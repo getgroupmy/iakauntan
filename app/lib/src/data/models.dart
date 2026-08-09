@@ -643,6 +643,7 @@ class Opportunity {
 class PipelineStage {
   PipelineStage({
     required this.id,
+    required this.pipelineId,
     required this.name,
     required this.probability,
     required this.stageType,
@@ -651,6 +652,7 @@ class PipelineStage {
   });
 
   final String id;
+  final String pipelineId;
   final String name;
   final double probability;
   final String stageType;
@@ -659,6 +661,7 @@ class PipelineStage {
 
   factory PipelineStage.fromJson(Map<String, dynamic> j) => PipelineStage(
         id: j['id'] as String,
+        pipelineId: j['pipeline_id']?.toString() ?? '',
         name: j['name']?.toString() ?? '',
         probability: Fmt.toDouble(j['probability']),
         stageType: j['stage_type']?.toString() ?? 'open',

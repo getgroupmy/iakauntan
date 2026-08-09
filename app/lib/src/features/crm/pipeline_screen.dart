@@ -318,7 +318,7 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
       action: () => ref.read(repoProvider)!.saveOpportunity({
         'name': _name.text.trim(),
         'contact_id': _contactId,
-        'pipeline_id': _pipelineIdFor(stage),
+        'pipeline_id': stage.pipelineId,
         'stage_id': stage.id,
         'amount': double.tryParse(_amount.text) ?? 0,
         'probability': stage.probability,
@@ -335,10 +335,6 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
       Navigator.pop(context);
     }
   }
-
-  /// Stages carry their pipeline; read it back from the loaded rows.
-  String? _pipelineIdFor(PipelineStage stage) =>
-      ref.read(_pipelineIdProvider).value;
 
   @override
   Widget build(BuildContext context) {
@@ -442,17 +438,3 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
     );
   }
 }
-
-/// The default pipeline for the org, needed when creating a deal.
-final _pipelineIdProvider = FutureProvider<String?>((ref) async {
-  final repo = ref.watch(repoProvider);
-  if (repo == null) return null;
-  final rows = await repo.client
-      .from('pipelines')
-      .select('id')
-      .eq('org_id', repo.orgId)
-      .order('is_default', ascending: false)
-      .limit(1);
-  final list = rows as List;
-  return list.isEmpty ? null : list.first['id'] as String;
-});
