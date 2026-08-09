@@ -5,7 +5,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
-import 'invoice_editor.dart';
+import 'line_draft.dart';
 
 /// Editable document lines. Wide screens get a spreadsheet-style grid;
 /// phones get one card per line so every field stays reachable.

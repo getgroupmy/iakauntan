@@ -57,6 +57,17 @@ Dr  1210 Accounts Receivable   19,332.00
 A RM 10,000 part payment moved the invoice to `partial`, left a balance of
 RM 9,332, and trial balance, balance sheet and P&L all agree.
 
+Weighted-average costing was checked across a full cycle — buy 10 @ 1,200,
+buy 10 @ 1,500 (average moves to 1,350), then sell 5, which posted:
+
+```
+Dr  5200 Cost of Goods Sold     6,750.00
+    Cr 1310 Inventory                     6,750.00
+```
+
+leaving 15 units valued at RM 20,250. Supplier payments (with bank
+charges) and expenses post correctly too.
+
 ---
 
 ## e-Invoice (LHDN MyInvois)
@@ -179,8 +190,8 @@ Stated plainly so nothing here is mistaken for finished:
 - Consolidated B2C e-Invoice: tables and the 7-day deadline are modelled,
   the monthly rollup job is not written
 - Self-billed e-Invoice for foreign suppliers: schema supports it, no UI
-- Purchase-side UI — the schema, posting engine and reports cover
-  purchases, but the app screens currently only cover the sales cycle
+- Goods Received and Purchase Request screens (the types exist in the
+  schema; only PO, Bill and Purchase Credit Note are exposed in the app)
 - Invoice PDF rendering and email delivery
 - Bank statement import and auto-matching
 - Payroll (EPF/SOCSO/EIS/PCB accounts exist in the chart of accounts, but

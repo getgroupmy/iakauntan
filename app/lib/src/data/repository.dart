@@ -211,16 +211,20 @@ class Repo {
   }
 
   // ------------------------------------------------------------------
-  // Sales documents
+  // Sales and purchase documents
+  //
+  // Both cycles use the same table shape, so one set of methods serves
+  // them and the screens only pass a DocKind.
   // ------------------------------------------------------------------
-  Future<List<SalesDocument>> salesDocuments({
+  Future<List<BusinessDocument>> documents({
+    required DocKind kind,
     required String docType,
     String? status,
     String? search,
     int limit = 100,
   }) async {
     var query = client
-        .from('sales_documents')
+        .from(kind.table)
         .select('*, contacts(name, code)')
         .eq('org_id', orgId)
         .eq('doc_type', docType)
@@ -232,24 +236,23 @@ class Repo {
           : query.eq('status', status);
     }
     if (search != null && search.trim().isNotEmpty) {
-      query = query.ilike('doc_no', '%${search.trim()}%');
+      final q = search.trim();
+      query = kind.isSales
+          ? query.ilike('doc_no', '%$q%')
+          : query.or('doc_no.ilike.%$q%,supplier_doc_no.ilike.%$q%');
     }
 
     final data = await query.order('doc_date', ascending: false).limit(limit);
-    return _rows(data).map(SalesDocument.fromJson).toList();
+    return _rows(data).map(BusinessDocument.fromJson).toList();
   }
 
-  Future<SalesDocument> salesDocument(String id) async {
+  Future<BusinessDocument> document(DocKind kind, String id) async {
     final data = await client
-        .from('sales_documents')
-        .select('*, contacts(name, code), sales_document_lines(*)')
+        .from(kind.table)
+        .select('*, contacts(name, code), ${kind.lineTable}(*)')
         .eq('id', id)
         .single();
-
-    final lines = (data['sales_document_lines'] as List?) ?? [];
-    lines.sort((a, b) =>
-        Fmt.toInt(a['line_no']).compareTo(Fmt.toInt(b['line_no'])));
-    return SalesDocument.fromJson(data);
+    return BusinessDocument.fromJson(data);
   }
 
   Future<String> nextDocumentNumber(String docType) async {
@@ -261,7 +264,8 @@ class Repo {
   /// Creates or replaces a document and its lines. Lines are deleted and
   /// re-inserted so the header totals are recomputed by the database
   /// triggers rather than trusted from the client.
-  Future<String> saveSalesDocument({
+  Future<String> saveDocument({
+    required DocKind kind,
     String? id,
     required String docType,
     required Map<String, dynamic> header,
@@ -277,16 +281,16 @@ class Repo {
         'doc_no': header['doc_no'] ?? await nextDocumentNumber(docType),
       };
       final row =
-          await client.from('sales_documents').insert(payload).select().single();
+          await client.from(kind.table).insert(payload).select().single();
       documentId = row['id'] as String;
     } else {
       documentId = id;
-      await client.from('sales_documents').update(header).eq('id', id);
-      await client.from('sales_document_lines').delete().eq('document_id', id);
+      await client.from(kind.table).update(header).eq('id', id);
+      await client.from(kind.lineTable).delete().eq('document_id', id);
     }
 
     if (lines.isNotEmpty) {
-      await client.from('sales_document_lines').insert([
+      await client.from(kind.lineTable).insert([
         for (var i = 0; i < lines.length; i++)
           {
             ...lines[i],
@@ -300,14 +304,13 @@ class Repo {
     return documentId;
   }
 
-  Future<void> deleteSalesDocument(String id) =>
-      client.from('sales_documents').update({
+  Future<void> deleteDocument(DocKind kind, String id) =>
+      client.from(kind.table).update({
         'deleted_at': DateTime.now().toIso8601String(),
       }).eq('id', id);
 
-  Future<String> postSalesDocument(String id) async {
-    final data =
-        await client.rpc('post_sales_document', params: {'p_id': id});
+  Future<String> postDocument(DocKind kind, String id) async {
+    final data = await client.rpc(kind.postRpc, params: {'p_id': id});
     return data as String;
   }
 
@@ -317,26 +320,39 @@ class Repo {
       );
 
   // ------------------------------------------------------------------
-  // Receipts
+  // Settlement
   // ------------------------------------------------------------------
-  Future<void> recordReceipt({
+
+  /// Records a customer receipt or a supplier payment, allocates it
+  /// against open documents and posts it. The two flows differ only in
+  /// which table and column names are used, so they share one method.
+  Future<void> recordSettlement({
+    required DocKind kind,
     required String contactId,
     required double amount,
     required DateTime date,
-    required List<({String invoiceId, double amount})> allocations,
+    required List<({String documentId, double amount})> allocations,
     String? bankAccountId,
     String? paymentModeCode,
     String? reference,
+    double bankCharges = 0,
   }) async {
-    final receipt = await client
-        .from('receipts')
+    final isReceipt = kind.isSales;
+    final table = isReceipt ? 'receipts' : 'purchase_payments';
+    final numberField = isReceipt ? 'receipt_no' : 'payment_no';
+    final dateField = isReceipt ? 'receipt_date' : 'payment_date';
+    final docType = isReceipt ? 'receipt' : 'payment';
+
+    final row = await client
+        .from(table)
         .insert({
           'org_id': orgId,
-          'receipt_no': await nextDocumentNumber('receipt'),
-          'receipt_date': Fmt.iso(date),
+          numberField: await nextDocumentNumber(docType),
+          dateField: Fmt.iso(date),
           'contact_id': contactId,
           'amount': amount,
           'unapplied_amount': amount,
+          'bank_charges': bankCharges,
           'bank_account_id': bankAccountId,
           'payment_mode_code': paymentModeCode,
           'reference': reference,
@@ -344,21 +360,41 @@ class Repo {
         .select()
         .single();
 
-    final receiptId = receipt['id'] as String;
+    final settlementId = row['id'] as String;
 
     if (allocations.isNotEmpty) {
       await client.from('payment_allocations').insert([
         for (final a in allocations)
           {
             'org_id': orgId,
-            'receipt_id': receiptId,
-            'invoice_id': a.invoiceId,
+            if (isReceipt) 'receipt_id': settlementId else 'payment_id': settlementId,
+            if (isReceipt) 'invoice_id': a.documentId else 'bill_id': a.documentId,
             'amount': a.amount,
           }
       ]);
     }
 
-    await client.rpc('post_receipt', params: {'p_id': receiptId});
+    await client.rpc(
+      isReceipt ? 'post_receipt' : 'post_purchase_payment',
+      params: {'p_id': settlementId},
+    );
+  }
+
+  /// Open documents for a contact, used by the settlement dialog.
+  Future<List<BusinessDocument>> outstandingFor({
+    required DocKind kind,
+    required String contactId,
+  }) async {
+    final data = await client
+        .from(kind.table)
+        .select('*, contacts(name, code)')
+        .eq('org_id', orgId)
+        .eq('contact_id', contactId)
+        .eq('doc_type', kind.isSales ? 'invoice' : 'bill')
+        .gt('balance_amount', 0)
+        .isFilter('deleted_at', null)
+        .order('doc_date');
+    return _rows(data).map(BusinessDocument.fromJson).toList();
   }
 
   Future<List<Map<String, dynamic>>> bankAccounts() async {
@@ -369,6 +405,66 @@ class Repo {
         .eq('is_active', true)
         .order('name');
     return _rows(data);
+  }
+
+  Future<List<Map<String, dynamic>>> paymentModes() async {
+    final data = await client
+        .from('ref_payment_modes')
+        .select()
+        .eq('is_active', true)
+        .order('code');
+    return _rows(data);
+  }
+
+  // ------------------------------------------------------------------
+  // Expenses
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> expenses({int limit = 100}) async {
+    final data = await client
+        .from('expenses')
+        .select('*, accounts(code, name), contacts(name)')
+        .eq('org_id', orgId)
+        .isFilter('deleted_at', null)
+        .order('expense_date', ascending: false)
+        .limit(limit);
+    return _rows(data);
+  }
+
+  /// Creates an expense and posts it in one step — expenses are always
+  /// money already spent, so there is no useful draft state.
+  Future<void> recordExpense({
+    required String accountId,
+    required double amount,
+    required DateTime date,
+    String? description,
+    String? contactId,
+    String? bankAccountId,
+    String? paymentModeCode,
+    String? taxCodeId,
+    double taxAmount = 0,
+    String? reference,
+  }) async {
+    final row = await client
+        .from('expenses')
+        .insert({
+          'org_id': orgId,
+          'expense_no': await nextDocumentNumber('expense'),
+          'expense_date': Fmt.iso(date),
+          'account_id': accountId,
+          'contact_id': contactId,
+          'bank_account_id': bankAccountId,
+          'payment_mode_code': paymentModeCode,
+          'description': description,
+          'reference': reference,
+          'amount': amount,
+          'tax_code_id': taxCodeId,
+          'tax_amount': taxAmount,
+          'total_amount': amount + taxAmount,
+        })
+        .select()
+        .single();
+
+    await client.rpc('post_expense', params: {'p_id': row['id']});
   }
 
   // ------------------------------------------------------------------

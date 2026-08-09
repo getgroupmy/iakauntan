@@ -350,8 +350,32 @@ class Account {
       );
 }
 
-class SalesDocument {
-  SalesDocument({
+/// Which side of the ledger a document belongs to. The sales and purchase
+/// tables are deliberately the same shape, so this is all the editor and
+/// list screens need to switch between them.
+enum DocKind { sales, purchase }
+
+extension DocKindX on DocKind {
+  bool get isSales => this == DocKind.sales;
+
+  String get table => isSales ? 'sales_documents' : 'purchase_documents';
+  String get lineTable =>
+      isSales ? 'sales_document_lines' : 'purchase_document_lines';
+
+  /// Which contacts may be chosen on this kind of document.
+  String get contactType => isSales ? 'customer' : 'supplier';
+  String get contactLabel => isSales ? 'Customer' : 'Supplier';
+
+  String get postRpc =>
+      isSales ? 'post_sales_document' : 'post_purchase_document';
+
+  String get routePrefix => isSales ? '/sales' : '/purchases';
+}
+
+/// A sales or purchase document header. The two tables share a shape, so
+/// one model serves both and the editor screens stay generic.
+class BusinessDocument {
+  BusinessDocument({
     required this.id,
     required this.docType,
     required this.docNo,
@@ -360,6 +384,7 @@ class SalesDocument {
     this.contactName,
     this.dueDate,
     this.reference,
+    this.supplierDocNo,
     this.currency = 'MYR',
     this.subtotal = 0,
     this.discountAmount = 0,
@@ -387,6 +412,9 @@ class SalesDocument {
   final String? contactName;
   final DateTime? dueDate;
   final String? reference;
+
+  /// The supplier's own invoice number. Purchase documents only.
+  final String? supplierDocNo;
   final String currency;
   final double subtotal;
   final double discountAmount;
@@ -403,7 +431,7 @@ class SalesDocument {
   final String? notes;
   final String? termsConditions;
   final String? paymentTermId;
-  final List<SalesLine> lines;
+  final List<DocumentLine> lines;
 
   bool get isPosted => glEntryId != null;
   bool get isOverdue =>
@@ -412,9 +440,12 @@ class SalesDocument {
       dueDate!.isBefore(DateTime.now()) &&
       status != 'void';
 
-  factory SalesDocument.fromJson(Map<String, dynamic> j) {
+  factory BusinessDocument.fromJson(Map<String, dynamic> j) {
     final contact = j['contacts'];
-    return SalesDocument(
+    // The embedded line list is named after whichever table it came from.
+    final rawLines = (j['sales_document_lines'] ?? j['purchase_document_lines'])
+        as List?;
+    return BusinessDocument(
       id: j['id'] as String,
       docType: j['doc_type']?.toString() ?? 'invoice',
       docNo: j['doc_no']?.toString() ?? '',
@@ -423,6 +454,7 @@ class SalesDocument {
       contactName: contact is Map ? contact['name'] as String? : null,
       dueDate: Fmt.parseDate(j['due_date']),
       reference: j['reference'] as String?,
+      supplierDocNo: j['supplier_doc_no'] as String?,
       currency: j['currency']?.toString() ?? 'MYR',
       subtotal: Fmt.toDouble(j['subtotal']),
       discountAmount: Fmt.toDouble(j['discount_amount']),
@@ -439,16 +471,16 @@ class SalesDocument {
       notes: j['notes'] as String?,
       termsConditions: j['terms_conditions'] as String?,
       paymentTermId: j['payment_term_id'] as String?,
-      lines: (j['sales_document_lines'] as List?)
-              ?.map((e) => SalesLine.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          const [],
+      lines: (rawLines ?? const [])
+          .map((e) => DocumentLine.fromJson(e as Map<String, dynamic>))
+          .toList()
+        ..sort((a, b) => a.lineNo.compareTo(b.lineNo)),
     );
   }
 }
 
-class SalesLine {
-  SalesLine({
+class DocumentLine {
+  DocumentLine({
     this.id,
     required this.lineNo,
     this.itemId,
@@ -484,32 +516,7 @@ class SalesLine {
   final String? classificationCode;
   final bool isTaxInclusive;
 
-  /// Mirrors app.calc_document_line() so the editor can show live totals
-  /// before the row is saved. The database remains the source of truth.
-  static ({double net, double tax, double total}) compute({
-    required double quantity,
-    required double unitPrice,
-    required double discountPercent,
-    required double discountAmount,
-    required double taxRate,
-    required bool taxInclusive,
-  }) {
-    final gross = quantity * unitPrice;
-    final discount =
-        discountPercent > 0 ? _r(gross * discountPercent / 100) : discountAmount;
-    if (taxInclusive && taxRate > 0) {
-      final net = _r((gross - discount) / (1 + taxRate / 100));
-      final tax = _r(gross - discount - net);
-      return (net: net, tax: tax, total: net + tax);
-    }
-    final net = _r(gross - discount);
-    final tax = _r(net * taxRate / 100);
-    return (net: net, tax: tax, total: net + tax);
-  }
-
-  static double _r(double v) => (v * 100).roundToDouble() / 100;
-
-  factory SalesLine.fromJson(Map<String, dynamic> j) => SalesLine(
+  factory DocumentLine.fromJson(Map<String, dynamic> j) => DocumentLine(
         id: j['id'] as String?,
         lineNo: Fmt.toInt(j['line_no']),
         itemId: j['item_id'] as String?,

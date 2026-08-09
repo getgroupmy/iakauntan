@@ -6,88 +6,30 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'doc_types.dart';
+import 'line_draft.dart';
 import 'line_editor.dart';
-import 'sales_list_screen.dart';
+import 'settlement_dialog.dart';
 
-/// Mutable working copy of a document line while it is being edited.
-class LineDraft {
-  LineDraft({
-    this.itemId,
-    this.description = '',
-    this.quantity = 1,
-    this.unitPrice = 0,
-    this.discountPercent = 0,
-    this.taxCodeId,
-    this.taxRate = 0,
-    this.uomCode,
-    this.classificationCode,
-    this.isTaxInclusive = false,
-  });
-
-  String? itemId;
-  String description;
-  double quantity;
-  double unitPrice;
-  double discountPercent;
-  String? taxCodeId;
-  double taxRate;
-  String? uomCode;
-  String? classificationCode;
-  bool isTaxInclusive;
-
-  ({double net, double tax, double total}) get totals => SalesLine.compute(
-        quantity: quantity,
-        unitPrice: unitPrice,
-        discountPercent: discountPercent,
-        discountAmount: 0,
-        taxRate: taxRate,
-        taxInclusive: isTaxInclusive,
-      );
-
-  Map<String, dynamic> toJson() => {
-        'line_type': 'item',
-        'item_id': itemId,
-        'description': description,
-        'quantity': quantity,
-        'unit_price': unitPrice,
-        'discount_percent': discountPercent,
-        'tax_code_id': taxCodeId,
-        'tax_rate': taxRate,
-        'is_tax_inclusive': isTaxInclusive,
-        'uom_code': uomCode,
-        'classification_code': classificationCode,
-      };
-
-  factory LineDraft.fromLine(SalesLine l) => LineDraft(
-        itemId: l.itemId,
-        description: l.description,
-        quantity: l.quantity,
-        unitPrice: l.unitPrice,
-        discountPercent: l.discountPercent,
-        taxCodeId: l.taxCodeId,
-        taxRate: l.taxRate,
-        uomCode: l.uomCode,
-        classificationCode: l.classificationCode,
-        isTaxInclusive: l.isTaxInclusive,
-      );
-}
-
-class InvoiceEditor extends ConsumerStatefulWidget {
-  const InvoiceEditor({super.key, required this.docType, this.documentId});
+/// One editor for every document type in both cycles. What changes
+/// between them — which contacts are selectable, whether posting writes a
+/// journal, whether MyInvois applies — comes from DocTypeMeta.
+class DocumentEditor extends ConsumerStatefulWidget {
+  const DocumentEditor({super.key, required this.docType, this.documentId});
 
   final String docType;
   final String? documentId;
 
   @override
-  ConsumerState<InvoiceEditor> createState() => _InvoiceEditorState();
+  ConsumerState<DocumentEditor> createState() => _DocumentEditorState();
 }
 
-class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
+class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   final _reference = TextEditingController();
+  final _supplierDocNo = TextEditingController();
   final _notes = TextEditingController();
 
   String? _contactId;
-  String? _contactName;
   String _docNo = '';
   DateTime _docDate = DateTime.now();
   DateTime? _dueDate;
@@ -102,10 +44,10 @@ class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
   bool _saving = false;
   bool _dirty = false;
 
+  DocTypeMeta get _meta => metaFor(widget.docType);
+  DocKind get _kind => _meta.kind;
   bool get _isNew => widget.documentId == null;
   bool get _isPosted => _glEntryId != null;
-  bool get _isEinvoiceDoc =>
-      const ['invoice', 'credit_note', 'debit_note'].contains(widget.docType);
 
   @override
   void initState() {
@@ -116,6 +58,7 @@ class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
   @override
   void dispose() {
     _reference.dispose();
+    _supplierDocNo.dispose();
     _notes.dispose();
     super.dispose();
   }
@@ -130,10 +73,9 @@ class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
         _dueDate = DateTime.now().add(const Duration(days: 30));
         _lines.add(LineDraft());
       } else {
-        final doc = await repo.salesDocument(widget.documentId!);
+        final doc = await repo.document(_kind, widget.documentId!);
         _docNo = doc.docNo;
         _contactId = doc.contactId;
-        _contactName = doc.contactName;
         _docDate = doc.docDate;
         _dueDate = doc.dueDate;
         _currency = doc.currency;
@@ -142,6 +84,7 @@ class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
         _glEntryId = doc.glEntryId;
         _paidAmount = doc.paidAmount;
         _reference.text = doc.reference ?? '';
+        _supplierDocNo.text = doc.supplierDocNo ?? '';
         _notes.text = doc.notes ?? '';
         _lines
           ..clear()
@@ -160,14 +103,11 @@ class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
 
   // Totals are recomputed locally for instant feedback; the database
   // recalculates authoritatively on save.
-  double get _subtotal =>
-      _lines.fold(0, (sum, l) => sum + l.totals.net);
-  double get _taxTotal =>
-      _lines.fold(0, (sum, l) => sum + l.totals.tax);
+  double get _subtotal => _lines.fold(0, (sum, l) => sum + l.totals.net);
+  double get _taxTotal => _lines.fold(0, (sum, l) => sum + l.totals.tax);
   double get _grandTotal {
     final raw = _subtotal + _taxTotal;
-    final org = ref.read(currentOrgProvider).value;
-    return switch (org?.roundingMethod) {
+    return switch (ref.read(currentOrgProvider).value?.roundingMethod) {
       'nearest_5cent' => (raw * 20).round() / 20,
       'nearest_10cent' => (raw * 10).round() / 10,
       _ => (raw * 100).round() / 100,
@@ -178,23 +118,20 @@ class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
 
   Future<String?> _save({bool silent = false}) async {
     if (_contactId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Choose a customer first.'),
-      ));
+      _toast('Choose a ${_kind.contactLabel.toLowerCase()} first.');
       return null;
     }
     final validLines =
         _lines.where((l) => l.description.trim().isNotEmpty || l.itemId != null);
     if (validLines.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Add at least one line.'),
-      ));
+      _toast('Add at least one line.');
       return null;
     }
 
     setState(() => _saving = true);
     try {
-      final id = await ref.read(repoProvider)!.saveSalesDocument(
+      final id = await ref.read(repoProvider)!.saveDocument(
+            kind: _kind,
             id: widget.documentId,
             docType: widget.docType,
             header: {
@@ -202,32 +139,21 @@ class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
               'doc_date': Fmt.iso(_docDate),
               'due_date': _dueDate == null ? null : Fmt.iso(_dueDate!),
               'contact_id': _contactId,
-              'reference': _reference.text.trim().isEmpty
-                  ? null
-                  : _reference.text.trim(),
-              'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+              'reference': _nullIfBlank(_reference.text),
+              if (!_kind.isSales)
+                'supplier_doc_no': _nullIfBlank(_supplierDocNo.text),
+              'notes': _nullIfBlank(_notes.text),
               'currency': _currency,
             },
             lines: validLines.map((l) => l.toJson()).toList(),
           );
 
-      ref.invalidate(salesDocumentsProvider);
+      ref.invalidate(documentsProvider);
       if (mounted) setState(() => _dirty = false);
-
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Saved'),
-          backgroundColor: AppTheme.success,
-        ));
-      }
+      if (!silent) _toast('Saved', success: true);
       return id;
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('$e'),
-          backgroundColor: AppTheme.danger,
-        ));
-      }
+      _toast('$e', error: true);
       return null;
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -241,23 +167,21 @@ class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
     final ok = await confirm(
       context,
       title: 'Post to ledger?',
-      message:
-          'This writes a balanced journal entry and locks the document for '
-          'editing. Stock will move for inventory items.',
+      message: 'This writes a balanced journal entry and locks the document '
+          'for editing. Stock will move for inventory items.',
       confirmLabel: 'Post',
     );
     if (!ok || !mounted) return;
 
     final posted = await runWithFeedback(
       context,
-      action: () => ref.read(repoProvider)!.postSalesDocument(id),
+      action: () => ref.read(repoProvider)!.postDocument(_kind, id),
       successMessage: 'Posted to the general ledger',
       pendingMessage: 'Posting…',
     );
 
     if (posted && mounted) {
       refreshLedgerData(ref);
-      // Reload so the screen reflects its posted, read-only state.
       setState(() => _loading = true);
       await _load();
     }
@@ -268,9 +192,7 @@ class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
     final org = ref.read(currentOrgProvider).value;
 
     if (org?.einvoiceEnabled != true) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Enable e-Invoice in Settings first.'),
-      ));
+      _toast('Enable e-Invoice in Settings first.');
       return;
     }
 
@@ -278,9 +200,9 @@ class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
       context,
       title: 'Submit to MyInvois?',
       message: org?.einvoiceEnvironment == 'production'
-          ? 'This sends the invoice to LHDN production. Once validated it can '
-              'only be cancelled within 72 hours.'
-          : 'This sends the invoice to the LHDN sandbox for testing.',
+          ? 'This sends the document to LHDN production. Once validated it '
+              'can only be cancelled within 72 hours.'
+          : 'This sends the document to the LHDN sandbox for testing.',
       confirmLabel: 'Submit',
     );
     if (!ok || !mounted) return;
@@ -309,9 +231,19 @@ class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
     }
   }
 
+  void _toast(String message, {bool success = false, bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+      backgroundColor:
+          success ? AppTheme.success : (error ? AppTheme.danger : null),
+    ));
+  }
+
+  static String? _nullIfBlank(String v) => v.trim().isEmpty ? null : v.trim();
+
   @override
   Widget build(BuildContext context) {
-    final meta = salesDocTypes[widget.docType] ?? salesDocTypes['invoice']!;
     final canPost = ref.watch(canPostProvider);
     final canWrite = ref.watch(canWriteProvider);
     final editable = !_isPosted && canWrite;
@@ -331,18 +263,15 @@ class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(_isNew ? 'New ${meta.singular}' : _docNo),
+          title: Text(_isNew ? 'New ${_meta.singular}' : _docNo),
           actions: [
-            if (!_isNew) ...[
-              StatusChip(_status),
-              const SizedBox(width: 12),
-            ],
+            if (!_isNew) ...[StatusChip(_status), const SizedBox(width: 12)],
             if (editable)
               TextButton(
                 onPressed: _saving ? null : () => _save(),
                 child: const Text('Save'),
               ),
-            if (editable && canPost)
+            if (editable && canPost && _meta.posts)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: FilledButton(
@@ -350,22 +279,43 @@ class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
                   child: const Text('Post'),
                 ),
               ),
-            if (_isPosted && _isEinvoiceDoc)
+            if (_isPosted && _meta.settles && _grandTotal - _paidAmount > 0)
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: TextButton.icon(
+                  onPressed: canPost
+                      ? () async {
+                          await showSettlementDialog(
+                            context,
+                            ref,
+                            kind: _kind,
+                            contactId: _contactId,
+                            documentId: widget.documentId,
+                          );
+                          if (!mounted) return;
+                          setState(() => _loading = true);
+                          await _load();
+                        }
+                      : null,
+                  icon: const Icon(Icons.payments_outlined, size: 18),
+                  label: Text(_kind.isSales ? 'Receive payment' : 'Pay'),
+                ),
+              ),
+            if (_isPosted && _meta.einvoice)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: FilledButton.icon(
-                  onPressed: _einvoiceStatus == 'valid' ? null : _submitEinvoice,
+                  onPressed:
+                      _einvoiceStatus == 'valid' ? null : _submitEinvoice,
                   icon: Icon(
                     _einvoiceStatus == 'valid'
                         ? Icons.verified
                         : Icons.cloud_upload_outlined,
                     size: 18,
                   ),
-                  label: Text(
-                    _einvoiceStatus == 'valid'
-                        ? 'e-Invoice valid'
-                        : 'Submit e-Invoice',
-                  ),
+                  label: Text(_einvoiceStatus == 'valid'
+                      ? 'e-Invoice valid'
+                      : 'Submit e-Invoice'),
                 ),
               ),
           ],
@@ -382,20 +332,21 @@ class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
                           einvoiceStatus: _einvoiceStatus,
                           paidAmount: _paidAmount,
                           total: _grandTotal,
+                          kind: _kind,
+                          settles: _meta.settles,
                         ),
                       _HeaderCard(
                         docNo: _docNo,
+                        kind: _kind,
                         contactId: _contactId,
-                        contactName: _contactName,
                         docDate: _docDate,
                         dueDate: _dueDate,
                         reference: _reference,
+                        supplierDocNo: _supplierDocNo,
                         editable: editable,
-                        onContactChanged: (id, name) {
-                          setState(() {
-                            _contactId = id;
-                            _contactName = name;
-                          });
+                        requiresEinvoice: _meta.einvoice,
+                        onContactChanged: (id) {
+                          setState(() => _contactId = id);
                           _markDirty();
                         },
                         onDocDate: (d) {
@@ -406,7 +357,7 @@ class _InvoiceEditorState extends ConsumerState<InvoiceEditor> {
                           setState(() => _dueDate = d);
                           _markDirty();
                         },
-                        onReferenceChanged: _markDirty,
+                        onTextChanged: _markDirty,
                       ),
                       const SizedBox(height: 16),
                       LineEditorCard(
@@ -449,11 +400,15 @@ class _PostedBanner extends StatelessWidget {
     required this.einvoiceStatus,
     required this.paidAmount,
     required this.total,
+    required this.kind,
+    required this.settles,
   });
 
   final String einvoiceStatus;
   final double paidAmount;
   final double total;
+  final DocKind kind;
+  final bool settles;
 
   @override
   Widget build(BuildContext context) {
@@ -471,21 +426,21 @@ class _PostedBanner extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Posted to the ledger',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
+                    const Text('Posted to the ledger',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
                     Text(
-                      outstanding > 0
-                          ? '${Fmt.money(outstanding)} outstanding'
-                          : 'Fully settled',
+                      !settles
+                          ? 'Journal written'
+                          : outstanding > 0
+                              ? '${Fmt.money(outstanding)} '
+                                  '${kind.isSales ? 'outstanding' : 'still to pay'}'
+                              : 'Fully settled',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
               ),
-              if (einvoiceStatus != 'not_applicable')
-                StatusChip(einvoiceStatus),
+              if (einvoiceStatus != 'not_applicable') StatusChip(einvoiceStatus),
             ],
           ),
         ),
@@ -497,70 +452,72 @@ class _PostedBanner extends StatelessWidget {
 class _HeaderCard extends ConsumerWidget {
   const _HeaderCard({
     required this.docNo,
+    required this.kind,
     required this.contactId,
-    required this.contactName,
     required this.docDate,
     required this.dueDate,
     required this.reference,
+    required this.supplierDocNo,
     required this.editable,
+    required this.requiresEinvoice,
     required this.onContactChanged,
     required this.onDocDate,
     required this.onDueDate,
-    required this.onReferenceChanged,
+    required this.onTextChanged,
   });
 
   final String docNo;
+  final DocKind kind;
   final String? contactId;
-  final String? contactName;
   final DateTime docDate;
   final DateTime? dueDate;
   final TextEditingController reference;
+  final TextEditingController supplierDocNo;
   final bool editable;
-  final void Function(String id, String name) onContactChanged;
+  final bool requiresEinvoice;
+  final ValueChanged<String> onContactChanged;
   final ValueChanged<DateTime> onDocDate;
   final ValueChanged<DateTime> onDueDate;
-  final VoidCallback onReferenceChanged;
+  final VoidCallback onTextChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final customers =
-        ref.watch(contactsProvider((type: 'customer', search: '')));
+    final contacts =
+        ref.watch(contactsProvider((type: kind.contactType, search: '')));
     final narrow = MediaQuery.sizeOf(context).width < 700;
 
-    final customerField = customers.when(
-      data: (list) => DropdownButtonFormField<String>(
-        value: list.any((c) => c.id == contactId) ? contactId : null,
-        isExpanded: true,
-        decoration: InputDecoration(
-          labelText: 'Customer *',
-          helperText: contactId != null &&
-                  list.any((c) => c.id == contactId && !c.readyForEinvoice)
-              ? 'This customer has no TIN — e-Invoice will be rejected'
-              : null,
-          helperStyle: const TextStyle(color: AppTheme.amber),
-        ),
-        items: [
-          for (final c in list)
-            DropdownMenuItem(
-              value: c.id,
-              child: Text('${c.name} (${c.code})',
-                  overflow: TextOverflow.ellipsis),
-            ),
-        ],
-        onChanged: editable
-            ? (v) {
-                if (v == null) return;
-                final c = list.firstWhere((e) => e.id == v);
-                onContactChanged(c.id, c.name);
-              }
-            : null,
-      ),
+    final contactField = contacts.when(
+      data: (list) {
+        final selected = list.where((c) => c.id == contactId).firstOrNull;
+        final warnMissingTin =
+            requiresEinvoice && selected != null && !selected.readyForEinvoice;
+        return DropdownButtonFormField<String>(
+          value: selected?.id,
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: '${kind.contactLabel} *',
+            helperText: warnMissingTin
+                ? 'No TIN on file — e-Invoice will be rejected'
+                : null,
+            helperStyle: const TextStyle(color: AppTheme.amber),
+          ),
+          items: [
+            for (final c in list)
+              DropdownMenuItem(
+                value: c.id,
+                child: Text('${c.name} (${c.code})',
+                    overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: editable ? (v) => v == null ? null : onContactChanged(v) : null,
+        );
+      },
       loading: () => const LinearProgressIndicator(),
-      error: (e, _) => Text('Could not load customers: $e'),
+      error: (e, _) => Text('Could not load contacts: $e'),
     );
 
     final fields = <Widget>[
-      customerField,
+      contactField,
       _DateField(
         label: 'Document date',
         value: docDate,
@@ -576,11 +533,23 @@ class _HeaderCard extends ConsumerWidget {
       TextFormField(
         controller: reference,
         enabled: editable,
-        onChanged: (_) => onReferenceChanged(),
-        decoration: const InputDecoration(
-          labelText: 'Customer reference / PO no.',
+        onChanged: (_) => onTextChanged(),
+        decoration: InputDecoration(
+          labelText: kind.isSales
+              ? 'Customer reference / PO no.'
+              : 'Internal reference',
         ),
       ),
+      if (!kind.isSales)
+        TextFormField(
+          controller: supplierDocNo,
+          enabled: editable,
+          onChanged: (_) => onTextChanged(),
+          decoration: const InputDecoration(
+            labelText: 'Supplier invoice no.',
+            helperText: 'Their document number, needed for SST records',
+          ),
+        ),
     ];
 
     return Card(
@@ -620,6 +589,10 @@ class _HeaderCard extends ConsumerWidget {
                       Expanded(child: fields[2]),
                     ],
                   ),
+                  if (fields.length > 4) ...[
+                    const SizedBox(height: 14),
+                    Row(children: [Expanded(child: fields[4])]),
+                  ],
                 ],
               ),
           ],
@@ -706,7 +679,7 @@ class _TotalsAndNotes extends StatelessWidget {
               maxLines: 4,
               onChanged: (_) => onNotesChanged(),
               decoration: const InputDecoration(
-                hintText: 'Visible to the customer on the printed document',
+                hintText: 'Visible on the printed document',
               ),
             ),
           ],
@@ -744,7 +717,8 @@ class _TotalsAndNotes extends StatelessWidget {
     );
 
     if (narrow) {
-      return Column(children: [totalsCard, const SizedBox(height: 16), notesCard]);
+      return Column(
+          children: [totalsCard, const SizedBox(height: 16), notesCard]);
     }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

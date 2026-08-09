@@ -155,19 +155,48 @@ final classificationCodesProvider =
   return requireRepo(ref).classificationCodes();
 });
 
-final salesDocumentsProvider = FutureProvider.autoDispose
-    .family<List<SalesDocument>, ({String docType, String status, String search})>(
-        (ref, args) {
-  return requireRepo(ref).salesDocuments(
+typedef DocQuery = ({
+  DocKind kind,
+  String docType,
+  String status,
+  String search
+});
+
+final documentsProvider = FutureProvider.autoDispose
+    .family<List<BusinessDocument>, DocQuery>((ref, args) {
+  return requireRepo(ref).documents(
+    kind: args.kind,
     docType: args.docType,
     status: args.status,
     search: args.search,
   );
 });
 
-final salesDocumentProvider =
-    FutureProvider.autoDispose.family<SalesDocument, String>((ref, id) {
-  return requireRepo(ref).salesDocument(id);
+final documentProvider = FutureProvider.autoDispose
+    .family<BusinessDocument, ({DocKind kind, String id})>((ref, args) {
+  return requireRepo(ref).document(args.kind, args.id);
+});
+
+final outstandingProvider = FutureProvider.autoDispose
+    .family<List<BusinessDocument>, ({DocKind kind, String contactId})>(
+        (ref, args) {
+  return requireRepo(ref)
+      .outstandingFor(kind: args.kind, contactId: args.contactId);
+});
+
+final bankAccountsProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).bankAccounts();
+});
+
+final paymentModesProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).paymentModes();
+});
+
+final expensesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).expenses();
 });
 
 final einvoicesProvider =
@@ -205,6 +234,8 @@ void refreshLedgerData(WidgetRef ref) {
   ref.invalidate(revenueTrendProvider);
   ref.invalidate(arAgingProvider);
   ref.invalidate(trialBalanceProvider);
-  ref.invalidate(salesDocumentsProvider);
+  ref.invalidate(documentsProvider);
   ref.invalidate(einvoicesProvider);
+  ref.invalidate(bankAccountsProvider);
+  ref.invalidate(expensesProvider);
 }

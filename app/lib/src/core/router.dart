@@ -7,12 +7,13 @@ import '../features/contacts/contact_editor.dart';
 import '../features/contacts/contacts_screen.dart';
 import '../features/crm/pipeline_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
+import '../features/documents/document_editor.dart';
+import '../features/documents/document_list_screen.dart';
 import '../features/einvoice/einvoice_screen.dart';
+import '../features/expenses/expenses_screen.dart';
 import '../features/items/items_screen.dart';
 import '../features/onboarding/create_org_screen.dart';
 import '../features/reports/reports_screen.dart';
-import '../features/sales/invoice_editor.dart';
-import '../features/sales/sales_list_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/shell/app_shell.dart';
 import 'providers.dart';
@@ -58,29 +59,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             AppShell(location: state.matchedLocation, child: child),
         routes: [
           GoRoute(path: '/', builder: (_, __) => const DashboardScreen()),
-          GoRoute(
-            path: '/sales/:docType',
-            builder: (_, state) => SalesListScreen(
-              docType: state.pathParameters['docType'] ?? 'invoice',
-            ),
-            routes: [
-              GoRoute(
-                path: 'new',
-                parentNavigatorKey: _rootKey,
-                builder: (_, state) => InvoiceEditor(
-                  docType: state.pathParameters['docType'] ?? 'invoice',
-                ),
-              ),
-              GoRoute(
-                path: ':id',
-                parentNavigatorKey: _rootKey,
-                builder: (_, state) => InvoiceEditor(
-                  docType: state.pathParameters['docType'] ?? 'invoice',
-                  documentId: state.pathParameters['id'],
-                ),
-              ),
-            ],
-          ),
+
+          // Sales and purchases share one list and one editor; the doc
+          // type in the path decides which cycle applies.
+          ..._documentRoutes('/sales', 'invoice'),
+          ..._documentRoutes('/purchases', 'bill'),
+
+          GoRoute(path: '/expenses', builder: (_, __) => const ExpensesScreen()),
           GoRoute(
             path: '/contacts',
             builder: (_, __) => const ContactsScreen(),
@@ -127,6 +112,34 @@ final routerProvider = Provider<GoRouter>((ref) {
     ),
   );
 });
+
+/// List plus editor routes for one document cycle. Editors open on the
+/// root navigator so they cover the shell rather than nesting inside it.
+List<RouteBase> _documentRoutes(String prefix, String fallbackType) => [
+      GoRoute(
+        path: '$prefix/:docType',
+        builder: (_, state) => DocumentListScreen(
+          docType: state.pathParameters['docType'] ?? fallbackType,
+        ),
+        routes: [
+          GoRoute(
+            path: 'new',
+            parentNavigatorKey: _rootKey,
+            builder: (_, state) => DocumentEditor(
+              docType: state.pathParameters['docType'] ?? fallbackType,
+            ),
+          ),
+          GoRoute(
+            path: ':id',
+            parentNavigatorKey: _rootKey,
+            builder: (_, state) => DocumentEditor(
+              docType: state.pathParameters['docType'] ?? fallbackType,
+              documentId: state.pathParameters['id'],
+            ),
+          ),
+        ],
+      ),
+    ];
 
 /// Bridges Riverpod auth/org state into go_router's Listenable API.
 class _AuthRefresh extends ChangeNotifier {

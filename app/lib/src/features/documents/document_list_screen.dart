@@ -7,36 +7,37 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'doc_types.dart';
+import 'settlement_dialog.dart';
 
-const salesDocTypes = <String, ({String plural, String singular, IconData icon})>{
-  'quotation': (plural: 'Quotations', singular: 'Quotation', icon: Icons.request_quote_outlined),
-  'sales_order': (plural: 'Sales Orders', singular: 'Sales Order', icon: Icons.shopping_cart_outlined),
-  'delivery_order': (plural: 'Delivery Orders', singular: 'Delivery Order', icon: Icons.local_shipping_outlined),
-  'invoice': (plural: 'Invoices', singular: 'Invoice', icon: Icons.receipt_long_outlined),
-  'credit_note': (plural: 'Credit Notes', singular: 'Credit Note', icon: Icons.undo_outlined),
-  'debit_note': (plural: 'Debit Notes', singular: 'Debit Note', icon: Icons.redo_outlined),
-};
-
-class SalesListScreen extends ConsumerStatefulWidget {
-  const SalesListScreen({super.key, required this.docType});
+/// One list screen for every document type in both cycles. The doc type
+/// in the route decides which table, contact kind and actions apply.
+class DocumentListScreen extends ConsumerStatefulWidget {
+  const DocumentListScreen({super.key, required this.docType});
 
   final String docType;
 
   @override
-  ConsumerState<SalesListScreen> createState() => _SalesListScreenState();
+  ConsumerState<DocumentListScreen> createState() =>
+      _DocumentListScreenState();
 }
 
-class _SalesListScreenState extends ConsumerState<SalesListScreen> {
+class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   String _status = 'all';
   String _search = '';
 
   @override
   Widget build(BuildContext context) {
-    final meta = salesDocTypes[widget.docType] ?? salesDocTypes['invoice']!;
-    final docs = ref.watch(salesDocumentsProvider(
-      (docType: widget.docType, status: _status, search: _search),
-    ));
+    final meta = metaFor(widget.docType);
+    final kind = meta.kind;
+    final docs = ref.watch(documentsProvider((
+      kind: kind,
+      docType: widget.docType,
+      status: _status,
+      search: _search,
+    )));
     final canWrite = ref.watch(canWriteProvider);
+    final canPost = ref.watch(canPostProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -45,9 +46,10 @@ class _SalesListScreenState extends ConsumerState<SalesListScreen> {
           PopupMenuButton<String>(
             tooltip: 'Switch document type',
             icon: const Icon(Icons.swap_horiz),
-            onSelected: (type) => context.go('/sales/$type'),
+            onSelected: (type) =>
+                context.go('${metaFor(type).kind.routePrefix}/$type'),
             itemBuilder: (_) => [
-              for (final e in salesDocTypes.entries)
+              for (final e in docTypesFor(kind))
                 PopupMenuItem(
                   value: e.key,
                   child: Row(children: [
@@ -58,11 +60,21 @@ class _SalesListScreenState extends ConsumerState<SalesListScreen> {
                 ),
             ],
           ),
+          if (canPost && meta.settles)
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: TextButton.icon(
+                onPressed: () => showSettlementDialog(context, ref, kind: kind),
+                icon: const Icon(Icons.payments_outlined, size: 18),
+                label: Text(kind.isSales ? 'Receive payment' : 'Pay supplier'),
+              ),
+            ),
           if (canWrite)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: FilledButton.icon(
-                onPressed: () => context.go('/sales/${widget.docType}/new'),
+                onPressed: () =>
+                    context.go('${kind.routePrefix}/${widget.docType}/new'),
                 icon: const Icon(Icons.add, size: 18),
                 label: Text('New ${meta.singular.toLowerCase()}'),
               ),
@@ -76,9 +88,11 @@ class _SalesListScreenState extends ConsumerState<SalesListScreen> {
               Expanded(
                 child: TextField(
                   onChanged: (v) => setState(() => _search = v),
-                  decoration: const InputDecoration(
-                    hintText: 'Search document number',
-                    prefixIcon: Icon(Icons.search, size: 20),
+                  decoration: InputDecoration(
+                    hintText: kind.isSales
+                        ? 'Search document number'
+                        : 'Search our number or the supplier’s',
+                    prefixIcon: const Icon(Icons.search, size: 20),
                   ),
                 ),
               ),
@@ -100,7 +114,7 @@ class _SalesListScreenState extends ConsumerState<SalesListScreen> {
       ),
       body: AsyncView(
         value: docs,
-        onRetry: () => ref.invalidate(salesDocumentsProvider),
+        onRetry: () => ref.invalidate(documentsProvider),
         builder: (list) {
           if (list.isEmpty) {
             return EmptyState(
@@ -109,8 +123,8 @@ class _SalesListScreenState extends ConsumerState<SalesListScreen> {
               message: 'Create your first ${meta.singular.toLowerCase()}.',
               action: canWrite
                   ? FilledButton.icon(
-                      onPressed: () =>
-                          context.go('/sales/${widget.docType}/new'),
+                      onPressed: () => context
+                          .go('${kind.routePrefix}/${widget.docType}/new'),
                       icon: const Icon(Icons.add),
                       label: Text('New ${meta.singular.toLowerCase()}'),
                     )
@@ -118,22 +132,23 @@ class _SalesListScreenState extends ConsumerState<SalesListScreen> {
             );
           }
 
-          final totalOutstanding =
+          final outstanding =
               list.fold<double>(0, (sum, d) => sum + d.balanceAmount);
 
           return Column(
             children: [
-              if (totalOutstanding > 0)
+              if (outstanding > 0)
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   color: Theme.of(context)
                       .colorScheme
                       .primaryContainer
                       .withValues(alpha: 0.35),
                   child: Text(
-                    '${list.length} documents · ${Fmt.money(totalOutstanding)} outstanding',
+                    '${list.length} documents · ${Fmt.money(outstanding)} '
+                    '${kind.isSales ? 'receivable' : 'payable'}',
                     style: const TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 13),
                   ),
@@ -145,6 +160,7 @@ class _SalesListScreenState extends ConsumerState<SalesListScreen> {
                   itemBuilder: (context, i) => _DocumentTile(
                     doc: list[i],
                     docType: widget.docType,
+                    kind: kind,
                   ),
                 ),
               ),
@@ -157,24 +173,27 @@ class _SalesListScreenState extends ConsumerState<SalesListScreen> {
 }
 
 class _DocumentTile extends StatelessWidget {
-  const _DocumentTile({required this.doc, required this.docType});
+  const _DocumentTile({
+    required this.doc,
+    required this.docType,
+    required this.kind,
+  });
 
-  final SalesDocument doc;
+  final BusinessDocument doc;
   final String docType;
+  final DocKind kind;
 
   @override
   Widget build(BuildContext context) {
     final narrow = MediaQuery.sizeOf(context).width < 700;
 
     return ListTile(
-      onTap: () => context.go('/sales/$docType/${doc.id}'),
+      onTap: () => context.go('${kind.routePrefix}/$docType/${doc.id}'),
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       title: Row(
         children: [
-          Text(
-            doc.docNo,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
+          Text(doc.docNo,
+              style: const TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(width: 10),
           StatusChip(doc.isOverdue ? 'overdue' : doc.status, compact: true),
           if (doc.einvoiceStatus != 'not_applicable') ...[
@@ -191,8 +210,12 @@ class _DocumentTile extends StatelessWidget {
         ],
       ),
       subtitle: Text(
-        '${doc.contactName ?? '—'} · ${Fmt.date(doc.docDate)}'
-        '${doc.dueDate != null ? ' · due ${Fmt.date(doc.dueDate)}' : ''}',
+        [
+          doc.contactName ?? '—',
+          Fmt.date(doc.docDate),
+          if (doc.dueDate != null) 'due ${Fmt.date(doc.dueDate)}',
+          if ((doc.supplierDocNo ?? '').isNotEmpty) 'ref ${doc.supplierDocNo}',
+        ].join(' · '),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 12),
@@ -202,7 +225,9 @@ class _DocumentTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Money(doc.totalAmount, currency: doc.currency, bold: true),
-          if (!narrow && doc.balanceAmount > 0 && doc.balanceAmount != doc.totalAmount)
+          if (!narrow &&
+              doc.balanceAmount > 0 &&
+              doc.balanceAmount != doc.totalAmount)
             Text(
               '${Fmt.money(doc.balanceAmount, currency: doc.currency)} due',
               style: const TextStyle(fontSize: 11, color: AppTheme.amber),
