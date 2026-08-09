@@ -110,14 +110,86 @@ your organisation's certificate before enabling it.
 
 ---
 
+## Legal firm accounting (add-on)
+
+For law firms, where client money is not the firm's money. Built to the
+Solicitors' Accounts Rules:
+
+- **Matters** — the file, with client, fee earner, rate and deposit
+- **Client account** — a designated bank account, separate from office
+  money, with every movement analysed by matter
+- **Time recording** and **disbursements**, tracked as unbilled work in
+  progress until a bill is raised
+
+Client money posts as an offsetting asset/liability pair — client bank
+against *Client Monies Held* — so it never touches income. A deferred
+constraint trigger refuses any movement that would overdraw a matter:
+
+```
+Client account for matter MAT-2026-00001 would be overdrawn by 7500.00.
+Client money held for one matter cannot fund another.
+```
+
+That is enforced in the database, not the UI, so it holds however the
+row is written.
+
+---
+
+## Access and administration
+
+### Access types
+
+Assigned per company and enforced by RLS:
+
+| Access type | Can do |
+| --- | --- |
+| Owner | Everything, including ownership |
+| Company Admin | Everything except ownership transfer |
+| Accountant | Prepares **and posts** to the ledger, closes periods |
+| Accounts Clerk | Prepares documents but **cannot post** — preparation and approval stay in different hands |
+| Auditor | Reads everything including journals and audit trail; writes nothing |
+| Sales / Purchasing | Their own documents; no access to journals |
+| View Only | Read-only on day-to-day records |
+
+Verified: a clerk can write but not post, an auditor can read the ledger
+but every write is refused by RLS.
+
+### Super admin
+
+A platform tier *above* tenancy. `platform_admins` has RLS enabled with no
+write policy, so membership is granted out of band by the service role —
+a company admin can never escalate into it. Platform staff get
+cross-tenant stats, an organization list, account suspension, module
+toggles and backend service settings.
+
+Verified: a company owner calling any platform function is refused.
+
+### Modules and add-ons
+
+Core modules (sales, ledger, contacts) are always on. Purchasing,
+Inventory, CRM, e-Invoice and Legal are add-ons granted per tenant, and
+the entitlement is checked **in the RLS write policies** — not merely
+hidden in the UI. Reads stay open, so switching an add-on off stops new
+records without hiding a tenant's own history.
+
+### Registration and invitations
+
+Anyone can register and create a company. An admin invites colleagues by
+e-mail with an access type; when the invited person registers, the
+database claims the pending invitation and drops them into the right
+company with the right role.
+
+---
+
 ## Security
 
 Multi-tenant by `org_id` with row level security on every table. Policies
-are generated in `0010_rls.sql` in three write tiers:
+are generated in `0010_rls.sql` in tiers:
 
 - **admin** (owner, admin) — numbering sequences, membership
 - **post** (+ accountant) — ledger, accounts, tax codes, banking
-- **write** (+ sales, purchaser) — documents, contacts, items, CRM
+- **write** (+ accounts clerk, sales, purchaser) — documents, contacts, items
+- **read ledger** (+ auditor) — journals and audit trail
 
 The helper functions RLS calls (`app.is_org_member` and friends) are
 SECURITY DEFINER, which is what stops the `org_members` policies from
@@ -173,11 +245,19 @@ supabase functions deploy myinvois
 A worked example is loaded in the project: **Sinar Teknologi Sdn Bhd**,
 with a customer, two invoice lines, a posted journal and a part payment.
 
-```
-demo@iakauntan.my  /  Demo!Akaun2026
-```
+All four logins share the password `Demo!Akaun2026`:
 
-Delete this login and its organization before going anywhere near real
+| Login | Sees |
+| --- | --- |
+| `demo@iakauntan.my` | Owner — the whole company |
+| `clerk@iakauntan.my` | Accounts Clerk — can prepare, cannot post |
+| `auditor@iakauntan.my` | Auditor — reads the ledger, writes nothing |
+| `superadmin@iakauntan.my` | Platform operator — the admin console |
+
+There is also a worked legal matter (`MAT-2026-00001`) with RM 5,500 held
+in the client account and unbilled time against it.
+
+Delete these logins and the organization before going anywhere near real
 books.
 
 ---
