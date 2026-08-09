@@ -586,3 +586,270 @@ class MyInvoisException implements Exception {
   @override
   String toString() => message;
 }
+
+/// Platform-level data access. Not tenant scoped: every call lands on a
+/// SECURITY DEFINER function that re-checks platform admin rights, so a
+/// normal user calling these simply gets an error.
+class PlatformRepo {
+  PlatformRepo(this.client);
+
+  final SupabaseClient client;
+
+  Future<bool> amIPlatformAdmin() async {
+    final data = await client.rpc('am_i_platform_admin');
+    return data == true;
+  }
+
+  Future<Map<String, dynamic>> stats() async {
+    final data = await client.rpc('platform_stats');
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<List<PlatformOrg>> organizations() async {
+    final data = await client.rpc('platform_organizations');
+    return Repo._rows(data).map(PlatformOrg.fromJson).toList();
+  }
+
+  Future<List<ModuleInfo>> modules() async {
+    final data = await client
+        .from('platform_modules')
+        .select()
+        .eq('is_active', true)
+        .order('sort_order');
+    return Repo._rows(data).map(ModuleInfo.fromJson).toList();
+  }
+
+  Future<void> setModule(String orgId, String code, bool enabled) =>
+      client.rpc('platform_set_module', params: {
+        'p_org_id': orgId,
+        'p_module_code': code,
+        'p_enabled': enabled,
+      });
+
+  Future<void> setOrgStatus(String orgId, String status) =>
+      client.rpc('platform_set_org_status',
+          params: {'p_org_id': orgId, 'p_status': status});
+
+  Future<List<Map<String, dynamic>>> settings() async {
+    final data =
+        await client.from('platform_settings').select().order('key');
+    return Repo._rows(data);
+  }
+
+  Future<void> updateSetting(String key, Map<String, dynamic> value) =>
+      client.rpc('platform_update_setting',
+          params: {'p_key': key, 'p_value': value});
+}
+
+/// Tenant-scoped extras: team management, module entitlements and the
+/// legal firm module.
+extension RepoExtras on Repo {
+  // ------------------------------------------------------------------
+  // Modules the tenant is entitled to
+  // ------------------------------------------------------------------
+  Future<Set<String>> enabledModules() async {
+    final rows = await client
+        .from('org_modules')
+        .select('module_code, is_enabled, expires_at')
+        .eq('org_id', orgId);
+
+    final enabled = <String>{};
+    for (final r in Repo._rows(rows)) {
+      if (r['is_enabled'] != true) continue;
+      final expires = Fmt.parseDate(r['expires_at']);
+      if (expires != null && expires.isBefore(DateTime.now())) continue;
+      enabled.add(r['module_code'].toString());
+    }
+
+    // Core modules are always available.
+    final core = await client
+        .from('platform_modules')
+        .select('code')
+        .eq('is_core', true);
+    for (final r in Repo._rows(core)) {
+      enabled.add(r['code'].toString());
+    }
+    return enabled;
+  }
+
+  // ------------------------------------------------------------------
+  // Team
+  // ------------------------------------------------------------------
+  Future<List<TeamMember>> team() async {
+    final data = await client.rpc('org_team', params: {'p_org_id': orgId});
+    return Repo._rows(data).map(TeamMember.fromJson).toList();
+  }
+
+  Future<void> inviteMember(String email, String role) =>
+      client.rpc('invite_member', params: {
+        'p_org_id': orgId,
+        'p_email': email,
+        'p_role': role,
+      });
+
+  Future<void> changeMemberRole(String memberId, String role) =>
+      client.from('org_members').update({'role': role}).eq('id', memberId);
+
+  Future<void> removeMember(String memberId) =>
+      client.from('org_members').delete().eq('id', memberId);
+
+  Future<String> acceptInvitation(String token) async {
+    final data = await client.rpc('accept_invitation', params: {'p_token': token});
+    return data as String;
+  }
+
+  // ------------------------------------------------------------------
+  // Legal firm module
+  // ------------------------------------------------------------------
+  Future<void> setupLegalModule() =>
+      client.rpc('setup_legal_module', params: {'p_org_id': orgId});
+
+  Future<List<Matter>> matters({String? status, String? search}) async {
+    var query = client
+        .from('matters')
+        .select('*, contacts(name)')
+        .eq('org_id', orgId)
+        .isFilter('deleted_at', null);
+
+    if (status != null && status != 'all') query = query.eq('status', status);
+    if (search != null && search.trim().isNotEmpty) {
+      final q = search.trim();
+      query = query.or('name.ilike.%$q%,matter_no.ilike.%$q%');
+    }
+
+    final data = await query.order('matter_no', ascending: false).limit(200);
+    return Repo._rows(data).map(Matter.fromJson).toList();
+  }
+
+  Future<List<MatterSummary>> matterSummary() async {
+    final data =
+        await client.rpc('report_matter_summary', params: {'p_org_id': orgId});
+    return Repo._rows(data).map(MatterSummary.fromJson).toList();
+  }
+
+  Future<String> createMatter(Map<String, dynamic> values) async {
+    final row = await client
+        .from('matters')
+        .insert({
+          ...values,
+          'org_id': orgId,
+          'matter_no': await nextDocumentNumber('matter'),
+        })
+        .select()
+        .single();
+    return row['id'] as String;
+  }
+
+  Future<List<ClientTransaction>> clientTransactions(String matterId) async {
+    final data = await client
+        .from('client_account_transactions')
+        .select()
+        .eq('org_id', orgId)
+        .eq('matter_id', matterId)
+        .order('transaction_date')
+        .order('created_at');
+    return Repo._rows(data).map(ClientTransaction.fromJson).toList();
+  }
+
+  /// Records a client-money movement and posts it. `amount` is signed:
+  /// positive is money received into the client account.
+  Future<void> recordClientTransaction({
+    required String matterId,
+    required String transactionType,
+    required double amount,
+    required DateTime date,
+    String? description,
+    String? payee,
+    String? reference,
+    String? paymentModeCode,
+  }) async {
+    final bank = await client
+        .from('bank_accounts')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('is_client_account', true)
+        .maybeSingle();
+
+    if (bank == null) {
+      throw Exception(
+          'No client account configured. Open Settings and run the legal setup first.');
+    }
+
+    final row = await client
+        .from('client_account_transactions')
+        .insert({
+          'org_id': orgId,
+          'matter_id': matterId,
+          'transaction_no': await nextDocumentNumber('client_txn'),
+          'transaction_date': Fmt.iso(date),
+          'transaction_type': transactionType,
+          'bank_account_id': bank['id'],
+          'amount': amount,
+          'description': description,
+          'payee': payee,
+          'reference': reference,
+          'payment_mode_code': paymentModeCode,
+        })
+        .select()
+        .single();
+
+    await client.rpc('post_client_transaction', params: {'p_id': row['id']});
+  }
+
+  Future<List<TimeEntry>> timeEntries(String matterId) async {
+    final data = await client
+        .from('time_entries')
+        .select()
+        .eq('org_id', orgId)
+        .eq('matter_id', matterId)
+        .order('entry_date', ascending: false);
+    return Repo._rows(data).map(TimeEntry.fromJson).toList();
+  }
+
+  Future<void> addTimeEntry({
+    required String matterId,
+    required String description,
+    required int minutes,
+    required double hourlyRate,
+    required DateTime date,
+    String? activityCode,
+    bool billable = true,
+  }) =>
+      client.from('time_entries').insert({
+        'org_id': orgId,
+        'matter_id': matterId,
+        'user_id': client.auth.currentUser?.id,
+        'entry_date': Fmt.iso(date),
+        'description': description,
+        'activity_code': activityCode,
+        'minutes': minutes,
+        'hourly_rate': hourlyRate,
+        'is_billable': billable,
+      });
+
+  Future<List<Map<String, dynamic>>> disbursements(String matterId) async {
+    final data = await client
+        .from('disbursements')
+        .select()
+        .eq('org_id', orgId)
+        .eq('matter_id', matterId)
+        .order('disbursement_date', ascending: false);
+    return Repo._rows(data);
+  }
+
+  Future<void> addDisbursement({
+    required String matterId,
+    required String description,
+    required double amount,
+    required DateTime date,
+    String paidFrom = 'office',
+  }) =>
+      client.from('disbursements').insert({
+        'org_id': orgId,
+        'matter_id': matterId,
+        'disbursement_date': Fmt.iso(date),
+        'description': description,
+        'amount': amount,
+        'paid_from': paidFrom,
+      });
+}

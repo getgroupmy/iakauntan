@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../../data/repository.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -39,6 +40,8 @@ class SettingsScreen extends ConsumerWidget {
                   _CompanyCard(org: organization),
                   const SizedBox(height: 16),
                   _EinvoiceCard(org: organization, canEdit: isAdmin),
+                  const SizedBox(height: 16),
+                  _ModulesCard(canAdmin: isAdmin),
                   const SizedBox(height: 16),
                   const _ChartOfAccountsCard(),
                   const SizedBox(height: 16),
@@ -251,6 +254,103 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
                       : const Text('Save'),
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// What the tenant is entitled to. Add-ons are switched on by platform
+/// staff, not here, so this is informational with one exception: the
+/// legal module needs a one-time setup the company admin runs.
+class _ModulesCard extends ConsumerWidget {
+  const _ModulesCard({required this.canAdmin});
+
+  final bool canAdmin;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final enabled = ref.watch(enabledModulesProvider);
+    final catalog = ref.watch(platformModulesProvider).value ?? const [];
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionHeader(
+              'Modules',
+              subtitle: 'Contact us to add or remove an add-on',
+            ),
+            AsyncView(
+              value: enabled,
+              onRetry: () => ref.invalidate(enabledModulesProvider),
+              loading: const LinearProgressIndicator(),
+              builder: (active) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final m in catalog)
+                        Chip(
+                          avatar: Icon(
+                            active.contains(m.code)
+                                ? Icons.check_circle
+                                : Icons.remove_circle_outline,
+                            size: 16,
+                            color: active.contains(m.code)
+                                ? AppTheme.success
+                                : Theme.of(context).colorScheme.outline,
+                          ),
+                          label: Text(m.name),
+                        ),
+                    ],
+                  ),
+                  if (active.contains('legal')) ...[
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Legal firm accounting',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Creates the client account, client monies liability '
+                      'and disbursement accounts required to keep client '
+                      'money separate from office money. Safe to run twice.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 12),
+                    if (canAdmin)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            await runWithFeedback(
+                              context,
+                              action: () =>
+                                  ref.read(repoProvider)!.setupLegalModule(),
+                              successMessage: 'Client account ready',
+                            );
+                            ref.invalidate(accountsProvider);
+                            ref.invalidate(bankAccountsProvider);
+                          },
+                          icon: const Icon(Icons.gavel_outlined, size: 18),
+                          label: const Text('Set up client account'),
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
       ),

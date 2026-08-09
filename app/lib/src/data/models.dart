@@ -696,3 +696,323 @@ class DashboardSummary {
   int get activitiesDue => Fmt.toInt(_raw['activities_due']);
   int get lowStock => Fmt.toInt(_raw['low_stock']);
 }
+
+// =====================================================================
+// Access control
+// =====================================================================
+
+/// The roles a company can assign, with the wording used in the UI.
+/// Ownership is transferred rather than granted, so it is not offered
+/// when inviting someone.
+const memberRoles = <String, ({String label, String description})>{
+  'owner': (
+    label: 'Owner',
+    description: 'Full control including billing and closing the company'
+  ),
+  'admin': (
+    label: 'Company Admin',
+    description: 'Everything except ownership transfer'
+  ),
+  'accountant': (
+    label: 'Accountant',
+    description: 'Prepares and posts to the ledger, closes periods'
+  ),
+  'accounts_clerk': (
+    label: 'Accounts Clerk',
+    description: 'Prepares documents but cannot post to the ledger'
+  ),
+  'auditor': (
+    label: 'Auditor',
+    description: 'Reads everything including the ledger and audit trail; changes nothing'
+  ),
+  'sales': (label: 'Sales', description: 'CRM and sales documents'),
+  'purchaser': (label: 'Purchasing', description: 'Purchase documents'),
+  'viewer': (label: 'View Only', description: 'Read-only access to day-to-day records'),
+};
+
+String roleLabel(String? role) => memberRoles[role]?.label ?? Fmt.label(role);
+
+class TeamMember {
+  TeamMember({
+    required this.memberId,
+    required this.role,
+    required this.status,
+    this.userId,
+    this.email,
+    this.fullName,
+    this.joinedAt,
+  });
+
+  final String memberId;
+  final String? userId;
+  final String? email;
+  final String? fullName;
+  final String role;
+  final String status;
+  final DateTime? joinedAt;
+
+  bool get isPending => status == 'invited';
+  String get displayName =>
+      (fullName ?? '').trim().isNotEmpty ? fullName! : (email ?? 'Unknown');
+
+  factory TeamMember.fromJson(Map<String, dynamic> j) => TeamMember(
+        memberId: j['member_id'] as String,
+        userId: j['user_id'] as String?,
+        email: j['email'] as String?,
+        fullName: j['full_name'] as String?,
+        role: j['role']?.toString() ?? 'viewer',
+        status: j['status']?.toString() ?? 'active',
+        joinedAt: Fmt.parseDate(j['joined_at']),
+      );
+}
+
+// =====================================================================
+// Platform administration
+// =====================================================================
+
+class ModuleInfo {
+  ModuleInfo({
+    required this.code,
+    required this.name,
+    required this.isCore,
+    required this.monthlyPrice,
+    this.description,
+  });
+
+  final String code;
+  final String name;
+  final String? description;
+  final bool isCore;
+  final double monthlyPrice;
+
+  factory ModuleInfo.fromJson(Map<String, dynamic> j) => ModuleInfo(
+        code: j['code'] as String,
+        name: j['name'] as String,
+        description: j['description'] as String?,
+        isCore: j['is_core'] == true,
+        monthlyPrice: Fmt.toDouble(j['monthly_price']),
+      );
+}
+
+class PlatformOrg {
+  PlatformOrg({
+    required this.id,
+    required this.name,
+    required this.status,
+    required this.memberCount,
+    required this.invoiceCount,
+    required this.invoicedValue,
+    required this.modules,
+    this.registrationNo,
+    this.tin,
+    this.einvoiceEnabled = false,
+    this.createdAt,
+  });
+
+  final String id;
+  final String name;
+  final String status;
+  final String? registrationNo;
+  final String? tin;
+  final bool einvoiceEnabled;
+  final int memberCount;
+  final int invoiceCount;
+  final double invoicedValue;
+  final List<String> modules;
+  final DateTime? createdAt;
+
+  factory PlatformOrg.fromJson(Map<String, dynamic> j) => PlatformOrg(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        status: j['status']?.toString() ?? 'active',
+        registrationNo: j['registration_no'] as String?,
+        tin: j['tin'] as String?,
+        einvoiceEnabled: j['einvoice_enabled'] == true,
+        memberCount: Fmt.toInt(j['member_count']),
+        invoiceCount: Fmt.toInt(j['invoice_count']),
+        invoicedValue: Fmt.toDouble(j['invoiced_value']),
+        modules: ((j['modules'] as List?) ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+        createdAt: Fmt.parseDate(j['created_at']),
+      );
+}
+
+// =====================================================================
+// Legal firm accounting
+// =====================================================================
+
+class Matter {
+  Matter({
+    required this.id,
+    required this.matterNo,
+    required this.name,
+    required this.clientId,
+    required this.status,
+    this.clientName,
+    this.matterType,
+    this.practiceArea,
+    this.courtReference,
+    this.hourlyRate = 0,
+    this.estimatedFees = 0,
+    this.depositRequired = 0,
+    this.openedDate,
+    this.currency = 'MYR',
+  });
+
+  final String id;
+  final String matterNo;
+  final String name;
+  final String clientId;
+  final String? clientName;
+  final String status;
+  final String? matterType;
+  final String? practiceArea;
+  final String? courtReference;
+  final double hourlyRate;
+  final double estimatedFees;
+  final double depositRequired;
+  final DateTime? openedDate;
+  final String currency;
+
+  factory Matter.fromJson(Map<String, dynamic> j) {
+    final client = j['contacts'];
+    return Matter(
+      id: j['id'] as String,
+      matterNo: j['matter_no']?.toString() ?? '',
+      name: j['name']?.toString() ?? '',
+      clientId: j['client_id']?.toString() ?? '',
+      clientName: client is Map ? client['name'] as String? : null,
+      status: j['status']?.toString() ?? 'open',
+      matterType: j['matter_type'] as String?,
+      practiceArea: j['practice_area'] as String?,
+      courtReference: j['court_reference'] as String?,
+      hourlyRate: Fmt.toDouble(j['hourly_rate']),
+      estimatedFees: Fmt.toDouble(j['estimated_fees']),
+      depositRequired: Fmt.toDouble(j['deposit_required']),
+      openedDate: Fmt.parseDate(j['opened_date']),
+      currency: j['currency']?.toString() ?? 'MYR',
+    );
+  }
+}
+
+class MatterSummary {
+  MatterSummary({
+    required this.matterId,
+    required this.matterNo,
+    required this.matterName,
+    required this.clientName,
+    required this.status,
+    required this.clientFunds,
+    required this.unbilledTime,
+    required this.unbilledDisbursements,
+    required this.billed,
+    required this.outstanding,
+  });
+
+  final String matterId;
+  final String matterNo;
+  final String matterName;
+  final String clientName;
+  final String status;
+  final double clientFunds;
+  final double unbilledTime;
+  final double unbilledDisbursements;
+  final double billed;
+  final double outstanding;
+
+  double get workInProgress => unbilledTime + unbilledDisbursements;
+
+  factory MatterSummary.fromJson(Map<String, dynamic> j) => MatterSummary(
+        matterId: j['matter_id'] as String,
+        matterNo: j['matter_no']?.toString() ?? '',
+        matterName: j['matter_name']?.toString() ?? '',
+        clientName: j['client_name']?.toString() ?? '',
+        status: j['status']?.toString() ?? 'open',
+        clientFunds: Fmt.toDouble(j['client_funds']),
+        unbilledTime: Fmt.toDouble(j['unbilled_time']),
+        unbilledDisbursements: Fmt.toDouble(j['unbilled_disbursements']),
+        billed: Fmt.toDouble(j['billed']),
+        outstanding: Fmt.toDouble(j['outstanding']),
+      );
+}
+
+class ClientTransaction {
+  ClientTransaction({
+    required this.id,
+    required this.transactionNo,
+    required this.transactionDate,
+    required this.transactionType,
+    required this.amount,
+    required this.status,
+    this.description,
+    this.payee,
+    this.reference,
+  });
+
+  final String id;
+  final String transactionNo;
+  final DateTime transactionDate;
+  final String transactionType;
+  final double amount;
+  final String status;
+  final String? description;
+  final String? payee;
+  final String? reference;
+
+  bool get isMoneyIn => amount >= 0;
+
+  factory ClientTransaction.fromJson(Map<String, dynamic> j) => ClientTransaction(
+        id: j['id'] as String,
+        transactionNo: j['transaction_no']?.toString() ?? '',
+        transactionDate: Fmt.parseDate(j['transaction_date']) ?? DateTime.now(),
+        transactionType: j['transaction_type']?.toString() ?? 'receipt',
+        amount: Fmt.toDouble(j['amount']),
+        status: j['status']?.toString() ?? 'draft',
+        description: j['description'] as String?,
+        payee: j['payee'] as String?,
+        reference: j['reference'] as String?,
+      );
+}
+
+class TimeEntry {
+  TimeEntry({
+    required this.id,
+    required this.entryDate,
+    required this.description,
+    required this.minutes,
+    required this.hourlyRate,
+    required this.amount,
+    required this.isBillable,
+    required this.isBilled,
+    this.activityCode,
+  });
+
+  final String id;
+  final DateTime entryDate;
+  final String description;
+  final int minutes;
+  final double hourlyRate;
+  final double amount;
+  final bool isBillable;
+  final bool isBilled;
+  final String? activityCode;
+
+  String get duration {
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    return h == 0 ? '${m}m' : (m == 0 ? '${h}h' : '${h}h ${m}m');
+  }
+
+  factory TimeEntry.fromJson(Map<String, dynamic> j) => TimeEntry(
+        id: j['id'] as String,
+        entryDate: Fmt.parseDate(j['entry_date']) ?? DateTime.now(),
+        description: j['description']?.toString() ?? '',
+        minutes: Fmt.toInt(j['minutes']),
+        hourlyRate: Fmt.toDouble(j['hourly_rate']),
+        amount: Fmt.toDouble(j['amount']),
+        isBillable: j['is_billable'] != false,
+        isBilled: j['is_billed'] == true,
+        activityCode: j['activity_code'] as String?,
+      );
+}

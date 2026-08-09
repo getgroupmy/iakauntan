@@ -108,7 +108,12 @@ final memberRoleProvider = FutureProvider<String>((ref) async {
   return row?['role']?.toString() ?? 'viewer';
 });
 
-/// Whether the current member may post to the ledger.
+// These mirror app.can_post / can_write / can_read_ledger in the
+// database. They only decide what the UI offers; RLS is what actually
+// enforces it, so a stale copy here cannot become a security hole.
+
+/// Whether the current member may post to the ledger. An accounts clerk
+/// deliberately sits outside this: they prepare, someone else posts.
 final canPostProvider = Provider<bool>((ref) {
   final role = ref.watch(memberRoleProvider).value ?? 'viewer';
   return const ['owner', 'admin', 'accountant'].contains(role);
@@ -116,7 +121,21 @@ final canPostProvider = Provider<bool>((ref) {
 
 final canWriteProvider = Provider<bool>((ref) {
   final role = ref.watch(memberRoleProvider).value ?? 'viewer';
-  return const ['owner', 'admin', 'accountant', 'sales', 'purchaser']
+  return const [
+    'owner', 'admin', 'accountant', 'accounts_clerk', 'sales', 'purchaser'
+  ].contains(role);
+});
+
+final canAdminProvider = Provider<bool>((ref) {
+  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  return const ['owner', 'admin'].contains(role);
+});
+
+/// Who may see the journals and audit trail. Auditors get read access to
+/// everything; sales and purchasing staff do not.
+final canReadLedgerProvider = Provider<bool>((ref) {
+  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  return const ['owner', 'admin', 'accountant', 'accounts_clerk', 'auditor']
       .contains(role);
 });
 
@@ -238,4 +257,104 @@ void refreshLedgerData(WidgetRef ref) {
   ref.invalidate(einvoicesProvider);
   ref.invalidate(bankAccountsProvider);
   ref.invalidate(expensesProvider);
+}
+
+// ---------------------------------------------------------------------
+// Platform administration
+// ---------------------------------------------------------------------
+final platformRepoProvider =
+    Provider<PlatformRepo>((ref) => PlatformRepo(ref.watch(supabaseProvider)));
+
+/// Whether the signed-in user is platform staff. Drives whether the
+/// admin console appears at all.
+final isPlatformAdminProvider = FutureProvider<bool>((ref) async {
+  if (ref.watch(currentUserProvider) == null) return false;
+  try {
+    return await ref.watch(platformRepoProvider).amIPlatformAdmin();
+  } catch (_) {
+    return false;
+  }
+});
+
+final platformStatsProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) {
+  return ref.watch(platformRepoProvider).stats();
+});
+
+final platformOrgsProvider =
+    FutureProvider.autoDispose<List<PlatformOrg>>((ref) {
+  return ref.watch(platformRepoProvider).organizations();
+});
+
+final platformModulesProvider = FutureProvider<List<ModuleInfo>>((ref) {
+  return ref.watch(platformRepoProvider).modules();
+});
+
+final platformSettingsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return ref.watch(platformRepoProvider).settings();
+});
+
+// ---------------------------------------------------------------------
+// Module entitlements for the active tenant
+// ---------------------------------------------------------------------
+final enabledModulesProvider = FutureProvider<Set<String>>((ref) async {
+  final repo = ref.watch(repoProvider);
+  if (repo == null) return <String>{};
+  return repo.enabledModules();
+});
+
+/// Synchronous check for widgets. Treats "still loading" as enabled so
+/// navigation does not flicker on start-up.
+bool moduleEnabled(WidgetRef ref, String code) {
+  final modules = ref.watch(enabledModulesProvider);
+  return modules.when(
+    data: (set) => set.contains(code),
+    loading: () => true,
+    error: (_, __) => true,
+  );
+}
+
+// ---------------------------------------------------------------------
+// Team
+// ---------------------------------------------------------------------
+final teamProvider = FutureProvider.autoDispose<List<TeamMember>>((ref) {
+  return requireRepo(ref).team();
+});
+
+// ---------------------------------------------------------------------
+// Legal firm module
+// ---------------------------------------------------------------------
+final mattersProvider = FutureProvider.autoDispose
+    .family<List<Matter>, ({String status, String search})>((ref, args) {
+  return requireRepo(ref).matters(status: args.status, search: args.search);
+});
+
+final matterSummaryProvider =
+    FutureProvider.autoDispose<List<MatterSummary>>((ref) {
+  return requireRepo(ref).matterSummary();
+});
+
+final clientTransactionsProvider = FutureProvider.autoDispose
+    .family<List<ClientTransaction>, String>((ref, matterId) {
+  return requireRepo(ref).clientTransactions(matterId);
+});
+
+final timeEntriesProvider =
+    FutureProvider.autoDispose.family<List<TimeEntry>, String>((ref, matterId) {
+  return requireRepo(ref).timeEntries(matterId);
+});
+
+final disbursementsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, matterId) {
+  return requireRepo(ref).disbursements(matterId);
+});
+
+/// Refresh everything a matter screen shows after money moves.
+void refreshMatter(WidgetRef ref, String matterId) {
+  ref.invalidate(clientTransactionsProvider(matterId));
+  ref.invalidate(timeEntriesProvider(matterId));
+  ref.invalidate(disbursementsProvider(matterId));
+  ref.invalidate(matterSummaryProvider);
+  ref.invalidate(bankAccountsProvider);
 }

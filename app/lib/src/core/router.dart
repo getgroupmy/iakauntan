@@ -6,15 +6,19 @@ import '../features/auth/sign_in_screen.dart';
 import '../features/contacts/contact_editor.dart';
 import '../features/contacts/contacts_screen.dart';
 import '../features/crm/pipeline_screen.dart';
+import '../features/admin/platform_console_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/documents/document_editor.dart';
 import '../features/documents/document_list_screen.dart';
 import '../features/einvoice/einvoice_screen.dart';
 import '../features/expenses/expenses_screen.dart';
 import '../features/items/items_screen.dart';
+import '../features/legal/matter_detail_screen.dart';
+import '../features/legal/matters_screen.dart';
 import '../features/onboarding/create_org_screen.dart';
 import '../features/reports/reports_screen.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/team/team_screen.dart';
 import '../features/shell/app_shell.dart';
 import 'providers.dart';
 
@@ -86,6 +90,24 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
           GoRoute(path: '/items', builder: (_, __) => const ItemsScreen()),
+          GoRoute(
+            path: '/legal',
+            builder: (_, __) => const MattersScreen(),
+            routes: [
+              GoRoute(
+                path: ':id',
+                parentNavigatorKey: _rootKey,
+                builder: (_, state) => MatterDetailScreen(
+                  matterId: state.pathParameters['id']!,
+                ),
+              ),
+            ],
+          ),
+          GoRoute(path: '/team', builder: (_, __) => const TeamScreen()),
+          GoRoute(
+            path: '/admin',
+            builder: (_, __) => const PlatformConsoleScreen(),
+          ),
           GoRoute(path: '/crm', builder: (_, __) => const PipelineScreen()),
           GoRoute(path: '/einvoice', builder: (_, __) => const EinvoiceScreen()),
           GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),

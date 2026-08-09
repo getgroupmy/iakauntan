@@ -10,7 +10,7 @@ import '../../data/models.dart';
 /// Navigation destination shared by the rail (wide) and bottom bar (narrow).
 class _Dest {
   const _Dest(this.label, this.icon, this.selectedIcon, this.path,
-      {this.primary = false});
+      {this.primary = false, this.module, this.platformOnly = false});
 
   final String label;
   final IconData icon;
@@ -20,6 +20,14 @@ class _Dest {
   /// Primary destinations get a slot in the mobile bottom bar; the rest
   /// live behind "More".
   final bool primary;
+
+  /// Add-on this destination belongs to. Hidden when the tenant is not
+  /// entitled to it. The database blocks the writes regardless — this
+  /// just avoids showing doors that will not open.
+  final String? module;
+
+  /// Only visible to platform staff.
+  final bool platformOnly;
 }
 
 const _destinations = <_Dest>[
@@ -29,16 +37,24 @@ const _destinations = <_Dest>[
       '/sales/invoice',
       primary: true),
   _Dest('Purchases', Icons.shopping_bag_outlined, Icons.shopping_bag,
-      '/purchases/bill'),
+      '/purchases/bill',
+      module: 'purchases'),
   _Dest('Expenses', Icons.receipt_outlined, Icons.receipt, '/expenses'),
+  _Dest('Matters', Icons.gavel_outlined, Icons.gavel, '/legal',
+      module: 'legal'),
   _Dest('Contacts', Icons.people_outline, Icons.people, '/contacts',
       primary: true),
-  _Dest('Items', Icons.inventory_2_outlined, Icons.inventory_2, '/items'),
+  _Dest('Items', Icons.inventory_2_outlined, Icons.inventory_2, '/items',
+      module: 'inventory'),
   _Dest('CRM', Icons.trending_up_outlined, Icons.trending_up, '/crm',
-      primary: true),
-  _Dest('e-Invoice', Icons.verified_outlined, Icons.verified, '/einvoice'),
+      primary: true, module: 'crm'),
+  _Dest('e-Invoice', Icons.verified_outlined, Icons.verified, '/einvoice',
+      module: 'einvoice'),
   _Dest('Reports', Icons.bar_chart_outlined, Icons.bar_chart, '/reports'),
+  _Dest('Team', Icons.manage_accounts_outlined, Icons.manage_accounts, '/team'),
   _Dest('Settings', Icons.settings_outlined, Icons.settings, '/settings'),
+  _Dest('Platform', Icons.shield_outlined, Icons.shield, '/admin',
+      platformOnly: true),
 ];
 
 class AppShell extends ConsumerWidget {
@@ -49,12 +65,24 @@ class AppShell extends ConsumerWidget {
 
   static const _railBreakpoint = 900.0;
 
-  int get _selectedIndex {
+  /// Destinations this user can actually reach: add-ons the tenant is
+  /// entitled to, plus the platform console for staff.
+  List<_Dest> _visible(WidgetRef ref) {
+    final isPlatformAdmin =
+        ref.watch(isPlatformAdminProvider).value ?? false;
+    return _destinations.where((d) {
+      if (d.platformOnly) return isPlatformAdmin;
+      if (d.module == null) return true;
+      return moduleEnabled(ref, d.module!);
+    }).toList();
+  }
+
+  int _selectedIndexIn(List<_Dest> dests) {
     // Longest matching prefix wins so /sales/invoice/123 still lights up Sales.
     var best = 0;
     var bestLength = 0;
-    for (var i = 0; i < _destinations.length; i++) {
-      final path = _destinations[i].path;
+    for (var i = 0; i < dests.length; i++) {
+      final path = dests[i].path;
       final match = path == '/' ? location == '/' : location.startsWith(path);
       if (match && path.length >= bestLength) {
         best = i;
@@ -67,18 +95,21 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
-    return wide ? _wideLayout(context, ref) : _narrowLayout(context, ref);
+    final dests = _visible(ref);
+    return wide
+        ? _wideLayout(context, ref, dests)
+        : _narrowLayout(context, ref, dests);
   }
 
-  Widget _wideLayout(BuildContext context, WidgetRef ref) {
+  Widget _wideLayout(BuildContext context, WidgetRef ref, List<_Dest> dests) {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       body: Row(
         children: [
           NavigationRail(
             extended: MediaQuery.sizeOf(context).width >= 1200,
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (i) => context.go(_destinations[i].path),
+            selectedIndex: _selectedIndexIn(dests),
+            onDestinationSelected: (i) => context.go(dests[i].path),
             leading: _RailHeader(
               extended: MediaQuery.sizeOf(context).width >= 1200,
             ),
@@ -92,7 +123,7 @@ class AppShell extends ConsumerWidget {
               ),
             ),
             destinations: [
-              for (final d in _destinations)
+              for (final d in dests)
                 NavigationRailDestination(
                   icon: Icon(d.icon),
                   selectedIcon: Icon(d.selectedIcon),
@@ -110,9 +141,9 @@ class AppShell extends ConsumerWidget {
     );
   }
 
-  Widget _narrowLayout(BuildContext context, WidgetRef ref) {
-    final primary = _destinations.where((d) => d.primary).toList();
-    final selected = _destinations[_selectedIndex];
+  Widget _narrowLayout(BuildContext context, WidgetRef ref, List<_Dest> dests) {
+    final primary = dests.where((d) => d.primary).toList();
+    final selected = dests[_selectedIndexIn(dests)];
     final primaryIndex = primary.indexOf(selected);
 
     return Scaffold(
@@ -123,7 +154,7 @@ class AppShell extends ConsumerWidget {
           if (i < primary.length) {
             context.go(primary[i].path);
           } else {
-            _showMoreSheet(context);
+            _showMoreSheet(context, dests);
           }
         },
         destinations: [
@@ -142,7 +173,7 @@ class AppShell extends ConsumerWidget {
     );
   }
 
-  void _showMoreSheet(BuildContext context) {
+  void _showMoreSheet(BuildContext context, List<_Dest> dests) {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -150,7 +181,7 @@ class AppShell extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            for (final d in _destinations.where((d) => !d.primary))
+            for (final d in dests.where((d) => !d.primary))
               ListTile(
                 leading: Icon(d.icon),
                 title: Text(d.label),
