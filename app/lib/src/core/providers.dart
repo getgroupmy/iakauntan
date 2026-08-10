@@ -521,3 +521,15 @@ final departmentsProvider =
 final positionsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).positions();
 });
+
+final payrollSettingsProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>?>((ref) {
+  return requireRepo(ref).payrollSettings();
+});
+
+/// One provider for every simple configuration list, keyed by table.
+final setupRowsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({String table, String orderBy})>(
+        (ref, arg) {
+  return requireRepo(ref).setupRows(arg.table, orderBy: arg.orderBy);
+});

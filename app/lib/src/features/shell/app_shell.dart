@@ -62,6 +62,7 @@ const _destinations = <_Dest>[
   _Dest('Payroll', Icons.payments_outlined, Icons.payments, '/hr/payroll',
       module: 'payroll'),
   _Dest('Talent', Icons.work_outline, Icons.work, '/hr/talent', module: 'hr'),
+  _Dest('HR setup', Icons.tune_outlined, Icons.tune, '/hr/setup', module: 'hr'),
   _Dest('Reports', Icons.bar_chart_outlined, Icons.bar_chart, '/reports'),
   _Dest('Team', Icons.manage_accounts_outlined, Icons.manage_accounts, '/team'),
   _Dest('Settings', Icons.settings_outlined, Icons.settings, '/settings'),

@@ -20,6 +20,7 @@ import '../features/reports/reports_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/hr/claims_screen.dart';
 import '../features/hr/employee_editor.dart';
+import '../features/hr/hr_setup_screen.dart';
 import '../features/hr/leave_screen.dart';
 import '../features/hr/my_hr_screen.dart';
 import '../features/hr/payroll_screen.dart';
@@ -133,6 +134,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/hr/leave', builder: (_, __) => const LeaveScreen()),
           GoRoute(path: '/hr/claims', builder: (_, __) => const ClaimsScreen()),
           GoRoute(path: '/hr/talent', builder: (_, __) => const TalentScreen()),
+          GoRoute(path: '/hr/setup', builder: (_, __) => const HrSetupScreen()),
           GoRoute(
             path: '/hr/payroll',
             builder: (_, __) => const PayrollScreen(),

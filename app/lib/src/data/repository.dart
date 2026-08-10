@@ -1257,3 +1257,38 @@ extension RepoPayslipAccess on Repo {
     return Repo._rows(rows).map(PayslipAccessLogEntry.fromJson).toList();
   }
 }
+
+/// HR configuration. Every one of these was SQL-only, which meant a new
+/// tenant could not set itself up.
+extension RepoHrSetup on Repo {
+  Future<Map<String, dynamic>?> payrollSettings() async {
+    final row = await client
+        .from('payroll_settings')
+        .select()
+        .eq('org_id', orgId)
+        .maybeSingle();
+    return row == null ? null : Map<String, dynamic>.from(row);
+  }
+
+  Future<void> savePayrollSettings(Map<String, dynamic> values) =>
+      client.from('payroll_settings').upsert({...values, 'org_id': orgId});
+
+  /// One save path for every simple configuration list, since they all
+  /// behave the same way: insert when new, update when not.
+  Future<void> saveSetupRow(
+    String table,
+    Map<String, dynamic> values, {
+    String? id,
+  }) async {
+    if (id != null) {
+      await client.from(table).update(values).eq('id', id);
+    } else {
+      await client.from(table).insert({...values, 'org_id': orgId});
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> setupRows(String table,
+          {String orderBy = 'name'}) async =>
+      Repo._rows(
+          await client.from(table).select().eq('org_id', orgId).order(orderBy));
+}
