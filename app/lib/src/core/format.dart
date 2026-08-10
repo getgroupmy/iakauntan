@@ -40,6 +40,24 @@ class Fmt {
   static String longDate(DateTime? value) =>
       value == null ? '—' : _longDate.format(value);
 
+  /// Month name on its own, for payroll period labels.
+  /// Clock time only, for attendance rows.
+  static String time(DateTime? value) =>
+      value == null ? '—' : DateFormat('HH:mm').format(value.toLocal());
+
+  /// Leave is counted in days and halves, so trim a trailing ".0".
+  static String days(double value) {
+    final s = value.toStringAsFixed(1);
+    return s.endsWith('.0') ? s.substring(0, s.length - 2) : s;
+  }
+
+  static String monthName(int month) => _monthNames[(month - 1) % 12];
+
+  static const _monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
   static String monthYear(DateTime? value) =>
       value == null ? '—' : _monthYear.format(value);
 

@@ -358,3 +358,124 @@ void refreshMatter(WidgetRef ref, String matterId) {
   ref.invalidate(matterSummaryProvider);
   ref.invalidate(bankAccountsProvider);
 }
+
+// ---------------------------------------------------------------------
+// HRMS
+//
+// These mirror app.can_manage_hr / can_run_payroll. As with the finance
+// tiers, they only decide what the UI offers — RLS decides what actually
+// comes back.
+// ---------------------------------------------------------------------
+final canManageHrProvider = Provider<bool>((ref) {
+  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  return const ['owner', 'admin', 'hr_manager'].contains(role);
+});
+
+/// Payroll touches the ledger, so it needs a finance role as well as HR.
+final canRunPayrollProvider = Provider<bool>((ref) {
+  final role = ref.watch(memberRoleProvider).value ?? 'viewer';
+  return const ['owner', 'admin', 'hr_manager', 'accountant'].contains(role);
+});
+
+final directoryProvider = FutureProvider.autoDispose<List<Employee>>((ref) {
+  return requireRepo(ref).directory();
+});
+
+final employeesProvider =
+    FutureProvider.autoDispose.family<List<Employee>, String?>((ref, status) {
+  return requireRepo(ref).employees(status: status);
+});
+
+final employeeProvider =
+    FutureProvider.autoDispose.family<Employee?, String>((ref, id) {
+  return requireRepo(ref).employee(id);
+});
+
+/// The caller's own employee record. Everything on the self-service
+/// screen hangs off this, and it is null when the login is not linked.
+final myEmployeeProvider = FutureProvider<Employee?>((ref) {
+  final repo = ref.watch(repoProvider);
+  if (repo == null) return Future.value(null);
+  return repo.myEmployee();
+});
+
+final myAttendanceTodayProvider =
+    FutureProvider.autoDispose<AttendanceRecord?>((ref) async {
+  final me = await ref.watch(myEmployeeProvider.future);
+  if (me == null) return null;
+  final today = DateTime.now();
+  final rows = await requireRepo(ref).attendance(
+    employeeId: me.id,
+    from: DateTime(today.year, today.month, today.day),
+    to: DateTime(today.year, today.month, today.day),
+  );
+  return rows.isEmpty ? null : rows.first;
+});
+
+final attendanceProvider = FutureProvider.autoDispose
+    .family<List<AttendanceRecord>, String?>((ref, employeeId) {
+  final now = DateTime.now();
+  return requireRepo(ref).attendance(
+    employeeId: employeeId,
+    from: DateTime(now.year, now.month, 1),
+  );
+});
+
+final leaveTypesProvider = FutureProvider<List<LeaveType>>((ref) {
+  return requireRepo(ref).leaveTypes();
+});
+
+final myLeaveBalancesProvider =
+    FutureProvider.autoDispose<List<LeaveBalance>>((ref) async {
+  final me = await ref.watch(myEmployeeProvider.future);
+  if (me == null) return const [];
+  return requireRepo(ref).leaveBalances(me.id, DateTime.now().year);
+});
+
+final leaveRequestsProvider = FutureProvider.autoDispose
+    .family<List<LeaveRequest>, String>((ref, status) {
+  return requireRepo(ref).leaveRequests(status: status);
+});
+
+final claimsProvider =
+    FutureProvider.autoDispose.family<List<ExpenseClaim>, String>((ref, status) {
+  return requireRepo(ref).claims(status: status);
+});
+
+final claimTypesProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).claimTypes();
+});
+
+final payrollRunsProvider = FutureProvider.autoDispose<List<PayrollRun>>((ref) {
+  return requireRepo(ref).payrollRuns();
+});
+
+final payslipsForRunProvider =
+    FutureProvider.autoDispose.family<List<Payslip>, String>((ref, runId) {
+  return requireRepo(ref).payslips(runId: runId);
+});
+
+final myPayslipsProvider = FutureProvider.autoDispose<List<Payslip>>((ref) async {
+  final me = await ref.watch(myEmployeeProvider.future);
+  if (me == null) return const [];
+  return requireRepo(ref).payslips(employeeId: me.id);
+});
+
+final payslipProvider =
+    FutureProvider.autoDispose.family<Payslip?, String>((ref, id) {
+  return requireRepo(ref).payslip(id);
+});
+
+final requisitionsProvider =
+    FutureProvider.autoDispose<List<JobRequisition>>((ref) {
+  return requireRepo(ref).requisitions();
+});
+
+final applicantsProvider = FutureProvider.autoDispose<List<Applicant>>((ref) {
+  return requireRepo(ref).applicants();
+});
+
+final appraisalsProvider = FutureProvider.autoDispose<List<Appraisal>>((ref) {
+  return requireRepo(ref).appraisals();
+});

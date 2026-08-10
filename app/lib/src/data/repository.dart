@@ -853,3 +853,327 @@ extension RepoExtras on Repo {
         'paid_from': paidFrom,
       });
 }
+
+/// HRMS data access. Kept in its own extension so the HR surface can be
+/// read as one piece rather than scattered through the finance methods.
+extension RepoHr on Repo {
+  // ------------------------------------------------------------------
+  // People
+  // ------------------------------------------------------------------
+
+  /// The whole company, name and role only. Backed by a function so the
+  /// pay columns on the employee row never travel to the client.
+  Future<List<Employee>> directory() async {
+    final data = await client.rpc('employee_directory', params: {'p_org_id': orgId});
+    return Repo._rows(data).map(Employee.fromJson).toList();
+  }
+
+  /// Full employee records, which RLS narrows to what the caller may see:
+  /// everyone for HR, your reporting line for a manager, yourself
+  /// otherwise.
+  Future<List<Employee>> employees({String? search, String? status}) async {
+    var q = client
+        .from('employees')
+        .select('*, departments(name), positions(title)')
+        .eq('org_id', orgId);
+    if (status != null && status != 'all') q = q.eq('employment_status', status);
+    if (search != null && search.trim().isNotEmpty) {
+      final s = '%${search.trim()}%';
+      q = q.or('full_name.ilike.$s,employee_no.ilike.$s');
+    }
+    return Repo._rows(await q.order('employee_no')).map(Employee.fromJson).toList();
+  }
+
+  Future<Employee?> employee(String id) async {
+    final row = await client
+        .from('employees')
+        .select('*, departments(name), positions(title)')
+        .eq('id', id)
+        .maybeSingle();
+    return row == null ? null : Employee.fromJson(Map<String, dynamic>.from(row));
+  }
+
+  /// The caller's own employee record, or null when their login is not
+  /// linked to one.
+  Future<Employee?> myEmployee() async {
+    final uid = client.auth.currentUser?.id;
+    if (uid == null) return null;
+    final row = await client
+        .from('employees')
+        .select('*, departments(name), positions(title)')
+        .eq('org_id', orgId)
+        .eq('user_id', uid)
+        .maybeSingle();
+    return row == null ? null : Employee.fromJson(Map<String, dynamic>.from(row));
+  }
+
+  Future<String> saveEmployee(Map<String, dynamic> values, {String? id}) async {
+    if (id != null) {
+      await client.from('employees').update(values).eq('id', id);
+      return id;
+    }
+    final no = await client
+        .rpc('next_document_number', params: {'p_org_id': orgId, 'p_doc_type': 'employee'});
+    final row = await client
+        .from('employees')
+        .insert({...values, 'org_id': orgId, 'employee_no': no})
+        .select('id')
+        .single();
+    return row['id'] as String;
+  }
+
+  Future<List<Map<String, dynamic>>> departments() async => Repo._rows(
+      await client.from('departments').select().eq('org_id', orgId).order('name'));
+
+  Future<List<Map<String, dynamic>>> positions() async => Repo._rows(
+      await client.from('positions').select().eq('org_id', orgId).order('title'));
+
+  // ------------------------------------------------------------------
+  // Attendance
+  // ------------------------------------------------------------------
+  Future<List<AttendanceRecord>> attendance({
+    String? employeeId,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    var q = client
+        .from('attendance_records')
+        .select('*, employees(full_name)')
+        .eq('org_id', orgId);
+    if (employeeId != null) q = q.eq('employee_id', employeeId);
+    if (from != null) q = q.gte('work_date', Fmt.iso(from));
+    if (to != null) q = q.lte('work_date', Fmt.iso(to));
+    return Repo._rows(await q.order('work_date', ascending: false).limit(200))
+        .map(AttendanceRecord.fromJson)
+        .toList();
+  }
+
+  Future<void> clockIn({double? lat, double? lng, String? address}) =>
+      client.rpc('clock_in', params: {
+        'p_org_id': orgId,
+        'p_method': lat == null ? 'web' : 'mobile_gps',
+        if (lat != null) 'p_lat': lat,
+        if (lng != null) 'p_lng': lng,
+        if (address != null) 'p_address': address,
+      });
+
+  Future<Map<String, dynamic>> clockOut({double? lat, double? lng}) async {
+    final data = await client.rpc('clock_out', params: {
+      'p_org_id': orgId,
+      'p_method': lat == null ? 'web' : 'mobile_gps',
+      if (lat != null) 'p_lat': lat,
+      if (lng != null) 'p_lng': lng,
+    });
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  // ------------------------------------------------------------------
+  // Leave
+  // ------------------------------------------------------------------
+  Future<List<LeaveType>> leaveTypes() async => Repo._rows(await client
+          .from('leave_types')
+          .select()
+          .eq('org_id', orgId)
+          .eq('is_active', true)
+          .order('sort_order'))
+      .map(LeaveType.fromJson)
+      .toList();
+
+  Future<List<LeaveBalance>> leaveBalances(String employeeId, int year) async =>
+      Repo._rows(await client
+              .from('leave_balances')
+              .select('*, leave_types(name)')
+              .eq('employee_id', employeeId)
+              .eq('leave_year', year))
+          .map(LeaveBalance.fromJson)
+          .toList();
+
+  Future<List<LeaveRequest>> leaveRequests({String? status, String? employeeId}) async {
+    var q = client
+        .from('leave_requests')
+        .select('*, employees(full_name), leave_types(name)')
+        .eq('org_id', orgId);
+    if (status != null && status != 'all') q = q.eq('status', status);
+    if (employeeId != null) q = q.eq('employee_id', employeeId);
+    return Repo._rows(await q.order('start_date', ascending: false).limit(200))
+        .map(LeaveRequest.fromJson)
+        .toList();
+  }
+
+  Future<void> submitLeave({
+    required String leaveTypeId,
+    required DateTime start,
+    required DateTime end,
+    required double days,
+    String? reason,
+  }) =>
+      client.rpc('submit_leave_request', params: {
+        'p_org_id': orgId,
+        'p_leave_type_id': leaveTypeId,
+        'p_start_date': Fmt.iso(start),
+        'p_end_date': Fmt.iso(end),
+        'p_total_days': days,
+        if (reason != null) 'p_reason': reason,
+      });
+
+  Future<void> decideLeave(String id, bool approve, {String? note}) =>
+      client.rpc('decide_leave_request', params: {
+        'p_request_id': id,
+        'p_approve': approve,
+        if (note != null) 'p_note': note,
+      });
+
+  // ------------------------------------------------------------------
+  // Claims
+  // ------------------------------------------------------------------
+  Future<List<ExpenseClaim>> claims({String? status, String? employeeId}) async {
+    var q = client
+        .from('expense_claims')
+        .select('*, employees(full_name)')
+        .eq('org_id', orgId);
+    if (status != null && status != 'all') q = q.eq('status', status);
+    if (employeeId != null) q = q.eq('employee_id', employeeId);
+    return Repo._rows(await q.order('claim_date', ascending: false).limit(200))
+        .map(ExpenseClaim.fromJson)
+        .toList();
+  }
+
+  Future<void> decideClaim(String id, bool approve,
+          {String? note, double? approvedAmount}) =>
+      client.rpc('decide_expense_claim', params: {
+        'p_claim_id': id,
+        'p_approve': approve,
+        if (note != null) 'p_note': note,
+        if (approvedAmount != null) 'p_approved_amount': approvedAmount,
+      });
+
+  Future<List<Map<String, dynamic>>> claimTypes() async => Repo._rows(await client
+      .from('claim_types')
+      .select()
+      .eq('org_id', orgId)
+      .eq('is_active', true)
+      .order('sort_order'));
+
+  Future<String> createClaim({
+    required String employeeId,
+    required String title,
+    required List<Map<String, dynamic>> lines,
+  }) async {
+    final no = await client.rpc('next_document_number',
+        params: {'p_org_id': orgId, 'p_doc_type': 'expense_claim'});
+    final total = lines.fold<double>(
+        0, (sum, l) => sum + Fmt.toDouble(l['amount']));
+    final row = await client
+        .from('expense_claims')
+        .insert({
+          'org_id': orgId,
+          'claim_no': no,
+          'employee_id': employeeId,
+          'title': title,
+          'total_amount': total,
+          'status': 'submitted',
+          'submitted_at': DateTime.now().toIso8601String(),
+        })
+        .select('id')
+        .single();
+    final id = row['id'] as String;
+    await client.from('expense_claim_lines').insert([
+      for (var i = 0; i < lines.length; i++)
+        {...lines[i], 'org_id': orgId, 'claim_id': id, 'line_no': i + 1}
+    ]);
+    return id;
+  }
+
+  // ------------------------------------------------------------------
+  // Payroll
+  // ------------------------------------------------------------------
+  Future<List<PayrollRun>> payrollRuns() async => Repo._rows(await client
+          .from('payroll_runs')
+          .select('*, pay_periods(code, pay_date)')
+          .eq('org_id', orgId)
+          .order('created_at', ascending: false))
+      .map(PayrollRun.fromJson)
+      .toList();
+
+  Future<List<Payslip>> payslips({String? runId, String? employeeId}) async {
+    var q = client
+        .from('payslips')
+        .select('*, payroll_runs(run_no, pay_periods(code))')
+        .eq('org_id', orgId);
+    if (runId != null) q = q.eq('run_id', runId);
+    if (employeeId != null) q = q.eq('employee_id', employeeId);
+    return Repo._rows(await q.order('employee_no'))
+        .map(Payslip.fromJson)
+        .toList();
+  }
+
+  Future<Payslip?> payslip(String id) async {
+    final row = await client
+        .from('payslips')
+        .select('*, payslip_lines(*), payroll_runs(run_no, pay_periods(code))')
+        .eq('id', id)
+        .maybeSingle();
+    return row == null ? null : Payslip.fromJson(Map<String, dynamic>.from(row));
+  }
+
+  /// Creates the period if it does not exist, then a run against it.
+  Future<String> startPayrollRun(int year, int month) async {
+    final periodId = await client.rpc('ensure_pay_period',
+        params: {'p_org_id': orgId, 'p_year': year, 'p_month': month});
+    final runId = await client.rpc('create_payroll_run', params: {
+      'p_org_id': orgId,
+      'p_period_id': periodId,
+      'p_description': '${Fmt.monthName(month)} $year payroll',
+    });
+    return runId as String;
+  }
+
+  Future<void> calculatePayroll(String runId) =>
+      client.rpc('calculate_payroll_run', params: {'p_run_id': runId});
+
+  Future<void> postPayroll(String runId) =>
+      client.rpc('post_payroll_run', params: {'p_run_id': runId});
+
+  // ------------------------------------------------------------------
+  // Talent
+  // ------------------------------------------------------------------
+  Future<List<JobRequisition>> requisitions() async => Repo._rows(await client
+          .from('job_requisitions')
+          .select('*, departments(name), applicants(count)')
+          .eq('org_id', orgId)
+          .order('created_at', ascending: false))
+      .map(JobRequisition.fromJson)
+      .toList();
+
+  Future<List<Applicant>> applicants({String? requisitionId}) async {
+    var q = client
+        .from('applicants')
+        .select('*, job_requisitions(title)')
+        .eq('org_id', orgId);
+    if (requisitionId != null) q = q.eq('requisition_id', requisitionId);
+    return Repo._rows(await q.order('applied_at', ascending: false))
+        .map(Applicant.fromJson)
+        .toList();
+  }
+
+  /// Moves an applicant along and keeps the move as history, so
+  /// time-to-hire can be measured later.
+  Future<void> moveApplicant(String id, String from, String to) async {
+    await client.from('applicants').update({'status': to}).eq('id', id);
+    await client.from('applicant_stage_history').insert({
+      'org_id': orgId,
+      'applicant_id': id,
+      'from_status': from,
+      'to_status': to,
+    });
+  }
+
+  Future<List<Appraisal>> appraisals() async => Repo._rows(await client
+          .from('appraisals')
+          .select('*, employees!appraisals_employee_id_fkey(full_name), '
+              'appraisal_cycles(name)')
+          .eq('org_id', orgId)
+          .order('created_at', ascending: false))
+      .map(Appraisal.fromJson)
+      .toList();
+}

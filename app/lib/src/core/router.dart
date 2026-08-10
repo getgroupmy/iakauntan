@@ -18,6 +18,13 @@ import '../features/legal/matters_screen.dart';
 import '../features/onboarding/create_org_screen.dart';
 import '../features/reports/reports_screen.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/hr/claims_screen.dart';
+import '../features/hr/leave_screen.dart';
+import '../features/hr/my_hr_screen.dart';
+import '../features/hr/payroll_screen.dart';
+import '../features/hr/payslip_screen.dart';
+import '../features/hr/people_screen.dart';
+import '../features/hr/talent_screen.dart';
 import '../features/team/team_screen.dart';
 import '../features/shell/app_shell.dart';
 import 'providers.dart';
@@ -104,6 +111,31 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
           GoRoute(path: '/team', builder: (_, __) => const TeamScreen()),
+          GoRoute(path: '/hr/me', builder: (_, __) => const MyHrScreen()),
+          GoRoute(
+            path: '/hr/people',
+            builder: (_, __) => const PeopleScreen(),
+          ),
+          GoRoute(path: '/hr/leave', builder: (_, __) => const LeaveScreen()),
+          GoRoute(path: '/hr/claims', builder: (_, __) => const ClaimsScreen()),
+          GoRoute(path: '/hr/talent', builder: (_, __) => const TalentScreen()),
+          GoRoute(
+            path: '/hr/payroll',
+            builder: (_, __) => const PayrollScreen(),
+            routes: [
+              GoRoute(
+                path: ':id',
+                parentNavigatorKey: _rootKey,
+                builder: (_, state) =>
+                    PayrollRunScreen(runId: state.pathParameters['id']!),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: '/hr/payslip/:id',
+            builder: (_, state) =>
+                PayslipScreen(payslipId: state.pathParameters['id']!),
+          ),
           GoRoute(
             path: '/admin',
             builder: (_, __) => const PlatformConsoleScreen(),

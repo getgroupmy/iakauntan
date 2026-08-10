@@ -1016,3 +1016,615 @@ class TimeEntry {
         activityCode: j['activity_code'] as String?,
       );
 }
+
+// =====================================================================
+// HRMS
+// =====================================================================
+
+class Employee {
+  Employee({
+    required this.id,
+    required this.employeeNo,
+    required this.fullName,
+    this.email,
+    this.phone,
+    this.photoUrl,
+    this.departmentName,
+    this.positionTitle,
+    this.managerName,
+    this.employmentStatus = 'active',
+    this.employmentType = 'full_time',
+    this.hireDate,
+    this.basicSalary = 0,
+    this.nric,
+    this.epfNo,
+    this.socsoNo,
+    this.incomeTaxNo,
+    this.bankName,
+    this.bankAccountNo,
+    this.maritalStatus = 'single',
+    this.residencyStatus = 'citizen',
+    this.dateOfBirth,
+    this.userId,
+  });
+
+  final String id;
+  final String employeeNo;
+  final String fullName;
+  final String? email;
+  final String? phone;
+  final String? photoUrl;
+  final String? departmentName;
+  final String? positionTitle;
+  final String? managerName;
+  final String employmentStatus;
+  final String employmentType;
+  final DateTime? hireDate;
+  final double basicSalary;
+  final String? nric;
+  final String? epfNo;
+  final String? socsoNo;
+  final String? incomeTaxNo;
+  final String? bankName;
+  final String? bankAccountNo;
+  final String maritalStatus;
+  final String residencyStatus;
+  final DateTime? dateOfBirth;
+  final String? userId;
+
+  /// True when this row came from the directory function, which carries
+  /// no pay data — used to hide salary rather than show a false zero.
+  bool get isDirectoryOnly => basicSalary == 0 && nric == null;
+
+  factory Employee.fromJson(Map<String, dynamic> j) {
+    final dept = j['departments'];
+    final pos = j['positions'];
+    return Employee(
+      id: j['id'] as String,
+      employeeNo: j['employee_no']?.toString() ?? '',
+      fullName: j['full_name']?.toString() ?? '',
+      email: j['email']?.toString(),
+      phone: j['phone']?.toString(),
+      photoUrl: j['photo_url']?.toString(),
+      departmentName: j['department_name']?.toString() ??
+          (dept is Map ? dept['name'] as String? : null),
+      positionTitle: j['position_title']?.toString() ??
+          (pos is Map ? pos['title'] as String? : null),
+      managerName: j['manager_name']?.toString(),
+      employmentStatus: j['employment_status']?.toString() ?? 'active',
+      employmentType: j['employment_type']?.toString() ?? 'full_time',
+      hireDate: Fmt.parseDate(j['hire_date']),
+      basicSalary: Fmt.toDouble(j['basic_salary']),
+      nric: j['nric']?.toString(),
+      epfNo: j['epf_no']?.toString(),
+      socsoNo: j['socso_no']?.toString(),
+      incomeTaxNo: j['income_tax_no']?.toString(),
+      bankName: j['bank_name']?.toString(),
+      bankAccountNo: j['bank_account_no']?.toString(),
+      maritalStatus: j['marital_status']?.toString() ?? 'single',
+      residencyStatus: j['residency_status']?.toString() ?? 'citizen',
+      dateOfBirth: Fmt.parseDate(j['date_of_birth']),
+      userId: j['user_id']?.toString(),
+    );
+  }
+}
+
+class AttendanceRecord {
+  AttendanceRecord({
+    required this.id,
+    required this.workDate,
+    required this.status,
+    this.employeeName,
+    this.clockIn,
+    this.clockOut,
+    this.workedMinutes = 0,
+    this.lateMinutes = 0,
+    this.otMinutes = 0,
+    this.clockInMethod,
+    this.clockInAddress,
+  });
+
+  final String id;
+  final DateTime workDate;
+  final String status;
+  final String? employeeName;
+  final DateTime? clockIn;
+  final DateTime? clockOut;
+  final int workedMinutes;
+  final int lateMinutes;
+  final int otMinutes;
+  final String? clockInMethod;
+  final String? clockInAddress;
+
+  factory AttendanceRecord.fromJson(Map<String, dynamic> j) {
+    final emp = j['employees'];
+    return AttendanceRecord(
+      id: j['id'] as String,
+      workDate: Fmt.parseDate(j['work_date']) ?? DateTime.now(),
+      status: j['status']?.toString() ?? 'present',
+      employeeName: emp is Map ? emp['full_name'] as String? : null,
+      clockIn: Fmt.parseDate(j['clock_in']),
+      clockOut: Fmt.parseDate(j['clock_out']),
+      workedMinutes: Fmt.toInt(j['worked_minutes']),
+      lateMinutes: Fmt.toInt(j['late_minutes']),
+      otMinutes: Fmt.toInt(j['ot_normal_minutes']) +
+          Fmt.toInt(j['ot_restday_minutes']) +
+          Fmt.toInt(j['ot_holiday_minutes']),
+      clockInMethod: j['clock_in_method']?.toString(),
+      clockInAddress: j['clock_in_address']?.toString(),
+    );
+  }
+}
+
+class LeaveType {
+  LeaveType({
+    required this.id,
+    required this.code,
+    required this.name,
+    this.isPaid = true,
+    this.defaultDays = 0,
+  });
+
+  final String id;
+  final String code;
+  final String name;
+  final bool isPaid;
+  final double defaultDays;
+
+  factory LeaveType.fromJson(Map<String, dynamic> j) => LeaveType(
+        id: j['id'] as String,
+        code: j['code']?.toString() ?? '',
+        name: j['name']?.toString() ?? '',
+        isPaid: j['is_paid'] == true,
+        defaultDays: Fmt.toDouble(j['default_days']),
+      );
+}
+
+class LeaveBalance {
+  LeaveBalance({
+    required this.leaveTypeId,
+    required this.leaveTypeName,
+    this.entitled = 0,
+    this.carriedForward = 0,
+    this.adjustment = 0,
+    this.taken = 0,
+    this.pending = 0,
+  });
+
+  final String leaveTypeId;
+  final String leaveTypeName;
+  final double entitled;
+  final double carriedForward;
+  final double adjustment;
+  final double taken;
+  final double pending;
+
+  double get available =>
+      entitled + carriedForward + adjustment - taken - pending;
+
+  factory LeaveBalance.fromJson(Map<String, dynamic> j) {
+    final lt = j['leave_types'];
+    return LeaveBalance(
+      leaveTypeId: j['leave_type_id']?.toString() ?? '',
+      leaveTypeName: lt is Map ? (lt['name'] as String? ?? '') : '',
+      entitled: Fmt.toDouble(j['entitled_days']),
+      carriedForward: Fmt.toDouble(j['carried_forward']),
+      adjustment: Fmt.toDouble(j['adjustment_days']),
+      taken: Fmt.toDouble(j['taken_days']),
+      pending: Fmt.toDouble(j['pending_days']),
+    );
+  }
+}
+
+class LeaveRequest {
+  LeaveRequest({
+    required this.id,
+    required this.requestNo,
+    required this.startDate,
+    required this.endDate,
+    required this.totalDays,
+    required this.status,
+    this.employeeName,
+    this.leaveTypeName,
+    this.reason,
+    this.decisionNote,
+  });
+
+  final String id;
+  final String requestNo;
+  final DateTime startDate;
+  final DateTime endDate;
+  final double totalDays;
+  final String status;
+  final String? employeeName;
+  final String? leaveTypeName;
+  final String? reason;
+  final String? decisionNote;
+
+  factory LeaveRequest.fromJson(Map<String, dynamic> j) {
+    final emp = j['employees'];
+    final lt = j['leave_types'];
+    return LeaveRequest(
+      id: j['id'] as String,
+      requestNo: j['request_no']?.toString() ?? '',
+      startDate: Fmt.parseDate(j['start_date']) ?? DateTime.now(),
+      endDate: Fmt.parseDate(j['end_date']) ?? DateTime.now(),
+      totalDays: Fmt.toDouble(j['total_days']),
+      status: j['status']?.toString() ?? 'draft',
+      employeeName: emp is Map ? emp['full_name'] as String? : null,
+      leaveTypeName: lt is Map ? lt['name'] as String? : null,
+      reason: j['reason']?.toString(),
+      decisionNote: j['decision_note']?.toString(),
+    );
+  }
+}
+
+class ExpenseClaim {
+  ExpenseClaim({
+    required this.id,
+    required this.claimNo,
+    required this.claimDate,
+    required this.status,
+    this.title,
+    this.employeeName,
+    this.totalAmount = 0,
+    this.approvedAmount = 0,
+    this.paidAt,
+    this.payWithPayroll = true,
+  });
+
+  final String id;
+  final String claimNo;
+  final DateTime claimDate;
+  final String status;
+  final String? title;
+  final String? employeeName;
+  final double totalAmount;
+  final double approvedAmount;
+  final DateTime? paidAt;
+  final bool payWithPayroll;
+
+  factory ExpenseClaim.fromJson(Map<String, dynamic> j) {
+    final emp = j['employees'];
+    return ExpenseClaim(
+      id: j['id'] as String,
+      claimNo: j['claim_no']?.toString() ?? '',
+      claimDate: Fmt.parseDate(j['claim_date']) ?? DateTime.now(),
+      status: j['status']?.toString() ?? 'draft',
+      title: j['title']?.toString(),
+      employeeName: emp is Map ? emp['full_name'] as String? : null,
+      totalAmount: Fmt.toDouble(j['total_amount']),
+      approvedAmount: Fmt.toDouble(j['approved_amount']),
+      paidAt: Fmt.parseDate(j['paid_at']),
+      payWithPayroll: j['pay_with_payroll'] != false,
+    );
+  }
+}
+
+class PayrollRun {
+  PayrollRun({
+    required this.id,
+    required this.runNo,
+    required this.status,
+    this.periodCode,
+    this.payDate,
+    this.description,
+    this.employeeCount = 0,
+    this.totalGross = 0,
+    this.totalNet = 0,
+    this.totalDeductions = 0,
+    this.totalEmployerCost = 0,
+    this.totalEpfEmployee = 0,
+    this.totalEpfEmployer = 0,
+    this.totalSocsoEmployee = 0,
+    this.totalSocsoEmployer = 0,
+    this.totalEisEmployee = 0,
+    this.totalEisEmployer = 0,
+    this.totalPcb = 0,
+    this.totalHrdf = 0,
+  });
+
+  final String id;
+  final String runNo;
+  final String status;
+  final String? periodCode;
+  final DateTime? payDate;
+  final String? description;
+  final int employeeCount;
+  final double totalGross;
+  final double totalNet;
+  final double totalDeductions;
+  final double totalEmployerCost;
+  final double totalEpfEmployee;
+  final double totalEpfEmployer;
+  final double totalSocsoEmployee;
+  final double totalSocsoEmployer;
+  final double totalEisEmployee;
+  final double totalEisEmployer;
+  final double totalPcb;
+  final double totalHrdf;
+
+  bool get isPosted => status == 'posted' || status == 'paid';
+
+  factory PayrollRun.fromJson(Map<String, dynamic> j) {
+    final p = j['pay_periods'];
+    return PayrollRun(
+      id: j['id'] as String,
+      runNo: j['run_no']?.toString() ?? '',
+      status: j['status']?.toString() ?? 'draft',
+      periodCode: p is Map ? p['code'] as String? : null,
+      payDate: p is Map ? Fmt.parseDate(p['pay_date']) : null,
+      description: j['description']?.toString(),
+      employeeCount: Fmt.toInt(j['employee_count']),
+      totalGross: Fmt.toDouble(j['total_gross']),
+      totalNet: Fmt.toDouble(j['total_net']),
+      totalDeductions: Fmt.toDouble(j['total_deductions']),
+      totalEmployerCost: Fmt.toDouble(j['total_employer_cost']),
+      totalEpfEmployee: Fmt.toDouble(j['total_epf_employee']),
+      totalEpfEmployer: Fmt.toDouble(j['total_epf_employer']),
+      totalSocsoEmployee: Fmt.toDouble(j['total_socso_employee']),
+      totalSocsoEmployer: Fmt.toDouble(j['total_socso_employer']),
+      totalEisEmployee: Fmt.toDouble(j['total_eis_employee']),
+      totalEisEmployer: Fmt.toDouble(j['total_eis_employer']),
+      totalPcb: Fmt.toDouble(j['total_pcb']),
+      totalHrdf: Fmt.toDouble(j['total_hrdf']),
+    );
+  }
+}
+
+class Payslip {
+  Payslip({
+    required this.id,
+    required this.employeeName,
+    this.employeeNo,
+    this.departmentName,
+    this.positionTitle,
+    this.periodCode,
+    this.basicSalary = 0,
+    this.grossPay = 0,
+    this.totalDeductions = 0,
+    this.netPay = 0,
+    this.epfWage = 0,
+    this.socsoWage = 0,
+    this.eisWage = 0,
+    this.taxableIncome = 0,
+    this.epfEmployee = 0,
+    this.epfEmployer = 0,
+    this.socsoEmployee = 0,
+    this.socsoEmployer = 0,
+    this.eisEmployee = 0,
+    this.eisEmployer = 0,
+    this.pcb = 0,
+    this.zakat = 0,
+    this.hrdf = 0,
+    this.otHours = 0,
+    this.schedulesVerified = false,
+    this.lines = const [],
+  });
+
+  final String id;
+  final String employeeName;
+  final String? employeeNo;
+  final String? departmentName;
+  final String? positionTitle;
+  final String? periodCode;
+  final double basicSalary;
+  final double grossPay;
+  final double totalDeductions;
+  final double netPay;
+  final double epfWage;
+  final double socsoWage;
+  final double eisWage;
+  final double taxableIncome;
+  final double epfEmployee;
+  final double epfEmployer;
+  final double socsoEmployee;
+  final double socsoEmployer;
+  final double eisEmployee;
+  final double eisEmployer;
+  final double pcb;
+  final double zakat;
+  final double hrdf;
+  final double otHours;
+  final bool schedulesVerified;
+  final List<PayslipLine> lines;
+
+  factory Payslip.fromJson(Map<String, dynamic> j) {
+    final raw = j['payslip_lines'];
+    final run = j['payroll_runs'];
+    final period = run is Map ? run['pay_periods'] : null;
+    return Payslip(
+      id: j['id'] as String,
+      employeeName: j['employee_name']?.toString() ?? '',
+      employeeNo: j['employee_no']?.toString(),
+      departmentName: j['department_name']?.toString(),
+      positionTitle: j['position_title']?.toString(),
+      periodCode: period is Map ? period['code'] as String? : null,
+      basicSalary: Fmt.toDouble(j['basic_salary']),
+      grossPay: Fmt.toDouble(j['gross_pay']),
+      totalDeductions: Fmt.toDouble(j['total_deductions']),
+      netPay: Fmt.toDouble(j['net_pay']),
+      epfWage: Fmt.toDouble(j['epf_wage']),
+      socsoWage: Fmt.toDouble(j['socso_wage']),
+      eisWage: Fmt.toDouble(j['eis_wage']),
+      taxableIncome: Fmt.toDouble(j['taxable_income']),
+      epfEmployee: Fmt.toDouble(j['epf_employee']),
+      epfEmployer: Fmt.toDouble(j['epf_employer']),
+      socsoEmployee: Fmt.toDouble(j['socso_employee']),
+      socsoEmployer: Fmt.toDouble(j['socso_employer']),
+      eisEmployee: Fmt.toDouble(j['eis_employee']),
+      eisEmployer: Fmt.toDouble(j['eis_employer']),
+      pcb: Fmt.toDouble(j['pcb']) + Fmt.toDouble(j['cp38']),
+      zakat: Fmt.toDouble(j['zakat']),
+      hrdf: Fmt.toDouble(j['hrdf']),
+      otHours: Fmt.toDouble(j['ot_hours']),
+      schedulesVerified: j['schedules_verified'] == true,
+      lines: raw is List
+          ? raw
+              .map((e) => PayslipLine.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+    );
+  }
+}
+
+class PayslipLine {
+  PayslipLine({
+    required this.kind,
+    required this.code,
+    required this.description,
+    required this.amount,
+    this.quantity,
+    this.rate,
+  });
+
+  final String kind;
+  final String code;
+  final String description;
+  final double amount;
+  final double? quantity;
+  final double? rate;
+
+  factory PayslipLine.fromJson(Map<String, dynamic> j) => PayslipLine(
+        kind: j['kind']?.toString() ?? 'earning',
+        code: j['code']?.toString() ?? '',
+        description: j['description']?.toString() ?? '',
+        amount: Fmt.toDouble(j['amount']),
+        quantity: j['quantity'] == null ? null : Fmt.toDouble(j['quantity']),
+        rate: j['rate'] == null ? null : Fmt.toDouble(j['rate']),
+      );
+}
+
+class JobRequisition {
+  JobRequisition({
+    required this.id,
+    required this.requisitionNo,
+    required this.title,
+    required this.status,
+    this.departmentName,
+    this.headcount = 1,
+    this.location,
+    this.salaryMin,
+    this.salaryMax,
+    this.applicantCount = 0,
+  });
+
+  final String id;
+  final String requisitionNo;
+  final String title;
+  final String status;
+  final String? departmentName;
+  final int headcount;
+  final String? location;
+  final double? salaryMin;
+  final double? salaryMax;
+  final int applicantCount;
+
+  factory JobRequisition.fromJson(Map<String, dynamic> j) {
+    final dept = j['departments'];
+    final apps = j['applicants'];
+    return JobRequisition(
+      id: j['id'] as String,
+      requisitionNo: j['requisition_no']?.toString() ?? '',
+      title: j['title']?.toString() ?? '',
+      status: j['status']?.toString() ?? 'draft',
+      departmentName: dept is Map ? dept['name'] as String? : null,
+      headcount: Fmt.toInt(j['headcount']),
+      location: j['location']?.toString(),
+      salaryMin: j['salary_min'] == null ? null : Fmt.toDouble(j['salary_min']),
+      salaryMax: j['salary_max'] == null ? null : Fmt.toDouble(j['salary_max']),
+      applicantCount: apps is List && apps.isNotEmpty && apps.first is Map
+          ? Fmt.toInt((apps.first as Map)['count'])
+          : 0,
+    );
+  }
+}
+
+class Applicant {
+  Applicant({
+    required this.id,
+    required this.fullName,
+    required this.status,
+    this.email,
+    this.phone,
+    this.currentPosition,
+    this.expectedSalary,
+    this.source,
+    this.rating,
+    this.requisitionTitle,
+    this.appliedAt,
+  });
+
+  final String id;
+  final String fullName;
+  final String status;
+  final String? email;
+  final String? phone;
+  final String? currentPosition;
+  final double? expectedSalary;
+  final String? source;
+  final int? rating;
+  final String? requisitionTitle;
+  final DateTime? appliedAt;
+
+  factory Applicant.fromJson(Map<String, dynamic> j) {
+    final req = j['job_requisitions'];
+    return Applicant(
+      id: j['id'] as String,
+      fullName: j['full_name']?.toString() ?? '',
+      status: j['status']?.toString() ?? 'applied',
+      email: j['email']?.toString(),
+      phone: j['phone']?.toString(),
+      currentPosition: j['current_position']?.toString(),
+      expectedSalary:
+          j['expected_salary'] == null ? null : Fmt.toDouble(j['expected_salary']),
+      source: j['source']?.toString(),
+      rating: j['rating'] == null ? null : Fmt.toInt(j['rating']),
+      requisitionTitle: req is Map ? req['title'] as String? : null,
+      appliedAt: Fmt.parseDate(j['applied_at']),
+    );
+  }
+}
+
+class Appraisal {
+  Appraisal({
+    required this.id,
+    required this.status,
+    this.employeeName,
+    this.reviewerName,
+    this.cycleName,
+    this.selfRating,
+    this.managerRating,
+    this.finalRating,
+    this.recommendedIncrement,
+  });
+
+  final String id;
+  final String status;
+  final String? employeeName;
+  final String? reviewerName;
+  final String? cycleName;
+  final double? selfRating;
+  final double? managerRating;
+  final double? finalRating;
+  final double? recommendedIncrement;
+
+  factory Appraisal.fromJson(Map<String, dynamic> j) {
+    final emp = j['employees'];
+    final cyc = j['appraisal_cycles'];
+    return Appraisal(
+      id: j['id'] as String,
+      status: j['status']?.toString() ?? 'draft',
+      employeeName: emp is Map ? emp['full_name'] as String? : null,
+      cycleName: cyc is Map ? cyc['name'] as String? : null,
+      selfRating: j['self_rating'] == null ? null : Fmt.toDouble(j['self_rating']),
+      managerRating:
+          j['manager_rating'] == null ? null : Fmt.toDouble(j['manager_rating']),
+      finalRating:
+          j['final_rating'] == null ? null : Fmt.toDouble(j['final_rating']),
+      recommendedIncrement: j['recommended_increment_percent'] == null
+          ? null
+          : Fmt.toDouble(j['recommended_increment_percent']),
+    );
+  }
+}
