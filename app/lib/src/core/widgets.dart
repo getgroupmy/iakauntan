@@ -517,13 +517,19 @@ Future<bool> runWithFeedback(
     ));
   }
 
+  // Read the colours before awaiting: the widget that supplied this
+  // context may be gone by the time the action returns, and the
+  // messenger captured above outlives it.
+  final success = context.colors.success;
+  final danger = context.colors.danger;
+
   try {
     await action();
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text(successMessage),
-        backgroundColor: context.colors.success,
+        backgroundColor: success,
       ));
     return true;
   } catch (err) {
@@ -531,7 +537,7 @@ Future<bool> runWithFeedback(
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text('$err'),
-        backgroundColor: context.colors.danger,
+        backgroundColor: danger,
         duration: const Duration(seconds: 6),
       ));
     return false;

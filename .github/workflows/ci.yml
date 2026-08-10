@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  flutter:
+    name: Analyze and test the app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze --fatal-infos --fatal-warnings
+      - run: flutter test
+
+  statutory:
+    name: Statutory engine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # A throwaway local stack, so the assertions run against the
+      # migrations in this commit rather than whatever the hosted project
+      # happens to be at.
+      - run: supabase start
+      - name: Run the statutory assertions
+        run: |
+          psql "$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')" \
+            -v ON_ERROR_STOP=1 -f supabase/tests/statutory.sql
+      - if: always()
+        run: supabase stop --no-backup

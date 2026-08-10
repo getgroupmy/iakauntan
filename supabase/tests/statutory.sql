@@ -1,0 +1,235 @@
+-- =====================================================================
+-- iAkauntan :: statutory engine tests
+--
+-- The worked examples in the README, made executable. Run against a
+-- database with the migrations applied:
+--
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/statutory.sql
+--
+-- Every check raises on failure, so a non-zero exit means a rate table,
+-- a rounding rule or a relief has moved. Nothing is written: the whole
+-- file runs inside a transaction that is rolled back at the end.
+-- =====================================================================
+
+begin;
+
+create or replace function pg_temp.check_eq(
+  p_label text, p_actual numeric, p_expected numeric)
+returns void language plpgsql as $$
+begin
+  if p_actual is distinct from p_expected then
+    raise exception 'FAIL %: expected %, got %', p_label, p_expected, p_actual;
+  end if;
+  raise notice 'ok   % = %', p_label, p_actual;
+end;
+$$;
+
+create or replace function pg_temp.check_true(p_label text, p_value boolean)
+returns void language plpgsql as $$
+begin
+  if p_value is not true then
+    raise exception 'FAIL %: expected true', p_label;
+  end if;
+  raise notice 'ok   %', p_label;
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- EPF
+--
+-- Employer drops from 13% to 12% above RM5,000, and stops for the
+-- employee at 60 while the employer side falls to 4%.
+-- ---------------------------------------------------------------------
+do $$
+declare r record;
+begin
+  select * into r from app.calc_statutory(
+    'epf', 'citizen_under60', 5000, date '2026-01-31');
+  perform pg_temp.check_eq('EPF 5000 employee', r.employee_amount, 550);
+  perform pg_temp.check_eq('EPF 5000 employer (13%)', r.employer_amount, 650);
+
+  select * into r from app.calc_statutory(
+    'epf', 'citizen_under60', 12000, date '2026-01-31');
+  perform pg_temp.check_eq('EPF 12000 employee', r.employee_amount, 1320);
+  perform pg_temp.check_eq('EPF 12000 employer (12%)', r.employer_amount, 1440);
+
+  select * into r from app.calc_statutory(
+    'epf', 'citizen_60plus', 4500, date '2026-01-31');
+  perform pg_temp.check_eq('EPF 60+ employee stops', r.employee_amount, 0);
+  perform pg_temp.check_eq('EPF 60+ employer (4%)', r.employer_amount, 180);
+
+  -- The wage is rounded up to the next RM20 before the rate is applied,
+  -- and the contribution up to the next ringgit.
+  select * into r from app.calc_statutory(
+    'epf', 'citizen_under60', 3010, date '2026-01-31');
+  perform pg_temp.check_eq('EPF rounds the wage up to RM3,020',
+    r.employee_amount, ceil(3020 * 0.11));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- SOCSO and EIS
+--
+-- Both cap at the RM6,000 insured wage. Act 800 covers employment
+-- injury only, so the employee side is nil.
+-- ---------------------------------------------------------------------
+do $$
+declare r record;
+begin
+  select * into r from app.calc_statutory('socso', 'act4', 5000, date '2026-01-31');
+  perform pg_temp.check_eq('SOCSO 5000 employee', r.employee_amount, 25.00);
+  perform pg_temp.check_eq('SOCSO 5000 employer', r.employer_amount, 87.50);
+
+  select * into r from app.calc_statutory('socso', 'act4', 12000, date '2026-01-31');
+  perform pg_temp.check_eq('SOCSO caps at 6000, employee', r.employee_amount, 30.00);
+  perform pg_temp.check_eq('SOCSO caps at 6000, employer', r.employer_amount, 105.00);
+
+  select * into r from app.calc_statutory('socso', 'act800', 4500, date '2026-01-31');
+  perform pg_temp.check_eq('SOCSO Act 800 employee is nil', r.employee_amount, 0);
+  perform pg_temp.check_eq('SOCSO Act 800 employer', r.employer_amount, 56.25);
+
+  select * into r from app.calc_statutory('eis', 'default', 12000, date '2026-01-31');
+  perform pg_temp.check_eq('EIS caps at 6000, employee', r.employee_amount, 12.00);
+  perform pg_temp.check_eq('EIS caps at 6000, employer', r.employer_amount, 12.00);
+
+  perform pg_temp.check_eq('SOCSO insured wage shown on a payslip',
+    app.insured_wage('socso', 'act4', 12000, date '2026-01-31'), 6000);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The annual tax scale
+-- ---------------------------------------------------------------------
+do $$
+declare v_sched uuid;
+begin
+  select id into v_sched from app.statutory_schedule_on('pcb', date '2026-01-31');
+
+  -- Below the threshold, and inside the rebate.
+  perform pg_temp.check_eq('tax on 5,000', app.annual_tax(5000, v_sched), 0);
+  perform pg_temp.check_eq('tax on 30,000 after the RM400 rebate',
+    app.annual_tax(30000, v_sched), 150 + (30000 - 20000) * 0.03 - 400);
+  -- Above the rebate ceiling the full amount stands.
+  perform pg_temp.check_eq('tax on 46,650',
+    app.annual_tax(46650, v_sched), 600 + (46650 - 35000) * 0.06);
+  perform pg_temp.check_eq('tax on 122,650',
+    app.annual_tax(122650, v_sched), 9400 + (122650 - 100000) * 0.25);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- PCB, the three worked examples from the README
+--
+-- Computed against a throwaway organization so the figures do not depend
+-- on whatever the demo tenant has accumulated.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid;
+  v_single uuid;
+  v_family uuid;
+  v_senior uuid;
+  r record;
+begin
+  -- A trigger enrols the creator as owner, and that row needs a real
+  -- user, so borrow any existing one. The whole transaction rolls back.
+  insert into public.organizations
+    (name, slug, entity_type, base_currency, created_by)
+  values ('Test Co', 'test-co-' || gen_random_uuid(), 'sdn_bhd', 'MYR',
+          (select id from auth.users order by created_at limit 1))
+  returning id into v_org;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'T1', 'Single, 5000', date '2020-01-01', 5000,
+          date '1992-04-15', 'single', 'citizen')
+  returning id into v_single;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, spouse_is_working, residency_status)
+  values (v_org, 'T2', 'Married, 12000, two children', date '2020-01-01',
+          12000, date '1985-09-22', 'married', false, 'citizen')
+  returning id into v_family;
+
+  insert into public.employee_dependants
+    (org_id, employee_id, name, relationship, date_of_birth)
+  values (v_org, v_family, 'Child one', 'child', date '2015-02-11'),
+         (v_org, v_family, 'Child two', 'child', date '2018-08-03');
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'T3', 'Aged 62, 4500', date '2010-01-04', 4500,
+          date '1964-03-18', 'married', 'citizen')
+  returning id into v_senior;
+
+  -- January, so the year is projected over twelve months.
+  select * into r from app.calc_pcb(v_single, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq('PCB, single on 5,000', r.pcb, 108.25);
+
+  select * into r from app.calc_pcb(v_family, 12000, 1320, 42, 0, date '2026-01-31');
+  perform pg_temp.check_eq('PCB, married on 12,000 with two children',
+    r.pcb, 1255.20);
+
+  select * into r from app.calc_pcb(v_senior, 4500, 0, 0, 0, date '2026-01-31');
+  perform pg_temp.check_eq('PCB, aged 62 on 4,500', r.pcb, 80.00);
+
+  -- A non-resident is deducted flat, with no reliefs at all.
+  update public.employees set residency_status = 'expatriate'
+   where id = v_single;
+  select * into r from app.calc_pcb(v_single, 5000, 0, 0, 0, date '2026-01-31');
+  perform pg_temp.check_eq('PCB, non-resident flat rate', r.pcb, 1500.00);
+
+  -- Zakat is a rebate against tax, not a relief against income, so a
+  -- month of zakat reduces the deduction ringgit for ringgit.
+  update public.employees set residency_status = 'citizen' where id = v_single;
+  select * into r from app.calc_pcb(v_single, 5000, 550, 35, 5, date '2026-01-31');
+  perform pg_temp.check_eq('PCB falls by the zakat paid', r.pcb, 108.25 - 5);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Every seeded schedule declares its provenance
+-- ---------------------------------------------------------------------
+do $$
+declare v_unverified integer;
+begin
+  select count(*) into v_unverified
+    from public.statutory_schedules where not is_verified;
+  perform pg_temp.check_true(
+    'seeded schedules are flagged unverified until the gazetted tables are loaded',
+    v_unverified > 0);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Access boundaries that must not quietly loosen
+-- ---------------------------------------------------------------------
+do $$
+begin
+  perform pg_temp.check_true('payslips carry row level security',
+    (select relrowsecurity from pg_class where relname = 'payslips'));
+
+  perform pg_temp.check_true('the read log cannot be written from the API',
+    not exists (
+      select 1 from pg_policies
+       where tablename = 'payslip_access_log' and cmd <> 'SELECT'));
+
+  perform pg_temp.check_true('a grant no longer opens the payslip table',
+    (select qual::text not ilike '%payslip_access_granted%'
+       from pg_policies
+      where tablename = 'payslips' and policyname = 'payslips_select'));
+
+  perform pg_temp.check_true('access requests are readable but not writable',
+    not exists (
+      select 1 from pg_policies
+       where tablename = 'payslip_access_requests' and cmd <> 'SELECT'));
+
+  perform pg_temp.check_true('no SECURITY DEFINER function is left to anon',
+    not exists (
+      select 1
+        from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname in ('public', 'app')
+         and p.prosecdef
+         and has_function_privilege('anon', p.oid, 'execute')));
+end $$;
+
+rollback;
