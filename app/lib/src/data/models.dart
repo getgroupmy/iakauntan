@@ -1442,6 +1442,92 @@ class PayrollRun {
   }
 }
 
+/// A journal, as it sits in the ledger.
+///
+/// Everything in the system posts through `create_gl_entry`, so this is
+/// where an invoice, a payroll run and a hand-written correction all end
+/// up looking the same.
+class JournalEntry {
+  JournalEntry({
+    required this.id,
+    required this.entryNo,
+    required this.entryDate,
+    required this.source,
+    required this.status,
+    this.description,
+    this.reference,
+    this.totalDebit = 0,
+    this.totalCredit = 0,
+    this.isReversal = false,
+    this.reversedEntryId,
+    this.lines = const [],
+  });
+
+  final String id;
+  final String entryNo;
+  final DateTime entryDate;
+  final String source;
+  final String status;
+  final String? description;
+  final String? reference;
+  final double totalDebit;
+  final double totalCredit;
+  final bool isReversal;
+  final String? reversedEntryId;
+  final List<JournalLine> lines;
+
+  bool get isVoid => status == 'void';
+  bool get canReverse => status == 'posted';
+
+  factory JournalEntry.fromJson(Map<String, dynamic> j) => JournalEntry(
+        id: j['id'] as String,
+        entryNo: j['entry_no']?.toString() ?? '',
+        entryDate: Fmt.parseDate(j['entry_date']) ?? DateTime.now(),
+        source: j['source']?.toString() ?? 'manual',
+        status: j['status']?.toString() ?? 'posted',
+        description: j['description']?.toString(),
+        reference: j['reference']?.toString(),
+        totalDebit: Fmt.toDouble(j['total_debit']),
+        totalCredit: Fmt.toDouble(j['total_credit']),
+        isReversal: j['is_reversal'] == true,
+        reversedEntryId: j['reversed_entry_id'] as String?,
+        lines: [
+          for (final l in (j['gl_lines'] as List? ?? const []))
+            JournalLine.fromJson(Map<String, dynamic>.from(l as Map))
+        ]..sort((a, b) => a.lineNo.compareTo(b.lineNo)),
+      );
+}
+
+class JournalLine {
+  JournalLine({
+    required this.lineNo,
+    required this.accountCode,
+    required this.accountName,
+    this.description,
+    this.debit = 0,
+    this.credit = 0,
+  });
+
+  final int lineNo;
+  final String accountCode;
+  final String accountName;
+  final String? description;
+  final double debit;
+  final double credit;
+
+  factory JournalLine.fromJson(Map<String, dynamic> j) {
+    final a = j['accounts'];
+    return JournalLine(
+      lineNo: Fmt.toInt(j['line_no']),
+      accountCode: a is Map ? a['code']?.toString() ?? '' : '',
+      accountName: a is Map ? a['name']?.toString() ?? '' : '',
+      description: j['description']?.toString(),
+      debit: Fmt.toDouble(j['debit']),
+      credit: Fmt.toDouble(j['credit']),
+    );
+  }
+}
+
 /// One recorded change to something worth watching.
 ///
 /// [changes] holds only the fields that moved, from and to, so a salary

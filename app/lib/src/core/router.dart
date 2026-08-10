@@ -16,6 +16,7 @@ import '../features/items/items_screen.dart';
 import '../features/legal/matter_detail_screen.dart';
 import '../features/legal/matters_screen.dart';
 import '../features/onboarding/create_org_screen.dart';
+import '../features/ledger/journals_screen.dart';
 import '../features/reports/reports_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/hr/claims_screen.dart';
@@ -158,6 +159,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(path: '/crm', builder: (_, __) => const PipelineScreen()),
           GoRoute(path: '/einvoice', builder: (_, __) => const EinvoiceScreen()),
+          GoRoute(path: '/journals', builder: (_, __) => const JournalsScreen()),
           GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),
           GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
         ],

@@ -94,6 +94,48 @@ Periods can be closed and reopened from the same screen, owner or admin
 only. **Locked is terminal** — it is what year-end sign-off means, so
 nothing reopens it.
 
+### Journals, and undoing one
+
+There was no way to look at a journal at all. **Journals** lists the
+ledger with its lines, filtered by source, so an invoice, a payroll run
+and a hand-written correction can be compared side by side.
+
+`reverse_gl_entry` was a working RPC with no caller. Reversing posts the
+mirror image and marks the original void; nothing is deleted, because a
+ledger you can erase is not a ledger. It carried the same hole
+`create_gl_entry` did — it looked up the period for the reversal date
+and used it without checking — so a reversal could be dated into a
+closed month and quietly undo it. `0059` holds it to the same rules as
+every other posting.
+
+### The jobs that run themselves
+
+Leave carry-forward, recurring journals and the B2C consolidation all
+had schema and **no runner** — `pg_cron` was not installed and there
+were no accrual or rollup functions at all. `0058` writes them and
+`0060` schedules a single daily job at 01:00 MYT.
+
+- **Leave** rolls on 1 January: next year's entitlement opens and unused
+  days carry, capped by the leave type's own limit. A type with no limit
+  carries nothing — silently rolling everything forward is how leave
+  liability grows unnoticed. Running it twice changes nothing.
+- **Recurring journals** post on their due date and the schedule
+  advances by its own frequency. One that cannot post — a closed period,
+  a missing fiscal year — records the reason on the row and stays due, so
+  it retries once the obstruction clears instead of vanishing from the
+  run with no explanation.
+- **The B2C consolidation** is gathered on the first of the month for
+  the month just ended, with the due date seven days out.
+
+A scheduled job has no `auth.uid()`, so it cannot pass `can_post` — and
+the first attempt actually died inside `next_document_number`, which
+checks membership too. Rather than let a runner write `gl_entries`
+directly and skip the fiscal period and balance rules with it, `0056`
+moves both bodies into `app.*_internal` and leaves the public functions
+as the permission check plus a call. One implementation, two doors, and
+the internal pair is revoked from `authenticated` — asserted in the
+tests, because a permission check you can walk around is decoration.
+
 ---
 
 ## e-Invoice (LHDN MyInvois)
@@ -545,8 +587,9 @@ books.
 Stated plainly so nothing here is mistaken for finished:
 
 - XAdES digital signature for e-Invoice version 1.1 (see above)
-- Consolidated B2C e-Invoice: tables and the 7-day deadline are modelled,
-  the monthly rollup job is not written
+- Consolidated B2C e-Invoice: the monthly rollup now runs and starts the
+  7-day clock, but **submitting** the consolidation is still manual — the
+  scheduler does not hold MyInvois credentials
 - Self-billed e-Invoice for foreign suppliers: schema supports it, no UI
 - Goods Received and Purchase Request screens (the types exist in the
   schema; only PO, Bill and Purchase Credit Note are exposed in the app)

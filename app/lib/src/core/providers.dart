@@ -174,6 +174,14 @@ final fiscalYearsProvider =
   return requireRepo(ref).fiscalYears();
 });
 
+/// The ledger. Filtered by source so "show me only the payroll journals"
+/// does not mean scrolling.
+final journalSourceFilterProvider = StateProvider<String?>((ref) => null);
+
+final journalsProvider = FutureProvider.autoDispose<List<JournalEntry>>((ref) {
+  return requireRepo(ref).journals(source: ref.watch(journalSourceFilterProvider));
+});
+
 final classificationCodesProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).classificationCodes();

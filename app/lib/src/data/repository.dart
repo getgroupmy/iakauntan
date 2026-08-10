@@ -187,6 +187,32 @@ class Repo {
       client.rpc('set_fiscal_period_status',
           params: {'p_period_id': periodId, 'p_status': status});
 
+  /// The ledger itself. Everything in the system posts through
+  /// create_gl_entry, so this is the one place an invoice, a payroll run
+  /// and a hand-written correction can be compared side by side.
+  Future<List<JournalEntry>> journals({
+    DateTime? from,
+    DateTime? to,
+    String? source,
+    int limit = 100,
+  }) async {
+    var q = client
+        .from('gl_entries')
+        .select('*, gl_lines(*, accounts(code, name))')
+        .eq('org_id', orgId);
+    if (from != null) q = q.gte('entry_date', Fmt.iso(from));
+    if (to != null) q = q.lte('entry_date', Fmt.iso(to));
+    if (source != null) q = q.eq('source', source);
+    final rows = await q.order('entry_date', ascending: false).limit(limit);
+    return _rows(rows).map(JournalEntry.fromJson).toList();
+  }
+
+  /// Posts the mirror image and voids the original. Nothing is deleted:
+  /// a ledger you can erase is not a ledger.
+  Future<void> reverseJournal(String entryId, DateTime on) =>
+      client.rpc('reverse_gl_entry',
+          params: {'p_entry_id': entryId, 'p_date': Fmt.iso(on)});
+
   Future<List<Account>> accounts({bool postableOnly = false}) async {
     var query = client
         .from('accounts')

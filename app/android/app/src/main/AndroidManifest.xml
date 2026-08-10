@@ -1,6 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Flutter injects this into the debug and profile manifests only.
+         Without it here a release build installs and then fails every
+         call to Supabase, which looks like a broken backend rather than
+         a missing permission. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="iakauntan"
+        android:label="iAkauntan"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
