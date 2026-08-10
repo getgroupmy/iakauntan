@@ -265,7 +265,7 @@ class _InviteDialogState extends ConsumerState<_InviteDialog> {
               ),
               const SizedBox(height: 10),
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(Space.md),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(10),
@@ -305,7 +305,7 @@ class _RoleReference extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -333,9 +333,9 @@ class _RoleReference extends StatelessWidget {
               ),
             const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(Space.md),
               decoration: BoxDecoration(
-                color: AppTheme.info.withValues(alpha: 0.08),
+                color: context.colors.info.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(

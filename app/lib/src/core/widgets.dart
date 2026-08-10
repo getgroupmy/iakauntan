@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -41,11 +42,11 @@ class ErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(Space.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 40, color: AppTheme.danger),
+            Icon(Icons.error_outline, size: 40, color: context.colors.danger),
             const SizedBox(height: 12),
             Text(
               'Something went wrong',
@@ -91,7 +92,7 @@ class EmptyState extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(Space.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -128,28 +129,26 @@ class StatusChip extends StatelessWidget {
   final String status;
   final bool compact;
 
-  static const _colors = <String, Color>{
-    'draft': Color(0xFF64748B),
-    'pending': AppTheme.amber,
-    'queued': AppTheme.amber,
-    'submitted': AppTheme.info,
-    'approved': AppTheme.info,
-    'posted': AppTheme.success,
-    'valid': AppTheme.success,
-    'completed': AppTheme.success,
-    'partial': AppTheme.amber,
-    'overdue': AppTheme.danger,
-    'invalid': AppTheme.danger,
-    'failed': AppTheme.danger,
-    'rejected': AppTheme.danger,
-    'void': Color(0xFF94A3B8),
-    'cancelled': Color(0xFF94A3B8),
-    'not_applicable': Color(0xFF94A3B8),
-  };
+  /// Resolved per build rather than held in a const map, so the same status
+  /// reads correctly on a light and a dark ground.
+  static Color colorFor(BuildContext context, String status) {
+    final c = context.colors;
+    const neutral = Color(0xFF64748B);
+    const dim = Color(0xFF94A3B8);
+    return switch (status) {
+      'draft' => neutral,
+      'pending' || 'queued' || 'partial' => c.warning,
+      'submitted' || 'approved' => c.info,
+      'posted' || 'valid' || 'completed' => c.success,
+      'overdue' || 'invalid' || 'failed' || 'rejected' => c.danger,
+      'void' || 'cancelled' || 'not_applicable' => dim,
+      _ => neutral,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
-    final color = _colors[status] ?? const Color(0xFF64748B);
+    final color = colorFor(context, status);
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: compact ? 6 : 10,
@@ -172,6 +171,83 @@ class StatusChip extends StatelessWidget {
   }
 }
 
+/// A single series drawn small enough to sit inside a metric tile: the
+/// shape of the last twelve months, with the latest point called out.
+/// No axes — this answers "which way is it going", not "by how much".
+class Sparkline extends StatelessWidget {
+  const Sparkline(this.values, {super.key, required this.color, this.height = 30});
+
+  final List<double> values;
+  final Color color;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    if (values.length < 2) return SizedBox(height: height);
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: CustomPaint(painter: _SparklinePainter(values, color)),
+    );
+  }
+}
+
+class _SparklinePainter extends CustomPainter {
+  _SparklinePainter(this.values, this.color);
+
+  final List<double> values;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final lo = values.reduce((a, b) => a < b ? a : b);
+    final hi = values.reduce((a, b) => a > b ? a : b);
+    // A flat series would divide by zero; draw it down the middle instead.
+    final span = (hi - lo).abs() < 1e-9 ? 1.0 : hi - lo;
+    final dx = size.width / (values.length - 1);
+
+    Offset at(int i) => Offset(
+          i * dx,
+          size.height - ((values[i] - lo) / span) * (size.height - 3) - 1.5,
+        );
+
+    final line = Path()..moveTo(at(0).dx, at(0).dy);
+    for (var i = 1; i < values.length; i++) {
+      final p = at(i), q = at(i - 1);
+      final cx = (q.dx + p.dx) / 2;
+      line.cubicTo(cx, q.dy, cx, p.dy, p.dx, p.dy);
+    }
+
+    final fill = Path.from(line)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+
+    canvas.drawPath(
+      fill,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [color.withValues(alpha: 0.20), color.withValues(alpha: 0)],
+        ).createShader(Offset.zero & size),
+    );
+    canvas.drawPath(
+      line,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..strokeCap = StrokeCap.round
+        ..color = color,
+    );
+    canvas.drawCircle(at(values.length - 1), 2.4, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_SparklinePainter old) =>
+      old.color != color || !listEquals(old.values, values);
+}
+
 /// Dashboard metric tile.
 class StatTile extends StatelessWidget {
   const StatTile({
@@ -182,6 +258,9 @@ class StatTile extends StatelessWidget {
     this.icon,
     this.accent,
     this.onTap,
+    this.trend,
+    this.delta,
+    this.deltaIsGood = true,
   });
 
   final String label;
@@ -190,6 +269,15 @@ class StatTile extends StatelessWidget {
   final IconData? icon;
   final Color? accent;
   final VoidCallback? onTap;
+
+  /// Recent history for the sparkline, oldest first.
+  final List<double>? trend;
+
+  /// Change against the previous period, as a fraction (0.12 = up 12%).
+  final double? delta;
+
+  /// Whether a rise is a good thing. Revenue up is green; expenses up is not.
+  final bool deltaIsGood;
 
   @override
   Widget build(BuildContext context) {
@@ -201,7 +289,7 @@ class StatTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(Space.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -242,20 +330,71 @@ class StatTile extends StatelessWidget {
                       ),
                 ),
               ),
-              if (caption != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  caption!,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
+              if (caption != null || delta != null) ...[
+                const SizedBox(height: Space.xs),
+                Row(
+                  children: [
+                    if (delta != null) ...[
+                      _DeltaBadge(delta: delta!, isGood: deltaIsGood),
+                      const SizedBox(width: Space.sm),
+                    ],
+                    if (caption != null)
+                      Expanded(
+                        child: Text(
+                          caption!,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                  overflow: TextOverflow.ellipsis,
+                  ],
                 ),
+              ],
+              if (trend != null && trend!.length > 1) ...[
+                const SizedBox(height: Space.md),
+                Sparkline(trend!, color: color),
               ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Direction of travel against the previous period. Colour says whether
+/// that direction is welcome, which is not the same as which way it points.
+class _DeltaBadge extends StatelessWidget {
+  const _DeltaBadge({required this.delta, required this.isGood});
+
+  final double delta;
+  final bool isGood;
+
+  @override
+  Widget build(BuildContext context) {
+    final up = delta >= 0;
+    final welcome = up == isGood;
+    final color =
+        welcome ? context.colors.success : context.colors.warning;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(up ? Icons.arrow_upward : Icons.arrow_downward,
+            size: 12, color: color),
+        const SizedBox(width: 2),
+        Text(
+          '${(delta.abs() * 100).toStringAsFixed(0)}%',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: color,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -323,7 +462,7 @@ class Money extends StatelessWidget {
       style: (style ?? Theme.of(context).textTheme.bodyMedium)?.copyWith(
         fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
         fontFeatures: const [FontFeature.tabularFigures()],
-        color: colorNegative && value < 0 ? AppTheme.danger : null,
+        color: colorNegative && value < 0 ? context.colors.danger : null,
       ),
     );
   }
@@ -335,7 +474,7 @@ class PageBody extends StatelessWidget {
     super.key,
     required this.child,
     this.maxWidth = 1280,
-    this.padding = const EdgeInsets.all(20),
+    this.padding = const EdgeInsets.all(Space.lg),
   });
 
   final Widget child;
@@ -384,7 +523,7 @@ Future<bool> runWithFeedback(
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text(successMessage),
-        backgroundColor: AppTheme.success,
+        backgroundColor: context.colors.success,
       ));
     return true;
   } catch (err) {
@@ -392,7 +531,7 @@ Future<bool> runWithFeedback(
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text('$err'),
-        backgroundColor: AppTheme.danger,
+        backgroundColor: context.colors.danger,
         duration: const Duration(seconds: 6),
       ));
     return false;
@@ -419,7 +558,7 @@ Future<bool> confirm(
         FilledButton(
           onPressed: () => Navigator.pop(ctx, true),
           style: destructive
-              ? FilledButton.styleFrom(backgroundColor: AppTheme.danger)
+              ? FilledButton.styleFrom(backgroundColor: context.colors.danger)
               : null,
           child: Text(confirmLabel),
         ),

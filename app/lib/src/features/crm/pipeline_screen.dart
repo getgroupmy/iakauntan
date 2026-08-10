@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 
@@ -76,7 +77,7 @@ class PipelineScreen extends ConsumerWidget {
                 Expanded(
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(Space.lg),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -139,7 +140,7 @@ class _StageColumn extends StatelessWidget {
       builder: (context, candidate, _) => Container(
         width: 280,
         margin: const EdgeInsets.only(right: 12),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(Space.md),
         decoration: BoxDecoration(
           color: candidate.isNotEmpty
               ? _color.withValues(alpha: 0.10)
@@ -209,7 +210,7 @@ class _DealCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final card = Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(Space.md),
       decoration: BoxDecoration(
         color: Theme.of(context).cardTheme.color,
         borderRadius: BorderRadius.circular(10),

@@ -96,7 +96,7 @@ class _MatterHeader extends StatelessWidget {
     final narrow = MediaQuery.sizeOf(context).width < 700;
 
     final figures = <({String label, double value, Color? colour})>[
-      (label: 'Client funds held', value: summary.clientFunds, colour: AppTheme.info),
+      (label: 'Client funds held', value: summary.clientFunds, colour: context.colors.info),
       (label: 'Unbilled time', value: summary.unbilledTime, colour: null),
       (
         label: 'Unbilled disbursements',
@@ -106,13 +106,13 @@ class _MatterHeader extends StatelessWidget {
       (
         label: 'Outstanding bills',
         value: summary.outstanding,
-        colour: summary.outstanding > 0 ? AppTheme.amber : null
+        colour: summary.outstanding > 0 ? context.colors.warning : null
       ),
     ];
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(Space.lg),
       color: Theme.of(context).colorScheme.surfaceContainerLow,
       child: Wrap(
         spacing: narrow ? 16 : 40,
@@ -191,14 +191,14 @@ class _ClientLedgerTab extends ConsumerWidget {
               final t = r.txn;
               return ListTile(
                 contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                    const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.xs),
                 leading: CircleAvatar(
-                  backgroundColor: (t.isMoneyIn ? AppTheme.success : AppTheme.amber)
+                  backgroundColor: (t.isMoneyIn ? context.colors.success : context.colors.warning)
                       .withValues(alpha: 0.15),
                   child: Icon(
                     t.isMoneyIn ? Icons.south_west : Icons.north_east,
                     size: 18,
-                    color: t.isMoneyIn ? AppTheme.success : AppTheme.amber,
+                    color: t.isMoneyIn ? context.colors.success : context.colors.warning,
                   ),
                 ),
                 title: Text(
@@ -352,7 +352,7 @@ class _ClientMoneyDialogState extends ConsumerState<_ClientMoneyDialog> {
                         ? null
                         : '${Fmt.money(_available)} available on this matter',
                     helperStyle: TextStyle(
-                        color: wouldOverdraw ? AppTheme.danger : null),
+                        color: wouldOverdraw ? context.colors.danger : null),
                   ),
                   validator: (v) => (double.tryParse(v ?? '') ?? 0) <= 0
                       ? 'Enter an amount'
@@ -406,19 +406,19 @@ class _ClientMoneyDialogState extends ConsumerState<_ClientMoneyDialog> {
                 if (wouldOverdraw) ...[
                   const SizedBox(height: 16),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(Space.md),
                     decoration: BoxDecoration(
-                      color: AppTheme.danger.withValues(alpha: 0.10),
+                      color: context.colors.danger.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                          color: AppTheme.danger.withValues(alpha: 0.35)),
+                          color: context.colors.danger.withValues(alpha: 0.35)),
                     ),
                     child: Text(
                       'This matter only holds ${Fmt.money(_available)}. Client '
                       'money held for one matter cannot fund another, so this '
                       'will be rejected.',
-                      style: const TextStyle(
-                          color: AppTheme.danger, fontSize: 12),
+                      style: TextStyle(
+                          color: context.colors.danger, fontSize: 12),
                     ),
                   ),
                 ],
@@ -486,7 +486,7 @@ class _TimeTab extends ConsumerWidget {
               final e = list[i];
               return ListTile(
                 contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.xs),
                 title: Text(e.description,
                     maxLines: 1, overflow: TextOverflow.ellipsis),
                 subtitle: Text(
@@ -736,7 +736,7 @@ class _DisbursementsTab extends ConsumerWidget {
               final d = list[i];
               return ListTile(
                 contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.xs),
                 title: Text(d['description']?.toString() ?? '—',
                     maxLines: 1, overflow: TextOverflow.ellipsis),
                 subtitle: Text(

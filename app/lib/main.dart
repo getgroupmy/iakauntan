@@ -45,12 +45,12 @@ class _StartupFailure extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
             child: Padding(
-              padding: const EdgeInsets.all(32),
+              padding: const EdgeInsets.all(Space.xxl),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.cloud_off,
-                      size: 44, color: AppTheme.danger),
+                  Icon(Icons.cloud_off,
+                      size: 44, color: context.colors.danger),
                   const SizedBox(height: 20),
                   Text(
                     'Cannot reach iAkauntan',
@@ -69,7 +69,7 @@ class _StartupFailure extends StatelessWidget {
                   const SizedBox(height: 20),
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(Space.md),
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(10),

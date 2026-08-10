@@ -97,7 +97,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
     final form = Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(Space.xl),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
           child: Form(
@@ -188,11 +188,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
-                  _Banner(message: _error!, color: AppTheme.danger),
+                  _Banner(message: _error!, color: context.colors.danger),
                 ],
                 if (_notice != null) ...[
                   const SizedBox(height: 12),
-                  _Banner(message: _notice!, color: AppTheme.success),
+                  _Banner(message: _notice!, color: context.colors.success),
                 ],
                 const SizedBox(height: 20),
                 FilledButton(
@@ -366,7 +366,7 @@ class _Banner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(Space.md),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),

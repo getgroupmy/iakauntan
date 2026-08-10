@@ -100,15 +100,34 @@ class _Greeting extends StatelessWidget {
   }
 }
 
-class _MetricGrid extends StatelessWidget {
+class _MetricGrid extends ConsumerWidget {
   const _MetricGrid({required this.data});
 
   final DashboardSummary data;
 
+  /// Month-on-month change, or null when there is not enough history to
+  /// claim one. A first month in business is not a 100% rise.
+  static double? _delta(List<double> series) {
+    if (series.length < 2) return null;
+    final previous = series[series.length - 2];
+    if (previous == 0) return null;
+    return (series.last - previous) / previous;
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final width = MediaQuery.sizeOf(context).width;
     final columns = width >= 1100 ? 4 : (width >= 700 ? 2 : 1);
+
+    // The same series the chart below uses; the tiles show its shape so the
+    // top row answers "which way is this going" without scrolling.
+    final rows = ref.watch(revenueTrendProvider).valueOrNull ?? const [];
+    final revenueSeries = [
+      for (final r in rows) Fmt.toDouble(r['revenue']),
+    ];
+    final expenseSeries = [
+      for (final r in rows) Fmt.toDouble(r['expenses']),
+    ];
 
     final tiles = <Widget>[
       StatTile(
@@ -116,14 +135,20 @@ class _MetricGrid extends StatelessWidget {
         value: Fmt.money(data.revenue),
         caption: 'Invoiced, excluding drafts',
         icon: Icons.trending_up,
-        accent: AppTheme.success,
+        accent: context.colors.success,
+        trend: revenueSeries,
+        delta: _delta(revenueSeries),
       ),
       StatTile(
         label: 'Expenses this month',
         value: Fmt.money(data.expenses),
         caption: 'Supplier bills',
         icon: Icons.trending_down,
-        accent: AppTheme.amber,
+        accent: context.colors.warning,
+        trend: expenseSeries,
+        delta: _delta(expenseSeries),
+        // Spending more than last month is not an achievement.
+        deltaIsGood: false,
       ),
       StatTile(
         label: 'Receivables',
@@ -132,14 +157,14 @@ class _MetricGrid extends StatelessWidget {
             ? '${Fmt.money(data.overdueReceivables)} overdue'
             : 'Nothing overdue',
         icon: Icons.account_balance_wallet_outlined,
-        accent: data.overdueReceivables > 0 ? AppTheme.danger : null,
+        accent: data.overdueReceivables > 0 ? context.colors.danger : null,
       ),
       StatTile(
         label: 'Bank balance',
         value: Fmt.money(data.bankBalance),
         caption: 'Across active accounts',
         icon: Icons.account_balance,
-        accent: AppTheme.info,
+        accent: context.colors.info,
       ),
     ];
 
@@ -163,7 +188,7 @@ class _EinvoiceBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final needsAttention = data.einvoiceInvalid > 0;
-    final color = needsAttention ? AppTheme.danger : AppTheme.amber;
+    final color = needsAttention ? context.colors.danger : context.colors.warning;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
@@ -172,7 +197,7 @@ class _EinvoiceBanner extends ConsumerWidget {
           borderRadius: BorderRadius.circular(14),
           onTap: () => context.go('/einvoice'),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(Space.lg),
             child: Row(
               children: [
                 Icon(
@@ -220,7 +245,7 @@ class _TrendCard extends ConsumerWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -303,8 +328,8 @@ class _TrendCard extends ConsumerWidget {
                         ),
                       ),
                       lineBarsData: [
-                        _line(revenue, AppTheme.success),
-                        _line(expenses, AppTheme.amber),
+                        _line(revenue, context.colors.success),
+                        _line(expenses, context.colors.warning),
                       ],
                     ),
                   );
@@ -312,11 +337,11 @@ class _TrendCard extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 12),
-            const Row(
+            Row(
               children: [
-                _Legend(color: AppTheme.success, label: 'Revenue'),
+                _Legend(color: context.colors.success, label: 'Revenue'),
                 SizedBox(width: 20),
-                _Legend(color: AppTheme.amber, label: 'Expenses'),
+                _Legend(color: context.colors.warning, label: 'Expenses'),
               ],
             ),
           ],
@@ -372,7 +397,7 @@ class _ReceivablesCard extends ConsumerWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -426,9 +451,9 @@ class _ReceivablesCard extends ConsumerWidget {
                             if (Fmt.toInt(row['days_overdue']) > 0)
                               Text(
                                 '${row['days_overdue']} days late',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
-                                  color: AppTheme.danger,
+                                  color: context.colors.danger,
                                 ),
                               ),
                           ],
@@ -454,7 +479,7 @@ class _ActivitiesCard extends ConsumerWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

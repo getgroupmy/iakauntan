@@ -51,7 +51,7 @@ class _MattersScreenState extends ConsumerState<MattersScreen> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(64),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.md),
             child: Row(children: [
               Expanded(
                 child: TextField(
@@ -105,8 +105,8 @@ class _MattersScreenState extends ConsumerState<MattersScreen> {
               Container(
                 width: double.infinity,
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                color: AppTheme.info.withValues(alpha: 0.10),
+                    const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
+                color: context.colors.info.withValues(alpha: 0.10),
                 child: Row(children: [
                   const Icon(Icons.account_balance_outlined, size: 16),
                   const SizedBox(width: 8),
@@ -148,7 +148,7 @@ class _MatterTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       onTap: () => context.go('/legal/${matter.id}'),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      contentPadding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.xs),
       title: Row(children: [
         Text(matter.matterNo,
             style: const TextStyle(fontWeight: FontWeight.w600)),

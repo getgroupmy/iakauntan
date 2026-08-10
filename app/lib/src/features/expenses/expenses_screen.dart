@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 
@@ -64,7 +65,7 @@ class ExpensesScreen extends ConsumerWidget {
               Container(
                 width: double.infinity,
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
                 color: Theme.of(context)
                     .colorScheme
                     .primaryContainer

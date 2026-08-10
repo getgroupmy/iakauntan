@@ -134,11 +134,11 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
               children: [
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(Space.lg),
                     child: Row(
                       children: [
-                        const Icon(Icons.auto_awesome,
-                            color: AppTheme.success, size: 20),
+                        Icon(Icons.auto_awesome,
+                            color: context.colors.success, size: 20),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
@@ -289,14 +289,14 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                 if (_error != null) ...[
                   const SizedBox(height: 20),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(Space.md),
                     decoration: BoxDecoration(
-                      color: AppTheme.danger.withValues(alpha: 0.1),
+                      color: context.colors.danger.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       _error!,
-                      style: const TextStyle(color: AppTheme.danger),
+                      style: TextStyle(color: context.colors.danger),
                     ),
                   ),
                 ],

@@ -68,7 +68,7 @@ class _CompanyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -176,7 +176,7 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -187,9 +187,9 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
             if (missingTin)
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(Space.md),
                 decoration: BoxDecoration(
-                  color: AppTheme.amber.withValues(alpha: 0.12),
+                  color: context.colors.warning.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Text(
@@ -276,7 +276,7 @@ class _ModulesCard extends ConsumerWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -303,7 +303,7 @@ class _ModulesCard extends ConsumerWidget {
                                 : Icons.remove_circle_outline,
                             size: 16,
                             color: active.contains(m.code)
-                                ? AppTheme.success
+                                ? context.colors.success
                                 : Theme.of(context).colorScheme.outline,
                           ),
                           label: Text(m.name),
@@ -367,7 +367,7 @@ class _ChartOfAccountsCard extends ConsumerWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -416,7 +416,7 @@ class _TaxCodesCard extends ConsumerWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -477,7 +477,7 @@ class _AboutCard extends ConsumerWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

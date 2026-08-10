@@ -49,7 +49,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(64),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.md),
             child: Row(
               children: [
                 Expanded(
@@ -154,9 +154,9 @@ class _ContactTile extends StatelessWidget {
           ),
           if (contact.isTinVerified) ...[
             const SizedBox(width: 6),
-            const Tooltip(
+            Tooltip(
               message: 'TIN verified with LHDN',
-              child: Icon(Icons.verified, size: 15, color: AppTheme.success),
+              child: Icon(Icons.verified, size: 15, color: context.colors.success),
             ),
           ],
         ],
@@ -175,10 +175,10 @@ class _ContactTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (!contact.readyForEinvoice)
-            const Tooltip(
+            Tooltip(
               message: 'Missing TIN or registration number for e-Invoice',
               child: Icon(Icons.warning_amber_rounded,
-                  size: 18, color: AppTheme.amber),
+                  size: 18, color: context.colors.warning),
             ),
           const SizedBox(width: 8),
           StatusChip(contact.contactType, compact: true),

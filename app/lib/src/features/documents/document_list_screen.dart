@@ -83,7 +83,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(64),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.md),
             child: Row(children: [
               Expanded(
                 child: TextField(
@@ -141,7 +141,7 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                 Container(
                   width: double.infinity,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
                   color: Theme.of(context)
                       .colorScheme
                       .primaryContainer
@@ -189,7 +189,7 @@ class _DocumentTile extends StatelessWidget {
 
     return ListTile(
       onTap: () => context.go('${kind.routePrefix}/$docType/${doc.id}'),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      contentPadding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.xs),
       title: Row(
         children: [
           Text(doc.docNo,
@@ -203,7 +203,7 @@ class _DocumentTile extends StatelessWidget {
               child: Icon(
                 _einvoiceIcon(doc.einvoiceStatus),
                 size: 16,
-                color: _einvoiceColor(doc.einvoiceStatus),
+                color: _einvoiceColor(context, doc.einvoiceStatus),
               ),
             ),
           ],
@@ -230,7 +230,7 @@ class _DocumentTile extends StatelessWidget {
               doc.balanceAmount != doc.totalAmount)
             Text(
               '${Fmt.money(doc.balanceAmount, currency: doc.currency)} due',
-              style: const TextStyle(fontSize: 11, color: AppTheme.amber),
+              style: TextStyle(fontSize: 11, color: context.colors.warning),
             ),
         ],
       ),
@@ -245,10 +245,11 @@ class _DocumentTile extends StatelessWidget {
         _ => Icons.help_outline,
       };
 
-  static Color _einvoiceColor(String status) => switch (status) {
-        'valid' => AppTheme.success,
-        'invalid' || 'rejected' => AppTheme.danger,
-        'submitted' || 'pending' => AppTheme.amber,
+  static Color _einvoiceColor(BuildContext context, String status) =>
+      switch (status) {
+        'valid' => context.colors.success,
+        'invalid' || 'rejected' => context.colors.danger,
+        'submitted' || 'pending' => context.colors.warning,
         _ => const Color(0xFF94A3B8),
       };
 }

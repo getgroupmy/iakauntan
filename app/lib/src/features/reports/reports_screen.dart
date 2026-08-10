@@ -194,7 +194,7 @@ class _ProfitLoss extends ConsumerWidget {
             maxWidth: 860,
             child: Card(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(Space.xl),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -244,7 +244,7 @@ class _Highlight extends StatelessWidget {
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: (value >= 0 ? AppTheme.success : AppTheme.danger)
+        color: (value >= 0 ? context.colors.success : context.colors.danger)
             .withValues(alpha: emphasise ? 0.12 : 0.06),
         borderRadius: BorderRadius.circular(10),
       ),
@@ -315,7 +315,7 @@ class _BalanceSheet extends ConsumerWidget {
             maxWidth: 860,
             child: Card(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(Space.xl),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -390,7 +390,7 @@ class _TrialBalance extends ConsumerWidget {
           child: PageBody(
             child: Card(
               child: Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(Space.lg),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -492,7 +492,7 @@ class _SstSummary extends ConsumerWidget {
             maxWidth: 860,
             child: Card(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(Space.xl),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

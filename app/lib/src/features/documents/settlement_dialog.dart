@@ -242,7 +242,7 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppTheme.success.withValues(alpha: 0.08),
+                  color: context.colors.success.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -320,13 +320,13 @@ class _OpenDocumentsState extends ConsumerState<_OpenDocuments> {
     return AsyncView(
       value: docs,
       loading: const Padding(
-        padding: EdgeInsets.all(16),
+        padding: EdgeInsets.all(Space.lg),
         child: Center(child: CircularProgressIndicator()),
       ),
       builder: (list) {
         if (list.isEmpty) {
           return Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(Space.lg),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(10),
@@ -446,7 +446,7 @@ class _AllocationRowState extends State<_AllocationRow> {
                   '${doc.dueDate != null ? ' · due ${Fmt.date(doc.dueDate)}' : ''}',
                   style: TextStyle(
                     fontSize: 11,
-                    color: doc.isOverdue ? AppTheme.danger : null,
+                    color: doc.isOverdue ? context.colors.danger : null,
                   ),
                 ),
               ],

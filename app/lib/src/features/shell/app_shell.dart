@@ -279,7 +279,7 @@ class _OrgSwitcher extends ConsumerWidget {
                   ),
                 ),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(Space.md),
           child: Row(
             children: [
               CircleAvatar(
@@ -313,7 +313,7 @@ class _OrgSwitcher extends ConsumerWidget {
                       style: TextStyle(
                         fontSize: 11,
                         color: org?.einvoiceEnabled == true
-                            ? AppTheme.success
+                            ? context.colors.success
                             : scheme.onSurfaceVariant,
                       ),
                     ),

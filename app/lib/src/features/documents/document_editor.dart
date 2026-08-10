@@ -236,7 +236,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(message),
       backgroundColor:
-          success ? AppTheme.success : (error ? AppTheme.danger : null),
+          success ? context.colors.success : (error ? context.colors.danger : null),
     ));
   }
 
@@ -417,10 +417,10 @@ class _PostedBanner extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 16),
       child: Card(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(Space.lg),
           child: Row(
             children: [
-              const Icon(Icons.lock_outline, size: 20, color: AppTheme.success),
+              Icon(Icons.lock_outline, size: 20, color: context.colors.success),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -499,7 +499,7 @@ class _HeaderCard extends ConsumerWidget {
             helperText: warnMissingTin
                 ? 'No TIN on file — e-Invoice will be rejected'
                 : null,
-            helperStyle: const TextStyle(color: AppTheme.amber),
+            helperStyle: TextStyle(color: context.colors.warning),
           ),
           items: [
             for (final c in list)
@@ -554,7 +554,7 @@ class _HeaderCard extends ConsumerWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -668,7 +668,7 @@ class _TotalsAndNotes extends StatelessWidget {
 
     final notesCard = Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -689,7 +689,7 @@ class _TotalsAndNotes extends StatelessWidget {
 
     final totalsCard = Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           children: [
             _TotalRow(label: 'Subtotal', value: subtotal, currency: currency),

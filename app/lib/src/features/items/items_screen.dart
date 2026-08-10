@@ -39,7 +39,7 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.md),
             child: TextField(
               onChanged: (v) => setState(() => _search = v),
               decoration: const InputDecoration(
@@ -77,7 +77,7 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
               return ListTile(
                 onTap: canWrite ? () => _openEditor(context, item) : null,
                 contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.xs),
                 title: Row(
                   children: [
                     Flexible(
@@ -90,10 +90,10 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                     ),
                     if (item.isLowStock) ...[
                       const SizedBox(width: 8),
-                      const Tooltip(
+                      Tooltip(
                         message: 'At or below reorder level',
                         child: Icon(Icons.warning_amber_rounded,
-                            size: 16, color: AppTheme.amber),
+                            size: 16, color: context.colors.warning),
                       ),
                     ],
                   ],

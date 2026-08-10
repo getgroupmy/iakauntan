@@ -116,14 +116,14 @@ class _OverviewTab extends ConsumerWidget {
                       value: '${Fmt.toInt(s['users'])}',
                       caption: '${Fmt.toInt(s['signups_30d'])} joined in 30 days',
                       icon: Icons.people_outline,
-                      accent: AppTheme.info,
+                      accent: context.colors.info,
                     ),
                     StatTile(
                       label: 'Invoiced value',
                       value: Fmt.money(Fmt.toDouble(s['invoiced_value'])),
                       caption: '${Fmt.toInt(s['invoices'])} invoices',
                       icon: Icons.receipt_long_outlined,
-                      accent: AppTheme.success,
+                      accent: context.colors.success,
                     ),
                     StatTile(
                       label: 'e-Invoices validated',
@@ -133,15 +133,15 @@ class _OverviewTab extends ConsumerWidget {
                           : 'None failing',
                       icon: Icons.verified_outlined,
                       accent: Fmt.toInt(s['einvoices_failed']) > 0
-                          ? AppTheme.danger
-                          : AppTheme.success,
+                          ? context.colors.danger
+                          : context.colors.success,
                     ),
                   ],
                 ),
                 const SizedBox(height: 24),
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(Space.lg),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -211,7 +211,7 @@ class _OrgTile extends ConsumerWidget {
     final addOns = modules.where((m) => !m.isCore).toList();
 
     return ExpansionTile(
-      tilePadding: const EdgeInsets.symmetric(horizontal: 20),
+      tilePadding: const EdgeInsets.symmetric(horizontal: Space.lg),
       title: Row(children: [
         Flexible(
           child: Text(org.name,
@@ -235,7 +235,7 @@ class _OrgTile extends ConsumerWidget {
       ),
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+          padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -405,7 +405,7 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Space.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

@@ -74,7 +74,7 @@ class _EinvoiceScreenState extends ConsumerState<EinvoiceScreen> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(56),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.md),
             child: Align(
               alignment: Alignment.centerLeft,
               child: SegmentedButton<String>(
@@ -132,11 +132,11 @@ class _SetupBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      color: AppTheme.amber.withValues(alpha: 0.12),
-      padding: const EdgeInsets.all(16),
+      color: context.colors.warning.withValues(alpha: 0.12),
+      padding: const EdgeInsets.all(Space.lg),
       child: Row(
         children: [
-          const Icon(Icons.info_outline, color: AppTheme.amber),
+          Icon(Icons.info_outline, color: context.colors.warning),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -170,7 +170,7 @@ class _EinvoiceTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return ExpansionTile(
-      tilePadding: const EdgeInsets.symmetric(horizontal: 20),
+      tilePadding: const EdgeInsets.symmetric(horizontal: Space.lg),
       title: Row(
         children: [
           Text(doc.internalDocNo,
@@ -189,7 +189,7 @@ class _EinvoiceTile extends ConsumerWidget {
       trailing: Money(doc.payableAmount, currency: doc.currency, bold: true),
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+          padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -228,7 +228,7 @@ class _EinvoiceTile extends ConsumerWidget {
                         'Cancel (${_hoursLeft(doc)}h left)',
                       ),
                       style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.danger),
+                          foregroundColor: context.colors.danger),
                     ),
                   if (doc.status == 'invalid' || doc.status == 'failed')
                     FilledButton.icon(
@@ -276,7 +276,7 @@ class _EinvoiceTile extends ConsumerWidget {
             child: const Text('Keep'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            style: FilledButton.styleFrom(backgroundColor: context.colors.danger),
             onPressed: () => Navigator.pop(ctx, reasonController.text.trim()),
             child: const Text('Cancel e-Invoice'),
           ),
@@ -341,11 +341,11 @@ class _ValidDetails extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Validated by LHDN',
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.success,
+                  color: context.colors.success,
                 ),
               ),
               const SizedBox(height: 6),
@@ -382,19 +382,19 @@ class _ErrorDetails extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(Space.md),
       decoration: BoxDecoration(
-        color: AppTheme.danger.withValues(alpha: 0.08),
+        color: context.colors.danger.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.danger.withValues(alpha: 0.3)),
+        border: Border.all(color: context.colors.danger.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             doc.errorMessage ?? 'Rejected by LHDN',
-            style: const TextStyle(
-                fontWeight: FontWeight.w600, color: AppTheme.danger),
+            style: TextStyle(
+                fontWeight: FontWeight.w600, color: context.colors.danger),
           ),
           if (doc.validationErrors.isNotEmpty) ...[
             const SizedBox(height: 8),

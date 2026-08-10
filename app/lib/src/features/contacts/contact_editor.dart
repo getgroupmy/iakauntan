@@ -177,7 +177,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         content: Text(_tinValid == true
             ? 'TIN verified with LHDN.'
             : 'LHDN could not match this TIN to $idValue.'),
-        backgroundColor: _tinValid == true ? AppTheme.success : AppTheme.danger,
+        backgroundColor: _tinValid == true ? context.colors.success : context.colors.danger,
       ));
     } catch (e) {
       if (mounted) {
@@ -298,8 +298,8 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                             : Icon(
                                 _tinValid! ? Icons.verified : Icons.error_outline,
                                 color: _tinValid!
-                                    ? AppTheme.success
-                                    : AppTheme.danger,
+                                    ? context.colors.success
+                                    : context.colors.danger,
                                 size: 20,
                               ),
                       ),
