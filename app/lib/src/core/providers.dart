@@ -512,3 +512,12 @@ final payslipAccessLogProvider =
     FutureProvider.autoDispose<List<PayslipAccessLogEntry>>((ref) {
   return requireRepo(ref).payslipAccessLog();
 });
+
+final departmentsProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).departments();
+});
+
+final positionsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).positions();
+});
