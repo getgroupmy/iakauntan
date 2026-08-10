@@ -15,7 +15,7 @@ than a bolt-on.
 ```
 app/                  Flutter client (web + mobile)
 supabase/
-  migrations/         Schema, RLS, business logic, reports  (0001 … 0016)
+  migrations/         Schema, RLS, business logic, reports  (0001 … 0044)
   functions/myinvois/ Deno edge function: LHDN MyInvois integration
 ```
 
@@ -135,6 +135,89 @@ row is written.
 
 ---
 
+## HRMS
+
+Two add-on modules: **hr** and **payroll**.
+
+| Area | Covered |
+| --- | --- |
+| Core HR | Employees with the statutory identifiers payroll needs (EPF, SOCSO, LHDN file number, TIN), dependants, departments, positions, document expiry |
+| Time & attendance | Shifts and rosters, clock-ins recording method, GPS position, device and biometric terminal, overtime split by Employment Act multiplier |
+| Leave | Types with entitlement and carry-forward, requests that hold against the balance while pending, approvals |
+| Claims | Expense claims reimbursed through payroll or posted to the ledger |
+| Payroll | EPF, SOCSO, EIS, PCB, HRD Corp levy, zakat; posting to the GL; year-to-date carried forward |
+| Talent | Requisitions, applicants with stage history, interviews, onboarding checklists, appraisal cycles with goals |
+
+### Statutory rates are data, not code
+
+Every schedule in `statutory_schedules` carries an effective range, so
+payroll picks the rules in force on the pay date — re-running an old
+period keeps using the rules that applied then, and a gazetted change is
+an insert rather than a deploy. Each payslip records which schedules
+produced it.
+
+**Read this before filing anything.** The seeded schedules are marked
+`is_verified = false`. They carry the published statutory *percentages*
+and thresholds, which is enough to compute correctly, but KWSP and
+PERKESO also gazette contribution *tables* whose band amounts differ
+from a straight percentage by a few sen. Load the authority's own table
+and mark the schedule verified before submitting real returns. A payslip
+produced from an unverified schedule says so on its face.
+
+### PCB
+
+Computed by projecting the year at the current month's rate, applying
+the reliefs the employee is entitled to, taxing the result and spreading
+the balance over the months that remain. That is arithmetically what
+LHDN's M/R/B table does — the table is a precomputed form of the same
+sum. Non-residents are deducted at a flat rate with no reliefs.
+
+### Verified end to end
+
+Three employees, January 2026, hand-checked against the published rules:
+
+| | RM 5,000, single | RM 12,000, married, 2 children | RM 4,500, aged 62 |
+| --- | --- | --- | --- |
+| EPF employee | 550.00 | 1,320.00 | 0.00 |
+| EPF employer | 650.00 (13%) | 1,440.00 (12%) | 180.00 (4%) |
+| SOCSO | 25.00 / 87.50 | 30.00 / 105.00 (capped at RM6,000) | 0.00 / 56.25 (Act 800) |
+| EIS | 10.00 / 10.00 | 12.00 / 12.00 | nil — stops at 60 |
+| PCB | 108.25 | 1,255.20 | 80.00 |
+| Net pay | 4,306.75 | 9,382.80 | 4,420.00 |
+
+Every figure matched. The payroll journal balanced at RM 24,255.75:
+
+```
+Dr  6100 Salaries and Wages       21,500.00
+Dr  6110 EPF Contribution          2,270.00
+Dr  6120 SOCSO Contribution          248.75
+Dr  6130 EIS Contribution             22.00
+Dr  6150 HRD Corp Levy               215.00
+    Cr 2150 EPF Payable                        4,140.00
+    Cr 2160 SOCSO Payable                        303.75
+    Cr 2170 EIS Payable                           44.00
+    Cr 2180 PCB / MTD Payable                  1,443.45
+    Cr 2195 HRD Corp Levy Payable                215.00
+    Cr 2145 Salaries Payable                  18,109.55
+```
+
+### Who sees what
+
+An employee sees only their own record, payslips, leave and claims. A
+manager sees their reporting line — but **not** what their reports are
+paid. HR sees the company; payroll needs a finance role as well. The
+company directory is a separate function returning name, department,
+role and contact only, so colleagues can find each other without salary
+travelling to the client.
+
+Verified: an accounts clerk linked to an employee record could read
+exactly one payslip and one employee row, no payroll runs at all, and
+the full directory. An auditor saw no HR records but did see the payroll
+journal in the general ledger — deliberate, and worth changing if your
+auditors need payslip detail.
+
+---
+
 ## Access and administration
 
 ### Access types
@@ -148,6 +231,8 @@ Assigned per company and enforced by RLS:
 | Accountant | Prepares **and posts** to the ledger, closes periods |
 | Accounts Clerk | Prepares documents but **cannot post** — preparation and approval stay in different hands |
 | Auditor | Reads everything including journals and audit trail; writes nothing |
+| HR Manager | Employee records, leave, claims, payroll and talent |
+| Employee | Self-service only — their own record, payslips, leave and claims |
 | Sales / Purchasing | Their own documents; no access to journals |
 | View Only | Read-only on day-to-day records |
 
@@ -274,5 +359,8 @@ Stated plainly so nothing here is mistaken for finished:
   schema; only PO, Bill and Purchase Credit Note are exposed in the app)
 - Invoice PDF rendering and email delivery
 - Bank statement import and auto-matching
-- Payroll (EPF/SOCSO/EIS/PCB accounts exist in the chart of accounts, but
-  no payroll module)
+- Statutory submission files: CP39, Borang A, Lampiran 1 and the EA form
+  are all computable from what is stored, but no exporter is written
+- The gazetted KWSP and PERKESO contribution tables (see HRMS above)
+- Biometric terminal integration: attendance records carry a terminal
+  identifier, but nothing pushes punches in from a device yet
