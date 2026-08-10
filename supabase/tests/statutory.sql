@@ -168,6 +168,63 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- The tax year an employee brings with them
+--
+-- PCB projects the year from the month in hand, so a mid-year joiner
+-- with nothing recorded has a part year projected as the whole. This is
+-- the difference that makes, and it is large.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid;
+  v_emp uuid;
+  r record;
+  v_bare numeric;
+  v_open numeric;
+  v_relief numeric;
+  v_bik numeric;
+begin
+  v_org := pg_temp.test_org('Mid Year Co');
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'M1', 'Joined in July', date '2026-07-01', 8000,
+          date '1990-01-01', 'single', 'citizen')
+  returning id into v_emp;
+
+  -- July: six months left, and as far as payroll knows, six months of pay.
+  select * into r from app.calc_pcb(v_emp, 8000, 880, 44, 0, date '2026-07-31');
+  v_bare := r.pcb;
+
+  insert into public.employee_ytd_opening
+    (org_id, employee_id, tax_year, gross_pay, epf_employee, pcb_paid, zakat_paid)
+  values (v_org, v_emp, 2026, 48000, 5280, 1500, 0);
+  select * into r from app.calc_pcb(v_emp, 8000, 880, 44, 0, date '2026-07-31');
+  v_open := r.pcb;
+
+  perform pg_temp.check_true(
+    'without the opening figures the deduction is a small fraction of the truth',
+    v_bare * 10 < v_open);
+
+  -- A declared relief comes off the projection.
+  insert into public.employee_tax_reliefs
+    (org_id, employee_id, tax_year, relief_code, amount)
+  values (v_org, v_emp, 2026, 'lifestyle', 2500);
+  select * into r from app.calc_pcb(v_emp, 8000, 880, 44, 0, date '2026-07-31');
+  v_relief := r.pcb;
+  perform pg_temp.check_true('a declared relief reduces the deduction',
+    v_relief < v_open);
+
+  -- Benefits in kind are income, and used to be stored and ignored.
+  update public.employee_ytd_opening set benefits_in_kind = 12000
+   where employee_id = v_emp;
+  select * into r from app.calc_pcb(v_emp, 8000, 880, 44, 0, date '2026-07-31');
+  v_bik := r.pcb;
+  perform pg_temp.check_true('benefits in kind raise it again', v_bik > v_relief);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Every seeded schedule declares its provenance
 -- ---------------------------------------------------------------------
 do $$

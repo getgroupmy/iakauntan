@@ -943,6 +943,84 @@ extension RepoHr on Repo {
     return row['id'] as String;
   }
 
+  // ------------------------------------------------------------------
+  // The tax year an employee brings with them
+  //
+  // PCB projects the year, so what was already earned and deducted
+  // elsewhere has to be known or the projection is a fraction of the
+  // truth. All of this is read by app.calc_pcb.
+  // ------------------------------------------------------------------
+  Future<YtdOpening?> ytdOpening(String employeeId, int taxYear) async {
+    final row = await client
+        .from('employee_ytd_opening')
+        .select()
+        .eq('employee_id', employeeId)
+        .eq('tax_year', taxYear)
+        .maybeSingle();
+    return row == null
+        ? null
+        : YtdOpening.fromJson(Map<String, dynamic>.from(row));
+  }
+
+  Future<void> saveYtdOpening(String employeeId, YtdOpening opening) =>
+      client.from('employee_ytd_opening').upsert({
+        'org_id': orgId,
+        'employee_id': employeeId,
+        'tax_year': opening.taxYear,
+        'gross_pay': opening.grossPay,
+        'epf_employee': opening.epfEmployee,
+        'pcb_paid': opening.pcbPaid,
+        'zakat_paid': opening.zakatPaid,
+        'benefits_in_kind': opening.benefitsInKind,
+        'notes': opening.notes,
+      }, onConflict: 'employee_id,tax_year');
+
+  Future<List<DeclaredRelief>> declaredReliefs(
+          String employeeId, int taxYear) async =>
+      Repo._rows(await client
+              .from('employee_tax_reliefs')
+              .select()
+              .eq('employee_id', employeeId)
+              .eq('tax_year', taxYear)
+              .order('relief_code'))
+          .map(DeclaredRelief.fromJson)
+          .toList();
+
+  /// The reliefs an employee may declare — everything the company cannot
+  /// work out for itself from the record it already holds.
+  Future<List<ReliefType>> reliefTypes(DateTime on) async {
+    final schedule = await client
+        .from('statutory_schedules')
+        .select('id')
+        .eq('schedule_type', 'pcb')
+        .lte('effective_from', Fmt.iso(on))
+        .order('effective_from', ascending: false)
+        .limit(1)
+        .maybeSingle();
+    if (schedule == null) return const [];
+    return Repo._rows(await client
+            .from('tax_reliefs')
+            .select('code, name, max_amount')
+            .eq('schedule_id', schedule['id'] as String)
+            .eq('applies_to', 'manual')
+            .order('sort_order'))
+        .map(ReliefType.fromJson)
+        .toList();
+  }
+
+  Future<void> saveDeclaredRelief(String employeeId, DeclaredRelief relief) =>
+      client.from('employee_tax_reliefs').upsert({
+        'org_id': orgId,
+        'employee_id': employeeId,
+        'tax_year': relief.taxYear,
+        'relief_code': relief.reliefCode,
+        'amount': relief.amount,
+        'notes': relief.notes,
+      }, onConflict: 'employee_id,tax_year,relief_code');
+
+  Future<void> deleteDeclaredRelief(String id) =>
+      client.from('employee_tax_reliefs').delete().eq('id', id);
+
   Future<List<Map<String, dynamic>>> departments() async => Repo._rows(
       await client.from('departments').select().eq('org_id', orgId).order('name'));
 

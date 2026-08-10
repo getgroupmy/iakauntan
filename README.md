@@ -198,6 +198,32 @@ the balance over the months that remain. That is arithmetically what
 LHDN's M/R/B table does — the table is a precomputed form of the same
 sum. Non-residents are deducted at a flat rate with no reliefs.
 
+### Starting mid-year
+
+PCB projects the year from the month in hand, so an employee who joined
+in July with nothing recorded has six months of pay projected as if it
+were the whole year — and is deducted a fraction of what they owe. On
+RM8,000 a month that is **RM 32.00 instead of RM 769.95**, and the
+shortfall lands on the employee at filing.
+
+`calc_pcb` has always read `employee_ytd_opening` and
+`employee_tax_reliefs`; neither had a screen, so the figures could not be
+entered. **Edit an employee → Tax year** now takes them: gross already
+earned, EPF and PCB already deducted, zakat paid, and benefits in kind,
+copied from the last payslip or the previous employer's EA form. Saved
+separately from the rest of the form, so an accidental Save cannot
+rewrite what a previous employer paid.
+
+Declared reliefs — the employee's TP1 — go in the same place. Reliefs the
+company can work out for itself (the individual allowance, EPF, SOCSO,
+spouse, children on file) are applied automatically and are deliberately
+absent from that list, so nothing gets claimed twice. Each entry is held
+to the statutory ceiling: over-claiming here under-deducts, and the
+employee pays for it later.
+
+Benefits in kind were being stored and ignored. They are employment
+income under section 13, so `0054` folds them into the projection.
+
 ### Verified end to end
 
 Three employees, January 2026, hand-checked against the published rules:

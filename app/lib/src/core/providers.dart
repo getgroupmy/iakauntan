@@ -396,6 +396,24 @@ final employeeProvider =
   return requireRepo(ref).employee(id);
 });
 
+/// What an employee brought with them into the current tax year, and the
+/// reliefs they have declared. Keyed by employee because the tax year is
+/// always the current one — a past year is history, not something the
+/// projection can still act on.
+final ytdOpeningProvider =
+    FutureProvider.autoDispose.family<YtdOpening?, String>((ref, employeeId) {
+  return requireRepo(ref).ytdOpening(employeeId, DateTime.now().year);
+});
+
+final declaredReliefsProvider = FutureProvider.autoDispose
+    .family<List<DeclaredRelief>, String>((ref, employeeId) {
+  return requireRepo(ref).declaredReliefs(employeeId, DateTime.now().year);
+});
+
+final reliefTypesProvider = FutureProvider<List<ReliefType>>((ref) {
+  return requireRepo(ref).reliefTypes(DateTime.now());
+});
+
 /// The caller's own employee record. Everything on the self-service
 /// screen hangs off this, and it is null when the login is not linked.
 final myEmployeeProvider = FutureProvider<Employee?>((ref) {

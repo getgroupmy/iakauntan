@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'tax_year_section.dart';
 
 /// Create or amend an employee. The statutory identifiers are not
 /// optional extras — payroll cannot file a return without them, so they
@@ -272,6 +273,11 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
                         ]),
                       ],
                     ),
+                    // Only once the employee exists: both of these hang
+                    // off an employee id, and there is nothing sensible
+                    // to attach them to before Save.
+                    if (!widget.isNew)
+                      TaxYearSection(employeeId: widget.employeeId!),
                     const SizedBox(height: Space.xxl),
                   ],
                 ),

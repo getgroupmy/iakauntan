@@ -1442,6 +1442,106 @@ class PayrollRun {
   }
 }
 
+/// What an employee had already earned this tax year before payroll
+/// started keeping their record.
+///
+/// PCB works by projecting the year, so a company adopting in July with
+/// nothing here projects six months of pay as if it were the whole year
+/// and deducts a fraction of what it should. The figures come off the
+/// employee's last payslip or their EA form from the previous employer.
+class YtdOpening {
+  YtdOpening({
+    required this.taxYear,
+    this.id,
+    this.grossPay = 0,
+    this.epfEmployee = 0,
+    this.pcbPaid = 0,
+    this.zakatPaid = 0,
+    this.benefitsInKind = 0,
+    this.notes,
+  });
+
+  final String? id;
+  final int taxYear;
+  final double grossPay;
+  final double epfEmployee;
+  final double pcbPaid;
+  final double zakatPaid;
+  final double benefitsInKind;
+  final String? notes;
+
+  bool get isEmpty =>
+      grossPay == 0 &&
+      epfEmployee == 0 &&
+      pcbPaid == 0 &&
+      zakatPaid == 0 &&
+      benefitsInKind == 0;
+
+  factory YtdOpening.fromJson(Map<String, dynamic> j) => YtdOpening(
+        id: j['id'] as String?,
+        taxYear: Fmt.toInt(j['tax_year']),
+        grossPay: Fmt.toDouble(j['gross_pay']),
+        epfEmployee: Fmt.toDouble(j['epf_employee']),
+        pcbPaid: Fmt.toDouble(j['pcb_paid']),
+        zakatPaid: Fmt.toDouble(j['zakat_paid']),
+        benefitsInKind: Fmt.toDouble(j['benefits_in_kind']),
+        notes: j['notes']?.toString(),
+      );
+}
+
+/// A relief the employee has declared — the TP1 form. Reliefs the
+/// company can work out for itself (the individual allowance, EPF,
+/// SOCSO, spouse, children) are applied automatically and are not
+/// entered here.
+class DeclaredRelief {
+  DeclaredRelief({
+    required this.reliefCode,
+    required this.amount,
+    required this.taxYear,
+    this.id,
+    this.name,
+    this.maxAmount,
+    this.notes,
+  });
+
+  final String? id;
+  final String reliefCode;
+  final String? name;
+  final double amount;
+  final double? maxAmount;
+  final int taxYear;
+  final String? notes;
+
+  factory DeclaredRelief.fromJson(Map<String, dynamic> j) => DeclaredRelief(
+        id: j['id'] as String?,
+        reliefCode: j['relief_code']?.toString() ?? '',
+        amount: Fmt.toDouble(j['amount']),
+        taxYear: Fmt.toInt(j['tax_year']),
+        notes: j['notes']?.toString(),
+      );
+}
+
+/// A relief the statutory schedule offers, for the picker.
+class ReliefType {
+  ReliefType({
+    required this.code,
+    required this.name,
+    this.maxAmount,
+  });
+
+  final String code;
+  final String name;
+  final double? maxAmount;
+
+  factory ReliefType.fromJson(Map<String, dynamic> j) => ReliefType(
+        code: j['code']?.toString() ?? '',
+        name: j['name']?.toString() ?? '',
+        maxAmount: j['max_amount'] == null
+            ? null
+            : Fmt.toDouble(j['max_amount']),
+      );
+}
+
 /// One line of a bank payment instruction.
 ///
 /// [problem] is set when the line cannot be paid as it stands — no bank
