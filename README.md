@@ -353,6 +353,40 @@ that matter. Run headers also stay directly readable under a grant: they
 are org-level totals that already appear in the payroll journal in the
 general ledger.
 
+### And every change is recorded too
+
+`audit_logs` existed with a select policy, no write policy, and **no
+writer at all** — zero rows, no `insert` anywhere in the schema. So the
+system recorded every auditor's glance at a payslip and nothing at all
+about who changed a salary. `0055` fixes the asymmetry.
+
+A SECURITY DEFINER trigger writes it, the table still has no insert,
+update or delete policy, and it covers the tables where a quiet change
+would matter: employees and their salary components, opening year to
+date and declared reliefs, payroll settings, bank accounts, the chart of
+accounts, tax codes, fiscal periods, memberships, modules and the
+company record. Deliberately not everything — an audit trail nobody reads
+because it is mostly invoice lines is the same as no audit trail.
+
+Only the fields that moved are stored, from and to, so a raise reads as
+a raise:
+
+```json
+{ "from": { "basic_salary": 5000.00 }, "to": { "basic_salary": 6500.00 } }
+```
+
+An update that changes nothing is not written at all.
+
+Reads are **owner and admin only**, tightened from `can_read_ledger`:
+those diffs carry salaries, bank account numbers and statutory
+identifiers, which is precisely what the payslip rules above keep away
+from an auditor without an approved request. It appears on Team & access,
+beside the read log — one records who looked, the other who changed it.
+
+Verified: an insert and a real update are recorded while a no-op update
+is not, only the moved field is kept, and a caller without admin is
+refused with `42501`.
+
 ---
 
 ## Access and administration

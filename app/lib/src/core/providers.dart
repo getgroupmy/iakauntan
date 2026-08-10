@@ -543,6 +543,14 @@ final payslipAccessLogProvider =
   return requireRepo(ref).payslipAccessLog();
 });
 
+/// The change history. Owners and admins only — the RPC refuses anyone
+/// else, so the screen guards on the same right rather than showing an
+/// error where a card should be.
+final auditTrailProvider =
+    FutureProvider.autoDispose<List<AuditEntry>>((ref) {
+  return requireRepo(ref).auditTrail();
+});
+
 final departmentsProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).departments();

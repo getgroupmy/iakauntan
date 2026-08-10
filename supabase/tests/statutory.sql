@@ -276,6 +276,63 @@ begin
     case when app.has_org_role(gen_random_uuid(),
            array['owner', 'admin']::app.member_role[]) is false
          then 1 else 0 end, 1);
+
+  -- The change history carries salaries and bank numbers in its diffs,
+  -- so it is admin-only and, like the read log, written by the database
+  -- rather than by anybody with an API key.
+  perform pg_temp.check_true('the change history cannot be written from the API',
+    not exists (
+      select 1 from pg_policies
+       where tablename = 'audit_logs' and cmd <> 'SELECT'));
+
+  perform pg_temp.check_true('and it is not open to everyone who reads the ledger',
+    (select qual::text like '%can_admin%'
+       from pg_policies
+      where tablename = 'audit_logs' and policyname = 'audit_logs_select'));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The change history
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid;
+  v_emp uuid;
+  v_n   integer;
+  v_changes jsonb;
+begin
+  v_org := pg_temp.test_org('Audited Co');
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary, residency_status)
+  values (v_org, 'A1', 'Audited Person', date '2026-01-01', 5000, 'citizen')
+  returning id into v_emp;
+
+  update public.employees set basic_salary = 6500 where id = v_emp;
+  -- A write that changes nothing is not an event.
+  update public.employees set basic_salary = 6500 where id = v_emp;
+
+  select count(*) into v_n from public.audit_logs
+   where org_id = v_org and table_name = 'employees' and record_id = v_emp;
+  perform pg_temp.check_eq(
+    'an insert and a real update are recorded, a no-op update is not', v_n, 2);
+
+  select jsonb_build_object('from', old_data, 'to', new_data) into v_changes
+    from public.audit_logs
+   where org_id = v_org and record_id = v_emp and action = 'update';
+  perform pg_temp.check_true('and only the field that moved is kept',
+    v_changes = jsonb_build_object(
+      'from', jsonb_build_object('basic_salary', 5000.00),
+      'to',   jsonb_build_object('basic_salary', 6500.00)));
+
+  -- Nobody without admin gets to read it.
+  perform pg_temp.sign_out();
+  begin
+    perform * from public.audit_trail(v_org);
+    raise exception 'FAIL: a non-admin read the change history';
+  exception when sqlstate '42501' then
+    raise notice 'ok   a non-admin cannot read the change history';
+  end;
 end $$;
 
 -- ---------------------------------------------------------------------

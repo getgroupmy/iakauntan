@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'audit_trail_card.dart';
 
 /// Who is in the company and what they may do. Inviting someone creates
 /// a pending membership; when they register with that e-mail the database
@@ -64,6 +65,8 @@ class TeamScreen extends ConsumerWidget {
                 const SizedBox(height: 24),
                 if (canAdmin) ...[
                   const _PayslipAccessCard(),
+                  const SizedBox(height: 24),
+                  const AuditTrailCard(),
                   const SizedBox(height: 24),
                 ],
                 const _RoleReference(),

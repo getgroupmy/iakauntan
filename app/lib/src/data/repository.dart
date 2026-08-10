@@ -1368,6 +1368,22 @@ extension RepoPayslipAccess on Repo {
         .limit(limit);
     return Repo._rows(rows).map(PayslipAccessLogEntry.fromJson).toList();
   }
+
+  /// Who changed what. The function refuses anyone who is not an owner
+  /// or admin, because the diffs carry salaries and bank details.
+  Future<List<AuditEntry>> auditTrail({
+    String? table,
+    String? recordId,
+    int limit = 100,
+  }) async {
+    final rows = await client.rpc('audit_trail', params: {
+      'p_org_id': orgId,
+      'p_table': table,
+      'p_record_id': recordId,
+      'p_limit': limit,
+    });
+    return Repo._rows(rows).map(AuditEntry.fromJson).toList();
+  }
 }
 
 /// HR configuration. Every one of these was SQL-only, which meant a new

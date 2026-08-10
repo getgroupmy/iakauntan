@@ -1442,6 +1442,58 @@ class PayrollRun {
   }
 }
 
+/// One recorded change to something worth watching.
+///
+/// [changes] holds only the fields that moved, from and to, so a salary
+/// change reads as a salary change rather than a wall of unchanged
+/// columns.
+class AuditEntry {
+  AuditEntry({
+    required this.id,
+    required this.at,
+    required this.actor,
+    required this.action,
+    required this.tableName,
+    this.recordId,
+    this.before = const {},
+    this.after = const {},
+  });
+
+  final int id;
+  final DateTime at;
+  final String actor;
+  final String action;
+  final String tableName;
+  final String? recordId;
+  final Map<String, dynamic> before;
+  final Map<String, dynamic> after;
+
+  /// The fields that moved, in a stable order so the list does not
+  /// reshuffle itself between reads.
+  List<String> get fields =>
+      ({...before.keys, ...after.keys}.toList()..sort());
+
+  factory AuditEntry.fromJson(Map<String, dynamic> j) {
+    final changes = j['changes'];
+    Map<String, dynamic> side(String key) {
+      if (changes is! Map) return const {};
+      final v = changes[key];
+      return v is Map ? Map<String, dynamic>.from(v) : const {};
+    }
+
+    return AuditEntry(
+      id: Fmt.toInt(j['id']),
+      at: Fmt.parseDate(j['at']) ?? DateTime.now(),
+      actor: j['actor']?.toString() ?? 'system',
+      action: j['action']?.toString() ?? '',
+      tableName: j['table_name']?.toString() ?? '',
+      recordId: j['record_id'] as String?,
+      before: side('from'),
+      after: side('to'),
+    );
+  }
+}
+
 /// What an employee had already earned this tax year before payroll
 /// started keeping their record.
 ///
