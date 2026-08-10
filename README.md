@@ -201,6 +201,31 @@ Dr  6150 HRD Corp Levy               215.00
     Cr 2145 Salaries Payable                  18,109.55
 ```
 
+### Paying the run
+
+Posting books the liability against **2145 Salaries Payable**; it does
+not move a ringgit. A posted run grows a **Pay** card carrying one line
+per employee — bank, account number, net pay and a reference of
+`<period> <run no>` — which downloads as CSV.
+
+It is a plain RFC 4180 CSV with six columns, every field quoted. Maybank
+M2E, CIMB BizChannel and RHB Reflex each want their own layout and some
+want fixed width, so rather than guess at one and be wrong for everyone,
+this exports something every portal can map once and reuse. On a phone,
+where there is nothing to download to, it goes to the clipboard instead
+and says so.
+
+Lines that cannot be paid — no bank account, no bank named, nothing
+owing — are **shown but left out of the file**, and the card says how
+many. An employee who quietly falls out of the export is an employee who
+does not get paid and nobody notices; a bank will also reject the whole
+batch over one bad row.
+
+Marking the run **paid** is a separate action from producing the file,
+because only a person can know whether the bank actually took it. A run
+can be marked paid once: `mark_payroll_paid` refuses anything that is not
+`posted`, so the second attempt fails rather than paying twice.
+
 ### Who sees what
 
 An employee sees only their own record, payslips, leave and claims. A
@@ -343,12 +368,6 @@ recursing into themselves.
 Verified: a member sees their own org's rows; a non-member sees zero rows
 across organizations, contacts, invoices and ledger lines, while shared
 reference data stays readable to both.
-
-Supabase's linter reports no errors. Two warnings remain and are expected:
-`citext` and `pg_trgm` living in `public` (moving them would break the
-`citext` columns already in use), and signed-in users being able to call
-the SECURITY DEFINER RPCs — which is the point, since each one checks
-membership and role itself.
 
 ---
 

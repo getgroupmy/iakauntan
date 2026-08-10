@@ -1372,6 +1372,44 @@ class PayrollRun {
   }
 }
 
+/// One line of a bank payment instruction.
+///
+/// [problem] is set when the line cannot be paid as it stands — no bank
+/// account, no bank, or nothing owing. Those lines are carried rather
+/// than dropped, because an employee who quietly falls out of the file is
+/// an employee who does not get paid and nobody notices.
+class PaymentLine {
+  PaymentLine({
+    required this.employeeNo,
+    required this.employeeName,
+    required this.amount,
+    required this.reference,
+    this.bankName,
+    this.bankAccountNo,
+    this.problem,
+  });
+
+  final String employeeNo;
+  final String employeeName;
+  final double amount;
+  final String reference;
+  final String? bankName;
+  final String? bankAccountNo;
+  final String? problem;
+
+  bool get isPayable => problem == null;
+
+  factory PaymentLine.fromJson(Map<String, dynamic> j) => PaymentLine(
+        employeeNo: j['employee_no']?.toString() ?? '',
+        employeeName: j['employee_name']?.toString() ?? '',
+        amount: Fmt.toDouble(j['amount']),
+        reference: j['reference']?.toString() ?? '',
+        bankName: j['bank_name']?.toString(),
+        bankAccountNo: j['bank_account_no']?.toString(),
+        problem: j['problem']?.toString(),
+      );
+}
+
 class Payslip {
   Payslip({
     required this.id,

@@ -478,6 +478,13 @@ final payslipProvider =
   return repo.auditPayslip(id);
 });
 
+/// The bank instruction for a posted run. Only payroll may ask; the
+/// function refuses anyone else, so the screen guards on the same right.
+final paymentInstructionProvider =
+    FutureProvider.autoDispose.family<List<PaymentLine>, String>((ref, runId) {
+  return requireRepo(ref).paymentInstruction(runId);
+});
+
 final requisitionsProvider =
     FutureProvider.autoDispose<List<JobRequisition>>((ref) {
   return requireRepo(ref).requisitions();

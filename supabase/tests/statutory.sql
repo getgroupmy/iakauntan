@@ -34,6 +34,41 @@ begin
 end;
 $$;
 
+-- A user to hang the fixtures off. A freshly migrated stack has no one
+-- signed up yet, and the trigger that enrols an organization's creator as
+-- its owner needs a real row in auth.users, so make one if the database
+-- is empty. Rolled back with everything else.
+create or replace function pg_temp.test_user()
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
+  select id into v_id from auth.users order by created_at limit 1;
+  if v_id is null then
+    insert into auth.users (id, email)
+    values (gen_random_uuid(), 'fixture@iakauntan.test')
+    returning id into v_id;
+  end if;
+  return v_id;
+end;
+$$;
+
+-- Runs the rest of the transaction as that user, so the `can_*` guards
+-- inside the SECURITY DEFINER functions see somebody rather than nobody.
+create or replace function pg_temp.sign_in_as(p_user uuid)
+returns void language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', p_user, 'role', 'authenticated')::text, true);
+end;
+$$;
+
+create or replace function pg_temp.sign_out()
+returns void language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims', '', true);
+end;
+$$;
+
 -- ---------------------------------------------------------------------
 -- EPF
 --
@@ -129,11 +164,11 @@ declare
   r record;
 begin
   -- A trigger enrols the creator as owner, and that row needs a real
-  -- user, so borrow any existing one. The whole transaction rolls back.
+  -- user. The whole transaction rolls back.
   insert into public.organizations
     (name, slug, entity_type, base_currency, created_by)
   values ('Test Co', 'test-co-' || gen_random_uuid(), 'sdn_bhd', 'MYR',
-          (select id from auth.users order by created_at limit 1))
+          pg_temp.test_user())
   returning id into v_org;
 
   insert into public.employees
@@ -230,6 +265,78 @@ begin
        where n.nspname in ('public', 'app')
          and p.prosecdef
          and has_function_privilege('anon', p.oid, 'execute')));
+
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Paying a run
+--
+-- Posting books the liability; the payment instruction is what moves the
+-- money, so the transitions around it are worth pinning down.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner  uuid := pg_temp.test_user();
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+begin
+  insert into public.organizations
+    (name, slug, entity_type, base_currency, created_by)
+  values ('Pay Co', 'pay-co-' || gen_random_uuid(), 'sdn_bhd', 'MYR', v_owner)
+  returning id into v_org;
+
+  insert into public.pay_periods (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-01', date '2026-01-01', date '2026-01-31', date '2026-01-31')
+  returning id into v_period;
+
+  insert into public.payroll_runs (org_id, period_id, run_no, status)
+  values (v_org, v_period, 'PAY-TEST-1', 'draft')
+  returning id into v_run;
+
+  -- Run as the owner of the organization.
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- A run that has not been posted has no instruction to give.
+  begin
+    perform * from public.payroll_payment_instruction(v_run);
+    raise exception 'FAIL: a draft run produced a payment file';
+  exception when sqlstate '22023' then
+    raise notice 'ok   a draft run refuses to produce a payment file';
+  end;
+
+  begin
+    perform public.mark_payroll_paid(v_run);
+    raise exception 'FAIL: a draft run was marked paid';
+  exception when sqlstate '22023' then
+    raise notice 'ok   a draft run cannot be marked paid';
+  end;
+
+  update public.payroll_runs set status = 'posted' where id = v_run;
+  perform public.mark_payroll_paid(v_run);
+  perform pg_temp.check_true('a posted run can be marked paid',
+    (select status = 'paid' from public.payroll_runs where id = v_run));
+
+  -- Paying twice is how an employee gets paid twice.
+  begin
+    perform public.mark_payroll_paid(v_run);
+    raise exception 'FAIL: a paid run was marked paid a second time';
+  exception when sqlstate '22023' then
+    raise notice 'ok   a paid run cannot be marked paid again';
+  end;
+
+  -- But it can still be re-read, so the file can be produced again.
+  perform * from public.payroll_payment_instruction(v_run);
+  raise notice 'ok   a paid run can still produce its file';
+
+  begin
+    perform public.mark_payroll_paid(gen_random_uuid());
+    raise exception 'FAIL: an unknown run was accepted';
+  exception when sqlstate 'P0002' then
+    raise notice 'ok   an unknown run is rejected';
+  end;
+
+  perform pg_temp.sign_out();
 end $$;
 
 rollback;

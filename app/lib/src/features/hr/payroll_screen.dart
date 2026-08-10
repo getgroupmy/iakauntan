@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'payment_file.dart';
 
 /// Payroll runs. A run is calculated, checked, then posted — posting is
 /// what writes the journal and moves the year-to-date figures, so it is
@@ -169,6 +172,11 @@ class PayrollRunScreen extends ConsumerWidget {
                 children: [
                   _RunHeader(run: run),
                   const SizedBox(height: Space.lg),
+                  if (run.isPosted &&
+                      ref.watch(canRunPayrollProvider)) ...[
+                    _PaymentCard(run: run),
+                    const SizedBox(height: Space.lg),
+                  ],
                   _StatutoryCard(run: run),
                   const SizedBox(height: Space.lg),
                   _PayslipsCard(payslips: payslips),
@@ -294,6 +302,239 @@ class _Figure extends StatelessWidget {
                     : Theme.of(context).textTheme.titleLarge)
                 ?.copyWith(fontWeight: FontWeight.w700)),
       ],
+    );
+  }
+}
+
+/// Getting the money out.
+///
+/// Posting the run books the liability; it does not move a ringgit. This
+/// turns the run into a file for the bank, shows anything that would stop
+/// a line being paid, and — separately, once someone has actually put the
+/// file through — records the run as paid.
+class _PaymentCard extends ConsumerWidget {
+  const _PaymentCard({required this.run});
+
+  final PayrollRun run;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lines = ref.watch(paymentInstructionProvider(run.id));
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(
+              run.status == 'paid' ? 'Paid' : 'Pay',
+              subtitle: run.status == 'paid'
+                  ? 'This run has been marked as paid'
+                  : 'Posting booked the liability — this is the file that '
+                      'moves the money',
+            ),
+            lines.when(
+              loading: () => const LinearProgressIndicator(),
+              error: (e, _) => Text('$e'),
+              data: (list) => _PaymentBody(run: run, lines: list),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PaymentBody extends ConsumerWidget {
+  const _PaymentBody({required this.run, required this.lines});
+
+  final PayrollRun run;
+  final List<PaymentLine> lines;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final payable = lines.where((l) => l.isPayable).toList();
+    final held = lines.where((l) => !l.isPayable).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (held.isNotEmpty) _HeldNotice(held: held),
+        for (var i = 0; i < lines.length; i++) ...[
+          if (i > 0) const Divider(height: 1),
+          _PaymentRow(line: lines[i]),
+        ],
+        const Divider(),
+        Row(children: [
+          Expanded(
+            child: Text(
+              '${payable.length} of ${lines.length} to pay',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: context.scheme.onSurfaceVariant),
+            ),
+          ),
+          Money(PaymentFile.total(lines), bold: true),
+        ]),
+        const SizedBox(height: Space.lg),
+        Wrap(
+          spacing: Space.sm,
+          runSpacing: Space.sm,
+          alignment: WrapAlignment.end,
+          children: [
+            OutlinedButton.icon(
+              onPressed:
+                  payable.isEmpty ? null : () => _export(context, payable),
+              icon: const Icon(Icons.download_outlined, size: 18),
+              label: const Text('Payment file (CSV)'),
+            ),
+            if (run.status == 'posted')
+              FilledButton.icon(
+                onPressed:
+                    payable.isEmpty ? null : () => _markPaid(context, ref),
+                icon: const Icon(Icons.done_all, size: 18),
+                label: const Text('Mark as paid'),
+              ),
+          ],
+        ),
+        const SizedBox(height: Space.sm),
+        Text(
+          'A generic CSV. Malaysian bank portals each want their own '
+          'layout, so map the six columns once in the portal and reuse '
+          'the mapping. Open it in a text editor rather than a '
+          'spreadsheet, which will eat the leading zeros on account '
+          'numbers.',
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: context.scheme.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _export(BuildContext context, List<PaymentLine> payable) async {
+    final csv = PaymentFile.csv(payable);
+    final messenger = ScaffoldMessenger.of(context);
+    final saved =
+        await saveTextFile(PaymentFile.filename(run.runNo), 'text/csv', csv);
+    if (!saved) {
+      // Nothing downloads on a phone, so leave it somewhere the payer can
+      // paste it rather than pretending the export happened.
+      await Clipboard.setData(ClipboardData(text: csv));
+    }
+    messenger.showSnackBar(SnackBar(
+      content: Text(saved
+          ? '${payable.length} lines exported'
+          : '${payable.length} lines copied to the clipboard'),
+    ));
+  }
+
+  Future<void> _markPaid(BuildContext context, WidgetRef ref) async {
+    final ok = await confirm(
+      context,
+      title: 'Mark ${run.runNo} as paid?',
+      message: 'Do this once the bank has accepted the file. It records '
+          'that the money went out; it does not send anything itself.',
+      confirmLabel: 'Mark as paid',
+    );
+    if (!ok || !context.mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.markPayrollPaid(run.id),
+      successMessage: 'Marked as paid',
+    );
+    ref.invalidate(payrollRunsProvider);
+    ref.invalidate(paymentInstructionProvider(run.id));
+  }
+}
+
+/// Held lines are named before the file is offered, not after. The bank
+/// will reject a whole batch over one bad row.
+class _HeldNotice extends StatelessWidget {
+  const _HeldNotice({required this.held});
+
+  final List<PaymentLine> held;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: Space.md),
+      padding: const EdgeInsets.all(Space.md),
+      decoration: BoxDecoration(
+        color: context.colors.warning.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(Radii.sm),
+        border: Border.all(color: context.colors.warning.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded,
+              size: 18, color: context.colors.warning),
+          const SizedBox(width: Space.sm),
+          Expanded(
+            child: Text(
+              '${held.length} ${held.length == 1 ? 'line is' : 'lines are'} '
+              'held back and not in the file. Fix the employee record, then '
+              'pay them separately.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentRow extends StatelessWidget {
+  const _PaymentRow({required this.line});
+
+  final PaymentLine line;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context)
+        .textTheme
+        .bodySmall
+        ?.copyWith(color: context.scheme.onSurfaceVariant);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Space.sm),
+      child: Row(children: [
+        Expanded(
+          flex: 3,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(line.employeeName,
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              if (line.problem != null)
+                Text(line.problem!,
+                    style: muted?.copyWith(color: context.colors.warning))
+              else
+                Text('${line.bankName} · ${line.bankAccountNo}', style: muted),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Money(
+            line.amount,
+            bold: line.isPayable,
+            // A held line still shows its amount, greyed: the payer needs
+            // to know how much is not going out.
+            style: line.isPayable
+                ? null
+                : Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: context.scheme.onSurfaceVariant),
+          ),
+        ),
+      ]),
     );
   }
 }

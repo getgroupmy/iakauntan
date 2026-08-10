@@ -1134,6 +1134,19 @@ extension RepoHr on Repo {
   Future<void> postPayroll(String runId) =>
       client.rpc('post_payroll_run', params: {'p_run_id': runId});
 
+  /// The bank instruction for a posted run. Lines that cannot be paid
+  /// come back flagged rather than missing.
+  Future<List<PaymentLine>> paymentInstruction(String runId) async {
+    final data = await client
+        .rpc('payroll_payment_instruction', params: {'p_run_id': runId});
+    return Repo._rows(data).map(PaymentLine.fromJson).toList();
+  }
+
+  /// Records that the bank took the file. Separate from producing it,
+  /// because only a person can know whether the transfer actually went.
+  Future<void> markPayrollPaid(String runId) =>
+      client.rpc('mark_payroll_paid', params: {'p_run_id': runId});
+
   // ------------------------------------------------------------------
   // Talent
   // ------------------------------------------------------------------
