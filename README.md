@@ -369,6 +369,34 @@ Verified: a member sees their own org's rows; a non-member sees zero rows
 across organizations, contacts, invoices and ledger lines, while shared
 reference data stays readable to both.
 
+### A guard that failed open
+
+Found while testing the payment file, fixed in `0052`. `app.org_role`
+returns null for someone who is not a member of the organization at all,
+and in SQL `null = any (...)` is null rather than false — so
+`app.has_org_role` handed a null to every `can_*` helper built on it.
+
+RLS was never at risk: a policy whose `using` clause is null filters the
+row out, which is the safe direction. The damage was in the twenty-six
+SECURITY DEFINER functions guarded as `if not app.can_x(org) then raise`,
+because `not null` is null and the branch never fired. Confirmed against
+the live database: a signed-in user belonging to no organization could
+read another company's payroll payment instruction — names, banks,
+account numbers and net pay.
+
+The fix is one `coalesce(..., false)` in `has_org_role`, which closes all
+twenty-six call sites at once. Re-verified after the change: the outsider
+is refused with `42501`, and the organization's owner still reads the
+same three lines. `statutory.sql` now asserts that the predicate is a
+hard `false` for a stranger organization, and exercises the refusal
+through a real call, so this cannot come back quietly.
+
+Supabase's linter reports no errors. Two warnings remain and are expected:
+`citext` and `pg_trgm` living in `public` (moving them would break the
+`citext` columns already in use), and signed-in users being able to call
+the SECURITY DEFINER RPCs — which is the point, since each one checks
+membership and role itself.
+
 ---
 
 ## Running it

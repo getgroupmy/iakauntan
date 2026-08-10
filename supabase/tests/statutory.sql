@@ -266,6 +266,13 @@ begin
          and p.prosecdef
          and has_function_privilege('anon', p.oid, 'execute')));
 
+  -- The whole permission layer hangs off this one predicate, and the
+  -- twenty-six guards written as `if not app.can_x(...) then raise` only
+  -- fire on a hard false. A null here reopens every one of them.
+  perform pg_temp.check_eq('a stranger organisation is a hard false, never null',
+    case when app.has_org_role(gen_random_uuid(),
+           array['owner', 'admin']::app.member_role[]) is false
+         then 1 else 0 end, 1);
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -294,7 +301,26 @@ begin
   values (v_org, v_period, 'PAY-TEST-1', 'draft')
   returning id into v_run;
 
-  -- Run as the owner of the organization.
+  -- Nobody at all is refused. This is the regression test for a guard
+  -- that used to pass a non-member straight through: app.org_role gives
+  -- null for someone outside the organization, `null = any (...)` is
+  -- null, and `if not null then raise` never fires.
+  perform pg_temp.sign_out();
+  begin
+    perform * from public.payroll_payment_instruction(v_run);
+    raise exception 'FAIL: a non-member read a payment instruction';
+  exception when sqlstate '42501' then
+    raise notice 'ok   a non-member cannot read a payment instruction';
+  end;
+
+  begin
+    perform public.mark_payroll_paid(v_run);
+    raise exception 'FAIL: a non-member marked a run paid';
+  exception when sqlstate '42501' then
+    raise notice 'ok   a non-member cannot mark a run paid';
+  end;
+
+  -- From here on, the owner of the organization.
   perform pg_temp.sign_in_as(v_owner);
 
   -- A run that has not been posted has no instruction to give.
