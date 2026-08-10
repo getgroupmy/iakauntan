@@ -386,11 +386,110 @@ class _PayslipAccessCard extends ConsumerWidget {
                   if (i > 0) const Divider(height: 1),
                   _AccessRow(request: list[i]),
                 ],
+                const SizedBox(height: Space.lg),
+                const _AccessLog(),
               ],
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// Who actually opened what. Written by the read functions themselves,
+/// so a payslip cannot be read under a grant without appearing here.
+class _AccessLog extends ConsumerStatefulWidget {
+  const _AccessLog();
+
+  @override
+  ConsumerState<_AccessLog> createState() => _AccessLogState();
+}
+
+class _AccessLogState extends ConsumerState<_AccessLog> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final log = ref.watch(payslipAccessLogProvider);
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(Radii.md),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(Radii.md),
+            onTap: () => setState(() => _open = !_open),
+            child: Padding(
+              padding: const EdgeInsets.all(Space.md),
+              child: Row(children: [
+                Icon(Icons.history, size: 18, color: scheme.onSurfaceVariant),
+                const SizedBox(width: Space.md),
+                Expanded(
+                  child: Text(
+                    'Who has opened a payslip'
+                    '${log.valueOrNull == null ? '' : ' (${log.value!.length})'}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Icon(_open ? Icons.expand_less : Icons.expand_more, size: 20),
+              ]),
+            ),
+          ),
+          if (_open)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  Space.md, 0, Space.md, Space.md),
+              child: log.when(
+                loading: () => const LinearProgressIndicator(),
+                error: (e, _) => Text('$e'),
+                data: (entries) => entries.isEmpty
+                    ? Text('Nobody has opened a payslip under a grant.',
+                        style: Theme.of(context).textTheme.bodySmall)
+                    : Column(
+                        children: [
+                          for (final e in entries)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: Space.xs),
+                              child: Row(children: [
+                                Icon(
+                                  e.isView
+                                      ? Icons.visibility_outlined
+                                      : Icons.list_alt,
+                                  size: 15,
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: Space.sm),
+                                Expanded(
+                                  child: Text(
+                                    '${e.actorName ?? 'Someone'} — ${e.summary}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                ),
+                                Text(
+                                  Fmt.dateTime(e.viewedAt),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                          color: scheme.onSurfaceVariant),
+                                ),
+                              ]),
+                            ),
+                        ],
+                      ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

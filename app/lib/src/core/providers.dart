@@ -453,7 +453,12 @@ final payrollRunsProvider = FutureProvider.autoDispose<List<PayrollRun>>((ref) {
 
 final payslipsForRunProvider =
     FutureProvider.autoDispose.family<List<Payslip>, String>((ref, runId) {
-  return requireRepo(ref).payslips(runId: runId);
+  // Payroll reads the table directly; a granted reader goes through the
+  // function that logs the read.
+  final repo = requireRepo(ref);
+  return ref.watch(canRunPayrollProvider)
+      ? repo.payslips(runId: runId)
+      : repo.auditPayslips(runId: runId);
 });
 
 final myPayslipsProvider = FutureProvider.autoDispose<List<Payslip>>((ref) async {
@@ -463,8 +468,14 @@ final myPayslipsProvider = FutureProvider.autoDispose<List<Payslip>>((ref) async
 });
 
 final payslipProvider =
-    FutureProvider.autoDispose.family<Payslip?, String>((ref, id) {
-  return requireRepo(ref).payslip(id);
+    FutureProvider.autoDispose.family<Payslip?, String>((ref, id) async {
+  final repo = requireRepo(ref);
+  if (ref.watch(canRunPayrollProvider)) return repo.payslip(id);
+  // An employee opening their own payslip still reads the table; only a
+  // granted outsider is routed through the logged function.
+  final mine = await repo.payslip(id).catchError((_) => null);
+  if (mine != null) return mine;
+  return repo.auditPayslip(id);
 });
 
 final requisitionsProvider =
@@ -495,4 +506,9 @@ final payslipAccessRequestsProvider =
 /// True for an auditor: no payroll rights, but may ask for them.
 final canRequestPayslipAccessProvider = Provider<bool>((ref) {
   return (ref.watch(memberRoleProvider).value ?? '') == 'auditor';
+});
+
+final payslipAccessLogProvider =
+    FutureProvider.autoDispose<List<PayslipAccessLogEntry>>((ref) {
+  return requireRepo(ref).payslipAccessLog();
 });

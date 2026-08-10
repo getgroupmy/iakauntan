@@ -1223,4 +1223,37 @@ extension RepoPayslipAccess on Repo {
   Future<void> revokePayslipAccess(String id, {String? note}) =>
       client.rpc('revoke_payslip_access',
           params: {'p_request_id': id, if (note != null) 'p_note': note});
+
+  /// Payslips a granted reader may see. Goes through a function rather
+  /// than the table because the function writes the read into the log —
+  /// there is no unlogged way in.
+  Future<List<Payslip>> auditPayslips({String? runId}) async {
+    final data = await client.rpc('audit_list_payslips', params: {
+      'p_org_id': orgId,
+      if (runId != null) 'p_run_id': runId,
+    });
+    return (data as List)
+        .map((e) => Payslip.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<Payslip?> auditPayslip(String id) async {
+    final data =
+        await client.rpc('audit_view_payslip', params: {'p_payslip_id': id});
+    return data == null
+        ? null
+        : Payslip.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  /// Who has opened which payslip, and under whose grant.
+  Future<List<PayslipAccessLogEntry>> payslipAccessLog({int limit = 100}) async {
+    final rows = await client
+        .from('payslip_access_log')
+        .select('*, actor:profiles!payslip_access_log_actor_id_fkey'
+            '(full_name, email)')
+        .eq('org_id', orgId)
+        .order('viewed_at', ascending: false)
+        .limit(limit);
+    return Repo._rows(rows).map(PayslipAccessLogEntry.fromJson).toList();
+  }
 }

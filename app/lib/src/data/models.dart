@@ -1698,3 +1698,52 @@ class PayslipAccessRequest {
     );
   }
 }
+
+/// One entry in the payslip read log: who opened what, and under which
+/// grant. Written by the read functions themselves.
+class PayslipAccessLogEntry {
+  PayslipAccessLogEntry({
+    required this.id,
+    required this.action,
+    required this.viewedAt,
+    this.actorName,
+    this.employeeName,
+    this.periodCode,
+    this.payslipCount,
+    this.ipAddress,
+  });
+
+  final String id;
+  final String action;
+  final DateTime viewedAt;
+  final String? actorName;
+  final String? employeeName;
+  final String? periodCode;
+  final int? payslipCount;
+  final String? ipAddress;
+
+  bool get isView => action == 'view';
+
+
+  /// What was actually looked at, in words.
+  String get summary => isView
+      ? '${employeeName ?? 'A payslip'}${periodCode == null ? '' : ' · $periodCode'}'
+      : 'Listed ${payslipCount ?? 0} payslip(s)';
+
+  factory PayslipAccessLogEntry.fromJson(Map<String, dynamic> j) {
+    final actor = j['actor'];
+    return PayslipAccessLogEntry(
+      id: j['id'] as String,
+      action: j['action']?.toString() ?? 'view',
+      viewedAt: Fmt.parseDate(j['viewed_at']) ?? DateTime.now(),
+      actorName: actor is Map
+          ? (actor['full_name'] ?? actor['email'])?.toString()
+          : null,
+      employeeName: j['employee_name']?.toString(),
+      periodCode: j['period_code']?.toString(),
+      payslipCount:
+          j['payslip_count'] == null ? null : Fmt.toInt(j['payslip_count']),
+      ipAddress: j['ip_address']?.toString(),
+    );
+  }
+}

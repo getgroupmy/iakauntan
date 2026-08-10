@@ -469,8 +469,10 @@ class _GrantedBadge extends ConsumerWidget {
 
     return Tooltip(
       message: live?.expiresAt == null
-          ? 'Read-only access granted by a company admin'
-          : 'Read-only access, expires ${Fmt.date(live!.expiresAt)}',
+          ? 'Read-only access granted by a company admin. Every payslip you '
+              'open is recorded.'
+          : 'Read-only access, expires ${Fmt.date(live!.expiresAt)}. Every '
+              'payslip you open is recorded.',
       child: Container(
         padding: const EdgeInsets.symmetric(
             horizontal: Space.md, vertical: Space.xs),
@@ -548,7 +550,8 @@ class _RequestAccessScreenState extends ConsumerState<_RequestAccessScreen> {
                         'What people are paid is not part of an auditor’s '
                         'standing access. Ask a company admin for it, saying '
                         'what it is for and over what period. Access is '
-                        'read-only, and lapses on its own.',
+                        'read-only, lapses on its own, and every payslip you '
+                        'open is recorded against the grant that allowed it.',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: Space.xl),

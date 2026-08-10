@@ -243,6 +243,39 @@ Verified end to end against the deployed database:
 | Grant past its expiry | 0 |
 | Admin revokes | 0, and the auditor still sees their own request history |
 
+### Every read is recorded
+
+Postgres cannot fire a trigger on `SELECT`, so a log sitting beside an
+open read path is a log you can walk around. The grant therefore does
+**not** widen the table policies at all. A granted reader gets in only
+through `audit_list_payslips()` and `audit_view_payslip()`, and those
+write the log entry before they return the rows — there is no other
+route, so there is no unlogged read.
+
+`payslip_access_log` records who looked, what they opened (employee and
+period, denormalised so the entry still reads correctly if the payslip
+is later removed), which grant permitted it, and the caller's IP and
+user agent where PostgREST supplied them. It has a select policy and
+**no insert, update or delete policy** — the read functions write it and
+nobody edits it afterwards.
+
+Company admins and payroll see the whole log on Team & access. The
+auditor sees their own entries: being watched is not the same as being
+watched secretly.
+
+Verified: with a live grant, a direct `select` on `payslips` returns **0**
+rows while `audit_list_payslips()` returns 3 and writes one `list` entry;
+opening one writes a `view` entry naming the employee and period; a
+payslip outside the grant's period is refused and leaves **no** entry,
+because nothing was disclosed; and an auditor's `delete` against the log
+removed nothing.
+
+Payroll staff reading the table directly are not tracked — they are the
+data's custodians, and logging their every glance would bury the entries
+that matter. Run headers also stay directly readable under a grant: they
+are org-level totals that already appear in the payroll journal in the
+general ledger.
+
 ---
 
 ## Access and administration
