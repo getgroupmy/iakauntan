@@ -68,6 +68,32 @@ Dr  5200 Cost of Goods Sold     6,750.00
 leaving 15 units valued at RM 20,250. Supplier payments (with bank
 charges) and expenses post correctly too.
 
+### Fiscal years, and the day the books would have stopped
+
+Every entry must land inside a fiscal period. `create_gl_entry` used to
+check that only when it found one — a date outside every fiscal year
+posted with a null `fiscal_period_id`, quietly beyond the reach of period
+locking, so closing a period could not protect it and year-end had
+nothing to close. Confirmed before the fix: an entry dated 15 January
+2027 posted happily against a company whose periods stop at 31 December
+2026. It is now refused, naming what to do:
+
+```
+No fiscal period covers 2027-01-15. Create the fiscal year before posting to it.
+```
+
+Creating that year had no caller either — the RPC existed, no screen used
+it. **Settings → Fiscal years** now lists each year and its twelve
+periods, warns when the last one is within three months of ending (and
+again, in red, once it has), and creates the next year in one action.
+With no date given it continues from the day the last year ends;
+overlapping years are refused, because an overlap would give one date two
+periods and the lookup would pick between them arbitrarily.
+
+Periods can be closed and reopened from the same screen, owner or admin
+only. **Locked is terminal** — it is what year-end sign-off means, so
+nothing reopens it.
+
 ---
 
 ## e-Invoice (LHDN MyInvois)

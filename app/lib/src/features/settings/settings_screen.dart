@@ -43,6 +43,8 @@ class SettingsScreen extends ConsumerWidget {
                   const SizedBox(height: 16),
                   _ModulesCard(canAdmin: isAdmin),
                   const SizedBox(height: 16),
+                  _FiscalYearsCard(canAdmin: isAdmin),
+                  const SizedBox(height: 16),
                   const _ChartOfAccountsCard(),
                   const SizedBox(height: 16),
                   _TaxCodesCard(),
@@ -355,6 +357,197 @@ class _ModulesCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// Fiscal years, and the periods under them.
+///
+/// Nothing posts to a date no period covers, so a company that reaches
+/// the end of its last fiscal year stops being able to invoice. This
+/// card exists to make that impossible to walk into: it says how much
+/// runway is left, and creating the next year is one button.
+class _FiscalYearsCard extends ConsumerWidget {
+  const _FiscalYearsCard({required this.canAdmin});
+
+  final bool canAdmin;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final years = ref.watch(fiscalYearsProvider);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(
+              'Fiscal years',
+              subtitle: 'Nothing can be posted to a date no period covers',
+              action: canAdmin
+                  ? TextButton.icon(
+                      onPressed: () => _createNext(context, ref),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Add next year'),
+                    )
+                  : null,
+            ),
+            AsyncView(
+              value: years,
+              onRetry: () => ref.invalidate(fiscalYearsProvider),
+              loading: const LinearProgressIndicator(),
+              builder: (list) => list.isEmpty
+                  ? const Text('No fiscal year yet — nothing can be posted.')
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _RunwayNotice(years: list),
+                        for (final y in list)
+                          _YearTile(year: y, canAdmin: canAdmin),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _createNext(BuildContext context, WidgetRef ref) async {
+    await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.createFiscalYear(),
+      successMessage: 'Next fiscal year created, with its twelve periods',
+    );
+    ref.invalidate(fiscalYearsProvider);
+  }
+}
+
+/// How long before the books stop working. Said in months, because
+/// "ends 31 December 2026" does not read as urgent in November.
+class _RunwayNotice extends StatelessWidget {
+  const _RunwayNotice({required this.years});
+
+  final List<FiscalYear> years;
+
+  @override
+  Widget build(BuildContext context) {
+    final last = years
+        .map((y) => y.endDate)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+    final now = DateTime.now();
+    final months =
+        (last.year - now.year) * 12 + (last.month - now.month);
+
+    if (months > 3) return const SizedBox.shrink();
+
+    final expired = last.isBefore(now);
+    final colour =
+        expired ? context.colors.danger : context.colors.warning;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: Space.md),
+      padding: const EdgeInsets.all(Space.md),
+      decoration: BoxDecoration(
+        color: colour.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(Radii.sm),
+        border: Border.all(color: colour.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(expired ? Icons.error_outline : Icons.warning_amber_rounded,
+              size: 18, color: colour),
+          const SizedBox(width: Space.sm),
+          Expanded(
+            child: Text(
+              expired
+                  ? 'The last fiscal year ended on ${Fmt.date(last)}. Nothing '
+                      'can be posted until the next one is created.'
+                  : 'The last fiscal year ends on ${Fmt.date(last)}. Create '
+                      'the next one before then, or posting will stop.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _YearTile extends ConsumerWidget {
+  const _YearTile({required this.year, required this.canAdmin});
+
+  final FiscalYear year;
+  final bool canAdmin;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final open = year.periods.where((p) => p.isOpen).length;
+
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.only(bottom: Space.sm),
+      initiallyExpanded: year.covers(DateTime.now()),
+      title: Row(children: [
+        Text(year.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(width: Space.sm),
+        if (year.covers(DateTime.now()))
+          const StatusChip('current', compact: true),
+      ]),
+      subtitle: Text(
+        '${Fmt.date(year.startDate)} – ${Fmt.date(year.endDate)} · '
+        '$open of ${year.periods.length} periods open',
+        style: const TextStyle(fontSize: 12),
+      ),
+      children: [
+        for (final p in year.periods)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(children: [
+              Expanded(flex: 3, child: Text(p.name)),
+              StatusChip(p.status, compact: true),
+              const SizedBox(width: Space.sm),
+              SizedBox(
+                width: 96,
+                child: canAdmin && !p.isLocked
+                    ? Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => _toggle(context, ref, p),
+                          child: Text(p.isOpen ? 'Close' : 'Reopen'),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ]),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _toggle(
+      BuildContext context, WidgetRef ref, FiscalPeriod period) async {
+    final closing = period.isOpen;
+    if (closing) {
+      final ok = await confirm(
+        context,
+        title: 'Close ${period.name}?',
+        message: 'Nothing more can be posted into it. You can reopen it '
+            'later — only a locked period is final.',
+        confirmLabel: 'Close',
+      );
+      if (!ok || !context.mounted) return;
+    }
+
+    await runWithFeedback(
+      context,
+      action: () => ref
+          .read(repoProvider)!
+          .setPeriodStatus(period.id, closing ? 'closed' : 'open'),
+      successMessage: closing ? '${period.name} closed' : '${period.name} reopened',
+    );
+    ref.invalidate(fiscalYearsProvider);
   }
 }
 

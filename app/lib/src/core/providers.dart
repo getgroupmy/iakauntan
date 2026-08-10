@@ -169,6 +169,11 @@ final accountsProvider = FutureProvider<List<Account>>((ref) {
   return requireRepo(ref).accounts();
 });
 
+final fiscalYearsProvider =
+    FutureProvider.autoDispose<List<FiscalYear>>((ref) {
+  return requireRepo(ref).fiscalYears();
+});
+
 final classificationCodesProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).classificationCodes();

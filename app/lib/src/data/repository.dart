@@ -166,6 +166,27 @@ class Repo {
     return _rows(data).map(TaxCode.fromJson).toList();
   }
 
+  Future<List<FiscalYear>> fiscalYears() async {
+    final data = await client
+        .from('fiscal_years')
+        .select('*, fiscal_periods(*)')
+        .eq('org_id', orgId)
+        .order('start_date', ascending: false);
+    return _rows(data).map(FiscalYear.fromJson).toList();
+  }
+
+  /// Creates the year after the last one. Passing a start date is only
+  /// for the first year, or for a company changing its year end.
+  Future<void> createFiscalYear({DateTime? startDate}) =>
+      client.rpc('create_fiscal_year', params: {
+        'p_org_id': orgId,
+        if (startDate != null) 'p_start_date': Fmt.iso(startDate),
+      });
+
+  Future<void> setPeriodStatus(String periodId, String status) =>
+      client.rpc('set_fiscal_period_status',
+          params: {'p_period_id': periodId, 'p_status': status});
+
   Future<List<Account>> accounts({bool postableOnly = false}) async {
     var query = client
         .from('accounts')

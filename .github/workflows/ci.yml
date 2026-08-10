@@ -22,8 +22,8 @@ jobs:
       - run: flutter analyze --fatal-infos --fatal-warnings
       - run: flutter test
 
-  statutory:
-    name: Statutory engine
+  database:
+    name: Statutory engine and ledger rules
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,9 +35,12 @@ jobs:
       # migrations in this commit rather than whatever the hosted project
       # happens to be at.
       - run: supabase start
-      - name: Run the statutory assertions
+      - name: Run the database assertions
         run: |
-          psql "$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')" \
-            -v ON_ERROR_STOP=1 -f supabase/tests/statutory.sql
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          for f in supabase/tests/statutory.sql supabase/tests/ledger.sql; do
+            echo "== $f"
+            psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
+          done
       - if: always()
         run: supabase stop --no-backup

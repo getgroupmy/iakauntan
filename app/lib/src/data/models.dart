@@ -287,6 +287,76 @@ class Item {
       };
 }
 
+/// A fiscal year and the twelve periods under it.
+///
+/// Nothing posts to a date no period covers, so the year that has not
+/// been created yet is the year the books stop working.
+class FiscalYear {
+  FiscalYear({
+    required this.id,
+    required this.name,
+    required this.startDate,
+    required this.endDate,
+    this.status = 'open',
+    this.periods = const [],
+  });
+
+  final String id;
+  final String name;
+  final DateTime startDate;
+  final DateTime endDate;
+  final String status;
+  final List<FiscalPeriod> periods;
+
+  bool covers(DateTime day) =>
+      !day.isBefore(startDate) && !day.isAfter(endDate);
+
+  factory FiscalYear.fromJson(Map<String, dynamic> j) => FiscalYear(
+        id: j['id'] as String,
+        name: j['name']?.toString() ?? '',
+        startDate: Fmt.parseDate(j['start_date'])!,
+        endDate: Fmt.parseDate(j['end_date'])!,
+        status: j['status']?.toString() ?? 'open',
+        periods: [
+          for (final p in (j['fiscal_periods'] as List? ?? const []))
+            FiscalPeriod.fromJson(Map<String, dynamic>.from(p as Map))
+        ]..sort((a, b) => a.periodNo.compareTo(b.periodNo)),
+      );
+}
+
+class FiscalPeriod {
+  FiscalPeriod({
+    required this.id,
+    required this.periodNo,
+    required this.name,
+    required this.startDate,
+    required this.endDate,
+    this.status = 'open',
+  });
+
+  final String id;
+  final int periodNo;
+  final String name;
+  final DateTime startDate;
+  final DateTime endDate;
+  final String status;
+
+  bool get isOpen => status == 'open';
+
+  /// Locked is terminal — it is what year-end sign-off means, so the UI
+  /// must not offer to reopen it.
+  bool get isLocked => status == 'locked';
+
+  factory FiscalPeriod.fromJson(Map<String, dynamic> j) => FiscalPeriod(
+        id: j['id'] as String,
+        periodNo: Fmt.toInt(j['period_no']),
+        name: j['name']?.toString() ?? '',
+        startDate: Fmt.parseDate(j['start_date'])!,
+        endDate: Fmt.parseDate(j['end_date'])!,
+        status: j['status']?.toString() ?? 'open',
+      );
+}
+
 class TaxCode {
   TaxCode({
     required this.id,
