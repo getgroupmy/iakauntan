@@ -1628,3 +1628,73 @@ class Appraisal {
     );
   }
 }
+
+/// An auditor's request to read payslips, and the admin decision on it.
+class PayslipAccessRequest {
+  PayslipAccessRequest({
+    required this.id,
+    required this.status,
+    required this.reason,
+    required this.requestedAt,
+    this.requesterName,
+    this.decidedByName,
+    this.decisionNote,
+    this.periodFrom,
+    this.periodTo,
+    this.expiresAt,
+    this.decidedAt,
+  });
+
+  final String id;
+  final String status;
+  final String reason;
+  final DateTime requestedAt;
+  final String? requesterName;
+  final String? decidedByName;
+  final String? decisionNote;
+  final DateTime? periodFrom;
+  final DateTime? periodTo;
+  final DateTime? expiresAt;
+  final DateTime? decidedAt;
+
+  bool get isPending => status == 'pending';
+
+  /// Approved but past its expiry. The database stops honouring it either
+  /// way; this is so the UI does not call a dead grant "approved".
+  bool get hasLapsed =>
+      status == 'approved' &&
+      expiresAt != null &&
+      expiresAt!.isBefore(DateTime.now());
+
+  bool get isLive => status == 'approved' && !hasLapsed;
+
+  /// What to show on a chip: the stored status, unless it has quietly run out.
+  String get displayStatus => hasLapsed ? 'expired' : status;
+
+  String get scopeLabel {
+    if (periodFrom == null && periodTo == null) return 'All periods';
+    return '${Fmt.date(periodFrom)} – ${Fmt.date(periodTo)}';
+  }
+
+  factory PayslipAccessRequest.fromJson(Map<String, dynamic> j) {
+    final requester = j['requester'];
+    final decider = j['decider'];
+    return PayslipAccessRequest(
+      id: j['id'] as String,
+      status: j['status']?.toString() ?? 'pending',
+      reason: j['reason']?.toString() ?? '',
+      requestedAt: Fmt.parseDate(j['requested_at']) ?? DateTime.now(),
+      requesterName: requester is Map
+          ? (requester['full_name'] ?? requester['email'])?.toString()
+          : null,
+      decidedByName: decider is Map
+          ? (decider['full_name'] ?? decider['email'])?.toString()
+          : null,
+      decisionNote: j['decision_note']?.toString(),
+      periodFrom: Fmt.parseDate(j['period_from']),
+      periodTo: Fmt.parseDate(j['period_to']),
+      expiresAt: Fmt.parseDate(j['expires_at']),
+      decidedAt: Fmt.parseDate(j['decided_at']),
+    );
+  }
+}

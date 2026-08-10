@@ -1177,3 +1177,50 @@ extension RepoHr on Repo {
       .map(Appraisal.fromJson)
       .toList();
 }
+
+/// Auditor access to payslips: requested, approved by a company admin,
+/// and time-boxed so it lapses without anyone having to remember.
+extension RepoPayslipAccess on Repo {
+  Future<bool> myPayslipAccess() async {
+    final data =
+        await client.rpc('my_payslip_access', params: {'p_org_id': orgId});
+    return data == true;
+  }
+
+  Future<List<PayslipAccessRequest>> payslipAccessRequests() async {
+    final rows = await client
+        .from('payslip_access_requests')
+        .select('*, requester:profiles!payslip_access_requests_requested_by_fkey'
+            '(full_name, email), '
+            'decider:profiles!payslip_access_requests_decided_by_fkey'
+            '(full_name, email)')
+        .eq('org_id', orgId)
+        .order('requested_at', ascending: false);
+    return Repo._rows(rows).map(PayslipAccessRequest.fromJson).toList();
+  }
+
+  Future<void> requestPayslipAccess({
+    required String reason,
+    DateTime? from,
+    DateTime? to,
+  }) =>
+      client.rpc('request_payslip_access', params: {
+        'p_org_id': orgId,
+        'p_reason': reason,
+        if (from != null) 'p_period_from': Fmt.iso(from),
+        if (to != null) 'p_period_to': Fmt.iso(to),
+      });
+
+  Future<void> decidePayslipAccess(String id, bool approve,
+          {String? note, int days = 30}) =>
+      client.rpc('decide_payslip_access', params: {
+        'p_request_id': id,
+        'p_approve': approve,
+        if (note != null) 'p_note': note,
+        'p_days': days,
+      });
+
+  Future<void> revokePayslipAccess(String id, {String? note}) =>
+      client.rpc('revoke_payslip_access',
+          params: {'p_request_id': id, if (note != null) 'p_note': note});
+}

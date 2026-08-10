@@ -62,6 +62,10 @@ class TeamScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
+                if (canAdmin) ...[
+                  const _PayslipAccessCard(),
+                  const SizedBox(height: 24),
+                ],
                 const _RoleReference(),
                 const SizedBox(height: 32),
               ],
@@ -348,6 +352,211 @@ class _RoleReference extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+
+/// Auditors asking to see payslips, and what was decided. Sits with the
+/// rest of access management because that is what it is.
+class _PayslipAccessCard extends ConsumerWidget {
+  const _PayslipAccessCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final requests = ref.watch(payslipAccessRequestsProvider);
+
+    return requests.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (list) {
+        if (list.isEmpty) return const SizedBox.shrink();
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(Space.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SectionHeader(
+                  'Payslip access',
+                  subtitle: 'Auditors do not see what people are paid unless '
+                      'you let them, and only for as long as you say',
+                ),
+                for (var i = 0; i < list.length; i++) ...[
+                  if (i > 0) const Divider(height: 1),
+                  _AccessRow(request: list[i]),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AccessRow extends ConsumerWidget {
+  const _AccessRow({required this.request});
+
+  final PayslipAccessRequest request;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Space.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Flexible(
+                    child: Text(request.requesterName ?? 'Auditor',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                  const SizedBox(width: Space.sm),
+                  StatusChip(request.displayStatus, compact: true),
+                ]),
+                const SizedBox(height: 2),
+                Text(request.reason,
+                    style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: 2),
+                Text(
+                  [
+                    request.scopeLabel,
+                    'asked ${Fmt.date(request.requestedAt)}',
+                    if (request.isLive && request.expiresAt != null)
+                      'expires ${Fmt.date(request.expiresAt)}',
+                  ].join(' · '),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: Space.md),
+          if (request.isPending)
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              TextButton(
+                onPressed: () => _decide(context, ref, false),
+                child: Text('Refuse',
+                    style: TextStyle(color: context.colors.danger)),
+              ),
+              FilledButton(
+                onPressed: () => _approve(context, ref),
+                child: const Text('Approve'),
+              ),
+            ])
+          else if (request.isLive)
+            OutlinedButton(
+              onPressed: () => _revoke(context, ref),
+              child: const Text('Revoke'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _approve(BuildContext context, WidgetRef ref) async {
+    final days = await showDialog<int>(
+      context: context,
+      builder: (_) => const _AccessDurationDialog(),
+    );
+    if (days == null || !context.mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () => ref
+          .read(repoProvider)!
+          .decidePayslipAccess(request.id, true, days: days),
+      successMessage: 'Granted for $days days, read only',
+    );
+    ref.invalidate(payslipAccessRequestsProvider);
+  }
+
+  Future<void> _decide(BuildContext context, WidgetRef ref, bool approve) async {
+    await runWithFeedback(
+      context,
+      action: () =>
+          ref.read(repoProvider)!.decidePayslipAccess(request.id, approve),
+      successMessage: 'Refused',
+    );
+    ref.invalidate(payslipAccessRequestsProvider);
+  }
+
+  Future<void> _revoke(BuildContext context, WidgetRef ref) async {
+    final ok = await confirm(
+      context,
+      title: 'Revoke access?',
+      message: '${request.requesterName ?? 'The auditor'} loses sight of every '
+          'payslip immediately.',
+      confirmLabel: 'Revoke',
+      destructive: true,
+    );
+    if (!ok || !context.mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.revokePayslipAccess(request.id),
+      successMessage: 'Access revoked',
+    );
+    ref.invalidate(payslipAccessRequestsProvider);
+  }
+}
+
+/// Access has to expire, so the only question is when.
+class _AccessDurationDialog extends StatefulWidget {
+  const _AccessDurationDialog();
+
+  @override
+  State<_AccessDurationDialog> createState() => _AccessDurationDialogState();
+}
+
+class _AccessDurationDialogState extends State<_AccessDurationDialog> {
+  int _days = 30;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('How long?'),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Access is read-only and ends by itself, so nobody has to '
+              'remember to take it away.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: Space.lg),
+            SegmentedButton<int>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: 7, label: Text('7 days')),
+                ButtonSegment(value: 30, label: Text('30 days')),
+                ButtonSegment(value: 90, label: Text('90 days')),
+              ],
+              selected: {_days},
+              onSelectionChanged: (s) => setState(() => _days = s.first),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _days),
+          child: const Text('Grant access'),
+        ),
+      ],
     );
   }
 }

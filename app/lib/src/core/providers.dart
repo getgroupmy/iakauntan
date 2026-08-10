@@ -479,3 +479,20 @@ final applicantsProvider = FutureProvider.autoDispose<List<Applicant>>((ref) {
 final appraisalsProvider = FutureProvider.autoDispose<List<Appraisal>>((ref) {
   return requireRepo(ref).appraisals();
 });
+
+/// Whether the caller holds a live, admin-approved grant to read payslips.
+final myPayslipAccessProvider = FutureProvider.autoDispose<bool>((ref) {
+  final repo = ref.watch(repoProvider);
+  if (repo == null) return Future.value(false);
+  return repo.myPayslipAccess();
+});
+
+final payslipAccessRequestsProvider =
+    FutureProvider.autoDispose<List<PayslipAccessRequest>>((ref) {
+  return requireRepo(ref).payslipAccessRequests();
+});
+
+/// True for an auditor: no payroll rights, but may ask for them.
+final canRequestPayslipAccessProvider = Provider<bool>((ref) {
+  return (ref.watch(memberRoleProvider).value ?? '') == 'auditor';
+});

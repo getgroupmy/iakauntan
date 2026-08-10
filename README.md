@@ -212,9 +212,36 @@ travelling to the client.
 
 Verified: an accounts clerk linked to an employee record could read
 exactly one payslip and one employee row, no payroll runs at all, and
-the full directory. An auditor saw no HR records but did see the payroll
-journal in the general ledger — deliberate, and worth changing if your
-auditors need payslip detail.
+the full directory.
+
+### An auditor asking to see payslips
+
+An auditor cannot audit payroll without seeing it, but standing access
+to everyone's pay is not the answer either. So they ask, and a company
+admin decides:
+
+- The request carries a **reason** and a **period**, both on the record
+- Only an **auditor** can ask; only a **company admin** can decide, and
+  never their own request
+- Approval is for a stated number of days. Access is **read-only** and
+  **lapses on its own**, so nobody has to remember to take it away
+- An admin can revoke early; a grant that has run out reads *expired*
+- A grant opens the payslips and their run headers. It does **not** open
+  the employee master — the auditor reads the frozen payslip, not live
+  salary records
+
+Verified end to end against the deployed database:
+
+| Step | Payslips visible |
+| --- | --- |
+| Auditor before asking | 0 |
+| Request submitted, still pending | 0 |
+| Auditor tries to approve their own | refused, stays pending |
+| Accounts clerk tries to approve | refused — admins only |
+| Owner approves for 30 days | 3 payslips, 23 lines, 1 run, **0 employee rows** |
+| Grant narrowed to a period the payslips fall outside | 0 |
+| Grant past its expiry | 0 |
+| Admin revokes | 0, and the auditor still sees their own request history |
 
 ---
 
