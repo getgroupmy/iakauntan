@@ -49,6 +49,10 @@ graphify-out/graph.html
 # and .vercel/project.json is whatever local link the CLI made.
 .vercel/
 
+# Python bytecode from the CI helper scripts
+__pycache__/
+*.pyc
+
 # OS
 .DS_Store
 Thumbs.db
