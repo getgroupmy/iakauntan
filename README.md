@@ -1005,6 +1005,24 @@ proper letterhead: the mark is an addition to the registered name and
 numbers, never a replacement, because a tax invoice has to carry those
 whatever it looks like.
 
+**A company that prints onto its own letterhead paper turns the block
+off** — Settings → Company → *Printed stationery*. It is a company
+setting rather than a choice on every download, because owning headed
+paper is a fact about the business, not about one invoice. With it on,
+invoices and payslips start 42 mm down the first page
+(`PdfKit.stationeryReserve`, a guess about somebody else's stationery and
+therefore written down where it can be changed) so nothing lands on top
+of the printed header, and the logo is not embedded at all.
+
+What the setting does **not** do is drop the registration, TIN and SST
+numbers. Those move down the page in small type instead. Printed
+stationery routinely carries a company's name and address but not its SST
+registration, and the Sales Tax Act asks for those on the invoice rather
+than on the paper — so suppressing them to tidy the layout would quietly
+produce invalid tax invoices. The default is off, which is the only safe
+assumption for a PDF that gets e-mailed: nothing outside the file
+supplies the company's details.
+
 **On a secretarial document the letterhead is an option, never the
 default.** The PDF button gives a bare copy; "Download PDF on your
 letterhead" is a separate entry in the row's overflow menu, and it saves

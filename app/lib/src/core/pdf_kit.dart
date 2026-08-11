@@ -7,6 +7,26 @@ import 'package:pdf/widgets.dart' as pw;
 import '../data/models.dart';
 import 'format.dart';
 
+/// Whether the PDF draws the company's identity block or leaves room for
+/// one already printed on the paper.
+enum LetterheadMode {
+  /// Draw it. The default, and the only right answer for a PDF that will
+  /// be e-mailed, filed or kept — nothing outside the file supplies the
+  /// company's details.
+  printed,
+
+  /// Leave the top of the first page empty, for a company that prints
+  /// onto its own pre-printed stationery and would otherwise get two
+  /// headers on one sheet.
+  ///
+  /// Statutory identifiers are still printed, small, under the reserved
+  /// space: a tax invoice has to carry the registration and SST numbers,
+  /// and printed stationery routinely shows a company's name and address
+  /// but not its SST registration. Reserving the space is a layout
+  /// convenience; dropping the numbers would make the document wrong.
+  stationery,
+}
+
 /// The pieces every generated PDF shares: the typeface, the letterhead
 /// and the money column.
 ///
@@ -19,6 +39,14 @@ class PdfKit {
   final pw.Font bold;
 
   static PdfKit? _cached;
+
+  /// Blank space left above the content in [LetterheadMode.stationery],
+  /// on top of the page's own 42pt margin — so the document starts 120pt,
+  /// about 42 mm, below the edge of the sheet. That covers the usual
+  /// depth of a printed header. It is a guess about somebody else's
+  /// stationery, and the only honest thing to do with a guess is write it
+  /// down where it can be changed.
+  static const double stationeryReserve = 78;
 
   /// The app's own typeface, so a printed document looks like the system
   /// it came from. Loaded once: parsing a TTF for every download would
@@ -56,8 +84,13 @@ class PdfKit {
   /// [documentLabel] is the big grey word in the top right. It is
   /// optional: an invoice wants "INVOICE" there, a board resolution does
   /// not, because the resolution announces itself in its own first line.
+  ///
+  /// [mode] decides whether the block is drawn at all — see
+  /// [LetterheadMode].
   pw.Widget letterhead(Organization org,
-      {String? documentLabel, Uint8List? logo}) {
+      {String? documentLabel,
+      Uint8List? logo,
+      LetterheadMode mode = LetterheadMode.printed}) {
     final address = [
       org.addressLine1,
       org.addressLine2,
@@ -71,6 +104,30 @@ class PdfKit {
       if (org.isSstRegistered && _present(org.sstRegistrationNo))
         'SST ${org.sstRegistrationNo}',
     ];
+
+    if (mode == LetterheadMode.stationery) {
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.SizedBox(height: stationeryReserve),
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              pw.Expanded(
+                child: ids.isEmpty
+                    ? pw.SizedBox()
+                    : pw.Text(ids.join('  ·  '),
+                        style: style(size: 8.5, colour: PdfColors.grey700)),
+              ),
+              if (documentLabel != null)
+                pw.Text(documentLabel.toUpperCase(),
+                    style:
+                        style(size: 15, strong: true, colour: PdfColors.grey600)),
+            ],
+          ),
+        ],
+      );
+    }
 
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,

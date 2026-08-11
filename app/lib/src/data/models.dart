@@ -26,6 +26,7 @@ class Organization {
     this.logoUrl,
     this.baseCurrency = 'MYR',
     this.isSstRegistered = false,
+    this.usesPreprintedLetterhead = false,
     this.einvoiceEnabled = false,
     this.einvoiceEnvironment = 'sandbox',
     this.entityType = 'sdn_bhd',
@@ -53,6 +54,11 @@ class Organization {
   final String? logoUrl;
   final String baseCurrency;
   final bool isSstRegistered;
+
+  /// The company prints onto its own letterhead paper, so the generated
+  /// PDFs leave room for a header rather than drawing one.
+  final bool usesPreprintedLetterhead;
+
   final bool einvoiceEnabled;
   final String einvoiceEnvironment;
   final String entityType;
@@ -80,6 +86,8 @@ class Organization {
         logoUrl: j['logo_url'] as String?,
         baseCurrency: j['base_currency']?.toString() ?? 'MYR',
         isSstRegistered: j['is_sst_registered'] == true,
+        usesPreprintedLetterhead:
+            j['uses_preprinted_letterhead'] == true,
         einvoiceEnabled: j['einvoice_enabled'] == true,
         einvoiceEnvironment: j['einvoice_environment']?.toString() ?? 'sandbox',
         entityType: j['entity_type']?.toString() ?? 'sdn_bhd',

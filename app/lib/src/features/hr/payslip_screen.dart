@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/download.dart';
 import '../../core/format.dart';
+import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -34,7 +35,10 @@ class PayslipScreen extends ConsumerWidget {
     final bytes = await buildPayslipPdf(
         org: org,
         payslip: slip,
-        logo: await ref.read(orgLogoProvider.future));
+        logo: await ref.read(orgLogoProvider.future),
+        mode: org.usesPreprintedLetterhead
+            ? LetterheadMode.stationery
+            : LetterheadMode.printed);
     final stem = [
       slip.employeeNo ?? slip.employeeName,
       slip.periodCode ?? '',

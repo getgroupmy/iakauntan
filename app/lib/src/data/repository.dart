@@ -685,6 +685,13 @@ extension RepoOrgLogo on Repo {
       return null;
     }
   }
+
+  /// Whether the generated PDFs should leave room for a header already
+  /// printed on the paper. RLS lets only an administrator through, which
+  /// is the same bar as replacing the logo.
+  Future<void> setPreprintedLetterhead(bool value) => client
+      .from('organizations')
+      .update({'uses_preprinted_letterhead': value}).eq('id', orgId);
 }
 
 class MyInvoisException implements Exception {

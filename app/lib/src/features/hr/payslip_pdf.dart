@@ -18,11 +18,13 @@ import '../../data/models.dart';
 /// clearly outside it. They are not the employee's money and must never
 /// read as though they were — but leaving them off makes the cost of
 /// employment invisible to the person it is spent on.
+/// [mode] can leave the top of the page clear for pre-printed stationery.
 Future<Uint8List> buildPayslipPdf({
   required Organization org,
   required Payslip payslip,
   String? periodLabel,
   Uint8List? logo,
+  LetterheadMode mode = LetterheadMode.printed,
 }) async {
   final kit = await PdfKit.load();
   final period = periodLabel ?? payslip.periodCode ?? '';
@@ -50,7 +52,8 @@ Future<Uint8List> buildPayslipPdf({
       footer: (context) => kit.footer(context,
           note: 'Private and confidential'),
       build: (context) => [
-        kit.letterhead(org, documentLabel: 'Payslip', logo: logo),
+        kit.letterhead(org,
+            documentLabel: 'Payslip', logo: logo, mode: mode),
         kit.rule(),
 
         pw.Row(

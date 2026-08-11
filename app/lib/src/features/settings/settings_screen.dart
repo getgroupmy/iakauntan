@@ -79,6 +79,8 @@ class _CompanyCard extends ConsumerWidget {
           children: [
             const SectionHeader('Company'),
             _LogoRow(org: org),
+            const SizedBox(height: Space.md),
+            _StationeryRow(org: org),
             const Divider(height: Space.xl),
             _Field(label: 'Name', value: org.name),
             _Field(label: 'Entity type', value: Fmt.label(org.entityType)),
@@ -1008,6 +1010,108 @@ class _LogoRowState extends ConsumerState<_LogoRow> {
               Text(
                 'PNG or JPEG, up to 5 MB. Printed at the top left of every '
                 'invoice, payslip and generated document.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: context.scheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Companies that print onto their own letterhead paper.
+///
+/// Whether a business owns pre-printed stationery is a fact about the
+/// business rather than about one invoice, so it lives here instead of in
+/// a menu on every download. Off means the PDF is complete on its own,
+/// which is the only safe default for a file that gets e-mailed.
+class _StationeryRow extends ConsumerStatefulWidget {
+  const _StationeryRow({required this.org});
+
+  final Organization org;
+
+  @override
+  ConsumerState<_StationeryRow> createState() => _StationeryRowState();
+}
+
+class _StationeryRowState extends ConsumerState<_StationeryRow> {
+  bool _busy = false;
+
+  Future<void> _set(bool value) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    setState(() => _busy = true);
+    try {
+      await repo.setPreprintedLetterhead(value);
+      ref.invalidate(currentOrgProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(value
+              ? 'Invoices and payslips will leave room for your letterhead'
+              : 'Invoices and payslips will print their own letterhead'),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canAdmin = ref.watch(canAdminProvider);
+    final on = widget.org.usesPreprintedLetterhead;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 180,
+          child: Text('Printed stationery',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: context.scheme.onSurfaceVariant)),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Switch(
+                  value: on,
+                  onChanged: canAdmin && !_busy ? _set : null,
+                ),
+                const SizedBox(width: Space.sm),
+                Flexible(
+                  child: Text(
+                    on
+                        ? 'Leaving room for your letterhead'
+                        : 'Printing our own letterhead',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              ]),
+              const SizedBox(height: Space.xs),
+              Text(
+                on
+                    ? 'Invoices and payslips start 42 mm down the first page, '
+                        'so nothing lands on top of your printed header. Your '
+                        'registration and SST numbers are still printed, '
+                        'smaller, because a tax invoice has to carry them and '
+                        'stationery usually does not.'
+                    : 'Turn this on only if you print onto paper that already '
+                        'carries your header. A PDF you e-mail should keep its '
+                        'own letterhead — nothing outside the file supplies '
+                        'your address.',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall

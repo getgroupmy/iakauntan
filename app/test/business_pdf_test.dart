@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:iakauntan/src/core/pdf_kit.dart';
 import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/features/documents/invoice_pdf.dart';
 import 'package:iakauntan/src/features/hr/payslip_pdf.dart';
@@ -249,6 +250,83 @@ void main() {
       expect(String.fromCharCodes(with_.take(5)), '%PDF-');
       expect(with_.length, greaterThan(without.length),
           reason: 'the image should be embedded, not silently dropped');
+    });
+
+    group('pre-printed stationery', () {
+      // The company that owns headed paper. Reserving the top of the page
+      // is only half of it: what must NOT happen is the statutory
+      // identifiers going out with the identity block.
+      test('the identity block goes, and the registration numbers stay',
+          () async {
+        final printed = await buildInvoicePdf(
+            org: org, doc: _plainInvoice(), documentLabel: 'Invoice');
+        final onPaper = await buildInvoicePdf(
+            org: org,
+            doc: _plainInvoice(),
+            documentLabel: 'Invoice',
+            mode: LetterheadMode.stationery);
+        expect(onPaper.length, lessThan(printed.length),
+            reason: 'the address block should not be drawn twice');
+
+        // Same document, same mode, an organisation with nothing to
+        // identify it. If the numbers were being dropped in stationery
+        // mode these two would come out the same size.
+        final anonymous = await buildInvoicePdf(
+          org: Organization(id: 'o', name: 'Bare Sdn Bhd', slug: 'bare'),
+          doc: _plainInvoice(),
+          documentLabel: 'Invoice',
+          mode: LetterheadMode.stationery,
+        );
+        expect(onPaper.length, greaterThan(anonymous.length),
+            reason: 'a tax invoice has to carry the SST and registration '
+                'numbers, and headed paper rarely shows the SST one');
+      });
+
+      test('the logo is not printed onto paper that already has one',
+          () async {
+        final without = await buildInvoicePdf(
+            org: org,
+            doc: _plainInvoice(),
+            documentLabel: 'Invoice',
+            mode: LetterheadMode.stationery);
+        final with_ = await buildInvoicePdf(
+            org: org,
+            doc: _plainInvoice(),
+            documentLabel: 'Invoice',
+            logo: png,
+            mode: LetterheadMode.stationery);
+        expect(with_.length, without.length,
+            reason: 'the mark belongs to the pre-printed header, so the '
+                'image should not be embedded at all');
+      });
+
+      test('a payslip on headed paper renders', () async {
+        final bytes = await buildPayslipPdf(
+          org: org,
+          payslip: Payslip(
+            id: 'p',
+            employeeName: 'On Headed Paper',
+            basicSalary: 0,
+            grossPay: 0,
+            totalDeductions: 0,
+            netPay: 0,
+            epfEmployee: 0,
+            epfEmployer: 0,
+            socsoEmployee: 0,
+            socsoEmployer: 0,
+            eisEmployee: 0,
+            eisEmployer: 0,
+            pcb: 0,
+            zakat: 0,
+            hrdf: 0,
+            otHours: 0,
+            schedulesVerified: true,
+            lines: const [],
+          ),
+          mode: LetterheadMode.stationery,
+        );
+        expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+      });
     });
 
     test('a payslip with a logo renders', () async {

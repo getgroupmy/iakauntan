@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/download.dart';
 import '../../core/format.dart';
+import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -180,6 +181,9 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         doc: doc,
         documentLabel: _meta.singular,
         logo: await ref.read(orgLogoProvider.future),
+        mode: org.usesPreprintedLetterhead
+            ? LetterheadMode.stationery
+            : LetterheadMode.printed,
       );
       final stem =
           doc.docNo.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();

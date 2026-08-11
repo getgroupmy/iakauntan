@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1786393436.4863958,
-    "ast_hash": "182ee96ccf32f3ee016f77038f25ef19",
-    "semantic_hash": "182ee96ccf32f3ee016f77038f25ef19"
+    "mtime": 1786477877.4606333,
+    "ast_hash": "74cb1508b2b118121e3a65d10b2c2c5d",
+    "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786473884.275618,
-    "ast_hash": "1d99b532c9c7daa7ac2382440cfea8b5",
+    "mtime": 1786477904.4132488,
+    "ast_hash": "c03cd846f835501ab8b0a29593e6a6a7",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -150,8 +150,8 @@
     "semantic_hash": "88f373b2bbe85ad1d830bbd9c2bf8c6c"
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1786473961.6423292,
-    "ast_hash": "36c8f19989bf03546973f4821de0a278",
+    "mtime": 1786477999.0376124,
+    "ast_hash": "6207f1bf6958d55b3402fe55d072680a",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -220,8 +220,8 @@
     "semantic_hash": "a4f912788c0743d41700d6f8247af9ce"
   },
   "app/lib/src/features/hr/payslip_screen.dart": {
-    "mtime": 1786473961.64262,
-    "ast_hash": "5db3a6109299b0648b1fcf2abb5abf66",
+    "mtime": 1786477999.0386813,
+    "ast_hash": "83545a364d562dd61d2c8f41f0e680b0",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/people_screen.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1786473928.8817766,
-    "ast_hash": "51ac7bf877fc618ef0214847e9a2b01f",
+    "mtime": 1786477928.6612482,
+    "ast_hash": "c1f3e1f692cfddc764a5f7065cfe9c3c",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786474652.678294,
-    "ast_hash": "e3e1004598d7191018e3186624ba63b0",
+    "mtime": 1786478164.3212414,
+    "ast_hash": "3f83cae71b56cdb490ef9677085fa3fd",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -1035,28 +1035,33 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/pdf_kit.dart": {
-    "mtime": 1786474293.7734575,
-    "ast_hash": "d28439bc71c193cc89c5d7a15e228bdc",
+    "mtime": 1786477783.5372522,
+    "ast_hash": "58a6fa67f01a38f2fda03783cf25daaf",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/invoice_pdf.dart": {
-    "mtime": 1786473862.2682922,
-    "ast_hash": "991cc9762eca4ab3a5b94c9507ffe353",
+    "mtime": 1786477792.221252,
+    "ast_hash": "3fe4c567e7a5bfcd114f3bce0097ea2d",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/payslip_pdf.dart": {
-    "mtime": 1786473862.2687297,
-    "ast_hash": "f6254e86ef1e3fa27525e54f2103baaa",
+    "mtime": 1786477804.1892517,
+    "ast_hash": "c680bf04d789d1e420df2c0e984788cd",
     "semantic_hash": ""
   },
   "app/test/business_pdf_test.dart": {
-    "mtime": 1786473996.7767496,
-    "ast_hash": "047334c0cecec0aaa55bf0c52a8d8932",
+    "mtime": 1786478033.3812451,
+    "ast_hash": "873cd427eff93c6a7c092ecc81943745",
     "semantic_hash": ""
   },
   "supabase/migrations/0073_logo_replacement.sql": {
     "mtime": 1786473737.5023148,
     "ast_hash": "2a2196168164bb9e044b9c5af1993259",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0074_preprinted_letterhead.sql": {
+    "mtime": 1786477851.9812503,
+    "ast_hash": "5b62fce3379b6fae50b62915df6d625f",
     "semantic_hash": ""
   }
 }

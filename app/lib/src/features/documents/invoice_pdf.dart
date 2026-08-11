@@ -14,11 +14,16 @@ import '../../data/models.dart';
 /// on it. That is why the letterhead carries the registration numbers and
 /// why tax is a column rather than a single line at the bottom: a bill
 /// with two tax rates on it has to show which line bore which.
+///
+/// [mode] can leave the top of the page clear for pre-printed stationery.
+/// The registration numbers move down the page rather than disappearing,
+/// because the Act asks for them on the invoice and not on the paper.
 Future<Uint8List> buildInvoicePdf({
   required Organization org,
   required BusinessDocument doc,
   required String documentLabel,
   Uint8List? logo,
+  LetterheadMode mode = LetterheadMode.printed,
 }) async {
   final kit = await PdfKit.load();
   final pdf = pw.Document(title: '$documentLabel ${doc.docNo}');
@@ -33,7 +38,8 @@ Future<Uint8List> buildInvoicePdf({
       theme: kit.theme,
       footer: (context) => kit.footer(context, note: doc.docNo),
       build: (context) => [
-        kit.letterhead(org, documentLabel: documentLabel, logo: logo),
+        kit.letterhead(org,
+            documentLabel: documentLabel, logo: logo, mode: mode),
         kit.rule(),
 
         pw.Row(
