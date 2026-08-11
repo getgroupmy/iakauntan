@@ -467,9 +467,15 @@ class Repo {
   // Expenses
   // ------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> expenses({int limit = 100}) async {
+    // No bare `contacts(...)` here. An expense points at contacts twice —
+    // contact_id for whoever was paid, billed_to_id for the client it is
+    // rebilled to — so PostgREST cannot guess which one is meant and
+    // refuses the whole request with PGRST201 rather than choosing. The
+    // screen never read the name anyway. If it should show the payee, ask
+    // for it by constraint: `contacts!expenses_contact_id_fkey(name)`.
     final data = await client
         .from('expenses')
-        .select('*, accounts(code, name), contacts(name)')
+        .select('*, accounts(code, name)')
         .eq('org_id', orgId)
         .isFilter('deleted_at', null)
         .order('expense_date', ascending: false)
