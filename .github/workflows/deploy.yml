@@ -114,6 +114,13 @@ jobs:
         if: steps.creds.outputs.ready == 'true'
         run: |
           npm install --global vercel@latest
+
+          # Links the checkout to the project named by VERCEL_ORG_ID and
+          # VERCEL_PROJECT_ID. Not strictly required for a prebuilt deploy,
+          # but it fails here with a clear message if a token or an id is
+          # wrong, rather than further down inside the upload.
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
           # --yes so a first deploy into a fresh project cannot sit waiting
           # on a confirmation prompt that nobody is there to answer.
           if [ "${{ github.ref_name }}" = "${{ github.event.repository.default_branch }}" ]; then
