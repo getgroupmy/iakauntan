@@ -954,7 +954,7 @@ and that does not belong in this repo.
 A worked example is loaded in the project: **Sinar Teknologi Sdn Bhd**,
 with a customer, two invoice lines, a posted journal and a part payment.
 
-All four logins share the password `Demo!Akaun2026`:
+All five logins share the password `Demo!Akaun2026`:
 
 | Login | Sees |
 | --- | --- |
@@ -962,12 +962,50 @@ All four logins share the password `Demo!Akaun2026`:
 | `clerk@iakauntan.my` | Accounts Clerk — can prepare, cannot post |
 | `auditor@iakauntan.my` | Auditor — reads the ledger, writes nothing |
 | `superadmin@iakauntan.my` | Platform operator — the admin console |
+| `secretary@iakauntan.my` | Company secretary — a practice and its clients |
+
+### The secretarial practice
+
+`secretary@iakauntan.my` owns a second organization, **Amanah Setiausaha
+Sdn Bhd**, with the secretarial add-on enabled — a separate company
+rather than a role inside Sinar Teknologi, because the module is about
+managing *other people's* companies. Nurul Aina is the named s.236
+secretary on all three client boards.
+
+| Client | Incorporated | FYE | Why it is there |
+| --- | --- | --- | --- |
+| Kilang Lestari Sdn Bhd | 14 Mar 2019 | 31 Dec | Two directors and a share transfer |
+| Bayu Digital Sdn Bhd | 30 Sep 2022 | 30 Jun | A 30 September anniversary, and a June year end |
+| Pinang Holdings Berhad | 20 Jan 2015 | 31 Mar | Public, so the AGM obligation applies |
+
+The clients differ on purpose, so the deadline list exercises the
+arithmetic rather than repeating one date:
+
+- Annual Returns fall 30 days after the **incorporation anniversary**, not
+  the year end — 30 Sep 2025 gives 30 Oct 2025, 14 Mar 2026 gives
+  13 Apr 2026.
+- Financial statements are 180 days from the year end plus 30 to lodge, so
+  a 30 June year end is due 26 Jan and a 31 December one 29 July.
+- **Only Pinang Holdings gets an AGM.** s.340 binds public companies; the
+  two Sdn Bhds are absent from that line, which is the rule working rather
+  than data missing.
+
+Kilang Lestari also carries a share transfer — 10,000 of Lim Wei Ming's
+70,000 to Siti Zubaidah on 19 Feb 2024 — so the register of members shows
+60/40 computed from the event stream rather than stored, with the
+movement date against both holders.
 
 There is also a worked legal matter (`MAT-2026-00001`) with RM 5,500 held
 in the client account and unbilled time against it.
 
-Delete these logins and the organization before going anywhere near real
-books.
+Delete these logins and **both** organizations before going anywhere near
+real books.
+
+None of this is in a migration. The demo users and their companies were
+made directly against the hosted project, so a fresh `supabase db push`
+gives you an empty system rather than somebody else's fictional clients —
+which is the right default, and the reason there is nothing here to
+delete from the repository.
 
 ### `Database error querying schema`
 
