@@ -52,8 +52,12 @@ class PdfKit {
   /// addition to the identity block, never a replacement for it, because
   /// a tax invoice has to carry the registered name and numbers whatever
   /// it looks like.
+  ///
+  /// [documentLabel] is the big grey word in the top right. It is
+  /// optional: an invoice wants "INVOICE" there, a board resolution does
+  /// not, because the resolution announces itself in its own first line.
   pw.Widget letterhead(Organization org,
-      {required String documentLabel, Uint8List? logo}) {
+      {String? documentLabel, Uint8List? logo}) {
     final address = [
       org.addressLine1,
       org.addressLine2,
@@ -102,8 +106,9 @@ class PdfKit {
             ],
           ),
         ),
-        pw.Text(documentLabel.toUpperCase(),
-            style: style(size: 15, strong: true, colour: PdfColors.grey600)),
+        if (documentLabel != null)
+          pw.Text(documentLabel.toUpperCase(),
+              style: style(size: 15, strong: true, colour: PdfColors.grey600)),
       ],
     );
   }

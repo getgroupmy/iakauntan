@@ -998,17 +998,24 @@ disagree about the company's own address.
 **The letterhead carries the company logo**, uploaded under Settings →
 Company (administrators only, matching the storage policy — the bucket
 refuses a write whose first path segment is not an organization the
-caller administers). It prints top left on invoices and payslips at a
-fixed size with the aspect ratio preserved, so a tall logo cannot push
-the identity block down the page. A company without one still prints a
+caller administers). It prints top left, wherever the letterhead appears,
+at a fixed size with the aspect ratio preserved, so a tall logo cannot
+push the identity block down the page. A company without one still prints a
 proper letterhead: the mark is an addition to the registered name and
 numbers, never a replacement, because a tax invoice has to carry those
 whatever it looks like.
 
-Secretarial documents deliberately do **not** take the practice's
-letterhead. A board resolution belongs to the client company whose board
-passed it — its name is already at the head of the text — and stamping
-the secretarial firm's mark on it would misstate whose document it is.
+**On a secretarial document the letterhead is an option, never the
+default.** The PDF button gives a bare copy; "Download PDF on your
+letterhead" is a separate entry in the row's overflow menu, and it saves
+under a different filename so the two are distinguishable on disk. The
+distinction is not cosmetic: a board resolution belongs to the client
+company whose board passed it — its name is already the first line of the
+text — so a practice's mark at the top could be read as though the
+practice resolved something. When the letterhead is used, the identity
+block is followed by **"Prepared by …"** and a rule, and the document
+proper starts below the line still announcing its own company in its own
+first words.
 
 Two things the layouts get right on purpose:
 

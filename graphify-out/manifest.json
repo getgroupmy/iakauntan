@@ -275,8 +275,8 @@
     "semantic_hash": "f6071149b884abb0a3eb114e391db379"
   },
   "app/lib/src/features/secretarial/entity_screen.dart": {
-    "mtime": 1786471923.1496584,
-    "ast_hash": "5c69d17cf09767b4ab6103398a052766",
+    "mtime": 1786474576.9862955,
+    "ast_hash": "bb59273302abdd528936962b05dd1db7",
     "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/secretarial_screen.dart": {
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786474058.3361921,
-    "ast_hash": "762fc0f235562a3ef56815d3c32ebeaf",
+    "mtime": 1786474652.678294,
+    "ast_hash": "e3e1004598d7191018e3186624ba63b0",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -1020,13 +1020,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/document_pdf.dart": {
-    "mtime": 1786471889.5652196,
-    "ast_hash": "14ee2eccb4263a39ac974b579d77d458",
+    "mtime": 1786474812.2222903,
+    "ast_hash": "3ef9ca476a6b4fdde5af52cee6e1911f",
     "semantic_hash": ""
   },
   "app/test/document_pdf_test.dart": {
-    "mtime": 1786471960.033218,
-    "ast_hash": "e460369d4542ea52ce60fcce41e8c1da",
+    "mtime": 1786474594.0662951,
+    "ast_hash": "edb3e94e1b87e181709bbe1c8b539bb4",
     "semantic_hash": ""
   },
   "supabase/migrations/0072_corp_document_amendment.sql": {
@@ -1035,8 +1035,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/pdf_kit.dart": {
-    "mtime": 1786473862.2678394,
-    "ast_hash": "1050586813f9cfa91ef5b534a943c2e6",
+    "mtime": 1786474293.7734575,
+    "ast_hash": "d28439bc71c193cc89c5d7a15e228bdc",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/invoice_pdf.dart": {

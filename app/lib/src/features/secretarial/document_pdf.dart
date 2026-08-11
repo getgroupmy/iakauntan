@@ -1,8 +1,10 @@
 import 'dart:typed_data';
 
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+
+import '../../core/pdf_kit.dart';
+import '../../data/models.dart';
 
 /// Turns a generated document into a PDF fit for a minute book.
 ///
@@ -15,17 +17,27 @@ import 'package:pdf/widgets.dart' as pw;
 /// paragraphs separated by blank lines, `**bold**` within a line, and
 /// single newlines kept as line breaks — an address block and a list of
 /// directors' names both depend on those breaks surviving.
+///
+/// [letterhead] is the organisation that prepared the document, with
+/// [logo] its uploaded mark; both null gives a bare copy.
+///
+/// Optional on purpose, and never the default. A board resolution belongs
+/// to the company whose board passed it — its name is the first line of
+/// the text — so a secretarial practice's mark at the top could be read as
+/// though the practice resolved something. Hence the "Prepared by" line
+/// under the letterhead and the rule beneath it: the identity block is
+/// stated as the preparer's, and the document proper starts below the
+/// line, still announcing its own company in its own first words.
 Future<Uint8List> buildDocumentPdf({
   required String title,
   required String body,
   String? footerNote,
+  Organization? letterhead,
+  Uint8List? logo,
 }) async {
-  // The app's own typeface, so the printed document looks like the
-  // system it came from rather than like Helvetica.
-  final regular =
-      pw.Font.ttf(await rootBundle.load('assets/fonts/PlusJakartaSans-Regular.ttf'));
-  final bold =
-      pw.Font.ttf(await rootBundle.load('assets/fonts/PlusJakartaSans-Bold.ttf'));
+  final kit = await PdfKit.load();
+  final regular = kit.regular;
+  final bold = kit.bold;
 
   final doc = pw.Document(title: title);
 
@@ -48,6 +60,14 @@ Future<Uint8List> buildDocumentPdf({
         ),
       ),
       build: (context) => [
+        if (letterhead != null) ...[
+          kit.letterhead(letterhead, logo: logo),
+          pw.SizedBox(height: 6),
+          pw.Text('Prepared by ${letterhead.legalName ?? letterhead.name}',
+              style: pw.TextStyle(
+                  font: regular, fontSize: 8, color: PdfColors.grey600)),
+          kit.rule(),
+        ],
         pw.Header(
           level: 0,
           padding: const pw.EdgeInsets.only(bottom: 10),

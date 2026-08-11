@@ -1514,13 +1514,13 @@ class _SignDialogState extends State<_SignDialog> {
   }
 }
 
-class _DocumentRow extends StatelessWidget {
+class _DocumentRow extends ConsumerWidget {
   const _DocumentRow({required this.document});
 
   final CorpDocument document;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(document.title,
@@ -1536,8 +1536,15 @@ class _DocumentRow extends StatelessWidget {
         PopupMenuButton<String>(
           tooltip: 'More',
           icon: const Icon(Icons.more_horiz, size: 18),
-          onSelected: (_) => _downloadMarkdown(context),
+          onSelected: (choice) => switch (choice) {
+            'letterhead' => _downloadPdf(context, ref: ref),
+            _ => _downloadMarkdown(context),
+          },
           itemBuilder: (_) => const [
+            PopupMenuItem(
+              value: 'letterhead',
+              child: Text('Download PDF on your letterhead'),
+            ),
             PopupMenuItem(
               value: 'md',
               child: Text('Download Markdown (the signed text)'),
@@ -1564,14 +1571,26 @@ class _DocumentRow extends StatelessWidget {
   /// what the database stores and what the signature hash covers, so it
   /// is the copy to keep if you care about the exact bytes that were
   /// signed.
-  Future<void> _downloadPdf(BuildContext context) async {
+  ///
+  /// Pass [ref] to put your own letterhead on it. Plain is the default,
+  /// and the icon button stays plain: the resolution is the client
+  /// company's act, not yours, so your name goes on it only when you ask
+  /// for it — and then as "Prepared by", which is what you actually did.
+  Future<void> _downloadPdf(BuildContext context, {WidgetRef? ref}) async {
     final messenger = ScaffoldMessenger.of(context);
+    final org = ref == null ? null : await ref.read(currentOrgProvider.future);
+    final logo = ref == null ? null : await ref.read(orgLogoProvider.future);
     final bytes = await buildDocumentPdf(
       title: document.title,
       body: document.body,
       footerNote: 'Generated ${Fmt.date(document.generatedAt)}',
+      letterhead: org,
+      logo: logo,
     );
-    final saved = await saveBytesFile('$_stem.pdf', 'application/pdf', bytes);
+    // Named apart, because a secretary who downloads both wants to know
+    // which one is which without opening them.
+    final name = org == null ? '$_stem.pdf' : '$_stem-letterhead.pdf';
+    final saved = await saveBytesFile(name, 'application/pdf', bytes);
     messenger.showSnackBar(SnackBar(
       content: Text(saved
           ? 'Downloaded'
