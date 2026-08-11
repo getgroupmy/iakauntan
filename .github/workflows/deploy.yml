@@ -1,0 +1,107 @@
+name: Deploy web
+
+# Vercel has no Flutter build image, and teaching its build container to
+# install one on every deploy is slow and brittle. So the bundle is built
+# here — with the same toolchain CI already analyzes and tests against —
+# and uploaded to Vercel prebuilt. Vercel never sees Dart; it serves a
+# folder of static files.
+#
+# Pushing to the default branch publishes to production. Any other branch
+# gets a preview URL, which is the point of previews: look at the change
+# before it is anybody's books.
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+concurrency:
+  # A newer commit supersedes an in-flight deploy of an older one.
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and deploy to Vercel
+    runs-on: ubuntu-latest
+    env:
+      # The secrets context is not available to job-level `if`, so it is
+      # lifted into env and each step checks it. Without the secrets the
+      # job reports what is missing and succeeds, rather than painting
+      # every push red for a repository that has not been wired up yet.
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the deploy credentials are present
+        id: creds
+        run: |
+          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping deploy — set VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID in repository secrets."
+          fi
+
+      - uses: subosito/flutter-action@v2
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build the web bundle
+        if: steps.creds.outputs.ready == 'true'
+        working-directory: app
+        env:
+          # Optional. Unset, the build falls back to the defaults compiled
+          # into lib/src/core/env.dart. Only ever the publishable key —
+          # the service role key must never reach a client bundle.
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: |
+          flutter pub get
+
+          # Nothing reaches a real ledger untested. This repeats CI rather
+          # than trusting it, because a workflow that publishes should not
+          # depend on another workflow having been green.
+          flutter analyze --fatal-infos --fatal-warnings
+          flutter test
+
+          defines=()
+          if [ -n "$SUPABASE_URL" ]; then
+            defines+=("--dart-define=SUPABASE_URL=$SUPABASE_URL")
+          fi
+          if [ -n "$SUPABASE_ANON_KEY" ]; then
+            defines+=("--dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY")
+          fi
+
+          # --no-web-resources-cdn is load-bearing: without it the bundle
+          # fetches CanvasKit from www.gstatic.com before main() runs, and
+          # anyone behind a network that blocks it gets a blank page with
+          # no error screen, because the app never starts.
+          flutter build web --release --no-web-resources-cdn "${defines[@]}"
+
+      - name: Assemble the Vercel build output
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          mkdir -p .vercel/output/static
+          cp -r app/build/web/. .vercel/output/static/
+          cp deploy/vercel-output-config.json .vercel/output/config.json
+          test -f .vercel/output/static/index.html
+          test -f .vercel/output/static/canvaskit/canvaskit.wasm
+
+      - name: Deploy
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          npm install --global vercel@latest
+          if [ "${{ github.ref_name }}" = "${{ github.event.repository.default_branch }}" ]; then
+            url="$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")"
+            echo "### Deployed to production" >> "$GITHUB_STEP_SUMMARY"
+          else
+            url="$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")"
+            echo "### Preview deploy" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "$url" >> "$GITHUB_STEP_SUMMARY"

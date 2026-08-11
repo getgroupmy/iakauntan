@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786450278.699841,
-    "ast_hash": "b931adfe8b2ca4f57fd18b19ea7a9b90",
+    "mtime": 1786450845.0718281,
+    "ast_hash": "9bbc9884cdbc471190d828eb5ae26fe5",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -977,6 +977,11 @@
   "app/web/icons/Icon-maskable-512.png": {
     "mtime": 1786450112.1028562,
     "ast_hash": "baea673416e0fd86fcf882eeda6113b3",
+    "semantic_hash": ""
+  },
+  ".github/workflows/deploy.yml": {
+    "mtime": 1786450803.751829,
+    "ast_hash": "88ff00eddc159188732647abbd852749",
     "semantic_hash": ""
   }
 }

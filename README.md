@@ -769,9 +769,53 @@ Two things to do before real users arrive:
 - Replace the seeded statutory schedules, which are `is_verified = false`
   on purpose.
 
-There is no deploy pipeline in this repo yet — CI analyzes, tests and
-runs the database assertions, but nothing publishes. Adding one is a
-handful of lines once a host is chosen.
+#### The Vercel pipeline
+
+`.github/workflows/deploy.yml` builds the bundle in CI and uploads it to
+Vercel **prebuilt**. Vercel has no Flutter build image, and teaching its
+build container to install one on every deploy is slow and brittle — so
+Vercel never sees Dart, it serves a folder. The workflow analyzes and
+tests before it builds, repeating CI rather than trusting it: a workflow
+that publishes should not depend on a different workflow having been
+green.
+
+Pushes to the default branch go to production. Every other branch gets a
+preview URL.
+
+Three repository secrets are needed. Until all three are set the job
+reports what is missing and passes, rather than painting every push red:
+
+| Secret | Where it comes from |
+| --- | --- |
+| `VERCEL_TOKEN` | Vercel → Account Settings → Tokens |
+| `VERCEL_ORG_ID` | `.vercel/project.json` after one local `vercel link` |
+| `VERCEL_PROJECT_ID` | same file |
+
+Optionally set the repository **variables** `SUPABASE_URL` and
+`SUPABASE_ANON_KEY` to point a deployment at a different project; unset,
+the build uses the defaults compiled into `lib/src/core/env.dart`. Only
+ever the publishable key.
+
+`deploy/vercel-output-config.json` carries the response headers. Two
+things in it were established by testing the real bundle in a browser
+rather than copied from a template:
+
+- **`Cache-Control: public, max-age=0, must-revalidate` on everything.**
+  Flutter's web output has no content hashes in its filenames —
+  `main.dart.js` is `main.dart.js` in every build — so caching anything
+  for long would serve stale code after a deploy. Revalidation still
+  returns 304s, and the service worker does the real offline caching from
+  its own hashed resource map.
+- **A Content-Security-Policy that the app actually runs under.** It needs
+  `'wasm-unsafe-eval'` for CanvasKit and `'unsafe-inline'` styles because
+  Flutter injects them. It also has to allow `fonts.gstatic.com`: the
+  Flutter engine fetches its fallback Roboto at start-up. The app does not
+  need that font — it bundles Plus Jakarta Sans and renders identically
+  with the request blocked, which I checked — but without the exception
+  every page load logs a violation, and a real one would be lost in the
+  noise. Verified: the app boots with zero CSP violations under this
+  policy. If you point the app at a different Supabase project, change
+  `connect-src` and `img-src` to name it or every request will be refused.
 
 ### Backend changes
 

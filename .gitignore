@@ -45,6 +45,10 @@ graphify-out/graph.html
 .claude/settings.json
 .claude/settings.local.json
 
+# Vercel: .vercel/output is assembled at deploy time from app/build/web,
+# and .vercel/project.json is whatever local link the CLI made.
+.vercel/
+
 # OS
 .DS_Store
 Thumbs.db
