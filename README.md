@@ -810,8 +810,21 @@ green.
 Pushes to the default branch go to production. Every other branch gets a
 preview URL.
 
-Three repository secrets are needed. Until all three are set the job
-reports what is missing and passes, rather than painting every push red:
+**Do not import the repository into Vercel as a Git project.** If you do,
+Vercel runs its own build, finds no Flutter and no output directory, and
+publishes an empty deployment — which is what a bare `404: NOT_FOUND` on
+your Vercel URL means. The root `vercel.json` sets
+`git.deploymentEnabled: false` to stop that happening; if a Git
+integration was already connected, disconnect it under Project Settings →
+Git, because deployments it already made will otherwise stay as
+production. Create the project instead with one `vercel link` from a
+local checkout, and let the workflow do every deploy.
+
+Three repository secrets are needed. Until all three are set, **nothing
+is deployed** — the job emits a warning and a "Nothing was deployed" run
+summary naming the missing ones, and passes rather than painting every
+push red. A green tick on this workflow is not proof that anything
+shipped; read the summary:
 
 | Secret | Where it comes from |
 | --- | --- |
