@@ -655,6 +655,32 @@ e-mail with an access type; when the invited person registers, the
 database claims the pending invitation and drops them into the right
 company with the right role.
 
+### Forgetting and changing a password
+
+Two different situations, and they are deliberately not the same screen.
+
+**Forgotten.** "Forgot password?" sends a reset e-mail pointing at
+`/#/reset-password`. Redeeming that link *signs the user in* — which is
+the trap in the naive version of this flow, because they would otherwise
+land on the dashboard with the password they had forgotten still in
+force, having proved only that they can read their own e-mail. So the
+router watches for the recovery event and holds them on the reset screen
+until `updateUser` has actually returned. No current password is asked
+for: they do not have one they can remember, and possession of the link
+is the proof. There is a way out — "I did not ask for this" signs them
+straight back out.
+
+**Known, and being changed.** Settings → Your account → Change password
+*does* ask for the current one, and verifies it by signing in with it
+before changing anything. Supabase's `updateUser` will change a password
+on the strength of the session alone, so without that step a borrowed
+laptop is enough to lock the owner out of their own books.
+
+For this to work on a deployment, the origin must be in Supabase's
+**Authentication → URL Configuration → Redirect URLs**. Add
+`https://*.vercel.app/**` too if you want reset links from preview
+deployments to come back to that preview instead of production.
+
 ---
 
 ## Security
@@ -758,10 +784,12 @@ root is the whole requirement.
 Under a sub-path (a GitHub Pages project site, say) add
 `--base-href=/<repo>/`.
 
-Then, in the Supabase dashboard, **set Authentication → URL Configuration
-→ Site URL to the deployed origin**. Sign-up confirmation and password
-reset e-mails are sent with no explicit `redirectTo`, so they use Site
-URL; left at its default they send your users to `localhost`.
+Then, in the Supabase dashboard under **Authentication → URL
+Configuration**, set **Site URL** to the deployed origin and add it to
+**Redirect URLs**. Sign-up confirmation uses Site URL; password reset
+links are aimed explicitly at `<origin>/#/reset-password` and are refused
+unless that origin is allowed. Left at the defaults, both send your users
+to `localhost`.
 
 Two things to do before real users arrive:
 
@@ -925,10 +953,5 @@ Stated plainly so nothing here is mistaken for finished:
 - The gazetted KWSP and PERKESO contribution tables (see HRMS above)
 - Biometric terminal integration: attendance records carry a terminal
   identifier, but nothing pushes punches in from a device yet
-- **Password recovery has no landing screen.** "Forgot password?" sends
-  the e-mail, and the link opens the app with a valid recovery session —
-  but nothing listens for the recovery event and there is no screen that
-  calls `updateUser` to set a new one. Today the user simply arrives
-  signed in and their old password still stands. Until this is built,
-  a forgotten password is an administrator's job
-- A deploy pipeline (see *Deploying the web app*)
+- Sign-in with anything other than a password: no OAuth, no magic link,
+  no two-factor

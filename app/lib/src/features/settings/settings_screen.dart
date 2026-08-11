@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
@@ -7,6 +8,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../auth/reset_password_screen.dart' show validatePassword;
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -679,6 +681,15 @@ class _AboutCard extends ConsumerWidget {
             _Field(label: 'Role', value: Fmt.label(role)),
             const SizedBox(height: 12),
             OutlinedButton.icon(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => const _ChangePasswordDialog(),
+              ),
+              icon: const Icon(Icons.password_outlined, size: 18),
+              label: const Text('Change password'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
               onPressed: () async {
                 await ref.read(supabaseProvider).auth.signOut();
                 ref.read(currentOrgIdProvider.notifier).clear();
@@ -689,6 +700,142 @@ class _AboutCard extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Changing a password you already know.
+///
+/// Deliberately different from the reset-link screen, which asks for no
+/// current password because the holder cannot remember one. Here they
+/// can, and being asked matters: Supabase's updateUser accepts a new
+/// password on the strength of the session alone, so without this step a
+/// borrowed laptop or a stolen session is enough to lock the owner out of
+/// their own books. The current password is checked by signing in with
+/// it, which is the only way to verify it from a client.
+class _ChangePasswordDialog extends ConsumerStatefulWidget {
+  const _ChangePasswordDialog();
+
+  @override
+  ConsumerState<_ChangePasswordDialog> createState() =>
+      _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends ConsumerState<_ChangePasswordDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _current = TextEditingController();
+  final _next = TextEditingController();
+  final _confirm = TextEditingController();
+
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _current.dispose();
+    _next.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    final auth = ref.read(supabaseProvider).auth;
+    final email = auth.currentUser?.email;
+    if (email == null) {
+      setState(() => _error = 'No signed-in account.');
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    try {
+      await auth.signInWithPassword(email: email, password: _current.text);
+      await auth.updateUser(UserAttributes(password: _next.text));
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Password changed.')),
+        );
+      }
+    } on AuthException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Change password'),
+      content: SizedBox(
+        width: 380,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _current,
+                obscureText: true,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Current password',
+                ),
+                validator: (v) =>
+                    (v ?? '').isEmpty ? 'Enter your current password' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _next,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password'),
+                validator: validatePassword,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _confirm,
+                obscureText: true,
+                decoration:
+                    const InputDecoration(labelText: 'Confirm new password'),
+                validator: (v) => v == _next.text
+                    ? null
+                    : 'The two passwords do not match',
+                onFieldSubmitted: (_) => _submit(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(_error!,
+                      style: TextStyle(color: context.colors.danger)),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: _busy
+              ? const SizedBox(
+                  height: 16,
+                  width: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Change password'),
+        ),
+      ],
     );
   }
 }

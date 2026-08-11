@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -79,7 +80,14 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     }
     setState(() => _busy = true);
     try {
-      await ref.read(supabaseProvider).auth.resetPasswordForEmail(email);
+      await ref.read(supabaseProvider).auth.resetPasswordForEmail(
+            email,
+            // Aim the link at the reset screen rather than leaving it to
+            // the project's Site URL, so a preview deployment sends
+            // people back to that preview instead of production. The
+            // origin has to be in Supabase's redirect allow list.
+            redirectTo: kIsWeb ? '${Uri.base.origin}/#/reset-password' : null,
+          );
       if (mounted) {
         setState(() => _notice = 'Password reset link sent to $email.');
       }

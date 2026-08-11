@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/auth/reset_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
 import '../features/contacts/contact_editor.dart';
 import '../features/contacts/contacts_screen.dart';
@@ -54,6 +55,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (path.startsWith('/sign/')) return null;
 
       if (!signedIn) return path == '/signin' ? null : '/signin';
+
+      // Redeeming a reset link signs the user in, so this has to be
+      // checked before anything else sends them to the dashboard —
+      // otherwise they arrive at their books with the password they had
+      // forgotten still in force.
+      if (ref.read(passwordRecoveryProvider)) {
+        return path == '/reset-password' ? null : '/reset-password';
+      }
+
       if (path == '/signin') return '/';
 
       // Organizations may still be loading; hold the current route until
@@ -75,6 +85,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/onboarding',
         builder: (_, __) => const CreateOrgScreen(),
+      ),
+      // Reachable two ways on purpose: the router forces it after a
+      // recovery event, and the reset e-mail links straight here. If the
+      // event is missed the link still lands somewhere useful.
+      GoRoute(
+        path: '/reset-password',
+        builder: (_, __) => const ResetPasswordScreen(),
       ),
       // Outside the shell as well as outside auth: no navigation rail,
       // no company switcher, nothing but the document being signed.
@@ -257,5 +274,9 @@ class _AuthRefresh extends ChangeNotifier {
   _AuthRefresh(Ref ref) {
     ref.listen(authStateProvider, (_, __) => notifyListeners());
     ref.listen(organizationsProvider, (_, __) => notifyListeners());
+    // Listened to as much for the side effect as the signal: this is what
+    // builds the recovery notifier, and it has to be alive and subscribed
+    // before the recovery event arrives or it will miss it.
+    ref.listen(passwordRecoveryProvider, (_, __) => notifyListeners());
   }
 }

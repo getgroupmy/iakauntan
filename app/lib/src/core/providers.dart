@@ -18,6 +18,36 @@ final currentUserProvider = Provider<User?>((ref) {
   return ref.watch(supabaseProvider).auth.currentUser;
 });
 
+/// True from the moment a reset link is redeemed until a new password has
+/// actually been set.
+///
+/// Redeeming the link leaves the user *signed in* — which is the trap in
+/// the naive version of this flow: they land on the dashboard, nothing
+/// asks them for a new password, and the old one still works. So the
+/// router holds them on the reset screen until [done] is called.
+class PasswordRecoveryNotifier extends Notifier<bool> {
+  @override
+  bool build() {
+    ref.listen(authStateProvider, (_, next) {
+      switch (next.value?.event) {
+        case AuthChangeEvent.passwordRecovery:
+          state = true;
+        case AuthChangeEvent.signedOut:
+          state = false;
+        case _:
+          break;
+      }
+    });
+    return false;
+  }
+
+  void done() => state = false;
+}
+
+final passwordRecoveryProvider =
+    NotifierProvider<PasswordRecoveryNotifier, bool>(
+        PasswordRecoveryNotifier.new);
+
 /// Organizations the signed-in user belongs to.
 final organizationsProvider = FutureProvider<List<Organization>>((ref) async {
   final user = ref.watch(currentUserProvider);

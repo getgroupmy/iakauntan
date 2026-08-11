@@ -70,14 +70,14 @@
     "semantic_hash": "e9921fc03203fbc5f9b5857bef93bbe6"
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786440788.592066,
-    "ast_hash": "9f95a992f8edf1e73548c2a68a8c7bd7",
-    "semantic_hash": "9f95a992f8edf1e73548c2a68a8c7bd7"
+    "mtime": 1786451848.6112466,
+    "ast_hash": "30aba0a6eccb94a18d704efff56a7545",
+    "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786441891.7480128,
-    "ast_hash": "fd31ec790db32050417d48ddc49a20f2",
-    "semantic_hash": "fd31ec790db32050417d48ddc49a20f2"
+    "mtime": 1786452174.5557323,
+    "ast_hash": "4506415a589bbe6e74c804f9f52a3d0d",
+    "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
     "mtime": 1786329638.315036,
@@ -120,9 +120,9 @@
     "semantic_hash": "d467519d6e9c87185e4a072e6581819a"
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1786328947.8051572,
-    "ast_hash": "8d03472b966cb7698dbfc1a5c1f1bbab",
-    "semantic_hash": "8d03472b966cb7698dbfc1a5c1f1bbab"
+    "mtime": 1786451918.979245,
+    "ast_hash": "73377bb02e5b03ec9c9c6f5c3516e7ce",
+    "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
     "mtime": 1786328947.8077903,
@@ -290,9 +290,9 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1786389291.3904905,
-    "ast_hash": "ca037b0da5b44daabfab49e5365c10e8",
-    "semantic_hash": "ca037b0da5b44daabfab49e5365c10e8"
+    "mtime": 1786451990.6232433,
+    "ast_hash": "c4929b758c9352f7bf85c0ad00f9a71f",
+    "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
     "mtime": 1786440765.4144921,
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786450845.0718281,
-    "ast_hash": "9bbc9884cdbc471190d828eb5ae26fe5",
+    "mtime": 1786452215.679238,
+    "ast_hash": "494a9039e0c0ce9fa5b7452c05aec801",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -982,6 +982,16 @@
   ".github/workflows/deploy.yml": {
     "mtime": 1786450803.751829,
     "ast_hash": "88ff00eddc159188732647abbd852749",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/auth/reset_password_screen.dart": {
+    "mtime": 1786451881.1992457,
+    "ast_hash": "4cc757ddc8732dba62005f13fd6b05f4",
+    "semantic_hash": ""
+  },
+  "app/test/reset_password_test.dart": {
+    "mtime": 1786452018.6432426,
+    "ast_hash": "b5a1c59eedc658dd8886ae44401ab75e",
     "semantic_hash": ""
   }
 }
