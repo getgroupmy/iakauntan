@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'doc_types.dart';
+import 'invoice_pdf.dart';
 import 'line_draft.dart';
 import 'line_editor.dart';
 import 'settlement_dialog.dart';
@@ -160,6 +162,38 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     }
   }
 
+  /// The saved document as the customer's copy.
+  ///
+  /// Reloaded from the database rather than assembled from the form, so
+  /// what prints is what was stored — an unsaved edit in a text field is
+  /// not part of the invoice yet, and printing it would say otherwise.
+  Future<void> _downloadPdf() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final org = ref.read(currentOrgProvider).valueOrNull;
+    final repo = ref.read(repoProvider);
+    if (org == null || repo == null || widget.documentId == null) return;
+
+    try {
+      final doc = await repo.document(_kind, widget.documentId!);
+      final bytes = await buildInvoicePdf(
+        org: org,
+        doc: doc,
+        documentLabel: _meta.singular,
+      );
+      final stem =
+          doc.docNo.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
+      final saved =
+          await saveBytesFile('$stem.pdf', 'application/pdf', bytes);
+      messenger.showSnackBar(SnackBar(
+        content: Text(saved
+            ? 'Downloaded'
+            : 'PDF download is only available in the browser'),
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
   Future<void> _post() async {
     final id = await _save(silent: true);
     if (id == null || !mounted) return;
@@ -266,6 +300,15 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           title: Text(_isNew ? 'New ${_meta.singular}' : _docNo),
           actions: [
             if (!_isNew) ...[StatusChip(_status), const SizedBox(width: 12)],
+            // Only once it exists: there is nothing to print from a form
+            // that has not been saved, and a PDF of a half-typed invoice
+            // is a document somebody could send.
+            if (!_isNew)
+              IconButton(
+                tooltip: 'Download PDF',
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+                onPressed: _saving ? null : _downloadPdf,
+              ),
             if (editable)
               TextButton(
                 onPressed: _saving ? null : () => _save(),

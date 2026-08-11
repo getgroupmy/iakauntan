@@ -987,6 +987,31 @@ All five logins share the password `Demo!Akaun2026`:
 | `superadmin@iakauntan.my` | Platform operator — the admin console |
 | `secretary@iakauntan.my` | Company secretary — a practice and its clients |
 
+### Printing what a customer or an employee receives
+
+Three documents render to PDF and download: the **invoice** (from its
+editor), the **payslip** (from the payslip screen), and any **secretarial
+document** (from the company's Documents tab). All three share one
+letterhead and one embedded typeface, so an invoice and a payslip cannot
+disagree about the company's own address.
+
+Two things the layouts get right on purpose:
+
+- **Tax is a column on the invoice, not a line at the bottom.** A bill
+  carrying two tax rates has to show which line bore which, and the
+  discount and tax columns only appear when some line actually uses them.
+  An unposted document prints `DRAFT — not yet posted to the ledger`,
+  because a draft that looks like a tax invoice is a document somebody
+  pays against.
+- **The payslip itemises from the payslip lines, never the summary
+  fields.** Basic salary is an earning line and EPF, SOCSO, EIS and PCB
+  are deduction lines, so printing the scalar columns beside them would
+  list every statutory figure twice — and the totals would still foot,
+  which is exactly what would make it hard to notice. Employer
+  contributions sit below the net pay, outside it, labelled as not
+  deducted. If the contribution schedules are unverified, the payslip
+  says so on its face, because the payslip is what the employee keeps.
+
 ### The secretarial practice
 
 `secretary@iakauntan.my` owns a second organization, **Amanah Setiausaha
@@ -1086,10 +1111,8 @@ Stated plainly so nothing here is mistaken for finished:
 - Self-billed e-Invoice for foreign suppliers: schema supports it, no UI
 - Goods Received and Purchase Request screens (the types exist in the
   schema; only PO, Bill and Purchase Credit Note are exposed in the app)
-- Invoice and payslip PDFs, and e-mail delivery of anything. Secretarial
-  documents do render to PDF (see above); the same renderer has not been
-  pointed at an invoice or a payslip, which need a layout rather than a
-  page of prose
+- E-mail delivery of anything. Invoices, payslips and secretarial
+  documents all render to PDF and download; nothing sends them
 - Bank statement import and auto-matching
 - Statutory submission files: CP39, Borang A, Lampiran 1 and the EA form
   are all computable from what is stored, but no exporter is written

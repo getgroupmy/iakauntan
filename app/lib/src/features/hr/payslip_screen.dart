@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'payslip_pdf.dart';
 
 /// One payslip, laid out the way a Malaysian payslip is read: what was
 /// earned, what was taken off, what the company paid on top, and the
@@ -15,6 +17,33 @@ class PayslipScreen extends ConsumerWidget {
   const PayslipScreen({super.key, required this.payslipId});
 
   final String payslipId;
+
+  /// The payslip as a document the employee can keep. Falls back to
+  /// saying so rather than pretending, because saveBytesFile only works
+  /// in the browser.
+  Future<void> _downloadPdf(
+      BuildContext context, WidgetRef ref, Payslip slip) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final org = ref.read(currentOrgProvider).valueOrNull;
+    if (org == null) {
+      messenger.showSnackBar(
+          const SnackBar(content: Text('No company selected')));
+      return;
+    }
+
+    final bytes = await buildPayslipPdf(org: org, payslip: slip);
+    final stem = [
+      slip.employeeNo ?? slip.employeeName,
+      slip.periodCode ?? '',
+    ].join('-').replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
+    final saved =
+        await saveBytesFile('payslip-$stem.pdf', 'application/pdf', bytes);
+    messenger.showSnackBar(SnackBar(
+      content: Text(saved
+          ? 'Downloaded'
+          : 'PDF download is only available in the browser'),
+    ));
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -28,6 +57,17 @@ class PayslipScreen extends ConsumerWidget {
               context.canPop() ? context.pop() : context.go('/hr/me'),
         ),
         title: const Text('Payslip'),
+        actions: [
+          if (payslip.valueOrNull != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.md),
+              child: OutlinedButton.icon(
+                onPressed: () => _downloadPdf(context, ref, payslip.value!),
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                label: const Text('PDF'),
+              ),
+            ),
+        ],
       ),
       body: AsyncView(
         value: payslip,
