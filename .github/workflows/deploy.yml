@@ -71,9 +71,13 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # Pinned for the same reason as in ci.yml, and more so here: what
+      # gets deployed should be built by a known SDK, not by whatever
+      # stable happened to become this morning.
       - uses: subosito/flutter-action@v2
         if: steps.creds.outputs.ready == 'true'
         with:
+          flutter-version: 3.32.0
           channel: stable
           cache: true
 

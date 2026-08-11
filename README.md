@@ -723,6 +723,29 @@ same three lines. `statutory.sql` now asserts that the predicate is a
 hard `false` for a stranger organization, and exercises the refusal
 through a real call, so this cannot come back quietly.
 
+### What CI actually runs, and a day it was not running
+
+`.github/workflows/ci.yml` analyzes and tests the Flutter app, then
+starts a throwaway Supabase stack and runs `statutory.sql`, `ledger.sql`
+and `secretarial.sql` against the migrations *in that commit* rather than
+against the hosted project.
+
+That second job had been failing, unnoticed, since the suite grew a
+second fixture organization. `app.seed_chart_of_accounts` creates a temp
+table `on commit drop`, which only drops at COMMIT — and the whole suite
+runs inside one transaction that is rolled back, so the second call died
+on `relation "_coa" already exists`. The hosted project had been given
+the one-line fix directly and the repository never received it, so the
+assertions passed by hand and failed from a clean build. `0071` writes
+that fix down. **A clean build from the migrations is the only thing that
+tests the migrations**, which is the whole reason that job exists.
+
+Both workflows pin `flutter-version: 3.32.0` rather than tracking
+`channel: stable`. A newer stable deprecated `DropdownButtonFormField`'s
+`value` argument; with `--fatal-infos` that turned into 37 errors in code
+nobody had touched. Bump the pin deliberately, with the deprecations
+fixed in the same commit.
+
 Supabase's linter reports no errors. Two warnings remain and are expected:
 `citext` and `pg_trgm` living in `public` (moving them would break the
 `citext` columns already in use), and signed-in users being able to call

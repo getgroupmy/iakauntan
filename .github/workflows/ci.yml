@@ -14,8 +14,14 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v4
+      # Pinned, not `channel: stable`. A floating stable moves under the
+      # repository: a newer SDK deprecated DropdownButtonFormField's
+      # `value` argument, --fatal-infos turned that into 37 errors, and
+      # analyze started failing on code nobody had touched. Bump this
+      # deliberately, with the deprecations fixed in the same commit.
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: 3.32.0
           channel: stable
           cache: true
       - run: flutter pub get
