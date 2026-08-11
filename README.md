@@ -969,6 +969,49 @@ in the client account and unbilled time against it.
 Delete these logins and the organization before going anywhere near real
 books.
 
+### `Database error querying schema`
+
+If sign-in fails with
+
+```json
+{"code":"unexpected_failure","message":"Database error querying schema"}
+```
+
+the password is not the problem and neither is the deployment. GoTrue
+reads `auth.users` into Go structs where the token columns are
+non-nullable strings, so a user whose `confirmation_token`,
+`recovery_token`, `email_change_token_new`, `email_change_token_current`,
+`phone_change_token`, `reauthentication_token`, `email_change` or
+`phone_change` is **NULL** cannot be scanned at all. The API answers 500
+before it ever looks at the password, which is why the message points
+nowhere near the cause. The auth log says it plainly:
+
+```
+error finding user: sql: Scan error on column index 3,
+name "confirmation_token": converting NULL to string is unsupported
+```
+
+It happens to any user inserted with plain SQL rather than created
+through the Auth API, which writes `''`. The demo logins were made that
+way and hit it. The fix is NULL → empty string on those columns, and it
+touches no credentials:
+
+```sql
+update auth.users set
+  confirmation_token         = coalesce(confirmation_token, ''),
+  recovery_token             = coalesce(recovery_token, ''),
+  email_change_token_new     = coalesce(email_change_token_new, ''),
+  email_change_token_current = coalesce(email_change_token_current, ''),
+  phone_change_token         = coalesce(phone_change_token, ''),
+  reauthentication_token     = coalesce(reauthentication_token, ''),
+  email_change               = coalesce(email_change, ''),
+  phone_change               = coalesce(phone_change, '');
+```
+
+Make users through the Auth API where you can. `supabase/tests/_helpers.sql`
+writes the empty strings explicitly, because that is the fixture anyone
+will copy.
+
 ---
 
 ## Not built yet

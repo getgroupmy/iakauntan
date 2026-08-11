@@ -725,9 +725,9 @@
     "semantic_hash": "200dfde266fb67d41983b3a17fa1e187"
   },
   "supabase/tests/_helpers.sql": {
-    "mtime": 1786389395.4224882,
-    "ast_hash": "1cfad580ee13bd39a9ed093495fe3181",
-    "semantic_hash": "1cfad580ee13bd39a9ed093495fe3181"
+    "mtime": 1786460904.7863712,
+    "ast_hash": "270470aa5f531e72148d31ca01a615e9",
+    "semantic_hash": ""
   },
   "supabase/tests/ledger.sql": {
     "mtime": 1786393719.2863894,
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786455662.5010734,
-    "ast_hash": "72abba817ca4c62066552d86331db835",
+    "mtime": 1786460920.8863723,
+    "ast_hash": "1b04dc30cd0baafe476ef5b58d568712",
     "semantic_hash": ""
   },
   "app/README.md": {

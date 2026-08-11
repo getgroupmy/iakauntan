@@ -34,14 +34,29 @@ $$;
 -- signed up yet, and the trigger that enrols an organization's creator as
 -- its owner needs a real row in auth.users, so make one if the database
 -- is empty. Rolled back with everything else.
+--
+-- The empty strings are not decoration. GoTrue reads its token columns
+-- into non-nullable Go strings, so a user inserted with those columns
+-- left NULL cannot sign in at all: the row fails to scan and the API
+-- answers 500 `{"code":"unexpected_failure","message":"Database error
+-- querying schema"}` — before it ever looks at the password, which makes
+-- it read like anything except what it is. Tests never call GoTrue, so
+-- this changes nothing here; it is written down because this is the
+-- pattern anyone will copy when they need to make a real user by hand.
 create or replace function pg_temp.test_user()
 returns uuid language plpgsql as $$
 declare v_id uuid;
 begin
   select id into v_id from auth.users order by created_at limit 1;
   if v_id is null then
-    insert into auth.users (id, email)
-    values (gen_random_uuid(), 'fixture@iakauntan.test')
+    insert into auth.users (
+      id, email,
+      confirmation_token, recovery_token,
+      email_change_token_new, email_change_token_current,
+      phone_change_token, reauthentication_token,
+      email_change, phone_change)
+    values (gen_random_uuid(), 'fixture@iakauntan.test',
+      '', '', '', '', '', '', '', '')
     returning id into v_id;
   end if;
   return v_id;
