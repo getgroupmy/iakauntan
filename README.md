@@ -989,10 +989,13 @@ All five logins share the password `Demo!Akaun2026`:
 
 ### Printing what a customer or an employee receives
 
-Three documents render to PDF and download: the **invoice** (from its
-editor), the **payslip** (from the payslip screen), and any **secretarial
-document** (from the company's Documents tab). All three share one
-letterhead and one embedded typeface, so an invoice and a payslip cannot
+Six things render to PDF and download: the **invoice** (from its
+editor), the **payslip** (from the payslip screen), any **secretarial
+document** (from the company's Documents tab), the four **reports**
+(Profit & Loss, Balance Sheet, Trial Balance, SST Summary — the icon in
+the Reports app bar exports whichever tab you are on), and a customer
+**statement of account** (from the customer's own screen). They share one
+letterhead and one embedded typeface, so an invoice and a report cannot
 disagree about the company's own address.
 
 **The letterhead carries the company logo**, uploaded under Settings →
@@ -1034,6 +1037,30 @@ practice resolved something. When the letterhead is used, the identity
 block is followed by **"Prepared by …"** and a rule, and the document
 proper starts below the line still announcing its own company in its own
 first words.
+
+**A report and a statement carry the letterhead too**, for the same
+reason an invoice does: once the PDF leaves the app nothing else says
+whose numbers these are, and a balance sheet with no name on it is not
+evidence of anything. Both honour the printed-stationery setting.
+
+Two structural decisions there are worth knowing about:
+
+- **The screen and the PDF render the same spec.** `report_spec.dart`
+  turns the rows the database returns into sections, grids and
+  highlights; `reports_screen.dart` draws that on screen and
+  `report_pdf.dart` draws it on a page. Neither computes a figure of its
+  own. A printed profit and loss that disagrees with the one on screen is
+  worse than having no PDF at all, and the way that happens is two copies
+  of the same filter drifting apart — so there is only one copy, and the
+  arithmetic is tested without a widget tree.
+- **The statement is an open-item statement and says so.** It lists what
+  is still unpaid as at a date, with an ageing summary; it is not a
+  transaction history and carries no balance brought forward. A customer
+  reconciling against their own ledger needs to know which of the two
+  they are holding. The bands are inclusive at the top — 30 days overdue
+  is in *1–30*, not *31–60* — because that is what the customer's own
+  aged listing will assume, and a document with no due date is counted as
+  not yet due rather than as maximally overdue.
 
 Two things the layouts get right on purpose:
 

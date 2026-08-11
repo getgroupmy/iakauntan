@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/download.dart';
+import '../../core/format.dart';
+import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'statement_pdf.dart';
 
 class ContactEditor extends ConsumerStatefulWidget {
   const ContactEditor({super.key, this.contactId, this.contactType = 'customer'});
@@ -21,6 +25,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
   final _controllers = <String, TextEditingController>{};
 
   String _contactType = 'customer';
+  bool _statementBusy = false;
   String _entityType = 'sdn_bhd';
   String _idType = 'BRN';
   String? _stateCode;
@@ -100,6 +105,52 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Could not load contact: $e')));
       }
+    }
+  }
+
+  /// A statement of what this customer still owes.
+  ///
+  /// Reloaded from the database rather than taken from the form, for the
+  /// same reason the invoice PDF is: an unsaved edit in a text field is
+  /// not yet part of the record, and a statement is a document that goes
+  /// out to somebody else.
+  Future<void> _downloadStatement() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final repo = ref.read(repoProvider);
+    final org = ref.read(currentOrgProvider).valueOrNull;
+    if (repo == null || org == null || widget.contactId == null) return;
+
+    setState(() => _statementBusy = true);
+    try {
+      final contact = await repo.contact(widget.contactId!);
+      final documents = await repo.outstandingFor(
+          kind: DocKind.sales, contactId: widget.contactId!);
+      final asAt = DateTime.now();
+
+      final bytes = await buildStatementPdf(
+        org: org,
+        contact: contact,
+        documents: documents,
+        asAt: asAt,
+        logo: await ref.read(orgLogoProvider.future),
+        mode: org.usesPreprintedLetterhead
+            ? LetterheadMode.stationery
+            : LetterheadMode.printed,
+      );
+
+      final stem =
+          contact.code.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
+      final saved = await saveBytesFile(
+          'statement-$stem-${Fmt.iso(asAt)}.pdf', 'application/pdf', bytes);
+      messenger.showSnackBar(SnackBar(
+        content: Text(saved
+            ? 'Downloaded'
+            : 'PDF download is only available in the browser'),
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _statementBusy = false);
     }
   }
 
@@ -197,6 +248,15 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
       appBar: AppBar(
         title: Text(widget.contactId == null ? 'New contact' : 'Edit contact'),
         actions: [
+          // Only for a saved customer: a statement is a list of what
+          // somebody owes, and a contact that does not exist yet cannot
+          // owe anything.
+          if (widget.contactId != null && _contactType != 'supplier')
+            IconButton(
+              tooltip: 'Statement of account',
+              icon: const Icon(Icons.request_quote_outlined, size: 20),
+              onPressed: _statementBusy ? null : _downloadStatement,
+            ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton(
