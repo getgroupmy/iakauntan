@@ -10,6 +10,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/corp_models.dart';
 import '../../data/corp_repository.dart';
+import '../shared/attachments_card.dart';
 
 /// One company's file: the statutory registers the Companies Act 2016
 /// requires a secretary to keep, and the documents drawn from them.
@@ -740,7 +741,10 @@ class _Documents extends ConsumerWidget {
     return SingleChildScrollView(
       child: PageBody(
         maxWidth: 900,
-        child: Card(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+        Card(
           child: Padding(
             padding: const EdgeInsets.all(Space.lg),
             child: Column(
@@ -775,6 +779,20 @@ class _Documents extends ConsumerWidget {
               ],
             ),
           ),
+        ),
+        const SizedBox(height: Space.lg),
+        // The signed hard copy, the stamped instrument, the certificate
+        // that came back from the Registrar — the paper that goes with
+        // the generated text.
+        AttachmentsCard(
+          table: 'corp_entities',
+          recordId: entityId,
+          title: 'Filed papers',
+          subtitle: 'Signed copies, stamped instruments and anything '
+              'returned by the Registrar',
+        ),
+        const SizedBox(height: Space.xxl),
+          ],
         ),
       ),
     );
@@ -948,6 +966,333 @@ class _FillGapsState extends State<_FillGaps> {
   }
 }
 
+/// The document, and who has signed it.
+///
+/// The signatures are recomputed against the text as it stands now, so a
+/// document edited after signature says so on its face rather than
+/// carrying a tick that stopped meaning anything.
+class _DocumentDialog extends ConsumerWidget {
+  const _DocumentDialog({required this.document});
+
+  final CorpDocument document;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final signatures = ref.watch(corpSignaturesProvider(document.id));
+    final canWrite = ref.watch(canWriteProvider);
+
+    return AlertDialog(
+      title: Text(document.title),
+      content: SizedBox(
+        width: 680,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SelectableText(document.body),
+              const Divider(height: Space.xxl),
+              _SignatureBlock(
+                documentId: document.id,
+                entityId: document.entityId,
+                signatures: signatures,
+                canWrite: canWrite,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+}
+
+class _SignatureBlock extends ConsumerWidget {
+  const _SignatureBlock({
+    required this.documentId,
+    required this.entityId,
+    required this.signatures,
+    required this.canWrite,
+  });
+
+  final String documentId;
+  final String entityId;
+  final AsyncValue<List<CorpSignature>> signatures;
+  final bool canWrite;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final muted = Theme.of(context)
+        .textTheme
+        .bodySmall
+        ?.copyWith(color: context.scheme.onSurfaceVariant);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionHeader(
+          'Signatures',
+          subtitle: 'An electronic signature under the Electronic Commerce '
+              'Act 2006 — a recorded act of signing. Not a digital '
+              'signature under the Digital Signature Act 1997, which needs '
+              'a certificate from a licensed authority.',
+          action: canWrite
+              ? TextButton.icon(
+                  onPressed: () => _request(context, ref),
+                  icon: const Icon(Icons.draw_outlined, size: 18),
+                  label: const Text('Circulate'),
+                )
+              : null,
+        ),
+        AsyncView(
+          value: signatures,
+          onRetry: () => ref.invalidate(corpSignaturesProvider(documentId)),
+          loading: const LinearProgressIndicator(),
+          builder: (list) => list.isEmpty
+              ? Text('Not circulated for signature.', style: muted)
+              : Column(children: [
+                  for (final s in list) _SignatureRow(
+                    signature: s,
+                    documentId: documentId,
+                    canWrite: canWrite,
+                  ),
+                ]),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _request(BuildContext context, WidgetRef ref) async {
+    final officers = await ref.read(corpOfficersProvider(entityId).future);
+    if (!context.mounted) return;
+    final current = officers.where((o) => o.isCurrent).toList();
+    if (current.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Nobody on the register to sign'),
+      ));
+      return;
+    }
+
+    final chosen = await showDialog<List<CorpOfficer>>(
+      context: context,
+      builder: (_) => _SignatoryPicker(officers: current),
+    );
+    if (chosen == null || chosen.isEmpty || !context.mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.corpRequestSignatures(
+            documentId,
+            [for (final o in chosen) o.personId],
+            capacities: [for (final o in chosen) Fmt.label(o.role)],
+          ),
+      successMessage: 'Circulated for signature',
+    );
+    ref.invalidate(corpSignaturesProvider(documentId));
+  }
+}
+
+class _SignatureRow extends ConsumerWidget {
+  const _SignatureRow({
+    required this.signature,
+    required this.documentId,
+    required this.canWrite,
+  });
+
+  final CorpSignature signature;
+  final String documentId;
+  final bool canWrite;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final muted = Theme.of(context)
+        .textTheme
+        .bodySmall
+        ?.copyWith(color: context.scheme.onSurfaceVariant);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Space.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Flexible(
+                    child: Text(signature.personName,
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                  const SizedBox(width: Space.sm),
+                  StatusChip(signature.status, compact: true),
+                ]),
+                if (signature.capacity != null)
+                  Text(signature.capacity!, style: muted),
+                if (signature.isSigned)
+                  Text(
+                    'Signed "${signature.signedName}" on '
+                    '${Fmt.dateTime(signature.signedAt)}',
+                    style: muted,
+                  ),
+                // The whole point of hashing the body: a signature that
+                // no longer vouches for what is on screen says so.
+                if (signature.isStale)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'The document has been edited since this was signed — '
+                      'the signature no longer covers this text',
+                      style: muted?.copyWith(color: context.colors.danger),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (canWrite && signature.isPending)
+            TextButton(
+              onPressed: () => _sign(context, ref),
+              child: const Text('Sign'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _sign(BuildContext context, WidgetRef ref) async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => _SignDialog(who: signature.personName),
+    );
+    if (name == null || !context.mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () =>
+          ref.read(repoProvider)!.corpSignDocument(signature.id, name),
+      successMessage: 'Signed',
+    );
+    ref.invalidate(corpSignaturesProvider(documentId));
+  }
+}
+
+class _SignatoryPicker extends StatefulWidget {
+  const _SignatoryPicker({required this.officers});
+
+  final List<CorpOfficer> officers;
+
+  @override
+  State<_SignatoryPicker> createState() => _SignatoryPickerState();
+}
+
+class _SignatoryPickerState extends State<_SignatoryPicker> {
+  final _chosen = <String>{};
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Who signs?'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final o in widget.officers)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  value: _chosen.contains(o.id),
+                  title: Text(o.name),
+                  subtitle: Text(Fmt.label(o.role)),
+                  onChanged: (on) => setState(() =>
+                      on == true ? _chosen.add(o.id) : _chosen.remove(o.id)),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _chosen.isEmpty
+              ? null
+              : () => Navigator.pop(context,
+                  widget.officers.where((o) => _chosen.contains(o.id)).toList()),
+          child: const Text('Circulate'),
+        ),
+      ],
+    );
+  }
+}
+
+class _SignDialog extends StatefulWidget {
+  const _SignDialog({required this.who});
+
+  final String who;
+
+  @override
+  State<_SignDialog> createState() => _SignDialogState();
+}
+
+class _SignDialogState extends State<_SignDialog> {
+  late final _c = TextEditingController(text: widget.who);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Sign'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Typing your name below records that you signed this document '
+              'as it stands. The text is fingerprinted at that moment, so a '
+              'later edit is detectable.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: context.scheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: Space.md),
+            TextField(
+              controller: _c,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Full name'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _c.text.trim()),
+          child: const Text('Sign'),
+        ),
+      ],
+    );
+  }
+}
+
 class _DocumentRow extends StatelessWidget {
   const _DocumentRow({required this.document});
 
@@ -969,24 +1314,10 @@ class _DocumentRow extends StatelessWidget {
         ),
         IconButton(
           icon: const Icon(Icons.visibility_outlined, size: 18),
-          tooltip: 'Read',
+          tooltip: 'Read and sign',
           onPressed: () => showDialog<void>(
             context: context,
-            builder: (_) => AlertDialog(
-              title: Text(document.title),
-              content: SizedBox(
-                width: 640,
-                child: SingleChildScrollView(
-                  child: SelectableText(document.body),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Close'),
-                ),
-              ],
-            ),
+            builder: (_) => _DocumentDialog(document: document),
           ),
         ),
       ]),

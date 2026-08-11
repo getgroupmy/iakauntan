@@ -219,6 +219,141 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- Signatures
+--
+-- Not a digital signature under the DSA 1997 — an electronic one under
+-- the ECA 2006. What makes it worth anything is that the text is
+-- fingerprinted when signing opens and again as each person signs.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_e uuid; v_a uuid; v_b uuid; v_doc uuid; v_req uuid;
+  v_sig_a uuid; v_sig_b uuid;
+begin
+  v_org := pg_temp.sec_org();
+
+  insert into public.corp_entities (org_id, name, registration_no, entity_type,
+    incorporated_on, financial_year_end_day, financial_year_end_month,
+    registered_office)
+  values (v_org, 'Tandatangan Sdn Bhd', '202401011111', 'sdn_bhd',
+          date '2024-03-12', 31, 12, 'Level 8, Menara ABC, KL')
+  returning id into v_e;
+  insert into public.corp_persons (org_id, kind, full_name, nric)
+  values (v_org, 'individual', 'Director One', '900101011111') returning id into v_a;
+  insert into public.corp_persons (org_id, kind, full_name, nric)
+  values (v_org, 'individual', 'Director Two', '900202022222') returning id into v_b;
+  insert into public.corp_officers (org_id, entity_id, person_id, role, appointed_on)
+  values (v_org, v_e, v_a, 'director', date '2024-03-12'),
+         (v_org, v_e, v_b, 'director', date '2024-03-12');
+
+  v_doc := public.corp_generate_document(v_e, 'sec_particulars');
+  v_req := public.corp_request_signatures(v_doc, array[v_a, v_b],
+             array['Director', 'Director'], current_date + 7, null);
+
+  select id into v_sig_a from public.corp_signatures
+   where request_id = v_req and person_id = v_a;
+  select id into v_sig_b from public.corp_signatures
+   where request_id = v_req and person_id = v_b;
+
+  perform public.corp_sign_document(v_sig_a, 'Director One');
+  perform pg_temp.check_true('a signature vouches for the text it was given',
+    (select s.document_unchanged
+       from public.corp_signature_state(v_doc) s
+      where s.signature_id = v_sig_a));
+
+  begin
+    perform public.corp_sign_document(v_sig_a, 'Director One');
+    raise exception 'FAIL: the same line was signed twice';
+  exception when sqlstate '22023' then
+    raise notice 'ok   a line cannot be signed twice';
+  end;
+
+  begin
+    perform public.corp_sign_document(v_sig_b, '   ');
+    raise exception 'FAIL: an empty name was accepted as a signature';
+  exception when sqlstate '22023' then
+    raise notice 'ok   an empty name is not a signature';
+  end;
+
+  -- Now edit the document underneath the signature that was taken.
+  update public.corp_documents set body = body || E'\n\nAnd one more thing.'
+   where id = v_doc;
+
+  perform pg_temp.check_true(
+    'once the text changes, the signature stops vouching for it',
+    (select s.document_unchanged = false
+       from public.corp_signature_state(v_doc) s
+      where s.signature_id = v_sig_a));
+
+  begin
+    perform public.corp_sign_document(v_sig_b, 'Director Two');
+    raise exception 'FAIL: signed a document that had changed since circulation';
+  exception when sqlstate '23514' then
+    raise notice 'ok   nobody can sign a text that changed since it was circulated';
+  end;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Attachments inherit what they hang off
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_clerk uuid; v_emp_user uuid; v_emp uuid; v_other uuid;
+begin
+  v_org := pg_temp.sec_org();
+
+  insert into auth.users (id, email)
+  values (gen_random_uuid(), 'clerk-' || gen_random_uuid() || '@iakauntan.test')
+  returning id into v_clerk;
+  insert into auth.users (id, email)
+  values (gen_random_uuid(), 'emp-' || gen_random_uuid() || '@iakauntan.test')
+  returning id into v_emp_user;
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_clerk, 'accounts_clerk', 'active'),
+         (v_org, v_emp_user, 'employee', 'active');
+
+  insert into public.employees (org_id, employee_no, full_name, hire_date,
+    basic_salary, residency_status, user_id)
+  values (v_org, 'A1', 'Self Service', date '2024-01-01', 5000, 'citizen',
+          v_emp_user) returning id into v_emp;
+  insert into public.employees (org_id, employee_no, full_name, hire_date,
+    basic_salary, residency_status)
+  values (v_org, 'A2', 'Somebody Else', date '2024-01-01', 5000, 'citizen')
+  returning id into v_other;
+
+  perform pg_temp.sign_in_as(v_emp_user);
+  perform pg_temp.check_true('an employee sees their own attachments',
+    app.can_read_attachment(v_org, 'employees', v_emp));
+  perform pg_temp.check_true('and not a colleague''s',
+    not app.can_read_attachment(v_org, 'employees', v_other));
+
+  perform pg_temp.sign_in_as(v_clerk);
+  perform pg_temp.check_true('a clerk reads a bill attachment',
+    app.can_read_attachment(v_org, 'purchase_documents', gen_random_uuid()));
+  perform pg_temp.check_true('but not a personnel one',
+    not app.can_read_attachment(v_org, 'employees', v_other));
+
+  perform pg_temp.sign_out();
+  perform pg_temp.check_true('and a non-member reads nothing',
+    not app.can_read_attachment(v_org, 'purchase_documents', gen_random_uuid()));
+
+  -- A malformed path denies rather than raising, so a bad upload is a
+  -- refusal and not a 500.
+  perform pg_temp.check_true('a malformed path is null, not an error',
+    app.uuid_or_null('not-a-uuid') is null);
+
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  begin
+    insert into public.attachments
+      (org_id, entity_table, entity_id, file_name, storage_path)
+    values (v_org, 'employees', v_emp, 'x.pdf', 'somewhere/else.pdf');
+    raise exception 'FAIL: an attachment path that lied about itself was accepted';
+  exception when sqlstate '22023' then
+    raise notice 'ok   the path must agree with the row';
+  end;
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Access
 -- ---------------------------------------------------------------------
 do $$

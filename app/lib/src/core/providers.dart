@@ -570,6 +570,11 @@ final corpTemplatesProvider = FutureProvider<List<CorpTemplate>>((ref) {
   return requireRepo(ref).corpTemplates();
 });
 
+final corpSignaturesProvider =
+    FutureProvider.autoDispose.family<List<CorpSignature>, String>((ref, id) {
+  return requireRepo(ref).corpSignatures(id);
+});
+
 final corpPersonsProvider = FutureProvider.autoDispose<List<CorpPerson>>((ref) {
   return requireRepo(ref).corpPersons();
 });

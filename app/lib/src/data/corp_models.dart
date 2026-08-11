@@ -539,6 +539,7 @@ class CorpPlaceholder {
 class CorpDocument {
   CorpDocument({
     required this.id,
+    required this.entityId,
     required this.title,
     required this.body,
     required this.generatedAt,
@@ -546,6 +547,7 @@ class CorpDocument {
   });
 
   final String id;
+  final String entityId;
   final String title;
   final String body;
   final DateTime generatedAt;
@@ -553,9 +555,58 @@ class CorpDocument {
 
   factory CorpDocument.fromJson(Map<String, dynamic> j) => CorpDocument(
         id: j['id'] as String,
+        entityId: j['entity_id'] as String,
         title: j['title']?.toString() ?? '',
         body: j['body']?.toString() ?? '',
         generatedAt: Fmt.parseDate(j['generated_at']) ?? DateTime.now(),
         templateCode: j['template_code']?.toString(),
+      );
+}
+
+/// One person's line on a signature request.
+///
+/// This is an electronic signature under the Electronic Commerce Act
+/// 2006 — a recorded act of signing, attributable to a person — and not
+/// a digital signature under the Digital Signature Act 1997, which needs
+/// a certificate from a licensed certification authority.
+///
+/// [documentUnchanged] is recomputed on every read by hashing the
+/// document as it stands now against the hash taken when the person
+/// signed. A stored "verified" flag would be a claim about the past that
+/// nothing keeps true.
+class CorpSignature {
+  CorpSignature({
+    required this.id,
+    required this.personName,
+    required this.status,
+    this.capacity,
+    this.signedAt,
+    this.signedName,
+    this.documentUnchanged,
+  });
+
+  final String id;
+  final String personName;
+  final String status;
+  final String? capacity;
+  final DateTime? signedAt;
+  final String? signedName;
+  final bool? documentUnchanged;
+
+  bool get isPending => status == 'pending';
+  bool get isSigned => status == 'signed';
+
+  /// Signed, but the text has moved since. The signature no longer
+  /// vouches for what is on screen.
+  bool get isStale => isSigned && documentUnchanged == false;
+
+  factory CorpSignature.fromJson(Map<String, dynamic> j) => CorpSignature(
+        id: j['signature_id'] as String,
+        personName: j['person_name']?.toString() ?? '',
+        status: j['status']?.toString() ?? 'pending',
+        capacity: j['capacity']?.toString(),
+        signedAt: Fmt.parseDate(j['signed_at']),
+        signedName: j['signed_name']?.toString(),
+        documentUnchanged: j['document_unchanged'] as bool?,
       );
 }

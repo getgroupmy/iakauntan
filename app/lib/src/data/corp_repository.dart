@@ -213,3 +213,34 @@ extension RepoCorp on Repo {
           .map(CorpDocument.fromJson)
           .toList();
 }
+
+/// Collecting signatures on a generated document.
+extension RepoCorpSignatures on Repo {
+  Future<List<CorpSignature>> corpSignatures(String documentId) async {
+    final rows = await client
+        .rpc('corp_signature_state', params: {'p_document_id': documentId});
+    return Repo.rows(rows).map(CorpSignature.fromJson).toList();
+  }
+
+  Future<void> corpRequestSignatures(
+    String documentId,
+    List<String> personIds, {
+    List<String>? capacities,
+    DateTime? dueOn,
+    String? note,
+  }) =>
+      client.rpc('corp_request_signatures', params: {
+        'p_document_id': documentId,
+        'p_person_ids': personIds,
+        'p_capacities': capacities,
+        'p_due_on': dueOn == null ? null : Fmt.iso(dueOn),
+        'p_note': note,
+      });
+
+  /// The database records the time, the hash and the caller. Nothing
+  /// about the evidence comes from here, because a signature record the
+  /// signer can write is not evidence of anything.
+  Future<void> corpSignDocument(String signatureId, String signedName) =>
+      client.rpc('corp_sign_document',
+          params: {'p_signature_id': signatureId, 'p_signed_name': signedName});
+}

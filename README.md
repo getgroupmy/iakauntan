@@ -288,15 +288,56 @@ rather than after. Nothing is silently blanked: an unfilled placeholder
 would stay visible as `{{director_name}}`, which is why the gaps are
 collected up front instead.
 
+### Signatures
+
+A generated document can be circulated for signature. This is an
+**electronic signature under the Electronic Commerce Act 2006** — a
+recorded act of signing, attributable to a person — and **not a digital
+signature under the Digital Signature Act 1997**, which requires a
+certificate from a licensed certification authority. The screen says so
+rather than letting anyone assume otherwise.
+
+What makes it worth anything is the hash. The document body is
+fingerprinted with SHA-256 when signing opens, and again as each person
+signs. So:
+
+- Signing a text that has changed since it was circulated is **refused**.
+- A signature taken before an edit is shown as no longer covering the
+  text on screen, in red, rather than carrying a tick that quietly
+  stopped meaning anything.
+
+The time, the hash, the caller and the request headers are written by the
+database at the moment of signing — none of it comes from the client,
+because a signature record the signer can write is not evidence of
+anything.
+
+### Attachments
+
+Files are filed against a record at `<org>/<table>/<record>/<file>`, and
+that path is not decoration: the storage policies read the organization,
+the table and the record straight out of the object name, and a trigger
+refuses any row whose path disagrees with its own columns.
+
+**An attachment inherits the sensitivity of what it hangs off.** Both the
+table and the bucket previously let any member of the organization read
+any file, which was harmless only while nothing could upload — a scan of
+a payslip or a passport would otherwise have been readable by every
+signed-in colleague, undoing the payslip access rules by the simple
+expedient of attaching a photograph. Now an accounts clerk reads a bill
+attachment and not a personnel one, and an employee reads their own and
+nobody else's. Links are signed and expire in ten minutes; the bucket is
+private, so there is no URL to leak.
+
 ### Not built
 
 - **Direct SSM lodgement.** SSM publishes no general API for filing;
   MBRS submission goes through their own tool in XBRL. The module tracks
   what is due and produces the paperwork — a human still lodges it.
-- **Digital signatures** and a **client portal** for owners to upload
-  identity documents and sign resolutions. Both are Phase 2 in the brief
-  and neither is written.
-- Attachments of any kind — the same Storage gap as the rest of the app.
+- **A client portal** for owners to sign in, upload identity documents
+  and approve resolutions themselves. It needs a decision this codebase
+  should not make on its own: whether client contacts get real logins (a
+  different audience from `org_members`) or reach the app through
+  expiring per-document links.
 
 ---
 

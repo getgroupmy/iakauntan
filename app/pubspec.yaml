@@ -29,6 +29,10 @@ dependencies:
   # Only reached from the web build, behind a conditional import, so the
   # payment file can be handed to the browser as a download.
   web: ^1.1.0
+  # Picking a file to attach. Works on web and mobile from one call,
+  # which is why it beats hand-rolling an <input type=file>.
+  file_selector: ^1.0.3
+  crypto: ^3.0.6
 
 dev_dependencies:
   flutter_test:
