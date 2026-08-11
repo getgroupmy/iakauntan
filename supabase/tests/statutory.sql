@@ -260,14 +260,27 @@ begin
       select 1 from pg_policies
        where tablename = 'payslip_access_requests' and cmd <> 'SELECT'));
 
-  perform pg_temp.check_true('no SECURITY DEFINER function is left to anon',
+  -- Two functions are deliberately open to an unauthenticated caller:
+  -- the signing link, which exists precisely so a director with no
+  -- account can sign one resolution. Everything else being closed is the
+  -- assertion — an allowlist rather than deleting the check, so a third
+  -- one appearing is caught.
+  perform pg_temp.check_true('nothing new is exposed to anon',
     not exists (
       select 1
         from pg_proc p
         join pg_namespace n on n.oid = p.pronamespace
        where n.nspname in ('public', 'app')
          and p.prosecdef
-         and has_function_privilege('anon', p.oid, 'execute')));
+         and has_function_privilege('anon', p.oid, 'execute')
+         and p.proname not in ('corp_open_signing_link', 'corp_sign_with_link')));
+
+  perform pg_temp.check_true('and the link tables stay shut to anon',
+    not exists (
+      select 1 from information_schema.role_table_grants
+       where grantee = 'anon'
+         and table_name in ('corp_signing_links', 'corp_signatures',
+                            'corp_signature_requests', 'corp_documents')));
 
   -- The whole permission layer hangs off this one predicate, and the
   -- twenty-six guards written as `if not app.can_x(...) then raise` only

@@ -244,3 +244,17 @@ extension RepoCorpSignatures on Repo {
       client.rpc('corp_sign_document',
           params: {'p_signature_id': signatureId, 'p_signed_name': signedName});
 }
+
+/// Signing links: a credential for somebody who has no account.
+extension RepoCorpSigningLinks on Repo {
+  /// Returns the raw token exactly once. The database stores only a
+  /// hash, so this is the only moment the link can be produced — after
+  /// this it can be recognised but never reconstructed.
+  Future<String> corpCreateSigningLink(String signatureId,
+          {int validDays = 14, String? email}) async =>
+      await client.rpc('corp_create_signing_link', params: {
+        'p_signature_id': signatureId,
+        'p_valid_days': validDays,
+        'p_email': email,
+      }) as String;
+}

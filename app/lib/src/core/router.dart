@@ -19,6 +19,7 @@ import '../features/onboarding/create_org_screen.dart';
 import '../features/ledger/journals_screen.dart';
 import '../features/reports/reports_screen.dart';
 import '../features/secretarial/entity_editor.dart';
+import '../features/secretarial/signing_page.dart';
 import '../features/secretarial/entity_screen.dart';
 import '../features/secretarial/secretarial_screen.dart';
 import '../features/settings/settings_screen.dart';
@@ -47,6 +48,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       final signedIn = ref.read(currentUserProvider) != null;
       final path = state.matchedLocation;
 
+      // The signing page is the one route that works with no account at
+      // all: a director will not sign up to an accounting system to sign
+      // one resolution. It authorises itself against the token.
+      if (path.startsWith('/sign/')) return null;
+
       if (!signedIn) return path == '/signin' ? null : '/signin';
       if (path == '/signin') return '/';
 
@@ -69,6 +75,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/onboarding',
         builder: (_, __) => const CreateOrgScreen(),
+      ),
+      // Outside the shell as well as outside auth: no navigation rail,
+      // no company switcher, nothing but the document being signed.
+      GoRoute(
+        path: '/sign/:token',
+        builder: (_, state) =>
+            SigningPage(token: state.pathParameters['token']!),
       ),
       ShellRoute(
         navigatorKey: _shellKey,

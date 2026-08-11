@@ -294,6 +294,172 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- Signing links
+--
+-- The only part of the database a stranger can reach. Everything here is
+-- asserted from the anon role rather than as the owner, because the
+-- question is not "does the SQL work" but "what can somebody with a URL
+-- and no account actually do".
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_e uuid; v_a uuid; v_b uuid; v_doc uuid; v_req uuid;
+  v_sig_a uuid; v_sig_b uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_first text; v_live text; v_late text; v_stale text;
+  v_state text; v_body text; v_who text;
+begin
+  v_org := pg_temp.sec_org();
+
+  insert into public.corp_entities (org_id, name, registration_no, entity_type,
+    incorporated_on, financial_year_end_day, financial_year_end_month,
+    registered_office)
+  values (v_org, 'Pautan Sdn Bhd', '202401012222', 'sdn_bhd',
+          date '2024-05-20', 31, 12, 'Level 9, Menara XYZ, KL')
+  returning id into v_e;
+  insert into public.corp_persons (org_id, kind, full_name, nric)
+  values (v_org, 'individual', 'Director One', '900303033333') returning id into v_a;
+  insert into public.corp_persons (org_id, kind, full_name, nric)
+  values (v_org, 'individual', 'Director Two', '900404044444') returning id into v_b;
+  insert into public.corp_officers (org_id, entity_id, person_id, role, appointed_on)
+  values (v_org, v_e, v_a, 'director', date '2024-05-20'),
+         (v_org, v_e, v_b, 'director', date '2024-05-20');
+
+  v_doc := public.corp_generate_document(v_e, 'sec_particulars');
+  v_req := public.corp_request_signatures(v_doc, array[v_a, v_b],
+             array['Director', 'Director'], current_date + 7, null);
+  select id into v_sig_a from public.corp_signatures
+   where request_id = v_req and person_id = v_a;
+  select id into v_sig_b from public.corp_signatures
+   where request_id = v_req and person_id = v_b;
+
+  v_first := public.corp_create_signing_link(v_sig_a, 14, 'one@example.test');
+
+  perform pg_temp.check_true('a token carries 256 bits of randomness',
+    length(v_first) = 64);
+  perform pg_temp.check_true('the token itself is never stored',
+    not exists (select 1 from public.corp_signing_links
+                 where token_hash = v_first));
+  perform pg_temp.check_true('only its hash is',
+    exists (select 1 from public.corp_signing_links
+             where token_hash = app.corp_token_hash(v_first)));
+
+  -- Issuing a replacement has to kill the one already in somebody's
+  -- inbox, or "I sent a new link" would mean two working links.
+  v_live := public.corp_create_signing_link(v_sig_a, 14, 'one@example.test');
+  perform pg_temp.check_true('issuing a new link retires the old one',
+    (select revoked_at is not null from public.corp_signing_links
+      where token_hash = app.corp_token_hash(v_first)));
+
+  -- A link for the second director that will be aged out, and one that
+  -- will be left behind by an edit.
+  v_late := public.corp_create_signing_link(v_sig_b, 14, null);
+  update public.corp_signing_links set expires_at = now() - interval '1 day'
+   where token_hash = app.corp_token_hash(v_late);
+
+  -- ---- from here on, nobody is signed in and the role is anon --------
+  perform pg_temp.sign_out();
+  execute 'set local role anon';
+
+  begin
+    perform 1 from public.corp_signing_links;
+    raise exception 'FAIL: anon read the signing link table';
+  exception when insufficient_privilege then
+    raise notice 'ok   the link table itself is shut to anon';
+  end;
+
+  select l.state, l.document_body into v_state, v_body
+    from public.corp_open_signing_link(v_first) l;
+  perform pg_temp.check_true('a retired link says it was withdrawn',
+    v_state = 'revoked');
+  perform pg_temp.check_true('and withholds the text', v_body is null);
+
+  select l.state, l.document_body into v_state, v_body
+    from public.corp_open_signing_link(v_late) l;
+  perform pg_temp.check_true('an aged link says expired rather than invalid',
+    v_state = 'expired');
+  perform pg_temp.check_true('and withholds the text too', v_body is null);
+
+  select l.state, l.document_body, l.signatory_name into v_state, v_body, v_who
+    from public.corp_open_signing_link(gen_random_uuid()::text) l;
+  perform pg_temp.check_true('a token nobody issued is simply invalid',
+    v_state = 'invalid');
+  perform pg_temp.check_true('and tells a guesser nothing at all',
+    v_body is null and v_who is null);
+
+  select l.state, l.document_body, l.signatory_name into v_state, v_body, v_who
+    from public.corp_open_signing_link(v_live) l;
+  perform pg_temp.check_true('the live link opens', v_state = 'open');
+  perform pg_temp.check_true('hands over the text to be signed',
+    v_body is not null);
+  perform pg_temp.check_true('and names the person it was meant for',
+    v_who = 'Director One');
+
+  begin
+    perform public.corp_sign_with_link(v_late, 'Director Two');
+    raise exception 'FAIL: an expired link still signed';
+  exception when sqlstate '22023' then
+    raise notice 'ok   an expired link cannot sign';
+  end;
+
+  perform public.corp_sign_with_link(v_live, 'Director One');
+
+  begin
+    perform public.corp_sign_with_link(v_live, 'Director One');
+    raise exception 'FAIL: a link signed twice';
+  exception when sqlstate '22023' then
+    raise notice 'ok   a link signs once and is then spent';
+  end;
+
+  select l.state into v_state from public.corp_open_signing_link(v_live) l;
+  perform pg_temp.check_true('and reopening it says used', v_state = 'used');
+
+  execute 'reset role';
+  perform pg_temp.sign_in_as(v_owner);
+
+  perform pg_temp.check_true('the signature stands as an ordinary signature',
+    (select s.document_unchanged
+       from public.corp_signature_state(v_doc) s
+      where s.signature_id = v_sig_a));
+  perform pg_temp.check_true(
+    'but signed_by stays null: nobody was signed in',
+    (select signed_by is null and signed_name = 'Director One'
+       and ip_address is not distinct from null
+       from public.corp_signatures where id = v_sig_a));
+
+  -- Now move the text underneath a link that is already out.
+  v_stale := public.corp_create_signing_link(v_sig_b, 14, null);
+  update public.corp_documents set body = body || E'\n\nAdded after the fact.'
+   where id = v_doc;
+
+  perform pg_temp.sign_out();
+  execute 'set local role anon';
+
+  select l.state, l.document_body into v_state, v_body
+    from public.corp_open_signing_link(v_stale) l;
+  perform pg_temp.check_true('a link outlived by an edit says so',
+    v_state = 'changed');
+  perform pg_temp.check_true('and will not show the text it no longer covers',
+    v_body is null);
+
+  begin
+    perform public.corp_sign_with_link(v_stale, 'Director Two');
+    raise exception 'FAIL: signed a document that had changed since the link went out';
+  exception when sqlstate '23514' then
+    raise notice 'ok   a changed document cannot be signed by link either';
+  end;
+
+  execute 'reset role';
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- The secretary can see the link was opened; that is the only evidence
+  -- there is that it reached anybody.
+  perform pg_temp.check_true('opening a link is recorded',
+    (select opened_at is not null from public.corp_signing_links
+      where token_hash = app.corp_token_hash(v_live)));
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Attachments inherit what they hang off
 -- ---------------------------------------------------------------------
 do $$

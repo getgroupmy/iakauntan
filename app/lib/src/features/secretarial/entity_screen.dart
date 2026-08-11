@@ -1153,11 +1153,20 @@ class _SignatureRow extends ConsumerWidget {
               ],
             ),
           ),
-          if (canWrite && signature.isPending)
+          if (canWrite && signature.isPending) ...[
+            // For somebody who will sign at this desk.
             TextButton(
               onPressed: () => _sign(context, ref),
               child: const Text('Sign'),
             ),
+            // And for somebody who will not: a director does not sign up
+            // to an accounting system to sign one resolution.
+            IconButton(
+              icon: const Icon(Icons.link, size: 18),
+              tooltip: 'Send a signing link',
+              onPressed: () => _link(context, ref),
+            ),
+          ],
         ],
       ),
     );
@@ -1177,6 +1186,89 @@ class _SignatureRow extends ConsumerWidget {
       successMessage: 'Signed',
     );
     ref.invalidate(corpSignaturesProvider(documentId));
+  }
+
+  Future<void> _link(BuildContext context, WidgetRef ref) async {
+    String? token;
+    final ok = await runWithFeedback(
+      context,
+      action: () async {
+        token = await ref
+            .read(repoProvider)!
+            .corpCreateSigningLink(signature.id, validDays: 14);
+      },
+      successMessage: 'Link created',
+    );
+    if (!ok || token == null || !context.mounted) return;
+
+    final url = '${Uri.base.origin}/#/sign/$token';
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _LinkDialog(url: url, who: signature.personName),
+    );
+    ref.invalidate(corpSignaturesProvider(documentId));
+  }
+}
+
+/// The one moment the link exists in readable form.
+class _LinkDialog extends StatelessWidget {
+  const _LinkDialog({required this.url, required this.who});
+
+  final String url;
+  final String who;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Signing link for $who'),
+      content: SizedBox(
+        width: 520,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Copy it now. The database keeps only a fingerprint, so this '
+              'is the only time it can be shown. It signs one document '
+              'once, expires in fourteen days, and issuing another link '
+              'for the same signature retires this one.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: context.scheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: Space.md),
+            SelectableText(
+              url,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+            ),
+            const SizedBox(height: Space.md),
+            Text(
+              'Anyone holding this link can sign as $who, so send it the way '
+              'you would send anything else that carries their authority.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: context.colors.warning),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        FilledButton.icon(
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: url));
+            if (context.mounted) Navigator.pop(context);
+          },
+          icon: const Icon(Icons.copy, size: 18),
+          label: const Text('Copy'),
+        ),
+      ],
+    );
   }
 }
 

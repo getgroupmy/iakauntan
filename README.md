@@ -311,6 +311,46 @@ database at the moment of signing — none of it comes from the client,
 because a signature record the signer can write is not evidence of
 anything.
 
+### Signing without an account
+
+A director will not sign up to an accounting system to sign one
+resolution. So the secretary can issue a **signing link**: a URL at
+`/sign/<token>` that opens one document, for one named signatory, and
+grants exactly one action. No login, no session, no sight of anything
+else in the company.
+
+The token is 256 bits of randomness and is **stored only as a SHA-256
+hash**. It is returned once, at the moment it is created, and cannot be
+read back afterwards — if it is lost the secretary issues a new one,
+which retires the old, so "I sent you a new link" never means two links
+work. The link table itself is closed to `anon` at the privilege level as
+well as by policy, so a future policy mistake cannot open it.
+
+Two functions are the only things in the entire database reachable
+without an account, and `supabase/tests/statutory.sql` asserts that by
+name, so a third cannot appear by accident.
+
+Every way a link can be unusable gets its own answer rather than being
+flattened into "invalid" — `expired`, `used`, `revoked`, `withdrawn`,
+`already_signed`, `changed` — because telling somebody their link expired
+saves them hunting for a problem that is not there. The document text is
+handed over **only** when the link can actually be signed; a stale or
+spent link shows the company and the title and nothing else. Signing
+through a link runs every check that signing while logged in does,
+including the hash of the body, and `signed_by` is deliberately left
+null: nobody was signed in, the link is the attribution, and it is
+recorded beside the signature along with the time the link was opened.
+
+**This is not a second factor.** The app sends no e-mail yet, so the link
+is exactly as strong as the channel it is sent over. It is short-lived
+(14 days by default, 90 at most), single-use, bound to one signature
+line, and dies if the document moves — but anyone holding the URL can
+sign. Send it to the person, not to a group.
+
+The same primitive is what a client portal invitation needs, which is why
+it is a table of scoped credentials rather than a column on the signature
+row.
+
 ### Attachments
 
 Files are filed against a record at `<org>/<table>/<record>/<file>`, and
@@ -333,11 +373,11 @@ private, so there is no URL to leak.
 - **Direct SSM lodgement.** SSM publishes no general API for filing;
   MBRS submission goes through their own tool in XBRL. The module tracks
   what is due and produces the paperwork — a human still lodges it.
-- **A client portal** for owners to sign in, upload identity documents
-  and approve resolutions themselves. It needs a decision this codebase
-  should not make on its own: whether client contacts get real logins (a
-  different audience from `org_members`) or reach the app through
-  expiring per-document links.
+- **A full client portal** — a standing place for owners to sign in,
+  upload identity documents and see their own company's file. The token
+  layer it needs is built and in use (see *Signing without an account*);
+  what is missing is the rest of the surface, and e-mail delivery so an
+  invitation can be sent rather than copied out by hand.
 
 ---
 
