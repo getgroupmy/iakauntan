@@ -81,6 +81,11 @@ class AppShell extends ConsumerWidget {
 
   static const _railBreakpoint = 900.0;
 
+  /// Material's own defaults for the rail, named here because the header
+  /// sits beside the rail rather than inside it and has to match.
+  static const _extendedWidth = 256.0;
+  static const _collapsedWidth = 80.0;
+
   /// Destinations this user can actually reach: add-ons the tenant is
   /// entitled to, plus the platform console for staff.
   List<_Dest> _visible(WidgetRef ref) {
@@ -168,33 +173,71 @@ class AppShell extends ConsumerWidget {
 
   Widget _wideLayout(BuildContext context, WidgetRef ref, List<_Dest> dests) {
     final scheme = Theme.of(context).colorScheme;
+    final extended = MediaQuery.sizeOf(context).width >= 1200;
+
     return Scaffold(
       body: Row(
         children: [
-          NavigationRail(
-            extended: MediaQuery.sizeOf(context).width >= 1200,
-            selectedIndex: _selectedIndexIn(dests),
-            onDestinationSelected: (i) => context.go(dests[i].path),
-            leading: _RailHeader(
-              extended: MediaQuery.sizeOf(context).width >= 1200,
-            ),
-            trailing: Expanded(
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _AccountButton(),
+          // NavigationRail does not scroll. With every module switched on
+          // there are twenty-one destinations, which is taller than a
+          // laptop screen — everything below HR setup simply could not be
+          // reached, with no scrollbar to suggest there was more.
+          //
+          // The scroll view needs a minimum height of the viewport so the
+          // rail still fills the screen when the list is short, and
+          // IntrinsicHeight so that the Expanded in `trailing` — which is
+          // what pins the account button to the bottom — has a bounded
+          // height to expand into.
+          SizedBox(
+            // A definite width, because IntrinsicHeight below measures
+            // this subtree and an intrinsic pass offers unbounded width.
+            // The company switcher is a Row that fills its line, and a
+            // Row cannot size itself against unbounded width at all.
+            width: extended ? _extendedWidth : _collapsedWidth,
+            child: Column(
+              children: [
+                // Outside the scroll view: the company you are looking at
+                // should not scroll away from you, and keeping it out of
+                // the rail keeps it out of the intrinsic measurement too.
+                _RailHeader(extended: extended),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints:
+                            BoxConstraints(minHeight: constraints.maxHeight),
+                        child: IntrinsicHeight(
+                          child: NavigationRail(
+                            extended: extended,
+                            minExtendedWidth: _extendedWidth,
+                            selectedIndex: _selectedIndexIn(dests),
+                            onDestinationSelected: (i) =>
+                                context.go(dests[i].path),
+                            trailing: Expanded(
+                              child: Align(
+                                alignment: Alignment.bottomCenter,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: _AccountButton(),
+                                ),
+                              ),
+                            ),
+                            destinations: [
+                              for (final d in dests)
+                                NavigationRailDestination(
+                                  icon: Icon(d.icon),
+                                  selectedIcon: Icon(d.selectedIcon),
+                                  label: Text(d.label),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-            destinations: [
-              for (final d in dests)
-                NavigationRailDestination(
-                  icon: Icon(d.icon),
-                  selectedIcon: Icon(d.selectedIcon),
-                  label: Text(d.label),
-                ),
-            ],
           ),
           VerticalDivider(
             width: 1,
@@ -360,7 +403,12 @@ class _OrgSwitcher extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(
+              // Flexible rather than Expanded: this sits inside the
+              // navigation rail, which is measured intrinsically, and an
+              // intrinsic pass hands a Row unbounded width. A child with
+              // non-zero flex cannot answer "how wide would you like to
+              // be?" under those conditions and throws. A loose fit can.
+              Flexible(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
