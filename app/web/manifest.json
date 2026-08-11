@@ -1,12 +1,11 @@
 {
-    "name": "iakauntan",
-    "short_name": "iakauntan",
+    "name": "iAkauntan — accounting and CRM for Malaysian business",
+    "short_name": "iAkauntan",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#F6F8F8",
+    "theme_color": "#0B7A6B",
+    "description": "Accounting, CRM, payroll and LHDN e-Invoice for Malaysian business.",
     "prefer_related_applications": false,
     "icons": [
         {

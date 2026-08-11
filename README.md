@@ -728,6 +728,51 @@ flutter build web --release \
 Only the **publishable** key belongs in the client — RLS is what protects
 the data. The service role key must never appear in the app or the repo.
 
+### Deploying the web app
+
+The build is a folder of static files. There is no server to run: any
+static host will do, and the app talks to Supabase straight from the
+browser.
+
+```bash
+cd app
+flutter build web --release --no-web-resources-cdn
+# → app/build/web/  (~26 MB on disk; the browser fetches far less)
+```
+
+**`--no-web-resources-cdn` is not optional.** Without it the bundle
+fetches the CanvasKit renderer from `www.gstatic.com` at run time. That
+request happens *before* `main()` runs, so if the CDN is blocked — a
+corporate firewall, a filtered network, a captive portal — the user gets
+a blank white page and the "Cannot reach iAkauntan" screen never gets a
+chance to explain itself. Verified: with the flag off and gstatic blocked
+the page renders nothing; with it on, the same environment boots to the
+sign-in screen. The renderer is 20 MB of the build output, and it is why
+the flag costs nothing but a slightly larger upload.
+
+Routing is Flutter's default hash strategy, so `/#/sign/<token>` and
+every other deep link resolve client-side — **no rewrite rules, no
+`try_files`, no SPA fallback configuration**. Serving `index.html` at the
+root is the whole requirement.
+
+Under a sub-path (a GitHub Pages project site, say) add
+`--base-href=/<repo>/`.
+
+Then, in the Supabase dashboard, **set Authentication → URL Configuration
+→ Site URL to the deployed origin**. Sign-up confirmation and password
+reset e-mails are sent with no explicit `redirectTo`, so they use Site
+URL; left at its default they send your users to `localhost`.
+
+Two things to do before real users arrive:
+
+- Delete the demo logins and the demo organization (below).
+- Replace the seeded statutory schedules, which are `is_verified = false`
+  on purpose.
+
+There is no deploy pipeline in this repo yet — CI analyzes, tests and
+runs the database assertions, but nothing publishes. Adding one is a
+handful of lines once a host is chosen.
+
 ### Backend changes
 
 ```bash
@@ -836,3 +881,10 @@ Stated plainly so nothing here is mistaken for finished:
 - The gazetted KWSP and PERKESO contribution tables (see HRMS above)
 - Biometric terminal integration: attendance records carry a terminal
   identifier, but nothing pushes punches in from a device yet
+- **Password recovery has no landing screen.** "Forgot password?" sends
+  the e-mail, and the link opens the app with a valid recovery session —
+  but nothing listens for the recovery event and there is no screen that
+  calls `updateUser` to set a new one. Today the user simply arrives
+  signed in and their old password still stands. Until this is built,
+  a forgotten password is an administrator's job
+- A deploy pipeline (see *Deploying the web app*)
