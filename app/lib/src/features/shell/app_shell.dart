@@ -119,11 +119,51 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
     final dests = _visible(ref);
+
+    // Both Material navigation widgets require at least two destinations,
+    // and there are two ordinary ways to have fewer: a platform operator
+    // belongs to no company and so sees only the console, and on the very
+    // first frame the platform-admin answer has not arrived yet and the
+    // list is empty. Either one puts selectedIndex out of range, which
+    // throws while building — and a release build renders a thrown build
+    // as a blank page, with no clue as to why.
+    if (dests.length < 2) return _bareLayout(context, dests);
+
+    final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
     return wide
         ? _wideLayout(context, ref, dests)
         : _narrowLayout(context, ref, dests);
+  }
+
+  /// No navigation, because there is nowhere else to go — but still the
+  /// account button, so whoever is here can sign out.
+  Widget _bareLayout(BuildContext context, List<_Dest> dests) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      body: Row(
+        children: [
+          SizedBox(
+            width: 72,
+            child: Column(
+              children: [
+                const _RailHeader(extended: false),
+                const Spacer(),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _AccountButton(),
+                ),
+              ],
+            ),
+          ),
+          VerticalDivider(
+            width: 1,
+            color: scheme.outlineVariant.withValues(alpha: 0.6),
+          ),
+          Expanded(child: child),
+        ],
+      ),
+    );
   }
 
   Widget _wideLayout(BuildContext context, WidgetRef ref, List<_Dest> dests) {
