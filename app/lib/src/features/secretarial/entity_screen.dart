@@ -11,6 +11,7 @@ import '../../core/widgets.dart';
 import '../../data/corp_models.dart';
 import '../../data/corp_repository.dart';
 import '../shared/attachments_card.dart';
+import 'document_pdf.dart';
 
 /// One company's file: the statutory registers the Companies Act 2016
 /// requires a secretary to keep, and the documents drawn from them.
@@ -1002,9 +1003,137 @@ class _DocumentDialog extends ConsumerWidget {
         ),
       ),
       actions: [
+        if (canWrite)
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              showDialog<void>(
+                context: context,
+                builder: (_) => _DocumentEditor(document: document),
+              );
+            },
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            label: const Text('Edit'),
+          ),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Amending generated text.
+///
+/// A template cannot anticipate every recital, so the body is editable —
+/// but only until somebody signs it. After that the database refuses,
+/// because a signed resolution whose words have since been rewritten
+/// says one thing while a signature attests to another. The refusal
+/// comes back as an ordinary error here rather than being second-guessed
+/// in Dart: the rule lives in one place, and this is not it.
+class _DocumentEditor extends ConsumerStatefulWidget {
+  const _DocumentEditor({required this.document});
+
+  final CorpDocument document;
+
+  @override
+  ConsumerState<_DocumentEditor> createState() => _DocumentEditorState();
+}
+
+class _DocumentEditorState extends ConsumerState<_DocumentEditor> {
+  late final _title = TextEditingController(text: widget.document.title);
+  late final _body = TextEditingController(text: widget.document.body);
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _body.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    // Deliberately not runWithFeedback here. Its refusal is a snackbar,
+    // and the refusal that matters — this document has been signed — is a
+    // sentence the secretary needs to read and act on, not something that
+    // should slide away while the editor closes over it.
+    try {
+      await ref
+          .read(repoProvider)!
+          .corpUpdateDocument(widget.document.id, _title.text, _body.text);
+      ref.invalidate(corpDocumentsProvider(widget.document.entityId));
+      ref.invalidate(corpSignaturesProvider(widget.document.id));
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Document amended')),
+        );
+      }
+    } catch (e) {
+      // Strip PostgREST's wrapper so the database's own sentence shows.
+      if (mounted) {
+        setState(() =>
+            _error = '$e'.replaceFirst(RegExp(r'^\w*Exception[^:]*:\s*'), ''));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit document'),
+      content: SizedBox(
+        width: 680,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _title,
+                decoration: const InputDecoration(labelText: 'Title'),
+              ),
+              const SizedBox(height: Space.md),
+              TextField(
+                controller: _body,
+                maxLines: 18,
+                minLines: 10,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                decoration: const InputDecoration(
+                  labelText: 'Body',
+                  alignLabelWithHint: true,
+                  helperText: 'Markdown. Editing stops once anyone has signed.',
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: Space.md),
+                Text(_error!, style: TextStyle(color: context.colors.danger)),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _save,
+          child: _busy
+              ? const SizedBox(
+                  height: 16,
+                  width: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Save'),
         ),
       ],
     );
@@ -1400,9 +1529,20 @@ class _DocumentRow extends StatelessWidget {
           style: const TextStyle(fontSize: 12)),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         IconButton(
-          icon: const Icon(Icons.download_outlined, size: 18),
-          tooltip: 'Download',
-          onPressed: () => _download(context),
+          icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+          tooltip: 'Download PDF',
+          onPressed: () => _downloadPdf(context),
+        ),
+        PopupMenuButton<String>(
+          tooltip: 'More',
+          icon: const Icon(Icons.more_horiz, size: 18),
+          onSelected: (_) => _downloadMarkdown(context),
+          itemBuilder: (_) => const [
+            PopupMenuItem(
+              value: 'md',
+              child: Text('Download Markdown (the signed text)'),
+            ),
+          ],
         ),
         IconButton(
           icon: const Icon(Icons.visibility_outlined, size: 18),
@@ -1416,11 +1556,32 @@ class _DocumentRow extends StatelessWidget {
     );
   }
 
-  Future<void> _download(BuildContext context) async {
-    final name =
-        '${document.title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase()}.md';
+  String get _stem =>
+      document.title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
+
+  /// A PDF, because this is a document that gets printed, signed and put
+  /// in a minute book. The Markdown remains available beside it: it is
+  /// what the database stores and what the signature hash covers, so it
+  /// is the copy to keep if you care about the exact bytes that were
+  /// signed.
+  Future<void> _downloadPdf(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
-    final saved = await saveTextFile(name, 'text/markdown', document.body);
+    final bytes = await buildDocumentPdf(
+      title: document.title,
+      body: document.body,
+      footerNote: 'Generated ${Fmt.date(document.generatedAt)}',
+    );
+    final saved = await saveBytesFile('$_stem.pdf', 'application/pdf', bytes);
+    messenger.showSnackBar(SnackBar(
+      content: Text(saved
+          ? 'Downloaded'
+          : 'PDF download is only available in the browser'),
+    ));
+  }
+
+  Future<void> _downloadMarkdown(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = await saveTextFile('$_stem.md', 'text/markdown', document.body);
     if (!saved) await Clipboard.setData(ClipboardData(text: document.body));
     messenger.showSnackBar(SnackBar(
       content: Text(saved ? 'Downloaded' : 'Copied to the clipboard'),

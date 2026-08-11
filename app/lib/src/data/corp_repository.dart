@@ -203,6 +203,20 @@ extension RepoCorp on Repo {
         'p_extra': extra,
       }) as String;
 
+  /// Amends the text of a generated document.
+  ///
+  /// Generated text is a starting point, not a finished deed. The
+  /// database refuses once anybody has signed it — enforced by a trigger
+  /// rather than here, so going around this call does not go around the
+  /// rule.
+  Future<void> corpUpdateDocument(
+          String documentId, String title, String body) async =>
+      await client.rpc('corp_update_document', params: {
+        'p_document_id': documentId,
+        'p_title': title,
+        'p_body': body,
+      });
+
   Future<List<CorpDocument>> corpDocuments(String entityId) async =>
       Repo.rows(await client
               .from('corp_documents')

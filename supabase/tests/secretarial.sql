@@ -294,6 +294,73 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- Amending a generated document
+--
+-- Generated text is a starting point, not a finished deed — until
+-- somebody signs it, at which point the words are what they attested to.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_e uuid; v_p uuid; v_doc uuid; v_req uuid; v_sig uuid;
+begin
+  v_org := pg_temp.sec_org();
+
+  insert into public.corp_entities (org_id, name, registration_no, entity_type,
+    incorporated_on, financial_year_end_day, financial_year_end_month,
+    registered_office)
+  values (v_org, 'Pindaan Sdn Bhd', '202401013333', 'sdn_bhd',
+          date '2024-04-04', 31, 12, 'Level 3, Menara PQR, KL')
+  returning id into v_e;
+  insert into public.corp_persons (org_id, kind, full_name, nric)
+  values (v_org, 'individual', 'Director Amend', '900505055555')
+  returning id into v_p;
+  insert into public.corp_officers (org_id, entity_id, person_id, role, appointed_on)
+  values (v_org, v_e, v_p, 'director', date '2024-04-04');
+
+  v_doc := public.corp_generate_document(v_e, 'sec_particulars');
+
+  perform public.corp_update_document(v_doc, 'Amended particulars',
+            'Rewritten by the secretary.');
+  perform pg_temp.check_true('an unsigned document can be amended',
+    (select body = 'Rewritten by the secretary.' and title = 'Amended particulars'
+       from public.corp_documents where id = v_doc));
+
+  begin
+    perform public.corp_update_document(v_doc, '   ', 'Still needs a title.');
+    raise exception 'FAIL: a document was left with no title';
+  exception when sqlstate '22023' then
+    raise notice 'ok   a document still needs a title';
+  end;
+
+  v_req := public.corp_request_signatures(v_doc, array[v_p], array['Director'],
+             null, null);
+  select id into v_sig from public.corp_signatures where request_id = v_req;
+  perform public.corp_sign_document(v_sig, 'Director Amend');
+
+  begin
+    perform public.corp_update_document(v_doc, 'Amended again', 'Different text.');
+    raise exception 'FAIL: a signed document was edited';
+  exception when sqlstate '23514' then
+    raise notice 'ok   a signed document cannot be edited';
+  end;
+
+  -- The rule is a trigger rather than a check inside the function,
+  -- because RLS grants can_write full ALL on this table: without it,
+  -- anyone with a session could PATCH the row straight past the RPC.
+  begin
+    update public.corp_documents set body = 'Straight past the function.'
+     where id = v_doc;
+    raise exception 'FAIL: a signed document was edited by direct update';
+  exception when sqlstate '23514' then
+    raise notice 'ok   and not by going around the function either';
+  end;
+
+  -- Bookkeeping about the document is not the document.
+  update public.corp_documents set filing_id = null where id = v_doc;
+  raise notice 'ok   a signed document still accepts non-text changes';
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Signing links
 --
 -- The only part of the database a stranger can reach. Everything here is

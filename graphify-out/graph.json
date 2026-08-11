@@ -252,7 +252,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_main",
-      "community": 93,
+      "community": 91,
       "community_name": "package:flutter/material.dart",
       "norm_label": "main.dart"
     },
@@ -263,7 +263,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_main_startupfailure",
-      "community": 93,
+      "community": 91,
       "community_name": "package:flutter/material.dart",
       "norm_label": "_startupfailure"
     },
@@ -285,7 +285,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_main_error",
-      "community": 93,
+      "community": 91,
       "community_name": "package:flutter/material.dart",
       "norm_label": "error"
     },
@@ -296,7 +296,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_main_main",
-      "community": 93,
+      "community": 91,
       "community_name": "package:flutter/material.dart",
       "norm_label": "main"
     },
@@ -307,7 +307,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_main_build",
-      "community": 93,
+      "community": 91,
       "community_name": "package:flutter/material.dart",
       "norm_label": "build"
     },
@@ -318,7 +318,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_flutter_material_dart",
-      "community": 93,
+      "community": 91,
       "community_name": "package:flutter/material.dart",
       "norm_label": "package:flutter/material.dart"
     },
@@ -330,7 +330,7 @@
       "_origin": "ast",
       "id": "package_flutter_riverpod_flutter_riverpod_dart",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "package:flutter_riverpod/flutter_riverpod.dart"
     },
     {
@@ -341,7 +341,7 @@
       "_origin": "ast",
       "id": "package_supabase_flutter_supabase_flutter_dart",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "package:supabase_flutter/supabase_flutter.dart"
     },
     {
@@ -351,7 +351,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "src_app_dart",
-      "community": 93,
+      "community": 91,
       "community_name": "package:flutter/material.dart",
       "norm_label": "src/app.dart"
     },
@@ -362,7 +362,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "src_core_env_dart",
-      "community": 93,
+      "community": 91,
       "community_name": "package:flutter/material.dart",
       "norm_label": "src/core/env.dart"
     },
@@ -373,7 +373,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "src_core_theme_dart",
-      "community": 93,
+      "community": 91,
       "community_name": "package:flutter/material.dart",
       "norm_label": "src/core/theme.dart"
     },
@@ -384,8 +384,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_app",
-      "community": 93,
-      "community_name": "package:flutter/material.dart",
+      "community": 118,
+      "community_name": "../../core/format.dart",
       "norm_label": "app.dart"
     },
     {
@@ -395,8 +395,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_app_iakauntanapp",
-      "community": 93,
-      "community_name": "package:flutter/material.dart",
+      "community": 118,
+      "community_name": "../../core/format.dart",
       "norm_label": "iakauntanapp"
     },
     {
@@ -417,8 +417,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_app_build",
-      "community": 93,
-      "community_name": "package:flutter/material.dart",
+      "community": 118,
+      "community_name": "../../core/format.dart",
       "norm_label": "build"
     },
     {
@@ -428,8 +428,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "core_env_dart",
-      "community": 93,
-      "community_name": "package:flutter/material.dart",
+      "community": 49,
+      "community_name": "signing_page.dart",
       "norm_label": "../../core/env.dart"
     },
     {
@@ -439,8 +439,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "core_router_dart",
-      "community": 93,
-      "community_name": "package:flutter/material.dart",
+      "community": 118,
+      "community_name": "../../core/format.dart",
       "norm_label": "core/router.dart"
     },
     {
@@ -451,7 +451,7 @@
       "_origin": "ast",
       "id": "core_theme_dart",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "../../core/theme.dart"
     },
     {
@@ -484,7 +484,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_download_stub",
       "community": 81,
-      "community_name": "download_web.dart",
+      "community_name": "document_pdf.dart",
       "norm_label": "download_stub.dart"
     },
     {
@@ -495,7 +495,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_download_stub_false",
       "community": 81,
-      "community_name": "download_web.dart",
+      "community_name": "document_pdf.dart",
       "norm_label": "false"
     },
     {
@@ -506,7 +506,7 @@
       "_origin": "ast",
       "id": "return",
       "community": 81,
-      "community_name": "download_web.dart",
+      "community_name": "document_pdf.dart",
       "norm_label": "return"
     },
     {
@@ -517,8 +517,30 @@
       "_origin": "ast",
       "id": "app_lib_src_core_download_stub_savetextfile",
       "community": 81,
-      "community_name": "download_web.dart",
+      "community_name": "document_pdf.dart",
       "norm_label": "savetextfile"
+    },
+    {
+      "label": "saveBytesFile",
+      "file_type": "code",
+      "source_file": "app/lib/src/core/download_stub.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_core_download_stub_savebytesfile",
+      "community": 81,
+      "community_name": "document_pdf.dart",
+      "norm_label": "savebytesfile"
+    },
+    {
+      "label": "dart:typed_data",
+      "file_type": "code",
+      "source_file": null,
+      "source_location": null,
+      "_origin": "ast",
+      "id": "dart_typed_data",
+      "community": 81,
+      "community_name": "document_pdf.dart",
+      "norm_label": "dart:typed_data"
     },
     {
       "label": "download_web.dart",
@@ -528,7 +550,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_download_web",
       "community": 81,
-      "community_name": "download_web.dart",
+      "community_name": "document_pdf.dart",
       "norm_label": "download_web.dart"
     },
     {
@@ -539,7 +561,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_download_web_blob",
       "community": 81,
-      "community_name": "download_web.dart",
+      "community_name": "document_pdf.dart",
       "norm_label": "blob"
     },
     {
@@ -550,7 +572,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_download_web_url",
       "community": 81,
-      "community_name": "download_web.dart",
+      "community_name": "document_pdf.dart",
       "norm_label": "url"
     },
     {
@@ -561,7 +583,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_download_web_anchor",
       "community": 81,
-      "community_name": "download_web.dart",
+      "community_name": "document_pdf.dart",
       "norm_label": "anchor"
     },
     {
@@ -572,7 +594,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_download_web_true",
       "community": 81,
-      "community_name": "download_web.dart",
+      "community_name": "document_pdf.dart",
       "norm_label": "true"
     },
     {
@@ -583,8 +605,19 @@
       "_origin": "ast",
       "id": "app_lib_src_core_download_web_savetextfile",
       "community": 81,
-      "community_name": "download_web.dart",
+      "community_name": "document_pdf.dart",
       "norm_label": "savetextfile"
+    },
+    {
+      "label": "saveBytesFile",
+      "file_type": "code",
+      "source_file": "app/lib/src/core/download_web.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_core_download_web_savebytesfile",
+      "community": 81,
+      "community_name": "document_pdf.dart",
+      "norm_label": "savebytesfile"
     },
     {
       "label": "dart:js_interop",
@@ -594,7 +627,7 @@
       "_origin": "ast",
       "id": "dart_js_interop",
       "community": 81,
-      "community_name": "download_web.dart",
+      "community_name": "document_pdf.dart",
       "norm_label": "dart:js_interop"
     },
     {
@@ -605,7 +638,7 @@
       "_origin": "ast",
       "id": "package_web_web_dart",
       "community": 81,
-      "community_name": "download_web.dart",
+      "community_name": "document_pdf.dart",
       "norm_label": "package:web/web.dart"
     },
     {
@@ -616,7 +649,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_env",
       "community": 63,
-      "community_name": "../../data/models.dart",
+      "community_name": "static const",
       "norm_label": "_"
     },
     {
@@ -627,7 +660,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_env_env",
       "community": 63,
-      "community_name": "../../data/models.dart",
+      "community_name": "static const",
       "norm_label": "env"
     },
     {
@@ -638,7 +671,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_env_supabaseurl",
       "community": 63,
-      "community_name": "../../data/models.dart",
+      "community_name": "static const",
       "norm_label": "supabaseurl"
     },
     {
@@ -649,7 +682,7 @@
       "_origin": "ast",
       "id": "static_const",
       "community": 63,
-      "community_name": "../../data/models.dart",
+      "community_name": "static const",
       "norm_label": "static const"
     },
     {
@@ -660,7 +693,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_env_supabaseanonkey",
       "community": 63,
-      "community_name": "../../data/models.dart",
+      "community_name": "static const",
       "norm_label": "supabaseanonkey"
     },
     {
@@ -671,7 +704,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_env_appname",
       "community": 63,
-      "community_name": "../../data/models.dart",
+      "community_name": "static const",
       "norm_label": "appname"
     },
     {
@@ -682,7 +715,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_env_supportemail",
       "community": 63,
-      "community_name": "../../data/models.dart",
+      "community_name": "static const",
       "norm_label": "supportemail"
     },
     {
@@ -1121,8 +1154,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_currentorgprovider",
-      "community": 108,
-      "community_name": "ConsumerWidget",
+      "community": 82,
+      "community_name": "build",
       "norm_label": "currentorgprovider"
     },
     {
@@ -1198,8 +1231,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_memberroleprovider",
-      "community": 108,
-      "community_name": "ConsumerWidget",
+      "community": 69,
+      "community_name": "supabaseProvider",
       "norm_label": "memberroleprovider"
     },
     {
@@ -1220,8 +1253,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_canpostprovider",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 43,
+      "community_name": "ConsumerState",
       "norm_label": "canpostprovider"
     },
     {
@@ -1242,8 +1275,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_canwriteprovider",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 30,
+      "community_name": "pipeline_screen.dart",
       "norm_label": "canwriteprovider"
     },
     {
@@ -1275,8 +1308,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_dashboardprovider",
-      "community": 19,
-      "community_name": "dashboard_screen.dart",
+      "community": 20,
+      "community_name": "build",
       "norm_label": "dashboardprovider"
     },
     {
@@ -1286,8 +1319,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_revenuetrendprovider",
-      "community": 19,
-      "community_name": "dashboard_screen.dart",
+      "community": 175,
+      "community_name": "revenueTrendProvider",
       "norm_label": "revenuetrendprovider"
     },
     {
@@ -1297,8 +1330,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_contactsprovider",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 30,
+      "community_name": "pipeline_screen.dart",
       "norm_label": "contactsprovider"
     },
     {
@@ -1331,7 +1364,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_providers_accountsprovider",
       "community": 82,
-      "community_name": "_ExpenseDialogState",
+      "community_name": "build",
       "norm_label": "accountsprovider"
     },
     {
@@ -1341,8 +1374,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_fiscalyearsprovider",
-      "community": 108,
-      "community_name": "ConsumerWidget",
+      "community": 82,
+      "community_name": "build",
       "norm_label": "fiscalyearsprovider"
     },
     {
@@ -1352,8 +1385,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_journalsourcefilterprovider",
-      "community": 175,
-      "community_name": "build",
+      "community": 118,
+      "community_name": "../../core/format.dart",
       "norm_label": "journalsourcefilterprovider"
     },
     {
@@ -1363,8 +1396,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_journalsprovider",
-      "community": 175,
-      "community_name": "build",
+      "community": 118,
+      "community_name": "../../core/format.dart",
       "norm_label": "journalsprovider"
     },
     {
@@ -1429,8 +1462,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_documentsprovider",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 76,
+      "community_name": "document_list_screen.dart",
       "norm_label": "documentsprovider"
     },
     {
@@ -1473,8 +1506,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_bankaccountsprovider",
-      "community": 82,
-      "community_name": "_ExpenseDialogState",
+      "community": 58,
+      "community_name": "expenses_screen.dart",
       "norm_label": "bankaccountsprovider"
     },
     {
@@ -1484,8 +1517,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_paymentmodesprovider",
-      "community": 82,
-      "community_name": "_ExpenseDialogState",
+      "community": 58,
+      "community_name": "expenses_screen.dart",
       "norm_label": "paymentmodesprovider"
     },
     {
@@ -1495,8 +1528,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_expensesprovider",
-      "community": 82,
-      "community_name": "_ExpenseDialogState",
+      "community": 58,
+      "community_name": "expenses_screen.dart",
       "norm_label": "expensesprovider"
     },
     {
@@ -1517,8 +1550,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_pipelinestagesprovider",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 30,
+      "community_name": "pipeline_screen.dart",
       "norm_label": "pipelinestagesprovider"
     },
     {
@@ -1528,8 +1561,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_opportunitiesprovider",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 30,
+      "community_name": "pipeline_screen.dart",
       "norm_label": "opportunitiesprovider"
     },
     {
@@ -1539,8 +1572,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_aragingprovider",
-      "community": 19,
-      "community_name": "dashboard_screen.dart",
+      "community": 20,
+      "community_name": "build",
       "norm_label": "aragingprovider"
     },
     {
@@ -1561,8 +1594,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_activitiesprovider",
-      "community": 19,
-      "community_name": "dashboard_screen.dart",
+      "community": 20,
+      "community_name": "build",
       "norm_label": "activitiesprovider"
     },
     {
@@ -1638,8 +1671,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_enabledmodulesprovider",
-      "community": 108,
-      "community_name": "ConsumerWidget",
+      "community": 176,
+      "community_name": "build",
       "norm_label": "enabledmodulesprovider"
     },
     {
@@ -1671,8 +1704,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_mattersprovider",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 47,
+      "community_name": "matters_screen.dart",
       "norm_label": "mattersprovider"
     },
     {
@@ -1682,8 +1715,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_mattersummaryprovider",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 47,
+      "community_name": "matters_screen.dart",
       "norm_label": "mattersummaryprovider"
     },
     {
@@ -1727,7 +1760,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_providers_canmanagehrprovider",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "canmanagehrprovider"
     },
     {
@@ -1737,8 +1770,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_canrunpayrollprovider",
-      "community": 24,
-      "community_name": "build",
+      "community": 108,
+      "community_name": "ConsumerWidget",
       "norm_label": "canrunpayrollprovider"
     },
     {
@@ -1749,7 +1782,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_providers_directoryprovider",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "directoryprovider"
     },
     {
@@ -1781,8 +1814,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_ytdopeningprovider",
-      "community": 181,
-      "community_name": "_TaxYearSectionState",
+      "community": 21,
+      "community_name": "tax_year_section.dart",
       "norm_label": "ytdopeningprovider"
     },
     {
@@ -1792,8 +1825,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_declaredreliefsprovider",
-      "community": 181,
-      "community_name": "_TaxYearSectionState",
+      "community": 21,
+      "community_name": "tax_year_section.dart",
       "norm_label": "declaredreliefsprovider"
     },
     {
@@ -1803,8 +1836,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_relieftypesprovider",
-      "community": 181,
-      "community_name": "_TaxYearSectionState",
+      "community": 21,
+      "community_name": "tax_year_section.dart",
       "norm_label": "relieftypesprovider"
     },
     {
@@ -1946,8 +1979,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_payrollrunsprovider",
-      "community": 24,
-      "community_name": "build",
+      "community": 108,
+      "community_name": "ConsumerWidget",
       "norm_label": "payrollrunsprovider"
     },
     {
@@ -1957,8 +1990,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_payslipsforrunprovider",
-      "community": 24,
-      "community_name": "build",
+      "community": 108,
+      "community_name": "ConsumerWidget",
       "norm_label": "payslipsforrunprovider"
     },
     {
@@ -2001,8 +2034,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_paymentinstructionprovider",
-      "community": 24,
-      "community_name": "build",
+      "community": 108,
+      "community_name": "ConsumerWidget",
       "norm_label": "paymentinstructionprovider"
     },
     {
@@ -2012,8 +2045,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_corpentitiesprovider",
-      "community": 20,
-      "community_name": "build",
+      "community": 51,
+      "community_name": "secretarial_screen.dart",
       "norm_label": "corpentitiesprovider"
     },
     {
@@ -2023,8 +2056,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_corpentityprovider",
-      "community": 94,
-      "community_name": "build",
+      "community": 65,
+      "community_name": "corpEntityProvider",
       "norm_label": "corpentityprovider"
     },
     {
@@ -2100,8 +2133,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_corpfilingsprovider",
-      "community": 20,
-      "community_name": "build",
+      "community": 51,
+      "community_name": "secretarial_screen.dart",
       "norm_label": "corpfilingsprovider"
     },
     {
@@ -2145,7 +2178,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_providers_requisitionsprovider",
       "community": 96,
-      "community_name": "../../core/format.dart",
+      "community_name": "../../data/models.dart",
       "norm_label": "requisitionsprovider"
     },
     {
@@ -2156,7 +2189,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_providers_applicantsprovider",
       "community": 96,
-      "community_name": "../../core/format.dart",
+      "community_name": "../../data/models.dart",
       "norm_label": "applicantsprovider"
     },
     {
@@ -2167,7 +2200,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_providers_appraisalsprovider",
       "community": 96,
-      "community_name": "../../core/format.dart",
+      "community_name": "../../data/models.dart",
       "norm_label": "appraisalsprovider"
     },
     {
@@ -2177,8 +2210,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_mypayslipaccessprovider",
-      "community": 24,
-      "community_name": "build",
+      "community": 108,
+      "community_name": "ConsumerWidget",
       "norm_label": "mypayslipaccessprovider"
     },
     {
@@ -2199,8 +2232,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_canrequestpayslipaccessprovider",
-      "community": 24,
-      "community_name": "build",
+      "community": 108,
+      "community_name": "ConsumerWidget",
       "norm_label": "canrequestpayslipaccessprovider"
     },
     {
@@ -2210,8 +2243,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_payslipaccesslogprovider",
-      "community": 43,
-      "community_name": "ConsumerState",
+      "community": 167,
+      "community_name": "currentUserProvider",
       "norm_label": "payslipaccesslogprovider"
     },
     {
@@ -2375,8 +2408,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_providers_moduleenabled",
-      "community": 108,
-      "community_name": "ConsumerWidget",
+      "community": 176,
+      "community_name": "build",
       "norm_label": "moduleenabled"
     },
     {
@@ -2463,7 +2496,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "data_models_dart",
-      "community": 63,
+      "community": 96,
       "community_name": "../../data/models.dart",
       "norm_label": "../../data/models.dart"
     },
@@ -2475,7 +2508,7 @@
       "_origin": "ast",
       "id": "data_repository_dart",
       "community": 96,
-      "community_name": "../../core/format.dart",
+      "community_name": "../../data/models.dart",
       "norm_label": "../../data/repository.dart"
     },
     {
@@ -2562,8 +2595,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_core_router_routerprovider",
-      "community": 93,
-      "community_name": "package:flutter/material.dart",
+      "community": 118,
+      "community_name": "../../core/format.dart",
       "norm_label": "routerprovider"
     },
     {
@@ -2585,7 +2618,7 @@
       "_origin": "ast",
       "id": "package_go_router_go_router_dart",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "package:go_router/go_router.dart"
     },
     {
@@ -3222,8 +3255,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "color",
-      "community": 19,
-      "community_name": "dashboard_screen.dart",
+      "community": 45,
+      "community_name": "sign_in_screen.dart",
       "norm_label": "color"
     },
     {
@@ -4393,24 +4426,13 @@
       "norm_label": "deleteattachment"
     },
     {
-      "label": "dart:typed_data",
-      "file_type": "code",
-      "source_file": null,
-      "source_location": null,
-      "_origin": "ast",
-      "id": "dart_typed_data",
-      "community": 54,
-      "community_name": "attachments_repository.dart",
-      "norm_label": "dart:typed_data"
-    },
-    {
       "label": "../../core/format.dart",
       "file_type": "code",
       "source_file": null,
       "source_location": null,
       "_origin": "ast",
       "id": "core_format_dart",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "../../core/format.dart"
     },
@@ -6164,6 +6186,17 @@
       "norm_label": "corpgeneratedocument"
     },
     {
+      "label": "corpUpdateDocument",
+      "file_type": "code",
+      "source_file": "app/lib/src/data/corp_repository.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_data_corp_repository_corpupdatedocument",
+      "community": 26,
+      "community_name": "corp_repository.dart",
+      "norm_label": "corpupdatedocument"
+    },
+    {
       "label": "corpDocuments",
       "file_type": "code",
       "source_file": "app/lib/src/data/corp_repository.dart",
@@ -6258,7 +6291,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_data_models_contact",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "contact"
     },
@@ -6324,8 +6357,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_data_models_dockind",
-      "community": 65,
-      "community_name": "DocKind",
+      "community": 76,
+      "community_name": "document_list_screen.dart",
       "norm_label": "dockind"
     },
     {
@@ -6479,7 +6512,7 @@
       "_origin": "ast",
       "id": "app_lib_src_data_models_employee",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "employee"
     },
     {
@@ -6512,7 +6545,7 @@
       "_origin": "ast",
       "id": "app_lib_src_data_models_leavebalance",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "leavebalance"
     },
     {
@@ -6555,7 +6588,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_data_models_journalentry",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "journalentry"
     },
@@ -6709,8 +6742,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_data_models_dockindx",
-      "community": 65,
-      "community_name": "DocKind",
+      "community": 76,
+      "community_name": "document_list_screen.dart",
       "norm_label": "dockindx"
     },
     {
@@ -11967,8 +12000,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_admin_platform_console_screen_platformconsolescreen",
-      "community": 43,
-      "community_name": "ConsumerState",
+      "community": 40,
+      "community_name": "platform_console_screen.dart",
       "norm_label": "platformconsolescreen"
     },
     {
@@ -11989,8 +12022,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_admin_platform_console_screen_platformconsolescreenstate",
-      "community": 43,
-      "community_name": "ConsumerState",
+      "community": 40,
+      "community_name": "platform_console_screen.dart",
       "norm_label": "_platformconsolescreenstate"
     },
     {
@@ -12297,7 +12330,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "core_providers_dart",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "../../core/providers.dart"
     },
@@ -12308,7 +12341,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "core_widgets_dart",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "../../core/widgets.dart"
     },
@@ -12803,8 +12836,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_contacts_contact_editor_contacteditor",
-      "community": 22,
-      "community_name": "contact_editor.dart",
+      "community": 93,
+      "community_name": "_ContactEditorState",
       "norm_label": "contacteditor"
     },
     {
@@ -12814,8 +12847,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_contacts_contact_editor_contacteditorstate",
-      "community": 22,
-      "community_name": "contact_editor.dart",
+      "community": 93,
+      "community_name": "_ContactEditorState",
       "norm_label": "_contacteditorstate"
     },
     {
@@ -12957,8 +12990,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_contacts_contact_editor_statesrefprovider",
-      "community": 22,
-      "community_name": "contact_editor.dart",
+      "community": 93,
+      "community_name": "_ContactEditorState",
       "norm_label": "_statesrefprovider"
     },
     {
@@ -13056,8 +13089,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_contacts_contact_editor_build",
-      "community": 22,
-      "community_name": "contact_editor.dart",
+      "community": 93,
+      "community_name": "_ContactEditorState",
       "norm_label": "_build"
     },
     {
@@ -13111,7 +13144,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_contacts_contacts_screen",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "contacts_screen.dart"
     },
@@ -13122,8 +13155,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_contacts_contacts_screen_contactsscreen",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 30,
+      "community_name": "pipeline_screen.dart",
       "norm_label": "contactsscreen"
     },
     {
@@ -13133,8 +13166,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_contacts_contacts_screen_contactsscreenstate",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 30,
+      "community_name": "pipeline_screen.dart",
       "norm_label": "_contactsscreenstate"
     },
     {
@@ -13144,7 +13177,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_contacts_contacts_screen_contacttile",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "_contacttile"
     },
@@ -13155,7 +13188,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_contacts_contacts_screen_search",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "_search"
     },
@@ -13166,7 +13199,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_contacts_contacts_screen_type",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "_type"
     },
@@ -13177,7 +13210,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_contacts_contacts_screen_query",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "_query"
     },
@@ -13188,7 +13221,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_contacts_contacts_screen_contact",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "contact"
     },
@@ -13199,7 +13232,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_contacts_contacts_screen_createstate",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "createstate"
     },
@@ -13210,7 +13243,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_contacts_contacts_screen_dispose",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "dispose"
     },
@@ -13221,8 +13254,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_contacts_contacts_screen_build",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 30,
+      "community_name": "pipeline_screen.dart",
       "norm_label": "build"
     },
     {
@@ -13243,8 +13276,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_crm_pipeline_screen_pipelinescreen",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 30,
+      "community_name": "pipeline_screen.dart",
       "norm_label": "pipelinescreen"
     },
     {
@@ -13430,8 +13463,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_crm_pipeline_screen_build",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 30,
+      "community_name": "pipeline_screen.dart",
       "norm_label": "build"
     },
     {
@@ -13463,8 +13496,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_crm_pipeline_screen_save",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 30,
+      "community_name": "pipeline_screen.dart",
       "norm_label": "_save"
     },
     {
@@ -13485,8 +13518,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_dashboard_dashboard_screen_dashboardscreen",
-      "community": 19,
-      "community_name": "dashboard_screen.dart",
+      "community": 20,
+      "community_name": "build",
       "norm_label": "dashboardscreen"
     },
     {
@@ -13507,8 +13540,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_dashboard_dashboard_screen_metricgrid",
-      "community": 19,
-      "community_name": "dashboard_screen.dart",
+      "community": 175,
+      "community_name": "revenueTrendProvider",
       "norm_label": "_metricgrid"
     },
     {
@@ -13529,8 +13562,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_dashboard_dashboard_screen_trendcard",
-      "community": 19,
-      "community_name": "dashboard_screen.dart",
+      "community": 175,
+      "community_name": "revenueTrendProvider",
       "norm_label": "_trendcard"
     },
     {
@@ -13551,8 +13584,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_dashboard_dashboard_screen_receivablescard",
-      "community": 19,
-      "community_name": "dashboard_screen.dart",
+      "community": 20,
+      "community_name": "build",
       "norm_label": "_receivablescard"
     },
     {
@@ -13562,8 +13595,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_dashboard_dashboard_screen_activitiescard",
-      "community": 19,
-      "community_name": "dashboard_screen.dart",
+      "community": 20,
+      "community_name": "build",
       "norm_label": "_activitiescard"
     },
     {
@@ -13650,8 +13683,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_dashboard_dashboard_screen_build",
-      "community": 19,
-      "community_name": "dashboard_screen.dart",
+      "community": 20,
+      "community_name": "build",
       "norm_label": "build"
     },
     {
@@ -13672,8 +13705,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "route_einvoice",
-      "community": 19,
-      "community_name": "dashboard_screen.dart",
+      "community": 20,
+      "community_name": "build",
       "norm_label": "route /einvoice"
     },
     {
@@ -13694,8 +13727,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "route_sales_invoice",
-      "community": 19,
-      "community_name": "dashboard_screen.dart",
+      "community": 20,
+      "community_name": "build",
       "norm_label": "route /sales/invoice"
     },
     {
@@ -13705,8 +13738,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "route_crm",
-      "community": 19,
-      "community_name": "dashboard_screen.dart",
+      "community": 20,
+      "community_name": "build",
       "norm_label": "route /crm"
     },
     {
@@ -13881,8 +13914,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_documents_document_editor_documenteditor",
-      "community": 138,
-      "community_name": "_DocumentEditorState",
+      "community": 43,
+      "community_name": "ConsumerState",
       "norm_label": "documenteditor"
     },
     {
@@ -13892,9 +13925,20 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_documents_document_editor_documenteditorstate",
-      "community": 138,
-      "community_name": "_DocumentEditorState",
+      "community": 43,
+      "community_name": "ConsumerState",
       "norm_label": "_documenteditorstate"
+    },
+    {
+      "label": "_DocumentEditor",
+      "file_type": "code",
+      "source_file": null,
+      "source_location": null,
+      "_origin": "ast",
+      "id": "documenteditor",
+      "community": 43,
+      "community_name": "ConsumerState",
+      "norm_label": "_documenteditor"
     },
     {
       "label": "_PostedBanner",
@@ -13914,8 +13958,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_documents_document_editor_headercard",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 30,
+      "community_name": "pipeline_screen.dart",
       "norm_label": "_headercard"
     },
     {
@@ -14519,8 +14563,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_documents_document_editor_submiteinvoice",
-      "community": 108,
-      "community_name": "ConsumerWidget",
+      "community": 82,
+      "community_name": "build",
       "norm_label": "_submiteinvoice"
     },
     {
@@ -14552,8 +14596,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_documents_document_editor_build",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 43,
+      "community_name": "ConsumerState",
       "norm_label": "build"
     },
     {
@@ -14618,8 +14662,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_documents_document_list_screen_documentlistscreen",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 76,
+      "community_name": "document_list_screen.dart",
       "norm_label": "documentlistscreen"
     },
     {
@@ -14629,8 +14673,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_documents_document_list_screen_documentlistscreenstate",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 76,
+      "community_name": "document_list_screen.dart",
       "norm_label": "_documentlistscreenstate"
     },
     {
@@ -14717,8 +14761,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_documents_document_list_screen_build",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 76,
+      "community_name": "document_list_screen.dart",
       "norm_label": "build"
     },
     {
@@ -15377,8 +15421,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_documents_settlement_dialog_settlementdialog",
-      "community": 82,
-      "community_name": "_ExpenseDialogState",
+      "community": 58,
+      "community_name": "expenses_screen.dart",
       "norm_label": "_settlementdialog"
     },
     {
@@ -15388,8 +15432,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_documents_settlement_dialog_settlementdialogstate",
-      "community": 82,
-      "community_name": "_ExpenseDialogState",
+      "community": 58,
+      "community_name": "expenses_screen.dart",
       "norm_label": "_settlementdialogstate"
     },
     {
@@ -15718,8 +15762,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_documents_settlement_dialog_build",
-      "community": 82,
-      "community_name": "_ExpenseDialogState",
+      "community": 58,
+      "community_name": "expenses_screen.dart",
       "norm_label": "build"
     },
     {
@@ -16004,8 +16048,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_expenses_expenses_screen_expensesscreen",
-      "community": 82,
-      "community_name": "_ExpenseDialogState",
+      "community": 58,
+      "community_name": "expenses_screen.dart",
       "norm_label": "expensesscreen"
     },
     {
@@ -16015,8 +16059,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_expenses_expenses_screen_expensedialog",
-      "community": 82,
-      "community_name": "_ExpenseDialogState",
+      "community": 58,
+      "community_name": "expenses_screen.dart",
       "norm_label": "_expensedialog"
     },
     {
@@ -16026,8 +16070,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_expenses_expenses_screen_expensedialogstate",
-      "community": 82,
-      "community_name": "_ExpenseDialogState",
+      "community": 58,
+      "community_name": "expenses_screen.dart",
       "norm_label": "_expensedialogstate"
     },
     {
@@ -16158,8 +16202,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_expenses_expenses_screen_build",
-      "community": 82,
-      "community_name": "_ExpenseDialogState",
+      "community": 58,
+      "community_name": "expenses_screen.dart",
       "norm_label": "build"
     },
     {
@@ -17357,8 +17401,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_leave_screen_leavetile",
-      "community": 44,
-      "community_name": "leave_screen.dart",
+      "community": 108,
+      "community_name": "ConsumerWidget",
       "norm_label": "_leavetile"
     },
     {
@@ -17600,7 +17644,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_my_hr_screen",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "my_hr_screen.dart"
     },
     {
@@ -17644,7 +17688,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_my_hr_screen_balancepill",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "_balancepill"
     },
     {
@@ -17666,7 +17710,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_my_hr_screen_mydetailscard",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "_mydetailscard"
     },
     {
@@ -17677,7 +17721,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_my_hr_screen_employee",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "employee"
     },
     {
@@ -17688,7 +17732,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_my_hr_screen_balance",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "balance"
     },
     {
@@ -17710,7 +17754,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_my_hr_screen_punch",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "_punch"
     },
     {
@@ -17731,7 +17775,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payment_file",
-      "community": 63,
+      "community": 96,
       "community_name": "../../data/models.dart",
       "norm_label": "payment_file.dart"
     },
@@ -17742,7 +17786,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payment_file_paymentfile",
-      "community": 63,
+      "community": 96,
       "community_name": "../../data/models.dart",
       "norm_label": "paymentfile"
     },
@@ -17753,7 +17797,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payment_file_header",
-      "community": 63,
+      "community": 96,
       "community_name": "../../data/models.dart",
       "norm_label": "header"
     },
@@ -17764,7 +17808,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payment_file_csv",
-      "community": 63,
+      "community": 96,
       "community_name": "../../data/models.dart",
       "norm_label": "csv"
     },
@@ -17775,7 +17819,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payment_file_row",
-      "community": 63,
+      "community": 96,
       "community_name": "../../data/models.dart",
       "norm_label": "_row"
     },
@@ -17786,7 +17830,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payment_file_escape",
-      "community": 63,
+      "community": 96,
       "community_name": "../../data/models.dart",
       "norm_label": "_escape"
     },
@@ -17797,7 +17841,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payment_file_filename",
-      "community": 63,
+      "community": 96,
       "community_name": "../../data/models.dart",
       "norm_label": "filename"
     },
@@ -17808,7 +17852,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payment_file_total",
-      "community": 63,
+      "community": 96,
       "community_name": "../../data/models.dart",
       "norm_label": "total"
     },
@@ -17830,8 +17874,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payroll_screen_payrollscreen",
-      "community": 24,
-      "community_name": "build",
+      "community": 108,
+      "community_name": "ConsumerWidget",
       "norm_label": "payrollscreen"
     },
     {
@@ -17852,8 +17896,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payroll_screen_payrollrunscreen",
-      "community": 24,
-      "community_name": "build",
+      "community": 108,
+      "community_name": "ConsumerWidget",
       "norm_label": "payrollrunscreen"
     },
     {
@@ -17863,8 +17907,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payroll_screen_runheader",
-      "community": 24,
-      "community_name": "build",
+      "community": 108,
+      "community_name": "ConsumerWidget",
       "norm_label": "_runheader"
     },
     {
@@ -17885,8 +17929,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payroll_screen_paymentcard",
-      "community": 24,
-      "community_name": "build",
+      "community": 108,
+      "community_name": "ConsumerWidget",
       "norm_label": "_paymentcard"
     },
     {
@@ -17940,8 +17984,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payroll_screen_payslipscard",
-      "community": 17,
-      "community_name": "StatelessWidget",
+      "community": 13,
+      "community_name": "payroll_screen.dart",
       "norm_label": "_payslipscard"
     },
     {
@@ -17984,8 +18028,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payroll_screen_requestaccessscreen",
-      "community": 43,
-      "community_name": "ConsumerState",
+      "community": 13,
+      "community_name": "payroll_screen.dart",
       "norm_label": "_requestaccessscreen"
     },
     {
@@ -17995,8 +18039,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payroll_screen_requestaccessscreenstate",
-      "community": 43,
-      "community_name": "ConsumerState",
+      "community": 13,
+      "community_name": "payroll_screen.dart",
       "norm_label": "_requestaccessscreenstate"
     },
     {
@@ -18259,8 +18303,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payroll_screen_build",
-      "community": 24,
-      "community_name": "build",
+      "community": 108,
+      "community_name": "ConsumerWidget",
       "norm_label": "build"
     },
     {
@@ -18281,8 +18325,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "route_hr_payroll",
-      "community": 24,
-      "community_name": "build",
+      "community": 108,
+      "community_name": "ConsumerWidget",
       "norm_label": "route /hr/payroll"
     },
     {
@@ -18380,8 +18424,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_flutter_services_dart",
-      "community": 13,
-      "community_name": "payroll_screen.dart",
+      "community": 81,
+      "community_name": "document_pdf.dart",
       "norm_label": "package:flutter/services.dart"
     },
     {
@@ -18579,7 +18623,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "people_screen.dart"
     },
     {
@@ -18590,7 +18634,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_peoplescreen",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "peoplescreen"
     },
     {
@@ -18601,7 +18645,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_peoplescreenstate",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "_peoplescreenstate"
     },
     {
@@ -18612,7 +18656,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_persontile",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "_persontile"
     },
     {
@@ -18623,7 +18667,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_search",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "_search"
     },
     {
@@ -18634,7 +18678,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_employee",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "employee"
     },
     {
@@ -18645,7 +18689,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_canmanagehr",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "canmanagehr"
     },
     {
@@ -18656,7 +18700,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_createstate",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "createstate"
     },
     {
@@ -18667,7 +18711,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_build",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "build"
     },
     {
@@ -18678,7 +18722,7 @@
       "_origin": "ast",
       "id": "route_hr_people_new",
       "community": 118,
-      "community_name": "../../core/theme.dart",
+      "community_name": "../../core/format.dart",
       "norm_label": "route /hr/people/new"
     },
     {
@@ -18689,7 +18733,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_talent_screen",
       "community": 96,
-      "community_name": "../../core/format.dart",
+      "community_name": "../../data/models.dart",
       "norm_label": "talent_screen.dart"
     },
     {
@@ -18700,7 +18744,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_talent_screen_talentscreen",
       "community": 96,
-      "community_name": "../../core/format.dart",
+      "community_name": "../../data/models.dart",
       "norm_label": "talentscreen"
     },
     {
@@ -18711,7 +18755,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_talent_screen_requisitionstab",
       "community": 96,
-      "community_name": "../../core/format.dart",
+      "community_name": "../../data/models.dart",
       "norm_label": "_requisitionstab"
     },
     {
@@ -18722,7 +18766,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_talent_screen_candidatestab",
       "community": 96,
-      "community_name": "../../core/format.dart",
+      "community_name": "../../data/models.dart",
       "norm_label": "_candidatestab"
     },
     {
@@ -18733,7 +18777,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_talent_screen_appraisalstab",
       "community": 96,
-      "community_name": "../../core/format.dart",
+      "community_name": "../../data/models.dart",
       "norm_label": "_appraisalstab"
     },
     {
@@ -18744,7 +18788,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_talent_screen_stages",
       "community": 96,
-      "community_name": "../../core/format.dart",
+      "community_name": "../../data/models.dart",
       "norm_label": "_stages"
     },
     {
@@ -18755,7 +18799,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_talent_screen_build",
       "community": 96,
-      "community_name": "../../core/format.dart",
+      "community_name": "../../data/models.dart",
       "norm_label": "build"
     },
     {
@@ -18766,7 +18810,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_talent_screen_advance",
       "community": 96,
-      "community_name": "../../core/format.dart",
+      "community_name": "../../data/models.dart",
       "norm_label": "_advance"
     },
     {
@@ -18787,8 +18831,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_tax_year_section_taxyearsection",
-      "community": 181,
-      "community_name": "_TaxYearSectionState",
+      "community": 21,
+      "community_name": "tax_year_section.dart",
       "norm_label": "taxyearsection"
     },
     {
@@ -18798,8 +18842,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_tax_year_section_taxyearsectionstate",
-      "community": 181,
-      "community_name": "_TaxYearSectionState",
+      "community": 21,
+      "community_name": "tax_year_section.dart",
       "norm_label": "_taxyearsectionstate"
     },
     {
@@ -18809,8 +18853,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_tax_year_section_relieflist",
-      "community": 181,
-      "community_name": "_TaxYearSectionState",
+      "community": 21,
+      "community_name": "tax_year_section.dart",
       "norm_label": "_relieflist"
     },
     {
@@ -19051,8 +19095,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_tax_year_section_build",
-      "community": 181,
-      "community_name": "_TaxYearSectionState",
+      "community": 21,
+      "community_name": "tax_year_section.dart",
       "norm_label": "build"
     },
     {
@@ -19150,8 +19194,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_items_items_screen_itemsscreen",
-      "community": 35,
-      "community_name": "taxCodesProvider",
+      "community": 31,
+      "community_name": "items_screen.dart",
       "norm_label": "itemsscreen"
     },
     {
@@ -19161,8 +19205,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_items_items_screen_itemsscreenstate",
-      "community": 35,
-      "community_name": "taxCodesProvider",
+      "community": 31,
+      "community_name": "items_screen.dart",
       "norm_label": "_itemsscreenstate"
     },
     {
@@ -19458,7 +19502,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_ledger_journals_screen",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "journals_screen.dart"
     },
@@ -19469,8 +19513,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_ledger_journals_screen_journalsscreen",
-      "community": 175,
-      "community_name": "build",
+      "community": 118,
+      "community_name": "../../core/format.dart",
       "norm_label": "journalsscreen"
     },
     {
@@ -19480,8 +19524,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_ledger_journals_screen_journaltile",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 43,
+      "community_name": "ConsumerState",
       "norm_label": "_journaltile"
     },
     {
@@ -19491,7 +19535,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_ledger_journals_screen_sources",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "_sources"
     },
@@ -19502,7 +19546,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_ledger_journals_screen_entry",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "entry"
     },
@@ -19513,8 +19557,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_ledger_journals_screen_build",
-      "community": 175,
-      "community_name": "build",
+      "community": 118,
+      "community_name": "../../core/format.dart",
       "norm_label": "build"
     },
     {
@@ -19524,7 +19568,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_ledger_journals_screen_reverse",
-      "community": 96,
+      "community": 118,
       "community_name": "../../core/format.dart",
       "norm_label": "_reverse"
     },
@@ -19656,8 +19700,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_legal_matter_detail_screen_disbursementdialog",
-      "community": 43,
-      "community_name": "ConsumerState",
+      "community": 14,
+      "community_name": "matter_detail_screen.dart",
       "norm_label": "_disbursementdialog"
     },
     {
@@ -19667,8 +19711,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_legal_matter_detail_screen_disbursementdialogstate",
-      "community": 43,
-      "community_name": "ConsumerState",
+      "community": 14,
+      "community_name": "matter_detail_screen.dart",
       "norm_label": "_disbursementdialogstate"
     },
     {
@@ -19909,8 +19953,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_legal_matter_detail_screen_save",
-      "community": 16,
-      "community_name": "repoProvider",
+      "community": 14,
+      "community_name": "matter_detail_screen.dart",
       "norm_label": "_save"
     },
     {
@@ -19920,8 +19964,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_legal_matter_detail_screen_initstate",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 47,
+      "community_name": "matters_screen.dart",
       "norm_label": "initstate"
     },
     {
@@ -19942,8 +19986,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_legal_matters_screen_mattersscreen",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 47,
+      "community_name": "matters_screen.dart",
       "norm_label": "mattersscreen"
     },
     {
@@ -19953,8 +19997,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_legal_matters_screen_mattersscreenstate",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 47,
+      "community_name": "matters_screen.dart",
       "norm_label": "_mattersscreenstate"
     },
     {
@@ -19975,8 +20019,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_legal_matters_screen_matterdialog",
-      "community": 43,
-      "community_name": "ConsumerState",
+      "community": 47,
+      "community_name": "matters_screen.dart",
       "norm_label": "_matterdialog"
     },
     {
@@ -19986,8 +20030,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_legal_matters_screen_matterdialogstate",
-      "community": 43,
-      "community_name": "ConsumerState",
+      "community": 47,
+      "community_name": "matters_screen.dart",
       "norm_label": "_matterdialogstate"
     },
     {
@@ -20151,8 +20195,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_legal_matters_screen_build",
-      "community": 75,
-      "community_name": "canWriteProvider",
+      "community": 47,
+      "community_name": "matters_screen.dart",
       "norm_label": "build"
     },
     {
@@ -20838,6 +20882,138 @@
       "norm_label": "requirerepo"
     },
     {
+      "label": "document_pdf.dart",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_document_pdf",
+      "community": 81,
+      "community_name": "document_pdf.dart",
+      "norm_label": "document_pdf.dart"
+    },
+    {
+      "label": "regular",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_document_pdf_regular",
+      "community": 81,
+      "community_name": "document_pdf.dart",
+      "norm_label": "regular"
+    },
+    {
+      "label": "bold",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_document_pdf_bold",
+      "community": 81,
+      "community_name": "document_pdf.dart",
+      "norm_label": "bold"
+    },
+    {
+      "label": "doc",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_document_pdf_doc",
+      "community": 81,
+      "community_name": "document_pdf.dart",
+      "norm_label": "doc"
+    },
+    {
+      "label": "spans",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_document_pdf_spans",
+      "community": 81,
+      "community_name": "document_pdf.dart",
+      "norm_label": "spans"
+    },
+    {
+      "label": "parts",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_document_pdf_parts",
+      "community": 81,
+      "community_name": "document_pdf.dart",
+      "norm_label": "parts"
+    },
+    {
+      "label": "buildDocumentPdf",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_document_pdf_builddocumentpdf",
+      "community": 81,
+      "community_name": "document_pdf.dart",
+      "norm_label": "builddocumentpdf"
+    },
+    {
+      "label": "save",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_document_pdf_save",
+      "community": 81,
+      "community_name": "document_pdf.dart",
+      "norm_label": "save"
+    },
+    {
+      "label": "_paragraphs",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_document_pdf_paragraphs",
+      "community": 81,
+      "community_name": "document_pdf.dart",
+      "norm_label": "_paragraphs"
+    },
+    {
+      "label": "_inline",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_document_pdf_inline",
+      "community": 81,
+      "community_name": "document_pdf.dart",
+      "norm_label": "_inline"
+    },
+    {
+      "label": "package:pdf/pdf.dart",
+      "file_type": "code",
+      "source_file": null,
+      "source_location": null,
+      "_origin": "ast",
+      "id": "package_pdf_pdf_dart",
+      "community": 81,
+      "community_name": "document_pdf.dart",
+      "norm_label": "package:pdf/pdf.dart"
+    },
+    {
+      "label": "package:pdf/widgets.dart",
+      "file_type": "code",
+      "source_file": null,
+      "source_location": null,
+      "_origin": "ast",
+      "id": "package_pdf_widgets_dart",
+      "community": 81,
+      "community_name": "document_pdf.dart",
+      "norm_label": "package:pdf/widgets.dart"
+    },
+    {
       "label": "entity_editor.dart",
       "file_type": "code",
       "source_file": "app/lib/src/features/secretarial/entity_editor.dart",
@@ -20855,8 +21031,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_secretarial_entity_editor_corpentityeditor",
-      "community": 15,
-      "community_name": "entity_editor.dart",
+      "community": 65,
+      "community_name": "corpEntityProvider",
       "norm_label": "corpentityeditor"
     },
     {
@@ -20866,8 +21042,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_secretarial_entity_editor_corpentityeditorstate",
-      "community": 15,
-      "community_name": "entity_editor.dart",
+      "community": 65,
+      "community_name": "corpEntityProvider",
       "norm_label": "_corpentityeditorstate"
     },
     {
@@ -21141,8 +21317,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_secretarial_entity_editor_build",
-      "community": 94,
-      "community_name": "build",
+      "community": 65,
+      "community_name": "corpEntityProvider",
       "norm_label": "build"
     },
     {
@@ -21152,8 +21328,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "route_secretarial",
-      "community": 94,
-      "community_name": "build",
+      "community": 65,
+      "community_name": "corpEntityProvider",
       "norm_label": "route /secretarial"
     },
     {
@@ -21196,8 +21372,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_secretarial_entity_editor_save",
-      "community": 94,
-      "community_name": "build",
+      "community": 65,
+      "community_name": "corpEntityProvider",
       "norm_label": "_save"
     },
     {
@@ -21218,8 +21394,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_secretarial_entity_screen_corpentityscreen",
-      "community": 94,
-      "community_name": "build",
+      "community": 65,
+      "community_name": "corpEntityProvider",
       "norm_label": "corpentityscreen"
     },
     {
@@ -21408,6 +21584,28 @@
       "community": 94,
       "community_name": "build",
       "norm_label": "_documentdialog"
+    },
+    {
+      "label": "_DocumentEditor",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_entity_screen_documenteditor",
+      "community": 43,
+      "community_name": "ConsumerState",
+      "norm_label": "_documenteditor"
+    },
+    {
+      "label": "_DocumentEditorState",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_entity_screen_documenteditorstate",
+      "community": 43,
+      "community_name": "ConsumerState",
+      "norm_label": "_documenteditorstate"
     },
     {
       "label": "_SignatureBlock",
@@ -21674,6 +21872,50 @@
       "norm_label": "document"
     },
     {
+      "label": "_title",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_entity_screen_title",
+      "community": 8,
+      "community_name": "entity_screen.dart",
+      "norm_label": "_title"
+    },
+    {
+      "label": "_body",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_entity_screen_body",
+      "community": 8,
+      "community_name": "entity_screen.dart",
+      "norm_label": "_body"
+    },
+    {
+      "label": "_busy",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_entity_screen_busy",
+      "community": 8,
+      "community_name": "entity_screen.dart",
+      "norm_label": "_busy"
+    },
+    {
+      "label": "_error",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_entity_screen_error",
+      "community": 8,
+      "community_name": "entity_screen.dart",
+      "norm_label": "_error"
+    },
+    {
       "label": "documentId",
       "file_type": "code",
       "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
@@ -21751,6 +21993,17 @@
       "norm_label": "_chosen"
     },
     {
+      "label": "_stem",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_entity_screen_stem",
+      "community": 8,
+      "community_name": "entity_screen.dart",
+      "norm_label": "_stem"
+    },
+    {
       "label": "build",
       "file_type": "code",
       "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
@@ -21795,6 +22048,17 @@
       "norm_label": "dispose"
     },
     {
+      "label": "_save",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_entity_screen_save",
+      "community": 8,
+      "community_name": "entity_screen.dart",
+      "norm_label": "_save"
+    },
+    {
       "label": "_request",
       "file_type": "code",
       "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
@@ -21828,15 +22092,26 @@
       "norm_label": "_link"
     },
     {
-      "label": "_download",
+      "label": "_downloadPdf",
       "file_type": "code",
       "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "app_lib_src_features_secretarial_entity_screen_download",
+      "id": "app_lib_src_features_secretarial_entity_screen_downloadpdf",
       "community": 8,
       "community_name": "entity_screen.dart",
-      "norm_label": "_download"
+      "norm_label": "_downloadpdf"
+    },
+    {
+      "label": "_downloadMarkdown",
+      "file_type": "code",
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_lib_src_features_secretarial_entity_screen_downloadmarkdown",
+      "community": 8,
+      "community_name": "entity_screen.dart",
+      "norm_label": "_downloadmarkdown"
     },
     {
       "label": "../shared/attachments_card.dart",
@@ -21848,6 +22123,17 @@
       "community": 8,
       "community_name": "entity_screen.dart",
       "norm_label": "../shared/attachments_card.dart"
+    },
+    {
+      "label": "document_pdf.dart",
+      "file_type": "code",
+      "source_file": null,
+      "source_location": null,
+      "_origin": "ast",
+      "id": "document_pdf_dart",
+      "community": 8,
+      "community_name": "entity_screen.dart",
+      "norm_label": "document_pdf.dart"
     },
     {
       "label": "secretarial_screen.dart",
@@ -21867,8 +22153,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_secretarial_secretarial_screen_secretarialscreen",
-      "community": 20,
-      "community_name": "build",
+      "community": 51,
+      "community_name": "secretarial_screen.dart",
       "norm_label": "secretarialscreen"
     },
     {
@@ -21988,8 +22274,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_secretarial_secretarial_screen_build",
-      "community": 20,
-      "community_name": "build",
+      "community": 51,
+      "community_name": "secretarial_screen.dart",
       "norm_label": "build"
     },
     {
@@ -21999,8 +22285,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "route_secretarial_new",
-      "community": 20,
-      "community_name": "build",
+      "community": 51,
+      "community_name": "secretarial_screen.dart",
       "norm_label": "route /secretarial/new"
     },
     {
@@ -22032,8 +22318,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_secretarial_signing_page_signingpage",
-      "community": 43,
-      "community_name": "ConsumerState",
+      "community": 49,
+      "community_name": "signing_page.dart",
       "norm_label": "signingpage"
     },
     {
@@ -22043,8 +22329,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_secretarial_signing_page_signingpagestate",
-      "community": 43,
-      "community_name": "ConsumerState",
+      "community": 49,
+      "community_name": "signing_page.dart",
       "norm_label": "_signingpagestate"
     },
     {
@@ -22285,8 +22571,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_settings_settings_screen_settingsscreen",
-      "community": 108,
-      "community_name": "ConsumerWidget",
+      "community": 82,
+      "community_name": "build",
       "norm_label": "settingsscreen"
     },
     {
@@ -22329,8 +22615,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_settings_settings_screen_modulescard",
-      "community": 108,
-      "community_name": "ConsumerWidget",
+      "community": 176,
+      "community_name": "build",
       "norm_label": "_modulescard"
     },
     {
@@ -22340,8 +22626,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_settings_settings_screen_fiscalyearscard",
-      "community": 108,
-      "community_name": "ConsumerWidget",
+      "community": 82,
+      "community_name": "build",
       "norm_label": "_fiscalyearscard"
     },
     {
@@ -22374,7 +22660,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_settings_settings_screen_chartofaccountscard",
       "community": 82,
-      "community_name": "_ExpenseDialogState",
+      "community_name": "build",
       "norm_label": "_chartofaccountscard"
     },
     {
@@ -22648,8 +22934,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_settings_settings_screen_build",
-      "community": 108,
-      "community_name": "ConsumerWidget",
+      "community": 82,
+      "community_name": "build",
       "norm_label": "build"
     },
     {
@@ -23011,8 +23297,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_shell_app_shell_railheader",
-      "community": 108,
-      "community_name": "ConsumerWidget",
+      "community": 82,
+      "community_name": "build",
       "norm_label": "_railheader"
     },
     {
@@ -23033,8 +23319,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_shell_app_shell_accountbutton",
-      "community": 108,
-      "community_name": "ConsumerWidget",
+      "community": 69,
+      "community_name": "supabaseProvider",
       "norm_label": "_accountbutton"
     },
     {
@@ -23473,8 +23759,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_team_team_screen_membertile",
-      "community": 16,
-      "community_name": "repoProvider",
+      "community": 108,
+      "community_name": "ConsumerWidget",
       "norm_label": "_membertile"
     },
     {
@@ -23528,8 +23814,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_team_team_screen_accesslog",
-      "community": 43,
-      "community_name": "ConsumerState",
+      "community": 167,
+      "community_name": "currentUserProvider",
       "norm_label": "_accesslog"
     },
     {
@@ -23539,8 +23825,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_team_team_screen_accesslogstate",
-      "community": 43,
-      "community_name": "ConsumerState",
+      "community": 167,
+      "community_name": "currentUserProvider",
       "norm_label": "_accesslogstate"
     },
     {
@@ -23550,8 +23836,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_team_team_screen_accessrow",
-      "community": 16,
-      "community_name": "repoProvider",
+      "community": 108,
+      "community_name": "ConsumerWidget",
       "norm_label": "_accessrow"
     },
     {
@@ -23797,25 +24083,58 @@
       "norm_label": "audit_trail_card.dart"
     },
     {
-      "label": "format_test.dart",
+      "label": "document_pdf_test.dart",
       "file_type": "code",
-      "source_file": "app/test/format_test.dart",
+      "source_file": "app/test/document_pdf_test.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "app_test_format_test",
-      "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
-      "norm_label": "format_test.dart"
+      "id": "app_test_document_pdf_test",
+      "community": 24,
+      "community_name": "document_pdf_test.dart",
+      "norm_label": "document_pdf_test.dart"
+    },
+    {
+      "label": "body",
+      "file_type": "code",
+      "source_file": "app/test/document_pdf_test.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_test_document_pdf_test_body",
+      "community": 24,
+      "community_name": "document_pdf_test.dart",
+      "norm_label": "body"
+    },
+    {
+      "label": "2026",
+      "file_type": "code",
+      "source_file": "app/test/document_pdf_test.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_test_document_pdf_test_2026",
+      "community": 24,
+      "community_name": "document_pdf_test.dart",
+      "norm_label": "2026"
+    },
+    {
+      "label": "Dated this 11 August",
+      "file_type": "code",
+      "source_file": null,
+      "source_location": null,
+      "_origin": "ast",
+      "id": "dated_this_11_august",
+      "community": 24,
+      "community_name": "document_pdf_test.dart",
+      "norm_label": "dated this 11 august"
     },
     {
       "label": "main",
       "file_type": "code",
-      "source_file": "app/test/format_test.dart",
+      "source_file": "app/test/document_pdf_test.dart",
       "source_location": null,
       "_origin": "ast",
-      "id": "app_test_format_test_main",
-      "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "id": "app_test_document_pdf_test_main",
+      "community": 24,
+      "community_name": "document_pdf_test.dart",
       "norm_label": "main"
     },
     {
@@ -23825,9 +24144,42 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_flutter_test_flutter_test_dart",
-      "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community": 24,
+      "community_name": "document_pdf_test.dart",
       "norm_label": "package:flutter_test/flutter_test.dart"
+    },
+    {
+      "label": "package:iakauntan/src/features/secretarial/document_pdf.dart",
+      "file_type": "code",
+      "source_file": null,
+      "source_location": null,
+      "_origin": "ast",
+      "id": "package_iakauntan_src_features_secretarial_document_pdf_dart",
+      "community": 24,
+      "community_name": "document_pdf_test.dart",
+      "norm_label": "package:iakauntan/src/features/secretarial/document_pdf.dart"
+    },
+    {
+      "label": "format_test.dart",
+      "file_type": "code",
+      "source_file": "app/test/format_test.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_test_format_test",
+      "community": 24,
+      "community_name": "document_pdf_test.dart",
+      "norm_label": "format_test.dart"
+    },
+    {
+      "label": "main",
+      "file_type": "code",
+      "source_file": "app/test/format_test.dart",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "app_test_format_test_main",
+      "community": 24,
+      "community_name": "document_pdf_test.dart",
+      "norm_label": "main"
     },
     {
       "label": "package:iakauntan/src/core/format.dart",
@@ -23836,8 +24188,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_iakauntan_src_core_format_dart",
-      "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community": 24,
+      "community_name": "document_pdf_test.dart",
       "norm_label": "package:iakauntan/src/core/format.dart"
     },
     {
@@ -23847,8 +24199,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_test_payment_file_test",
-      "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community": 75,
+      "community_name": "payment_file_test.dart",
       "norm_label": "payment_file_test.dart"
     },
     {
@@ -23858,8 +24210,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_test_payment_file_test_line",
-      "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community": 75,
+      "community_name": "payment_file_test.dart",
       "norm_label": "_line"
     },
     {
@@ -23869,8 +24221,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_test_payment_file_test_main",
-      "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community": 75,
+      "community_name": "payment_file_test.dart",
       "norm_label": "main"
     },
     {
@@ -23880,8 +24232,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_iakauntan_src_core_download_dart",
-      "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community": 75,
+      "community_name": "payment_file_test.dart",
       "norm_label": "package:iakauntan/src/core/download.dart"
     },
     {
@@ -23891,8 +24243,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_iakauntan_src_data_models_dart",
-      "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community": 75,
+      "community_name": "payment_file_test.dart",
       "norm_label": "package:iakauntan/src/data/models.dart"
     },
     {
@@ -23902,8 +24254,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_iakauntan_src_features_hr_payment_file_dart",
-      "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community": 75,
+      "community_name": "payment_file_test.dart",
       "norm_label": "package:iakauntan/src/features/hr/payment_file.dart"
     },
     {
@@ -23914,7 +24266,7 @@
       "_origin": "ast",
       "id": "app_test_reset_password_test",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "reset_password_test.dart"
     },
     {
@@ -23925,7 +24277,7 @@
       "_origin": "ast",
       "id": "app_test_reset_password_test_main",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "main"
     },
     {
@@ -23936,7 +24288,7 @@
       "_origin": "ast",
       "id": "package_iakauntan_src_core_providers_dart",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "package:iakauntan/src/core/providers.dart"
     },
     {
@@ -23947,7 +24299,7 @@
       "_origin": "ast",
       "id": "package_iakauntan_src_core_theme_dart",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "package:iakauntan/src/core/theme.dart"
     },
     {
@@ -23958,7 +24310,7 @@
       "_origin": "ast",
       "id": "package_iakauntan_src_features_auth_reset_password_screen_dart",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "package:iakauntan/src/features/auth/reset_password_screen.dart"
     },
     {
@@ -23969,7 +24321,7 @@
       "_origin": "ast",
       "id": "app_test_shell_no_org_test",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "shell_no_org_test.dart"
     },
     {
@@ -23980,7 +24332,7 @@
       "_origin": "ast",
       "id": "app_test_shell_no_org_test_main",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "main"
     },
     {
@@ -23991,7 +24343,7 @@
       "_origin": "ast",
       "id": "app_test_shell_no_org_test_harness",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "harness"
     },
     {
@@ -24002,7 +24354,7 @@
       "_origin": "ast",
       "id": "app_test_shell_no_org_test_sizeto",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "sizeto"
     },
     {
@@ -24013,7 +24365,7 @@
       "_origin": "ast",
       "id": "package_iakauntan_src_features_shell_app_shell_dart",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "package:iakauntan/src/features/shell/app_shell.dart"
     },
     {
@@ -24024,7 +24376,7 @@
       "_origin": "ast",
       "id": "app_test_shell_rail_scroll_test",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "shell_rail_scroll_test.dart"
     },
     {
@@ -24035,7 +24387,7 @@
       "_origin": "ast",
       "id": "app_test_shell_rail_scroll_test_everything",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "everything"
     },
     {
@@ -24046,7 +24398,7 @@
       "_origin": "ast",
       "id": "app_test_shell_rail_scroll_test_main",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "main"
     },
     {
@@ -24057,7 +24409,7 @@
       "_origin": "ast",
       "id": "app_test_shell_rail_scroll_test_harness",
       "community": 91,
-      "community_name": "package:flutter_riverpod/flutter_riverpod.dart",
+      "community_name": "package:flutter/material.dart",
       "norm_label": "harness"
     },
     {
@@ -32972,6 +33324,50 @@
       "norm_label": "_coa"
     },
     {
+      "label": "0072_corp_document_amendment.sql",
+      "file_type": "code",
+      "source_file": "supabase/migrations/0072_corp_document_amendment.sql",
+      "source_location": null,
+      "_origin": "ast",
+      "id": "supabase_migrations_0072_corp_document_amendment",
+      "community": 138,
+      "community_name": "0072_corp_document_amendment.sql",
+      "norm_label": "0072_corp_document_amendment.sql"
+    },
+    {
+      "label": "app.corp_document_locked()",
+      "file_type": "code",
+      "source_file": "supabase/migrations/0072_corp_document_amendment.sql",
+      "source_location": "L23",
+      "_origin": "ast",
+      "id": "supabase_migrations_0072_corp_document_amendment_app_corp_document_locked",
+      "community": 138,
+      "community_name": "0072_corp_document_amendment.sql",
+      "norm_label": "app.corp_document_locked()"
+    },
+    {
+      "label": "public.corp_documents",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "supabase_migrations_0072_corp_document_amendment_sql_public_corp_documents",
+      "community": 138,
+      "community_name": "0072_corp_document_amendment.sql",
+      "norm_label": "public.corp_documents"
+    },
+    {
+      "label": "public.corp_update_document()",
+      "file_type": "code",
+      "source_file": "supabase/migrations/0072_corp_document_amendment.sql",
+      "source_location": "L66",
+      "_origin": "ast",
+      "id": "supabase_migrations_0072_corp_document_amendment_public_corp_update_document",
+      "community": 138,
+      "community_name": "0072_corp_document_amendment.sql",
+      "norm_label": "public.corp_update_document()"
+    },
+    {
       "label": "_helpers.sql",
       "file_type": "code",
       "source_file": "supabase/tests/_helpers.sql",
@@ -34020,7 +34416,7 @@
       "label": "Signatures",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L291",
+      "source_location": "L314",
       "_origin": "ast",
       "id": "readme_signatures",
       "community": 95,
@@ -34031,7 +34427,7 @@
       "label": "Signing without an account",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L314",
+      "source_location": "L337",
       "_origin": "ast",
       "id": "readme_signing_without_an_account",
       "community": 95,
@@ -34042,7 +34438,7 @@
       "label": "Attachments",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L354",
+      "source_location": "L377",
       "_origin": "ast",
       "id": "readme_attachments",
       "community": 95,
@@ -34053,7 +34449,7 @@
       "label": "Not built",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L371",
+      "source_location": "L394",
       "_origin": "ast",
       "id": "readme_not_built",
       "community": 95,
@@ -34064,7 +34460,7 @@
       "label": "HRMS",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L384",
+      "source_location": "L407",
       "_origin": "ast",
       "id": "readme_hrms",
       "community": 95,
@@ -34075,7 +34471,7 @@
       "label": "Statutory rates are data, not code",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L397",
+      "source_location": "L420",
       "_origin": "ast",
       "id": "readme_statutory_rates_are_data_not_code",
       "community": 95,
@@ -34086,7 +34482,7 @@
       "label": "PCB",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L413",
+      "source_location": "L436",
       "_origin": "ast",
       "id": "readme_pcb",
       "community": 95,
@@ -34097,7 +34493,7 @@
       "label": "Starting mid-year",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L421",
+      "source_location": "L444",
       "_origin": "ast",
       "id": "readme_starting_mid_year",
       "community": 95,
@@ -34108,9 +34504,9 @@
       "label": "Verified end to end",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L447",
+      "source_location": "L470",
       "_origin": "ast",
-      "id": "readme_verified_end_to_end_447",
+      "id": "readme_verified_end_to_end_470",
       "community": 95,
       "community_name": "iAkauntan",
       "norm_label": "verified end to end"
@@ -34119,7 +34515,7 @@
       "label": "Paying the run",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L476",
+      "source_location": "L499",
       "_origin": "ast",
       "id": "readme_paying_the_run",
       "community": 95,
@@ -34130,7 +34526,7 @@
       "label": "Who sees what",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L501",
+      "source_location": "L524",
       "_origin": "ast",
       "id": "readme_who_sees_what",
       "community": 95,
@@ -34141,7 +34537,7 @@
       "label": "An auditor asking to see payslips",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L514",
+      "source_location": "L537",
       "_origin": "ast",
       "id": "readme_an_auditor_asking_to_see_payslips",
       "community": 95,
@@ -34152,7 +34548,7 @@
       "label": "Every read is recorded",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L543",
+      "source_location": "L566",
       "_origin": "ast",
       "id": "readme_every_read_is_recorded",
       "community": 95,
@@ -34163,7 +34559,7 @@
       "label": "And every change is recorded too",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L576",
+      "source_location": "L599",
       "_origin": "ast",
       "id": "readme_and_every_change_is_recorded_too",
       "community": 95,
@@ -34174,7 +34570,7 @@
       "label": "Access and administration",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L612",
+      "source_location": "L635",
       "_origin": "ast",
       "id": "readme_access_and_administration",
       "community": 95,
@@ -34185,7 +34581,7 @@
       "label": "Access types",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L614",
+      "source_location": "L637",
       "_origin": "ast",
       "id": "readme_access_types",
       "community": 95,
@@ -34196,7 +34592,7 @@
       "label": "Super admin",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L633",
+      "source_location": "L656",
       "_origin": "ast",
       "id": "readme_super_admin",
       "community": 95,
@@ -34207,7 +34603,7 @@
       "label": "Modules and add-ons",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L643",
+      "source_location": "L666",
       "_origin": "ast",
       "id": "readme_modules_and_add_ons",
       "community": 95,
@@ -34218,7 +34614,7 @@
       "label": "Registration and invitations",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L651",
+      "source_location": "L674",
       "_origin": "ast",
       "id": "readme_registration_and_invitations",
       "community": 95,
@@ -34229,7 +34625,7 @@
       "label": "Forgetting and changing a password",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L658",
+      "source_location": "L681",
       "_origin": "ast",
       "id": "readme_forgetting_and_changing_a_password",
       "community": 95,
@@ -34240,7 +34636,7 @@
       "label": "Security",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L686",
+      "source_location": "L709",
       "_origin": "ast",
       "id": "readme_security",
       "community": 95,
@@ -34251,7 +34647,7 @@
       "label": "A guard that failed open",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L704",
+      "source_location": "L727",
       "_origin": "ast",
       "id": "readme_a_guard_that_failed_open",
       "community": 95,
@@ -34262,7 +34658,7 @@
       "label": "What CI actually runs, and a day it was not running",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L726",
+      "source_location": "L749",
       "_origin": "ast",
       "id": "readme_what_ci_actually_runs_and_a_day_it_was_not_running",
       "community": 95,
@@ -34273,7 +34669,7 @@
       "label": "Running it",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L757",
+      "source_location": "L780",
       "_origin": "ast",
       "id": "readme_running_it",
       "community": 95,
@@ -34284,7 +34680,7 @@
       "label": "Deploying the web app",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L780",
+      "source_location": "L803",
       "_origin": "ast",
       "id": "readme_deploying_the_web_app",
       "community": 95,
@@ -34295,7 +34691,7 @@
       "label": "The Vercel pipeline",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L823",
+      "source_location": "L846",
       "_origin": "ast",
       "id": "readme_the_vercel_pipeline",
       "community": 95,
@@ -34306,7 +34702,7 @@
       "label": "Backend changes",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L884",
+      "source_location": "L907",
       "_origin": "ast",
       "id": "readme_backend_changes",
       "community": 95,
@@ -34317,7 +34713,7 @@
       "label": "The knowledge graph",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L892",
+      "source_location": "L915",
       "_origin": "ast",
       "id": "readme_the_knowledge_graph",
       "community": 95,
@@ -34328,7 +34724,7 @@
       "label": "Demo data",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L952",
+      "source_location": "L975",
       "_origin": "ast",
       "id": "readme_demo_data",
       "community": 95,
@@ -34339,7 +34735,7 @@
       "label": "The secretarial practice",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L967",
+      "source_location": "L990",
       "_origin": "ast",
       "id": "readme_the_secretarial_practice",
       "community": 95,
@@ -34350,7 +34746,7 @@
       "label": "`Database error querying schema`",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L1010",
+      "source_location": "L1033",
       "_origin": "ast",
       "id": "readme_database_error_querying_schema",
       "community": 95,
@@ -34361,7 +34757,7 @@
       "label": "Not built yet",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L1055",
+      "source_location": "L1078",
       "_origin": "ast",
       "id": "readme_not_built_yet",
       "community": 95,
@@ -38125,7 +38521,29 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "app_lib_src_core_download_stub",
+      "target": "app_lib_src_core_download_stub_savebytesfile"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/core/download_stub.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_core_download_stub",
       "target": "app_lib_src_core_download_stub_savetextfile"
+    },
+    {
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/core/download_stub.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_core_download_stub",
+      "target": "dart_typed_data"
     },
     {
       "relation": "references",
@@ -38176,6 +38594,51 @@
       "target": "return"
     },
     {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "context": "variable_type",
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_document_pdf",
+      "target": "return"
+    },
+    {
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/core/download_web.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_core_download_web",
+      "target": "dart_typed_data"
+    },
+    {
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/data/attachments_repository.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_data_attachments_repository",
+      "target": "dart_typed_data"
+    },
+    {
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_document_pdf",
+      "target": "dart_typed_data"
+    },
+    {
       "relation": "defines",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -38196,6 +38659,17 @@
       "_origin": "ast",
       "source": "app_lib_src_core_download_web",
       "target": "app_lib_src_core_download_web_blob"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/core/download_web.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_core_download_web",
+      "target": "app_lib_src_core_download_web_savebytesfile"
     },
     {
       "relation": "defines",
@@ -40640,6 +41114,18 @@
       "context": "variable_type",
       "_origin": "ast",
       "source": "app_lib_src_features_secretarial_entity_editor",
+      "target": "string"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "context": "variable_type",
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_entity_screen",
       "target": "string"
     },
     {
@@ -48311,17 +48797,6 @@
       "target": "core_format_dart"
     },
     {
-      "relation": "imports",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "app/lib/src/data/attachments_repository.dart",
-      "source_location": null,
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "app_lib_src_data_attachments_repository",
-      "target": "dart_typed_data"
-    },
-    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -50665,6 +51140,18 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "context": "variable_type",
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_entity_screen",
+      "target": "string_get"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
       "source_file": "app/lib/src/features/team/audit_trail_card.dart",
       "source_location": null,
       "weight": 1.0,
@@ -50927,6 +51414,17 @@
       "_origin": "ast",
       "source": "app_lib_src_data_corp_repository",
       "target": "app_lib_src_data_corp_repository_corpupcomingfilings"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/data/corp_repository.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_data_corp_repository",
+      "target": "app_lib_src_data_corp_repository_corpupdatedocument"
     },
     {
       "relation": "defines",
@@ -58040,6 +58538,17 @@
       "relation": "inherits",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_entity_screen_documenteditor",
+      "target": "consumerstatefulwidget"
+    },
+    {
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
       "source_file": "app/lib/src/features/secretarial/signing_page.dart",
       "source_location": null,
       "weight": 1.0,
@@ -58485,6 +58994,17 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "app_lib_src_features_secretarial_entity_editor_corpentityeditorstate",
+      "target": "consumerstate"
+    },
+    {
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_entity_screen_documenteditorstate",
       "target": "consumerstate"
     },
     {
@@ -61905,7 +62425,18 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "app_lib_src_features_documents_document_editor_documenteditorstate",
-      "target": "app_lib_src_features_documents_document_editor_documenteditor"
+      "target": "documenteditor"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_entity_screen_documenteditorstate",
+      "target": "documenteditor"
     },
     {
       "relation": "references",
@@ -66093,6 +66624,17 @@
       "relation": "imports",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_document_pdf",
+      "target": "package_flutter_services_dart"
+    },
+    {
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
       "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
       "source_location": null,
       "weight": 1.0,
@@ -68703,6 +69245,127 @@
       "relation": "defines",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_document_pdf",
+      "target": "app_lib_src_features_secretarial_document_pdf_bold"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_document_pdf",
+      "target": "app_lib_src_features_secretarial_document_pdf_builddocumentpdf"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_document_pdf",
+      "target": "app_lib_src_features_secretarial_document_pdf_doc"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_document_pdf",
+      "target": "app_lib_src_features_secretarial_document_pdf_inline"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_document_pdf",
+      "target": "app_lib_src_features_secretarial_document_pdf_paragraphs"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_document_pdf",
+      "target": "app_lib_src_features_secretarial_document_pdf_parts"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_document_pdf",
+      "target": "app_lib_src_features_secretarial_document_pdf_regular"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_document_pdf",
+      "target": "app_lib_src_features_secretarial_document_pdf_save"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_document_pdf",
+      "target": "app_lib_src_features_secretarial_document_pdf_spans"
+    },
+    {
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_document_pdf",
+      "target": "package_pdf_pdf_dart"
+    },
+    {
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/document_pdf.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_document_pdf",
+      "target": "package_pdf_widgets_dart"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
       "source_file": "app/lib/src/features/secretarial/entity_editor.dart",
       "source_location": null,
       "weight": 1.0,
@@ -69107,7 +69770,29 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "app_lib_src_features_secretarial_entity_screen",
+      "target": "app_lib_src_features_secretarial_entity_screen_body"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_entity_screen",
       "target": "app_lib_src_features_secretarial_entity_screen_build"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_entity_screen",
+      "target": "app_lib_src_features_secretarial_entity_screen_busy"
     },
     {
       "relation": "defines",
@@ -69250,6 +69935,28 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "app_lib_src_features_secretarial_entity_screen",
+      "target": "app_lib_src_features_secretarial_entity_screen_documenteditor"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_entity_screen",
+      "target": "app_lib_src_features_secretarial_entity_screen_documenteditorstate"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_entity_screen",
       "target": "app_lib_src_features_secretarial_entity_screen_documentid"
     },
     {
@@ -69283,7 +69990,18 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "app_lib_src_features_secretarial_entity_screen",
-      "target": "app_lib_src_features_secretarial_entity_screen_download"
+      "target": "app_lib_src_features_secretarial_entity_screen_downloadmarkdown"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_entity_screen",
+      "target": "app_lib_src_features_secretarial_entity_screen_downloadpdf"
     },
     {
       "relation": "defines",
@@ -69306,6 +70024,17 @@
       "_origin": "ast",
       "source": "app_lib_src_features_secretarial_entity_screen",
       "target": "app_lib_src_features_secretarial_entity_screen_entityid"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_entity_screen",
+      "target": "app_lib_src_features_secretarial_entity_screen_error"
     },
     {
       "relation": "defines",
@@ -69558,6 +70287,17 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "app_lib_src_features_secretarial_entity_screen",
+      "target": "app_lib_src_features_secretarial_entity_screen_save"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_entity_screen",
       "target": "app_lib_src_features_secretarial_entity_screen_sign"
     },
     {
@@ -69657,6 +70397,17 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "app_lib_src_features_secretarial_entity_screen",
+      "target": "app_lib_src_features_secretarial_entity_screen_stem"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_entity_screen",
       "target": "app_lib_src_features_secretarial_entity_screen_templatepicker"
     },
     {
@@ -69690,6 +70441,17 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "app_lib_src_features_secretarial_entity_screen",
+      "target": "app_lib_src_features_secretarial_entity_screen_title"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_entity_screen",
       "target": "app_lib_src_features_secretarial_entity_screen_url"
     },
     {
@@ -69713,6 +70475,17 @@
       "_origin": "ast",
       "source": "app_lib_src_features_secretarial_entity_screen",
       "target": "app_lib_src_features_secretarial_entity_screen_who"
+    },
+    {
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/lib/src/features/secretarial/entity_screen.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_lib_src_features_secretarial_entity_screen",
+      "target": "document_pdf_dart"
     },
     {
       "relation": "imports",
@@ -71738,12 +72511,68 @@
       "relation": "defines",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
-      "source_file": "app/test/format_test.dart",
+      "source_file": "app/test/document_pdf_test.dart",
       "source_location": null,
       "weight": 1.0,
       "_origin": "ast",
-      "source": "app_test_format_test",
-      "target": "app_test_format_test_main"
+      "source": "app_test_document_pdf_test",
+      "target": "app_test_document_pdf_test_2026"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/test/document_pdf_test.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_test_document_pdf_test",
+      "target": "app_test_document_pdf_test_body"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/test/document_pdf_test.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_test_document_pdf_test",
+      "target": "app_test_document_pdf_test_main"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/test/document_pdf_test.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "context": "variable_type",
+      "_origin": "ast",
+      "source": "app_test_document_pdf_test",
+      "target": "dated_this_11_august"
+    },
+    {
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/test/document_pdf_test.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_test_document_pdf_test",
+      "target": "package_flutter_test_flutter_test_dart"
+    },
+    {
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/test/document_pdf_test.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_test_document_pdf_test",
+      "target": "package_iakauntan_src_features_secretarial_document_pdf_dart"
     },
     {
       "relation": "imports",
@@ -71755,17 +72584,6 @@
       "_origin": "ast",
       "source": "app_test_format_test",
       "target": "package_flutter_test_flutter_test_dart"
-    },
-    {
-      "relation": "imports",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "app/test/format_test.dart",
-      "source_location": null,
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "app_test_format_test",
-      "target": "package_iakauntan_src_core_format_dart"
     },
     {
       "relation": "imports",
@@ -71810,6 +72628,28 @@
       "_origin": "ast",
       "source": "app_test_shell_rail_scroll_test",
       "target": "package_flutter_test_flutter_test_dart"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/test/format_test.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_test_format_test",
+      "target": "app_test_format_test_main"
+    },
+    {
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/test/format_test.dart",
+      "source_location": null,
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_test_format_test",
+      "target": "package_iakauntan_src_core_format_dart"
     },
     {
       "relation": "defines",
@@ -84797,6 +85637,39 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "supabase/migrations/0072_corp_document_amendment.sql",
+      "source_location": "L23",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "supabase_migrations_0072_corp_document_amendment",
+      "target": "supabase_migrations_0072_corp_document_amendment_app_corp_document_locked",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "supabase/migrations/0072_corp_document_amendment.sql",
+      "source_location": "L66",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "supabase_migrations_0072_corp_document_amendment",
+      "target": "supabase_migrations_0072_corp_document_amendment_public_corp_update_document",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "reads_from",
+      "confidence": "EXTRACTED",
+      "source_file": "supabase/migrations/0072_corp_document_amendment.sql",
+      "source_location": "L75",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "supabase_migrations_0072_corp_document_amendment_app_corp_document_locked",
+      "target": "supabase_migrations_0072_corp_document_amendment_sql_public_corp_documents",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "supabase/tests/_helpers.sql",
       "source_location": "L12",
       "weight": 1.0,
@@ -85513,7 +86386,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L612",
+      "source_location": "L635",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_iakauntan",
@@ -85546,7 +86419,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L952",
+      "source_location": "L975",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_iakauntan",
@@ -85568,7 +86441,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L384",
+      "source_location": "L407",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_iakauntan",
@@ -85590,7 +86463,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L1055",
+      "source_location": "L1078",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_iakauntan",
@@ -85601,7 +86474,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L757",
+      "source_location": "L780",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_iakauntan",
@@ -85612,7 +86485,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L686",
+      "source_location": "L709",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_iakauntan",
@@ -85689,7 +86562,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L354",
+      "source_location": "L377",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_corporate_secretarial_add_on",
@@ -85711,7 +86584,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L371",
+      "source_location": "L394",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_corporate_secretarial_add_on",
@@ -85722,7 +86595,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L291",
+      "source_location": "L314",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_corporate_secretarial_add_on",
@@ -85733,7 +86606,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L314",
+      "source_location": "L337",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_corporate_secretarial_add_on",
@@ -85766,7 +86639,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L514",
+      "source_location": "L537",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_hrms",
@@ -85777,7 +86650,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L576",
+      "source_location": "L599",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_hrms",
@@ -85788,7 +86661,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L543",
+      "source_location": "L566",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_hrms",
@@ -85799,7 +86672,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L476",
+      "source_location": "L499",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_hrms",
@@ -85810,7 +86683,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L413",
+      "source_location": "L436",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_hrms",
@@ -85821,7 +86694,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L421",
+      "source_location": "L444",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_hrms",
@@ -85832,7 +86705,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L397",
+      "source_location": "L420",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_hrms",
@@ -85843,18 +86716,18 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L447",
+      "source_location": "L470",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_hrms",
-      "target": "readme_verified_end_to_end_447",
+      "target": "readme_verified_end_to_end_470",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L501",
+      "source_location": "L524",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_hrms",
@@ -85865,7 +86738,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L614",
+      "source_location": "L637",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_access_and_administration",
@@ -85876,7 +86749,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L658",
+      "source_location": "L681",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_access_and_administration",
@@ -85887,7 +86760,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L643",
+      "source_location": "L666",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_access_and_administration",
@@ -85898,7 +86771,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L651",
+      "source_location": "L674",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_access_and_administration",
@@ -85909,7 +86782,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L633",
+      "source_location": "L656",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_access_and_administration",
@@ -85920,7 +86793,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L704",
+      "source_location": "L727",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_security",
@@ -85931,7 +86804,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L726",
+      "source_location": "L749",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_security",
@@ -85942,7 +86815,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L884",
+      "source_location": "L907",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_running_it",
@@ -85953,7 +86826,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L780",
+      "source_location": "L803",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_running_it",
@@ -85964,7 +86837,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L892",
+      "source_location": "L915",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_running_it",
@@ -85975,7 +86848,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L823",
+      "source_location": "L846",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_deploying_the_web_app",
@@ -85986,7 +86859,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L1010",
+      "source_location": "L1033",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_demo_data",
@@ -85997,7 +86870,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L967",
+      "source_location": "L990",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_demo_data",
@@ -86028,5 +86901,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "c8945df319ddd1a681e146688da71310454d00c0"
+  "built_at_commit": "c65ae2447c9c8897302ccc0cb4b2894ae16a0163"
 }

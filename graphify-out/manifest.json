@@ -50,14 +50,14 @@
     "semantic_hash": "15368a9032e126beed36d4c8ffebd7f7"
   },
   "app/lib/src/core/download_stub.dart": {
-    "mtime": 1786371488.3828979,
-    "ast_hash": "ae187ef8fbe5a4d74955cce9ef48ae68",
-    "semantic_hash": "ae187ef8fbe5a4d74955cce9ef48ae68"
+    "mtime": 1786471868.8732228,
+    "ast_hash": "0365cb37cd97dc0d9bc193fdbc51ec1b",
+    "semantic_hash": ""
   },
   "app/lib/src/core/download_web.dart": {
-    "mtime": 1786371494.9108977,
-    "ast_hash": "bbf0505cbb6e8ee8d4406bb47965a7ab",
-    "semantic_hash": "bbf0505cbb6e8ee8d4406bb47965a7ab"
+    "mtime": 1786471868.8727884,
+    "ast_hash": "0599e958014e34ed6fa5e3ed8e036f12",
+    "semantic_hash": ""
   },
   "app/lib/src/core/env.dart": {
     "mtime": 1786260429.810775,
@@ -100,9 +100,9 @@
     "semantic_hash": "8866c4e3ed3d2d74eef871478f5e2d72"
   },
   "app/lib/src/data/corp_repository.dart": {
-    "mtime": 1786441925.0854797,
-    "ast_hash": "9b0c8a231796bf7333874b3317f5c34a",
-    "semantic_hash": "9b0c8a231796bf7333874b3317f5c34a"
+    "mtime": 1786471526.813228,
+    "ast_hash": "dab8d0bd7b7339cd443dfa7cd3f5fb14",
+    "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
     "mtime": 1786393436.4863958,
@@ -275,9 +275,9 @@
     "semantic_hash": "f6071149b884abb0a3eb114e391db379"
   },
   "app/lib/src/features/secretarial/entity_screen.dart": {
-    "mtime": 1786441925.104428,
-    "ast_hash": "23e4fcc451533f53d94c2b17e3226dd7",
-    "semantic_hash": "23e4fcc451533f53d94c2b17e3226dd7"
+    "mtime": 1786471923.1496584,
+    "ast_hash": "5c69d17cf09767b4ab6103398a052766",
+    "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/secretarial_screen.dart": {
     "mtime": 1786437777.3562913,
@@ -735,9 +735,9 @@
     "semantic_hash": "f3893f34cb98c338baff25896b9ad710"
   },
   "supabase/tests/secretarial.sql": {
-    "mtime": 1786442250.0134723,
-    "ast_hash": "6ad9da5108e225e9569a8e0a39e01ce2",
-    "semantic_hash": "6ad9da5108e225e9569a8e0a39e01ce2"
+    "mtime": 1786471500.3732285,
+    "ast_hash": "09689e0d39b6b4c1531d3e82cc5358ed",
+    "semantic_hash": ""
   },
   "supabase/tests/statutory.sql": {
     "mtime": 1786441816.0291908,
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786470934.3212414,
-    "ast_hash": "208c38f0faf525ca6912311c4efce065",
+    "mtime": 1786472055.8092158,
+    "ast_hash": "9fb0b5519cd7836e1d584c4b6973966f",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -830,8 +830,8 @@
     "semantic_hash": ""
   },
   "app/pubspec.yaml": {
-    "mtime": 1786440701.577536,
-    "ast_hash": "cf0a83a325a9fdbf70fbdea5b21e5c2d",
+    "mtime": 1786471844.9871256,
+    "ast_hash": "cec498bcfc75ff954c78822f22b1c30e",
     "semantic_hash": ""
   },
   "app/web/index.html": {
@@ -1017,6 +1017,21 @@
   "app/test/shell_rail_scroll_test.dart": {
     "mtime": 1786463651.1930597,
     "ast_hash": "0c987e698fb5e913429d4cf3955fd57f",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/secretarial/document_pdf.dart": {
+    "mtime": 1786471889.5652196,
+    "ast_hash": "14ee2eccb4263a39ac974b579d77d458",
+    "semantic_hash": ""
+  },
+  "app/test/document_pdf_test.dart": {
+    "mtime": 1786471960.033218,
+    "ast_hash": "e460369d4542ea52ce60fcce41e8c1da",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0072_corp_document_amendment.sql": {
+    "mtime": 1786471424.5052302,
+    "ast_hash": "8ffdea659766016be02a268e74d8f1b3",
     "semantic_hash": ""
   }
 }

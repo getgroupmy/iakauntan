@@ -288,6 +288,29 @@ rather than after. Nothing is silently blanked: an unfilled placeholder
 would stay visible as `{{director_name}}`, which is why the gaps are
 collected up front instead.
 
+Every generated document is kept — the **Documents** tab on a company
+lists them, newest first, and each one can be read, amended, signed and
+downloaded. They are stored, not regenerated on demand, because a
+resolution is a record of what was circulated on a date, not a view over
+today's register.
+
+**Amending, and when you cannot.** A template cannot anticipate every
+recital, so the body is editable. Once anybody has signed it, it is not.
+The signature layer already *detects* an edit — the text is hashed when
+signing opens and again as each person signs — but detecting is not
+preventing, and a signed resolution whose words were later rewritten says
+one thing while a signature attests to another. The rule is a trigger on
+`corp_documents` rather than a check inside the RPC, because RLS grants
+`can_write` full `ALL` on that table: a guard that only lives in one
+function is not a guard, since a PATCH straight to PostgREST would walk
+around it. `supabase/tests/secretarial.sql` asserts both paths are shut.
+
+**Downloads come out as PDF**, on A4 with the company's typeface
+embedded, page numbers and the generation date in the footer. The
+Markdown is still available from the row's overflow menu, and it is the
+copy to keep if the exact bytes matter: it is what the database stores
+and what the signature hash covers. The PDF is a rendering of it.
+
 ### Signatures
 
 A generated document can be circulated for signature. This is an
@@ -1063,7 +1086,10 @@ Stated plainly so nothing here is mistaken for finished:
 - Self-billed e-Invoice for foreign suppliers: schema supports it, no UI
 - Goods Received and Purchase Request screens (the types exist in the
   schema; only PO, Bill and Purchase Credit Note are exposed in the app)
-- Invoice PDF rendering and email delivery
+- Invoice and payslip PDFs, and e-mail delivery of anything. Secretarial
+  documents do render to PDF (see above); the same renderer has not been
+  pointed at an invoice or a payslip, which need a layout rather than a
+  page of prose
 - Bank statement import and auto-matching
 - Statutory submission files: CP39, Borang A, Lampiran 1 and the EA form
   are all computable from what is stored, but no exporter is written

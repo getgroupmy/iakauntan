@@ -33,6 +33,10 @@ dependencies:
   # which is why it beats hand-rolling an <input type=file>.
   file_selector: ^1.0.3
   crypto: ^3.0.6
+  # Real PDFs for the documents a secretary has to print, sign
+  # and lodge. Markdown is fine for a diff; it is not fine for
+  # something that goes in a minute book.
+  pdf: ^3.11.1
 
 dev_dependencies:
   flutter_test:
