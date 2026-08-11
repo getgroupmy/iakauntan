@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/format.dart';
@@ -636,6 +638,53 @@ class Repo {
   /// duplicating the cast is how two of them end up disagreeing about
   /// what PostgREST returns.
   static List<Map<String, dynamic>> rows(dynamic data) => _rows(data);
+}
+
+/// The company's own mark, for the top of everything it sends out.
+extension RepoOrgLogo on Repo {
+  /// One object per company at a fixed path, replaced in place.
+  ///
+  /// Fixed rather than timestamped so the bucket does not accumulate
+  /// every logo a company has ever had, and because the storage policy
+  /// keys off the first path segment: `<org>/logo` is what makes this
+  /// company's mark unwritable by anyone else.
+  String get _logoPath => '$orgId/logo';
+
+  Future<String> uploadOrgLogo(Uint8List bytes, String contentType) async {
+    await client.storage.from('logos').uploadBinary(
+          _logoPath,
+          bytes,
+          fileOptions: FileOptions(upsert: true, contentType: contentType),
+        );
+
+    // The path never changes, so a browser that has seen the old logo
+    // would keep showing it. The version parameter is only for display —
+    // the PDF reads the bytes straight from storage and never sees it.
+    final url = client.storage.from('logos').getPublicUrl(_logoPath);
+    final versioned = '$url?v=${DateTime.now().millisecondsSinceEpoch}';
+    await client
+        .from('organizations')
+        .update({'logo_url': versioned}).eq('id', orgId);
+    return versioned;
+  }
+
+  Future<void> removeOrgLogo() async {
+    await client.storage.from('logos').remove([_logoPath]);
+    await client.from('organizations').update({'logo_url': null}).eq('id', orgId);
+  }
+
+  /// The raw bytes, for embedding in a PDF.
+  ///
+  /// Returns null rather than throwing when there is no logo, or when the
+  /// object has gone missing behind a stale `logo_url`: a company without
+  /// a mark still has to be able to print an invoice.
+  Future<Uint8List?> orgLogoBytes() async {
+    try {
+      return await client.storage.from('logos').download(_logoPath);
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 class MyInvoisException implements Exception {

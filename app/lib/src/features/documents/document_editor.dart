@@ -179,6 +179,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         org: org,
         doc: doc,
         documentLabel: _meta.singular,
+        logo: await ref.read(orgLogoProvider.future),
       );
       final stem =
           doc.docNo.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();

@@ -31,7 +31,10 @@ class PayslipScreen extends ConsumerWidget {
       return;
     }
 
-    final bytes = await buildPayslipPdf(org: org, payslip: slip);
+    final bytes = await buildPayslipPdf(
+        org: org,
+        payslip: slip,
+        logo: await ref.read(orgLogoProvider.future));
     final stem = [
       slip.employeeNo ?? slip.employeeName,
       slip.periodCode ?? '',

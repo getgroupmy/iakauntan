@@ -22,6 +22,7 @@ Future<Uint8List> buildPayslipPdf({
   required Organization org,
   required Payslip payslip,
   String? periodLabel,
+  Uint8List? logo,
 }) async {
   final kit = await PdfKit.load();
   final period = periodLabel ?? payslip.periodCode ?? '';
@@ -49,7 +50,7 @@ Future<Uint8List> buildPayslipPdf({
       footer: (context) => kit.footer(context,
           note: 'Private and confidential'),
       build: (context) => [
-        kit.letterhead(org, documentLabel: 'Payslip'),
+        kit.letterhead(org, documentLabel: 'Payslip', logo: logo),
         kit.rule(),
 
         pw.Row(

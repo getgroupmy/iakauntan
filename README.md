@@ -995,6 +995,21 @@ document** (from the company's Documents tab). All three share one
 letterhead and one embedded typeface, so an invoice and a payslip cannot
 disagree about the company's own address.
 
+**The letterhead carries the company logo**, uploaded under Settings →
+Company (administrators only, matching the storage policy — the bucket
+refuses a write whose first path segment is not an organization the
+caller administers). It prints top left on invoices and payslips at a
+fixed size with the aspect ratio preserved, so a tall logo cannot push
+the identity block down the page. A company without one still prints a
+proper letterhead: the mark is an addition to the registered name and
+numbers, never a replacement, because a tax invoice has to carry those
+whatever it looks like.
+
+Secretarial documents deliberately do **not** take the practice's
+letterhead. A board resolution belongs to the client company whose board
+passed it — its name is already at the head of the text — and stamping
+the secretarial firm's mark on it would misstate whose document it is.
+
 Two things the layouts get right on purpose:
 
 - **Tax is a column on the invoice, not a line at the bottom.** A bill

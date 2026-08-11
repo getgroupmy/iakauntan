@@ -1,3 +1,4 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -63,13 +64,13 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
-class _CompanyCard extends StatelessWidget {
+class _CompanyCard extends ConsumerWidget {
   const _CompanyCard({required this.org});
 
   final Organization org;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(Space.lg),
@@ -77,6 +78,8 @@ class _CompanyCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SectionHeader('Company'),
+            _LogoRow(org: org),
+            const Divider(height: Space.xl),
             _Field(label: 'Name', value: org.name),
             _Field(label: 'Entity type', value: Fmt.label(org.entityType)),
             _Field(
@@ -865,6 +868,155 @@ class _Field extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The mark that goes at the top of every invoice, payslip and letter.
+///
+/// Admin only, matching the storage policy — the bucket refuses a write
+/// whose first path segment is not an organization the caller administers,
+/// so showing the button to anyone else would only produce a refusal.
+class _LogoRow extends ConsumerStatefulWidget {
+  const _LogoRow({required this.org});
+
+  final Organization org;
+
+  @override
+  ConsumerState<_LogoRow> createState() => _LogoRowState();
+}
+
+class _LogoRowState extends ConsumerState<_LogoRow> {
+  bool _busy = false;
+
+  Future<void> _pick() async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+
+    final file = await openFile(acceptedTypeGroups: const [
+      XTypeGroup(label: 'Image', extensions: ['png', 'jpg', 'jpeg', 'webp']),
+    ]);
+    if (file == null) return;
+
+    final bytes = await file.readAsBytes();
+    // The bucket caps at 5 MB; refusing here says why, rather than
+    // letting storage return a bare 413.
+    if (bytes.length > 5 * 1024 * 1024) {
+      if (mounted) _say('That image is over 5 MB. Try a smaller one.');
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      await repo.uploadOrgLogo(bytes, file.mimeType ?? 'image/png');
+      ref.invalidate(currentOrgProvider);
+      ref.invalidate(orgLogoProvider);
+      if (mounted) _say('Logo updated');
+    } catch (e) {
+      if (mounted) _say('$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _remove() async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    setState(() => _busy = true);
+    try {
+      await repo.removeOrgLogo();
+      ref.invalidate(currentOrgProvider);
+      ref.invalidate(orgLogoProvider);
+      if (mounted) _say('Logo removed');
+    } catch (e) {
+      if (mounted) _say('$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _say(String message) => ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content: Text(message)));
+
+  @override
+  Widget build(BuildContext context) {
+    final canAdmin = ref.watch(canAdminProvider);
+    final url = widget.org.logoUrl;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 180,
+          child: Text('Logo',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: context.scheme.onSurfaceVariant)),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                height: 64,
+                width: 128,
+                alignment: Alignment.centerLeft,
+                decoration: BoxDecoration(
+                  border: Border.all(color: context.scheme.outlineVariant),
+                  borderRadius: BorderRadius.circular(Radii.sm),
+                ),
+                padding: const EdgeInsets.all(6),
+                child: url == null
+                    ? Center(
+                        child: Text('None',
+                            style: Theme.of(context).textTheme.bodySmall),
+                      )
+                    : Image.network(url,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Center(
+                              child: Text('Could not load',
+                                  style:
+                                      Theme.of(context).textTheme.bodySmall),
+                            )),
+              ),
+              const SizedBox(height: Space.sm),
+              if (canAdmin)
+                Row(children: [
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : _pick,
+                    icon: _busy
+                        ? const SizedBox(
+                            height: 14,
+                            width: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.upload_outlined, size: 18),
+                    label: Text(url == null ? 'Upload' : 'Replace'),
+                  ),
+                  if (url != null) ...[
+                    const SizedBox(width: Space.sm),
+                    TextButton(
+                      onPressed: _busy ? null : _remove,
+                      child: const Text('Remove'),
+                    ),
+                  ],
+                ])
+              else
+                Text('Ask an administrator to change this.',
+                    style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: Space.xs),
+              Text(
+                'PNG or JPEG, up to 5 MB. Printed at the top left of every '
+                'invoice, payslip and generated document.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: context.scheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

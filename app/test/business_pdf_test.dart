@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:iakauntan/src/data/models.dart';
@@ -228,4 +230,76 @@ void main() {
       expect(head(bytes), '%PDF-');
     });
   });
+  group('letterhead logo', () {
+    // A real 1x1 PNG. MemoryImage sniffs the header, so a stub of random
+    // bytes would prove nothing.
+    final png = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8'
+        'z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+
+    test('an invoice with a logo renders, and carries it', () async {
+      final without = await buildInvoicePdf(
+          org: org, doc: _plainInvoice(), documentLabel: 'Invoice');
+      final with_ = await buildInvoicePdf(
+          org: org,
+          doc: _plainInvoice(),
+          documentLabel: 'Invoice',
+          logo: png);
+
+      expect(String.fromCharCodes(with_.take(5)), '%PDF-');
+      expect(with_.length, greaterThan(without.length),
+          reason: 'the image should be embedded, not silently dropped');
+    });
+
+    test('a payslip with a logo renders', () async {
+      final bytes = await buildPayslipPdf(
+        org: org,
+        payslip: Payslip(
+          id: 'p',
+          employeeName: 'With Logo',
+          basicSalary: 0,
+          grossPay: 0,
+          totalDeductions: 0,
+          netPay: 0,
+          epfEmployee: 0,
+          epfEmployer: 0,
+          socsoEmployee: 0,
+          socsoEmployer: 0,
+          eisEmployee: 0,
+          eisEmployer: 0,
+          pcb: 0,
+          zakat: 0,
+          hrdf: 0,
+          otHours: 0,
+          schedulesVerified: true,
+          lines: const [],
+        ),
+        logo: png,
+      );
+      expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+    });
+  });
 }
+
+/// The smallest invoice that still exercises the letterhead.
+BusinessDocument _plainInvoice() => BusinessDocument(
+      id: 'd',
+      docType: 'invoice',
+      docNo: 'INV-9',
+      docDate: DateTime(2026, 8, 11),
+      contactId: 'c',
+      contactName: 'A Customer',
+      einvoiceStatus: 'not_applicable',
+      glEntryId: 'gl',
+      subtotal: 100,
+      totalAmount: 100,
+      lines: [
+        DocumentLine(
+            lineNo: 1,
+            description: 'One thing',
+            quantity: 1,
+            unitPrice: 100,
+            lineSubtotal: 100,
+            lineTotal: 100),
+      ],
+    );

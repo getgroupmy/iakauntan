@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -671,4 +673,17 @@ final setupRowsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, ({String table, String orderBy})>(
         (ref, arg) {
   return requireRepo(ref).setupRows(arg.table, orderBy: arg.orderBy);
+});
+
+/// The company logo as raw bytes, for embedding in a PDF.
+///
+/// Separate from `currentOrgProvider.logoUrl`, which is a URL for the
+/// browser to fetch: a PDF needs the bytes themselves, and reading them
+/// through the storage client sidesteps both CORS and the cache that
+/// makes a replaced logo look unchanged.
+final orgLogoProvider = FutureProvider<Uint8List?>((ref) async {
+  final repo = ref.watch(repoProvider);
+  final org = ref.watch(currentOrgProvider).valueOrNull;
+  if (repo == null || org?.logoUrl == null) return null;
+  return repo.orgLogoBytes();
 });

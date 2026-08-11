@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -45,7 +47,13 @@ class PdfKit {
   /// Who issued this. Everything is optional because a company that has
   /// not finished its settings should still be able to print — with gaps
   /// where the details are missing rather than the word "null".
-  pw.Widget letterhead(Organization org, {required String documentLabel}) {
+  /// [logo] is the raw image bytes, or null. A company that has not
+  /// uploaded one still prints a proper letterhead — the mark is an
+  /// addition to the identity block, never a replacement for it, because
+  /// a tax invoice has to carry the registered name and numbers whatever
+  /// it looks like.
+  pw.Widget letterhead(Organization org,
+      {required String documentLabel, Uint8List? logo}) {
     final address = [
       org.addressLine1,
       org.addressLine2,
@@ -63,6 +71,20 @@ class PdfKit {
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
+        if (logo != null) ...[
+          // Bounded, not scaled to fit: a tall logo would otherwise push
+          // the whole identity block down the page, and a wide one would
+          // squeeze it. `contain` keeps whatever aspect ratio was
+          // uploaded inside a fixed corner.
+          pw.Container(
+            width: 92,
+            height: 46,
+            margin: const pw.EdgeInsets.only(right: 14),
+            child: pw.Image(pw.MemoryImage(logo),
+                fit: pw.BoxFit.contain,
+                alignment: pw.Alignment.topLeft),
+          ),
+        ],
         pw.Expanded(
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,

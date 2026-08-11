@@ -18,6 +18,7 @@ Future<Uint8List> buildInvoicePdf({
   required Organization org,
   required BusinessDocument doc,
   required String documentLabel,
+  Uint8List? logo,
 }) async {
   final kit = await PdfKit.load();
   final pdf = pw.Document(title: '$documentLabel ${doc.docNo}');
@@ -32,7 +33,7 @@ Future<Uint8List> buildInvoicePdf({
       theme: kit.theme,
       footer: (context) => kit.footer(context, note: doc.docNo),
       build: (context) => [
-        kit.letterhead(org, documentLabel: documentLabel),
+        kit.letterhead(org, documentLabel: documentLabel, logo: logo),
         kit.rule(),
 
         pw.Row(
