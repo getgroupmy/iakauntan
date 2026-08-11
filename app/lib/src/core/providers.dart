@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../data/corp_models.dart';
+import '../data/corp_repository.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 
@@ -514,6 +516,62 @@ final payslipProvider =
 final paymentInstructionProvider =
     FutureProvider.autoDispose.family<List<PaymentLine>, String>((ref, runId) {
   return requireRepo(ref).paymentInstruction(runId);
+});
+
+// ---------------------------------------------------------------------
+// Corporate secretarial
+// ---------------------------------------------------------------------
+final corpEntitiesProvider =
+    FutureProvider.autoDispose<List<CorpEntity>>((ref) {
+  return requireRepo(ref).corpEntities();
+});
+
+final corpEntityProvider =
+    FutureProvider.autoDispose.family<CorpEntity?, String>((ref, id) {
+  return requireRepo(ref).corpEntity(id);
+});
+
+final corpOfficersProvider =
+    FutureProvider.autoDispose.family<List<CorpOfficer>, String>((ref, id) {
+  return requireRepo(ref).corpOfficers(id);
+});
+
+final corpMembersProvider =
+    FutureProvider.autoDispose.family<List<CorpMember>, String>((ref, id) {
+  return requireRepo(ref).corpRegisterOfMembers(id);
+});
+
+final corpShareEventsProvider =
+    FutureProvider.autoDispose.family<List<CorpShareEvent>, String>((ref, id) {
+  return requireRepo(ref).corpShareEvents(id);
+});
+
+final corpBeneficialOwnersProvider = FutureProvider.autoDispose
+    .family<List<CorpBeneficialOwner>, String>((ref, id) {
+  return requireRepo(ref).corpBeneficialOwners(id);
+});
+
+final corpChargesProvider =
+    FutureProvider.autoDispose.family<List<CorpCharge>, String>((ref, id) {
+  return requireRepo(ref).corpCharges(id);
+});
+
+final corpDocumentsProvider =
+    FutureProvider.autoDispose.family<List<CorpDocument>, String>((ref, id) {
+  return requireRepo(ref).corpDocuments(id);
+});
+
+/// Every obligation falling due, computed from each entity's own dates.
+final corpFilingsProvider = FutureProvider.autoDispose<List<CorpFiling>>((ref) {
+  return requireRepo(ref).corpUpcomingFilings(withinDays: 180);
+});
+
+final corpTemplatesProvider = FutureProvider<List<CorpTemplate>>((ref) {
+  return requireRepo(ref).corpTemplates();
+});
+
+final corpPersonsProvider = FutureProvider.autoDispose<List<CorpPerson>>((ref) {
+  return requireRepo(ref).corpPersons();
 });
 
 final requisitionsProvider =

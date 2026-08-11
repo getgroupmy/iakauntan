@@ -624,6 +624,12 @@ class Repo {
       (data as List? ?? const [])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
+
+  /// The same shaping, reachable from extensions in other files. Dart
+  /// extensions cannot see a private member across a file boundary, and
+  /// duplicating the cast is how two of them end up disagreeing about
+  /// what PostgREST returns.
+  static List<Map<String, dynamic>> rows(dynamic data) => _rows(data);
 }
 
 class MyInvoisException implements Exception {

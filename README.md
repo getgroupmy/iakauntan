@@ -203,6 +203,103 @@ row is written.
 
 ---
 
+## Corporate secretarial (add-on)
+
+For a firm acting as company secretary. The tenant is the firm; the
+companies it acts for are `corp_entities` — deliberately **not**
+organizations, because a client company is a subject of record, not a
+tenant with logins.
+
+Built to the Companies Act 2016, which replaced the numbered forms of
+the 1965 Act with sections. Practitioners still say "Form 49", so the
+filing types carry both.
+
+| Register | Section |
+| --- | --- |
+| Directors, managers and secretaries | s.57 |
+| Members | s.50 |
+| Beneficial owners | s.60B, in force since 1 April 2024 |
+| Charges | s.357 |
+
+### The dates are the product
+
+A secretarial firm's whole risk is a missed date, so none of them are
+typed in. Each is computed from the company's own dates against the
+section that imposes it:
+
+| Filing | Runs from | Days |
+| --- | --- | --- |
+| Annual Return (s.68) | **anniversary of incorporation** | 30 |
+| Financial statements (s.258, s.259) | financial year end | 180 + 30 |
+| Change of officers (s.58, "Form 49") | the change | 14 |
+| Change of registered office (s.46(3)) | the change | 14 |
+| Return of allotment (s.78) | the allotment | 14 |
+| Registration of a charge (s.352) | creation of the charge | 30 |
+| Beneficial ownership (s.60B) | obtaining the information | 14 |
+
+The Annual Return running from the **incorporation anniversary and not
+the year end** is the single most common reason a company is late, so it
+is what the module is built around.
+
+Two things the tests pin down, because both are easy to get wrong and
+neither is visible until it matters:
+
+- **The anniversary is interval arithmetic, not date rebuilding.** The
+  first cut clamped the day to the 28th to dodge 29 February, which
+  quietly moved every company incorporated after the 28th of a month two
+  or three days early. A statutory date that is wrong in the safe
+  direction is still wrong.
+- **Only public companies hold an AGM.** The 2016 Act removed the
+  requirement for private companies entirely. Opening an AGM filing
+  against a Sdn Bhd is refused outright — telling a client to hold a
+  meeting the Act does not require is teaching them the wrong law.
+
+### The register of members is computed
+
+Share movements are kept as events — allotment, transfer, transmission,
+cancellation — and positions are derived from them, the way the ledger
+derives balances from journals. A register you can edit directly is a
+register that will drift from the returns already lodged. A transfer of
+more shares than the holder holds is refused by the database:
+
+```
+Holder has 60 shares of that class on 2026-03-01, cannot move 1000
+```
+
+Anything over 20% is flagged against the s.60B tests rather than left
+for the secretary to eyeball percentages.
+
+### Documents are built from the registers
+
+A resolution that disagrees with the register is worse than no
+resolution, because it looks authoritative. So `corp_generate_document`
+reads the merge values out of the registers — company name, registration
+number, directors, members, issued capital — and substitutes them into a
+template. Six are shipped: appointment of a director, change of
+registered office, allotment of shares, special resolution changing the
+name, first board minutes, and a statutory particulars extract. A firm
+that wants its own wording copies a template against its own `org_id`
+and that version wins.
+
+Before generating, `corp_template_placeholders` reports which fields the
+register can answer and which it cannot — a new director's NRIC is not
+in the register yet, by definition — so a gap is caught before signature
+rather than after. Nothing is silently blanked: an unfilled placeholder
+would stay visible as `{{director_name}}`, which is why the gaps are
+collected up front instead.
+
+### Not built
+
+- **Direct SSM lodgement.** SSM publishes no general API for filing;
+  MBRS submission goes through their own tool in XBRL. The module tracks
+  what is due and produces the paperwork — a human still lodges it.
+- **Digital signatures** and a **client portal** for owners to upload
+  identity documents and sign resolutions. Both are Phase 2 in the brief
+  and neither is written.
+- Attachments of any kind — the same Storage gap as the rest of the app.
+
+---
+
 ## HRMS
 
 Two add-on modules: **hr** and **payroll**.

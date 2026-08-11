@@ -10,6 +10,8 @@ class Fmt {
   static final _dateTime = DateFormat('dd/MM/yyyy HH:mm');
   static final _plain = NumberFormat('#,##0.00');
   static final _compact = NumberFormat.compact(locale: 'en');
+  static final _whole = NumberFormat('#,##0');
+  static final _fractional = NumberFormat('#,##0.####');
 
   /// RM 1,234.56 — the symbol is spaced, which is how it appears on
   /// Malaysian tax invoices.
@@ -28,6 +30,14 @@ class Fmt {
     return v == v.roundToDouble()
         ? v.toStringAsFixed(0)
         : v.toString().replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+  }
+
+  /// Share counts. Whole numbers are the norm and "340.00 shares" reads
+  /// like money rather than shares, but fractional entitlements exist so
+  /// the decimals are kept when there are any.
+  static String shares(num? value) {
+    final v = value ?? 0;
+    return v == v.roundToDouble() ? _whole.format(v) : _fractional.format(v);
   }
 
   static String percent(num? value) {

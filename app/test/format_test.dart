@@ -17,6 +17,19 @@ void main() {
     });
   });
 
+  group('shares', () {
+    test('a share count is a count, not money', () {
+      // "340.00 shares" reads like a currency amount on a register.
+      expect(Fmt.shares(340), '340');
+      expect(Fmt.shares(1000000), '1,000,000');
+    });
+
+    test('but a fractional entitlement keeps its decimals', () {
+      expect(Fmt.shares(12.5), '12.5');
+      expect(Fmt.shares(0.0625), '0.0625');
+    });
+  });
+
   group('days', () {
     test('trims a trailing zero but keeps a half day', () {
       expect(Fmt.days(16), '16');

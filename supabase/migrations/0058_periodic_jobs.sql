@@ -81,7 +81,8 @@ end; $$;
 create or replace function app.advance_schedule(
   p_from date, p_frequency text, p_interval integer)
 returns date
-language sql immutable as $$
+language sql immutable
+set search_path = pg_catalog, pg_temp as $$
   select (p_from + (greatest(coalesce(p_interval, 1), 1) || ' ' ||
     case p_frequency
       when 'daily' then 'days' when 'weekly' then 'weeks'

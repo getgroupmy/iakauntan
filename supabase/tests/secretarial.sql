@@ -1,0 +1,256 @@
+-- =====================================================================
+-- iAkauntan :: corporate secretarial tests
+--
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/secretarial.sql
+--
+-- The dates are the product. A secretarial firm's whole risk is a
+-- missed deadline, so the arithmetic that produces them is asserted
+-- rather than eyeballed. Runs inside a transaction that is rolled back.
+-- =====================================================================
+
+begin;
+
+\i supabase/tests/_helpers.sql
+
+create or replace function pg_temp.sec_org()
+returns uuid language plpgsql as $$
+declare v_org uuid;
+begin
+  v_org := pg_temp.test_org('Sec Firm');
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  values (v_org, 'secretarial', true) on conflict do nothing;
+  return v_org;
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- The Annual Return runs from the incorporation anniversary
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_sep uuid; v_leap uuid;
+  v_due date;
+begin
+  v_org := pg_temp.sec_org();
+
+  -- Incorporated on the 30th: clamping the anniversary day to dodge
+  -- 29 February would move this two days early, and a statutory date
+  -- that is wrong in the safe direction is still wrong.
+  insert into public.corp_entities (org_id, name, entity_type, incorporated_on,
+    financial_year_end_day, financial_year_end_month)
+  values (v_org, 'Akhir Bulan Sdn Bhd', 'sdn_bhd', date '2019-09-30', 31, 12)
+  returning id into v_sep;
+
+  insert into public.corp_entities (org_id, name, entity_type, incorporated_on,
+    financial_year_end_day, financial_year_end_month)
+  values (v_org, 'Lompat Sdn Bhd', 'sdn_bhd', date '2020-02-29', 31, 3)
+  returning id into v_leap;
+
+  select f.due_date into v_due
+    from public.corp_upcoming_filings(v_org, 400) f
+   where f.entity_id = v_sep and f.filing_type = 'annual_return'
+   order by f.due_date limit 1;
+  perform pg_temp.check_true(
+    'the Annual Return is thirty days after the anniversary, not the 28th',
+    extract(day from v_due) = 30);
+
+  -- A leap-day company has its anniversary on 28 February in a common
+  -- year, which is what Postgres interval arithmetic already does.
+  select f.trigger_date into v_due
+    from public.corp_upcoming_filings(v_org, 400) f
+   where f.entity_id = v_leap and f.filing_type = 'annual_return'
+   order by f.trigger_date limit 1;
+  perform pg_temp.check_true('a leap-day anniversary does not drift',
+    extract(month from v_due) = 2 and extract(day from v_due) in (28, 29));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Only public companies hold an AGM
+--
+-- The 2016 Act removed the requirement for a private company entirely.
+-- Telling a Sdn Bhd it has an AGM due is teaching the wrong law.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_sdn uuid; v_bhd uuid;
+begin
+  v_org := pg_temp.sec_org();
+
+  insert into public.corp_entities (org_id, name, entity_type, incorporated_on,
+    financial_year_end_day, financial_year_end_month)
+  values (v_org, 'Persendirian Sdn Bhd', 'sdn_bhd', date '2020-01-15', 31, 12)
+  returning id into v_sdn;
+  insert into public.corp_entities (org_id, name, entity_type, incorporated_on,
+    financial_year_end_day, financial_year_end_month)
+  values (v_org, 'Awam Berhad', 'berhad', date '2020-01-15', 31, 12)
+  returning id into v_bhd;
+
+  perform pg_temp.check_eq('no AGM is due of a private company',
+    (select count(*) from public.corp_upcoming_filings(v_org, 400) f
+      where f.entity_id = v_sdn and f.filing_type = 'agm'), 0);
+  perform pg_temp.check_true('but a public company has one',
+    (select count(*) from public.corp_upcoming_filings(v_org, 400) f
+      where f.entity_id = v_bhd and f.filing_type = 'agm') > 0);
+
+  -- And the guard holds when a filing is opened by hand.
+  begin
+    perform public.corp_open_filing(v_sdn, 'agm', date '2025-12-31');
+    raise exception 'FAIL: a private company was given an AGM filing';
+  exception when sqlstate '22023' then
+    raise notice 'ok   an AGM filing is refused for a private company';
+  end;
+
+  -- Financial statements: six months to circulate, thirty to lodge.
+  perform pg_temp.check_true('financial statements allow 180 + 30 days',
+    (select f.due_date - f.trigger_date = 210
+       from public.corp_upcoming_filings(v_org, 400) f
+      where f.entity_id = v_sdn and f.filing_type = 'financial_statements'
+      limit 1));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The register of members is computed, and cannot go negative
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_e uuid; v_ord uuid; v_a uuid; v_b uuid; v_c uuid;
+begin
+  v_org := pg_temp.sec_org();
+
+  insert into public.corp_entities (org_id, name, entity_type, incorporated_on,
+    financial_year_end_day, financial_year_end_month)
+  values (v_org, 'Saham Sdn Bhd', 'sdn_bhd', date '2024-03-12', 31, 12)
+  returning id into v_e;
+  insert into public.corp_share_classes (org_id, entity_id, code, name)
+  values (v_org, v_e, 'ORD', 'Ordinary') returning id into v_ord;
+
+  insert into public.corp_persons (org_id, kind, full_name, nric)
+  values (v_org, 'individual', 'Member A', '920415085566') returning id into v_a;
+  insert into public.corp_persons (org_id, kind, full_name, nric)
+  values (v_org, 'individual', 'Member B', '850922105533') returning id into v_b;
+  insert into public.corp_persons (org_id, kind, full_name, registration_no)
+  values (v_org, 'corporate', 'Holdings Bhd', '199501001234') returning id into v_c;
+
+  insert into public.corp_share_events (org_id, entity_id, share_class_id,
+    event_type, event_date, to_person_id, quantity, consideration_per_share,
+    total_consideration)
+  values (v_org, v_e, v_ord, 'allotment', date '2024-03-12', v_a, 100, 1, 100),
+         (v_org, v_e, v_ord, 'allotment', date '2024-03-12', v_b, 100, 1, 100),
+         (v_org, v_e, v_ord, 'allotment', date '2025-06-01', v_c, 300, 2.50, 750);
+  insert into public.corp_share_events (org_id, entity_id, share_class_id,
+    event_type, event_date, from_person_id, to_person_id, quantity)
+  values (v_org, v_e, v_ord, 'transfer', date '2026-02-14', v_b, v_c, 40);
+
+  perform pg_temp.check_eq('the transferee gains the shares',
+    (select r.shares from public.corp_register_of_members(v_e) r
+      where r.person_id = v_c), 340);
+  perform pg_temp.check_eq('and the transferor loses them',
+    (select r.shares from public.corp_register_of_members(v_e) r
+      where r.person_id = v_b), 60);
+  perform pg_temp.check_eq('percentages are of the class in issue',
+    (select round(r.percent) from public.corp_register_of_members(v_e) r
+      where r.person_id = v_c), 68);
+  perform pg_temp.check_eq('issued capital counts only allotments',
+    (select c.shares from public.corp_issued_capital(v_e) c), 500);
+
+  -- A register that can go negative has already lied to the Registrar.
+  begin
+    insert into public.corp_share_events (org_id, entity_id, share_class_id,
+      event_type, event_date, from_person_id, to_person_id, quantity)
+    values (v_org, v_e, v_ord, 'transfer', date '2026-03-01', v_b, v_a, 1000);
+    raise exception 'FAIL: transferred more shares than the holder held';
+  exception when sqlstate '23514' then
+    raise notice 'ok   nobody can transfer shares they do not hold';
+  end;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Documents are built from the registers
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_e uuid; v_ord uuid; v_p uuid; v_doc uuid; v_body text;
+  v_gaps integer;
+begin
+  v_org := pg_temp.sec_org();
+
+  insert into public.corp_entities (org_id, name, registration_no, entity_type,
+    incorporated_on, financial_year_end_day, financial_year_end_month,
+    registered_office)
+  values (v_org, 'Dokumen Sdn Bhd', '202401012345', 'sdn_bhd', date '2024-03-12',
+          31, 12, 'Level 8, Menara ABC, Kuala Lumpur')
+  returning id into v_e;
+  insert into public.corp_share_classes (org_id, entity_id, code, name)
+  values (v_org, v_e, 'ORD', 'Ordinary') returning id into v_ord;
+  insert into public.corp_persons (org_id, kind, full_name, nric)
+  values (v_org, 'individual', 'Nurul Aisyah binti Rahman', '920415085566')
+  returning id into v_p;
+  insert into public.corp_officers (org_id, entity_id, person_id, role, appointed_on)
+  values (v_org, v_e, v_p, 'director', date '2024-03-12');
+  insert into public.corp_share_events (org_id, entity_id, share_class_id,
+    event_type, event_date, to_person_id, quantity, consideration_per_share,
+    total_consideration)
+  values (v_org, v_e, v_ord, 'allotment', date '2024-03-12', v_p, 100, 1, 100);
+
+  v_doc := public.corp_generate_document(v_e, 'sec_particulars');
+  select body into v_body from public.corp_documents where id = v_doc;
+
+  perform pg_temp.check_true('the company name is merged',
+    v_body like '%Dokumen Sdn Bhd%');
+  perform pg_temp.check_true('the director comes from the register',
+    v_body like '%Nurul Aisyah binti Rahman%');
+  perform pg_temp.check_true('and so does the shareholding',
+    v_body like '%100 Ordinary shares (100.00%%)%');
+  perform pg_temp.check_true('no placeholder survives into the output',
+    v_body not like '%{{%');
+  -- to_char pads month names to nine characters without FM, which would
+  -- put "12 March     2024" in the middle of a resolution.
+  perform pg_temp.check_true('dates are not padded',
+    v_body like '%12 March 2024%');
+
+  -- What the register cannot answer is reported before anything is
+  -- signed, rather than left as visible braces in a resolution.
+  select count(*) into v_gaps
+    from public.corp_template_placeholders(v_e, 'board_res_appoint_director')
+   where not is_filled;
+  perform pg_temp.check_true(
+    'a template needing a new director''s details reports the gaps',
+    v_gaps >= 3);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Access
+-- ---------------------------------------------------------------------
+do $$
+declare v_org uuid; v_e uuid;
+begin
+  v_org := pg_temp.sec_org();
+  insert into public.corp_entities (org_id, name, entity_type, incorporated_on)
+  values (v_org, 'Terlindung Sdn Bhd', 'sdn_bhd', date '2024-01-01')
+  returning id into v_e;
+
+  perform pg_temp.sign_out();
+
+  begin
+    perform * from public.corp_upcoming_filings(v_org, 120);
+    raise exception 'FAIL: a non-member read the deadline list';
+  exception when sqlstate '42501' then
+    raise notice 'ok   a non-member cannot read the deadlines';
+  end;
+
+  begin
+    perform * from public.corp_register_of_members(v_e);
+    raise exception 'FAIL: a non-member read the register of members';
+  exception when sqlstate '42501' then
+    raise notice 'ok   a non-member cannot read the register of members';
+  end;
+
+  begin
+    perform public.corp_generate_document(v_e, 'sec_particulars');
+    raise exception 'FAIL: a non-member generated a document';
+  exception when sqlstate '42501' then
+    raise notice 'ok   a non-member cannot generate a document';
+  end;
+end $$;
+
+rollback;

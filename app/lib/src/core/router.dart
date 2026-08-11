@@ -18,6 +18,9 @@ import '../features/legal/matters_screen.dart';
 import '../features/onboarding/create_org_screen.dart';
 import '../features/ledger/journals_screen.dart';
 import '../features/reports/reports_screen.dart';
+import '../features/secretarial/entity_editor.dart';
+import '../features/secretarial/entity_screen.dart';
+import '../features/secretarial/secretarial_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/hr/claims_screen.dart';
 import '../features/hr/employee_editor.dart';
@@ -160,6 +163,29 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/crm', builder: (_, __) => const PipelineScreen()),
           GoRoute(path: '/einvoice', builder: (_, __) => const EinvoiceScreen()),
           GoRoute(path: '/journals', builder: (_, __) => const JournalsScreen()),
+          GoRoute(
+            path: '/secretarial',
+            builder: (_, __) => const SecretarialScreen(),
+            routes: [
+              GoRoute(
+                path: 'new',
+                parentNavigatorKey: _rootKey,
+                builder: (_, __) => const CorpEntityEditor(),
+              ),
+              GoRoute(
+                path: ':id/edit',
+                parentNavigatorKey: _rootKey,
+                builder: (_, state) =>
+                    CorpEntityEditor(entityId: state.pathParameters['id']),
+              ),
+              GoRoute(
+                path: ':id',
+                parentNavigatorKey: _rootKey,
+                builder: (_, state) =>
+                    CorpEntityScreen(entityId: state.pathParameters['id']!),
+              ),
+            ],
+          ),
           GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),
           GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
         ],
