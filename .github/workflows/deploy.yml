@@ -122,16 +122,19 @@ jobs:
           test -f .vercel/output/static/index.html
           test -f .vercel/output/static/canvaskit/canvaskit.wasm
 
+          # Creating .vercel/ is what links this checkout to the project,
+          # and the CLI reads that link from project.json rather than from
+          # the environment. Without it, a .vercel directory that exists
+          # but holds no project.json is worse than none at all: the CLI
+          # refuses with "Could not retrieve Project Settings" instead of
+          # falling back to VERCEL_ORG_ID and VERCEL_PROJECT_ID.
+          printf '{"projectId":"%s","orgId":"%s"}\n' \
+            "$VERCEL_PROJECT_ID" "$VERCEL_ORG_ID" > .vercel/project.json
+
       - name: Deploy
         if: steps.creds.outputs.ready == 'true'
         run: |
           npm install --global vercel@latest
-
-          # Links the checkout to the project named by VERCEL_ORG_ID and
-          # VERCEL_PROJECT_ID. Not strictly required for a prebuilt deploy,
-          # but it fails here with a clear message if a token or an id is
-          # wrong, rather than further down inside the upload.
-          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
           # --yes so a first deploy into a fresh project cannot sit waiting
           # on a confirmation prompt that nobody is there to answer.
