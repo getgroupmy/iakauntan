@@ -25,13 +25,18 @@ jobs:
     name: Build and deploy to Vercel
     runs-on: ubuntu-latest
     env:
-      # The secrets context is not available to job-level `if`, so it is
-      # lifted into env and each step checks it. Without the secrets the
-      # job reports what is missing and succeeds, rather than painting
-      # every push red for a repository that has not been wired up yet.
+      # The one real credential, and the only thing that has to be set by
+      # hand. The secrets context is not available to job-level `if`, so
+      # it is lifted into env and the first step checks it there.
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      # These two are identifiers, not credentials: they name the project
+      # and grant nothing without the token, so they are written down
+      # rather than costing two more secrets to set up and re-find. A
+      # secret or a repository variable of the same name overrides them,
+      # which is what to use if this repo ever deploys somewhere else.
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID || vars.VERCEL_ORG_ID || 'team_EBG91tunYkCckYh5bCELGRU3' }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID || vars.VERCEL_PROJECT_ID || 'prj_ACEwE16VnLeesABU7sAkPhzdn2Ti' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -52,14 +57,17 @@ jobs:
             # because the quiet version of this is genuinely misleading: a
             # green tick on a run that deployed nothing looks exactly like a
             # run that deployed something.
-            echo "::warning::Nothing was deployed. Missing repository secrets:$missing"
+            echo "::warning::Nothing was deployed. Missing:$missing"
             {
               echo "### Nothing was deployed"
               echo
-              echo "The build and deploy steps were skipped because these"
-              echo "repository secrets are not set:"
+              echo "The build and deploy steps were skipped because this is"
+              echo "not set:"
               echo
               for s in $missing; do echo "- \`$s\`"; done
+              echo
+              echo "Add it under **Settings → Secrets and variables →"
+              echo "Actions**, then re-run this workflow."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 

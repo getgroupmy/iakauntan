@@ -820,17 +820,17 @@ Git, because deployments it already made will otherwise stay as
 production. Create the project instead with one `vercel link` from a
 local checkout, and let the workflow do every deploy.
 
-Three repository secrets are needed. Until all three are set, **nothing
-is deployed** — the job emits a warning and a "Nothing was deployed" run
-summary naming the missing ones, and passes rather than painting every
-push red. A green tick on this workflow is not proof that anything
-shipped; read the summary:
+**One repository secret is needed**: `VERCEL_TOKEN`, from Vercel →
+Account Settings → Tokens. Until it is set, **nothing is deployed** — the
+job emits a warning and a "Nothing was deployed" run summary saying so,
+and passes rather than painting every push red. A green tick on this
+workflow is not proof that anything shipped; read the summary.
 
-| Secret | Where it comes from |
-| --- | --- |
-| `VERCEL_TOKEN` | Vercel → Account Settings → Tokens |
-| `VERCEL_ORG_ID` | `.vercel/project.json` after one local `vercel link` |
-| `VERCEL_PROJECT_ID` | same file |
+`VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` are written into the workflow
+rather than stored as secrets. They are identifiers, not credentials:
+they name the project and grant nothing without the token. Setting a
+secret or a repository **variable** of either name overrides them, which
+is what to do if this repo ever deploys to a different project.
 
 Optionally set the repository **variables** `SUPABASE_URL` and
 `SUPABASE_ANON_KEY` to point a deployment at a different project; unset,
