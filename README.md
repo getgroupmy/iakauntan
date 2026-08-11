@@ -736,6 +736,64 @@ supabase db push
 supabase functions deploy myinvois
 ```
 
+### The knowledge graph
+
+[graphify](https://github.com/Graphify-Labs/graphify) maps the repository
+into a queryable graph — 2,946 nodes and 4,409 edges across the Dart app,
+the SQL migrations and the edge functions — so a question can be answered
+by traversal instead of grep. `graphify-out/graph.json` and
+`GRAPH_REPORT.md` are committed, so a fresh checkout starts with the map
+already built.
+
+```bash
+uv tool install "graphifyy[sql]"   # the [sql] extra is not optional here
+graphify claude install --project  # your machine's hooks (git-ignored)
+```
+
+The `[sql]` extra matters: without `tree-sitter-sql` all 74 migrations
+contribute nothing, and in this codebase the migrations *are* the
+business logic — the graph goes from 2,212 nodes to 2,946 with it.
+
+```bash
+graphify explain "public.corp_sign_with_link"  # a symbol and its neighbours
+graphify god-nodes --top 12                    # what everything hangs off
+graphify update .                              # after code changes, no API cost
+```
+
+Everything above is local tree-sitter parsing — deterministic, no model
+involved, nothing leaves the machine. Community names in `GRAPH_REPORT.md`
+are file-name placeholders because no LLM key is configured; `graphify
+label .` with a key set will name them properly. Rebuild the clickable
+`graph.html` (git-ignored, 2.3 MB) with `graphify cluster-only .`.
+
+**Two things to know before you trust an answer from it**, both caused by
+this schema being a stack of `create or replace` migrations rather than one
+file:
+
+- A function replaced across several migrations is several nodes.
+  `graphify explain "public.post_payroll_run"` reports the ambiguity and
+  lists all three definitions with their ids — which is useful in itself,
+  but you must then ask about the id of the *latest* one to see what the
+  function actually does today.
+- A table is minted once by the migration that created it and again as a
+  bare node carrying references from every other migration. So "what
+  touches this table" means looking at both nodes, and `affected` needs
+  the SQL edge kinds spelled out, since it traverses call and import edges
+  by default:
+
+  ```bash
+  graphify affected "supabase_migrations_0069_document_signatures_public_corp_signatures" \
+    --relation reads_from --relation writes_to
+  ```
+
+The graph is a fast index, not a source of truth. For anything statutory,
+read the migration.
+
+`graphify extract . --postgres <dsn>` can also map the live schema
+directly, which would pick up what the migrations describe only
+cumulatively. It has not been run here — it needs a database password,
+and that does not belong in this repo.
+
 ---
 
 ## Demo data
