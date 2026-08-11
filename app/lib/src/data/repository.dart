@@ -933,7 +933,12 @@ extension RepoHr on Repo {
   Future<List<Employee>> employees({String? search, String? status}) async {
     var q = client
         .from('employees')
-        .select('*, departments(name), positions(title)')
+        // `departments!` names the relationship explicitly. An employee
+        // belongs to a department and a department has a head employee,
+        // so PostgREST sees two ways to join the two tables and refuses
+        // the request rather than guessing. The JSON key stays
+        // `departments`, so nothing downstream changes.
+        .select('*, departments!employees_department_id_fkey(name), positions(title)')
         .eq('org_id', orgId);
     if (status != null && status != 'all') q = q.eq('employment_status', status);
     if (search != null && search.trim().isNotEmpty) {
@@ -946,7 +951,12 @@ extension RepoHr on Repo {
   Future<Employee?> employee(String id) async {
     final row = await client
         .from('employees')
-        .select('*, departments(name), positions(title)')
+        // `departments!` names the relationship explicitly. An employee
+        // belongs to a department and a department has a head employee,
+        // so PostgREST sees two ways to join the two tables and refuses
+        // the request rather than guessing. The JSON key stays
+        // `departments`, so nothing downstream changes.
+        .select('*, departments!employees_department_id_fkey(name), positions(title)')
         .eq('id', id)
         .maybeSingle();
     return row == null ? null : Employee.fromJson(Map<String, dynamic>.from(row));
@@ -959,7 +969,12 @@ extension RepoHr on Repo {
     if (uid == null) return null;
     final row = await client
         .from('employees')
-        .select('*, departments(name), positions(title)')
+        // `departments!` names the relationship explicitly. An employee
+        // belongs to a department and a department has a head employee,
+        // so PostgREST sees two ways to join the two tables and refuses
+        // the request rather than guessing. The JSON key stays
+        // `departments`, so nothing downstream changes.
+        .select('*, departments!employees_department_id_fkey(name), positions(title)')
         .eq('org_id', orgId)
         .eq('user_id', uid)
         .maybeSingle();

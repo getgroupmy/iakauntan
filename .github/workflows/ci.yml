@@ -49,5 +49,16 @@ jobs:
             echo "== $f"
             psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done
+
+      # The client's queries checked against the schema they will run
+      # against. An ambiguous embed passes `flutter analyze`, passes the
+      # widget tests, passes the SQL tests, and then takes out a whole
+      # screen in the browser — it lives inside a string literal, so this
+      # is the only place the two halves meet.
+      - name: Check the client's embeds resolve against this schema
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_embeds.py "$DB"
+
       - if: always()
         run: supabase stop --no-backup

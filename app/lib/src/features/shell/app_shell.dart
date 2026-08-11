@@ -86,8 +86,17 @@ class AppShell extends ConsumerWidget {
   List<_Dest> _visible(WidgetRef ref) {
     final isPlatformAdmin =
         ref.watch(isPlatformAdminProvider).value ?? false;
+
+    // Every destination but the console reads from an organization, so
+    // with none selected they are doors onto an empty room. A platform
+    // operator belongs to no company and would otherwise be handed a full
+    // rail of screens that can only fail.
+    final hasOrg =
+        (ref.watch(organizationsProvider).value ?? const []).isNotEmpty;
+
     return _destinations.where((d) {
       if (d.platformOnly) return isPlatformAdmin;
+      if (!hasOrg) return false;
       if (d.module == null) return true;
       return moduleEnabled(ref, d.module!);
     }).toList();

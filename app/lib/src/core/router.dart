@@ -67,13 +67,32 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (path == '/signin') return '/';
 
       // Organizations may still be loading; hold the current route until
-      // we know whether the user has any books to open.
+      // we know whether the user has any books to open. The same goes for
+      // platform staff, who legitimately belong to no organization at all
+      // — deciding before that answer arrives is what sent the operator
+      // to the onboarding screen and left them there.
       final orgs = ref.read(organizationsProvider);
       if (orgs.isLoading || orgs.hasError) return null;
 
+      final admin = ref.read(isPlatformAdminProvider);
+      if (admin.isLoading) return null;
+
       final hasOrg = (orgs.value ?? const []).isNotEmpty;
-      if (!hasOrg && path != '/onboarding') return '/onboarding';
-      if (hasOrg && path == '/onboarding') return '/';
+
+      if (!hasOrg) {
+        // A platform operator has nothing to onboard into: their job is
+        // other people's companies, and the console is their home. They
+        // may still reach /onboarding deliberately if they want books of
+        // their own — it just is not forced on them.
+        if (admin.value ?? false) {
+          return path.startsWith('/admin') || path == '/onboarding'
+              ? null
+              : '/admin';
+        }
+        return path == '/onboarding' ? null : '/onboarding';
+      }
+
+      if (path == '/onboarding') return '/';
 
       return null;
     },
@@ -274,6 +293,10 @@ class _AuthRefresh extends ChangeNotifier {
   _AuthRefresh(Ref ref) {
     ref.listen(authStateProvider, (_, __) => notifyListeners());
     ref.listen(organizationsProvider, (_, __) => notifyListeners());
+    // The redirect holds its decision while this is loading, so it has to
+    // be told when the answer lands or an operator with no organization
+    // would sit on whatever route they happened to be on.
+    ref.listen(isPlatformAdminProvider, (_, __) => notifyListeners());
     // Listened to as much for the side effect as the signal: this is what
     // builds the recovery notifier, and it has to be alive and subscribed
     // before the recovery event arrives or it will miss it.

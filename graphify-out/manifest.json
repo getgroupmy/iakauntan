@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786452174.5557323,
-    "ast_hash": "4506415a589bbe6e74c804f9f52a3d0d",
+    "mtime": 1786461869.5659997,
+    "ast_hash": "b9e17f9c63561295960324809e57246a",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": "182ee96ccf32f3ee016f77038f25ef19"
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786461262.6423926,
-    "ast_hash": "154588ebec3272c4ff4ad4484d2aa617",
+    "mtime": 1786462115.494725,
+    "ast_hash": "2189f016eda23d9ed445ebe4ed8af9f6",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,9 +300,9 @@
     "semantic_hash": "d2c9729b108d770de90c22637a2bb8ae"
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1786437890.3775465,
-    "ast_hash": "a37b0322de025616122e9d672d3478b5",
-    "semantic_hash": "a37b0322de025616122e9d672d3478b5"
+    "mtime": 1786461891.9180012,
+    "ast_hash": "b8ff9b44354427e17bda195fb292ea57",
+    "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
     "mtime": 1786390932.190453,
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786455463.1450715,
-    "ast_hash": "141b6776dbd8f91b0a49b972129ffa5a",
+    "mtime": 1786462201.9780195,
+    "ast_hash": "d4894ba3ae96340b18afc52de640a323",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1002,6 +1002,11 @@
   "supabase/migrations/0071_seed_chart_of_accounts_reentrant.sql": {
     "mtime": 1786455539.3690722,
     "ast_hash": "ded78134968841058c4433170620e18d",
+    "semantic_hash": ""
+  },
+  "scripts/check_embeds.py": {
+    "mtime": 1786462187.0940187,
+    "ast_hash": "f8d8ef46b3f313816e1574ab155d8284",
     "semantic_hash": ""
   }
 }
