@@ -241,6 +241,41 @@ class Currency {
       );
 }
 
+/// One currency's worth of open foreign balances, as at a date: what the
+/// books carry, what they would carry at the closing rate, and the
+/// difference between the two.
+class FxRevaluation {
+  const FxRevaluation({
+    required this.currency,
+    required this.closingRate,
+    required this.documents,
+    required this.booked,
+    required this.restated,
+    required this.difference,
+  });
+
+  final String currency;
+  final double closingRate;
+  final int documents;
+
+  /// Net of receivables less payables, at the rates the documents were
+  /// raised at. Signed: a net payable position is negative.
+  final double booked;
+  final double restated;
+
+  /// Positive is a gain — more asset, or less liability, than booked.
+  final double difference;
+
+  factory FxRevaluation.fromJson(Map<String, dynamic> j) => FxRevaluation(
+        currency: j['currency']?.toString().trim() ?? '',
+        closingRate: Fmt.toDouble(j['closing_rate']),
+        documents: (j['documents'] as num?)?.toInt() ?? 0,
+        booked: Fmt.toDouble(j['booked']),
+        restated: Fmt.toDouble(j['restated']),
+        difference: Fmt.toDouble(j['difference']),
+      );
+}
+
 class Item {
   Item({
     required this.id,

@@ -279,6 +279,14 @@ final currenciesProvider = FutureProvider<List<Currency>>((ref) {
   return requireRepo(ref).currencies();
 });
 
+/// What revaluing the open foreign balances at [asAt] would do. Kept
+/// autoDispose because the answer moves with every rate and every
+/// settlement.
+final fxRevaluationPreviewProvider = FutureProvider.autoDispose
+    .family<List<FxRevaluation>, DateTime>((ref, asAt) {
+  return requireRepo(ref).fxRevaluationPreview(asAt);
+});
+
 final expensesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).expenses();

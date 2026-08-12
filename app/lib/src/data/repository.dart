@@ -295,6 +295,27 @@ class Repo {
     }
   }
 
+  /// What the open foreign balances would be restated to, one row per
+  /// currency. Raises if a currency has no rate on file at that date,
+  /// rather than reporting a confident zero for one it cannot price.
+  Future<List<FxRevaluation>> fxRevaluationPreview(DateTime asAt) async {
+    final data = await client.rpc('fx_revaluation_preview', params: {
+      'p_org_id': orgId,
+      'p_as_at': Fmt.iso(asAt),
+    });
+    return _rows(data).map(FxRevaluation.fromJson).toList();
+  }
+
+  /// Posts the restatement, returning the journal id — or null when
+  /// there was nothing to restate.
+  Future<String?> revalueForeignBalances(DateTime asAt) async {
+    final data = await client.rpc('revalue_foreign_balances', params: {
+      'p_org_id': orgId,
+      'p_as_at': Fmt.iso(asAt),
+    });
+    return data as String?;
+  }
+
   /// Records a rate so the next document does not have to be told again.
   ///
   /// Upserted on the natural key, because two rates for one pair on one

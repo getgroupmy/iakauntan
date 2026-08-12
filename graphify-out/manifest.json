@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786517719.6643815,
-    "ast_hash": "c9aad9e9fb2e200d2e144c109ae8b9c8",
+    "mtime": 1786520735.5134404,
+    "ast_hash": "94afdc08563afe5928c07ec95af97810",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1786520213.7977726,
-    "ast_hash": "f08262def92051ed45784f27d9af3395",
+    "mtime": 1786520735.5127292,
+    "ast_hash": "1ce2f33322e8747663fd91dbc002d5ed",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786519972.5482876,
-    "ast_hash": "67f24b615ba709847b92e3625aa0ebab",
+    "mtime": 1786520735.5113888,
+    "ast_hash": "f2b7973b236184abbc2846562de4379f",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1786508374.737772,
-    "ast_hash": "2fbede428b35bfd425a60292fb125217",
+    "mtime": 1786520791.458621,
+    "ast_hash": "c19a29b7687af529845c77aef4fb7831",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786519675.8123,
-    "ast_hash": "932741eb9c5d14c38337d281dd702a47",
+    "mtime": 1786520700.3699355,
+    "ast_hash": "4e070aa257e8bf73bf6bbc025cb9511f",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1195,8 +1195,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-autocount.md": {
-    "mtime": 1786520392.5267181,
-    "ast_hash": "6ee63f4d548776e7a4bc8b989c0bce6d",
+    "mtime": 1786520843.9036548,
+    "ast_hash": "5f0a7b8b1d14a31c4a73437cc01cbd3e",
     "semantic_hash": ""
   },
   "docs/migrating-from-autocount.md": {
@@ -1232,6 +1232,16 @@
   "supabase/tests/transfer.sql": {
     "mtime": 1786520346.6562722,
     "ast_hash": "dfab3a75b7f8d204cda748676019f7a1",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0083_fx_revaluation.sql": {
+    "mtime": 1786520503.0096097,
+    "ast_hash": "a6b18146ed2342a3eeec45a30584b548",
+    "semantic_hash": ""
+  },
+  "supabase/tests/fx_revaluation.sql": {
+    "mtime": 1786520700.3574877,
+    "ast_hash": "5e9ef2eee19749cdbe0ecaf522f041c6",
     "semantic_hash": ""
   }
 }

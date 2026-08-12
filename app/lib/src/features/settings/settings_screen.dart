@@ -19,6 +19,7 @@ class SettingsScreen extends ConsumerWidget {
     final org = ref.watch(currentOrgProvider);
     final role = ref.watch(memberRoleProvider).value ?? 'viewer';
     final isAdmin = role == 'owner' || role == 'admin';
+    final canPost = ref.watch(canPostProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -47,6 +48,9 @@ class SettingsScreen extends ConsumerWidget {
                   _ModulesCard(canAdmin: isAdmin),
                   const SizedBox(height: 16),
                   _FiscalYearsCard(canAdmin: isAdmin),
+                  const SizedBox(height: 16),
+                  if (organization.baseCurrency.isNotEmpty)
+                    _ForeignBalancesCard(org: organization, canPost: canPost),
                   const SizedBox(height: 16),
                   const _ChartOfAccountsCard(),
                   const SizedBox(height: 16),
@@ -362,6 +366,170 @@ class _ModulesCard extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Restating what the open foreign balances are worth.
+///
+/// Sits beside the fiscal years because it is the same job: the things
+/// that have to happen before a period can be called closed. An invoice
+/// raised at 4.70 and still open at a closing rate of 4.20 is carried at
+/// a value the company will never collect, and nothing else in the
+/// system will ever notice.
+class _ForeignBalancesCard extends ConsumerStatefulWidget {
+  const _ForeignBalancesCard({required this.org, required this.canPost});
+
+  final Organization org;
+  final bool canPost;
+
+  @override
+  ConsumerState<_ForeignBalancesCard> createState() =>
+      _ForeignBalancesCardState();
+}
+
+class _ForeignBalancesCardState extends ConsumerState<_ForeignBalancesCard> {
+  /// Defaults to the end of last month, which is what a period-end
+  /// revaluation is almost always dated.
+  late DateTime _asAt = DateTime(DateTime.now().year, DateTime.now().month, 0);
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = ref.watch(fxRevaluationPreviewProvider(_asAt));
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(
+              'Foreign balances',
+              subtitle: 'Restate what is still open at the closing rate',
+              action: TextButton.icon(
+                onPressed: _pickDate,
+                icon: const Icon(Icons.calendar_today, size: 16),
+                label: Text('As at ${Fmt.date(_asAt)}'),
+              ),
+            ),
+            preview.when(
+              loading: () => const LinearProgressIndicator(),
+              // The likely error is a currency with no rate on file at
+              // this date, which the database refuses to price rather
+              // than assuming par. Said plainly, because the fix is to
+              // enter the rate, not to try again.
+              error: (e, _) => Text('$e',
+                  style: TextStyle(color: context.colors.warning)),
+              data: (rows) => rows.isEmpty
+                  ? Text(
+                      'Nothing open in a currency other than '
+                      '\${widget.org.baseCurrency}.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final row in rows)
+                          _CurrencyRow(row: row, base: widget.org.baseCurrency),
+                        const SizedBox(height: 12),
+                        if (widget.canPost)
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: FilledButton.icon(
+                              onPressed: () => _post(rows),
+                              icon: const Icon(Icons.published_with_changes,
+                                  size: 18),
+                              label: const Text('Post revaluation'),
+                            ),
+                          ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _asAt,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) setState(() => _asAt = picked);
+  }
+
+  Future<void> _post(List<FxRevaluation> rows) async {
+    final net = rows.fold<double>(0, (sum, r) => sum + r.difference);
+    final ok = await confirm(
+      context,
+      title: 'Post the revaluation?',
+      message: net >= 0
+          ? 'This posts an unrealised gain of '
+              '\${Fmt.money(net, currency: widget.org.baseCurrency)} '
+              'as at \${Fmt.date(_asAt)}, and reverses the previous '
+              'revaluation if there is one standing.'
+          : 'This posts an unrealised loss of '
+              '\${Fmt.money(-net, currency: widget.org.baseCurrency)} '
+              'as at \${Fmt.date(_asAt)}, and reverses the previous '
+              'revaluation if there is one standing.',
+      confirmLabel: 'Post',
+    );
+    if (!ok || !mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.revalueForeignBalances(_asAt),
+      successMessage: 'Foreign balances restated',
+      pendingMessage: 'Posting…',
+    );
+    if (mounted) {
+      ref.invalidate(fxRevaluationPreviewProvider);
+      refreshLedgerData(ref);
+    }
+  }
+}
+
+class _CurrencyRow extends StatelessWidget {
+  const _CurrencyRow({required this.row, required this.base});
+
+  final FxRevaluation row;
+  final String base;
+
+  @override
+  Widget build(BuildContext context) {
+    final gain = row.difference >= 0;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('\${row.currency} at \${Fmt.rate(row.closingRate)}',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  '\${row.documents} open · carried at '
+                  '\${Fmt.money(row.booked, currency: base)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          Text(
+            (gain ? '+' : '') + Fmt.money(row.difference, currency: base),
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: row.difference == 0
+                  ? null
+                  : (gain ? context.colors.success : context.colors.danger),
+            ),
+          ),
+        ],
       ),
     );
   }

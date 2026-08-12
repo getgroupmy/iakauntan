@@ -135,11 +135,9 @@ test first.
 Ranked by how many businesses each unblocks, not by size:
 
 1. ~~**Document transfer.**~~ Done — `0081` and `0082`.
-2. **FX revaluation at period end.** The last piece of multi-currency
-   (`0078`–`0080` and the currency picker landed the rest). Until it
-   exists an open foreign invoice sits on the balance sheet at the rate
-   it was raised at, and the balances are wrong by the unrealised
-   difference after any rate movement.
+2. ~~**FX revaluation at period end.**~~ Done — `0083`, with a preview
+   and a post button beside the fiscal years in Settings. Foreign
+   **bank** balances are still outside it; see the migration for why.
 3. **Fixed assets and depreciation.** Universal, and the journal source
    is already reserved for it.
 4. **Bank reconciliation.** Two tables, fully designed, nothing on top.
@@ -161,7 +159,7 @@ A gap here is a client who cannot move:
 | --- | --- |
 | Services company, MYR only, no stock | Yes |
 | Trading company, MYR, simple stock | Yes |
-| Company invoicing in foreign currency | Yes to invoice and settle; not yet for period-end reporting |
+| Company invoicing in foreign currency | Yes |
 | Anyone with fixed assets to depreciate | No — nowhere to put the register |
 | Anyone reconciling a bank account monthly | No |
 | Distribution with cartons and pieces | No — until multi-UOM |
