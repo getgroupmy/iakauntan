@@ -8,12 +8,29 @@ import '../../core/pdf_kit.dart';
 import '../../data/models.dart';
 import 'statement.dart';
 
-/// A statement of account: the documents a customer has not paid, and
-/// how old each one is.
+/// Which way round the statement runs.
+///
+/// The two are not mirror images, whatever the arithmetic looks like. A
+/// customer statement is a demand: it goes out, it asks for money, and
+/// it closes by inviting the reader to say if they have already paid. A
+/// supplier statement is the opposite — it is what *our* books say we
+/// owe, printed so somebody can hold it against the statement the
+/// supplier sent us and find the difference. Sending a supplier a
+/// document that reads like a demand would be nonsense, so the wording
+/// changes with the side rather than the figures alone.
+enum StatementSide {
+  customer,
+  supplier;
+
+  bool get isCustomer => this == StatementSide.customer;
+}
+
+/// A statement of account: the documents that are still unpaid, and how
+/// old each one is.
 ///
 /// This is an **open-item** statement — it lists what is still
 /// outstanding, not every transaction in the period with a balance
-/// brought forward. The two are different documents and a customer
+/// brought forward. The two are different documents and anybody
 /// reconciling against their own ledger needs to know which one they are
 /// holding, so the statement says so on its face rather than leaving it
 /// to be inferred from what is missing.
@@ -22,11 +39,13 @@ Future<Uint8List> buildStatementPdf({
   required Contact contact,
   required List<BusinessDocument> documents,
   required DateTime asAt,
+  StatementSide side = StatementSide.customer,
   Uint8List? logo,
   LetterheadMode mode = LetterheadMode.printed,
 }) async {
   final kit = await PdfKit.load();
-  final pdf = pw.Document(title: 'Statement — ${contact.name}');
+  final pdf = pw.Document(
+      title: '${side.isCustomer ? 'Statement' : 'Supplier statement'} — ${contact.name}');
 
   final open = documents.where((d) => d.balanceAmount != 0).toList()
     ..sort((a, b) => a.docDate.compareTo(b.docDate));
@@ -46,7 +65,11 @@ Future<Uint8List> buildStatementPdf({
       theme: kit.theme,
       footer: (context) => kit.footer(context, note: contact.code),
       build: (context) => [
-        kit.letterhead(org, documentLabel: 'Statement', logo: logo, mode: mode),
+        kit.letterhead(org,
+            documentLabel:
+                side.isCustomer ? 'Statement' : 'Supplier statement',
+            logo: logo,
+            mode: mode),
         kit.rule(),
 
         pw.Row(
@@ -57,8 +80,8 @@ Future<Uint8List> buildStatementPdf({
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  kit.field('To', contact.legalName ?? contact.name,
-                      strong: true),
+                  kit.field(side.isCustomer ? 'To' : 'Supplier',
+                      contact.legalName ?? contact.name, strong: true),
                   for (final line in address)
                     pw.Text(line,
                         style: kit.style(size: 8.5, colour: PdfColors.grey700)),
@@ -78,7 +101,10 @@ Future<Uint8List> buildStatementPdf({
         if (open.isEmpty)
           pw.Container(
             padding: const pw.EdgeInsets.symmetric(vertical: 16),
-            child: pw.Text('Nothing outstanding. Thank you.',
+            child: pw.Text(
+                side.isCustomer
+                    ? 'Nothing outstanding. Thank you.'
+                    : 'Nothing outstanding against this supplier.',
                 style: kit.style(size: 11, strong: true)),
           )
         else ...[
@@ -108,10 +134,11 @@ Future<Uint8List> buildStatementPdf({
             data: [
               // The money columns are all in base currency, converted at
               // each document's own rate, so they foot to the total
-              // underneath. What the customer was actually invoiced is
-              // stated alongside the document number instead — dropping
-              // it would leave them unable to match this against their
-              // own ledger.
+              // underneath. The figure the document was actually raised
+              // in is stated alongside its number instead — dropping it
+              // would leave the reader unable to match this against
+              // their own ledger, which is the only thing either side of
+              // a statement is ever trying to do.
               for (final d in open)
                 [
                   Fmt.date(d.docDate),
@@ -144,7 +171,8 @@ Future<Uint8List> buildStatementPdf({
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Total due ${org.baseCurrency}',
+                    pw.Text(
+                        '${side.isCustomer ? 'Total due' : 'Total owed'} ${org.baseCurrency}',
                         style: kit.style(size: 11, strong: true)),
                     pw.Text(Fmt.money(aged.total, currency: org.baseCurrency),
                         style: kit.style(size: 11, strong: true)),
@@ -182,11 +210,21 @@ Future<Uint8List> buildStatementPdf({
 
         pw.SizedBox(height: 18),
         pw.Text(
-          'This statement lists documents that are still unpaid as at the '
-          'date above. It is not a full transaction history and carries no '
-          'balance brought forward. Payments made after that date are not '
-          'reflected — if you have already paid, please ignore the relevant '
-          'line and let us know.',
+          side.isCustomer
+              ? 'This statement lists documents that are still unpaid as at '
+                  'the date above. It is not a full transaction history and '
+                  'carries no balance brought forward. Payments made after '
+                  'that date are not reflected — if you have already paid, '
+                  'please ignore the relevant line and let us know.'
+              // Said plainly, because the whole use of this document is to
+              // be disagreed with. Somebody is holding it next to the
+              // supplier's own statement looking for the difference, and a
+              // line missing here is as interesting as a line too many.
+              : 'This lists what our records show as still owing to this '
+                  'supplier as at the date above, for checking against the '
+                  'supplier\'s own statement. It is not a full transaction '
+                  'history and carries no balance brought forward. Payments '
+                  'made after that date are not reflected.',
           style: kit.style(size: 7.5, colour: PdfColors.grey600),
         ),
       ],

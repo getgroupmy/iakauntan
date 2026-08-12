@@ -66,6 +66,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// needs the analysis there; the choice is per document because that
   /// is how the work actually arrives.
   String? _projectCode;
+  String? _salespersonId;
   String _status = 'draft';
 
   /// How much of this document has already gone forward. Shown because a
@@ -138,6 +139,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _projectCode = doc.lines
             .map((l) => l.projectCode)
             .firstWhere((c) => c != null, orElse: () => null);
+        _salespersonId = doc.salespersonId;
         _reference.text = doc.reference ?? '';
         _supplierDocNo.text = doc.supplierDocNo ?? '';
         _notes.text = doc.notes ?? '';
@@ -303,6 +305,9 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
               'notes': _nullIfBlank(_notes.text),
               'currency': _currency,
               'exchange_rate': _exchangeRate ?? 1,
+              // Sales only. The column is on `sales_documents` alone,
+              // and a bill has no salesperson by definition.
+              if (_kind.isSales) 'salesperson_id': _salespersonId,
             },
             lines: validLines.map((l) {
               l.projectCode = _projectCode;
@@ -749,6 +754,11 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         rateMissing: _rateMissing,
                         resolvingRate: _resolvingRate,
                         exchangeRate: _exchangeRate,
+                        salespersonId: _salespersonId,
+                        onSalespersonChanged: (id) {
+                          setState(() => _salespersonId = id);
+                          _markDirty();
+                        },
                         projectCode: _projectCode,
                         onProjectChanged: (code) {
                           setState(() => _projectCode = code);
@@ -1017,6 +1027,8 @@ class _HeaderCard extends ConsumerWidget {
     required this.resolvingRate,
     required this.exchangeRate,
     required this.projectCode,
+    required this.salespersonId,
+    required this.onSalespersonChanged,
     required this.onProjectChanged,
     required this.onCurrencyChanged,
     required this.onRateChanged,
@@ -1043,6 +1055,8 @@ class _HeaderCard extends ConsumerWidget {
   final bool resolvingRate;
   final double? exchangeRate;
   final String? projectCode;
+  final String? salespersonId;
+  final ValueChanged<String?> onSalespersonChanged;
   final ValueChanged<String?> onProjectChanged;
   final ValueChanged<String> onCurrencyChanged;
   final ValueChanged<String> onRateChanged;
@@ -1137,6 +1151,29 @@ class _HeaderCard extends ConsumerWidget {
             enabled: editable,
             onChanged: onRateChanged,
             onStore: onStoreRate,
+          ),
+          flex: 1
+        ),
+      // Same rule as the project dropdown below: shown only once there
+      // is somebody to pick. A business that does not attribute sales
+      // should not be asked to on every invoice.
+      if (kind.isSales &&
+          (ref.watch(salespeopleProvider).valueOrNull?.isNotEmpty ?? false))
+        (
+          child: DropdownButtonFormField<String?>(
+            value: salespersonId,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Salesperson'),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('None')),
+              for (final s in ref.watch(salespeopleProvider).value ?? const [])
+                DropdownMenuItem(
+                  value: s['id'] as String,
+                  child: Text(s['name']?.toString() ?? '',
+                      overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: editable ? onSalespersonChanged : null,
           ),
           flex: 1
         ),

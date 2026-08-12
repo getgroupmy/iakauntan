@@ -153,6 +153,35 @@ not functional currency under MFRS — it is an intangible asset, or
 inventory for a dealer, with disposals revenue in nature where trading is
 habitual. It would produce accounts that foot and are wrong.
 
+## 8c. Salesperson, and the vendor statement
+
+Both built, and both were half-present already.
+
+**Vendor statement** — the customer statement now runs either way round.
+The two are not mirror images whatever the arithmetic says: a customer
+statement is a demand, a supplier statement is what *our* books show we
+owe, printed so somebody can hold it against the statement the supplier
+sent and find the difference. The wording changes with the side; the
+figures do not.
+
+**Salesperson** — `sales_documents.salesperson_id` had been in the
+schema since 0005 with no screen and no report. It did have a foreign
+key, and it was the wrong one: it pointed at `auth.users`, so only people
+with a login could be credited, and because `auth.users` is global it let
+one organization's invoice name another organization's user with no
+policy to catch it. `0105` repoints it at a `salespeople` table of its
+own — org-scoped, optional links to an employee and to a member, so an
+agent who never signs in can still be credited — and adds a trigger that
+refuses a salesperson from another organization.
+
+`report_sales_by_person` is invoices less credit notes, because paying
+commission on a sale that was credited back out is paying twice for one
+mistake, and it carries an explicit **unattributed** line, since the
+sales nobody was credited with are the figure an argument will be about.
+Commission is computed from the rate on file and **posted nowhere** —
+whether it falls due on invoice, on payment or on margin is a policy
+decision, and a figure accrued on a guess is worse than no figure.
+
 ## 9. Coarse permissions
 
 Akaunting seeds per-resource permissions (`database/seeds/Permissions.php`)

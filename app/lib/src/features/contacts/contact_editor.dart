@@ -126,8 +126,14 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
     setState(() => _statementBusy = true);
     try {
       final contact = await repo.contact(widget.contactId!);
+      // A contact can be both, and then the statement follows what is
+      // on screen rather than guessing. `contact_type` is the only thing
+      // that says which of the two ledgers this person is being looked
+      // at through.
+      final supplier = _contactType == 'supplier';
       final documents = await repo.outstandingFor(
-          kind: DocKind.sales, contactId: widget.contactId!);
+          kind: supplier ? DocKind.purchase : DocKind.sales,
+          contactId: widget.contactId!);
       final asAt = DateTime.now();
 
       final bytes = await buildStatementPdf(
@@ -135,6 +141,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         contact: contact,
         documents: documents,
         asAt: asAt,
+        side: supplier ? StatementSide.supplier : StatementSide.customer,
         logo: await ref.read(orgLogoProvider.future),
         mode: org.usesPreprintedLetterhead
             ? LetterheadMode.stationery
@@ -144,7 +151,10 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
       final stem =
           contact.code.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
       final saved = await saveBytesFile(
-          'statement-$stem-${Fmt.iso(asAt)}.pdf', 'application/pdf', bytes);
+          '${supplier ? 'supplier-statement' : 'statement'}'
+          '-$stem-${Fmt.iso(asAt)}.pdf',
+          'application/pdf',
+          bytes);
       messenger.showSnackBar(SnackBar(
         content: Text(saved
             ? 'Downloaded'
@@ -252,12 +262,16 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
       appBar: AppBar(
         title: Text(widget.contactId == null ? 'New contact' : 'Edit contact'),
         actions: [
-          // Only for a saved customer: a statement is a list of what
-          // somebody owes, and a contact that does not exist yet cannot
-          // owe anything.
-          if (widget.contactId != null && _contactType != 'supplier')
+          // Only for a saved contact: a statement is a list of open
+          // documents, and a contact that does not exist yet has none.
+          // Suppliers get one too — theirs lists what we owe them, for
+          // checking against the statement they send us, which is the
+          // half of the reconciliation that used to have no document.
+          if (widget.contactId != null)
             IconButton(
-              tooltip: 'Statement of account',
+              tooltip: _contactType == 'supplier'
+                  ? 'Statement of what we owe'
+                  : 'Statement of account',
               icon: const Icon(Icons.request_quote_outlined, size: 20),
               onPressed: _statementBusy ? null : _downloadStatement,
             ),

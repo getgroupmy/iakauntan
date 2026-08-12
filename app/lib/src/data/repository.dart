@@ -1040,6 +1040,56 @@ class Repo {
     return documentId;
   }
 
+  // ------------------------------------------------------------------
+  // Salespeople
+  //
+  // Their own table rather than a pointer at a user, because the person
+  // who won the order does not always have a login — and until 0105 the
+  // column insisted they did, against `auth.users`, which is global and
+  // so did not even keep one organization's documents from naming
+  // another's people.
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> salespeople({bool activeOnly = false}) async {
+    var q = client.from('salespeople').select().eq('org_id', orgId);
+    if (activeOnly) q = q.eq('is_active', true);
+    return _rows(await q.order('name'));
+  }
+
+  Future<void> saveSalesperson(Map<String, dynamic> row) async {
+    final id = row['id'] as String?;
+    final payload = {...row, 'org_id': orgId}..remove('id');
+    if (id == null) {
+      await client.from('salespeople').insert(payload);
+    } else {
+      await client.from('salespeople').update(payload).eq('id', id);
+    }
+  }
+
+  /// Removes the person and leaves every document they sold standing.
+  ///
+  /// The foreign key is `on delete set null`: blocking this would make a
+  /// leaver permanent, and cascading it would delete invoices because
+  /// somebody resigned. The sales move to the unattributed line, which is
+  /// visible rather than lost.
+  Future<void> deleteSalesperson(String id) =>
+      client.from('salespeople').delete().eq('id', id);
+
+  /// Net sales by salesperson, and what any agreed rate implies.
+  ///
+  /// The commission figure is a working paper. Nothing is posted, no
+  /// liability is raised and nothing reaches payroll — whether
+  /// commission is earned on invoice, on payment or on margin is a
+  /// policy the database has no business inventing.
+  Future<List<Map<String, dynamic>>> salesByPerson({
+    required DateTime from,
+    required DateTime to,
+  }) async =>
+      _rows(await client.rpc('report_sales_by_person', params: {
+        'p_org_id': orgId,
+        'p_from': Fmt.iso(from),
+        'p_to': Fmt.iso(to),
+      }));
+
   /// What is still available to take forward from this document into a
   /// [targetType], line by line.
   Future<List<TransferLine>> transferOutstanding(

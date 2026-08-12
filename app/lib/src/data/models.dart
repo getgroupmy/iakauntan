@@ -699,6 +699,7 @@ class BusinessDocument {
     this.notes,
     this.termsConditions,
     this.paymentTermId,
+    this.salespersonId,
     this.lines = const [],
   });
 
@@ -740,6 +741,11 @@ class BusinessDocument {
   final String? notes;
   final String? termsConditions;
   final String? paymentTermId;
+
+  /// Who won the order. Sales documents only, and optional — plenty of
+  /// businesses never attribute a sale to anyone, and the report says so
+  /// out loud rather than quietly dropping what nobody was credited with.
+  final String? salespersonId;
   final List<DocumentLine> lines;
 
   bool get isPosted => glEntryId != null;
@@ -784,6 +790,7 @@ class BusinessDocument {
       notes: j['notes'] as String?,
       termsConditions: j['terms_conditions'] as String?,
       paymentTermId: j['payment_term_id'] as String?,
+      salespersonId: j['salesperson_id'] as String?,
       lines: (rawLines ?? const [])
           .map((e) => DocumentLine.fromJson(e as Map<String, dynamic>))
           .toList()

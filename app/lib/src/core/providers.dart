@@ -320,6 +320,13 @@ final projectsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).projects();
 });
 
+/// Only the people still selling. A dropdown listing everyone who ever
+/// worked here grows without bound and makes the current team harder to
+/// find; the report still shows leavers, because their sales happened.
+final salespeopleProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).salespeople(activeOnly: true);
+});
+
 final warehousesProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).warehouses();
