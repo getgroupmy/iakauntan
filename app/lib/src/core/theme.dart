@@ -245,11 +245,27 @@ class AppTheme {
       ),
       chipTheme: ChipThemeData(
         side: BorderSide.none,
-        labelStyle: const TextStyle(
+        // The colour is not decoration. A `labelStyle` supplied without
+        // one does not fall through to the colour scheme — Chip resolves
+        // the remaining fields against Material's own defaults, which are
+        // built for a light surface, so the label came out near-black on
+        // every chip in dark mode and the Modules row on Settings was
+        // unreadable. Naming the colour is the whole fix, and it has to
+        // be named on `secondaryLabelStyle` too or selected chips repeat
+        // it.
+        labelStyle: TextStyle(
           fontFamily: fontFamily,
           fontWeight: FontWeight.w600,
           fontSize: 12,
+          color: scheme.onSurfaceVariant,
         ),
+        secondaryLabelStyle: TextStyle(
+          fontFamily: fontFamily,
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+          color: scheme.onSecondaryContainer,
+        ),
+        iconTheme: IconThemeData(size: 16, color: scheme.onSurfaceVariant),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(Radii.sm),
         ),
