@@ -275,9 +275,26 @@ begin
     raise notice 'ok   an empty name is not a signature';
   end;
 
-  -- Now edit the document underneath the signature that was taken.
+  -- Since 0072 this cannot happen by the ordinary route at all: once a
+  -- signature exists the words are what somebody attested to.
+  begin
+    update public.corp_documents set body = body || E'\n\nAnd one more thing.'
+     where id = v_doc;
+    raise exception 'FAIL: a signed document was edited';
+  exception when sqlstate '23514' then
+    raise notice 'ok   a signed document cannot be edited';
+  end;
+
+  -- The hash is the backstop for what the trigger cannot see — a change
+  -- made by something other than an update to this table. Prevention and
+  -- detection guard against different failures and both are worth having,
+  -- so the guard is deliberately lifted here to reach the state the hash
+  -- exists to catch. This is the one place in the suite that reaches past
+  -- a rule on purpose, which is why it says so.
+  alter table public.corp_documents disable trigger corp_document_locked;
   update public.corp_documents set body = body || E'\n\nAnd one more thing.'
    where id = v_doc;
+  alter table public.corp_documents enable trigger corp_document_locked;
 
   perform pg_temp.check_true(
     'once the text changes, the signature stops vouching for it',
