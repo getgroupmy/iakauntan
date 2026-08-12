@@ -22,6 +22,47 @@ record.
 
 The database cannot send. It writes rows; the edge function drains them.
 
+## What is already done
+
+`send-email` is **deployed** (version 1, active) and
+`.github/workflows/send-email.yml` **drains the outbox on a schedule** —
+every half hour through the Malaysian working day, plus a pass at 17:15
+UTC, fifteen minutes after `app.run_daily_jobs` queues the overdue
+reminders.
+
+Until the two secrets below exist the function answers 503 and the
+workflow warns on every run. Messages queue up meanwhile and go out as
+soon as it is configured; nothing is lost.
+
+The workflow also needs the repository secret
+`SUPABASE_SERVICE_ROLE_KEY` (**Settings → Secrets and variables →
+Actions**) — the same one the exchange rate feed uses.
+
+### Who may drain the outbox
+
+The scheduler presents the service role key and drains every
+organization. Anybody else — the **Send now** button on the outbox
+screen — drains only their own, because the rows are chosen under their
+token and `email_outbox` carries `app.is_org_member(org_id)`.
+
+That distinction was missing until the scheduler was built. The function
+took any JWT the project had signed, and the publishable key ships
+inside the web bundle, so anyone at all could have pushed every
+organization's mail out early. They could never compose a message, only
+release ones already queued, but it was not their call to make.
+
+### On the half hour
+
+GitHub bills every job run at a minimum of one minute, so a five-minute
+cron would consume a private repository's whole monthly allowance and
+then some. Half-hourly is about 510 runs a month.
+
+The cost is latency: pressing **Email** on an invoice can mean a wait of
+up to half an hour. The Send now button covers the impatient case. If
+that is not good enough, the answer is not a tighter cron — it is
+`pg_cron` firing `pg_net` every minute from inside the database, which
+costs nothing per run and needs the service role key pasted into Vault.
+
 ## 1. A Resend account and a verified domain
 
 Sign up at resend.com, add the sending domain, and publish the DNS

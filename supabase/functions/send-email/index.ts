@@ -9,17 +9,46 @@
  * POST {}                     -> drain up to `limit` queued messages
  * POST { "id": "<uuid>" }     -> send one, for retrying a failure
  *
- * Called on a schedule by pg_cron and by hand from the outbox screen.
- * Requires the service role key, so a signed-in user cannot invoke it
- * to send arbitrary mail — what they can do is queue a row, which is
- * what `email_document` is for.
+ * Called on a schedule by `.github/workflows/send-email.yml`, and by
+ * hand from the outbox screen when somebody has just fixed whatever was
+ * wrong.
+ *
+ * Those two callers are not the same and are not treated the same. The
+ * scheduler presents the service role key and drains every
+ * organization. Anybody else drains only their own, because the rows to
+ * send are chosen under *their* token and `email_outbox` carries
+ * `app.is_org_member(org_id)` — so one company's staff cannot push
+ * another company's mail out early, which is what this function used to
+ * allow anyone holding the publishable key to do.
  *
  * Secrets, none of which are in the repository:
  *   RESEND_API_KEY   from resend.com, the one thing that can send
  *   MAIL_FROM        the verified sender, e.g. "billing@iakauntan.com"
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { corsHeaders, fail, json } from "../_shared/cors.ts";
+
+// Repeated from `_shared/cors.ts` rather than imported, for the same
+// reason `fetch-rates` repeats it: the CLI resolves `../_shared/` from
+// this directory, the management API roots the entrypoint a level
+// deeper, and the same path cannot satisfy both. `myinvois` keeps the
+// import because the CLI is the only thing that deploys it.
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+};
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function fail(message: string, status = 400, extra?: unknown): Response {
+  return json({ error: message, details: extra ?? null }, status);
+}
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
@@ -42,6 +71,14 @@ Deno.serve(async (req) => {
   }
   if (req.method !== "POST") return fail("Use POST", 405);
 
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const url = Deno.env.get("SUPABASE_URL");
+  if (!serviceKey || !url) return fail("Function is missing its own keys", 500);
+
+  const auth = req.headers.get("Authorization") ?? "";
+  const presented = auth.replace(/^Bearer\s+/i, "").trim();
+  const isScheduler = presented !== "" && presented === serviceKey;
+
   const apiKey = Deno.env.get("RESEND_API_KEY");
   const from = Deno.env.get("MAIL_FROM");
   if (!apiKey || !from) {
@@ -54,19 +91,30 @@ Deno.serve(async (req) => {
     );
   }
 
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const url = Deno.env.get("SUPABASE_URL");
-  if (!serviceKey || !url) return fail("Function is missing its own keys", 500);
-
+  // Sending and marking rows sent is always done with the service key:
+  // nobody but this function may write to the outbox.
   const db = createClient(url, serviceKey, {
     auth: { persistSession: false },
+  });
+
+  // *Choosing* the rows is a different question, and the answer is the
+  // caller's. The scheduler reads with the service key and sees every
+  // organization. Anyone else reads under their own token, so the
+  // `app.is_org_member(org_id)` policy on `email_outbox` decides what
+  // they can push out — and a caller presenting nothing but the
+  // publishable key is `anon`, matches no organization, and drains
+  // nothing at all. That last case is why no explicit 403 is needed.
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  const reader = isScheduler ? db : createClient(url, anonKey, {
+    auth: { persistSession: false },
+    global: { headers: { Authorization: auth } },
   });
 
   const body = await req.json().catch(() => ({}));
   const one = typeof body?.id === "string" ? body.id : null;
   const limit = Math.min(Math.max(Number(body?.limit ?? 25), 1), 100);
 
-  let query = db
+  let query = reader
     .from("email_outbox")
     .select("id, to_email, subject, body, reply_to, from_name, attempts")
     .eq("status", "queued")

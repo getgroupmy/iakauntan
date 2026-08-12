@@ -1,0 +1,131 @@
+name: Send queued email
+
+# Drains `email_outbox`. Nothing else does — the database queues rows and
+# deliberately never waits on Resend, so without something calling this
+# an invoice marked "emailed" sits in a table forever.
+#
+# ---------------------------------------------------------------------
+# On the cadence, which is a compromise and should be read as one
+#
+# GitHub bills each job run at a **minimum of one minute**, whatever it
+# actually takes, and a private repository has a monthly allowance. Every
+# five minutes would be 8,600 runs a month and would eat the allowance
+# several times over before CI got a look in. The schedule below is about
+# 510 runs a month, which leaves room for the pushes.
+#
+# The cost is latency: somebody who presses Email on an invoice waits up
+# to half an hour. That is tolerable for a statement or a reminder and
+# poor for anything a customer is waiting on, which is why the outbox
+# screen has a Send now button — and why that button still works for a
+# signed-in user after the change that stopped strangers draining the
+# queue. If half an hour is too long, the answer is not a tighter cron
+# here; it is `pg_cron` firing `pg_net` every minute from inside the
+# database, which costs nothing per run. That needs the service role key
+# in Vault, which needs somebody to paste it in.
+#
+# ---------------------------------------------------------------------
+# Two schedules, for two different things
+#
+# The business-hours pass carries what people do during the day. The
+# evening pass exists because `app.run_daily_jobs` runs at 17:00 UTC and
+# queues the overdue reminders; without a drain shortly after, every
+# reminder would wait until the following morning.
+
+on:
+  schedule:
+    # Every half hour through the Malaysian working day (09:00–19:30 MYT).
+    - cron: '*/30 1-11 * * 1-5'
+    # Fifteen minutes after `iakauntan-daily` queues the overdue
+    # reminders. Every day, because it queues them every day.
+    - cron: '15 17 * * *'
+  workflow_dispatch:
+    inputs:
+      id:
+        description: 'Send one message by id, or leave blank to drain the queue'
+        required: false
+
+concurrency:
+  group: send-email
+  # Never cancel a run in flight. It is in the middle of handing messages
+  # to Resend and updating their rows; killing it would leave the outbox
+  # disagreeing with what was actually sent.
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    name: Drain the outbox
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'ewwcgtnniwqndrzukksm' }}
+    steps:
+      - name: Call send-email
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::warning::Nothing was sent. Set the repository secret SUPABASE_SERVICE_ROLE_KEY."
+            {
+              echo "### Nothing was sent"
+              echo
+              echo "The repository secret \`SUPABASE_SERVICE_ROLE_KEY\` is not set."
+              echo "Add it under **Settings → Secrets and variables → Actions**."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          body='{}'
+          if [ -n "${{ inputs.id }}" ]; then
+            body="$(printf '{"id":"%s"}' "${{ inputs.id }}")"
+          fi
+
+          out="$(mktemp)"
+          code="$(curl -sS -X POST \
+            "https://${PROJECT_REF}.supabase.co/functions/v1/send-email" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H 'Content-Type: application/json' \
+            -d "$body" \
+            -o "$out" -w '%{http_code}')"
+
+          echo "HTTP $code"
+          cat "$out"
+          echo
+
+          # Mail not configured yet. A known, pending setup step rather
+          # than a fault, so it warns instead of failing — but it warns
+          # every single run, because messages are piling up behind it.
+          if [ "$code" = "503" ]; then
+            echo "::warning::Mail is not configured. Set RESEND_API_KEY and MAIL_FROM on the function."
+            {
+              echo "### Mail is not configured"
+              echo
+              echo "Messages are queuing and none can be sent until"
+              echo "\`RESEND_API_KEY\` and \`MAIL_FROM\` are set on the"
+              echo "\`send-email\` function. See \`docs/email-setup.md\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ "$code" != "200" ]; then
+            echo "::error::send-email answered $code"
+            exit 1
+          fi
+
+          considered="$(python3 -c "import json;print(json.load(open('$out')).get('considered',0))")"
+          sent="$(python3 -c "import json;print(json.load(open('$out')).get('sent',0))")"
+          failed="$(python3 -c "import json;print(json.load(open('$out')).get('failed',0))")"
+
+          # Nothing to do is the normal case and does not deserve a line
+          # on the summary — most half-hours have an empty queue.
+          if [ "$considered" != "0" ]; then
+            {
+              echo "### Sent $sent of $considered"
+              [ "$failed" != "0" ] && echo "$failed failed."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # A failure here is one message, not the run: a bad address is
+          # marked failed and never retried, so it will not reappear.
+          # Worth a warning on the run that saw it and not worth going
+          # red every day afterwards.
+          if [ "$failed" != "0" ]; then
+            echo "::warning::$failed message(s) failed — see Email → Failed in the app."
+          fi
