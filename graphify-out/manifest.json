@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786545094.9002357,
-    "ast_hash": "f60ace03f257c33aac1e08a6899ffb98",
+    "mtime": 1786547514.3435736,
+    "ast_hash": "72bdc227818ba786c2e36dd5b8af8fa9",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786545094.8985796,
-    "ast_hash": "1ed4b3a464afece7368f549bd437d7a2",
+    "mtime": 1786547463.9851227,
+    "ast_hash": "1a6f788f0a56513f18e0d65faa0cfa87",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": "d2c9729b108d770de90c22637a2bb8ae"
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1786545094.9013655,
-    "ast_hash": "0c9d5e021cf0f23726ade75e21c8fc78",
+    "mtime": 1786547514.3488758,
+    "ast_hash": "5d5c9648cdaef337c49f8338eacb944a",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786546186.3931496,
-    "ast_hash": "28b3c2cae0b06dfe295c2a0c74fb121e",
+    "mtime": 1786547446.341123,
+    "ast_hash": "fb1f6998027f44d93e57982327c2c87b",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1500,8 +1500,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-akaunting.md": {
-    "mtime": 1786545220.0463133,
-    "ast_hash": "cea96e051922ecac457603ab5b9f33ab",
+    "mtime": 1786547683.465118,
+    "ast_hash": "a0b7f921f8ea717c915fe10650b193cc",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/email_screen.dart": {
@@ -1642,6 +1642,31 @@
   "supabase/tests/csv_import.sql": {
     "mtime": 1786544919.9016721,
     "ast_hash": "f203efdcbfcd69ab377a0bfc725ecaea",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/exchange_rates_screen.dart": {
+    "mtime": 1786547580.5801659,
+    "ast_hash": "947cd5706d820dff4f938e7149f9bf5c",
+    "semantic_hash": ""
+  },
+  "supabase/functions/fetch-rates/index.ts": {
+    "mtime": 1786547437.509123,
+    "ast_hash": "0447d9d8600683c4984252f74e72e0eb",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0104_live_exchange_rates.sql": {
+    "mtime": 1786547190.4051285,
+    "ast_hash": "0dc89e154d0136fb9dec0a36fbc7dc95",
+    "semantic_hash": ""
+  },
+  "supabase/tests/exchange_rate_feed.sql": {
+    "mtime": 1786547312.0051258,
+    "ast_hash": "97a7bcc0eeba7c4ee421e339769e0e68",
+    "semantic_hash": ""
+  },
+  "docs/exchange-rate-feed.md": {
+    "mtime": 1786547675.0411181,
+    "ast_hash": "6fc1103dbc374ac3eb7243a5f2b07b65",
     "semantic_hash": ""
   }
 }

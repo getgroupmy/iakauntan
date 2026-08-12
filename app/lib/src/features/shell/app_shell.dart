@@ -82,6 +82,8 @@ const _destinations = <_Dest>[
       Icons.event_repeat, '/recurring-documents'),
   _Dest('Withholding tax', Icons.account_balance_outlined,
       Icons.account_balance, '/withholding'),
+  _Dest('Exchange rates', Icons.currency_exchange_outlined,
+      Icons.currency_exchange, '/exchange-rates'),
   _Dest('Import', Icons.upload_file_outlined, Icons.upload_file, '/import'),
   _Dest('Reports', Icons.bar_chart_outlined, Icons.bar_chart, '/reports'),
   _Dest('Team', Icons.manage_accounts_outlined, Icons.manage_accounts, '/team'),

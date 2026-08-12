@@ -908,11 +908,29 @@ class Repo {
     return data as String?;
   }
 
+  /// Every currency this organization could use, with the rate that is
+  /// actually in force and where it came from.
+  ///
+  /// `exchangeRateFor` answers one currency and says nothing about
+  /// provenance, which is right for pricing a document and useless for
+  /// answering "why is this the rate?". A currency with nothing on file
+  /// comes back with a null rate rather than being left out — that row
+  /// is the one that will refuse to post.
+  Future<List<Map<String, dynamic>>> exchangeRateBoard([DateTime? onDate]) async =>
+      _rows(await client.rpc('exchange_rate_board', params: {
+        'p_org_id': orgId,
+        'p_on_date': Fmt.iso(onDate ?? DateTime.now()),
+      }));
+
   /// Records a rate so the next document does not have to be told again.
   ///
   /// Upserted on the natural key, because two rates for one pair on one
   /// day is not a history — it is a tie the resolver would break by
   /// insertion order, which is no answer at all.
+  ///
+  /// Always this organization's own row. A published rate is never
+  /// written from here: `ingest_exchange_rates` is closed to signed-in
+  /// users, and the insert policy refuses a row belonging to nobody.
   Future<void> saveExchangeRate({
     required String from,
     required String to,

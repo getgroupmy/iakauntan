@@ -14,6 +14,7 @@ import '../features/banking/reconciliation_screen.dart';
 import '../features/stock/stock_take_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/documents/document_editor.dart';
+import '../features/documents/exchange_rates_screen.dart';
 import '../features/documents/document_list_screen.dart';
 import '../features/einvoice/einvoice_screen.dart';
 import '../features/expenses/expenses_screen.dart';
@@ -252,6 +253,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const WithholdingScreen(),
           ),
           GoRoute(path: '/import', builder: (_, __) => const ImportScreen()),
+          GoRoute(
+            path: '/exchange-rates',
+            builder: (_, __) => const ExchangeRatesScreen(),
+          ),
           GoRoute(path: '/assets', builder: (_, __) => const AssetsScreen()),
           GoRoute(
             path: '/stock-take',

@@ -132,6 +132,27 @@ so the bill shows what the supplier will actually be paid and the aged
 listing still foots. `supabase/tests/withholding.sql` asserts every rate
 and the one-month deadline. Compound tax is still not there.
 
+## 8b. Live currency
+
+Built — `ingest_exchange_rates` takes Bank Negara's published quotes and
+writes them as rows belonging to no organization, which
+`app.exchange_rate_for` falls back to. The organization's own rate wins
+for its own date and is never touched by the feed; a later published rate
+beats an earlier typed one, because a rate entered on 1 March says what
+the rate was on 1 March.
+
+This was less a convenience than a hole. `revalue_foreign_balances`
+refuses a currency it cannot price rather than assuming par — so with an
+empty rate table the month-end revaluation did not fail, it did not
+happen. `docs/exchange-rate-feed.md` has the deployment.
+
+Crypto currency, the other half of that pair in Akaunting's marketplace,
+is deliberately not built. Modelling it as a currency would route it
+through `revalue_foreign_balances` into exchange gain and loss, and it is
+not functional currency under MFRS — it is an intangible asset, or
+inventory for a dealer, with disposals revenue in nature where trading is
+habitual. It would produce accounts that foot and are wrong.
+
 ## 9. Coarse permissions
 
 Akaunting seeds per-resource permissions (`database/seeds/Permissions.php`)
