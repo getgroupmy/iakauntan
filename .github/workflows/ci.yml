@@ -4,6 +4,7 @@ on:
   push:
     branches: ['**']
   pull_request:
+  workflow_dispatch:
 
 jobs:
   flutter:
@@ -85,3 +86,194 @@ jobs:
 
       - if: always()
         run: supabase stop --no-backup
+
+  # -------------------------------------------------------------------
+  # Publishing
+  #
+  # This lived in its own workflow, and the separation was a mistake that
+  # took a week to show itself: a red ledger suite and a green deploy on
+  # the same commit are not contradictory when nothing connects them, so
+  # three commits published to production while `ledger.sql` was failing.
+  # Nothing harmful got out that time, which is luck rather than design —
+  # the same arrangement would have shipped wrong EPF arithmetic or a
+  # period control that had stopped holding.
+  #
+  # `needs` is the fix, and it is a different thing from what the old
+  # workflow did. It repeated Flutter's checks rather than trusting that
+  # CI had been green, which was sound reasoning about a *separate*
+  # workflow: green last time is not green now. Inside one workflow the
+  # dependency is real — the same commit, the same checkout, the same
+  # pinned SDK, and the job does not start at all unless both passed —
+  # so the repeat is now genuinely redundant and has gone.
+  #
+  # Vercel has no Flutter build image, and teaching its build container
+  # to install one on every deploy is slow and brittle. So the bundle is
+  # built here and uploaded prebuilt. Vercel never sees Dart; it serves a
+  # folder of static files.
+  #
+  # Pushing to the default branch publishes to production. Any other
+  # branch gets a preview URL, which is the point of previews: look at
+  # the change before it is anybody's books.
+  # -------------------------------------------------------------------
+  deploy:
+    name: Build and deploy to Vercel
+    runs-on: ubuntu-latest
+    needs: [flutter, database]
+    # A pull request is somebody else's commit by definition; it gets the
+    # checks and not the deploy credentials.
+    if: github.event_name != 'pull_request'
+    # On the job rather than the workflow. A newer commit should supersede
+    # an in-flight deploy of an older one — but not cancel the older
+    # commit's tests, which are the record of whether that commit was
+    # sound and are worth having even once it has been passed.
+    concurrency:
+      group: deploy-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      # The one real credential, and the only thing that has to be set by
+      # hand. The secrets context is not available to job-level `if`, so
+      # it is lifted into env and the first step checks it there.
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      # These two are identifiers, not credentials: they name the project
+      # and grant nothing without the token, so they are written down
+      # rather than costing two more secrets to set up and re-find. A
+      # secret or a repository variable of the same name overrides them,
+      # which is what to use if this repo ever deploys somewhere else.
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID || vars.VERCEL_ORG_ID || 'team_EBG91tunYkCckYh5bCELGRU3' }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID || vars.VERCEL_PROJECT_ID || 'prj_ACEwE16VnLeesABU7sAkPhzdn2Ti' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the deploy credentials are present
+        id: creds
+        run: |
+          missing=""
+          [ -z "$VERCEL_TOKEN" ] && missing="$missing VERCEL_TOKEN"
+          [ -z "$VERCEL_ORG_ID" ] && missing="$missing VERCEL_ORG_ID"
+          [ -z "$VERCEL_PROJECT_ID" ] && missing="$missing VERCEL_PROJECT_ID"
+
+          if [ -z "$missing" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            # A warning rather than a notice, and named on the run summary,
+            # because the quiet version of this is genuinely misleading: a
+            # green tick on a run that deployed nothing looks exactly like a
+            # run that deployed something.
+            echo "::warning::Nothing was deployed. Missing:$missing"
+            {
+              echo "### Nothing was deployed"
+              echo
+              echo "The build and deploy steps were skipped because this is"
+              echo "not set:"
+              echo
+              for s in $missing; do echo "- \`$s\`"; done
+              echo
+              echo "Add it under **Settings → Secrets and variables →"
+              echo "Actions**, then re-run this workflow."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The same pin as the analyze job above, for the same reason and
+      # more so here: what gets deployed should be built by a known SDK,
+      # not by whatever stable happened to become this morning.
+      - uses: subosito/flutter-action@v2
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          flutter-version: 3.32.0
+          channel: stable
+          cache: true
+
+      - name: Build the web bundle
+        if: steps.creds.outputs.ready == 'true'
+        working-directory: app
+        env:
+          # Optional. Unset, the build falls back to the defaults compiled
+          # into lib/src/core/env.dart. Only ever the publishable key —
+          # the service role key must never reach a client bundle.
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          # Set the repository variable DEMO_MODE to false to drop the
+          # one-tap demo logins from the sign-in page. Unset leaves them
+          # on, which is right while this deployment is the demo — see
+          # the README before it carries anybody's real ledger.
+          DEMO_MODE: ${{ vars.DEMO_MODE }}
+        run: |
+          flutter pub get
+
+          defines=()
+          if [ -n "$SUPABASE_URL" ]; then
+            defines+=("--dart-define=SUPABASE_URL=$SUPABASE_URL")
+          fi
+          if [ -n "$SUPABASE_ANON_KEY" ]; then
+            defines+=("--dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY")
+          fi
+          if [ -n "$DEMO_MODE" ]; then
+            defines+=("--dart-define=DEMO_MODE=$DEMO_MODE")
+          fi
+
+          # --no-web-resources-cdn is load-bearing: without it the bundle
+          # fetches CanvasKit from www.gstatic.com before main() runs, and
+          # anyone behind a network that blocks it gets a blank page with
+          # no error screen, because the app never starts.
+          #
+          # --pwa-strategy=none is load-bearing for a different reason.
+          # Flutter's default service worker caches flutter_bootstrap.js,
+          # and that bootstrap carries the serviceWorkerVersion it was
+          # built with — so once a device holds a stale copy the worker
+          # believes it is current, never updates, and serves old code
+          # forever. A deployed fix then never reaches the user and a
+          # reload cannot break the loop. Nothing here works offline
+          # anyway: every screen reads Supabase.
+          flutter build web --release --no-web-resources-cdn \
+            --pwa-strategy=none "${defines[@]}"
+
+          # Registration must not come back by accident — if it does,
+          # every later deploy silently stops reaching anyone who has
+          # already used the app.
+          #
+          # The check is a sentinel from web/flutter_bootstrap.js, not a
+          # grep for "serviceWorkerVersion": flutter.js is inlined into
+          # the bootstrap and always contains that identifier whether or
+          # not anything calls it, so that grep matches a clean build too.
+          if ! grep -q "iakauntan:no-service-worker" build/web/flutter_bootstrap.js; then
+            echo "::error::The custom web/flutter_bootstrap.js is not in the build."
+            echo "::error::Flutter's default bootstrap registers a caching service worker."
+            exit 1
+          fi
+
+      - name: Assemble the Vercel build output
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          mkdir -p .vercel/output/static
+          cp -r app/build/web/. .vercel/output/static/
+          cp deploy/vercel-output-config.json .vercel/output/config.json
+          test -f .vercel/output/static/index.html
+          test -f .vercel/output/static/canvaskit/canvaskit.wasm
+
+          # Creating .vercel/ is what links this checkout to the project,
+          # and the CLI reads that link from project.json rather than from
+          # the environment. Without it, a .vercel directory that exists
+          # but holds no project.json is worse than none at all: the CLI
+          # refuses with "Could not retrieve Project Settings" instead of
+          # falling back to VERCEL_ORG_ID and VERCEL_PROJECT_ID.
+          printf '{"projectId":"%s","orgId":"%s"}\n' \
+            "$VERCEL_PROJECT_ID" "$VERCEL_ORG_ID" > .vercel/project.json
+
+      - name: Deploy
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          npm install --global vercel@latest
+
+          # --yes so a first deploy into a fresh project cannot sit waiting
+          # on a confirmation prompt that nobody is there to answer.
+          if [ "${{ github.ref_name }}" = "${{ github.event.repository.default_branch }}" ]; then
+            url="$(vercel deploy --prebuilt --prod --yes --token="$VERCEL_TOKEN")"
+            echo "### Deployed to production" >> "$GITHUB_STEP_SUMMARY"
+          else
+            url="$(vercel deploy --prebuilt --yes --token="$VERCEL_TOKEN")"
+            echo "### Preview deploy" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "$url" >> "$GITHUB_STEP_SUMMARY"

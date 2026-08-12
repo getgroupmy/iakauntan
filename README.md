@@ -749,9 +749,11 @@ through a real call, so this cannot come back quietly.
 ### What CI actually runs, and a day it was not running
 
 `.github/workflows/ci.yml` analyzes and tests the Flutter app, then
-starts a throwaway Supabase stack and runs `statutory.sql`, `ledger.sql`
-and `secretarial.sql` against the migrations *in that commit* rather than
-against the hosted project.
+starts a throwaway Supabase stack and runs every file in
+`supabase/tests/` against the migrations *in that commit* rather than
+against the hosted project. Publishing is a third job in the same
+workflow, and it waits on both of the other two — see the Vercel
+pipeline below for why that gate is there.
 
 That second job had been failing, unnoticed, since the suite grew a
 second fixture organization. `app.seed_chart_of_accounts` creates a temp
@@ -763,8 +765,8 @@ assertions passed by hand and failed from a clean build. `0071` writes
 that fix down. **A clean build from the migrations is the only thing that
 tests the migrations**, which is the whole reason that job exists.
 
-Both workflows pin `flutter-version: 3.32.0` rather than tracking
-`channel: stable`. A newer stable deprecated `DropdownButtonFormField`'s
+Both jobs that touch Flutter pin `flutter-version: 3.32.0` rather than
+tracking `channel: stable`. A newer stable deprecated `DropdownButtonFormField`'s
 `value` argument; with `--fatal-infos` that turned into 37 errors in code
 nobody had touched. Bump the pin deliberately, with the deprecations
 fixed in the same commit.
@@ -845,16 +847,36 @@ Two things to do before real users arrive:
 
 #### The Vercel pipeline
 
-`.github/workflows/deploy.yml` builds the bundle in CI and uploads it to
-Vercel **prebuilt**. Vercel has no Flutter build image, and teaching its
-build container to install one on every deploy is slow and brittle — so
-Vercel never sees Dart, it serves a folder. The workflow analyzes and
-tests before it builds, repeating CI rather than trusting it: a workflow
-that publishes should not depend on a different workflow having been
-green.
+The `deploy` job in `.github/workflows/ci.yml` builds the bundle and
+uploads it to Vercel **prebuilt**. Vercel has no Flutter build image, and
+teaching its build container to install one on every deploy is slow and
+brittle — so Vercel never sees Dart, it serves a folder.
 
 Pushes to the default branch go to production. Every other branch gets a
-preview URL.
+preview URL. A pull request gets neither: it is somebody else's commit by
+definition, so it gets the checks and not the deploy credentials.
+
+**It waits on the tests, and that is not how it started.** Publishing
+used to live in its own `deploy.yml`, which repeated the Flutter checks
+rather than trusting CI — sound reasoning about a separate workflow,
+since green last time is not green now. What it could not repeat was the
+database job, and nothing connected the two: a red ledger suite and a
+green deploy on the same commit were not a contradiction. Three commits
+published to production while `ledger.sql` was failing. Nothing harmful
+got out, because the failure was a test asserting behaviour that had been
+deliberately removed — but the same arrangement would have shipped wrong
+EPF arithmetic or a period control that had stopped holding, just as
+quietly.
+
+So the deploy is now a job in this workflow with `needs: [flutter,
+database]`. Inside one workflow the dependency is real — the same commit,
+the same checkout, the same pinned SDK, and the job does not start unless
+both passed — which is why the repeated `flutter analyze` and `flutter
+test` have gone with it. The concurrency group that supersedes an
+in-flight deploy sits on the job rather than the workflow, so a newer
+commit cancels the older one's *deploy* without cancelling its tests;
+those are the record of whether that commit was sound and are worth
+keeping even once it has been passed.
 
 **Do not import the repository into Vercel as a Git project.** If you do,
 Vercel runs its own build, finds no Flutter and no output directory, and
