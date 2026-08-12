@@ -281,36 +281,54 @@ class AppShell extends ConsumerWidget {
     );
   }
 
+  /// Everything the bottom bar has no room for.
+  ///
+  /// Scrollable, and deliberately so. A default modal sheet is capped at
+  /// a little over half the screen; with the modules switched on this
+  /// list runs to seventeen entries plus Sign out, so the plain Column
+  /// that used to be here overflowed by about four hundred pixels and
+  /// simply clipped — no scrollbar, no bounce, nothing to suggest the
+  /// list continued. Sign out was the entry off the bottom.
   void _showMoreSheet(BuildContext context, List<_Dest> dests) {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      // Needed for the sheet to grow past the 9/16 default at all.
+      isScrollControlled: true,
+      // But not to the top of the screen: a navigation sheet that covers
+      // everything reads as a page you have navigated to, and you should
+      // still be able to see what you are leaving behind.
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.8,
+      ),
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final d in dests.where((d) => !d.primary))
-              ListTile(
-                leading: Icon(d.icon),
-                title: Text(d.label),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  context.go(d.path);
-                },
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final d in dests.where((d) => !d.primary))
+                ListTile(
+                  leading: Icon(d.icon),
+                  title: Text(d.label),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    context.go(d.path);
+                  },
+                ),
+              const Divider(),
+              Consumer(
+                builder: (context, ref, _) => ListTile(
+                  leading: const Icon(Icons.logout),
+                  title: const Text('Sign out'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await ref.read(supabaseProvider).auth.signOut();
+                    ref.read(currentOrgIdProvider.notifier).clear();
+                  },
+                ),
               ),
-            const Divider(),
-            Consumer(
-              builder: (context, ref, _) => ListTile(
-                leading: const Icon(Icons.logout),
-                title: const Text('Sign out'),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  await ref.read(supabaseProvider).auth.signOut();
-                  ref.read(currentOrgIdProvider.notifier).clear();
-                },
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
