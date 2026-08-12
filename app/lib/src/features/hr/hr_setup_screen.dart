@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'holidays_tab.dart';
+import 'onboarding_template_dialog.dart';
 import 'leave_bands_dialog.dart';
 import 'statutory_rates_tab.dart';
 
@@ -19,7 +20,7 @@ class HrSetupScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
-      length: 8,
+      length: 9,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('HR setup'),
@@ -35,6 +36,7 @@ class HrSetupScreen extends ConsumerWidget {
               Tab(text: 'Shifts'),
               Tab(text: 'Holidays'),
               Tab(text: 'Statutory rates'),
+              Tab(text: 'Onboarding'),
             ],
           ),
         ),
@@ -47,6 +49,7 @@ class HrSetupScreen extends ConsumerWidget {
           _ShiftsTab(),
           HolidaysTab(),
           StatutoryRatesTab(),
+          _OnboardingTemplatesTab(),
         ]),
       ),
     );
@@ -693,6 +696,33 @@ class _ShiftsTab extends StatelessWidget {
         '${r['start_time'] ?? ''} – ${r['end_time'] ?? ''}',
         '${Fmt.toInt(r['break_minutes'])} min break',
       ].whereType<Object>().join(' · '),
+    );
+  }
+}
+
+class _OnboardingTemplatesTab extends StatelessWidget {
+  const _OnboardingTemplatesTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SetupList(
+      table: 'onboarding_templates',
+      title: 'Onboarding templates',
+      subtitle: 'The tasks a joiner and whoever is setting them up have to '
+          'get through, with the day each one is due',
+      emptyMessage: 'Add a template, then its items, then start a checklist '
+          'against whoever is joining.',
+      fields: const [
+        SetupField('name', 'Name', required: true),
+        SetupField('is_active', 'Active', boolean: true),
+      ],
+      titleOf: (r) => r['name']?.toString() ?? '',
+      subtitleOf: (r) =>
+          r['is_active'] == true ? 'in use' : 'not offered when starting one',
+      rowAction: (context, row) => TextButton(
+        onPressed: () => showTemplateItems(context, row),
+        child: const Text('Items'),
+      ),
     );
   }
 }

@@ -68,6 +68,21 @@ was exactly that case.
   a saved contact. `0092` adds the partial unique indexes that make
   "the default address" mean one row rather than whichever the query
   returns first.
+- **CRM leads.** A leads screen, and `convert_lead` in `0093` — which
+  creates the customer, carries the named person across as their main
+  contact, opens an opportunity in the pipeline's first *open* stage,
+  and stamps the lead, all in one transaction. Three writes from the
+  client can half succeed and put the same company in the book twice.
+  The lead is kept rather than consumed: `converted_contact_id` is how
+  "where did this customer come from" gets answered a year later.
+- **Talent and onboarding.** Interview rounds against a candidate;
+  onboarding templates and their items, with `start_onboarding` turning
+  day offsets into dated tasks; a checklist screen where ticking the
+  last mandatory box closes the list; appraisal goals under an
+  appraisal; and dependants, documents and shift assignments on the
+  employee record. The first of those matters more than it looks — a
+  dependant carries a tax relief claim, so PCB was understated for
+  anybody who had one and no way to say so.
 
 ## Correct: the database owns these
 
@@ -83,20 +98,7 @@ via the `corp_*` RPCs), `einvoice_lines`, `einvoice_logs`,
 
 ## Gaps, worst first
 
-### 1. CRM leads
-
-`leads` has a table, RLS and no screen. The CRM is pipeline and
-opportunities only, so the top of the funnel is missing.
-
-### 2. Talent and onboarding
-
-`interviews`, `onboarding_templates`, `onboarding_checklists`,
-`onboarding_tasks`, `onboarding_template_items`, `appraisal_goals`,
-`employee_dependants`, `employee_documents`, `employee_shifts` — all
-unreachable. Appraisals and applicants have screens; the tables around
-them do not.
-
-### 3. Smaller, but real
+### 1. Smaller, but real
 
 - **`item_categories`** — no editor.
 - **Stock card.** `stock_movements` cannot be inspected per item, so

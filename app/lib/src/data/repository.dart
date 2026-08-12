@@ -2229,6 +2229,193 @@ extension RepoHrSetup on Repo {
         .eq('id', addressId);
   }
 
+  // ------------------------------------------------------------------
+  // Leads
+  //
+  // The top of the funnel. Everything before somebody has decided the
+  // enquiry is real enough to be an opportunity.
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> leads({String? status}) async {
+    var q = client
+        .from('leads')
+        .select('*, contacts:converted_contact_id(name)')
+        .eq('org_id', orgId)
+        .isFilter('deleted_at', null);
+    if (status != null && status != 'all') {
+      q = status == 'open'
+          ? q.not('status', 'in', '("converted","lost","unqualified")')
+          : q.eq('status', status);
+    }
+    return Repo._rows(
+        await q.order('created_at', ascending: false).limit(300));
+  }
+
+  Future<void> saveLead(Map<String, dynamic> values, {String? id}) async {
+    if (id != null) {
+      await client.from('leads').update(values).eq('id', id);
+    } else {
+      await client.from('leads').insert({
+        ...values,
+        'org_id': orgId,
+        'lead_no': await nextDocumentNumber('lead'),
+      });
+    }
+  }
+
+  /// Creates the customer, the contact person and usually an
+  /// opportunity, and stamps the lead — in one transaction, because
+  /// three writes from here can half succeed and leave the same company
+  /// in the book twice.
+  ///
+  /// Returns the new contact and opportunity ids.
+  Future<Map<String, dynamic>> convertLead(
+    String leadId, {
+    bool createOpportunity = true,
+    String? pipelineId,
+    double? amount,
+    DateTime? expectedClose,
+  }) async {
+    final data = await client.rpc('convert_lead', params: {
+      'p_lead_id': leadId,
+      'p_create_opportunity': createOpportunity,
+      if (pipelineId != null) 'p_pipeline_id': pipelineId,
+      if (amount != null) 'p_amount': amount,
+      if (expectedClose != null)
+        'p_expected_close_date': Fmt.iso(expectedClose),
+    });
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> pipelines() async => Repo._rows(await client
+      .from('pipelines')
+      .select()
+      .eq('org_id', orgId)
+      .eq('is_active', true)
+      .order('sort_order'));
+
+  // ------------------------------------------------------------------
+  // Interviews
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> interviews(String applicantId) async =>
+      Repo._rows(await client
+          .from('interviews')
+          .select('*, employees:interviewer_id(full_name)')
+          .eq('applicant_id', applicantId)
+          .order('round_no'));
+
+  Future<void> saveInterview(Map<String, dynamic> values, {String? id}) async {
+    if (id != null) {
+      await client.from('interviews').update(values).eq('id', id);
+    } else {
+      await client.from('interviews').insert({...values, 'org_id': orgId});
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Onboarding
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> onboardingTemplateItems(
+          String templateId) async =>
+      Repo._rows(await client
+          .from('onboarding_template_items')
+          .select()
+          .eq('template_id', templateId)
+          .order('sort_order'));
+
+  Future<void> saveTemplateItem(Map<String, dynamic> values,
+      {String? id}) async {
+    if (id != null) {
+      await client
+          .from('onboarding_template_items')
+          .update(values)
+          .eq('id', id);
+    } else {
+      await client
+          .from('onboarding_template_items')
+          .insert({...values, 'org_id': orgId});
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> onboardingChecklists(
+      {bool openOnly = true}) async {
+    var q = client
+        .from('onboarding_checklists')
+        .select('*, employees(full_name, employee_no), '
+            'onboarding_tasks(id, is_done, is_mandatory)')
+        .eq('org_id', orgId);
+    if (openOnly) q = q.isFilter('completed_at', null);
+    return Repo._rows(await q.order('start_date', ascending: false).limit(200));
+  }
+
+  Future<List<Map<String, dynamic>>> onboardingTasks(String checklistId) async =>
+      Repo._rows(await client
+          .from('onboarding_tasks')
+          .select('*, employees:owner_employee_id(full_name)')
+          .eq('checklist_id', checklistId)
+          .order('sort_order'));
+
+  /// Materialises the template's items as dated tasks. Copied rather
+  /// than referenced, so editing the template later does not move the
+  /// due dates of an onboarding already under way.
+  Future<String> startOnboarding({
+    required String employeeId,
+    String? templateId,
+    DateTime? startDate,
+    String kind = 'onboarding',
+  }) async {
+    final data = await client.rpc('start_onboarding', params: {
+      'p_employee_id': employeeId,
+      if (templateId != null) 'p_template_id': templateId,
+      if (startDate != null) 'p_start_date': Fmt.iso(startDate),
+      'p_kind': kind,
+    });
+    return data as String;
+  }
+
+  /// Returns true when that tick finished the checklist.
+  Future<bool> setOnboardingTaskDone(String taskId, bool done) async {
+    final data = await client.rpc('set_onboarding_task_done',
+        params: {'p_task_id': taskId, 'p_done': done});
+    return data == true;
+  }
+
+  // ------------------------------------------------------------------
+  // What an employee record hangs off: dependants, documents, shifts
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> employeeRows(
+          String table, String employeeId,
+          {String select = '*', String orderBy = 'created_at'}) async =>
+      Repo._rows(await client
+          .from(table)
+          .select(select)
+          .eq('employee_id', employeeId)
+          .order(orderBy));
+
+  Future<void> saveEmployeeRow(
+      String table, Map<String, dynamic> values, {String? id}) async {
+    if (id != null) {
+      await client.from(table).update(values).eq('id', id);
+    } else {
+      await client.from(table).insert({...values, 'org_id': orgId});
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> appraisalGoals(String appraisalId) async =>
+      Repo._rows(await client
+          .from('appraisal_goals')
+          .select()
+          .eq('appraisal_id', appraisalId)
+          .order('sort_order'));
+
+  Future<void> saveAppraisalGoal(Map<String, dynamic> values,
+      {String? id}) async {
+    if (id != null) {
+      await client.from('appraisal_goals').update(values).eq('id', id);
+    } else {
+      await client.from('appraisal_goals').insert({...values, 'org_id': orgId});
+    }
+  }
+
   Future<void> makePersonPrimary(String contactId, String personId) async {
     await client
         .from('contact_persons')

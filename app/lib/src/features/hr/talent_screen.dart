@@ -7,6 +7,8 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'appraisal_goals_dialog.dart';
+import 'interviews_dialog.dart';
 
 /// Recruitment and performance. Applicant data is HR-only — it is not
 /// company reading material, and the policies enforce that rather than
@@ -165,12 +167,19 @@ class _CandidatesTab extends ConsumerWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 12),
               ),
-              trailing: next == null
-                  ? null
-                  : OutlinedButton(
-                      onPressed: () => _advance(context, ref, a, next),
-                      child: Text('Move to ${Fmt.label(next)}'),
-                    ),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                TextButton(
+                  onPressed: () => showInterviews(context, a.id, a.fullName),
+                  child: const Text('Interviews'),
+                ),
+                if (next != null) ...[
+                  const SizedBox(width: Space.xs),
+                  OutlinedButton(
+                    onPressed: () => _advance(context, ref, a, next),
+                    child: Text('Move to ${Fmt.label(next)}'),
+                  ),
+                ],
+              ]),
             );
           },
         );
@@ -233,6 +242,8 @@ class _AppraisalsTab extends ConsumerWidget {
                     ].whereType<String>().join(' · '),
                     style: const TextStyle(fontSize: 12),
                   ),
+                  onTap: () => showAppraisalGoals(
+                      context, a.id, a.employeeName ?? 'Appraisal'),
                   trailing: a.finalRating == null
                       ? null
                       : Column(

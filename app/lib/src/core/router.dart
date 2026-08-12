@@ -6,6 +6,7 @@ import '../features/auth/reset_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
 import '../features/contacts/contact_editor.dart';
 import '../features/contacts/contacts_screen.dart';
+import '../features/crm/leads_screen.dart';
 import '../features/crm/pipeline_screen.dart';
 import '../features/admin/platform_console_screen.dart';
 import '../features/assets/assets_screen.dart';
@@ -31,6 +32,7 @@ import '../features/settings/settings_screen.dart';
 import '../features/hr/claims_screen.dart';
 import '../features/hr/employee_editor.dart';
 import '../features/hr/hr_setup_screen.dart';
+import '../features/hr/onboarding_screen.dart';
 import '../features/hr/leave_screen.dart';
 import '../features/hr/my_hr_screen.dart';
 import '../features/hr/payroll_screen.dart';
@@ -214,6 +216,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const PlatformConsoleScreen(),
           ),
           GoRoute(path: '/crm', builder: (_, __) => const PipelineScreen()),
+          GoRoute(path: '/crm/leads', builder: (_, __) => const LeadsScreen()),
+          GoRoute(
+            path: '/hr/onboarding',
+            builder: (_, __) => const OnboardingScreen(),
+          ),
           GoRoute(path: '/einvoice', builder: (_, __) => const EinvoiceScreen()),
           GoRoute(path: '/journals', builder: (_, __) => const JournalsScreen()),
           GoRoute(

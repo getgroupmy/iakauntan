@@ -787,6 +787,50 @@ final contactAddressesProvider = FutureProvider.autoDispose
   return requireRepo(ref).contactAddresses(contactId);
 });
 
+final appraisalGoalsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, appraisalId) {
+  return requireRepo(ref).appraisalGoals(appraisalId);
+});
+
+final leadsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, status) {
+  return requireRepo(ref).leads(status: status);
+});
+
+final pipelinesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).pipelines();
+});
+
+final interviewsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, applicantId) {
+  return requireRepo(ref).interviews(applicantId);
+});
+
+final onboardingChecklistsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, bool>((ref, openOnly) {
+  return requireRepo(ref).onboardingChecklists(openOnly: openOnly);
+});
+
+final onboardingTasksProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, checklistId) {
+  return requireRepo(ref).onboardingTasks(checklistId);
+});
+
+final templateItemsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, templateId) {
+  return requireRepo(ref).onboardingTemplateItems(templateId);
+});
+
+/// Dependants, documents and shifts all hang off one employee and are
+/// read the same way, so they share a provider keyed by table.
+final employeeRowsProvider = FutureProvider.autoDispose.family<
+    List<Map<String, dynamic>>,
+    ({String table, String employeeId, String select, String orderBy})>(
+        (ref, arg) {
+  return requireRepo(ref).employeeRows(arg.table, arg.employeeId,
+      select: arg.select, orderBy: arg.orderBy);
+});
+
 /// The company logo as raw bytes, for embedding in a PDF.
 ///
 /// Separate from `currentOrgProvider.logoUrl`, which is a URL for the
