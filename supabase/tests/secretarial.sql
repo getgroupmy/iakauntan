@@ -512,9 +512,17 @@ begin
        from public.corp_signatures where id = v_sig_a));
 
   -- Now move the text underneath a link that is already out.
+  --
+  -- 0072 refuses this by the ordinary route once anything is signed, and
+  -- that refusal is asserted where it belongs, further up. What is being
+  -- proved here is the other half: that a link already in somebody's
+  -- inbox notices the text moved. Reaching that state means lifting the
+  -- guard on purpose, the same as in the signature block above.
   v_stale := public.corp_create_signing_link(v_sig_b, 14, null);
+  alter table public.corp_documents disable trigger corp_document_locked;
   update public.corp_documents set body = body || E'\n\nAdded after the fact.'
    where id = v_doc;
+  alter table public.corp_documents enable trigger corp_document_locked;
 
   perform pg_temp.sign_out();
   execute 'set local role anon';
