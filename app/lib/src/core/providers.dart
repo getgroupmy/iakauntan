@@ -291,6 +291,16 @@ final recurringJournalsProvider =
   return requireRepo(ref).recurringJournals();
 });
 
+final withholdingTypesProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).withholdingTypes();
+});
+
+final withholdingReportProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).withholdingReport();
+});
+
 final recurringDocumentsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).recurringDocuments();

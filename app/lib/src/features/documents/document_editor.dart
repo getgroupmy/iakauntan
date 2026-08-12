@@ -20,6 +20,7 @@ import 'settlement_dialog.dart';
 import 'transfer.dart';
 import 'transfer_dialog.dart';
 import 'repeat_dialog.dart';
+import 'withholding_dialog.dart';
 import 'share_dialog.dart';
 
 /// One editor for every document type in both cycles. What changes
@@ -615,6 +616,24 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           tooltip: 'Email to the customer',
           icon: const Icon(Icons.mail_outline, size: 20),
           onPressed: _saving ? null : _emailDocument,
+        ),
+
+      // Withholding comes off a posted bill: the certificate debits the
+      // payable that posting created, so there is nothing to deduct from
+      // before then. Purchases only — tax withheld from money coming in
+      // is a credit against the company's own assessment, which is a
+      // different thing and is not built.
+      if (!_isNew && widget.docType == 'bill' && _isPosted && _status != 'void')
+        IconButton(
+          tooltip: 'Withhold tax',
+          icon: const Icon(Icons.account_balance_outlined, size: 20),
+          onPressed: _saving
+              ? null
+              : () async {
+                  final done = await showWithholdingDialog(
+                      context, widget.documentId!, _grandTotal);
+                  if (done == true && mounted) _load();
+                },
         ),
 
       // Only an invoice or a bill repeats, and only one that exists:

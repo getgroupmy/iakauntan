@@ -109,11 +109,13 @@ Akaunting's tax types are normal, inclusive, compound, fixed and
 withholding (`app/Models/Setting/Tax.php`). `tax_codes` here carries
 `rate` and `is_inclusive` and stops.
 
-Malaysia withholds under ITA s.107A, s.109 and s.109B on payments to
-non-residents — royalties, interest, technical fees, contract payments.
-A Malaysian system that cannot withhold has a real hole, and because it
-is statutory arithmetic it needs the test treatment `CLAUDE.md`
-requires.
+Withholding is built — `ref_withholding_types` carries the eight
+sections and their statutory rates, and a certificate is modelled as a
+settlement rather than a tax code: it debits the payable, credits
+`2145 Withholding Tax Payable` and writes a `payment_allocations` row,
+so the bill shows what the supplier will actually be paid and the aged
+listing still foots. `supabase/tests/withholding.sql` asserts every rate
+and the one-month deadline. Compound tax is still not there.
 
 ## 9. Coarse permissions
 
@@ -139,5 +141,6 @@ somebody wants "sees purchases, not payroll".
 1 and 2 belong together: email plus a signed invoice link is one
 workflow, and it is the difference between a bookkeeping tool and a
 business system. Both are built, and so is the aging, and so are
-recurring invoices and bills. Withholding tax is next. Bank transfer and
-import are small and fit anywhere.
+recurring invoices and bills, and so is withholding. Bank transfer and
+import are small and fit anywhere; the two statutory statements in 4 are
+the largest thing left.

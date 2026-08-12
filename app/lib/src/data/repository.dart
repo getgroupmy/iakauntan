@@ -489,6 +489,65 @@ class Repo {
     return (data as num?)?.toInt() ?? 0;
   }
 
+  // ------------------------------------------------------------------
+  // Withholding tax
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> withholdingTypes() async => _rows(
+      await client
+          .from('ref_withholding_types')
+          .select()
+          .eq('is_active', true)
+          .order('sort_order'));
+
+  /// The CP37 listing: what was deducted, on which form, and by when it
+  /// has to reach LHDN.
+  Future<List<Map<String, dynamic>>> withholdingReport({
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final data = await client.rpc('report_withholding', params: {
+      'p_org_id': orgId,
+      if (from != null) 'p_from': Fmt.iso(from),
+      if (to != null) 'p_to': Fmt.iso(to),
+    });
+    return _rows(data);
+  }
+
+  Future<String> createWithholding({
+    required String billId,
+    required String whtCode,
+    double? grossAmount,
+    double? rate,
+    DateTime? certDate,
+  }) async {
+    final data = await client.rpc('create_withholding', params: {
+      'p_bill_id': billId,
+      'p_wht_code': whtCode,
+      if (grossAmount != null) 'p_gross_amount': grossAmount,
+      if (rate != null) 'p_rate': rate,
+      if (certDate != null) 'p_cert_date': Fmt.iso(certDate),
+    });
+    return data as String;
+  }
+
+  Future<void> postWithholding(String id) async {
+    await client.rpc('post_withholding', params: {'p_id': id});
+  }
+
+  Future<void> remitWithholding({
+    required String id,
+    required DateTime paidOn,
+    String? bankAccountId,
+    String? reference,
+  }) async {
+    await client.rpc('remit_withholding', params: {
+      'p_id': id,
+      'p_paid_on': Fmt.iso(paidOn),
+      if (bankAccountId != null) 'p_bank_account_id': bankAccountId,
+      if (reference != null) 'p_reference': reference,
+    });
+  }
+
   /// What this customer pays for this item at this quantity: a price
   /// named for their level, a level-wide percentage, or the list price.
   Future<double> itemPrice({
