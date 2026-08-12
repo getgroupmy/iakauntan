@@ -177,6 +177,103 @@ void main() {
     });
   });
 
+  group('cash flows', () {
+    Map<String, dynamic> cf(String section, String label, double amount) =>
+        {'section': section, 'label': label, 'amount': amount, 'sort_order': 10};
+
+    final rows = [
+      cf('operating', 'Profit for the period', 6500),
+      cf('operating', 'Depreciation and amortisation', 500),
+      cf('operating', 'Accounts Receivable', -4000),
+      cf('operating', 'Accounts Payable', 1000),
+      cf('investing', 'Property, Plant and Equipment', -5000),
+      cf('reconciliation', 'Net movement in cash', -1000),
+      cf('reconciliation', 'Cash and cash equivalents brought forward', 0),
+      cf('reconciliation', 'Cash and cash equivalents carried forward', -1000),
+    ];
+
+    test('the sections total to the movement in cash', () {
+      // The whole point of the statement. If the printed sections do not
+      // come to the printed net movement, a reader adding them up gets a
+      // different answer from the one at the foot of the page.
+      final spec = cashFlowSpec(rows, range);
+      final sections = spec.blocks.whereType<ReportSection>().toList();
+      final total = sections.fold<double>(0, (s, x) => s + x.total);
+      final net = spec.blocks.whereType<ReportHighlight>().single;
+      expect(net.label, 'Net movement in cash');
+      expect(total, net.value);
+      expect(net.value, -1000);
+    });
+
+    test('a section with nothing in it does not print', () {
+      // ReportView drops an empty section, so financing with no rows is
+      // an absent heading rather than a heading with a zero under it.
+      final spec = cashFlowSpec(rows, range);
+      final financing = spec.blocks
+          .whereType<ReportSection>()
+          .firstWhere((s) => s.title == 'Financing activities');
+      expect(financing.lines, isEmpty);
+    });
+
+    test('the cash brought and carried forward are shown, signed', () {
+      final grid = cashFlowSpec(rows, range).blocks.whereType<ReportGrid>().single;
+      expect(grid.rows, hasLength(2));
+      // A bank overdraft is a negative, and printing 1,000 for -1,000
+      // would read as money in the bank.
+      expect((grid.rows[1][1] as MoneyCell).signed, isTrue);
+      expect((grid.rows[1][1] as MoneyCell).value, -1000);
+    });
+
+    test('it says which method it used', () {
+      expect(cashFlowSpec(rows, range).note, contains('indirect'));
+    });
+  });
+
+  group('changes in equity', () {
+    Map<String, dynamic> eq(String? code, String name, double opening,
+            double movement) =>
+        {
+          'code': code,
+          'name': name,
+          'opening_balance': opening,
+          'movement': movement,
+          'closing_balance': opening + movement,
+        };
+
+    final rows = [
+      eq('3100', 'Share Capital', 100000, 0),
+      eq('3200', 'Retained Earnings', 20000, 0),
+      eq(null, 'Profit for the financial period', 0, 30000),
+    ];
+
+    test('the total closes at the sum of the components', () {
+      final grid =
+          changesInEquitySpec(rows, range).blocks.whereType<ReportGrid>().single;
+      expect((grid.total![4] as MoneyCell).value, 150000);
+      expect((grid.total![2] as MoneyCell).value, 120000, reason: 'opening');
+      expect((grid.total![3] as MoneyCell).value, 30000, reason: 'movement');
+    });
+
+    test('the result for the period is a component like any other', () {
+      // It is not in retained earnings until the year is closed, and
+      // leaving it off is what makes the statement disagree with the
+      // balance sheet.
+      final grid =
+          changesInEquitySpec(rows, range).blocks.whereType<ReportGrid>().single;
+      expect(grid.rows, hasLength(3));
+      expect((grid.rows[2][1] as TextCell).text, 'Profit for the financial period');
+      expect((grid.rows[2][0] as TextCell).text, '');
+    });
+
+    test('a deficit is shown as a deficit', () {
+      final spec = changesInEquitySpec(
+          [eq('3200', 'Retained Earnings', 5000, -9000)], range);
+      final grid = spec.blocks.whereType<ReportGrid>().single;
+      expect((grid.rows[0][4] as MoneyCell).value, -4000);
+      expect((grid.rows[0][4] as MoneyCell).signed, isTrue);
+    });
+  });
+
   group('aged balances', () {
     final asAt = DateTime(2026, 3, 31);
 

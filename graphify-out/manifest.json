@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786537304.4861758,
-    "ast_hash": "d7a9db2f382734f693a34e19c39a1801",
+    "mtime": 1786538213.0702298,
+    "ast_hash": "2a1c61c71e167ddb12e28de3cc76adc4",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -265,8 +265,8 @@
     "semantic_hash": "76366d000addf0bd77f8a44839f730c2"
   },
   "app/lib/src/features/reports/reports_screen.dart": {
-    "mtime": 1786533720.2434819,
-    "ast_hash": "36897e8b04f63dc01fa398df4018c981",
+    "mtime": 1786538246.7675068,
+    "ast_hash": "02b4dd849c342df5e33078c396487f47",
     "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/entity_editor.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786537296.9941752,
-    "ast_hash": "0c75ae294e0bccbe0c9bd41046519d99",
+    "mtime": 1786538209.3502295,
+    "ast_hash": "ca07f37e6f41f6480394c2acc7d491b6",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1080,8 +1080,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/report_spec.dart": {
-    "mtime": 1786533698.727481,
-    "ast_hash": "755acfb366325cd8ec17bddf2e5f0371",
+    "mtime": 1786538230.7822309,
+    "ast_hash": "e88108a2c594d89cb66bbb931637e405",
     "semantic_hash": ""
   },
   "app/test/report_pdf_test.dart": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "app/test/report_spec_test.dart": {
-    "mtime": 1786533755.655483,
-    "ast_hash": "82fdbf06de640b57c3a1c19c6697d5cb",
+    "mtime": 1786538310.5822356,
+    "ast_hash": "feb251b230e300b1a1314d77967453d1",
     "semantic_hash": ""
   },
   "app/test/report_view_test.dart": {
@@ -1505,8 +1505,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-akaunting.md": {
-    "mtime": 1786537469.3568313,
-    "ast_hash": "d7a2f7230aa5e9542d7f2ced85120959",
+    "mtime": 1786538361.4131975,
+    "ast_hash": "ed2f2dfddc836c73879c2f862369f2a2",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/email_screen.dart": {
@@ -1587,6 +1587,16 @@
   "supabase/tests/withholding.sql": {
     "mtime": 1786537122.842165,
     "ast_hash": "4d478dc1f6549935f12c831633033c5f",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0100_cash_flow_and_equity.sql": {
+    "mtime": 1786537961.7862148,
+    "ast_hash": "ff04384ef82bb4957c4fa782f03d5f1b",
+    "semantic_hash": ""
+  },
+  "supabase/tests/financial_statements.sql": {
+    "mtime": 1786538093.0933888,
+    "ast_hash": "64b0dda1bf32dcaddf5e94fb82033614",
     "semantic_hash": ""
   }
 }

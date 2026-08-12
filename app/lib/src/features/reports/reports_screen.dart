@@ -34,7 +34,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 6, vsync: this);
+    _tabs = TabController(length: 8, vsync: this);
     // The download button belongs to whichever report is on screen, so
     // it has to rebuild when the tab changes.
     _tabs.addListener(() => setState(() {}));
@@ -98,6 +98,12 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
         return rows == null
             ? null
             : agedBalanceSpec(rows, _range.end, receivable: false);
+      case 5:
+        final rows = ref.watch(_cashFlowProvider(_range)).valueOrNull;
+        return rows == null ? null : cashFlowSpec(rows, _range);
+      case 6:
+        final rows = ref.watch(_equityProvider(_range)).valueOrNull;
+        return rows == null ? null : changesInEquitySpec(rows, _range);
       default:
         final rows = ref.watch(_sstProvider(_range)).valueOrNull;
         return rows == null ? null : sstSummarySpec(rows, _range);
@@ -181,6 +187,8 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
             Tab(text: 'Trial Balance'),
             Tab(text: 'Aged Receivables'),
             Tab(text: 'Aged Payables'),
+            Tab(text: 'Cash Flows'),
+            Tab(text: 'Changes in Equity'),
             Tab(text: 'SST Summary'),
           ],
         ),
@@ -234,6 +242,26 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               icon: Icons.hourglass_bottom_outlined,
               title: 'Nothing owed by you',
               message: 'Post bills to build up a payables ledger.',
+            ),
+          ),
+          _Report(
+            provider: _cashFlowProvider(_range),
+            spec: (rows) => cashFlowSpec(rows, _range),
+            empty: const EmptyState(
+              icon: Icons.waterfall_chart,
+              title: 'No cash movement in this period',
+              message: 'Post receipts and payments to build up a cash flow.',
+            ),
+          ),
+          _Report(
+            provider: _equityProvider(_range),
+            spec: (rows) => changesInEquitySpec(rows, _range),
+            wide: true,
+            empty: const EmptyState(
+              icon: Icons.pie_chart_outline,
+              title: 'No equity yet',
+              message: 'Share capital and retained earnings appear here as '
+                  'they are posted.',
             ),
           ),
           _Report(
@@ -544,3 +572,13 @@ final _sstProvider = FutureProvider.autoDispose
 /// The shared aged-balance provider, so the tab body and the download
 /// button read one request rather than two.
 final _agedProvider = agedBalancesProvider;
+
+final _cashFlowProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, DateTimeRange>((ref, range) {
+  return requireRepo(ref).cashFlow(from: range.start, to: range.end);
+});
+
+final _equityProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, DateTimeRange>((ref, range) {
+  return requireRepo(ref).changesInEquity(from: range.start, to: range.end);
+});

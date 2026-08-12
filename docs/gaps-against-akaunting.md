@@ -69,12 +69,14 @@ happened somewhere else. For Malaysia this would be FPX or DuitNow.
   and `report_ap_aging`, as at a date rather than as of now, footing to
   the receivable and payable control accounts. Both listings carry the
   credits, which is what makes them foot.
-- **Statement of cash flows** and **statement of changes in equity**.
-  Akaunting has neither and does not need them; it does not claim to
-  produce statutory accounts. iAkauntan has a corporate secretarial
-  module, and MFRS and MPERS both require a full set of financial
-  statements. Balance sheet, profit and loss and a trial balance is not
-  a full set.
+- ~~**Statement of cash flows** and **statement of changes in equity**.~~
+  Built — `report_cash_flow` (indirect method) and
+  `report_changes_in_equity`. Both are derived from the ledger rather
+  than classified by hand, and both are asserted against something
+  outside themselves: the cash flow against the movement in the bank and
+  cash accounts, the equity statement against net assets on the balance
+  sheet. With these, the set of financial statements MFRS 101 and MPERS
+  Section 3 ask for is complete.
 
 ## 5. Recurring covers journals only
 
@@ -141,6 +143,6 @@ somebody wants "sees purchases, not payroll".
 1 and 2 belong together: email plus a signed invoice link is one
 workflow, and it is the difference between a bookkeeping tool and a
 business system. Both are built, and so is the aging, and so are
-recurring invoices and bills, and so is withholding. Bank transfer and
-import are small and fit anywhere; the two statutory statements in 4 are
-the largest thing left.
+recurring invoices and bills, and so is withholding, and so are the two
+statutory statements. What is left is smaller: bank transfer, CSV
+import, compound tax, granular permissions, and taking payment.

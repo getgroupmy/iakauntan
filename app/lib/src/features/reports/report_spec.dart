@@ -234,6 +234,99 @@ ReportSpec trialBalanceSpec(List<Map<String, dynamic>> rows) {
   );
 }
 
+/// The statement of cash flows, indirect method.
+///
+/// The reconciliation at the foot is the point of the whole thing: the
+/// three sections have to come to the movement in the bank, and the
+/// bank figures are read straight from the cash accounts. A cash flow
+/// statement that does not tie is worse than none, because somebody
+/// will believe it.
+ReportSpec cashFlowSpec(List<Map<String, dynamic>> rows, DateTimeRange range) {
+  List<ReportLine> linesOf(String section) => [
+        for (final r in rows.where((r) => r['section'] == section))
+          ReportLine(
+            code: '',
+            name: r['label']?.toString() ?? '',
+            amount: Fmt.toDouble(r['amount']),
+          ),
+      ];
+
+  double reconciliation(String label) => Fmt.toDouble(rows
+      .firstWhere((r) => r['label'] == label, orElse: () => const {})['amount']);
+
+  return ReportSpec(
+    title: 'Statement of Cash Flows',
+    subtitle: '${Fmt.longDate(range.start)} to ${Fmt.longDate(range.end)}',
+    blocks: [
+      ReportSection(title: 'Operating activities', lines: linesOf('operating')),
+      ReportSection(title: 'Investing activities', lines: linesOf('investing')),
+      ReportSection(title: 'Financing activities', lines: linesOf('financing')),
+      ReportHighlight(
+        label: 'Net movement in cash',
+        value: reconciliation('Net movement in cash'),
+        emphasise: true,
+      ),
+      ReportGrid(
+        title: 'Cash and cash equivalents',
+        headers: const ['', 'Amount'],
+        rows: [
+          for (final label in const [
+            'Cash and cash equivalents brought forward',
+            'Cash and cash equivalents carried forward',
+          ])
+            [TextCell(label), MoneyCell(reconciliation(label), signed: true)],
+        ],
+      ),
+    ],
+    note: 'Prepared by the indirect method. Depreciation is added back in '
+        'operating activities, so the charge and the accumulated '
+        'depreciation it credits cancel.',
+  );
+}
+
+/// The statement of changes in equity.
+///
+/// Components down the page rather than across it: with a handful of
+/// them the transpose reads the same and fits a phone, which the
+/// conventional four-column layout does not.
+ReportSpec changesInEquitySpec(
+    List<Map<String, dynamic>> rows, DateTimeRange range) {
+  double column(String key) =>
+      rows.fold<double>(0, (s, r) => s + Fmt.toDouble(r[key]));
+
+  return ReportSpec(
+    title: 'Statement of Changes in Equity',
+    subtitle: '${Fmt.longDate(range.start)} to ${Fmt.longDate(range.end)}',
+    blocks: [
+      ReportGrid(
+        title: null,
+        headers: const ['Code', 'Component', 'Opening', 'Movement', 'Closing'],
+        rows: [
+          for (final r in rows)
+            [
+              TextCell(r['code']?.toString() ?? ''),
+              TextCell(r['name']?.toString() ?? ''),
+              MoneyCell(Fmt.toDouble(r['opening_balance']), signed: true),
+              MoneyCell(Fmt.toDouble(r['movement']), signed: true),
+              MoneyCell(Fmt.toDouble(r['closing_balance']), signed: true),
+            ],
+        ],
+        total: [
+          const TextCell(''),
+          const TextCell('Total equity'),
+          MoneyCell(column('opening_balance'), signed: true),
+          MoneyCell(column('movement'), signed: true),
+          MoneyCell(column('closing_balance'), signed: true),
+        ],
+      ),
+    ],
+    note: 'The result for the period is shown on its own line until the '
+        'year is closed, because that is where it is: in the profit and '
+        'loss, not yet in retained earnings. Closing equity equals net '
+        'assets on the balance sheet either way.',
+  );
+}
+
 /// The five columns, in the order they are read across a page.
 const _agingBuckets = <String, String>{
   'current': 'Current',

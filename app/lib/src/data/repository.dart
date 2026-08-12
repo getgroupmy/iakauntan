@@ -490,6 +490,33 @@ class Repo {
   }
 
   // ------------------------------------------------------------------
+  // The rest of a complete set of financial statements
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> cashFlow({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final data = await client.rpc('report_cash_flow', params: {
+      'p_org_id': orgId,
+      'p_from': Fmt.iso(from),
+      'p_to': Fmt.iso(to),
+    });
+    return _rows(data);
+  }
+
+  Future<List<Map<String, dynamic>>> changesInEquity({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final data = await client.rpc('report_changes_in_equity', params: {
+      'p_org_id': orgId,
+      'p_from': Fmt.iso(from),
+      'p_to': Fmt.iso(to),
+    });
+    return _rows(data);
+  }
+
+  // ------------------------------------------------------------------
   // Withholding tax
   // ------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> withholdingTypes() async => _rows(
