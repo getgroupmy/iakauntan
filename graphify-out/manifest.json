@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786537309.850176,
-    "ast_hash": "711cdab1fee09f77e8513bd7a5a51816",
+    "mtime": 1786543700.6206872,
+    "ast_hash": "c0c14837d7d4519cfcd143eed73d8bdd",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786538213.0702298,
-    "ast_hash": "2a1c61c71e167ddb12e28de3cc76adc4",
+    "mtime": 1786543645.3395586,
+    "ast_hash": "19a479a48c86e907f9a330f28f2a3fbd",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786538209.3502295,
-    "ast_hash": "ca07f37e6f41f6480394c2acc7d491b6",
+    "mtime": 1786543635.8174472,
+    "ast_hash": "3f6eea5b6b01084c60122d0d9376ad0d",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1280,8 +1280,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/banking/reconciliation_screen.dart": {
-    "mtime": 1786521995.0122035,
-    "ast_hash": "db03aabd105bb2d9f9be77003baca483",
+    "mtime": 1786543719.3690922,
+    "ast_hash": "eba0d3a9c1e5a6e9805cb6654e11bdc9",
     "semantic_hash": ""
   },
   "app/lib/src/features/banking/statement_import.dart": {
@@ -1505,8 +1505,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-akaunting.md": {
-    "mtime": 1786538361.4131975,
-    "ast_hash": "ed2f2dfddc836c73879c2f862369f2a2",
+    "mtime": 1786543850.3393161,
+    "ast_hash": "dd87f78f8fe70bfd39dddad374d39c70",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/email_screen.dart": {
@@ -1597,6 +1597,31 @@
   "supabase/tests/financial_statements.sql": {
     "mtime": 1786538093.0933888,
     "ast_hash": "64b0dda1bf32dcaddf5e94fb82033614",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/banking/transfer_dialog.dart": {
+    "mtime": 1786543700.6201975,
+    "ast_hash": "22ff15795f65646d1f2da5f266c11554",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0101_bank_transfers.sql": {
+    "mtime": 1786543049.0875711,
+    "ast_hash": "467e3e52f96e4f0c2f9f9a2273e08790",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0102_reversal_leaves_the_original_standing.sql": {
+    "mtime": 1786543454.3635626,
+    "ast_hash": "33ea2fcd6d52a0f6c70bc475fd7fe9e2",
+    "semantic_hash": ""
+  },
+  "supabase/tests/bank_transfers.sql": {
+    "mtime": 1786543127.6515694,
+    "ast_hash": "4746dd87232a31526c66368a41946610",
+    "semantic_hash": ""
+  },
+  "supabase/tests/reversal.sql": {
+    "mtime": 1786543488.079562,
+    "ast_hash": "afe76342bc5c2c164e35721e6284b460",
     "semantic_hash": ""
   }
 }

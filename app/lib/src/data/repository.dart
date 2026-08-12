@@ -490,6 +490,48 @@ class Repo {
   }
 
   // ------------------------------------------------------------------
+  // Moving money between the company's own accounts
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> bankTransfers() async => _rows(await client
+      .from('bank_transfers')
+      .select('*, from_account:bank_accounts!bank_transfers_from_account_id_fkey(name), '
+          'to_account:bank_accounts!bank_transfers_to_account_id_fkey(name)')
+      .eq('org_id', orgId)
+      .order('transfer_date', ascending: false)
+      .limit(200));
+
+  /// Records the transfer and posts it in one go. A draft transfer helps
+  /// nobody: the money has either moved or it has not.
+  Future<String> transferBetweenBanks({
+    required String fromAccountId,
+    required String toAccountId,
+    required double amountSent,
+    required DateTime date,
+    double? amountReceived,
+    double bankCharges = 0,
+    String? reference,
+    String? notes,
+  }) async {
+    final id = await client.rpc('create_bank_transfer', params: {
+      'p_from_account_id': fromAccountId,
+      'p_to_account_id': toAccountId,
+      'p_amount_sent': amountSent,
+      'p_transfer_date': Fmt.iso(date),
+      if (amountReceived != null) 'p_amount_received': amountReceived,
+      'p_bank_charges': bankCharges,
+      if (reference != null) 'p_reference': reference,
+      if (notes != null) 'p_notes': notes,
+    }) as String;
+    await client.rpc('post_bank_transfer', params: {'p_id': id});
+    return id;
+  }
+
+  Future<void> voidBankTransfer(String id, String reason) async {
+    await client
+        .rpc('void_bank_transfer', params: {'p_id': id, 'p_reason': reason});
+  }
+
+  // ------------------------------------------------------------------
   // The rest of a complete set of financial statements
   // ------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> cashFlow({

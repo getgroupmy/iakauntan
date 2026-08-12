@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'statement_import.dart';
+import 'transfer_dialog.dart';
 
 /// Reconciling a bank account against its statement.
 ///
@@ -84,6 +85,18 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
       appBar: AppBar(
         title: const Text('Bank reconciliation'),
         actions: [
+          // A transfer between the company's own accounts belongs here:
+          // both ends of it turn up on a statement, and this is the
+          // screen where somebody is looking at one.
+          if (canPost)
+            IconButton(
+              tooltip: 'Transfer between accounts',
+              icon: const Icon(Icons.swap_horiz),
+              onPressed: () async {
+                final done = await showTransferDialog(context);
+                if (done == true) _refresh();
+              },
+            ),
           if (canPost)
             IconButton(
               tooltip: 'Import statement',

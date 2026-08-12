@@ -93,10 +93,16 @@ document per run, and posts through the same code a person does.
 
 ## 6. No bank-to-bank transfer
 
-`Banking/Transfer.php` with its own create, update and delete jobs.
-Moving money between your own accounts in iAkauntan means writing a
-manual journal — possible since `0089`, but not what a bookkeeper
-reaches for, and nothing records that the two sides are one movement.
+Built — `bank_transfers`, one document with both ends on it. Sent,
+received and the fee are three separate figures that have to reconcile,
+which handles either place the bank took its cut from and catches a
+typo. Across currencies the residual is realised exchange; in one
+currency it is refused. Voiding reverses rather than deletes.
+
+Finding the cash flow statement already treats it correctly — both ends
+are cash, so a transfer moves nothing — is what the test asserts, since
+a transfer that inflated operating cash would flatter every set of
+accounts filed.
 
 ## 7. Import is bank statements only
 
@@ -144,5 +150,5 @@ somebody wants "sees purchases, not payroll".
 workflow, and it is the difference between a bookkeeping tool and a
 business system. Both are built, and so is the aging, and so are
 recurring invoices and bills, and so is withholding, and so are the two
-statutory statements. What is left is smaller: bank transfer, CSV
-import, compound tax, granular permissions, and taking payment.
+statutory statements, and so is bank transfer. What is left: CSV import,
+compound tax, granular permissions, and taking payment.

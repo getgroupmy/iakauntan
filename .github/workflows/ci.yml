@@ -65,7 +65,9 @@ jobs:
                    supabase/tests/aged_balances.sql \
                    supabase/tests/recurring_documents.sql \
                    supabase/tests/withholding.sql \
-                   supabase/tests/financial_statements.sql; do
+                   supabase/tests/financial_statements.sql \
+                   supabase/tests/reversal.sql \
+                   supabase/tests/bank_transfers.sql; do
             echo "== $f"
             psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done

@@ -267,6 +267,11 @@ final bankAccountsProvider =
   return requireRepo(ref).bankAccounts();
 });
 
+final bankTransfersProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).bankTransfers();
+});
+
 final paymentModesProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).paymentModes();
