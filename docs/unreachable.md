@@ -48,6 +48,26 @@ was exactly that case.
   rounded each share independently: three equal shares of an approved
   100.00 came to 99.99 against a credit of 100.00, and the journal was
   refused. Fixed in `0090`.
+- **Public holidays and leave entitlement bands** (were gaps 1 and 2 of
+  the second pass).
+  Two tabs on the HR setup screen, plus `add_fixed_public_holidays` for
+  the four Malaysian holidays that fall on a fixed date in every state
+  and `apply_statutory_leave_bands` for the Employment Act 1955 floors.
+  Both in `0091`.
+- **The statutory rate tables** (was gap 3). Read-only for
+  organizations, which is the design and not an omission — these tables
+  have no `org_id`, so a rate edited by one company is every company's
+  payroll. Publishing lives in the platform console behind
+  `app.is_platform_admin()`.
+- **Item prices** (was gap 4). A Prices action on each item, writing the
+  named prices and quantity breaks `item_price` already resolves — plus
+  an editor for `price_levels` themselves, which turned out to be
+  readable and creatable by nothing, so the screen above it would have
+  had nothing to price against.
+- **Contact people and delivery addresses** (was gap 5). Two sections on
+  a saved contact. `0092` adds the partial unique indexes that make
+  "the default address" mean one row rather than whichever the query
+  returns first.
 
 ## Correct: the database owns these
 
@@ -63,45 +83,12 @@ via the `corp_*` RPCs), `einvoice_lines`, `einvoice_logs`,
 
 ## Gaps, worst first
 
-### 1. Public holidays cannot be entered
-
-`public_holidays` is empty and unreachable. Leave day counts and the
-rest-day / public-holiday classification in attendance both read it, so
-every public holiday is currently an ordinary working day.
-
-### 2. Leave entitlement bands cannot be entered
-
-`leave_entitlement_bands` is empty and unreachable. These are the
-Employment Act s.19 minimums by length of service — the thing annual
-leave entitlement is calculated from.
-
-### 3. The statutory rate tables cannot be seen or corrected
-
-`statutory_rates` (11 rows) and `statutory_schedules` (5 of them
-`is_verified = false`) have no screen. `README.md` says these seeded
-figures must be replaced with the gazetted KWSP and PERKESO tables
-before filing real returns, and there is no way to do it from the app.
-
-### 4. Item prices cannot be set
-
-`item_prices` is unreachable, so only the level-wide percentage on
-`price_levels` can be used. The resolver added in `0088` reads named
-prices and quantity breaks that nothing can write. Half-finished, and
-mine.
-
-### 5. Contact persons and delivery addresses
-
-`contact_persons` and `contact_addresses` are both empty and
-unreachable, while `sales_documents.contact_person_id` and
-`shipping_address_id` are carried through the transfer path and read by
-the e-Invoice preparation.
-
-### 6. CRM leads
+### 1. CRM leads
 
 `leads` has a table, RLS and no screen. The CRM is pipeline and
 opportunities only, so the top of the funnel is missing.
 
-### 7. Talent and onboarding
+### 2. Talent and onboarding
 
 `interviews`, `onboarding_templates`, `onboarding_checklists`,
 `onboarding_tasks`, `onboarding_template_items`, `appraisal_goals`,
@@ -109,8 +96,9 @@ opportunities only, so the top of the funnel is missing.
 unreachable. Appraisals and applicants have screens; the tables around
 them do not.
 
-### 8. Smaller, but real
+### 3. Smaller, but real
 
+- **`item_categories`** — no editor.
 - **Stock card.** `stock_movements` cannot be inspected per item, so
   "why is this figure what it is" has no answer in the app.
 - **Reconciliation history.** `bank_reconciliations` rows are written and
@@ -120,7 +108,6 @@ them do not.
   per-asset history the auditor asks for is not printable.
 - **`corp_resolutions`** — the register itself, as opposed to the
   generated documents.
-- **`item_categories`** — no editor.
 - **`corp_issued_capital`, `resync_bank_balance`** — RPCs with no caller.
 - **Reference pickers**: `ref_countries`, `ref_msic_codes`,
   `ref_tax_types`, `ref_einvoice_types`, `ref_exemption_reasons` are

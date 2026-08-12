@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'statement_pdf.dart';
+import 'contact_extras.dart';
 
 class ContactEditor extends ConsumerStatefulWidget {
   const ContactEditor({super.key, this.contactId, this.contactType = 'customer'});
@@ -531,6 +532,11 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                           onChanged: (v) =>
                               setState(() => _priceLevelId = v),
                         ),
+                      // Only on a saved contact: a person or an address
+                      // needs a contact_id to hang off, and there isn't
+                      // one until this has been saved once.
+                      if (widget.contactId != null)
+                        ContactExtras(contactId: widget.contactId!),
                       const SizedBox(height: 40),
                     ],
                   ),

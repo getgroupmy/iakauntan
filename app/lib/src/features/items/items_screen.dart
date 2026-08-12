@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'item_prices_dialog.dart';
 
 class ItemsScreen extends ConsumerStatefulWidget {
   const ItemsScreen({super.key});
@@ -26,6 +27,12 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
       appBar: AppBar(
         title: const Text('Items'),
         actions: [
+          if (canWrite)
+            IconButton(
+              tooltip: 'Price levels',
+              icon: const Icon(Icons.sell_outlined, size: 20),
+              onPressed: () => showPriceLevels(context),
+            ),
           if (canWrite)
             Padding(
               padding: const EdgeInsets.only(right: 12),
@@ -103,7 +110,16 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                   '${item.trackInventory ? ' · ${Fmt.qty(item.quantityOnHand)} ${item.uomCode} on hand' : ''}',
                   style: const TextStyle(fontSize: 12),
                 ),
-                trailing: Money(item.unitPrice, bold: true),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Money(item.unitPrice, bold: true),
+                  if (canWrite) ...[
+                    const SizedBox(width: Space.sm),
+                    TextButton(
+                      onPressed: () => showItemPrices(context, item),
+                      child: const Text('Prices'),
+                    ),
+                  ],
+                ]),
               );
             },
           );

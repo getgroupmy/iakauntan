@@ -2142,4 +2142,101 @@ extension RepoHrSetup on Repo {
         if (source != null) 'p_source': source,
         if (notes != null) 'p_notes': notes,
       });
+
+  // ------------------------------------------------------------------
+  // Item prices
+  //
+  // `item_price(item, contact, qty)` resolves a named price first and
+  // falls back to the level's percentage. Named prices are what this
+  // reads and writes; without them a price level can only move every
+  // item by the same percentage, which is not how anybody prices a
+  // catalogue.
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> itemPrices(String itemId) async =>
+      Repo._rows(await client
+          .from('item_prices')
+          .select('*, price_levels(code, name)')
+          .eq('item_id', itemId)
+          .order('min_quantity'));
+
+  Future<void> saveItemPrice(Map<String, dynamic> values, {String? id}) async {
+    if (id != null) {
+      await client.from('item_prices').update(values).eq('id', id);
+    } else {
+      await client.from('item_prices').insert({...values, 'org_id': orgId});
+    }
+  }
+
+  // Resolving what a customer is quoted is `Repo.itemPrice`, further
+  // up, which the document editor already calls. Writing the named
+  // prices it reads is what was missing.
+
+  // ------------------------------------------------------------------
+  // Contact people and delivery addresses
+  //
+  // `sales_documents.contact_person_id` and `.shipping_address_id` are
+  // carried through the transfer path and read by the e-Invoice
+  // preparation, and both tables were empty because nothing could write
+  // them.
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> contactPersons(String contactId) async =>
+      Repo._rows(await client
+          .from('contact_persons')
+          .select()
+          .eq('contact_id', contactId)
+          .order('is_primary', ascending: false)
+          .order('name'));
+
+  Future<void> saveContactPerson(Map<String, dynamic> values,
+      {String? id}) async {
+    if (id != null) {
+      await client.from('contact_persons').update(values).eq('id', id);
+    } else {
+      await client.from('contact_persons').insert({...values, 'org_id': orgId});
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> contactAddresses(String contactId) async =>
+      Repo._rows(await client
+          .from('contact_addresses')
+          .select()
+          .eq('contact_id', contactId)
+          .order('is_default', ascending: false)
+          .order('label'));
+
+  Future<void> saveContactAddress(Map<String, dynamic> values,
+      {String? id}) async {
+    if (id != null) {
+      await client.from('contact_addresses').update(values).eq('id', id);
+    } else {
+      await client
+          .from('contact_addresses')
+          .insert({...values, 'org_id': orgId});
+    }
+  }
+
+  /// Clears the flag on every other row first. Two default addresses is
+  /// the same as none: whichever one a query happens to return wins, and
+  /// deliveries go to whichever that is.
+  Future<void> makeAddressDefault(String contactId, String addressId) async {
+    await client
+        .from('contact_addresses')
+        .update({'is_default': false})
+        .eq('contact_id', contactId);
+    await client
+        .from('contact_addresses')
+        .update({'is_default': true})
+        .eq('id', addressId);
+  }
+
+  Future<void> makePersonPrimary(String contactId, String personId) async {
+    await client
+        .from('contact_persons')
+        .update({'is_primary': false})
+        .eq('contact_id', contactId);
+    await client
+        .from('contact_persons')
+        .update({'is_primary': true})
+        .eq('id', personId);
+  }
 }

@@ -772,6 +772,21 @@ final statutorySchedulesProvider =
   return requireRepo(ref).statutorySchedules();
 });
 
+final itemPricesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, itemId) {
+  return requireRepo(ref).itemPrices(itemId);
+});
+
+final contactPersonsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, contactId) {
+  return requireRepo(ref).contactPersons(contactId);
+});
+
+final contactAddressesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, contactId) {
+  return requireRepo(ref).contactAddresses(contactId);
+});
+
 /// The company logo as raw bytes, for embedding in a PDF.
 ///
 /// Separate from `currentOrgProvider.logoUrl`, which is a URL for the
