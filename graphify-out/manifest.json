@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786528355.7261896,
-    "ast_hash": "d9c9424ca3d5977cfd12c2332818990f",
+    "mtime": 1786530151.6461658,
+    "ast_hash": "eed565abf3f23dc98928994288a601b7",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786528306.4163206,
-    "ast_hash": "d40a8bbb2d5c0885f3cde178e81e7ef9",
+    "mtime": 1786530157.4649334,
+    "ast_hash": "c5d5a56660cc05f8ff62b1f973196c87",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786528355.7257843,
-    "ast_hash": "9e4a5cd3d2acdd2002113ecff8058389",
+    "mtime": 1786530151.6451793,
+    "ast_hash": "f20b3f02f60e6bf015974bfad3bc0e35",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -150,8 +150,8 @@
     "semantic_hash": "88f373b2bbe85ad1d830bbd9c2bf8c6c"
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1786523948.4176848,
-    "ast_hash": "3e86afb59db52ba6806553b4e5904175",
+    "mtime": 1786530270.5369287,
+    "ast_hash": "77a0df8ee75535bfcb181887edcdb177",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786527881.2319584,
-    "ast_hash": "69a855b3915b457ffa09fff64d9cb326",
+    "mtime": 1786530073.144937,
+    "ast_hash": "8624b02f103ab04630fe40a3bb393372",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1482,6 +1482,31 @@
   "supabase/tests/leads_and_onboarding.sql": {
     "mtime": 1786527876.3079586,
     "ast_hash": "c8dd7945b834ed1e2e477bf5b4016175",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/share_dialog.dart": {
+    "mtime": 1786530196.6809318,
+    "ast_hash": "95af024c83065b40c1516450c47040cf",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/shared_document_page.dart": {
+    "mtime": 1786530136.9769342,
+    "ast_hash": "716e802c8fff7ff958a59e7351985fc9",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0094_document_share_links.sql": {
+    "mtime": 1786530007.7689397,
+    "ast_hash": "bde1dcea96dec38a0c1ceeb15f674508",
+    "semantic_hash": ""
+  },
+  "supabase/tests/document_share.sql": {
+    "mtime": 1786530069.312937,
+    "ast_hash": "5678f647a08e076a78df52b6e9a0aa9a",
+    "semantic_hash": ""
+  },
+  "docs/gaps-against-akaunting.md": {
+    "mtime": 1786529761.63695,
+    "ast_hash": "b478b2df08942cd686df5c3722770530",
     "semantic_hash": ""
   }
 }

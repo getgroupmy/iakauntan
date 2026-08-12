@@ -787,6 +787,11 @@ final contactAddressesProvider = FutureProvider.autoDispose
   return requireRepo(ref).contactAddresses(contactId);
 });
 
+final documentShareLinksProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, documentId) {
+  return requireRepo(ref).documentShareLinks(documentId);
+});
+
 final appraisalGoalsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, appraisalId) {
   return requireRepo(ref).appraisalGoals(appraisalId);

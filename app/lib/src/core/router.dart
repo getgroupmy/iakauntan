@@ -25,6 +25,7 @@ import '../features/ledger/journals_screen.dart';
 import '../features/ledger/recurring_screen.dart';
 import '../features/reports/reports_screen.dart';
 import '../features/secretarial/entity_editor.dart';
+import '../features/documents/shared_document_page.dart';
 import '../features/secretarial/signing_page.dart';
 import '../features/secretarial/entity_screen.dart';
 import '../features/secretarial/secretarial_screen.dart';
@@ -59,6 +60,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       // all: a director will not sign up to an accounting system to sign
       // one resolution. It authorises itself against the token.
       if (path.startsWith('/sign/')) return null;
+      // The other page that works with no account: a customer
+      // opening a link to their own invoice.
+      if (path.startsWith('/share/')) return null;
 
       if (!signedIn) return path == '/signin' ? null : '/signin';
 
@@ -124,6 +128,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/sign/:token',
         builder: (_, state) =>
             SigningPage(token: state.pathParameters['token']!),
+      ),
+      // Same treatment for a customer sent their own invoice: no shell,
+      // no sign-in, nothing but the document.
+      GoRoute(
+        path: '/share/:token',
+        builder: (_, state) =>
+            SharedDocumentPage(token: state.pathParameters['token']!),
       ),
       ShellRoute(
         navigatorKey: _shellKey,

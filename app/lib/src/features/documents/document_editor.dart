@@ -18,6 +18,7 @@ import 'line_editor.dart';
 import 'settlement_dialog.dart';
 import 'transfer.dart';
 import 'transfer_dialog.dart';
+import 'share_dialog.dart';
 
 /// One editor for every document type in both cycles. What changes
 /// between them — which contacts are selectable, whether posting writes a
@@ -571,6 +572,20 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           tooltip: 'Download PDF',
           icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
           onPressed: _saving ? null : _downloadPdf,
+        ),
+
+      // The other end of the PDF. Sales only: `share_document` reads
+      // `sales_documents`, and handing a supplier a link to their own
+      // bill is not a thing anybody wants. A draft is excluded too —
+      // the database refuses to share one, so the button would only
+      // ever produce an error.
+      if (!_isNew && _kind.isSales && _status != 'draft' && _status != 'void')
+        IconButton(
+          tooltip: 'Share a link',
+          icon: const Icon(Icons.link, size: 20),
+          onPressed: _saving
+              ? null
+              : () => showShareDialog(context, widget.documentId!, _docNo),
         ),
 
       if (!narrow)

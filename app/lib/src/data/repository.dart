@@ -2400,6 +2400,37 @@ extension RepoHrSetup on Repo {
     }
   }
 
+  // ------------------------------------------------------------------
+  // Sharing a document with somebody who has no login
+  //
+  // The token comes back exactly once and is never stored in the clear,
+  // so a caller that loses it has to issue a new link rather than look
+  // the old one up.
+  // ------------------------------------------------------------------
+  Future<String> shareDocument(String documentId,
+      {int validDays = 30, String? email}) async {
+    final data = await client.rpc('share_document', params: {
+      'p_document_id': documentId,
+      'p_valid_days': validDays,
+      if (email != null && email.trim().isNotEmpty) 'p_email': email.trim(),
+    });
+    return data as String;
+  }
+
+  Future<int> revokeDocumentShare(String documentId) async {
+    final data = await client
+        .rpc('revoke_document_share', params: {'p_document_id': documentId});
+    return Fmt.toInt(data);
+  }
+
+  Future<List<Map<String, dynamic>>> documentShareLinks(
+          String documentId) async =>
+      Repo._rows(await client
+          .from('document_share_links')
+          .select()
+          .eq('document_id', documentId)
+          .order('created_at', ascending: false));
+
   Future<List<Map<String, dynamic>>> appraisalGoals(String appraisalId) async =>
       Repo._rows(await client
           .from('appraisal_goals')
