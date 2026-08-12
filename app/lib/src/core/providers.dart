@@ -749,6 +749,29 @@ final setupRowsProvider = FutureProvider.autoDispose
   return requireRepo(ref).setupRows(arg.table, orderBy: arg.orderBy);
 });
 
+/// The thirteen states and three federal territories. Most Malaysian
+/// public holidays are observed in some of them and not others.
+final statesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).states();
+});
+
+final publicHolidaysProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, int>((ref, year) {
+  return requireRepo(ref).publicHolidays(year);
+});
+
+final leaveBandsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, leaveTypeId) {
+  return requireRepo(ref).leaveBands(leaveTypeId);
+});
+
+/// Not autoDispose: the statutory tables are the same for every
+/// organization in the database and change a few times a decade.
+final statutorySchedulesProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).statutorySchedules();
+});
+
 /// The company logo as raw bytes, for embedding in a PDF.
 ///
 /// Separate from `currentOrgProvider.logoUrl`, which is a URL for the

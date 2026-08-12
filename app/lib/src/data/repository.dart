@@ -2034,4 +2034,112 @@ extension RepoHrSetup on Repo {
           {String orderBy = 'name'}) async =>
       Repo._rows(
           await client.from(table).select().eq('org_id', orgId).order(orderBy));
+
+  Future<void> deleteSetupRow(String table, String id) =>
+      client.from(table).delete().eq('id', id);
+
+  // ------------------------------------------------------------------
+  // Public holidays
+  //
+  // Read by leave day counts and by the rest-day / public-holiday
+  // classification in attendance, so an empty calendar does not fail —
+  // it quietly makes every holiday an ordinary working day.
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> publicHolidays(int year) async =>
+      Repo._rows(await client
+          .from('public_holidays')
+          .select()
+          .eq('org_id', orgId)
+          .gte('holiday_date', '$year-01-01')
+          .lte('holiday_date', '$year-12-31')
+          .order('holiday_date'));
+
+  /// Fills in the four federal holidays that fall on a fixed date. The
+  /// lunar ones are gazetted each year and are not guessed.
+  Future<int> addFixedHolidays(int year) async {
+    final data = await client.rpc('add_fixed_public_holidays',
+        params: {'p_org_id': orgId, 'p_year': year});
+    return Fmt.toInt(data);
+  }
+
+  // ------------------------------------------------------------------
+  // Leave entitlement bands
+  //
+  // Not `setupRows`: the table carries no `org_id` at all — it hangs off
+  // its leave type, and RLS reaches the organization through that.
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> leaveBands(String leaveTypeId) async =>
+      Repo._rows(await client
+          .from('leave_entitlement_bands')
+          .select()
+          .eq('leave_type_id', leaveTypeId)
+          .order('service_years_from'));
+
+  Future<void> saveLeaveBand(Map<String, dynamic> values, {String? id}) async {
+    if (id != null) {
+      await client.from('leave_entitlement_bands').update(values).eq('id', id);
+    } else {
+      await client.from('leave_entitlement_bands').insert(values);
+    }
+  }
+
+  /// Writes the Employment Act 1955 minimums — s.60E(1) for annual
+  /// leave, s.60F(1) for sick — and turns on the flag that makes them
+  /// count.
+  Future<int> applyStatutoryLeaveBands(String leaveTypeId, String preset) async {
+    final data = await client.rpc('apply_statutory_leave_bands',
+        params: {'p_leave_type_id': leaveTypeId, 'p_preset': preset});
+    return Fmt.toInt(data);
+  }
+
+  // ------------------------------------------------------------------
+  // Statutory rate tables
+  //
+  // These have no `org_id`: one table, shared by every organization in
+  // the database. Anybody may read them — that is what makes "are we
+  // filing on verified figures?" answerable — and only a platform
+  // administrator may change them.
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> statutorySchedules() async =>
+      Repo._rows(await client
+          .from('statutory_schedules')
+          .select('*, statutory_rates(*)')
+          .order('body')
+          .order('effective_from', ascending: false));
+
+  Future<String> publishStatutorySchedule({
+    required String body,
+    required String name,
+    required String method,
+    required DateTime effectiveFrom,
+    required List<Map<String, dynamic>> rates,
+    String? source,
+    String? notes,
+    double? wageRoundUpTo,
+    String resultRounding = 'nearest_cent',
+    bool isVerified = false,
+  }) async {
+    final data = await client.rpc('platform_publish_statutory_schedule', params: {
+      'p_body': body,
+      'p_name': name,
+      'p_method': method,
+      'p_effective_from': Fmt.iso(effectiveFrom),
+      'p_rates': rates,
+      if (source != null) 'p_source': source,
+      if (notes != null) 'p_notes': notes,
+      if (wageRoundUpTo != null) 'p_wage_round_up_to': wageRoundUpTo,
+      'p_result_rounding': resultRounding,
+      'p_is_verified': isVerified,
+    });
+    return data as String;
+  }
+
+  Future<void> setScheduleVerified(String scheduleId, bool verified,
+          {String? source, String? notes}) =>
+      client.rpc('platform_set_schedule_verified', params: {
+        'p_schedule_id': scheduleId,
+        'p_verified': verified,
+        if (source != null) 'p_source': source,
+        if (notes != null) 'p_notes': notes,
+      });
 }

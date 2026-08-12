@@ -65,13 +65,13 @@
     "semantic_hash": "cf294daf9868cae90ecdf34107a0824d"
   },
   "app/lib/src/core/format.dart": {
-    "mtime": 1786518026.4963686,
-    "ast_hash": "7e1bdfa38d7448ee9bc9d1e92a7f861f",
+    "mtime": 1786526737.104006,
+    "ast_hash": "1434a0fd39aa7f7b0d72c7a71854e3a3",
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786523754.4102848,
-    "ast_hash": "a9ca40eb4cc60e9692036132cd95dd0c",
+    "mtime": 1786526732.5600064,
+    "ast_hash": "5b39d0d1fc30f9fca6edb9d275181484",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,14 +110,14 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786525650.7760513,
-    "ast_hash": "a3328b87a0cb7db008850912b0eca08e",
+    "mtime": 1786526660.8240092,
+    "ast_hash": "94d93898d3d63dc4bb28a50f5ae23cc1",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
-    "mtime": 1786328947.803174,
-    "ast_hash": "d467519d6e9c87185e4a072e6581819a",
-    "semantic_hash": "d467519d6e9c87185e4a072e6581819a"
+    "mtime": 1786526983.144617,
+    "ast_hash": "2050b1f392a9b9e2e462fcc54a4a6f19",
+    "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
     "mtime": 1786508406.2956023,
@@ -195,9 +195,9 @@
     "semantic_hash": "e13b53a2a63f9841ff6017cdf3c38c4c"
   },
   "app/lib/src/features/hr/hr_setup_screen.dart": {
-    "mtime": 1786371164.8869052,
-    "ast_hash": "dcc8c6c5486ad5b0c69b93a03b44793b",
-    "semantic_hash": "dcc8c6c5486ad5b0c69b93a03b44793b"
+    "mtime": 1786526857.140001,
+    "ast_hash": "efa7d40ccb517418fe9f76560435a25e",
+    "semantic_hash": ""
   },
   "app/lib/src/features/hr/leave_screen.dart": {
     "mtime": 1786505376.964451,
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786525955.0400386,
-    "ast_hash": "04477c12856022308077a45724b49302",
+    "mtime": 1786527024.4519942,
+    "ast_hash": "a1db8b5733018ab6ad5eb596e736c4a0",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1387,6 +1387,41 @@
   "supabase/tests/manual_journal.sql": {
     "mtime": 1786525472.3125095,
     "ast_hash": "41051c5b1f4e0cdb31b091d2c0f44783",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/admin/statutory_rates_admin.dart": {
+    "mtime": 1786526973.1239963,
+    "ast_hash": "52ae27b255f136f1deeeee2d211889e8",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/holidays_tab.dart": {
+    "mtime": 1786526884.3822289,
+    "ast_hash": "a871ddfbfda82161d419b58489baeef7",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/leave_bands_dialog.dart": {
+    "mtime": 1786526884.3957036,
+    "ast_hash": "86524c7720a17561d9d25dbc1869d05d",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/statutory_rates_tab.dart": {
+    "mtime": 1786526896.7539458,
+    "ast_hash": "db63c30cd8b082c6e26d557956f088e1",
+    "semantic_hash": ""
+  },
+  "app/test/rate_table_test.dart": {
+    "mtime": 1786527006.803995,
+    "ast_hash": "3cede40ed30f9c79bbb2271f2358bb34",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0091_hr_reference_data.sql": {
+    "mtime": 1786526521.3079238,
+    "ast_hash": "178651308dbf16723c4162c75c9eb94c",
+    "semantic_hash": ""
+  },
+  "supabase/tests/hr_reference.sql": {
+    "mtime": 1786526632.7120104,
+    "ast_hash": "3645696f085f824d8e465468a71a73e4",
     "semantic_hash": ""
   }
 }

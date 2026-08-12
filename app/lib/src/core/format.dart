@@ -74,6 +74,11 @@ class Fmt {
     return s.endsWith('.0') ? s.substring(0, s.length - 2) : s;
   }
 
+  /// Which day of the week a date falls on. A holiday landing on a
+  /// Saturday or Sunday is the first thing anybody checks about it.
+  static String weekday(DateTime? value) =>
+      value == null ? '—' : DateFormat('EEEE').format(value);
+
   static String monthName(int month) => _monthNames[(month - 1) % 12];
 
   static const _monthNames = [

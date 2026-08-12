@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'statutory_rates_admin.dart';
 
 /// Platform operator console. Everything here goes through SECURITY
 /// DEFINER functions that re-check platform admin rights, so a tenant
@@ -20,7 +21,7 @@ class PlatformConsoleScreen extends ConsumerStatefulWidget {
 
 class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 3, vsync: this);
+  late final TabController _tabs = TabController(length: 4, vsync: this);
 
   @override
   void dispose() {
@@ -47,6 +48,7 @@ class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen>
             Tab(text: 'Overview'),
             Tab(text: 'Organizations'),
             Tab(text: 'Service settings'),
+            Tab(text: 'Statutory rates'),
           ],
         ),
       ),
@@ -66,6 +68,7 @@ class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen>
               _OverviewTab(),
               _OrganizationsTab(),
               _SettingsTab(),
+              StatutoryRatesAdminTab(),
             ],
           );
         },

@@ -6,6 +6,9 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import 'holidays_tab.dart';
+import 'leave_bands_dialog.dart';
+import 'statutory_rates_tab.dart';
 
 /// Everything a company has to set up before payroll means anything.
 /// All of this was SQL-only, which made the module unusable by the
@@ -16,7 +19,7 @@ class HrSetupScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
-      length: 6,
+      length: 8,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('HR setup'),
@@ -30,6 +33,8 @@ class HrSetupScreen extends ConsumerWidget {
               Tab(text: 'Leave'),
               Tab(text: 'Claims'),
               Tab(text: 'Shifts'),
+              Tab(text: 'Holidays'),
+              Tab(text: 'Statutory rates'),
             ],
           ),
         ),
@@ -40,6 +45,8 @@ class HrSetupScreen extends ConsumerWidget {
           _LeaveTypesTab(),
           _ClaimTypesTab(),
           _ShiftsTab(),
+          HolidaysTab(),
+          StatutoryRatesTab(),
         ]),
       ),
     );
@@ -260,6 +267,7 @@ class _SetupList extends ConsumerWidget {
     required this.subtitleOf,
     this.orderBy = 'name',
     this.emptyMessage,
+    this.rowAction,
   });
 
   final String table;
@@ -270,6 +278,10 @@ class _SetupList extends ConsumerWidget {
   final String Function(Map<String, dynamic> row) subtitleOf;
   final String orderBy;
   final String? emptyMessage;
+
+  /// An extra button on each row, for a table that has something behind
+  /// it worth opening — leave types have their entitlement bands.
+  final Widget Function(BuildContext, Map<String, dynamic>)? rowAction;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -309,7 +321,13 @@ class _SetupList extends ConsumerWidget {
                           style: const TextStyle(fontWeight: FontWeight.w600)),
                       subtitle: Text(subtitleOf(list[i]),
                           style: const TextStyle(fontSize: 12)),
-                      trailing: const Icon(Icons.chevron_right, size: 18),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (rowAction != null) rowAction!(context, list[i]),
+                          const Icon(Icons.chevron_right, size: 18),
+                        ],
+                      ),
                     ),
                   ],
                 ],
@@ -590,6 +608,10 @@ class _LeaveTypesTab extends StatelessWidget {
       title: 'Leave types',
       subtitle: 'Unpaid leave drives a salary deduction; paid leave does not',
       emptyMessage: 'Add annual, sick and any other leave you grant.',
+      rowAction: (context, row) => TextButton(
+        onPressed: () => showLeaveBands(context, row),
+        child: const Text('Bands'),
+      ),
       fields: const [
         SetupField('code', 'Code', required: true),
         SetupField('name', 'Name', required: true),

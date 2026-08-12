@@ -56,7 +56,8 @@ jobs:
                    supabase/tests/stock_adjustments.sql \
                    supabase/tests/pricing_and_dimensions.sql \
                    supabase/tests/manual_journal.sql \
-                   supabase/tests/expense_claims.sql; do
+                   supabase/tests/expense_claims.sql \
+                   supabase/tests/hr_reference.sql; do
             echo "== $f"
             psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done
