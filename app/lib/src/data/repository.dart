@@ -295,6 +295,69 @@ class Repo {
     }
   }
 
+  // ------------------------------------------------------------------
+  // Fixed assets
+  // ------------------------------------------------------------------
+  Future<List<FixedAsset>> fixedAssets({bool includeDisposed = false}) async {
+    var q = client
+        .from('fixed_assets')
+        .select()
+        .eq('org_id', orgId)
+        .isFilter('deleted_at', null);
+    if (!includeDisposed) q = q.neq('status', 'disposed');
+    final data = await q.order('asset_no');
+    return _rows(data).map(FixedAsset.fromJson).toList();
+  }
+
+  Future<FixedAsset> saveFixedAsset(FixedAsset asset, {String? id}) async {
+    final payload = asset.toJson()..['org_id'] = orgId;
+    final data = id == null
+        ? await client.from('fixed_assets').insert(payload).select().single()
+        : await client
+            .from('fixed_assets')
+            .update(payload)
+            .eq('id', id)
+            .select()
+            .single();
+    return FixedAsset.fromJson(data);
+  }
+
+  /// What a run would charge, per asset, before anything is posted.
+  Future<List<DepreciationLine>> depreciationPreview(DateTime asAt) async {
+    final data = await client.rpc('depreciation_preview', params: {
+      'p_org_id': orgId,
+      'p_as_at': Fmt.iso(asAt),
+    });
+    return _rows(data).map(DepreciationLine.fromJson).toList();
+  }
+
+  /// Posts the charge. Null when every asset is already up to date —
+  /// which is what running it twice looks like.
+  Future<String?> runDepreciation(DateTime asAt) async {
+    final data = await client.rpc('run_depreciation', params: {
+      'p_org_id': orgId,
+      'p_as_at': Fmt.iso(asAt),
+    });
+    return data as String?;
+  }
+
+  /// Takes the asset off the books and recognises the gain or loss,
+  /// after bringing its depreciation up to the disposal date.
+  Future<String> disposeFixedAsset({
+    required String assetId,
+    required DateTime on,
+    double proceeds = 0,
+    String? bankAccountId,
+  }) async {
+    final data = await client.rpc('dispose_fixed_asset', params: {
+      'p_asset_id': assetId,
+      'p_date': Fmt.iso(on),
+      'p_proceeds': proceeds,
+      if (bankAccountId != null) 'p_bank_account_id': bankAccountId,
+    });
+    return data as String;
+  }
+
   /// What the open foreign balances would be restated to, one row per
   /// currency. Raises if a currency has no rate on file at that date,
   /// rather than reporting a confident zero for one it cannot price.

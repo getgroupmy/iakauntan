@@ -95,7 +95,7 @@ build-from-nothing work:
 
 | Missing | Why it matters | Who needs it |
 | --- | --- | --- |
-| **Fixed asset register and depreciation** | `journal_source` already has a `depreciation` value with nothing to produce it. Every company with a vehicle or a machine needs this at year end, and the auditor asks for the schedule | Everyone |
+| ~~Fixed asset register and depreciation~~ | Done — `0084`. Capital allowances remain a separate exercise; this is the accounting charge | Everyone |
 | **Budgets** | AutoCount has Budget Maintenance and budget-vs-actual reporting; iAkauntan has no budget anywhere | Anyone with a board |
 | **AR/AP contra** | Offsetting a customer who is also a supplier. Common in Malaysian trading, and today it must be faked with a journal | Trading |
 | **Credit control** | `contacts.credit_limit` is captured and stored and **never checked**. Nothing warns or blocks when an invoice takes a customer past their limit — the field is decorative | Anyone extending credit |
@@ -138,8 +138,8 @@ Ranked by how many businesses each unblocks, not by size:
 2. ~~**FX revaluation at period end.**~~ Done — `0083`, with a preview
    and a post button beside the fiscal years in Settings. Foreign
    **bank** balances are still outside it; see the migration for why.
-3. **Fixed assets and depreciation.** Universal, and the journal source
-   is already reserved for it.
+3. ~~**Fixed assets and depreciation.**~~ Done — `0084`, with a register,
+   straight-line and reducing-balance depreciation, and disposal.
 4. **Bank reconciliation.** Two tables, fully designed, nothing on top.
    Reconciling is monthly work for every bookkeeper alive.
 5. **Credit control.** Smallest job here: check the limit before posting
@@ -160,7 +160,7 @@ A gap here is a client who cannot move:
 | Services company, MYR only, no stock | Yes |
 | Trading company, MYR, simple stock | Yes |
 | Company invoicing in foreign currency | Yes |
-| Anyone with fixed assets to depreciate | No — nowhere to put the register |
+| Anyone with fixed assets to depreciate | Yes |
 | Anyone reconciling a bank account monthly | No |
 | Distribution with cartons and pieces | No — until multi-UOM |
 | Electronics, pharma, anything serialised | No — until serial tracking |

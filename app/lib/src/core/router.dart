@@ -8,6 +8,7 @@ import '../features/contacts/contact_editor.dart';
 import '../features/contacts/contacts_screen.dart';
 import '../features/crm/pipeline_screen.dart';
 import '../features/admin/platform_console_screen.dart';
+import '../features/assets/assets_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/documents/document_editor.dart';
 import '../features/documents/document_list_screen.dart';
@@ -212,6 +213,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/crm', builder: (_, __) => const PipelineScreen()),
           GoRoute(path: '/einvoice', builder: (_, __) => const EinvoiceScreen()),
           GoRoute(path: '/journals', builder: (_, __) => const JournalsScreen()),
+          GoRoute(path: '/assets', builder: (_, __) => const AssetsScreen()),
           GoRoute(
             path: '/secretarial',
             builder: (_, __) => const SecretarialScreen(),

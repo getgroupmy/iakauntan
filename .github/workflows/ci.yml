@@ -49,7 +49,8 @@ jobs:
                    supabase/tests/demo_accounts.sql \
                    supabase/tests/multicurrency.sql \
                    supabase/tests/transfer.sql \
-                   supabase/tests/fx_revaluation.sql; do
+                   supabase/tests/fx_revaluation.sql \
+                   supabase/tests/fixed_assets.sql; do
             echo "== $f"
             psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done

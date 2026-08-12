@@ -276,6 +276,147 @@ class FxRevaluation {
       );
 }
 
+/// One line of the fixed asset register.
+class FixedAsset {
+  const FixedAsset({
+    required this.id,
+    required this.assetNo,
+    required this.name,
+    required this.acquisitionDate,
+    required this.cost,
+    this.description,
+    this.category,
+    this.residualValue = 0,
+    this.method = 'straight_line',
+    this.usefulLifeMonths,
+    this.ratePercent,
+    this.accumulatedDepreciation = 0,
+    this.depreciatedTo,
+    this.serialNo,
+    this.location,
+    this.status = 'active',
+    this.disposalDate,
+    this.disposalProceeds,
+    this.notes,
+  });
+
+  final String id;
+  final String assetNo;
+  final String name;
+  final String? description;
+  final String? category;
+  final DateTime acquisitionDate;
+  final double cost;
+
+  /// What it is expected to be worth at the end of its life. Never
+  /// depreciated below this.
+  final double residualValue;
+
+  /// 'straight_line' or 'reducing_balance'.
+  final String method;
+  final int? usefulLifeMonths;
+
+  /// Annual rate, for reducing balance.
+  final double? ratePercent;
+
+  final double accumulatedDepreciation;
+  final DateTime? depreciatedTo;
+  final String? serialNo;
+  final String? location;
+  final String status;
+  final DateTime? disposalDate;
+  final double? disposalProceeds;
+  final String? notes;
+
+  double get netBookValue => cost - accumulatedDepreciation;
+  bool get isDisposed => status == 'disposed';
+
+  /// How the life reads on a register: "5 years" or "20% reducing".
+  String get basis => method == 'reducing_balance'
+      ? '${Fmt.rate(ratePercent ?? 0)}% reducing'
+      : usefulLifeMonths == null
+          ? 'Straight line'
+          : usefulLifeMonths! % 12 == 0
+              ? '${usefulLifeMonths! ~/ 12} year straight line'
+              : '$usefulLifeMonths month straight line';
+
+  factory FixedAsset.fromJson(Map<String, dynamic> j) => FixedAsset(
+        id: j['id'] as String,
+        assetNo: j['asset_no']?.toString() ?? '',
+        name: j['name']?.toString() ?? '',
+        description: j['description'] as String?,
+        category: j['category'] as String?,
+        acquisitionDate: Fmt.parseDate(j['acquisition_date']) ?? DateTime.now(),
+        cost: Fmt.toDouble(j['cost']),
+        residualValue: Fmt.toDouble(j['residual_value']),
+        method: j['method']?.toString() ?? 'straight_line',
+        usefulLifeMonths: (j['useful_life_months'] as num?)?.toInt(),
+        ratePercent:
+            j['rate_percent'] == null ? null : Fmt.toDouble(j['rate_percent']),
+        accumulatedDepreciation: Fmt.toDouble(j['accumulated_depreciation']),
+        depreciatedTo: Fmt.parseDate(j['depreciated_to']),
+        serialNo: j['serial_no'] as String?,
+        location: j['location'] as String?,
+        status: j['status']?.toString() ?? 'active',
+        disposalDate: Fmt.parseDate(j['disposal_date']),
+        disposalProceeds: j['disposal_proceeds'] == null
+            ? null
+            : Fmt.toDouble(j['disposal_proceeds']),
+        notes: j['notes'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'asset_no': assetNo,
+        'name': name,
+        'description': description,
+        'category': category,
+        'acquisition_date': Fmt.iso(acquisitionDate),
+        'cost': cost,
+        'residual_value': residualValue,
+        'method': method,
+        // Only the figure this method needs is sent. The table refuses a
+        // straight-line asset with no life and a reducing-balance one
+        // with no rate, and sending both would let a stale value from
+        // the other method sit there looking authoritative.
+        'useful_life_months': method == 'straight_line' ? usefulLifeMonths : null,
+        'rate_percent': method == 'reducing_balance' ? ratePercent : null,
+        'serial_no': serialNo,
+        'location': location,
+        'notes': notes,
+      };
+}
+
+/// What a depreciation run would charge against one asset.
+class DepreciationLine {
+  const DepreciationLine({
+    required this.assetId,
+    required this.assetNo,
+    required this.name,
+    required this.cost,
+    required this.accumulated,
+    required this.charge,
+    required this.netBookValue,
+  });
+
+  final String assetId;
+  final String assetNo;
+  final String name;
+  final double cost;
+  final double accumulated;
+  final double charge;
+  final double netBookValue;
+
+  factory DepreciationLine.fromJson(Map<String, dynamic> j) => DepreciationLine(
+        assetId: j['asset_id'] as String,
+        assetNo: j['asset_no']?.toString() ?? '',
+        name: j['name']?.toString() ?? '',
+        cost: Fmt.toDouble(j['cost']),
+        accumulated: Fmt.toDouble(j['accumulated']),
+        charge: Fmt.toDouble(j['charge']),
+        netBookValue: Fmt.toDouble(j['net_book_value']),
+      );
+}
+
 class Item {
   Item({
     required this.id,

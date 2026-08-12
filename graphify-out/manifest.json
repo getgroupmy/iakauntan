@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786520735.5134404,
-    "ast_hash": "94afdc08563afe5928c07ec95af97810",
+    "mtime": 1786521308.574124,
+    "ast_hash": "f457d591a818e4d7cb8e69fc0fdc8c5e",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786461869.5659997,
-    "ast_hash": "b9e17f9c63561295960324809e57246a",
+    "mtime": 1786521443.5767846,
+    "ast_hash": "4e9ef63b7c1d8239f2ff7789f4808472",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1786520735.5127292,
-    "ast_hash": "1ce2f33322e8747663fd91dbc002d5ed",
+    "mtime": 1786521287.2745183,
+    "ast_hash": "c3122cf7ad627c0842efad73842de0ef",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786520735.5113888,
-    "ast_hash": "f2b7973b236184abbc2846562de4379f",
+    "mtime": 1786521308.5736291,
+    "ast_hash": "49f072790837f8b380e46a2361afcd70",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": "d2c9729b108d770de90c22637a2bb8ae"
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1786501612.076552,
-    "ast_hash": "a41eb3c48a4bc25efd01a1fc83056ddd",
+    "mtime": 1786521443.5770867,
+    "ast_hash": "19d84aa020c7487ea3ab9066ce4f2c96",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786520700.3699355,
-    "ast_hash": "4e070aa257e8bf73bf6bbc025cb9511f",
+    "mtime": 1786521264.2272882,
+    "ast_hash": "e9dfacf590832e9580cb5332c8ee65a2",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1242,6 +1242,41 @@
   "supabase/tests/fx_revaluation.sql": {
     "mtime": 1786520700.3574877,
     "ast_hash": "5e9ef2eee19749cdbe0ecaf522f041c6",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/assets/asset_editor.dart": {
+    "mtime": 1786521381.864229,
+    "ast_hash": "54c7bc1aa206712c0bfe5ffca897d16a",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/assets/assets_screen.dart": {
+    "mtime": 1786521345.0682306,
+    "ast_hash": "7ff798462969eeeff236f174e96ca8e6",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/assets/depreciation_dialog.dart": {
+    "mtime": 1786521402.1482282,
+    "ast_hash": "5546d24025dfc1e1b3b1a538464176ae",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/assets/disposal_dialog.dart": {
+    "mtime": 1786521427.4442272,
+    "ast_hash": "54a5e785f45165bab276dc3772065487",
+    "semantic_hash": ""
+  },
+  "app/test/asset_register_test.dart": {
+    "mtime": 1786521498.3219862,
+    "ast_hash": "771c179966af1a72e9a036b099719ace",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0084_fixed_assets.sql": {
+    "mtime": 1786521167.3015661,
+    "ast_hash": "cf98c83f1fbb8bdf466c87c7b49e053d",
+    "semantic_hash": ""
+  },
+  "supabase/tests/fixed_assets.sql": {
+    "mtime": 1786521264.212234,
+    "ast_hash": "4a13ce95e46fe33dce3eb1fae7161738",
     "semantic_hash": ""
   }
 }
