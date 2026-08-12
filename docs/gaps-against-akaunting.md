@@ -157,5 +157,6 @@ somebody wants "sees purchases, not payroll".
 workflow, and it is the difference between a bookkeeping tool and a
 business system. Both are built, and so is the aging, and so are
 recurring invoices and bills, and so is withholding, and so are the two
-statutory statements, and so is bank transfer. What is left: CSV import,
-compound tax, granular permissions, and taking payment.
+statutory statements, and so is bank transfer, and so is importing the
+master files. What is left: importing open invoices and bills, compound
+tax, granular permissions, and taking payment.
