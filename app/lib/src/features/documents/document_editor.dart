@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/download.dart';
 import '../../core/format.dart';
@@ -15,6 +16,8 @@ import 'invoice_pdf.dart';
 import 'line_draft.dart';
 import 'line_editor.dart';
 import 'settlement_dialog.dart';
+import 'transfer.dart';
+import 'transfer_dialog.dart';
 
 /// One editor for every document type in both cycles. What changes
 /// between them — which contacts are selectable, whether posting writes a
@@ -54,6 +57,11 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// The table was asked and had nothing for this currency and date.
   bool _rateMissing = false;
   String _status = 'draft';
+
+  /// How much of this document has already gone forward. Shown because a
+  /// quotation that has been turned into an order looks identical to one
+  /// that has not, and transferring it twice is the mistake that follows.
+  String _fulfilment = 'pending';
   String _einvoiceStatus = 'not_applicable';
   String? _glEntryId;
   double _paidAmount = 0;
@@ -113,6 +121,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _rate.text = Fmt.rate(doc.exchangeRate);
         _rateOverridden = true;
         _status = doc.status;
+        _fulfilment = doc.fulfilmentStatus;
         _einvoiceStatus = doc.einvoiceStatus;
         _glEntryId = doc.glEntryId;
         _paidAmount = doc.paidAmount;
@@ -415,6 +424,31 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
 
   static String? _nullIfBlank(String v) => v.trim().isEmpty ? null : v.trim();
 
+  /// Takes this document forward into the next one in the cycle.
+  ///
+  /// Saves first: transferring reads the lines from the database, so an
+  /// edit still sitting in a text field would be silently left behind
+  /// and the new document would disagree with the one on screen.
+  Future<void> _transfer(String targetType) async {
+    if (_dirty) {
+      final id = await _save(silent: true);
+      if (id == null) return;
+    }
+    if (!mounted || widget.documentId == null) return;
+
+    final created = await showTransferDialog(
+      context,
+      ref,
+      sourceId: widget.documentId!,
+      sourceType: widget.docType,
+      targetType: targetType,
+    );
+    if (created == null || !mounted) return;
+
+    _toast('${metaFor(targetType).singular} created', success: true);
+    context.go('${_kind.routePrefix}/$targetType/$created');
+  }
+
   Future<void> _settle() async {
     await showSettlementDialog(
       context,
@@ -441,7 +475,9 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// already had, rather than inventing a new one: the filled button
   /// stays filled.
   List<Widget> _actions(BuildContext context,
-      {required bool editable, required bool canPost}) {
+      {required bool editable,
+      required bool canPost,
+      required bool canWrite}) {
     final narrow = MediaQuery.sizeOf(context).width < 640;
     final einvoiceValid = _einvoiceStatus == 'valid';
 
@@ -468,6 +504,20 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           icon: Icons.save_outlined,
           onTap: _saving ? null : () => _save()
         ),
+      // Only on a document that exists and has somewhere to go. A
+      // quotation with nothing left outstanding still offers this — the
+      // dialog is where "everything has already been taken" is said,
+      // because that is where the outstanding quantities are known.
+      // `canWrite`, not `editable`. A partly transferred document is
+      // read-only for editing and must still be transferable, or the
+      // second half of a part delivery could never be sent.
+      if (!_isNew && canWrite && !_isPosted)
+        for (final target in transferTargets(widget.docType))
+          (
+            label: 'Transfer to ${metaFor(target).singular.toLowerCase()}',
+            icon: Icons.arrow_forward,
+            onTap: _saving ? null : () => _transfer(target),
+          ),
       if (_isPosted && _meta.settles && _grandTotal - _paidAmount > 0)
         (
           label: _kind.isSales ? 'Receive payment' : 'Pay',
@@ -495,6 +545,11 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       // The chip repeats what the posted banner already says, so it is
       // the first thing to go when space is short.
       if (!_isNew && !narrow) ...[StatusChip(_status), const SizedBox(width: 12)],
+
+      // Only once something has been taken: on a fresh quotation
+      // "Pending" would be noise beside every other document in the app.
+      if (!_isNew && !narrow && _fulfilment != 'pending' && canTransfer(widget.docType))
+        ...[StatusChip(_fulfilment), const SizedBox(width: 12)],
 
       // Only once it exists: there is nothing to print from a form that
       // has not been saved, and a PDF of a half-typed invoice is a
@@ -540,7 +595,14 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   Widget build(BuildContext context) {
     final canPost = ref.watch(canPostProvider);
     final canWrite = ref.watch(canWriteProvider);
-    final editable = !_isPosted && canWrite;
+
+    // A document that has been transferred is frozen as well as posted
+    // ones. Saving deletes and re-inserts the lines, which would re-key
+    // them and detach the chain — migration 0082 refuses that outright,
+    // so the form must not offer it. Amend the document downstream, or
+    // void it, which releases the quantity.
+    final transferred = _fulfilment != 'pending' && canTransfer(widget.docType);
+    final editable = !_isPosted && canWrite && !transferred;
 
     return PopScope(
       canPop: !_dirty,
@@ -558,7 +620,8 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(_isNew ? 'New ${_meta.singular}' : _docNo),
-          actions: _actions(context, editable: editable, canPost: canPost),
+          actions: _actions(context,
+              editable: editable, canPost: canPost, canWrite: canWrite),
         ),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
@@ -567,6 +630,8 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (transferred && !_isPosted)
+                        _TransferredBanner(status: _fulfilment),
                       if (_isPosted)
                         _PostedBanner(
                           einvoiceStatus: _einvoiceStatus,
@@ -650,6 +715,51 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                   ),
                 ),
               ),
+      ),
+    );
+  }
+}
+
+/// Why the form has gone read-only on a document that was never posted.
+class _TransferredBanner extends StatelessWidget {
+  const _TransferredBanner({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(Space.lg),
+          child: Row(
+            children: [
+              Icon(Icons.arrow_forward, size: 20, color: context.colors.info),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      status == 'fulfilled'
+                          ? 'Taken forward in full'
+                          : 'Partly taken forward',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      'Editing is closed because later documents were '
+                      'built from these lines. Amend those, or void them '
+                      'to release the quantity back here.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              StatusChip(status),
+            ],
+          ),
+        ),
       ),
     );
   }

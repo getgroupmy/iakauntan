@@ -139,7 +139,7 @@ class StatusChip extends StatelessWidget {
       'draft' => neutral,
       'pending' || 'queued' || 'partial' => c.warning,
       'submitted' || 'approved' => c.info,
-      'posted' || 'valid' || 'completed' => c.success,
+      'posted' || 'valid' || 'completed' || 'fulfilled' => c.success,
       'overdue' || 'invalid' || 'failed' || 'rejected' => c.danger,
       'void' || 'cancelled' || 'not_applicable' => dim,
       _ => neutral,

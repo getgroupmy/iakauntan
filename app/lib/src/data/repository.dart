@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/format.dart';
+import '../features/documents/transfer.dart';
 import 'models.dart';
 
 /// All data access for one organization. Every query is additionally
@@ -406,6 +407,41 @@ class Repo {
     }
 
     return documentId;
+  }
+
+  /// What is still available to take forward from this document into a
+  /// [targetType], line by line.
+  Future<List<TransferLine>> transferOutstanding(
+    String documentId,
+    String targetType,
+  ) async {
+    final data = await client.rpc('transfer_outstanding', params: {
+      'p_source_id': documentId,
+      'p_target_type': targetType,
+    });
+    return _rows(data).map(TransferLine.fromJson).toList();
+  }
+
+  /// Creates the next document in the cycle and returns its id.
+  ///
+  /// Omit [lines] to take everything outstanding. The database decides
+  /// what is permitted and how much remains — this only carries the
+  /// request — so a stale screen is refused rather than acted on.
+  Future<String> transferDocument({
+    required String sourceId,
+    required String targetType,
+    List<({String lineId, double quantity})>? lines,
+  }) async {
+    final data = await client.rpc('transfer_document', params: {
+      'p_source_id': sourceId,
+      'p_target_type': targetType,
+      if (lines != null)
+        'p_lines': [
+          for (final l in lines)
+            {'line_id': l.lineId, 'quantity': l.quantity},
+        ],
+    });
+    return data as String;
   }
 
   Future<void> deleteDocument(DocKind kind, String id) =>

@@ -15,6 +15,7 @@ class LineDraft {
     this.classificationCode,
     this.isTaxInclusive = false,
     this.warehouseId,
+    this.sourceLineId,
   });
 
   String? itemId;
@@ -28,6 +29,11 @@ class LineDraft {
   String? classificationCode;
   bool isTaxInclusive;
   String? warehouseId;
+
+  /// Where this line came from, if it was transferred. Never edited —
+  /// only carried, so that saving the document does not sever the link
+  /// and hand the quantity back to the order it came off.
+  final String? sourceLineId;
 
   ({double net, double tax, double total}) get totals => computeLine(
         quantity: quantity,
@@ -51,6 +57,7 @@ class LineDraft {
         'uom_code': uomCode,
         'classification_code': classificationCode,
         'warehouse_id': warehouseId,
+        'source_line_id': sourceLineId,
       };
 
   factory LineDraft.fromLine(DocumentLine l) => LineDraft(
@@ -64,6 +71,8 @@ class LineDraft {
         uomCode: l.uomCode,
         classificationCode: l.classificationCode,
         isTaxInclusive: l.isTaxInclusive,
+        warehouseId: l.warehouseId,
+        sourceLineId: l.sourceLineId,
       );
 }
 

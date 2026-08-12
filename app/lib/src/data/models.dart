@@ -504,6 +504,7 @@ class BusinessDocument {
     this.paidAmount = 0,
     this.balanceAmount = 0,
     this.status = 'draft',
+    this.fulfilmentStatus = 'pending',
     this.einvoiceStatus = 'not_applicable',
     this.einvoiceId,
     this.glEntryId,
@@ -540,6 +541,11 @@ class BusinessDocument {
   final double paidAmount;
   final double balanceAmount;
   final String status;
+
+  /// How much of this document has been taken forward into the next one
+  /// in its cycle: pending, partial, fulfilled or cancelled. Maintained
+  /// by the database from the lines that were transferred out of it.
+  final String fulfilmentStatus;
   final String einvoiceStatus;
   final String? einvoiceId;
   final String? glEntryId;
@@ -583,6 +589,7 @@ class BusinessDocument {
       paidAmount: Fmt.toDouble(j['paid_amount']),
       balanceAmount: Fmt.toDouble(j['balance_amount']),
       status: j['status']?.toString() ?? 'draft',
+      fulfilmentStatus: j['fulfilment_status']?.toString() ?? 'pending',
       einvoiceStatus: j['einvoice_status']?.toString() ?? 'not_applicable',
       einvoiceId: j['einvoice_id'] as String?,
       glEntryId: j['gl_entry_id'] as String?,
@@ -615,6 +622,8 @@ class DocumentLine {
     this.uomCode,
     this.classificationCode,
     this.isTaxInclusive = false,
+    this.warehouseId,
+    this.sourceLineId,
   });
 
   final String? id;
@@ -633,6 +642,13 @@ class DocumentLine {
   final String? uomCode;
   final String? classificationCode;
   final bool isTaxInclusive;
+  final String? warehouseId;
+
+  /// The line on an earlier document this was transferred from. Carried
+  /// through the editor because saving deletes and re-inserts the lines,
+  /// and a line that came back without it would release the quantity on
+  /// the order it came from — which could then be ordered twice.
+  final String? sourceLineId;
 
   factory DocumentLine.fromJson(Map<String, dynamic> j) => DocumentLine(
         id: j['id'] as String?,
@@ -651,6 +667,8 @@ class DocumentLine {
         uomCode: j['uom_code'] as String?,
         classificationCode: j['classification_code'] as String?,
         isTaxInclusive: j['is_tax_inclusive'] == true,
+        warehouseId: j['warehouse_id'] as String?,
+        sourceLineId: j['source_line_id'] as String?,
       );
 }
 

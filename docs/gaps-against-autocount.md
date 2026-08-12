@@ -23,9 +23,16 @@ verified two ways:
 That second check is the one that matters, and it is why this revision
 says something different from the last one.
 
-## The finding that matters most
+> **Closed since this was written.** Document transfer landed in
+> migrations `0081`–`0082` with a dialog on every document that has a
+> next step. The section below is kept because it is the argument for
+> why it was built first, and because the shape of the problem — screens
+> that imply a capability the software does not have — is the one worth
+> recognising again.
 
-**The sales and purchase cycles are a chain in AutoCount and a set of
+## The finding that mattered most
+
+**The sales and purchase cycles were a chain in AutoCount and a set of
 dead ends here.**
 
 In AutoCount, a quotation is transferred to a sales order, the order to a
@@ -127,10 +134,7 @@ test first.
 
 Ranked by how many businesses each unblocks, not by size:
 
-1. **Document transfer.** The chain, both cycles, partial and full. The
-   screens already exist and the columns already exist; this is the
-   behaviour between them. Nothing else on this list makes the product
-   feel finished the way this does.
+1. ~~**Document transfer.**~~ Done — `0081` and `0082`.
 2. **FX revaluation at period end.** The last piece of multi-currency
    (`0078`–`0080` and the currency picker landed the rest). Until it
    exists an open foreign invoice sits on the balance sheet at the rate
@@ -156,7 +160,7 @@ A gap here is a client who cannot move:
 | Client profile | Can they move today? |
 | --- | --- |
 | Services company, MYR only, no stock | Yes |
-| Trading company, MYR, simple stock | Yes, but they will retype every order |
+| Trading company, MYR, simple stock | Yes |
 | Company invoicing in foreign currency | Yes to invoice and settle; not yet for period-end reporting |
 | Anyone with fixed assets to depreciate | No — nowhere to put the register |
 | Anyone reconciling a bank account monthly | No |
