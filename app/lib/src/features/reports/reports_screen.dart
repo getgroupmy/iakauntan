@@ -34,7 +34,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 6, vsync: this);
     // The download button belongs to whichever report is on screen, so
     // it has to rebuild when the tab changes.
     _tabs.addListener(() => setState(() {}));
@@ -88,11 +88,26 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
       case 2:
         final rows = ref.watch(trialBalanceProvider).valueOrNull;
         return rows == null ? null : trialBalanceSpec(rows);
+      case 3:
+        final rows = ref.watch(_agedProvider(_aged(true))).valueOrNull;
+        return rows == null
+            ? null
+            : agedBalanceSpec(rows, _range.end, receivable: true);
+      case 4:
+        final rows = ref.watch(_agedProvider(_aged(false))).valueOrNull;
+        return rows == null
+            ? null
+            : agedBalanceSpec(rows, _range.end, receivable: false);
       default:
         final rows = ref.watch(_sstProvider(_range)).valueOrNull;
         return rows == null ? null : sstSummarySpec(rows, _range);
     }
   }
+
+  /// The aged listings are as at a date, not over a period, so they take
+  /// the end of the chosen range and ignore the start.
+  ({bool receivable, DateTime asAt}) _aged(bool receivable) =>
+      (receivable: receivable, asAt: _range.end);
 
   Future<void> _download(ReportSpec spec) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -164,6 +179,8 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
             Tab(text: 'Profit & Loss'),
             Tab(text: 'Balance Sheet'),
             Tab(text: 'Trial Balance'),
+            Tab(text: 'Aged Receivables'),
+            Tab(text: 'Aged Payables'),
             Tab(text: 'SST Summary'),
           ],
         ),
@@ -197,6 +214,26 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               icon: Icons.table_chart_outlined,
               title: 'No ledger activity',
               message: 'The trial balance fills in as you post documents.',
+            ),
+          ),
+          _Report(
+            provider: _agedProvider(_aged(true)),
+            spec: (rows) => agedBalanceSpec(rows, _range.end, receivable: true),
+            wide: true,
+            empty: const EmptyState(
+              icon: Icons.hourglass_bottom_outlined,
+              title: 'Nothing owed to you',
+              message: 'Post invoices to build up a receivables ledger.',
+            ),
+          ),
+          _Report(
+            provider: _agedProvider(_aged(false)),
+            spec: (rows) => agedBalanceSpec(rows, _range.end, receivable: false),
+            wide: true,
+            empty: const EmptyState(
+              icon: Icons.hourglass_bottom_outlined,
+              title: 'Nothing owed by you',
+              message: 'Post bills to build up a payables ledger.',
             ),
           ),
           _Report(
@@ -503,3 +540,7 @@ final _sstProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTimeRange>((ref, range) {
   return requireRepo(ref).sstSummary(from: range.start, to: range.end);
 });
+
+/// The shared aged-balance provider, so the tab body and the download
+/// button read one request rather than two.
+final _agedProvider = agedBalancesProvider;

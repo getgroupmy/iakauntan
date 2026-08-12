@@ -61,7 +61,8 @@ jobs:
                    supabase/tests/contact_extras.sql \
                    supabase/tests/leads_and_onboarding.sql \
                    supabase/tests/document_share.sql \
-                   supabase/tests/outbound_email.sql; do
+                   supabase/tests/outbound_email.sql \
+                   supabase/tests/aged_balances.sql; do
             echo "== $f"
             psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done

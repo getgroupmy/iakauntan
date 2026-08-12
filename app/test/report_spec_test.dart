@@ -176,4 +176,132 @@ void main() {
           contains('SST-02'));
     });
   });
+
+  group('aged balances', () {
+    final asAt = DateTime(2026, 3, 31);
+
+    Map<String, dynamic> aged(
+      String contact,
+      String docNo,
+      String bucket,
+      double amount, {
+      String kind = 'invoice',
+      String? due = '2026-02-14',
+      int days = 45,
+    }) =>
+        {
+          'contact_id': contact.toLowerCase(),
+          'contact_name': contact,
+          'doc_kind': kind,
+          'doc_no': docNo,
+          'doc_date': '2026-01-15',
+          'due_date': due,
+          'currency': 'MYR',
+          'outstanding': amount,
+          'base_outstanding': amount,
+          'days_overdue': days,
+          'aging_bucket': bucket,
+        };
+
+    ReportGrid summaryOf(ReportSpec s) => s.blocks.whereType<ReportGrid>().first;
+
+    test('one row per customer, whatever the ledger holds against them', () {
+      final spec = agedBalanceSpec([
+        aged('Steady Bhd', 'INV-1', '1_30', 1000),
+        aged('Steady Bhd', 'INV-2', 'over_90', 400),
+        aged('Late Bhd', 'INV-3', '31_60', 250),
+      ], asAt, receivable: true);
+
+      final grid = summaryOf(spec);
+      expect(grid.rows, hasLength(2));
+      expect(grid.headers.first, 'Customer');
+      // Current, 1–30, 31–60, 61–90, Over 90, Total.
+      expect(grid.headers, hasLength(7));
+    });
+
+    test('the buckets across a customer add up to that customer', () {
+      final spec = agedBalanceSpec([
+        aged('Steady Bhd', 'INV-1', '1_30', 1000),
+        aged('Steady Bhd', 'INV-2', 'over_90', 400),
+      ], asAt, receivable: true);
+
+      final row = summaryOf(spec).rows.single;
+      expect((row[2] as MoneyCell).value, 1000, reason: '1–30');
+      expect((row[5] as MoneyCell).value, 400, reason: 'over 90');
+      expect((row[6] as MoneyCell).value, 1400, reason: 'total');
+    });
+
+    test('and the columns down the page add up to the total', () {
+      final spec = agedBalanceSpec([
+        aged('Steady Bhd', 'INV-1', '1_30', 1000),
+        aged('Late Bhd', 'INV-2', '1_30', 250),
+        aged('Late Bhd', 'INV-3', 'current', 90),
+      ], asAt, receivable: true);
+
+      final total = summaryOf(spec).total!;
+      expect((total[1] as MoneyCell).value, 90, reason: 'current');
+      expect((total[2] as MoneyCell).value, 1250, reason: '1–30');
+      expect((total[6] as MoneyCell).value, 1340, reason: 'grand total');
+    });
+
+    test('a credit carries its sign into the total', () {
+      // Unapplied cash nets off what the customer owes. Summing the
+      // magnitudes would show a customer in credit as a debtor.
+      final spec = agedBalanceSpec([
+        aged('Steady Bhd', 'INV-1', '1_30', 1000),
+        aged('Steady Bhd', 'RCP-1', 'current', -1200,
+            kind: 'receipt', due: null, days: 0),
+      ], asAt, receivable: true);
+
+      expect((summaryOf(spec).total!.last as MoneyCell).value, -200);
+    });
+
+    test('a credit is drawn as a negative rather than as a bare figure', () {
+      // MoneyCell drops the sign unless it is asked to keep it, which on
+      // this report turns money owed to a customer into money owed by
+      // them.
+      final spec = agedBalanceSpec([
+        aged('Steady Bhd', 'CN-1', 'current', -300,
+            kind: 'credit_note', due: null, days: 0),
+      ], asAt, receivable: true);
+
+      final cell = summaryOf(spec).rows.single.last as MoneyCell;
+      expect(cell.signed, isTrue);
+    });
+
+    test('the detail names what a line is when it is not an invoice', () {
+      final spec = agedBalanceSpec([
+        aged('Steady Bhd', 'INV-1', '1_30', 1000),
+        aged('Steady Bhd', 'RCP-1', 'current', -400,
+            kind: 'receipt', due: null, days: 0),
+      ], asAt, receivable: true);
+
+      final detail = spec.blocks.whereType<ReportGrid>().last;
+      expect((detail.rows[0][1] as TextCell).text, 'INV-1');
+      expect((detail.rows[1][1] as TextCell).text, 'RCP-1 · receipt');
+      // Cash on account has no due date, and printing one would age it
+      // against a deadline nobody set.
+      expect((detail.rows[1][3] as TextCell).text, '—');
+    });
+
+    test('the payables side says supplier, and says so in the title', () {
+      final spec = agedBalanceSpec([aged('Parts Bhd', 'BILL-1', '1_30', 500)],
+          asAt,
+          receivable: false);
+      expect(spec.title, 'Aged Payables');
+      expect(summaryOf(spec).headers.first, 'Supplier');
+      expect(spec.subtitle, contains('2026'));
+    });
+
+    test('it says the total is the control account', () {
+      // The footing is the whole point of the report, and a reader who
+      // does not know that will reconcile it against something else.
+      expect(
+        agedBalanceSpec([aged('Steady Bhd', 'INV-1', '1_30', 1)], asAt,
+                receivable: true)
+            .note,
+        contains('control account'),
+      );
+    });
+  });
 }

@@ -234,6 +234,126 @@ ReportSpec trialBalanceSpec(List<Map<String, dynamic>> rows) {
   );
 }
 
+/// The five columns, in the order they are read across a page.
+const _agingBuckets = <String, String>{
+  'current': 'Current',
+  '1_30': '1–30',
+  '31_60': '31–60',
+  '61_90': '61–90',
+  'over_90': 'Over 90',
+};
+
+/// What a line is, when it is not simply an invoice or a bill. Left
+/// blank for those two so the common row stays uncluttered.
+String _agedKind(String kind) => switch (kind) {
+      'invoice' || 'bill' => '',
+      'credit_note' || 'purchase_credit_note' => 'credit note',
+      'debit_note' || 'purchase_debit_note' => 'debit note',
+      'refund_note' => 'refund note',
+      'receipt' => 'receipt',
+      'payment' => 'payment',
+      _ => kind.replaceAll('_', ' '),
+    };
+
+/// An aged trial balance: who owes what, and for how long.
+///
+/// Two blocks, because they answer different questions. The summary is
+/// the page that gets printed and taken to a meeting; the detail is the
+/// page somebody works from when they pick up the phone.
+///
+/// Amounts are the base-currency ones the ledger carries, so the report
+/// foots to the receivable or payable control account. That is the point
+/// of it: an aged listing that does not agree with the nominal gets
+/// reconciled by hand every month until nobody believes either number.
+ReportSpec agedBalanceSpec(
+  List<Map<String, dynamic>> rows,
+  DateTime asAt, {
+  required bool receivable,
+}) {
+  // Rows arrive ordered by name, so insertion order is display order.
+  final buckets = <String, Map<String, double>>{};
+  final names = <String, String>{};
+
+  for (final r in rows) {
+    final key = r['contact_id']?.toString() ?? '';
+    names[key] = r['contact_name']?.toString() ?? '—';
+    final bucket = r['aging_bucket']?.toString() ?? 'current';
+    final amount = Fmt.toDouble(r['base_outstanding']);
+    final row = buckets.putIfAbsent(key, () => <String, double>{});
+    row[bucket] = (row[bucket] ?? 0) + amount;
+  }
+
+  double columnTotal(String bucket) =>
+      buckets.values.fold(0, (s, r) => s + (r[bucket] ?? 0));
+  double rowTotal(Map<String, double> r) => r.values.fold(0, (s, v) => s + v);
+
+  final grand = buckets.values.fold<double>(0, (s, r) => s + rowTotal(r));
+
+  final summary = ReportGrid(
+    title: null,
+    headers: [
+      receivable ? 'Customer' : 'Supplier',
+      ..._agingBuckets.values,
+      'Total',
+    ],
+    rows: [
+      for (final entry in buckets.entries)
+        [
+          TextCell(names[entry.key] ?? '—'),
+          for (final bucket in _agingBuckets.keys)
+            MoneyCell(entry.value[bucket] ?? 0, signed: true),
+          MoneyCell(rowTotal(entry.value), signed: true),
+        ],
+    ],
+    total: [
+      const TextCell('Total'),
+      for (final bucket in _agingBuckets.keys)
+        MoneyCell(columnTotal(bucket), signed: true),
+      MoneyCell(grand, signed: true),
+    ],
+  );
+
+  final detail = ReportGrid(
+    title: 'Detail',
+    headers: const ['Contact', 'Document', 'Date', 'Due', 'Days', 'Amount'],
+    rows: [
+      for (final r in rows)
+        [
+          TextCell(r['contact_name']?.toString() ?? '—'),
+          TextCell([
+            r['doc_no']?.toString() ?? '',
+            _agedKind(r['doc_kind']?.toString() ?? ''),
+          ].where((s) => s.isNotEmpty).join(' · ')),
+          TextCell(Fmt.date(Fmt.parseDate(r['doc_date']))),
+          // Cash on account and credit notes have no due date, and an
+          // invented one would age them against a deadline nobody set.
+          TextCell(r['due_date'] == null
+              ? '—'
+              : Fmt.date(Fmt.parseDate(r['due_date']))),
+          TextCell(Fmt.toInt(r['days_overdue']) == 0
+              ? '—'
+              : '${Fmt.toInt(r['days_overdue'])}'),
+          MoneyCell(Fmt.toDouble(r['base_outstanding']), signed: true),
+        ],
+    ],
+  );
+
+  return ReportSpec(
+    title: receivable ? 'Aged Receivables' : 'Aged Payables',
+    subtitle: 'As at ${Fmt.longDate(asAt)}',
+    blocks: [summary, detail],
+    note: receivable
+        ? 'Includes credit notes and receipts not yet applied, shown as '
+            'negatives, so the total agrees with the receivables control '
+            'account at this date. Amounts are in the base currency at the '
+            'rate each document was posted at.'
+        : 'Includes credit notes and payments not yet applied, shown as '
+            'negatives, so the total agrees with the payables control '
+            'account at this date. Amounts are in the base currency at the '
+            'rate each document was posted at.',
+  );
+}
+
 ReportSpec sstSummarySpec(
     List<Map<String, dynamic>> rows, DateTimeRange range) {
   ReportGrid grid(String title, String direction) {

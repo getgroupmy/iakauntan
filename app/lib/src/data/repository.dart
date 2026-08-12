@@ -99,12 +99,24 @@ class Repo {
     return _rows(data);
   }
 
-  Future<List<Map<String, dynamic>>> arAging() async {
-    final data = await client
-        .from('v_ar_aging')
-        .select()
-        .eq('org_id', orgId)
-        .order('days_overdue', ascending: false);
+  /// The aged listing of one side of the subledger, as at a date.
+  ///
+  /// Not the same question as "what is still open today": with an as-at
+  /// date the balance is rebuilt from the settlements that had happened
+  /// by then, so a March listing run in June still shows the invoices
+  /// that were paid in April. Passing no date asks about today, which is
+  /// what the dashboard wants.
+  Future<List<Map<String, dynamic>>> agedBalances({
+    required bool receivable,
+    DateTime? asAt,
+  }) async {
+    final data = await client.rpc(
+      receivable ? 'report_ar_aging' : 'report_ap_aging',
+      params: {
+        'p_org_id': orgId,
+        if (asAt != null) 'p_as_at': Fmt.iso(asAt),
+      },
+    );
     return _rows(data);
   }
 

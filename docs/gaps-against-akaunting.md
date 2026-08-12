@@ -65,11 +65,10 @@ happened somewhere else. For Malaysia this would be FPX or DuitNow.
 
 ## 4. Missing reports, two of them statutory
 
-- **Aged receivables and aged payables.** Neither product has an aging
-  report as such, but iAkauntan feels it more: credit limits are
-  enforced, per-customer statements exist, and there is still no way to
-  see every customer's exposure bucketed by age. This is the report a
-  credit controller lives in.
+- ~~**Aged receivables and aged payables.**~~ Built — `report_ar_aging`
+  and `report_ap_aging`, as at a date rather than as of now, footing to
+  the receivable and payable control accounts. Both listings carry the
+  credits, which is what makes them foot.
 - **Statement of cash flows** and **statement of changes in equity**.
   Akaunting has neither and does not need them; it does not claim to
   produce statutory accounts. iAkauntan has a corporate secretarial
@@ -136,5 +135,6 @@ somebody wants "sees purchases, not payroll".
 
 1 and 2 belong together: email plus a signed invoice link is one
 workflow, and it is the difference between a bookkeeping tool and a
-business system. Then aged receivables, then recurring invoices, then
-withholding tax. Bank transfer and import are small and fit anywhere.
+business system. Both are built, and so is the aging. Then recurring
+invoices, then withholding tax. Bank transfer and import are small and
+fit anywhere.

@@ -415,7 +415,17 @@ class _ReceivablesCard extends ConsumerWidget {
                 height: 120,
                 child: Center(child: CircularProgressIndicator()),
               ),
-              builder: (rows) {
+              builder: (all) {
+                // The aged listing carries the credits too — unapplied
+                // receipts and unused credit notes — because that is
+                // what makes it foot to the control account. This card
+                // is about who owes money, so they are left out here.
+                final rows = all
+                    .where((r) => Fmt.toDouble(r['outstanding']) > 0)
+                    .toList()
+                  ..sort((a, b) => Fmt.toInt(b['days_overdue'])
+                      .compareTo(Fmt.toInt(a['days_overdue'])));
+
                 if (rows.isEmpty) {
                   return const EmptyState(
                     icon: Icons.check_circle_outline,
@@ -444,7 +454,7 @@ class _ReceivablesCard extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Money(
-                              Fmt.toDouble(row['balance_amount']),
+                              Fmt.toDouble(row['outstanding']),
                               currency: row['currency']?.toString() ?? 'MYR',
                               bold: true,
                             ),

@@ -353,9 +353,21 @@ final opportunitiesProvider =
   return requireRepo(ref).opportunities();
 });
 
+/// Today's receivables, aged. The dashboard card and the Reports tab
+/// read the same function so the two cannot drift; the tab passes an
+/// as-at date and this one does not.
 final arAgingProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).arAging();
+  return requireRepo(ref).agedBalances(receivable: true);
+});
+
+/// Keyed by side and as-at date, so changing either restates the report
+/// rather than leaving the last one on screen while it reloads.
+final agedBalancesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({bool receivable, DateTime asAt})>(
+        (ref, args) {
+  return requireRepo(ref)
+      .agedBalances(receivable: args.receivable, asAt: args.asAt);
 });
 
 final trialBalanceProvider =
