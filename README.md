@@ -1247,3 +1247,7 @@ Stated plainly so nothing here is mistaken for finished:
   identifier, but nothing pushes punches in from a device yet
 - Sign-in with anything other than a password: no OAuth, no magic link,
   no two-factor
+- Migration from another accounting system. `docs/migrating-from-autocount.md`
+  plans one from AutoCount Cloud and names what has to be built first —
+  chiefly that **no table records where a row came from**, so no import
+  can be re-run, reconciled or rolled back until it does
