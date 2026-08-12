@@ -468,6 +468,41 @@ class Money extends StatelessWidget {
   }
 }
 
+/// A row of filters that scrolls sideways rather than being cut off.
+///
+/// SegmentedButton sizes itself to its segments: it neither shrinks nor
+/// wraps, so on a phone the options past the edge are simply gone. The
+/// e-Invoice screen lost "Needs fixing" that way, with "Submitted"
+/// wrapping mid-word beside it.
+///
+/// Scrolling rather than shortening the labels, because those words are
+/// what the rest of the app calls those states — an abbreviation that
+/// only exists on small screens is a second vocabulary to learn. The
+/// left edge is where the eye starts, so the first option stays put and
+/// the overflow is reached by dragging.
+class FilterBar extends StatelessWidget {
+  const FilterBar({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.md),
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: padding,
+      // Dragging a segmented control by touch is how a phone reaches the
+      // far end of it, and a trackpad or wheel has to work too.
+      physics: const ClampingScrollPhysics(),
+      child: child,
+    );
+  }
+}
+
 /// Page scaffold that keeps content readable on ultra-wide displays.
 class PageBody extends StatelessWidget {
   const PageBody({

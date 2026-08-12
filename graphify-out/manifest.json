@@ -85,9 +85,9 @@
     "semantic_hash": "b5af85af1de209be2d0e9851c1014db0"
   },
   "app/lib/src/core/widgets.dart": {
-    "mtime": 1786371039.4733253,
-    "ast_hash": "57d59a5a10ce61ec76f7bf2a3f670f42",
-    "semantic_hash": "57d59a5a10ce61ec76f7bf2a3f670f42"
+    "mtime": 1786505366.3155103,
+    "ast_hash": "0c603926e04fee5c885e5918b5e672d7",
+    "semantic_hash": ""
   },
   "app/lib/src/data/attachments_repository.dart": {
     "mtime": 1786440739.5704927,
@@ -150,8 +150,8 @@
     "semantic_hash": "88f373b2bbe85ad1d830bbd9c2bf8c6c"
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1786477999.0376124,
-    "ast_hash": "6207f1bf6958d55b3402fe55d072680a",
+    "mtime": 1786505450.4195082,
+    "ast_hash": "cd903f6b92c22fd2e8aef7d7ed552eba",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -175,9 +175,9 @@
     "semantic_hash": "8f702d06749523f19f374e0b662ad0d6"
   },
   "app/lib/src/features/einvoice/einvoice_screen.dart": {
-    "mtime": 1786328947.8048174,
-    "ast_hash": "ce4bdf93c975256f78b34f691e888e0b",
-    "semantic_hash": "ce4bdf93c975256f78b34f691e888e0b"
+    "mtime": 1786505376.9636507,
+    "ast_hash": "ecf0b4578eddcbe0dddc48ba49c66312",
+    "semantic_hash": ""
   },
   "app/lib/src/features/expenses/expenses_screen.dart": {
     "mtime": 1786328988.1514754,
@@ -185,9 +185,9 @@
     "semantic_hash": "f521ad6ddd2a0ecf7cc7fd904dd50c8f"
   },
   "app/lib/src/features/hr/claims_screen.dart": {
-    "mtime": 1786342479.8360405,
-    "ast_hash": "a993d583e2a61b01c7ce3f770255b974",
-    "semantic_hash": "a993d583e2a61b01c7ce3f770255b974"
+    "mtime": 1786505376.9642222,
+    "ast_hash": "c44106528e78d142de8276cbfd398cf0",
+    "semantic_hash": ""
   },
   "app/lib/src/features/hr/employee_editor.dart": {
     "mtime": 1786390118.3744717,
@@ -200,9 +200,9 @@
     "semantic_hash": "dcc8c6c5486ad5b0c69b93a03b44793b"
   },
   "app/lib/src/features/hr/leave_screen.dart": {
-    "mtime": 1786342214.3818069,
-    "ast_hash": "d37f28fd5c718584edcd9344cccbf25b",
-    "semantic_hash": "d37f28fd5c718584edcd9344cccbf25b"
+    "mtime": 1786505376.964451,
+    "ast_hash": "7a50cfdbc711d07054cc2379eecccd34",
+    "semantic_hash": ""
   },
   "app/lib/src/features/hr/my_hr_screen.dart": {
     "mtime": 1786342462.933749,
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786462201.9780195,
-    "ast_hash": "d4894ba3ae96340b18afc52de640a323",
+    "mtime": 1786505197.5845227,
+    "ast_hash": "f489f96fab581e6159e54cc07912f1b3",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -835,8 +835,8 @@
     "semantic_hash": ""
   },
   "app/web/index.html": {
-    "mtime": 1786450120.3678446,
-    "ast_hash": "ab12cf5c5d9fc6fbcab523044a1677e7",
+    "mtime": 1786504525.2635295,
+    "ast_hash": "b8aed9d22250c0ee388c3de060a6697b",
     "semantic_hash": ""
   },
   "app/android/app/src/main/res/mipmap-hdpi/ic_launcher.png": {
@@ -980,8 +980,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/deploy.yml": {
-    "mtime": 1786456145.925078,
-    "ast_hash": "b95d8fd682a56a62c8191515f7382b47",
+    "mtime": 1786504717.728206,
+    "ast_hash": "4f6a3b461c29e1a02fe6d1a9e1a86b11",
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/reset_password_screen.dart": {
@@ -1107,6 +1107,26 @@
   "app/test/shell_more_sheet_test.dart": {
     "mtime": 1786501551.3525484,
     "ast_hash": "6b89d3ee10a4833ee85bba571694da43",
+    "semantic_hash": ""
+  },
+  "app/test/narrow_layout_test.dart": {
+    "mtime": 1786505515.799507,
+    "ast_hash": "3671ad1262f8df727bc143e48850af91",
+    "semantic_hash": ""
+  },
+  "app/web/flutter_bootstrap.js": {
+    "mtime": 1786504717.7275872,
+    "ast_hash": "fca7def34f0832b2342ff98d5b7345b9",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0075_clock_in_status_cast.sql": {
+    "mtime": 1786505035.6835177,
+    "ast_hash": "16dc076572c4b3d9ab5cf5cbe733a043",
+    "semantic_hash": ""
+  },
+  "supabase/tests/attendance.sql": {
+    "mtime": 1786505197.584138,
+    "ast_hash": "3b98135f3d2d2ed43055326f76eec171",
     "semantic_hash": ""
   }
 }

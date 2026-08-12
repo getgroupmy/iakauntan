@@ -73,11 +73,8 @@ class _EinvoiceScreenState extends ConsumerState<EinvoiceScreen> {
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(56),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.md),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: SegmentedButton<String>(
+          child: FilterBar(
+            child: SegmentedButton<String>(
                 showSelectedIcon: false,
                 segments: const [
                   ButtonSegment(value: 'all', label: Text('All')),
@@ -88,7 +85,6 @@ class _EinvoiceScreenState extends ConsumerState<EinvoiceScreen> {
                 ],
                 selected: {_filter},
                 onSelectionChanged: (s) => setState(() => _filter = s.first),
-              ),
             ),
           ),
         ),

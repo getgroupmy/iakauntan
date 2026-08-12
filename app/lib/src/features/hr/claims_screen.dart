@@ -43,11 +43,8 @@ class _ClaimsScreenState extends ConsumerState<ClaimsScreen> {
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(56),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.md),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: SegmentedButton<String>(
+          child: FilterBar(
+            child: SegmentedButton<String>(
                 showSelectedIcon: false,
                 segments: const [
                   ButtonSegment(value: 'submitted', label: Text('Awaiting')),
@@ -56,7 +53,6 @@ class _ClaimsScreenState extends ConsumerState<ClaimsScreen> {
                 ],
                 selected: {_status},
                 onSelectionChanged: (s) => setState(() => _status = s.first),
-              ),
             ),
           ),
         ),

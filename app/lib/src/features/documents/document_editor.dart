@@ -281,6 +281,127 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
 
   static String? _nullIfBlank(String v) => v.trim().isEmpty ? null : v.trim();
 
+  Future<void> _settle() async {
+    await showSettlementDialog(
+      context,
+      ref,
+      kind: _kind,
+      contactId: _contactId,
+      documentId: widget.documentId,
+    );
+    if (!mounted) return;
+    setState(() => _loading = true);
+    await _load();
+  }
+
+  /// What the app bar offers, and how much of it survives a phone.
+  ///
+  /// AppBar actions neither wrap nor scroll: whatever does not fit runs
+  /// off the right edge and cannot be reached at all. A posted invoice
+  /// carries a status chip, a PDF button, "Receive payment" and "Submit
+  /// e-Invoice", which is comfortably wider than a phone — so on a
+  /// narrow screen only the primary action keeps its button and the rest
+  /// fold into a menu.
+  ///
+  /// Which action is primary follows the hierarchy the wide layout
+  /// already had, rather than inventing a new one: the filled button
+  /// stays filled.
+  List<Widget> _actions(BuildContext context,
+      {required bool editable, required bool canPost}) {
+    final narrow = MediaQuery.sizeOf(context).width < 640;
+    final einvoiceValid = _einvoiceStatus == 'valid';
+
+    final primary = switch (null) {
+      _ when editable && canPost && _meta.posts => (
+          label: 'Post',
+          short: 'Post',
+          icon: null,
+          onTap: _saving ? null : _post,
+        ),
+      _ when _isPosted && _meta.einvoice => (
+          label: einvoiceValid ? 'e-Invoice valid' : 'Submit e-Invoice',
+          short: einvoiceValid ? 'Valid' : 'Submit',
+          icon: einvoiceValid ? Icons.verified : Icons.cloud_upload_outlined,
+          onTap: einvoiceValid ? null : _submitEinvoice,
+        ),
+      _ => null,
+    };
+
+    final secondary = <({String label, IconData icon, VoidCallback? onTap})>[
+      if (editable)
+        (
+          label: 'Save',
+          icon: Icons.save_outlined,
+          onTap: _saving ? null : () => _save()
+        ),
+      if (_isPosted && _meta.settles && _grandTotal - _paidAmount > 0)
+        (
+          label: _kind.isSales ? 'Receive payment' : 'Pay',
+          icon: Icons.payments_outlined,
+          onTap: canPost ? _settle : null,
+        ),
+    ];
+
+    Widget primaryButton() {
+      final p = primary!;
+      final label = Text(narrow ? p.short : p.label);
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: p.icon == null
+            ? FilledButton(onPressed: p.onTap, child: label)
+            : FilledButton.icon(
+                onPressed: p.onTap,
+                icon: Icon(p.icon, size: 18),
+                label: label,
+              ),
+      );
+    }
+
+    return [
+      // The chip repeats what the posted banner already says, so it is
+      // the first thing to go when space is short.
+      if (!_isNew && !narrow) ...[StatusChip(_status), const SizedBox(width: 12)],
+
+      // Only once it exists: there is nothing to print from a form that
+      // has not been saved, and a PDF of a half-typed invoice is a
+      // document somebody could send.
+      if (!_isNew)
+        IconButton(
+          tooltip: 'Download PDF',
+          icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+          onPressed: _saving ? null : _downloadPdf,
+        ),
+
+      if (!narrow)
+        for (final a in secondary)
+          TextButton.icon(
+            onPressed: a.onTap,
+            icon: Icon(a.icon, size: 18),
+            label: Text(a.label),
+          ),
+
+      if (primary != null) primaryButton(),
+
+      if (narrow && secondary.isNotEmpty)
+        PopupMenuButton<int>(
+          tooltip: 'More',
+          onSelected: (i) => secondary[i].onTap?.call(),
+          itemBuilder: (_) => [
+            for (var i = 0; i < secondary.length; i++)
+              PopupMenuItem(
+                value: i,
+                enabled: secondary[i].onTap != null,
+                child: Row(children: [
+                  Icon(secondary[i].icon, size: 18),
+                  const SizedBox(width: 12),
+                  Text(secondary[i].label),
+                ]),
+              ),
+          ],
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final canPost = ref.watch(canPostProvider);
@@ -303,70 +424,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(_isNew ? 'New ${_meta.singular}' : _docNo),
-          actions: [
-            if (!_isNew) ...[StatusChip(_status), const SizedBox(width: 12)],
-            // Only once it exists: there is nothing to print from a form
-            // that has not been saved, and a PDF of a half-typed invoice
-            // is a document somebody could send.
-            if (!_isNew)
-              IconButton(
-                tooltip: 'Download PDF',
-                icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
-                onPressed: _saving ? null : _downloadPdf,
-              ),
-            if (editable)
-              TextButton(
-                onPressed: _saving ? null : () => _save(),
-                child: const Text('Save'),
-              ),
-            if (editable && canPost && _meta.posts)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: FilledButton(
-                  onPressed: _saving ? null : _post,
-                  child: const Text('Post'),
-                ),
-              ),
-            if (_isPosted && _meta.settles && _grandTotal - _paidAmount > 0)
-              Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: TextButton.icon(
-                  onPressed: canPost
-                      ? () async {
-                          await showSettlementDialog(
-                            context,
-                            ref,
-                            kind: _kind,
-                            contactId: _contactId,
-                            documentId: widget.documentId,
-                          );
-                          if (!mounted) return;
-                          setState(() => _loading = true);
-                          await _load();
-                        }
-                      : null,
-                  icon: const Icon(Icons.payments_outlined, size: 18),
-                  label: Text(_kind.isSales ? 'Receive payment' : 'Pay'),
-                ),
-              ),
-            if (_isPosted && _meta.einvoice)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: FilledButton.icon(
-                  onPressed:
-                      _einvoiceStatus == 'valid' ? null : _submitEinvoice,
-                  icon: Icon(
-                    _einvoiceStatus == 'valid'
-                        ? Icons.verified
-                        : Icons.cloud_upload_outlined,
-                    size: 18,
-                  ),
-                  label: Text(_einvoiceStatus == 'valid'
-                      ? 'e-Invoice valid'
-                      : 'Submit e-Invoice'),
-                ),
-              ),
-          ],
+          actions: _actions(context, editable: editable, canPost: canPost),
         ),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
