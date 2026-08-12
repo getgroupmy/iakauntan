@@ -730,9 +730,9 @@
     "semantic_hash": ""
   },
   "supabase/tests/ledger.sql": {
-    "mtime": 1786393719.2863894,
-    "ast_hash": "f3893f34cb98c338baff25896b9ad710",
-    "semantic_hash": "f3893f34cb98c338baff25896b9ad710"
+    "mtime": 1786545343.8658667,
+    "ast_hash": "54dadb7049f94a9096c54b4d9c57d54b",
+    "semantic_hash": ""
   },
   "supabase/tests/secretarial.sql": {
     "mtime": 1786516511.6556506,
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786545198.7059808,
-    "ast_hash": "a7d35fc3339146a39195bf4d8f1af253",
+    "mtime": 1786546186.3931496,
+    "ast_hash": "28b3c2cae0b06dfe295c2a0c74fb121e",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786514376.065768,
-    "ast_hash": "8a71f9646eeaf149de52a38c75eccab5",
+    "mtime": 1786546224.5571487,
+    "ast_hash": "90a0c221940e173e9cffb941ba0de9a5",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -977,11 +977,6 @@
   "app/web/icons/Icon-maskable-512.png": {
     "mtime": 1786450112.1028562,
     "ast_hash": "baea673416e0fd86fcf882eeda6113b3",
-    "semantic_hash": ""
-  },
-  ".github/workflows/deploy.yml": {
-    "mtime": 1786508137.8660972,
-    "ast_hash": "5da904faee8d2b513271fe187ec18a63",
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/reset_password_screen.dart": {
@@ -1240,8 +1235,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/fx_revaluation.sql": {
-    "mtime": 1786520700.3574877,
-    "ast_hash": "5e9ef2eee19749cdbe0ecaf522f041c6",
+    "mtime": 1786545343.8661914,
+    "ast_hash": "976b6ced776d1fe75a9bfc2ee2c3ec52",
     "semantic_hash": ""
   },
   "app/lib/src/features/assets/asset_editor.dart": {
@@ -1505,8 +1500,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-akaunting.md": {
-    "mtime": 1786545198.7063143,
-    "ast_hash": "9cdfa04ca8845974bcdb23f565d23500",
+    "mtime": 1786545220.0463133,
+    "ast_hash": "cea96e051922ecac457603ab5b9f33ab",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/email_screen.dart": {
