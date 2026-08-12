@@ -53,7 +53,8 @@ jobs:
                    supabase/tests/fixed_assets.sql \
                    supabase/tests/bank_reconciliation.sql \
                    supabase/tests/credit_control.sql \
-                   supabase/tests/stock_adjustments.sql; do
+                   supabase/tests/stock_adjustments.sql \
+                   supabase/tests/pricing_and_dimensions.sql; do
             echo "== $f"
             psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done

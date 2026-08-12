@@ -56,6 +56,12 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
 
   /// The table was asked and had nothing for this currency and date.
   bool _rateMissing = false;
+
+  /// The job this whole document belongs to, stamped onto every line at
+  /// save time. `gl_lines.project_code` is per line because the ledger
+  /// needs the analysis there; the choice is per document because that
+  /// is how the work actually arrives.
+  String? _projectCode;
   String _status = 'draft';
 
   /// How much of this document has already gone forward. Shown because a
@@ -125,6 +131,9 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _einvoiceStatus = doc.einvoiceStatus;
         _glEntryId = doc.glEntryId;
         _paidAmount = doc.paidAmount;
+        _projectCode = doc.lines
+            .map((l) => l.projectCode)
+            .firstWhere((c) => c != null, orElse: () => null);
         _reference.text = doc.reference ?? '';
         _supplierDocNo.text = doc.supplierDocNo ?? '';
         _notes.text = doc.notes ?? '';
@@ -291,7 +300,10 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
               'currency': _currency,
               'exchange_rate': _exchangeRate ?? 1,
             },
-            lines: validLines.map((l) => l.toJson()).toList(),
+            lines: validLines.map((l) {
+              l.projectCode = _projectCode;
+              return l.toJson();
+            }).toList(),
           );
 
       ref.invalidate(documentsProvider);
@@ -660,6 +672,11 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         rateMissing: _rateMissing,
                         resolvingRate: _resolvingRate,
                         exchangeRate: _exchangeRate,
+                        projectCode: _projectCode,
+                        onProjectChanged: (code) {
+                          setState(() => _projectCode = code);
+                          _markDirty();
+                        },
                         onCurrencyChanged: _changeCurrency,
                         onRateChanged: _onRateTyped,
                         onStoreRate: _storeRate,
@@ -691,6 +708,17 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         lines: _lines,
                         editable: editable,
                         currency: _currency,
+                        // Sales only: a price level is what we charge a
+                        // customer, not what a supplier charges us.
+                        priceFor: _kind.isSales && _contactId != null
+                            ? (itemId, quantity) => ref
+                                .read(repoProvider)!
+                                .itemPrice(
+                                  itemId: itemId,
+                                  contactId: _contactId,
+                                  quantity: quantity,
+                                )
+                            : null,
                         onChanged: _markDirty,
                         onAdd: () {
                           setState(() => _lines.add(LineDraft()));
@@ -911,6 +939,8 @@ class _HeaderCard extends ConsumerWidget {
     required this.rateMissing,
     required this.resolvingRate,
     required this.exchangeRate,
+    required this.projectCode,
+    required this.onProjectChanged,
     required this.onCurrencyChanged,
     required this.onRateChanged,
     required this.onStoreRate,
@@ -935,6 +965,8 @@ class _HeaderCard extends ConsumerWidget {
   final bool rateMissing;
   final bool resolvingRate;
   final double? exchangeRate;
+  final String? projectCode;
+  final ValueChanged<String?> onProjectChanged;
   final ValueChanged<String> onCurrencyChanged;
   final ValueChanged<String> onRateChanged;
   final VoidCallback onStoreRate;
@@ -1028,6 +1060,27 @@ class _HeaderCard extends ConsumerWidget {
             enabled: editable,
             onChanged: onRateChanged,
             onStore: onStoreRate,
+          ),
+          flex: 1
+        ),
+      // Only once projects exist. A dropdown with nothing in it on every
+      // invoice is a control that teaches people to ignore controls.
+      if (ref.watch(projectsProvider).valueOrNull?.isNotEmpty ?? false)
+        (
+          child: DropdownButtonFormField<String?>(
+            value: projectCode,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Project'),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('None')),
+              for (final p in ref.watch(projectsProvider).value ?? const [])
+                DropdownMenuItem(
+                  value: p['code'] as String,
+                  child: Text('${p['code']} · ${p['name']}',
+                      overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: editable ? onProjectChanged : null,
           ),
           flex: 1
         ),

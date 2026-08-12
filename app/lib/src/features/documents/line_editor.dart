@@ -19,11 +19,17 @@ class LineEditorCard extends ConsumerWidget {
     required this.onChanged,
     required this.onAdd,
     required this.onRemove,
+    this.priceFor,
   });
 
   final List<LineDraft> lines;
   final bool editable;
   final String currency;
+
+  /// The price this customer pays for this item at this quantity, or
+  /// null to keep the item's list price. Null on purchase documents,
+  /// where a price level is a sales idea.
+  final Future<double?> Function(String itemId, double quantity)? priceFor;
   final VoidCallback onChanged;
   final VoidCallback onAdd;
   final ValueChanged<int> onRemove;
@@ -63,6 +69,7 @@ class LineEditorCard extends ConsumerWidget {
                       currency: currency,
                       onChanged: onChanged,
                       onRemove: () => onRemove(i),
+                      priceFor: priceFor,
                     )
                   : _NarrowLine(
                       key: ObjectKey(lines[i]),
@@ -74,6 +81,7 @@ class LineEditorCard extends ConsumerWidget {
                       currency: currency,
                       onChanged: onChanged,
                       onRemove: () => onRemove(i),
+                      priceFor: priceFor,
                     ),
           ],
         ),
@@ -116,6 +124,7 @@ class _WideLine extends StatefulWidget {
     required this.currency,
     required this.onChanged,
     required this.onRemove,
+    this.priceFor,
   });
 
   final LineDraft line;
@@ -123,6 +132,7 @@ class _WideLine extends StatefulWidget {
   final List<TaxCode> taxCodes;
   final bool editable;
   final String currency;
+  final Future<double?> Function(String itemId, double quantity)? priceFor;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
 
@@ -159,27 +169,27 @@ class _WideLineState extends State<_WideLine> {
   }
 
   /// Pulls price, tax and classification from the item master so a line
-  /// is correct by default.
-  void _applyItem(Item item) {
+  /// is correct by default, then asks what this customer actually pays.
+  ///
+  /// The list price is applied first and corrected after, rather than
+  /// waiting: the round trip is short but not instant, and a line that
+  /// sits blank while it resolves reads as broken.
+  Future<void> _applyItem(Item item) async {
     setState(() {
-      widget.line
-        ..itemId = item.id
-        ..description = item.name
-        ..unitPrice = item.unitPrice
-        ..uomCode = item.uomCode
-        ..classificationCode = item.classificationCode;
+      applyItemToLine(widget.line, item, widget.taxCodes);
       _description.text = item.name;
       _price.text = item.unitPrice.toString();
+    });
+    widget.onChanged();
 
-      final tax = widget.taxCodes
-          .where((t) => t.id == item.salesTaxCodeId)
-          .firstOrNull ??
-          widget.taxCodes.where((t) => t.isDefault).firstOrNull;
-      if (tax != null) {
-        widget.line
-          ..taxCodeId = tax.id
-          ..taxRate = tax.rate;
-      }
+    final resolved =
+        await widget.priceFor?.call(item.id, widget.line.quantity);
+    if (!mounted || resolved == null || resolved == widget.line.unitPrice) {
+      return;
+    }
+    setState(() {
+      widget.line.unitPrice = resolved;
+      _price.text = resolved.toString();
     });
     widget.onChanged();
   }
@@ -297,12 +307,14 @@ class _NarrowLine extends StatefulWidget {
     required this.currency,
     required this.onChanged,
     required this.onRemove,
+    this.priceFor,
   });
 
   final int index;
   final LineDraft line;
   final List<Item> items;
   final List<TaxCode> taxCodes;
+  final Future<double?> Function(String itemId, double quantity)? priceFor;
   final bool editable;
   final String currency;
   final VoidCallback onChanged;
@@ -340,6 +352,28 @@ class _NarrowLineState extends State<_NarrowLine> {
     super.dispose();
   }
 
+  /// The same as the wide row: item defaults first, then what this
+  /// customer actually pays.
+  Future<void> _applyItem(Item item) async {
+    setState(() {
+      applyItemToLine(widget.line, item, widget.taxCodes);
+      _description.text = item.name;
+      _price.text = item.unitPrice.toString();
+    });
+    widget.onChanged();
+
+    final resolved =
+        await widget.priceFor?.call(item.id, widget.line.quantity);
+    if (!mounted || resolved == null || resolved == widget.line.unitPrice) {
+      return;
+    }
+    setState(() {
+      widget.line.unitPrice = resolved;
+      _price.text = resolved.toString();
+    });
+    widget.onChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
     final totals = widget.line.totals;
@@ -373,19 +407,7 @@ class _NarrowLineState extends State<_NarrowLine> {
             controller: _description,
             items: widget.items,
             editable: widget.editable,
-            onItemSelected: (item) {
-              setState(() {
-                widget.line
-                  ..itemId = item.id
-                  ..description = item.name
-                  ..unitPrice = item.unitPrice
-                  ..uomCode = item.uomCode
-                  ..classificationCode = item.classificationCode;
-                _description.text = item.name;
-                _price.text = item.unitPrice.toString();
-              });
-              widget.onChanged();
-            },
+            onItemSelected: _applyItem,
             onTextChanged: (v) {
               widget.line.description = v;
               widget.onChanged();

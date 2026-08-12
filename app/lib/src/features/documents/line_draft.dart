@@ -16,6 +16,7 @@ class LineDraft {
     this.isTaxInclusive = false,
     this.warehouseId,
     this.sourceLineId,
+    this.projectCode,
   });
 
   String? itemId;
@@ -34,6 +35,12 @@ class LineDraft {
   /// only carried, so that saving the document does not sever the link
   /// and hand the quantity back to the order it came off.
   final String? sourceLineId;
+
+  /// The job this line belongs to. Set from the document rather than
+  /// per line: the column is per line because the ledger needs it there,
+  /// but nobody splits one invoice across two jobs often enough to give
+  /// every line its own picker.
+  String? projectCode;
 
   ({double net, double tax, double total}) get totals => computeLine(
         quantity: quantity,
@@ -58,6 +65,7 @@ class LineDraft {
         'classification_code': classificationCode,
         'warehouse_id': warehouseId,
         'source_line_id': sourceLineId,
+        'project_code': projectCode,
       };
 
   factory LineDraft.fromLine(DocumentLine l) => LineDraft(
@@ -73,7 +81,32 @@ class LineDraft {
         isTaxInclusive: l.isTaxInclusive,
         warehouseId: l.warehouseId,
         sourceLineId: l.sourceLineId,
+        projectCode: l.projectCode,
       );
+}
+
+/// Fills a line from the item master: price, unit, classification and the
+/// tax code the item carries.
+///
+/// Shared by the wide row and the narrow card because they were doing it
+/// separately and had already drifted — the narrow one set everything
+/// except the tax code, so a line added on a phone silently carried no
+/// SST.
+void applyItemToLine(LineDraft line, Item item, List<TaxCode> taxCodes) {
+  line
+    ..itemId = item.id
+    ..description = item.name
+    ..unitPrice = item.unitPrice
+    ..uomCode = item.uomCode
+    ..classificationCode = item.classificationCode;
+
+  final tax = taxCodes.where((t) => t.id == item.salesTaxCodeId).firstOrNull ??
+      taxCodes.where((t) => t.isDefault).firstOrNull;
+  if (tax != null) {
+    line
+      ..taxCodeId = tax.id
+      ..taxRate = tax.rate;
+  }
 }
 
 /// Mirrors app.calc_document_line() so the editor can show live totals

@@ -126,6 +126,7 @@ class Contact {
     this.currency = 'MYR',
     this.creditLimit = 0,
     this.paymentTermId,
+    this.priceLevelId,
     this.isActive = true,
     this.entityType = 'sdn_bhd',
   });
@@ -153,6 +154,10 @@ class Contact {
   final String currency;
   final double creditLimit;
   final String? paymentTermId;
+
+  /// Which price list this customer buys on. Null falls back to the
+  /// organization's default level, and then to the item's list price.
+  final String? priceLevelId;
   final bool isActive;
   final String entityType;
 
@@ -186,6 +191,7 @@ class Contact {
         currency: j['currency']?.toString() ?? 'MYR',
         creditLimit: Fmt.toDouble(j['credit_limit']),
         paymentTermId: j['payment_term_id'] as String?,
+        priceLevelId: j['price_level_id'] as String?,
         isActive: j['is_active'] != false,
         entityType: j['entity_type']?.toString() ?? 'sdn_bhd',
       );
@@ -211,6 +217,7 @@ class Contact {
         'country_code': countryCode,
         'currency': currency,
         'credit_limit': creditLimit,
+        'price_level_id': priceLevelId,
         'is_active': isActive,
         'entity_type': entityType,
       };
@@ -805,6 +812,7 @@ class DocumentLine {
     this.isTaxInclusive = false,
     this.warehouseId,
     this.sourceLineId,
+    this.projectCode,
   });
 
   final String? id;
@@ -830,6 +838,7 @@ class DocumentLine {
   /// and a line that came back without it would release the quantity on
   /// the order it came from — which could then be ordered twice.
   final String? sourceLineId;
+  final String? projectCode;
 
   factory DocumentLine.fromJson(Map<String, dynamic> j) => DocumentLine(
         id: j['id'] as String?,
@@ -850,6 +859,7 @@ class DocumentLine {
         isTaxInclusive: j['is_tax_inclusive'] == true,
         warehouseId: j['warehouse_id'] as String?,
         sourceLineId: j['source_line_id'] as String?,
+        projectCode: j['project_code'] as String?,
       );
 }
 

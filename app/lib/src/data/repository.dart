@@ -57,6 +57,28 @@ class Repo {
     return _rows(data);
   }
 
+  /// The same P&L, restricted to one project or department. Passing
+  /// neither gives the whole company, so this can serve both.
+  Future<List<Map<String, dynamic>>> profitLossByDimension({
+    required DateTime from,
+    required DateTime to,
+    String? projectCode,
+    String? departmentCode,
+  }) async {
+    final data = await client.rpc('report_profit_loss_by_dimension', params: {
+      'p_org_id': orgId,
+      'p_from': Fmt.iso(from),
+      'p_to': Fmt.iso(to),
+      if (projectCode != null) 'p_project_code': projectCode,
+      if (departmentCode != null) 'p_department_code': departmentCode,
+    });
+    return _rows(data);
+  }
+
+  /// Which project and department codes actually appear in the ledger.
+  Future<List<Map<String, dynamic>>> ledgerDimensions() async =>
+      _rows(await client.rpc('ledger_dimensions', params: {'p_org_id': orgId}));
+
   Future<List<Map<String, dynamic>>> balanceSheet({DateTime? asAt}) async {
     final data = await client.rpc('report_balance_sheet', params: {
       'p_org_id': orgId,
@@ -294,6 +316,89 @@ class Repo {
       rethrow;
     }
   }
+
+  // ------------------------------------------------------------------
+  // Recurring journals
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> recurringJournals() async =>
+      _rows(await client
+          .from('recurring_journals')
+          .select()
+          .eq('org_id', orgId)
+          .order('name'));
+
+  Future<void> saveRecurringJournal({
+    String? id,
+    required String name,
+    required String frequency,
+    required int intervalCount,
+    required DateTime nextRun,
+    required bool autoPost,
+    required bool isActive,
+    required List<Map<String, dynamic>> lines,
+  }) async {
+    final payload = {
+      'org_id': orgId,
+      'name': name,
+      'frequency': frequency,
+      'interval_count': intervalCount,
+      'start_date': Fmt.iso(nextRun),
+      'next_run_date': Fmt.iso(nextRun),
+      'auto_post': autoPost,
+      'is_active': isActive,
+      'template': {'lines': lines},
+      // Clearing the last failure on save: whatever it was, the template
+      // has just been edited and the old message describes a version
+      // that no longer exists.
+      'last_error': null,
+      'last_error_at': null,
+    };
+
+    if (id == null) {
+      await client.from('recurring_journals').insert(payload);
+    } else {
+      await client.from('recurring_journals').update(payload).eq('id', id);
+    }
+  }
+
+  /// Runs anything due for this organization now, rather than waiting
+  /// for the nightly job. Returns how many ran.
+  Future<int> runRecurringJournals({DateTime? on}) async {
+    final data = await client.rpc('run_recurring_journals_for', params: {
+      'p_org_id': orgId,
+      if (on != null) 'p_on': Fmt.iso(on),
+    });
+    return (data as num?)?.toInt() ?? 0;
+  }
+
+  /// What this customer pays for this item at this quantity: a price
+  /// named for their level, a level-wide percentage, or the list price.
+  Future<double> itemPrice({
+    required String itemId,
+    String? contactId,
+    double quantity = 1,
+  }) async {
+    final data = await client.rpc('item_price', params: {
+      'p_item_id': itemId,
+      if (contactId != null) 'p_contact_id': contactId,
+      'p_quantity': quantity,
+    });
+    return Fmt.toDouble(data);
+  }
+
+  Future<List<Map<String, dynamic>>> priceLevels() async => _rows(await client
+      .from('price_levels')
+      .select()
+      .eq('org_id', orgId)
+      .eq('is_active', true)
+      .order('code'));
+
+  Future<List<Map<String, dynamic>>> projects() async => _rows(await client
+      .from('projects')
+      .select()
+      .eq('org_id', orgId)
+      .eq('is_active', true)
+      .order('code'));
 
   // ------------------------------------------------------------------
   // Stock

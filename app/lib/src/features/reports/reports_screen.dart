@@ -26,6 +26,11 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
     end: DateTime.now(),
   );
 
+  /// Project code the P&L is restricted to, or null for the whole
+  /// company. Only the P&L takes it: a balance sheet for one job is a
+  /// different report, not this one with a filter.
+  String? _project;
+
   @override
   void initState() {
     super.initState();
@@ -41,13 +46,41 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
     super.dispose();
   }
 
+  /// The project chooser, built from the codes the ledger actually
+  /// holds rather than from every project ever created.
+  Widget _projectFilter() {
+    final dimensions = ref.watch(_dimensionsProvider).valueOrNull ?? const [];
+    final projects = [
+      for (final d in dimensions)
+        if (d['kind'] == 'project') d['code'] as String,
+    ];
+    if (projects.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: DropdownButton<String?>(
+        value: _project,
+        hint: const Text('All projects'),
+        underline: const SizedBox.shrink(),
+        items: [
+          const DropdownMenuItem(value: null, child: Text('All projects')),
+          for (final code in projects)
+            DropdownMenuItem(value: code, child: Text(code)),
+        ],
+        onChanged: (v) => setState(() => _project = v),
+      ),
+    );
+  }
+
   /// The spec for the tab currently showing, or null while its data is
   /// still loading or failed. Null is what disables the download button:
   /// a PDF of a half-loaded report is worse than no PDF.
   ReportSpec? get _visibleSpec {
     switch (_tabs.index) {
       case 0:
-        final rows = ref.watch(_profitLossProvider(_range)).valueOrNull;
+        final rows = ref
+            .watch(_profitLossProvider((range: _range, project: _project)))
+            .valueOrNull;
         return rows == null ? null : profitLossSpec(rows, _range);
       case 1:
         final rows = ref.watch(_balanceSheetProvider(_range.end)).valueOrNull;
@@ -100,6 +133,10 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
             icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
             onPressed: spec == null ? null : () => _download(spec),
           ),
+          // Only on the P&L, and only once something in the ledger
+          // actually carries a project code — an empty dropdown on every
+          // report is a control that teaches people to ignore it.
+          if (_tabs.index == 0) _projectFilter(),
           Padding(
             padding: const EdgeInsets.only(right: 12, left: 4),
             child: OutlinedButton.icon(
@@ -135,7 +172,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
         controller: _tabs,
         children: [
           _Report(
-            provider: _profitLossProvider(_range),
+            provider: _profitLossProvider((range: _range, project: _project)),
             spec: (rows) => profitLossSpec(rows, _range),
             empty: const EmptyState(
               icon: Icons.summarize_outlined,
@@ -436,9 +473,25 @@ class _Highlight extends StatelessWidget {
   }
 }
 
+/// Keyed by period *and* project, so switching job restates the report
+/// rather than showing the last one until it reloads.
+///
+/// Always the by-dimension function, even with no project chosen: with
+/// null it returns exactly what the plain report does, and one code path
+/// cannot drift from the other.
 final _profitLossProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, DateTimeRange>((ref, range) {
-  return requireRepo(ref).profitLoss(from: range.start, to: range.end);
+    .family<List<Map<String, dynamic>>, ({DateTimeRange range, String? project})>(
+        (ref, args) {
+  return requireRepo(ref).profitLossByDimension(
+    from: args.range.start,
+    to: args.range.end,
+    projectCode: args.project,
+  );
+});
+
+final _dimensionsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).ledgerDimensions();
 });
 
 final _balanceSheetProvider = FutureProvider.autoDispose

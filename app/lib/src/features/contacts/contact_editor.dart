@@ -25,6 +25,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
   final _controllers = <String, TextEditingController>{};
 
   String _contactType = 'customer';
+  String? _priceLevelId;
   bool _statementBusy = false;
   String _entityType = 'sdn_bhd';
   String _idType = 'BRN';
@@ -93,6 +94,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         _c('postcode').text = contact.postcode ?? '';
         _c('creditLimit').text = contact.creditLimit.toStringAsFixed(2);
         _contactType = contact.contactType;
+        _priceLevelId = contact.priceLevelId;
         _entityType = contact.entityType;
         _idType = contact.idType ?? 'BRN';
         _stateCode = contact.stateCode;
@@ -176,6 +178,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         stateCode: _stateCode,
         entityType: _entityType,
         creditLimit: double.tryParse(_c('creditLimit').text) ?? 0,
+        priceLevelId: _priceLevelId,
       );
 
   static String? _nullIfEmpty(String v) => v.trim().isEmpty ? null : v.trim();
@@ -499,8 +502,35 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                         decoration: const InputDecoration(
                           labelText: 'Credit limit',
                           prefixText: 'RM ',
+                          helperText: 'Zero means no limit',
                         ),
                       ),
+                      const SizedBox(height: 14),
+                      // Only for customers: a price level is what we
+                      // charge, not what a supplier charges us.
+                      if (_contactType != 'supplier')
+                        DropdownButtonFormField<String?>(
+                          value: _priceLevelId,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Price level',
+                            helperText: 'What this customer is quoted',
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                                value: null, child: Text('Standard')),
+                            for (final l
+                                in ref.watch(priceLevelsProvider).value ??
+                                    const [])
+                              DropdownMenuItem(
+                                value: l['id'] as String,
+                                child: Text(l['name'] as String,
+                                    overflow: TextOverflow.ellipsis),
+                              ),
+                          ],
+                          onChanged: (v) =>
+                              setState(() => _priceLevelId = v),
+                        ),
                       const SizedBox(height: 40),
                     ],
                   ),

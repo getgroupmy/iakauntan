@@ -286,6 +286,20 @@ final customerCreditProvider = FutureProvider.autoDispose
   return requireRepo(ref).customerCreditStatus(contactId);
 });
 
+final recurringJournalsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).recurringJournals();
+});
+
+final priceLevelsProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).priceLevels();
+});
+
+final projectsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).projects();
+});
+
 final warehousesProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).warehouses();

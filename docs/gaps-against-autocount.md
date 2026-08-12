@@ -75,11 +75,11 @@ design. The rest are capabilities nobody can reach:
 | Capability | Tables in the schema | Callable? |
 | --- | --- | --- |
 | ~~Bank reconciliation~~ | `bank_reconciliations`, `bank_transactions` | Done — `0085` |
-| **Multi-location stock** | `warehouses`, `stock_levels.warehouse_id`, `purchase_document_lines.warehouse_id` | No UI. Every movement lands in one implied place |
-| **Stock adjustment / stock take** | `stock_adjustments`, `stock_adjustment_lines` | No UI **and no `post_stock_adjustment` function** — unreachable even from SQL |
-| **Recurring journals** | `recurring_journals`, run nightly by `app.run_recurring_journals` via the `iakauntan-daily` cron | The runner works; nothing can create a template to run |
-| **Price levels** | `price_levels`, `item_prices` | No UI. Line editor reads `items.unit_price` only |
-| **Project / department dimensions** | `gl_lines.project_code`, `.department_code`, and the same on both line tables | No UI, no `projects` table, no filtered P&L |
+| ~~Multi-location stock~~ | `warehouses`, `stock_levels.warehouse_id` | Done — `0087` |
+| ~~Stock adjustment / stock take~~ | `stock_adjustments`, `stock_adjustment_lines` | Done — `0087` |
+| ~~Recurring journals~~ | `recurring_journals` | Done — `0088` |
+| ~~Price levels~~ | `price_levels`, `item_prices` | Done — `0088` |
+| ~~Project / department dimensions~~ | `gl_lines.project_code`, `.department_code` | Done — `0088`: a `projects` table, a picker on the document, and a P&L per job |
 | **Sales agent** | `sales_documents.salesperson_id` | No UI, so no commission or agent report is possible |
 | **Item categories** | `item_categories` | No UI |
 
@@ -144,10 +144,9 @@ Ranked by how many businesses each unblocks, not by size:
    suggested matches and a reconciliation that refuses to close while it
    is out.
 5. ~~**Credit control.**~~ Done — `0086`, off/warn/block per company.
-6. **Stock adjustment and warehouses.** Needs a posting function as well
-   as a UI, so it is larger than it looks.
-7. **Price levels, project/department dimensions, recurring journal UI.**
-   Each is a screen over storage that already works.
+6. ~~**Stock adjustment and warehouses.**~~ Done — `0087`.
+7. ~~**Price levels, project/department dimensions, recurring journal
+   UI.**~~ Done — `0088`.
 8. **Multi-UOM, then serial/batch, then assembly.** Only if trading and
    light manufacturing are the target. These are real projects.
 

@@ -72,6 +72,7 @@ const _destinations = <_Dest>[
   _Dest('Fixed assets', Icons.inventory_2_outlined, Icons.inventory_2,
       '/assets'),
   _Dest('Journals', Icons.menu_book_outlined, Icons.menu_book, '/journals'),
+  _Dest('Recurring', Icons.repeat, Icons.repeat_on, '/recurring'),
   _Dest('Reports', Icons.bar_chart_outlined, Icons.bar_chart, '/reports'),
   _Dest('Team', Icons.manage_accounts_outlined, Icons.manage_accounts, '/team'),
   _Dest('Settings', Icons.settings_outlined, Icons.settings, '/settings'),
