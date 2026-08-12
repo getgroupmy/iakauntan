@@ -945,6 +945,20 @@ extension RepoOrgLogo on Repo {
     }
   }
 
+  /// Where a customer stands against their credit limit, in base
+  /// currency. Null limit means no limit was set.
+  Future<Map<String, dynamic>> customerCreditStatus(String contactId) async {
+    final data = await client
+        .rpc('customer_credit_status', params: {'p_contact_id': contactId});
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  /// off | warn | block — what happens when an invoice would take a
+  /// customer past their limit.
+  Future<void> setCreditControl(String mode) => client
+      .from('organizations')
+      .update({'credit_control': mode}).eq('id', orgId);
+
   /// Whether the generated PDFs should leave room for a header already
   /// printed on the paper. RLS lets only an administrator through, which
   /// is the same bar as replacing the logo.

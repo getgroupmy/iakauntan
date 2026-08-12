@@ -98,7 +98,7 @@ build-from-nothing work:
 | ~~Fixed asset register and depreciation~~ | Done — `0084`. Capital allowances remain a separate exercise; this is the accounting charge | Everyone |
 | **Budgets** | AutoCount has Budget Maintenance and budget-vs-actual reporting; iAkauntan has no budget anywhere | Anyone with a board |
 | **AR/AP contra** | Offsetting a customer who is also a supplier. Common in Malaysian trading, and today it must be faked with a journal | Trading |
-| **Credit control** | `contacts.credit_limit` is captured and stored and **never checked**. Nothing warns or blocks when an invoice takes a customer past their limit — the field is decorative | Anyone extending credit |
+| ~~Credit control~~ | Done — `0086`. Off, warn or block, per company | Anyone extending credit |
 | **Customer/supplier deposits** | `receipts.unapplied_amount` holds an advance, but there is no deposit entry, no forfeit, no application flow | Trading, projects |
 | **Cash flow forecast** | AutoCount's Advanced Financial Report module leads on this; iAkauntan has no forward view at all | Everyone |
 | **Multi-UOM** | `items` has a single `uom_code`. No conversion, so cartons and pieces cannot coexist | Distribution |
@@ -143,8 +143,7 @@ Ranked by how many businesses each unblocks, not by size:
 4. ~~**Bank reconciliation.**~~ Done — `0085`, with CSV import,
    suggested matches and a reconciliation that refuses to close while it
    is out.
-5. **Credit control.** Smallest job here: check the limit before posting
-   an invoice and say so. The field is already collected.
+5. ~~**Credit control.**~~ Done — `0086`, off/warn/block per company.
 6. **Stock adjustment and warehouses.** Needs a posting function as well
    as a UI, so it is larger than it looks.
 7. **Price levels, project/department dimensions, recurring journal UI.**

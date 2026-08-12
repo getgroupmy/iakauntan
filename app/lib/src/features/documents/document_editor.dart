@@ -630,6 +630,10 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // Only on the sales side, only once a customer is
+                      // chosen, and only when a limit was actually set.
+                      if (_kind.isSales && _contactId != null && !_isPosted)
+                        _CreditBanner(contactId: _contactId!),
                       if (transferred && !_isPosted)
                         _TransferredBanner(status: _fulfilment),
                       if (_isPosted)
@@ -715,6 +719,77 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                   ),
                 ),
               ),
+      ),
+    );
+  }
+}
+
+/// Where the customer stands against their credit limit.
+///
+/// `contacts.credit_limit` was collected and never read for the whole
+/// life of this app. The point of showing it here is that the moment to
+/// know somebody is at their limit is while the invoice is being typed,
+/// not after it has been posted and sent.
+///
+/// Silent when no limit is set, when the organization has credit control
+/// off, and when there is room left — a line saying "RM 8,000 available"
+/// on every invoice is a line nobody reads.
+class _CreditBanner extends ConsumerWidget {
+  const _CreditBanner({required this.contactId});
+
+  final String contactId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(customerCreditProvider(contactId)).valueOrNull;
+    if (status == null) return const SizedBox.shrink();
+
+    final control = status['control']?.toString() ?? 'warn';
+    final limit = Fmt.toDouble(status['credit_limit']);
+    if (control == 'off' || limit <= 0) return const SizedBox.shrink();
+
+    final over = status['over_limit'] == true;
+    final available = Fmt.toDouble(status['available']);
+    // Quiet until it is close, because a warning shown every time is a
+    // warning nobody sees when it matters.
+    if (!over && available > limit * 0.1) return const SizedBox.shrink();
+
+    final colour = over ? context.colors.danger : context.colors.warning;
+    const blockedNote = '. Posting past it is blocked.';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(Space.lg),
+          child: Row(
+            children: [
+              Icon(over ? Icons.credit_card_off : Icons.credit_card,
+                  size: 20, color: colour),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      over
+                          ? 'Over their credit limit by '
+                              '${Fmt.money(-available)}'
+                          : '${Fmt.money(available)} of credit left',
+                      style: TextStyle(fontWeight: FontWeight.w600, color: colour),
+                    ),
+                    Text(
+                      'Owes ${Fmt.money(Fmt.toDouble(status['outstanding']))} '
+                      'against a limit of ${Fmt.money(limit)}'
+                      '${control == 'block' ? blockedNote : ''}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

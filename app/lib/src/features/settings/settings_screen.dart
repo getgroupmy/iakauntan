@@ -49,6 +49,8 @@ class SettingsScreen extends ConsumerWidget {
                   const SizedBox(height: 16),
                   _FiscalYearsCard(canAdmin: isAdmin),
                   const SizedBox(height: 16),
+                  _CreditControlCard(org: organization, canAdmin: isAdmin),
+                  const SizedBox(height: 16),
                   if (organization.baseCurrency.isNotEmpty)
                     _ForeignBalancesCard(org: organization, canPost: canPost),
                   const SizedBox(height: 16),
@@ -371,6 +373,69 @@ class _ModulesCard extends ConsumerWidget {
   }
 }
 
+/// What happens when an invoice would take a customer past their limit.
+///
+/// Defaults to warn rather than block. Turning blocking on for books
+/// that have been running for a year, where nobody has revisited the
+/// limits, would start bouncing invoices — a change to the business,
+/// not a setting.
+class _CreditControlCard extends ConsumerWidget {
+  const _CreditControlCard({required this.org, required this.canAdmin});
+
+  final Organization org;
+  final bool canAdmin;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionHeader(
+              'Credit control',
+              subtitle: 'A credit limit of zero on a customer means no limit',
+            ),
+            SegmentedButton<String>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: 'off', label: Text('Ignore')),
+                ButtonSegment(value: 'warn', label: Text('Warn')),
+                ButtonSegment(value: 'block', label: Text('Block')),
+              ],
+              selected: {org.creditControl},
+              onSelectionChanged: canAdmin
+                  ? (s) async {
+                      await runWithFeedback(
+                        context,
+                        action: () =>
+                            ref.read(repoProvider)!.setCreditControl(s.first),
+                        successMessage: 'Credit control updated',
+                      );
+                      ref.invalidate(currentOrgProvider);
+                    }
+                  : null,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              switch (org.creditControl) {
+                'off' => 'Limits are recorded and never checked.',
+                'block' =>
+                  'An invoice that would take a customer past their limit '
+                      'cannot be posted.',
+                _ => 'The invoice screen says when a customer is at or past '
+                    'their limit. Posting still goes ahead.',
+              },
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Restating what the open foreign balances are worth.
 ///
 /// Sits beside the fiscal years because it is the same job: the things
@@ -424,7 +489,7 @@ class _ForeignBalancesCardState extends ConsumerState<_ForeignBalancesCard> {
               data: (rows) => rows.isEmpty
                   ? Text(
                       'Nothing open in a currency other than '
-                      '\${widget.org.baseCurrency}.',
+                      '${widget.org.baseCurrency}.',
                       style: Theme.of(context).textTheme.bodySmall,
                     )
                   : Column(
@@ -469,12 +534,12 @@ class _ForeignBalancesCardState extends ConsumerState<_ForeignBalancesCard> {
       title: 'Post the revaluation?',
       message: net >= 0
           ? 'This posts an unrealised gain of '
-              '\${Fmt.money(net, currency: widget.org.baseCurrency)} '
-              'as at \${Fmt.date(_asAt)}, and reverses the previous '
+              '${Fmt.money(net, currency: widget.org.baseCurrency)} '
+              'as at ${Fmt.date(_asAt)}, and reverses the previous '
               'revaluation if there is one standing.'
           : 'This posts an unrealised loss of '
-              '\${Fmt.money(-net, currency: widget.org.baseCurrency)} '
-              'as at \${Fmt.date(_asAt)}, and reverses the previous '
+              '${Fmt.money(-net, currency: widget.org.baseCurrency)} '
+              'as at ${Fmt.date(_asAt)}, and reverses the previous '
               'revaluation if there is one standing.',
       confirmLabel: 'Post',
     );
@@ -510,11 +575,11 @@ class _CurrencyRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('\${row.currency} at \${Fmt.rate(row.closingRate)}',
+                Text('${row.currency} at ${Fmt.rate(row.closingRate)}',
                     style: const TextStyle(fontWeight: FontWeight.w600)),
                 Text(
-                  '\${row.documents} open · carried at '
-                  '\${Fmt.money(row.booked, currency: base)}',
+                  '${row.documents} open · carried at '
+                  '${Fmt.money(row.booked, currency: base)}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],

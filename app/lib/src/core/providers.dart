@@ -279,6 +279,13 @@ final currenciesProvider = FutureProvider<List<Currency>>((ref) {
   return requireRepo(ref).currencies();
 });
 
+/// Where a customer stands against their credit limit. Family keyed by
+/// contact so switching customers on a document refetches.
+final customerCreditProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, String>((ref, contactId) {
+  return requireRepo(ref).customerCreditStatus(contactId);
+});
+
 final fixedAssetsProvider =
     FutureProvider.autoDispose.family<List<FixedAsset>, bool>(
         (ref, includeDisposed) {

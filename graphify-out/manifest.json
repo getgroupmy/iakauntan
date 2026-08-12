@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786521308.574124,
-    "ast_hash": "f457d591a818e4d7cb8e69fc0fdc8c5e",
+    "mtime": 1786522226.1364331,
+    "ast_hash": "6d7a5440914e2b4f2fa7e1c35104d913",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1786521287.2745183,
-    "ast_hash": "c3122cf7ad627c0842efad73842de0ef",
+    "mtime": 1786522226.1368952,
+    "ast_hash": "af22d08598e931dcbb308c8af31bb238",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786521856.9962091,
-    "ast_hash": "296e085c0728f7249351b95148820244",
+    "mtime": 1786522226.1360624,
+    "ast_hash": "82a5a6e6061d357612b9f60d50e153db",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -150,8 +150,8 @@
     "semantic_hash": "88f373b2bbe85ad1d830bbd9c2bf8c6c"
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1786520295.6145663,
-    "ast_hash": "bef97c59f192b7ec8a1e9807dfcf437f",
+    "mtime": 1786522293.8560882,
+    "ast_hash": "6ef8cc31c9f3952150318da18bf44abd",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1786520791.458621,
-    "ast_hash": "c19a29b7687af529845c77aef4fb7831",
+    "mtime": 1786522332.6212761,
+    "ast_hash": "708b91e831e88b8d0d87c167b7a83dd6",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786521819.237906,
-    "ast_hash": "0ee5bacd28808ffcd6d964b57fbf5c8a",
+    "mtime": 1786522212.6160588,
+    "ast_hash": "b3aba506cee40e490f4b98104c3f262b",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1195,8 +1195,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-autocount.md": {
-    "mtime": 1786521563.3827257,
-    "ast_hash": "5790a591cd1832f6352f97f10f852ec2",
+    "mtime": 1786522382.4349735,
+    "ast_hash": "9f708929bf4b75aaac40fde06b0d5550",
     "semantic_hash": ""
   },
   "docs/migrating-from-autocount.md": {
@@ -1302,6 +1302,21 @@
   "supabase/tests/bank_reconciliation.sql": {
     "mtime": 1786521819.227411,
     "ast_hash": "12d5a19a8f518dac36a2d24860a1a4a2",
+    "semantic_hash": ""
+  },
+  "app/test/no_dead_interpolation_test.dart": {
+    "mtime": 1786522311.7401903,
+    "ast_hash": "446a2868c17871da4653c06cef1e122c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0086_credit_control.sql": {
+    "mtime": 1786522128.852198,
+    "ast_hash": "47ac59c11b88cbfbfcbfc79ad8e0fc2e",
+    "semantic_hash": ""
+  },
+  "supabase/tests/credit_control.sql": {
+    "mtime": 1786522212.6001945,
+    "ast_hash": "4b0ea210ffd152db10f25984df389ddc",
     "semantic_hash": ""
   }
 }

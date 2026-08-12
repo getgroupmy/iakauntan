@@ -27,6 +27,7 @@ class Organization {
     this.baseCurrency = 'MYR',
     this.isSstRegistered = false,
     this.usesPreprintedLetterhead = false,
+    this.creditControl = 'warn',
     this.einvoiceEnabled = false,
     this.einvoiceEnvironment = 'sandbox',
     this.entityType = 'sdn_bhd',
@@ -58,6 +59,10 @@ class Organization {
   /// The company prints onto its own letterhead paper, so the generated
   /// PDFs leave room for a header rather than drawing one.
   final bool usesPreprintedLetterhead;
+
+  /// off | warn | block — what happens when an invoice would take a
+  /// customer past their credit limit.
+  final String creditControl;
 
   final bool einvoiceEnabled;
   final String einvoiceEnvironment;
