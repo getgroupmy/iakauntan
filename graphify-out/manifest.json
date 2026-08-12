@@ -1195,8 +1195,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-autocount.md": {
-    "mtime": 1786522382.4349735,
-    "ast_hash": "9f708929bf4b75aaac40fde06b0d5550",
+    "mtime": 1786524060.3156245,
+    "ast_hash": "15eec021b58fc4d6e2cfbef76797d988",
     "semantic_hash": ""
   },
   "docs/migrating-from-autocount.md": {
@@ -1347,6 +1347,16 @@
   "supabase/tests/pricing_and_dimensions.sql": {
     "mtime": 1786523522.4737241,
     "ast_hash": "7789e106abf08dacb1d7a4aa15cdfaad",
+    "semantic_hash": ""
+  },
+  "scripts/reachability.py": {
+    "mtime": 1786524640.0931358,
+    "ast_hash": "8777da0c21a7c8ea6fcbbb247560b1fe",
+    "semantic_hash": ""
+  },
+  "docs/unreachable.md": {
+    "mtime": 1786524596.464095,
+    "ast_hash": "9a66bdceceaee1944115969bbcd9edcd",
     "semantic_hash": ""
   }
 }
