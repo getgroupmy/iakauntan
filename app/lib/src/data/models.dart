@@ -1598,6 +1598,7 @@ class ExpenseClaim {
     this.approvedAmount = 0,
     this.paidAt,
     this.payWithPayroll = true,
+    this.glEntryId,
   });
 
   final String id;
@@ -1610,6 +1611,17 @@ class ExpenseClaim {
   final double approvedAmount;
   final DateTime? paidAt;
   final bool payWithPayroll;
+
+  /// The journal this claim posted, once it has. Null on an approved
+  /// claim means the expense has been agreed and has not yet reached the
+  /// ledger.
+  final String? glEntryId;
+
+  /// Approved, not reimbursed with payroll, and not yet in the ledger —
+  /// so somebody has to post it, and until the claims screen grew a Post
+  /// action nobody could.
+  bool get awaitingPosting =>
+      status == 'approved' && !payWithPayroll && glEntryId == null;
 
   factory ExpenseClaim.fromJson(Map<String, dynamic> j) {
     final emp = j['employees'];
@@ -1624,6 +1636,7 @@ class ExpenseClaim {
       approvedAmount: Fmt.toDouble(j['approved_amount']),
       paidAt: Fmt.parseDate(j['paid_at']),
       payWithPayroll: j['pay_with_payroll'] != false,
+      glEntryId: j['gl_entry_id'] as String?,
     );
   }
 }

@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1786523983.208336,
-    "ast_hash": "0d5037a9767aea603856c592e5009064",
+    "mtime": 1786525643.4240515,
+    "ast_hash": "9ddaadc6f25162ee6bd4dc1c3729cbdc",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786523847.153513,
-    "ast_hash": "2f47ab1e6addb2521c86ab55543bb9c3",
+    "mtime": 1786525650.7760513,
+    "ast_hash": "a3328b87a0cb7db008850912b0eca08e",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -185,8 +185,8 @@
     "semantic_hash": "f521ad6ddd2a0ecf7cc7fd904dd50c8f"
   },
   "app/lib/src/features/hr/claims_screen.dart": {
-    "mtime": 1786505376.9642222,
-    "ast_hash": "c44106528e78d142de8276cbfd398cf0",
+    "mtime": 1786525712.7680488,
+    "ast_hash": "606dd4973635692db6bc45919a40b5e1",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/employee_editor.dart": {
@@ -245,9 +245,9 @@
     "semantic_hash": "5045abb70acacee7b062353157728e41"
   },
   "app/lib/src/features/ledger/journals_screen.dart": {
-    "mtime": 1786393522.7983937,
-    "ast_hash": "13972820406145ed5016cb6a9703f84c",
-    "semantic_hash": "13972820406145ed5016cb6a9703f84c"
+    "mtime": 1786525187.5680707,
+    "ast_hash": "45761dc71db93f6b9bf7232ad1df8acb",
+    "semantic_hash": ""
   },
   "app/lib/src/features/legal/matter_detail_screen.dart": {
     "mtime": 1786328947.805605,
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786523522.4849045,
-    "ast_hash": "f954ece777230d3e89c0d3df34e21b6e",
+    "mtime": 1786525955.0400386,
+    "ast_hash": "04477c12856022308077a45724b49302",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1355,8 +1355,38 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1786524596.464095,
-    "ast_hash": "9a66bdceceaee1944115969bbcd9edcd",
+    "mtime": 1786526015.2284317,
+    "ast_hash": "7fd1e5082aa297d5dd84362a6799302e",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/ledger/journal_editor.dart": {
+    "mtime": 1786525168.1480715,
+    "ast_hash": "f6f7d7faeff03572d6007c0e251ae7d2",
+    "semantic_hash": ""
+  },
+  "app/test/journal_problem_test.dart": {
+    "mtime": 1786525205.23207,
+    "ast_hash": "c2338b1dda8d39b230d88593544a2b8a",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0089_manual_journal.sql": {
+    "mtime": 1786525326.7840648,
+    "ast_hash": "7fe711d846d43296128551cb6cb0bcaf",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0090_claim_allocation_rounding.sql": {
+    "mtime": 1786525619.1840527,
+    "ast_hash": "731bd9c704317b2934b83327a1e2ac75",
+    "semantic_hash": ""
+  },
+  "supabase/tests/expense_claims.sql": {
+    "mtime": 1786525885.2807112,
+    "ast_hash": "c9255e27b9dc5331c0bcee6e0ce3cfeb",
+    "semantic_hash": ""
+  },
+  "supabase/tests/manual_journal.sql": {
+    "mtime": 1786525472.3125095,
+    "ast_hash": "41051c5b1f4e0cdb31b091d2c0f44783",
     "semantic_hash": ""
   }
 }

@@ -8,9 +8,15 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 
-/// Expense claims. An approved claim marked "pay with payroll" is picked
-/// up by the next run and settled when that run posts, so nobody has to
-/// remember to reimburse it separately.
+/// Expense claims, and the two ways one gets settled.
+///
+/// Marked "pay with payroll", the next run picks it up and posts it, so
+/// nobody has to remember to reimburse it separately. Not marked, it
+/// waits here to be posted by hand — reimbursed out of a bank account
+/// now, or accrued and paid later. Approval on its own settles nothing
+/// and never did; before the Post action below, a claim that was not
+/// going through payroll simply stopped at "approved" and never reached
+/// the ledger at all.
 class ClaimsScreen extends ConsumerStatefulWidget {
   const ClaimsScreen({super.key});
 
@@ -84,6 +90,7 @@ class _ClaimTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pending = claim.status == 'submitted';
+    final postable = claim.awaitingPosting && ref.watch(canPostProvider);
 
     return ListTile(
       contentPadding:
@@ -104,7 +111,8 @@ class _ClaimTile extends ConsumerWidget {
       subtitle: Text(
         '${claim.employeeName ?? ''} · ${claim.claimNo} · '
         '${Fmt.date(claim.claimDate)}'
-        '${claim.payWithPayroll ? ' · reimbursed with salary' : ''}',
+        '${claim.payWithPayroll ? ' · reimbursed with salary' : ''}'
+        '${claim.awaitingPosting ? ' · not yet in the ledger' : ''}',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 12),
@@ -123,11 +131,21 @@ class _ClaimTile extends ConsumerWidget {
                 child: const Text('Approve'),
               ),
             ])
-          : Money(
-              claim.status == 'approved'
-                  ? claim.approvedAmount
-                  : claim.totalAmount,
-              bold: true),
+          : Row(mainAxisSize: MainAxisSize.min, children: [
+              Money(
+                claim.status == 'approved'
+                    ? claim.approvedAmount
+                    : claim.totalAmount,
+                bold: true,
+              ),
+              if (postable) ...[
+                const SizedBox(width: Space.md),
+                FilledButton.tonal(
+                  onPressed: () => _post(context, ref),
+                  child: const Text('Post'),
+                ),
+              ],
+            ]),
     );
   }
 
@@ -135,11 +153,146 @@ class _ClaimTile extends ConsumerWidget {
     await runWithFeedback(
       context,
       action: () => ref.read(repoProvider)!.decideClaim(claim.id, approve),
-      successMessage: approve
-          ? 'Approved — it will be reimbursed with the next payroll'
-          : 'Rejected',
+      // Approval is not settlement. Promising payroll reimbursement for
+      // a claim that is not going through payroll is how an approved
+      // claim gets forgotten.
+      successMessage: !approve
+          ? 'Rejected'
+          : claim.payWithPayroll
+              ? 'Approved — it will be reimbursed with the next payroll'
+              : 'Approved — post it to put the expense in the ledger',
     );
     ref.invalidate(claimsProvider);
+  }
+
+  Future<void> _post(BuildContext context, WidgetRef ref) async {
+    // A record rather than a bare `String?`: "accrue it" is a real
+    // choice that sends no bank account, and cancelling must not be
+    // indistinguishable from making it.
+    final choice = await showDialog<({String? bankAccountId})>(
+      context: context,
+      builder: (_) => _PostClaimDialog(claim: claim),
+    );
+    if (choice == null || !context.mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () => ref
+          .read(repoProvider)!
+          .postExpenseClaim(claim.id, bankAccountId: choice.bankAccountId),
+      successMessage: choice.bankAccountId == null
+          ? 'Posted to accruals'
+          : 'Posted and reimbursed',
+      pendingMessage: 'Posting…',
+    );
+    ref.invalidate(claimsProvider);
+    refreshLedgerData(ref);
+  }
+}
+
+/// How an approved claim reaches the ledger.
+///
+/// Either way the expense is recognised now, against the account each
+/// claim type names. The choice is only what sits on the other side: a
+/// bank account, and the employee has been paid; nothing, and it goes to
+/// Other Payables and Accruals until they are.
+class _PostClaimDialog extends ConsumerStatefulWidget {
+  const _PostClaimDialog({required this.claim});
+
+  final ExpenseClaim claim;
+
+  @override
+  ConsumerState<_PostClaimDialog> createState() => _PostClaimDialogState();
+}
+
+class _PostClaimDialogState extends ConsumerState<_PostClaimDialog> {
+  bool _reimburseNow = true;
+  String? _bankAccountId;
+
+  @override
+  Widget build(BuildContext context) {
+    final accounts = ref.watch(bankAccountsProvider).valueOrNull ?? const [];
+    if (_bankAccountId == null && accounts.isNotEmpty) {
+      _bankAccountId = accounts.first['id'] as String;
+    }
+    // With no bank account on file there is nothing to pay from, so the
+    // only honest option is to accrue.
+    final canReimburse = accounts.isNotEmpty;
+
+    return AlertDialog(
+      title: const Text('Post claim'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '${widget.claim.claimNo} · '
+              '${Fmt.money(widget.claim.approvedAmount)}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: Space.md),
+            RadioListTile<bool>(
+              value: true,
+              groupValue: _reimburseNow && canReimburse,
+              onChanged: canReimburse
+                  ? (_) => setState(() => _reimburseNow = true)
+                  : null,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Reimburse now'),
+              subtitle: Text(canReimburse
+                  ? 'Paid straight out of a bank account'
+                  : 'No bank account has been set up yet'),
+            ),
+            if (_reimburseNow && canReimburse)
+              Padding(
+                padding: const EdgeInsets.only(left: 32, bottom: Space.sm),
+                child: DropdownButtonFormField<String>(
+                  value: _bankAccountId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                      isDense: true, labelText: 'Pay from'),
+                  items: [
+                    for (final a in accounts)
+                      DropdownMenuItem(
+                        value: a['id'] as String,
+                        child: Text(a['name']?.toString() ?? '',
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => _bankAccountId = v),
+                ),
+              ),
+            RadioListTile<bool>(
+              value: false,
+              groupValue: _reimburseNow && canReimburse,
+              onChanged: (_) => setState(() => _reimburseNow = false),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Accrue it'),
+              subtitle: const Text(
+                  'Recognise the expense now and pay the employee later'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(
+            context,
+            (
+              bankAccountId:
+                  _reimburseNow && canReimburse ? _bankAccountId : null,
+            ),
+          ),
+          child: const Text('Post'),
+        ),
+      ],
+    );
   }
 }
 
@@ -158,6 +311,7 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
   String? _typeId;
   final DateTime _date = DateTime.now();
   bool _saving = false;
+  bool _payWithPayroll = true;
 
   @override
   void dispose() {
@@ -226,6 +380,19 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
                   return null;
                 },
               ),
+              const SizedBox(height: Space.sm),
+              // The column has always defaulted to true and nothing ever
+              // set it, so every claim went down the payroll route by
+              // accident rather than by choice.
+              SwitchListTile(
+                value: _payWithPayroll,
+                onChanged: (v) => setState(() => _payWithPayroll = v),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Reimburse with the next payroll'),
+                subtitle: Text(_payWithPayroll
+                    ? 'The next payroll run pays and posts it'
+                    : 'Somebody posts it from this screen once approved'),
+              ),
             ],
           ),
         ),
@@ -272,6 +439,7 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
                 'amount': double.parse(_amount.text.trim()),
               }
             ],
+            payWithPayroll: _payWithPayroll,
           ),
       successMessage: 'Submitted for approval',
     );

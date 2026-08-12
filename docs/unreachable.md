@@ -29,7 +29,25 @@ Two traps in doing it naively, both hit on the first pass:
   method might not.
 
 A name appearing only inside a comment is not a reference. `create_gl_entry`
-below is exactly that case.
+was exactly that case.
+
+## Closed
+
+- **The manual journal** (was gap 1). `post_manual_journal` in `0089`,
+  reached from the Journals screen. `create_gl_entry` itself is no
+  longer granted to `authenticated`: it takes the journal's source,
+  source table and source id as arguments, so holding it let any
+  signed-in user post an entry claiming to have come from a payroll run.
+- **Posting an approved expense claim** (was gap 2). A Post action on
+  the claims screen, and a switch on the claim itself so the choice
+  between payroll reimbursement and posting by hand is made deliberately
+  — `pay_with_payroll` defaulted to true and nothing ever set it, so
+  every claim took the payroll route by accident and `post_expense_claim`
+  would have refused all of them. Giving the function its first caller
+  also gave it its first test, which found that proportional allocation
+  rounded each share independently: three equal shares of an approved
+  100.00 came to 99.99 against a credit of 100.00, and the journal was
+  refused. Fixed in `0090`.
 
 ## Correct: the database owns these
 
@@ -45,66 +63,45 @@ via the `corp_*` RPCs), `einvoice_lines`, `einvoice_logs`,
 
 ## Gaps, worst first
 
-### 1. There is no way to post a manual journal
-
-`create_gl_entry` is granted to `authenticated` and called from nowhere.
-The three mentions in `app/lib` are all inside comments describing it.
-
-So there is no accrual, no prepayment, no adjusting entry, no correction
-of an opening balance, and no way to record anything the automated paths
-do not produce. Every other posting route in the system exists; the one
-a bookkeeper reaches for when something does not fit does not. For an
-accounting system this is the largest single gap on this list.
-
-### 2. An approved expense claim never reaches the ledger
-
-`post_expense_claim` exists and posts correctly. `decide_expense_claim`
-approves a claim and **does not call it** — checked against the function
-body, not assumed — and neither does the app.
-
-An approved claim is therefore approved and then nothing happens: the
-expense is never recognised and the employee is never credited. Nobody
-has hit it yet only because there are no claims in the live data.
-
-### 3. Public holidays cannot be entered
+### 1. Public holidays cannot be entered
 
 `public_holidays` is empty and unreachable. Leave day counts and the
 rest-day / public-holiday classification in attendance both read it, so
 every public holiday is currently an ordinary working day.
 
-### 4. Leave entitlement bands cannot be entered
+### 2. Leave entitlement bands cannot be entered
 
 `leave_entitlement_bands` is empty and unreachable. These are the
 Employment Act s.19 minimums by length of service — the thing annual
 leave entitlement is calculated from.
 
-### 5. The statutory rate tables cannot be seen or corrected
+### 3. The statutory rate tables cannot be seen or corrected
 
 `statutory_rates` (11 rows) and `statutory_schedules` (5 of them
 `is_verified = false`) have no screen. `README.md` says these seeded
 figures must be replaced with the gazetted KWSP and PERKESO tables
 before filing real returns, and there is no way to do it from the app.
 
-### 6. Item prices cannot be set
+### 4. Item prices cannot be set
 
 `item_prices` is unreachable, so only the level-wide percentage on
 `price_levels` can be used. The resolver added in `0088` reads named
 prices and quantity breaks that nothing can write. Half-finished, and
 mine.
 
-### 7. Contact persons and delivery addresses
+### 5. Contact persons and delivery addresses
 
 `contact_persons` and `contact_addresses` are both empty and
 unreachable, while `sales_documents.contact_person_id` and
 `shipping_address_id` are carried through the transfer path and read by
 the e-Invoice preparation.
 
-### 8. CRM leads
+### 6. CRM leads
 
 `leads` has a table, RLS and no screen. The CRM is pipeline and
 opportunities only, so the top of the funnel is missing.
 
-### 9. Talent and onboarding
+### 7. Talent and onboarding
 
 `interviews`, `onboarding_templates`, `onboarding_checklists`,
 `onboarding_tasks`, `onboarding_template_items`, `appraisal_goals`,
@@ -112,7 +109,7 @@ opportunities only, so the top of the funnel is missing.
 unreachable. Appraisals and applicants have screens; the tables around
 them do not.
 
-### 10. Smaller, but real
+### 8. Smaller, but real
 
 - **Stock card.** `stock_movements` cannot be inspected per item, so
   "why is this figure what it is" has no answer in the app.

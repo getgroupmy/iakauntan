@@ -232,6 +232,44 @@ class Repo {
     return _rows(rows).map(JournalEntry.fromJson).toList();
   }
 
+  /// A journal somebody wrote by hand.
+  ///
+  /// Everything else in this system reaches the ledger behind a
+  /// document; this is the one entry that is its own document.
+  ///
+  /// Not `create_gl_entry`, which takes the journal's source as an
+  /// argument — the client has no business asserting where a ledger
+  /// entry came from. `post_manual_journal` fixes the source and checks
+  /// the accounts, the balance and the period, so nothing here is
+  /// trusted.
+  Future<String> createJournal({
+    required DateTime date,
+    required String description,
+    String? reference,
+    required List<Map<String, dynamic>> lines,
+  }) async {
+    final data = await client.rpc('post_manual_journal', params: {
+      'p_org_id': orgId,
+      'p_entry_date': Fmt.iso(date),
+      'p_lines': lines,
+      'p_description': description,
+      if (reference != null && reference.trim().isNotEmpty)
+        'p_reference': reference.trim(),
+    });
+    return data as String;
+  }
+
+  /// Puts an approved claim into the ledger. With a bank account it is
+  /// reimbursed straight away; without one it sits in accruals until it
+  /// is paid.
+  Future<String> postExpenseClaim(String claimId, {String? bankAccountId}) async {
+    final data = await client.rpc('post_expense_claim', params: {
+      'p_claim_id': claimId,
+      if (bankAccountId != null) 'p_bank_account_id': bankAccountId,
+    });
+    return data as String;
+  }
+
   /// Posts the mirror image and voids the original. Nothing is deleted:
   /// a ledger you can erase is not a ledger.
   Future<void> reverseJournal(String entryId, DateTime on) =>
@@ -1722,10 +1760,17 @@ extension RepoHr on Repo {
       .eq('is_active', true)
       .order('sort_order'));
 
+  /// [payWithPayroll] decides which of two settlement routes the claim
+  /// takes, and it cannot be changed afterwards from here: true and the
+  /// next payroll run picks it up and posts it; false and somebody has
+  /// to post it from the claims screen. The column has always defaulted
+  /// to true, so before this argument existed every claim went down the
+  /// payroll route whether or not that was what anyone wanted.
   Future<String> createClaim({
     required String employeeId,
     required String title,
     required List<Map<String, dynamic>> lines,
+    bool payWithPayroll = true,
   }) async {
     final no = await client.rpc('next_document_number',
         params: {'p_org_id': orgId, 'p_doc_type': 'expense_claim'});
@@ -1741,6 +1786,7 @@ extension RepoHr on Repo {
           'total_amount': total,
           'status': 'submitted',
           'submitted_at': DateTime.now().toIso8601String(),
+          'pay_with_payroll': payWithPayroll,
         })
         .select('id')
         .single();

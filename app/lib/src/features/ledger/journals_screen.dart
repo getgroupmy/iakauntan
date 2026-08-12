@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'journal_editor.dart';
 
 /// The general ledger, as journals.
 ///
@@ -31,9 +32,23 @@ class JournalsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final journals = ref.watch(journalsProvider);
     final filter = ref.watch(journalSourceFilterProvider);
+    final canPost = ref.watch(canPostProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Journals')),
+      appBar: AppBar(
+        title: const Text('Journals'),
+        actions: [
+          if (canPost)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.sm),
+              child: FilledButton.icon(
+                onPressed: () => _newJournal(context, ref),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('New journal'),
+              ),
+            ),
+        ],
+      ),
       body: Column(
         children: [
           SizedBox(
@@ -77,7 +92,7 @@ class JournalsScreen extends ConsumerWidget {
                       title: 'No journals',
                       message: 'Every posted document writes one. Post an '
                           'invoice, a bill or a payroll run and it appears '
-                          'here.',
+                          'here — or write one by hand with New journal.',
                     )
                   : ListView.separated(
                       padding: const EdgeInsets.only(bottom: Space.xxl),
@@ -90,6 +105,16 @@ class JournalsScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _newJournal(BuildContext context, WidgetRef ref) async {
+    final id = await showJournalEditor(context, ref);
+    if (id == null) return;
+
+    // A manual journal reaches the ledger the moment it is posted, so
+    // every balance on screen is now stale, not just this list.
+    ref.invalidate(journalsProvider);
+    refreshLedgerData(ref);
   }
 }
 
