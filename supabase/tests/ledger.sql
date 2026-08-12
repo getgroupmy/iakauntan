@@ -214,14 +214,28 @@ begin
     from public.gl_lines where entry_id = v_r;
   perform pg_temp.check_eq('the reversal mirrors the original, debits', v_dr, 900);
   perform pg_temp.check_eq('and credits', v_cr, 900);
-  perform pg_temp.check_true('the original is voided, not deleted',
-    (select status = 'void' from public.gl_entries where id = v_e));
+  -- Contra-ed, not deleted and not voided either. Voiding the original
+  -- *as well* as mirroring it would take it out of every report — they
+  -- all filter on `posted` — leaving the mirror standing alone, which
+  -- is the opposite of the entry rather than nothing. That is what 0102
+  -- fixed and `supabase/tests/reversal.sql` covers caller by caller.
+  perform pg_temp.check_true('the original stays posted, contra-ed not hidden',
+    (select status = 'posted' from public.gl_entries where id = v_e));
+  perform pg_temp.check_true('and the mirror says what it reverses',
+    (select is_reversal and reversed_entry_id = v_e
+       from public.gl_entries where id = v_r));
+  perform pg_temp.check_eq('so the two of them come to nothing',
+    coalesce((select sum(l.debit - l.credit)
+                from public.gl_lines l
+                join public.gl_entries e on e.id = l.entry_id
+               where e.id in (v_e, v_r) and e.status = 'posted'
+                 and l.account_id = v_ar), 0), 0);
 
   begin
     perform public.reverse_gl_entry(v_e, date '2026-05-31');
-    raise exception 'FAIL: a voided journal was reversed again';
+    raise exception 'FAIL: a reversed journal was reversed again';
   exception when sqlstate '22023' then
-    raise notice 'ok   a voided journal cannot be reversed twice';
+    raise notice 'ok   reversing the contra would put the entry back';
   end;
 end $$;
 

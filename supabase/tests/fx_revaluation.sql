@@ -122,8 +122,12 @@ begin
   v_first  := public.revalue_foreign_balances(v_org, date '2026-03-31');
   v_second := public.revalue_foreign_balances(v_org, date '2026-03-31');
 
-  perform pg_temp.check_true('the first is voided by the second',
-    (select status = 'void' from public.gl_entries where id = v_first));
+  -- The second run contras the first rather than hiding it, so all
+  -- three journals stay on the page and the net below is what counts.
+  perform pg_temp.check_true('the first is contra-ed by the second',
+    (select status = 'posted' from public.gl_entries where id = v_first)
+    and exists (select 1 from public.gl_entries r
+                 where r.reversed_entry_id = v_first and r.status = 'posted'));
 
   -- Everything the revaluation has ever done to receivables, across all
   -- three journals: the first, its reversal, and the second.
