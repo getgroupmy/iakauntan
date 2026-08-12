@@ -490,6 +490,26 @@ class Repo {
   }
 
   // ------------------------------------------------------------------
+  // Getting a customer or item list in
+  // ------------------------------------------------------------------
+
+  /// Validates every row and, when [commit] is true, writes them —
+  /// which the database only does if none of them are wrong. Returns a
+  /// verdict per row either way, so a preview and an import cannot
+  /// disagree about what is acceptable.
+  Future<List<Map<String, dynamic>>> importRows({
+    required bool contacts,
+    required List<Map<String, String>> rows,
+    required bool commit,
+  }) async {
+    final data = await client.rpc(
+      contacts ? 'import_contacts' : 'import_items',
+      params: {'p_org_id': orgId, 'p_rows': rows, 'p_commit': commit},
+    );
+    return _rows(data);
+  }
+
+  // ------------------------------------------------------------------
   // Moving money between the company's own accounts
   // ------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> bankTransfers() async => _rows(await client

@@ -82,6 +82,7 @@ const _destinations = <_Dest>[
       Icons.event_repeat, '/recurring-documents'),
   _Dest('Withholding tax', Icons.account_balance_outlined,
       Icons.account_balance, '/withholding'),
+  _Dest('Import', Icons.upload_file_outlined, Icons.upload_file, '/import'),
   _Dest('Reports', Icons.bar_chart_outlined, Icons.bar_chart, '/reports'),
   _Dest('Team', Icons.manage_accounts_outlined, Icons.manage_accounts, '/team'),
   _Dest('Email', Icons.mail_outline, Icons.mail, '/email'),

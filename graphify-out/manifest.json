@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786537375.9018385,
-    "ast_hash": "ceaaf42828b74b35b6d123d723098ac9",
+    "mtime": 1786545094.9002357,
+    "ast_hash": "f60ace03f257c33aac1e08a6899ffb98",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786543645.3395586,
-    "ast_hash": "19a479a48c86e907f9a330f28f2a3fbd",
+    "mtime": 1786545094.8985796,
+    "ast_hash": "1ed4b3a464afece7368f549bd437d7a2",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": "d2c9729b108d770de90c22637a2bb8ae"
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1786537375.903038,
-    "ast_hash": "76d19a89eda7473b2b70275d261e9f8a",
+    "mtime": 1786545094.9013655,
+    "ast_hash": "0c9d5e021cf0f23726ade75e21c8fc78",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786543635.8174472,
-    "ast_hash": "3f6eea5b6b01084c60122d0d9376ad0d",
+    "mtime": 1786545198.7059808,
+    "ast_hash": "a7d35fc3339146a39195bf4d8f1af253",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1285,8 +1285,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/banking/statement_import.dart": {
-    "mtime": 1786521895.2082076,
-    "ast_hash": "bc22c33effc6c41229d8668128dde2e1",
+    "mtime": 1786545023.6685042,
+    "ast_hash": "97ffca06d7e42c21f61caeb50db78108",
     "semantic_hash": ""
   },
   "app/test/statement_import_test.dart": {
@@ -1505,8 +1505,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-akaunting.md": {
-    "mtime": 1786543850.3393161,
-    "ast_hash": "dd87f78f8fe70bfd39dddad374d39c70",
+    "mtime": 1786545198.7063143,
+    "ast_hash": "9cdfa04ca8845974bcdb23f565d23500",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/email_screen.dart": {
@@ -1622,6 +1622,31 @@
   "supabase/tests/reversal.sql": {
     "mtime": 1786543488.079562,
     "ast_hash": "afe76342bc5c2c164e35721e6284b460",
+    "semantic_hash": ""
+  },
+  "app/lib/src/core/csv.dart": {
+    "mtime": 1786545023.668895,
+    "ast_hash": "dc10fcaf5d4fb303131d98efab50ff01",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/imports/import_screen.dart": {
+    "mtime": 1786545080.5051727,
+    "ast_hash": "36c8fec147593a60a216521fcf354d87",
+    "semantic_hash": ""
+  },
+  "app/test/csv_test.dart": {
+    "mtime": 1786545130.5691717,
+    "ast_hash": "f52f6f7a6c987d26f3208d9722a56b7f",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0103_csv_import.sql": {
+    "mtime": 1786544790.891988,
+    "ast_hash": "3ebb37b886a9a49cec042fdbb0e69a1d",
+    "semantic_hash": ""
+  },
+  "supabase/tests/csv_import.sql": {
+    "mtime": 1786544919.9016721,
+    "ast_hash": "f203efdcbfcd69ab377a0bfc725ecaea",
     "semantic_hash": ""
   }
 }

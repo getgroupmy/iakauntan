@@ -106,10 +106,17 @@ accounts filed.
 
 ## 7. Import is bank statements only
 
-Akaunting imports customers, vendors, items, invoices, bills, categories
-and transactions (`*/import` under `routes/admin.php`, with export to
-match). iAkauntan parses a pasted bank statement and nothing else, so
-migrating onto it means typing the customer list.
+Contacts and items are built — `import_contacts` and `import_items`,
+with the header row mapped onto field names so a file exported from
+another system does not have to be renamed first. Nothing is written
+unless every row is good, and the same call previews and imports, so the
+preview cannot promise something the import then refuses.
+
+Still missing: invoices and bills. Bringing open items across mid-year
+is the other half of a migration and it posts to the ledger, which is a
+different problem from writing a master file — numbering, tax codes, an
+opening balance to sit against, and a decision about what the other side
+of the entry is. It wants to be its own piece of work.
 
 ## 8. Withholding and compound tax
 

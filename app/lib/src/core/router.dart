@@ -24,6 +24,7 @@ import '../features/onboarding/create_org_screen.dart';
 import '../features/ledger/journals_screen.dart';
 import '../features/documents/recurring_documents_screen.dart';
 import '../features/documents/withholding_screen.dart';
+import '../features/imports/import_screen.dart';
 import '../features/ledger/recurring_screen.dart';
 import '../features/reports/reports_screen.dart';
 import '../features/secretarial/entity_editor.dart';
@@ -250,6 +251,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/withholding',
             builder: (_, __) => const WithholdingScreen(),
           ),
+          GoRoute(path: '/import', builder: (_, __) => const ImportScreen()),
           GoRoute(path: '/assets', builder: (_, __) => const AssetsScreen()),
           GoRoute(
             path: '/stock-take',

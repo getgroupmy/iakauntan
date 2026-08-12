@@ -6,6 +6,8 @@
 /// separate debit and credit columns.
 library;
 
+import '../../core/csv.dart';
+
 /// One statement line, as read out of the paste.
 class StatementRow {
   const StatementRow({
@@ -71,7 +73,7 @@ StatementParse parseStatement(String text) {
     return const StatementParse([], ['Paste the header row and at least one line.']);
   }
 
-  final header = _split(lines.first).map((h) => h.trim().toLowerCase()).toList();
+  final header = splitCsvLine(lines.first).map((h) => h.trim().toLowerCase()).toList();
   int find(List<String> names) =>
       header.indexWhere((h) => names.contains(h));
 
@@ -99,7 +101,7 @@ StatementParse parseStatement(String text) {
   final problems = <String>[];
 
   for (var i = 1; i < lines.length; i++) {
-    final cells = _split(lines[i]);
+    final cells = splitCsvLine(lines[i]);
     String at(int index) =>
         index >= 0 && index < cells.length ? cells[index].trim() : '';
 
@@ -133,34 +135,6 @@ StatementParse parseStatement(String text) {
   }
 
   return StatementParse(rows, problems);
-}
-
-/// Splits one CSV line, honouring double quotes so a description
-/// containing a comma does not shift every column after it.
-List<String> _split(String line) {
-  final out = <String>[];
-  final buffer = StringBuffer();
-  var quoted = false;
-
-  for (var i = 0; i < line.length; i++) {
-    final ch = line[i];
-    if (ch == '"') {
-      // A doubled quote inside a quoted field is one literal quote.
-      if (quoted && i + 1 < line.length && line[i + 1] == '"') {
-        buffer.write('"');
-        i++;
-      } else {
-        quoted = !quoted;
-      }
-    } else if ((ch == ',' || ch == '\t') && !quoted) {
-      out.add(buffer.toString());
-      buffer.clear();
-    } else {
-      buffer.write(ch);
-    }
-  }
-  out.add(buffer.toString());
-  return out;
 }
 
 double? _number(String raw) {
