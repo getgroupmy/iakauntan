@@ -110,11 +110,47 @@ used instead of the service role key.
 
 ### Scheduling
 
-Same arrangement as `send-email`: the database does not wait on a third
-party, so something outside it has to call the function. Any scheduler
-that can POST with the service role key will do. Once a day on a weekday
-evening is enough — BNM publishes three sessions and `1700` closes the
-day.
+**Built** — `.github/workflows/exchange-rates.yml`, weekdays at 09:30
+UTC, which is 17:30 in Malaysia: half an hour after the `1700` session
+closes the day.
+
+It needs one thing set by hand, once:
+
+> **Settings → Secrets and variables → Actions → New repository secret**
+> `SUPABASE_SERVICE_ROLE_KEY`, from Supabase → Project Settings → API.
+
+Until that exists the job runs, warns on the run summary, and exits
+green having done nothing — deliberately, because a scheduler that is
+quietly not running looks exactly like a scheduler with nothing to
+report, and the symptom would surface a month later as a revaluation
+that will not post.
+
+Two things to know about GitHub's scheduler. It runs workflows from the
+**default branch** only, and it **disables scheduled workflows after 60
+days without repository activity**, with an email first. Neither matters
+while this is being worked on; both matter if it is left alone.
+
+You can also run it by hand — **Actions → Exchange rates → Run
+workflow** — with an optional date and session, which is the easiest way
+to backfill.
+
+**Why not `pg_cron`.** It is installed, `pg_net` is available and Vault
+would hold the key, so it would work. Two reasons against: `pg_net` is
+asynchronous, so the reply lands in `net._http_response` later and the
+job becomes two jobs with state between them; and the version that
+avoids the key entirely — Postgres calling Bank Negara directly — would
+need the field mapping written a second time in SQL beside the one in
+the edge function. Two implementations of the same thing is how they
+drift.
+
+The trade being made is that the service role key sits in this
+repository's Actions secrets. That is not the repository and not the app
+bundle, which is the rule it has to satisfy. It *is* readable by anybody
+with write access here.
+
+`send-email` needs the same treatment and can reuse the same secret —
+that workflow does not exist yet, and until `RESEND_API_KEY` is set the
+function answers 503 anyway.
 
 Running it more often is harmless. The same quote arriving again
 rewrites the same row rather than adding one, which is what the partial

@@ -1,0 +1,173 @@
+name: Exchange rates
+
+# The scheduler the rate feed has been waiting for.
+#
+# `revalue_foreign_balances` refuses a currency it cannot price rather
+# than assuming par, so an empty `exchange_rates` does not make month end
+# fail — it makes month end quietly not happen. Something has to call
+# `fetch-rates`, and the database deliberately will not: it does not wait
+# on third parties and holds no third party's key.
+#
+# ---------------------------------------------------------------------
+# Why here, and not in Postgres
+#
+# The other candidate was `pg_cron` calling the function through
+# `pg_net`, with the service role key in Supabase Vault. Both extensions
+# are available and Vault is already installed, so it would work. It was
+# not chosen for two reasons.
+#
+# `pg_net` is asynchronous: a request returns an id and the reply lands
+# in `net._http_response` some time later, so the job becomes two jobs
+# and a piece of state between them. And avoiding the key by having
+# Postgres call Bank Negara directly would mean writing the field mapping
+# a second time in SQL, beside the one in the edge function — two
+# implementations of the same thing, which is how they drift.
+#
+# So: the key sits in this repository's Actions secrets. It is not in the
+# repository and not in the app bundle, which is the rule. It *is*
+# readable by anybody with write access here, which is the trade being
+# made and is worth knowing rather than discovering.
+#
+# ---------------------------------------------------------------------
+# Its own file, on purpose
+#
+# Not folded into `ci.yml`. That workflow gates publishing on the tests
+# and has no business also being an operations timer — a scheduled job
+# that fails because Bank Negara is down should not sit in the same run
+# as the thing that decides whether code reaches production.
+
+on:
+  schedule:
+    # 09:30 UTC is 17:30 in Malaysia: half an hour after Bank Negara's
+    # 1700 session, which is the one that closes the day. Weekdays only,
+    # because there is no publication at a weekend and asking produces a
+    # 404 that means nothing.
+    #
+    # GitHub runs scheduled workflows on the default branch and may delay
+    # them when it is busy, so this is "once each weekday evening" rather
+    # than "at 17:30 exactly". Nothing here needs the minute: the rate is
+    # stored against the date the publisher gave it, and running twice
+    # rewrites the same row.
+    - cron: '30 9 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Backfill a particular day (YYYY-MM-DD), or leave blank for today'
+        required: false
+      session:
+        description: 'Published session'
+        required: false
+        default: '1700'
+        type: choice
+        options: ['0900', '1200', '1700']
+
+concurrency:
+  group: exchange-rates
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    name: Fetch the day's rates
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'ewwcgtnniwqndrzukksm' }}
+
+      # Kept out of the step so the shell never has to quote it. Every
+      # refused rate is listed by name: a currency that silently stops
+      # being priced is the failure this whole feed exists to prevent.
+      SUMMARY: |
+        import json, sys
+        d = json.load(open(sys.argv[1]))
+        print(f"Session {d.get('session')} · {d.get('published')} published · "
+              f"{d.get('stored')} stored · {d.get('skipped')} skipped · "
+              f"{d.get('errors')} errors")
+        bad = [r for r in d.get('rates', []) if r.get('status') == 'error']
+        if bad:
+            print()
+            print("| Currency | Problem |")
+            print("|---|---|")
+            for r in bad:
+                print(f"| {r.get('currency')} | {r.get('message')} |")
+    steps:
+      - name: Call fetch-rates
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            # A warning on the run summary rather than a silent success.
+            # A scheduler that is not running looks exactly like a
+            # scheduler with nothing to report, and the symptom shows up
+            # a month later as a revaluation that will not post.
+            echo "::warning::No rates were fetched. Set the repository secret SUPABASE_SERVICE_ROLE_KEY."
+            {
+              echo "### No rates were fetched"
+              echo
+              echo "The repository secret \`SUPABASE_SERVICE_ROLE_KEY\` is not set."
+              echo "Add it under **Settings → Secrets and variables → Actions**,"
+              echo "then re-run this workflow."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          body='{}'
+          if [ -n "${{ inputs.date }}" ]; then
+            body="$(printf '{"session":"%s","date":"%s"}' \
+              "${{ inputs.session || '1700' }}" "${{ inputs.date }}")"
+          elif [ -n "${{ inputs.session }}" ]; then
+            body="$(printf '{"session":"%s"}' "${{ inputs.session }}")"
+          fi
+
+          # `--fail-with-body` would hide the reply on a 4xx, and the
+          # reply is the only thing that says which currency was refused
+          # and why. So the status is captured separately and the body is
+          # always printed.
+          out="$(mktemp)"
+          code="$(curl -sS -X POST \
+            "https://${PROJECT_REF}.supabase.co/functions/v1/fetch-rates" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H 'Content-Type: application/json' \
+            -d "$body" \
+            -o "$out" -w '%{http_code}')"
+
+          echo "HTTP $code"
+          cat "$out"
+          echo
+
+          # A public holiday is not a failure. Bank Negara publishes on
+          # business days, this runs on weekdays, and the two are not the
+          # same set — a 404 means there was nothing to fetch, which is
+          # the honest answer rather than a rate invented for a day that
+          # had none.
+          if [ "$code" = "404" ]; then
+            echo "::notice::Bank Negara published nothing today."
+            echo "### Nothing published today" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ "$code" != "200" ]; then
+            echo "::error::fetch-rates answered $code"
+            exit 1
+          fi
+
+          stored="$(python3 -c "import json,sys;print(json.load(open('$out')).get('stored',0))")"
+          errors="$(python3 -c "import json,sys;print(json.load(open('$out')).get('errors',0))")"
+
+          # A heredoc cannot live inside a YAML block scalar — its
+          # terminator has to start at column zero, which ends the block.
+          # So the summary is built by a one-liner reading the file.
+          {
+            echo "### Rates stored: $stored"
+            echo
+            python3 -c "$SUMMARY" "$out"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # A refused rate is a shape change at the publisher, and the
+          # cost of ignoring it is a currency that silently stops being
+          # priced. Loud, every time.
+          if [ "$errors" != "0" ]; then
+            echo "::error::$errors rates were refused — read the reply above."
+            exit 1
+          fi
+
+          if [ "$stored" = "0" ]; then
+            echo "::warning::Nothing was stored, though the call succeeded."
+          fi
