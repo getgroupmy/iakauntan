@@ -20,6 +20,18 @@ final currentUserProvider = Provider<User?>((ref) {
   return ref.watch(supabaseProvider).auth.currentUser;
 });
 
+/// Whether this session belongs to one of the shared demo logins.
+///
+/// Read from app_metadata, which only the service role can write, so an
+/// account cannot talk its way out of the flag. This is for wording and
+/// for hiding buttons that cannot work — the rule itself is a trigger on
+/// auth.users (0076), because the password change is an ordinary call to
+/// GoTrue that never passes through this app.
+final isDemoAccountProvider = Provider<bool>((ref) {
+  final user = ref.watch(currentUserProvider);
+  return user?.appMetadata['demo'] == true;
+});
+
 /// True from the moment a reset link is redeemed until a new password has
 /// actually been set.
 ///

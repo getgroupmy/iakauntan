@@ -70,8 +70,8 @@
     "semantic_hash": "e9921fc03203fbc5f9b5857bef93bbe6"
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786473942.0330396,
-    "ast_hash": "d53d9a6551e718194d603edaf68b61eb",
+    "mtime": 1786508374.7372286,
+    "ast_hash": "527cae44c14b5d18a65449655f72ab50",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -120,8 +120,8 @@
     "semantic_hash": "d467519d6e9c87185e4a072e6581819a"
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1786507850.6459403,
-    "ast_hash": "69242cb9244bbdde8ed757db625c82ea",
+    "mtime": 1786508406.2956023,
+    "ast_hash": "869dc74e34265682ab2e283470eb130e",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1786477928.6612482,
-    "ast_hash": "c1f3e1f692cfddc764a5f7065cfe9c3c",
+    "mtime": 1786508374.737772,
+    "ast_hash": "2fbede428b35bfd425a60292fb125217",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786505197.5845227,
-    "ast_hash": "f489f96fab581e6159e54cc07912f1b3",
+    "mtime": 1786508453.2809622,
+    "ast_hash": "5ad532b5b1e5365fe7c1660a2430928e",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786508165.1314,
-    "ast_hash": "78016aba391586e9c30fc3f929069aa3",
+    "mtime": 1786508536.9936218,
+    "ast_hash": "62d969e1a65d603f0f24db1b3afe1fba",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -1125,7 +1125,7 @@
     "semantic_hash": ""
   },
   "supabase/tests/attendance.sql": {
-    "mtime": 1786505197.584138,
+    "mtime": 1786508453.2594419,
     "ast_hash": "3b98135f3d2d2ed43055326f76eec171",
     "semantic_hash": ""
   },
@@ -1135,8 +1135,18 @@
     "semantic_hash": ""
   },
   "app/test/demo_accounts_test.dart": {
-    "mtime": 1786507990.2758422,
-    "ast_hash": "c458b995976aaaf62c08741b2da74537",
+    "mtime": 1786508480.315649,
+    "ast_hash": "3e53f6c1ab176478f4824ae096908e67",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0076_lock_demo_credentials.sql": {
+    "mtime": 1786508304.3714454,
+    "ast_hash": "beb228cd858b629cd905ec0c904eb60a",
+    "semantic_hash": ""
+  },
+  "supabase/tests/demo_accounts.sql": {
+    "mtime": 1786508453.2694304,
+    "ast_hash": "e9a2bf8af2dff29a20dd080d0fcc4779",
     "semantic_hash": ""
   }
 }

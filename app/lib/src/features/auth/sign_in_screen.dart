@@ -113,6 +113,15 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       setState(() => _error = 'Enter your email first, then tap reset.');
       return;
     }
+    // The database refuses the change these links lead to, so sending one
+    // would only waste somebody's time. Said here rather than three
+    // screens later, once they have already opened their inbox.
+    if (demoAccounts.any((a) => a.email.toLowerCase() == email.toLowerCase())) {
+      setState(() => _error =
+          'The demo accounts share a fixed password, so it cannot be reset. '
+          'Use the buttons below to sign in.');
+      return;
+    }
     setState(() => _busy = true);
     try {
       await ref.read(supabaseProvider).auth.resetPasswordForEmail(

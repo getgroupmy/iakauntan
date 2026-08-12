@@ -685,14 +685,33 @@ class _AboutCard extends ConsumerWidget {
             _Field(label: 'Signed in as', value: user?.email ?? '—'),
             _Field(label: 'Role', value: Fmt.label(role)),
             const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () => showDialog<void>(
-                context: context,
-                builder: (_) => const _ChangePasswordDialog(),
+            // A demo login is shared with everybody else looking at the
+            // demo, so changing its password would lock all of them out.
+            // The database refuses it either way (0076); this is here so
+            // the answer arrives before the attempt rather than after.
+            if (ref.watch(isDemoAccountProvider))
+              Container(
+                padding: const EdgeInsets.all(Space.md),
+                decoration: BoxDecoration(
+                  color: context.colors.warning.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(Radii.md),
+                ),
+                child: const Text(
+                  'This is a shared demo account. Its password and email '
+                  'are fixed, so nobody can lock anyone else out. Create '
+                  'your own account to change them.',
+                  style: TextStyle(fontSize: 13),
+                ),
+              )
+            else
+              OutlinedButton.icon(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => const _ChangePasswordDialog(),
+                ),
+                icon: const Icon(Icons.password_outlined, size: 18),
+                label: const Text('Change password'),
               ),
-              icon: const Icon(Icons.password_outlined, size: 18),
-              label: const Text('Change password'),
-            ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: () async {

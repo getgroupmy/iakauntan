@@ -122,4 +122,23 @@ void main() {
       }
     });
   });
+
+  group('the credentials are not changeable', () {
+    // Enforced by a trigger on auth.users (0076) and covered by
+    // supabase/tests/demo_accounts.sql — the change is a call to GoTrue
+    // that never passes through this app, so nothing here could stop it.
+    // What these assert is that the app does not offer a door it knows
+    // is locked.
+    test('the reset guard matches on address, whatever the casing', () {
+      bool blocked(String typed) => demoAccounts
+          .any((a) => a.email.toLowerCase() == typed.toLowerCase());
+
+      expect(blocked('demo@iakauntan.my'), isTrue);
+      expect(blocked('DEMO@IAkauntan.MY'), isTrue,
+          reason: 'an address is not case sensitive, so neither is the guard');
+      expect(blocked('  demo@iakauntan.my'.trim()), isTrue);
+      expect(blocked('someone@example.com'), isFalse,
+          reason: 'a real user must still be able to reset their password');
+    });
+  });
 }

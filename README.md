@@ -1005,6 +1005,29 @@ five accounts are the only thing it opens. Two things to do, together:
 The switch is compile-time on purpose. A door that can be reopened by
 editing a row is not closed.
 
+**The demo credentials are frozen in the database.** Handing a stranger a
+session on a shared account means handing them the ability to change its
+password and lock out every visitor after them — or move its email and
+take the account. `0076` puts a trigger on `auth.users` that refuses any
+change to the password, email or phone of an account flagged
+`app_metadata.demo`, and the five seeded logins carry that flag.
+
+It is a trigger rather than a hidden button because the change is an
+ordinary POST to GoTrue's `/auth/v1/user`, which never passes through
+this app: anyone with a demo session and the publishable key can make it
+with curl. Settings hides the button and the sign-in page refuses to
+e-mail a reset link, but neither is the rule.
+
+Signing in still writes `last_sign_in_at`, and a reset link can still be
+requested — only the columns that would take the account away are
+frozen. To rotate the demo password later, clear the flag first, which
+needs the service role:
+
+```sql
+update auth.users set raw_app_meta_data = raw_app_meta_data - 'demo'
+ where email = 'demo@iakauntan.my';
+```
+
 ### Printing what a customer or an employee receives
 
 Six things render to PDF and download: the **invoice** (from its
