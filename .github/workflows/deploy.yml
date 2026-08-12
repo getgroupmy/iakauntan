@@ -90,6 +90,11 @@ jobs:
           # the service role key must never reach a client bundle.
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          # Set the repository variable DEMO_MODE to false to drop the
+          # one-tap demo logins from the sign-in page. Unset leaves them
+          # on, which is right while this deployment is the demo — see
+          # the README before it carries anybody's real ledger.
+          DEMO_MODE: ${{ vars.DEMO_MODE }}
         run: |
           flutter pub get
 
@@ -105,6 +110,9 @@ jobs:
           fi
           if [ -n "$SUPABASE_ANON_KEY" ]; then
             defines+=("--dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY")
+          fi
+          if [ -n "$DEMO_MODE" ]; then
+            defines+=("--dart-define=DEMO_MODE=$DEMO_MODE")
           fi
 
           # --no-web-resources-cdn is load-bearing: without it the bundle

@@ -120,8 +120,8 @@
     "semantic_hash": "d467519d6e9c87185e4a072e6581819a"
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1786451918.979245,
-    "ast_hash": "73377bb02e5b03ec9c9c6f5c3516e7ce",
+    "mtime": 1786507850.6459403,
+    "ast_hash": "69242cb9244bbdde8ed757db625c82ea",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786479960.1340315,
-    "ast_hash": "63e7b40e64fae86e5ec372a8076322f0",
+    "mtime": 1786508165.1314,
+    "ast_hash": "78016aba391586e9c30fc3f929069aa3",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -980,8 +980,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/deploy.yml": {
-    "mtime": 1786504717.728206,
-    "ast_hash": "4f6a3b461c29e1a02fe6d1a9e1a86b11",
+    "mtime": 1786508137.8660972,
+    "ast_hash": "5da904faee8d2b513271fe187ec18a63",
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/reset_password_screen.dart": {
@@ -1127,6 +1127,16 @@
   "supabase/tests/attendance.sql": {
     "mtime": 1786505197.584138,
     "ast_hash": "3b98135f3d2d2ed43055326f76eec171",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/auth/demo_accounts.dart": {
+    "mtime": 1786507887.3866014,
+    "ast_hash": "0a7a52657219271a80db62971097de1f",
+    "semantic_hash": ""
+  },
+  "app/test/demo_accounts_test.dart": {
+    "mtime": 1786507990.2758422,
+    "ast_hash": "c458b995976aaaf62c08741b2da74537",
     "semantic_hash": ""
   }
 }

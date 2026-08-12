@@ -987,6 +987,24 @@ All five logins share the password `Demo!Akaun2026`:
 | `superadmin@iakauntan.my` | Platform operator — the admin console |
 | `secretary@iakauntan.my` | Company secretary — a practice and its clients |
 
+**None of that needs typing.** The sign-in page lists the five accounts
+under *or look around a demo*, each described by what it will show rather
+than by the name of its role, and a tap signs straight in. It is the same
+`signInWithPassword` call the form makes, not a side door — a visitor
+should reach the app the way everybody else does, or the demo is
+demonstrating something other than the product.
+
+**Turn it off before this project holds a real ledger.** The panel ships
+the demo password inside the bundle, which is harmless only while those
+five accounts are the only thing it opens. Two things to do, together:
+
+- set the repository variable `DEMO_MODE` to `false` (or build with
+  `--dart-define=DEMO_MODE=false`), which removes the panel; and
+- delete the demo users and **both** demo organizations.
+
+The switch is compile-time on purpose. A door that can be reopened by
+editing a row is not closed.
+
 ### Printing what a customer or an employee receives
 
 Six things render to PDF and download: the **invoice** (from its

@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/providers.dart';
 import '../../core/theme.dart';
+import 'demo_accounts.dart';
 
 class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key});
@@ -21,6 +22,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
   bool _isSignUp = false;
   bool _busy = false;
+  String? _demoBusy;
   bool _obscure = true;
   String? _error;
   String? _notice;
@@ -69,6 +71,39 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       if (mounted) setState(() => _error = '$e');
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Straight in, no typing.
+  ///
+  /// Deliberately the same signInWithPassword call the form makes rather
+  /// than a side door: the demo account is a real user with a real role,
+  /// and it should reach the app the same way everyone else does, so
+  /// what a visitor sees is what the product does.
+  Future<void> _signInAsDemo(DemoAccount account) async {
+    setState(() {
+      _demoBusy = account.email;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      await ref.read(supabaseProvider).auth.signInWithPassword(
+            email: account.email,
+            password: demoPassword,
+          );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      // The likeliest cause by far is that the demo users were deleted
+      // before the project took real books, which is exactly what the
+      // README tells you to do. Saying "invalid login credentials" would
+      // send somebody hunting for a typo in a password they never typed.
+      setState(() => _error = e.statusCode == '400'
+          ? 'The demo accounts are not available on this deployment.'
+          : e.message);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _demoBusy = null);
     }
   }
 
@@ -228,6 +263,16 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                         : "New to iAkauntan? Create an account",
                   ),
                 ),
+                // Not offered halfway through creating an account: the
+                // demo is an alternative to signing up, not a step in it.
+                if (demoModeEnabled && !_isSignUp) ...[
+                  const SizedBox(height: 20),
+                  DemoAccountPicker(
+                    onPick: _signInAsDemo,
+                    busyEmail: _demoBusy,
+                    enabled: !_busy,
+                  ),
+                ],
               ],
             ),
           ),
