@@ -36,8 +36,15 @@ void main() {
         'clerk@iakauntan.my',
         'auditor@iakauntan.my',
         'secretary@iakauntan.my',
-        'superadmin@iakauntan.my',
       ]);
+    });
+
+    test('the platform operator is not offered', () {
+      // It is the one account that is not scoped to the demo company:
+      // the console lists every tenant on the deployment, including any
+      // real one. A visitor should not be handed that.
+      expect(demoAccounts.map((a) => a.email), isNot(contains('superadmin@iakauntan.my')));
+      expect(demoAccounts.map((a) => a.role), isNot(contains('Platform operator')));
     });
 
     test('every account says what it will show, not just its title', () {

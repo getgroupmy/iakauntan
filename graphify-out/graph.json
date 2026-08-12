@@ -2046,7 +2046,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_providers_canmanagehrprovider",
       "community": 43,
-      "community_name": "../../core/widgets.dart",
+      "community_name": "people_screen.dart",
       "norm_label": "canmanagehrprovider"
     },
     {
@@ -2068,7 +2068,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_providers_directoryprovider",
       "community": 43,
-      "community_name": "../../core/widgets.dart",
+      "community_name": "people_screen.dart",
       "norm_label": "directoryprovider"
     },
     {
@@ -2134,7 +2134,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_providers_myemployeeprovider",
       "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community_name": "../../core/widgets.dart",
       "norm_label": "myemployeeprovider"
     },
     {
@@ -2288,7 +2288,7 @@
       "_origin": "ast",
       "id": "app_lib_src_core_providers_mypayslipsprovider",
       "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community_name": "../../core/widgets.dart",
       "norm_label": "mypayslipsprovider"
     },
     {
@@ -2914,8 +2914,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "package_go_router_go_router_dart",
-      "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community": 43,
+      "community_name": "people_screen.dart",
       "norm_label": "package:go_router/go_router.dart"
     },
     {
@@ -6819,8 +6819,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_data_models_employee",
-      "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community": 43,
+      "community_name": "people_screen.dart",
       "norm_label": "employee"
     },
     {
@@ -6853,7 +6853,7 @@
       "_origin": "ast",
       "id": "app_lib_src_data_models_leavebalance",
       "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community_name": "../../core/widgets.dart",
       "norm_label": "leavebalance"
     },
     {
@@ -12726,7 +12726,7 @@
       "source_location": null,
       "_origin": "ast",
       "id": "core_widgets_dart",
-      "community": 43,
+      "community": 177,
       "community_name": "../../core/widgets.dart",
       "norm_label": "../../core/widgets.dart"
     },
@@ -17545,7 +17545,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_claims_screen_submit",
       "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community_name": "../../core/widgets.dart",
       "norm_label": "_submit"
     },
     {
@@ -18733,7 +18733,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_my_hr_screen",
       "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community_name": "../../core/widgets.dart",
       "norm_label": "my_hr_screen.dart"
     },
     {
@@ -18744,7 +18744,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_my_hr_screen_myhrscreen",
       "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community_name": "../../core/widgets.dart",
       "norm_label": "myhrscreen"
     },
     {
@@ -18777,7 +18777,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_my_hr_screen_balancepill",
       "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community_name": "../../core/widgets.dart",
       "norm_label": "_balancepill"
     },
     {
@@ -18788,7 +18788,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_my_hr_screen_mypayslipscard",
       "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community_name": "../../core/widgets.dart",
       "norm_label": "_mypayslipscard"
     },
     {
@@ -18799,7 +18799,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_my_hr_screen_mydetailscard",
       "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community_name": "../../core/widgets.dart",
       "norm_label": "_mydetailscard"
     },
     {
@@ -18810,7 +18810,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_my_hr_screen_employee",
       "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community_name": "../../core/widgets.dart",
       "norm_label": "employee"
     },
     {
@@ -18821,7 +18821,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_my_hr_screen_balance",
       "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community_name": "../../core/widgets.dart",
       "norm_label": "balance"
     },
     {
@@ -18832,7 +18832,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_my_hr_screen_build",
       "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community_name": "../../core/widgets.dart",
       "norm_label": "build"
     },
     {
@@ -18843,7 +18843,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_my_hr_screen_punch",
       "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community_name": "../../core/widgets.dart",
       "norm_label": "_punch"
     },
     {
@@ -18854,7 +18854,7 @@
       "_origin": "ast",
       "id": "route_hr_leave",
       "community": 177,
-      "community_name": "my_hr_screen.dart",
+      "community_name": "../../core/widgets.dart",
       "norm_label": "route /hr/leave"
     },
     {
@@ -19117,8 +19117,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payroll_screen_requestaccessscreen",
-      "community": 108,
-      "community_name": "repoProvider",
+      "community": 82,
+      "community_name": "ConsumerState",
       "norm_label": "_requestaccessscreen"
     },
     {
@@ -19128,8 +19128,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_hr_payroll_screen_requestaccessscreenstate",
-      "community": 108,
-      "community_name": "repoProvider",
+      "community": 82,
+      "community_name": "ConsumerState",
       "norm_label": "_requestaccessscreenstate"
     },
     {
@@ -19833,7 +19833,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen",
       "community": 43,
-      "community_name": "../../core/widgets.dart",
+      "community_name": "people_screen.dart",
       "norm_label": "people_screen.dart"
     },
     {
@@ -19844,7 +19844,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_peoplescreen",
       "community": 43,
-      "community_name": "../../core/widgets.dart",
+      "community_name": "people_screen.dart",
       "norm_label": "peoplescreen"
     },
     {
@@ -19855,7 +19855,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_peoplescreenstate",
       "community": 43,
-      "community_name": "../../core/widgets.dart",
+      "community_name": "people_screen.dart",
       "norm_label": "_peoplescreenstate"
     },
     {
@@ -19866,7 +19866,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_persontile",
       "community": 43,
-      "community_name": "../../core/widgets.dart",
+      "community_name": "people_screen.dart",
       "norm_label": "_persontile"
     },
     {
@@ -19877,7 +19877,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_search",
       "community": 43,
-      "community_name": "../../core/widgets.dart",
+      "community_name": "people_screen.dart",
       "norm_label": "_search"
     },
     {
@@ -19888,7 +19888,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_employee",
       "community": 43,
-      "community_name": "../../core/widgets.dart",
+      "community_name": "people_screen.dart",
       "norm_label": "employee"
     },
     {
@@ -19899,7 +19899,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_canmanagehr",
       "community": 43,
-      "community_name": "../../core/widgets.dart",
+      "community_name": "people_screen.dart",
       "norm_label": "canmanagehr"
     },
     {
@@ -19910,7 +19910,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_createstate",
       "community": 43,
-      "community_name": "../../core/widgets.dart",
+      "community_name": "people_screen.dart",
       "norm_label": "createstate"
     },
     {
@@ -19921,7 +19921,7 @@
       "_origin": "ast",
       "id": "app_lib_src_features_hr_people_screen_build",
       "community": 43,
-      "community_name": "../../core/widgets.dart",
+      "community_name": "people_screen.dart",
       "norm_label": "build"
     },
     {
@@ -19932,7 +19932,7 @@
       "_origin": "ast",
       "id": "route_hr_people_new",
       "community": 43,
-      "community_name": "../../core/widgets.dart",
+      "community_name": "people_screen.dart",
       "norm_label": "route /hr/people/new"
     },
     {
@@ -20877,8 +20877,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_legal_matter_detail_screen_timedialog",
-      "community": 14,
-      "community_name": "matter_detail_screen.dart",
+      "community": 82,
+      "community_name": "ConsumerState",
       "norm_label": "_timedialog"
     },
     {
@@ -20888,8 +20888,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_legal_matter_detail_screen_timedialogstate",
-      "community": 14,
-      "community_name": "matter_detail_screen.dart",
+      "community": 82,
+      "community_name": "ConsumerState",
       "norm_label": "_timedialogstate"
     },
     {
@@ -20910,8 +20910,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_legal_matter_detail_screen_disbursementdialog",
-      "community": 14,
-      "community_name": "matter_detail_screen.dart",
+      "community": 82,
+      "community_name": "ConsumerState",
       "norm_label": "_disbursementdialog"
     },
     {
@@ -20921,8 +20921,8 @@
       "source_location": null,
       "_origin": "ast",
       "id": "app_lib_src_features_legal_matter_detail_screen_disbursementdialogstate",
-      "community": 14,
-      "community_name": "matter_detail_screen.dart",
+      "community": 82,
+      "community_name": "ConsumerState",
       "norm_label": "_disbursementdialogstate"
     },
     {
@@ -37309,7 +37309,7 @@
       "label": "Printing what a customer or an employee receives",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L1031",
+      "source_location": "L1047",
       "_origin": "ast",
       "id": "readme_printing_what_a_customer_or_an_employee_receives",
       "community": 95,
@@ -37320,7 +37320,7 @@
       "label": "The secretarial practice",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L1123",
+      "source_location": "L1139",
       "_origin": "ast",
       "id": "readme_the_secretarial_practice",
       "community": 95,
@@ -37331,7 +37331,7 @@
       "label": "`Database error querying schema`",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L1166",
+      "source_location": "L1182",
       "_origin": "ast",
       "id": "readme_database_error_querying_schema",
       "community": 95,
@@ -37342,7 +37342,7 @@
       "label": "Not built yet",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L1211",
+      "source_location": "L1227",
       "_origin": "ast",
       "id": "readme_not_built_yet",
       "community": 95,
@@ -92998,7 +92998,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L1211",
+      "source_location": "L1227",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_iakauntan",
@@ -93394,7 +93394,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L1166",
+      "source_location": "L1182",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_demo_data",
@@ -93405,7 +93405,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L1031",
+      "source_location": "L1047",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_demo_data",
@@ -93416,7 +93416,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
-      "source_location": "L1123",
+      "source_location": "L1139",
       "weight": 1.0,
       "_origin": "ast",
       "source": "readme_demo_data",
@@ -93447,5 +93447,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "925e4d9049edec5d6a407dbc10ddaed0312083fd"
+  "built_at_commit": "95544a6a21783b4fd08a32e248e417a893a3bdb0"
 }

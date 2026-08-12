@@ -71,13 +71,20 @@ const demoAccounts = <DemoAccount>[
     sees: 'A practice and the client companies it files for',
     icon: Icons.domain_outlined,
   ),
-  DemoAccount(
-    email: 'superadmin@iakauntan.my',
-    role: 'Platform operator',
-    sees: 'The admin console, no company of its own',
-    icon: Icons.shield_outlined,
-  ),
 ];
+
+/// Not offered: `superadmin@iakauntan.my`, the platform operator.
+///
+/// Every other account here is scoped to a demo company, so the worst a
+/// visitor can do is scribble on invented books. The operator console is
+/// not scoped to anything — it lists every tenant on the deployment and
+/// can change their status, which would include a real company the day
+/// one signs up. Handing that to whoever loads the page is a different
+/// kind of offer, and not one a demo needs to make.
+///
+/// The account still exists and still signs in by typing its credentials.
+/// Removing it from this list is not the same as closing it: rotate its
+/// password before this deployment is anything but a demo.
 
 /// The picker itself.
 ///

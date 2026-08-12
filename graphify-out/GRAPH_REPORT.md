@@ -1,7 +1,7 @@
 # Graph Report - iakauntan  (2026-08-12)
 
 ## Corpus Check
-- 199 files · ~191,055 words
+- 199 files · ~191,333 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `925e4d90`
+- Built from commit: `95544a6a`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -58,7 +58,7 @@
 - platform_console_screen.dart
 - 0014_reports.sql
 - public.client_account_transactions
-- ../../core/widgets.dart
+- people_screen.dart
 - leave_screen.dart
 - sign_in_screen.dart
 - attachments_card.dart
@@ -171,7 +171,7 @@
 - extraction-spec.md
 - _ExpenseDialogState
 - build
-- my_hr_screen.dart
+- ../../core/widgets.dart
 - payslip_pdf.dart
 - 0071_seed_chart_of_accounts_reentrant.sql
 - ../../core/format.dart
@@ -278,7 +278,7 @@ Nodes (33): PaymentLine, PayrollRun, _buildForm, createState, _DateField, dispos
 
 ### Community 14 - "matter_detail_screen.dart"
 Cohesion: 0.07
-Nodes (35): clientTransactionsProvider, disbursementsProvider, timeEntriesProvider, _activity, _amount, _billable, build, canPost (+27 more)
+Nodes (31): clientTransactionsProvider, disbursementsProvider, timeEntriesProvider, _activity, _amount, _billable, build, canPost (+23 more)
 
 ### Community 15 - "entity_editor.dart"
 Cohesion: 0.07
@@ -392,9 +392,9 @@ Nodes (21): public.dashboard_summary(), public.report_balance_sheet(), public.re
 Cohesion: 0.18
 Nodes (20): app.assert_client_funds, app.calc_time_entry, app.assert_client_funds(), assert_client_funds, calc_amount, public.client_account_transactions, public.disbursements, public.matters (+12 more)
 
-### Community 43 - "../../core/widgets.dart"
-Cohesion: 0.19
-Nodes (12): canManageHrProvider, directoryProvider, build, canManageHr, createState, employee, PeopleScreen, _PeopleScreenState (+4 more)
+### Community 43 - "people_screen.dart"
+Cohesion: 0.18
+Nodes (13): canManageHrProvider, directoryProvider, Employee, build, canManageHr, createState, employee, PeopleScreen (+5 more)
 
 ### Community 44 - "leave_screen.dart"
 Cohesion: 0.06
@@ -549,8 +549,8 @@ Cohesion: 0.17
 Nodes (11): bold, buildDocumentPdf, doc, _inline, kit, _paragraphs, parts, regular (+3 more)
 
 ### Community 82 - "ConsumerState"
-Cohesion: 0.11
-Nodes (28): canPostProvider, canWriteProvider, contactsProvider, documentsProvider, PlatformConsoleScreen, _PlatformConsoleScreenState, ContactEditor, build (+20 more)
+Cohesion: 0.09
+Nodes (34): canPostProvider, canWriteProvider, contactsProvider, documentsProvider, PlatformConsoleScreen, _PlatformConsoleScreenState, ContactEditor, build (+26 more)
 
 ### Community 83 - "0020_platform_admin_rpcs.sql"
 Cohesion: 0.17
@@ -645,8 +645,8 @@ Cohesion: 0.29
 Nodes (5): public.audit_list_payslips(), public.pay_periods, public.payroll_runs, public.payslip_lines, public.payslips
 
 ### Community 108 - "repoProvider"
-Cohesion: 0.06
-Nodes (44): corpBeneficialOwnersProvider, corpChargesProvider, corpDocumentsProvider, corpMembersProvider, corpOfficersProvider, corpShareEventsProvider, corpSignaturesProvider, corpTemplatesProvider (+36 more)
+Cohesion: 0.07
+Nodes (42): corpBeneficialOwnersProvider, corpChargesProvider, corpDocumentsProvider, corpMembersProvider, corpOfficersProvider, corpShareEventsProvider, corpSignaturesProvider, corpTemplatesProvider (+34 more)
 
 ### Community 109 - "0012_bootstrap.sql"
 Cohesion: 0.40
@@ -744,9 +744,9 @@ Nodes (12): accountsProvider, bankAccountsProvider, expensesProvider, paymentMod
 Cohesion: 0.20
 Nodes (11): enabledModulesProvider, moduleEnabled, platformModulesProvider, platformOrgsProvider, platformSettingsProvider, platformStatsProvider, build, _OrganizationsTab (+3 more)
 
-### Community 177 - "my_hr_screen.dart"
-Cohesion: 0.14
-Nodes (15): myEmployeeProvider, myPayslipsProvider, Employee, LeaveBalance, _submit, balance, _BalancePill, build (+7 more)
+### Community 177 - "../../core/widgets.dart"
+Cohesion: 0.15
+Nodes (14): myEmployeeProvider, myPayslipsProvider, LeaveBalance, _submit, balance, _BalancePill, build, employee (+6 more)
 
 ### Community 178 - "payslip_pdf.dart"
 Cohesion: 0.17

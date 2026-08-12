@@ -984,12 +984,28 @@ All five logins share the password `Demo!Akaun2026`:
 | `demo@iakauntan.my` | Owner — the whole company |
 | `clerk@iakauntan.my` | Accounts Clerk — can prepare, cannot post |
 | `auditor@iakauntan.my` | Auditor — reads the ledger, writes nothing |
-| `superadmin@iakauntan.my` | Platform operator — the admin console |
 | `secretary@iakauntan.my` | Company secretary — a practice and its clients |
 
-**None of that needs typing.** The sign-in page lists the five accounts
+**None of that needs typing.** The sign-in page lists those four accounts
 under *or look around a demo*, each described by what it will show rather
-than by the name of its role, and a tap signs straight in. It is the same
+than by the name of its role, and a tap signs straight in.
+
+**`superadmin@iakauntan.my` is deliberately not among them.** Every other
+demo login is scoped to a demo company, so the worst a visitor can do is
+scribble on invented books. The platform operator console is scoped to
+nothing — it lists every tenant on the deployment and can change their
+status, which would include a real company the day one signs up.
+
+Leaving it off the list is not the same as closing it: the account still
+signs in if somebody types the password above, which this file publishes.
+**Rotate it before this deployment is anything but a demo.** The
+credential lock has to be lifted first, since that account carries the
+demo flag:
+
+```sql
+update auth.users set raw_app_meta_data = raw_app_meta_data - 'demo'
+ where email = 'superadmin@iakauntan.my';
+``` It is the same
 `signInWithPassword` call the form makes, not a side door — a visitor
 should reach the app the way everybody else does, or the demo is
 demonstrating something other than the product.
