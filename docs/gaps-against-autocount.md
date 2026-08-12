@@ -1,146 +1,170 @@
-# Gaps against AutoCount Cloud
+# Gaps against AutoCount Accounting 2.0
 
-## Where this came from
+## What was read, and what was not
 
-`my.autocountcloud.com` is blocked by the network egress proxy in the
-environment this was researched in, so **the page was not read.** The
-AutoCount feature list below comes from search-engine summaries of
-AutoCount's own marketing pages (`autocountsoft.com`,
-`autocountsystem.com`) and reseller sites. Treat it as the shape of their
-offering, not as a specification — plan comparisons and module names
-should be confirmed against a live plan page before anything is promised
-to a customer.
+`wiki.autocountsoft.com`, `autocountsoft.com` and `my.autocountcloud.com`
+are all blocked by the network egress proxy in this environment — every
+one returns `403` on the CONNECT tunnel. **The wiki pages themselves were
+not read.** The AutoCount side of this document comes from search-engine
+indexes of those same pages (help-file menu listings, module pages,
+knowledge-base articles). Treat it as an accurate shape of their
+functional surface and a poor guide to their exact field names. Before
+anything here is promised to a customer, confirm it against the live
+pages from a machine that can reach them.
 
-Everything about **iAkauntan** below was read from the live schema and
-the Dart source, and was accurate as at migration `0077`. Migrations
-`0078`–`0080` and the currency picker have since closed most of the
-multi-currency gap; the rows below are marked where that has happened.
+The **iAkauntan** side is not from summaries. Every claim below was
+verified two ways:
+
+- the live schema, queried directly (`information_schema`, `pg_proc`,
+  `pg_enum`, `cron.job`) on project `ewwcgtnniwqndrzukksm`;
+- a reference count of each table name in `app/lib`, which is what
+  separates "the database can do this" from "a user can do this".
+
+That second check is the one that matters, and it is why this revision
+says something different from the last one.
 
 ## The finding that matters most
 
-Not a missing feature. **Four capabilities were already in the database
-and could not be reached from the app.** They were built and then never
-wired up:
+**The sales and purchase cycles are a chain in AutoCount and a set of
+dead ends here.**
 
-| Capability | In the schema | References in `app/lib` |
+In AutoCount, a quotation is transferred to a sales order, the order to a
+delivery order, the delivery order to an invoice — partially or in full,
+with the quantities carried and the balance tracked. The same on the
+purchase side: purchase order → goods received → bill. That transfer is
+not a convenience feature; it *is* the sales module. It is what stops
+somebody retyping an order, and it is what makes "what have we ordered
+but not yet received" answerable.
+
+iAkauntan has the storage for it and none of the behaviour:
+
+| Column | Purpose | References in `app/lib` |
 | --- | --- | --- |
-| Multi-currency | `ref_currencies`, `exchange_rates`, `currency` + `exchange_rate` on every document and journal | ~~0~~ → picker, rate lookup and settlement FX shipped |
-| Project / department dimensions | `gl_lines.project_code`, `gl_lines.department_code` | **0** |
-| Price levels | `price_levels`, `item_prices` | **0** |
-| FX revaluation | `journal_source` has an `fx_revaluation` value | no function exists |
+| `sales_documents.parent_id` | the document this was transferred from | **0** |
+| `sales_documents.fulfilment_status` | how much of it has been delivered | **0** |
+| `purchase_document_lines.quantity_received` | received against this order line | **0** |
+| `purchase_document_lines.quantity_billed` | billed against this order line | **0** |
+| `sales_documents.original_invoice_id` | what a credit note credits | **0** |
 
-The multi-currency case was the clearest. `document_editor.dart` held
-`String _currency = 'MYR'`, read it back from a saved document, and
-wrote it on save — but **no widget ever changed it.** The plumbing ran
-from the client to the ledger and the tap that would start the water was
-missing.
+There is no `transfer` function anywhere in the database and no
+transfer action anywhere in the app. The Quotations, Sales Orders,
+Delivery Orders, Purchase Orders and Goods Received screens all exist and
+all terminate: you can create the document, and then you must retype it
+as the next one. Every quantity in the two `quantity_*` columns above is
+still zero in the live data, because nothing has ever written to them.
 
-That tap now exists: a currency selector and rate field on the document,
-the rate resolved from `exchange_rates` at the document date, and
-realised gain and loss posted on settlement. What is still missing is
-period-end revaluation, so **open** foreign balances are still carried at
-the rate they were raised at until they settle.
+This is worse than a missing feature, because the screens imply the
+capability. A user who raises a quotation reasonably expects to convert
+it, finds no way to, and concludes the software is unfinished — which,
+here, is the correct conclusion.
 
-This is the same pattern this project has hit repeatedly — the fiscal
-year RPC with no caller, `reverse_gl_entry` with no caller, the leave and
-recurring-journal schema with no runner. It is worth saying plainly
-because it changes the advice: **the cheapest way to close the gap
-against AutoCount is to finish what is already half-built, not to start
-anything new.**
+## Built in the database, unreachable from the app
 
-## Genuinely missing
+Thirteen tables have **zero** references in `app/lib`. Some of those are
+correct — `stock_movements`, `stock_levels` and `number_sequences` are
+written by SECURITY DEFINER functions and never touched by the client by
+design. The rest are capabilities nobody can reach:
 
-Nothing in the schema, nothing in the app.
-
-| Missing | What it is for | Who actually needs it |
+| Capability | Tables in the schema | Callable? |
 | --- | --- | --- |
-| **Multi-UOM** | Buy in cartons, hold in boxes, sell in pieces, with conversion factors | Trading and distribution. Very common in Malaysian SME wholesale |
-| **Serial / batch tracking** | Which physical unit went to which customer; expiry by batch | Electronics, pharmaceutical, automotive parts, anything with warranty or shelf life |
-| **Item assembly / BOM** | Build a finished item from components, moving cost with it | Light manufacturing, kitting |
-| **POS** | Retail counter, cash drawer, receipt printer | Retail. AutoCount sells this as a separate product |
-| **Customisable report layouts** | A designer for financial statement formats | Firms with a house format for client accounts |
-| **Landed cost** | Freight, duty and insurance apportioned into item cost | Importers |
+| **Bank reconciliation** | `bank_reconciliations`, `bank_transactions` (with `import_batch_id`, `matched_table`, `matched_id`, `is_reconciled`) | No UI, and no posting or matching function either |
+| **Multi-location stock** | `warehouses`, `stock_levels.warehouse_id`, `purchase_document_lines.warehouse_id` | No UI. Every movement lands in one implied place |
+| **Stock adjustment / stock take** | `stock_adjustments`, `stock_adjustment_lines` | No UI **and no `post_stock_adjustment` function** — unreachable even from SQL |
+| **Recurring journals** | `recurring_journals`, run nightly by `app.run_recurring_journals` via the `iakauntan-daily` cron | The runner works; nothing can create a template to run |
+| **Price levels** | `price_levels`, `item_prices` | No UI. Line editor reads `items.unit_price` only |
+| **Project / department dimensions** | `gl_lines.project_code`, `.department_code`, and the same on both line tables | No UI, no `projects` table, no filtered P&L |
+| **Sales agent** | `sales_documents.salesperson_id` | No UI, so no commission or agent report is possible |
+| **Item categories** | `item_categories` | No UI |
 
-Already recorded in the README's *Not built yet* list and not repeated
-here: bank statement import, statutory export files (CP39, EA, Borang E),
-e-mail delivery, Goods Received and Purchase Request screens.
+Five document types are in the `sales_doc_type` / `purchase_doc_type`
+enums with no screen: `proforma`, `refund_note`, `purchase_request`,
+`purchase_debit_note`, and — the one that will be missed —
+`purchase_return`.
 
-## Where iAkauntan is ahead
+## Not in the schema at all
 
-Worth knowing, because it decides who this is sold to. AutoCount sells
-these as separate products or not at all:
+These have no table, no column and no function. They are genuine
+build-from-nothing work:
 
-- **HR and payroll in the same system** — EPF, SOCSO, EIS, PCB, HRD Corp,
-  leave, claims, attendance, and a bank payment file, all posting to the
-  same ledger. AutoCount's HRMS is a separate purchase.
-- **Corporate secretarial** — statutory registers, CA 2016 deadlines
-  computed from incorporation and financial year end, document generation
-  and a signature workflow with scoped links for people who are not
-  staff.
-- **e-Invoice as part of the document lifecycle** rather than a bolt-on
-  module with its own price.
+| Missing | Why it matters | Who needs it |
+| --- | --- | --- |
+| **Fixed asset register and depreciation** | `journal_source` already has a `depreciation` value with nothing to produce it. Every company with a vehicle or a machine needs this at year end, and the auditor asks for the schedule | Everyone |
+| **Budgets** | AutoCount has Budget Maintenance and budget-vs-actual reporting; iAkauntan has no budget anywhere | Anyone with a board |
+| **AR/AP contra** | Offsetting a customer who is also a supplier. Common in Malaysian trading, and today it must be faked with a journal | Trading |
+| **Credit control** | `contacts.credit_limit` is captured and stored and **never checked**. Nothing warns or blocks when an invoice takes a customer past their limit — the field is decorative | Anyone extending credit |
+| **Customer/supplier deposits** | `receipts.unapplied_amount` holds an advance, but there is no deposit entry, no forfeit, no application flow | Trading, projects |
+| **Cash flow forecast** | AutoCount's Advanced Financial Report module leads on this; iAkauntan has no forward view at all | Everyone |
+| **Multi-UOM** | `items` has a single `uom_code`. No conversion, so cartons and pieces cannot coexist | Distribution |
+| **Serial and batch tracking** | Nothing. No serialised business can migrate | Electronics, pharma |
+| **Stock assembly / BOM** | `stock_movement_type` has `assembly_in` and `assembly_out` and there is no assembly table to produce them | Light manufacturing |
+| **Landed cost** | No apportionment of freight and duty onto item cost | Importers |
+| **Post-dated cheques** | `receipts.cheque_date` exists; no PDC register, no maturity handling | Traditional trading |
+| **Document approval workflow** | AutoCount sells this as a plug-in; iAkauntan has role gates but no per-document approval step | Larger SMEs |
 
-## Advice
+## What iAkauntan has that AutoCount does not
 
-### 1. Finish the four half-built things first
+Worth stating, because the gap list on its own reads as a deficit and the
+product is not one:
 
-In this order, by commercial value:
+- **LHDN e-Invoice built in**, including consolidation, submission,
+  status polling and the TIN checks — not a bolt-on.
+- **Payroll with the statutory engine asserted in CI** — EPF, SOCSO,
+  EIS, PCB, HRD Corp, with tests that fail if a number moves.
+- **Corporate secretarial**: registers, resolutions, SSM deadlines,
+  signature workflow and scoped signing links for people outside the
+  company.
+- **CRM** — leads, pipeline, opportunities.
+- **Multi-tenant SaaS with RLS**, module entitlements and a platform
+  console. AutoCount 2.0 is per-installation desktop software.
+- **Legal firm client accounts** with the client-money separation that
+  practice requires.
 
-**Multi-currency.** ~~The largest gap with the smallest remaining
-work~~ — mostly done. The rate resolver (`0078`), realised gain and loss
-on settlement (`0079`) and the currency picker are in. What is left is
-the `fx_revaluation` function for period end: until it exists, an open
-foreign invoice sits on the balance sheet at the rate it was raised at,
-so the balances are wrong after any rate movement by exactly the
-unrealised difference. It is not optional, and it is the last piece.
+The overlap is the accounting core. Everything above is where the
+product is ahead, and none of it is what a migrating AutoCount user will
+test first.
 
-**Project and department dimensions.** `gl_lines` already carries both
-codes. What is left: a `projects` table, pickers on the document and
-journal screens, and — the part that gives it value — a P&L filtered by
-project. Sells to professional services, construction and anyone doing
-job costing.
+## The order to build in
 
-**Price levels.** Least urgent, smallest job: a price level on the
-contact, and the line editor reading `item_prices` before falling back to
-`items.unit_price`.
+Ranked by how many businesses each unblocks, not by size:
 
-### 2. Then multi-UOM and serial/batch, but only if the target is trading
+1. **Document transfer.** The chain, both cycles, partial and full. The
+   screens already exist and the columns already exist; this is the
+   behaviour between them. Nothing else on this list makes the product
+   feel finished the way this does.
+2. **FX revaluation at period end.** The last piece of multi-currency
+   (`0078`–`0080` and the currency picker landed the rest). Until it
+   exists an open foreign invoice sits on the balance sheet at the rate
+   it was raised at, and the balances are wrong by the unrealised
+   difference after any rate movement.
+3. **Fixed assets and depreciation.** Universal, and the journal source
+   is already reserved for it.
+4. **Bank reconciliation.** Two tables, fully designed, nothing on top.
+   Reconciling is monthly work for every bookkeeper alive.
+5. **Credit control.** Smallest job here: check the limit before posting
+   an invoice and say so. The field is already collected.
+6. **Stock adjustment and warehouses.** Needs a posting function as well
+   as a UI, so it is larger than it looks.
+7. **Price levels, project/department dimensions, recurring journal UI.**
+   Each is a screen over storage that already works.
+8. **Multi-UOM, then serial/batch, then assembly.** Only if trading and
+   light manufacturing are the target. These are real projects.
 
-These are real work, not wiring — multi-UOM interacts with weighted
-average costing, and serial tracking changes what a stock movement *is*.
-Build them when a distribution client is actually in front of you, not to
-match a feature grid.
+## Migration eligibility
 
-### 3. Deliberately do not build
-
-- **POS.** A different product with different hardware, and AutoCount
-  treats it as one too.
-- **A report layout designer.** Large, and the demand behind it is
-  usually "I need this report in my format" — which good fixed reports
-  plus the PDF and CSV exports already answer for most firms.
-
-### 4. Read this next to the migration plan
-
-`docs/migrating-from-autocount.md` and this document are the same problem
-seen from two sides. **A gap here is a client who cannot move.** A
-company on AutoCount Pro using serial numbers cannot be migrated into
-iAkauntan today at any level of effort, because there is nowhere to put
-the data. Foreign-currency books are no longer in that category — they
-can be moved and transacted, with period-end revaluation the one thing
-still to finish.
-
-So the gap list doubles as a migration eligibility list:
+A gap here is a client who cannot move:
 
 | Client profile | Can they move today? |
 | --- | --- |
 | Services company, MYR only, no stock | Yes |
-| Trading company, MYR, simple stock | Yes |
-| Any company invoicing in foreign currency | Yes to invoice and settle; **not yet** for period-end reporting, until revaluation lands |
-| Distribution with cartons/pieces | **No** — until multi-UOM |
-| Electronics, pharma, anything serialised | **No** — until serial tracking |
+| Trading company, MYR, simple stock | Yes, but they will retype every order |
+| Company invoicing in foreign currency | Yes to invoice and settle; not yet for period-end reporting |
+| Anyone with fixed assets to depreciate | No — nowhere to put the register |
+| Anyone reconciling a bank account monthly | No |
+| Distribution with cartons and pieces | No — until multi-UOM |
+| Electronics, pharma, anything serialised | No — until serial tracking |
+| Light manufacturing with a BOM | No — until assembly |
 | Retail with a counter | No, and by choice |
 
-That ordering — currency, then dimensions, then UOM, then serials — is
-the order in which it widens the set of businesses that can leave
-AutoCount, which is a better reason to build than parity for its own
-sake.
+The middle three rows are the change from the last revision of this
+document. They are not exotic requirements; they are ordinary
+bookkeeping, and each one is a company that cannot leave AutoCount.
