@@ -296,6 +296,88 @@ class Repo {
   }
 
   // ------------------------------------------------------------------
+  // Stock
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> warehouses() async => _rows(await client
+      .from('warehouses')
+      .select()
+      .eq('org_id', orgId)
+      .eq('is_active', true)
+      .order('code'));
+
+  /// The warehouse a new adjustment is filed against, created if the
+  /// organization has none — `warehouses` being empty is not a state the
+  /// client can do anything about on its own.
+  Future<String> ensureDefaultWarehouse() async {
+    final data = await client
+        .rpc('ensure_default_warehouse', params: {'p_org_id': orgId});
+    return data as String;
+  }
+
+  /// What the books think is on the shelf, which is what a stock take
+  /// sheet opens on.
+  Future<List<Map<String, dynamic>>> stockOnHand({String? warehouseId}) async =>
+      _rows(await client.rpc('stock_on_hand', params: {
+        'p_org_id': orgId,
+        if (warehouseId != null) 'p_warehouse_id': warehouseId,
+      }));
+
+  Future<List<Map<String, dynamic>>> stockAdjustments({int limit = 50}) async =>
+      _rows(await client
+          .from('stock_adjustments')
+          .select()
+          .eq('org_id', orgId)
+          .order('adjustment_date', ascending: false)
+          .limit(limit));
+
+  /// Saves a counted sheet as a draft adjustment and returns its id.
+  /// Lines whose count equals the system figure are left out: they are
+  /// not an adjustment, and carrying them makes the sheet unreadable.
+  Future<String> saveStockAdjustment({
+    required String warehouseId,
+    required DateTime date,
+    required String reason,
+    required List<({String itemId, double system, double counted})> lines,
+  }) async {
+    final header = await client
+        .from('stock_adjustments')
+        .insert({
+          'org_id': orgId,
+          'adjustment_no': await nextDocumentNumber('stock_adjustment'),
+          'adjustment_date': Fmt.iso(date),
+          'warehouse_id': warehouseId,
+          'reason': reason,
+          'adjustment_type': 'stock_take',
+          'status': 'draft',
+        })
+        .select()
+        .single();
+
+    final id = header['id'] as String;
+    final changed = lines.where((l) => l.counted != l.system).toList();
+    if (changed.isNotEmpty) {
+      await client.from('stock_adjustment_lines').insert([
+        for (var i = 0; i < changed.length; i++)
+          {
+            'org_id': orgId,
+            'adjustment_id': id,
+            'line_no': i + 1,
+            'item_id': changed[i].itemId,
+            'system_quantity': changed[i].system,
+            'counted_quantity': changed[i].counted,
+          }
+      ]);
+    }
+    return id;
+  }
+
+  Future<String> postStockAdjustment(String id) async {
+    final data =
+        await client.rpc('post_stock_adjustment', params: {'p_id': id});
+    return data as String;
+  }
+
+  // ------------------------------------------------------------------
   // Bank reconciliation
   // ------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> bankStatementLines(

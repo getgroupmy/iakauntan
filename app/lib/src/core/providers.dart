@@ -286,6 +286,21 @@ final customerCreditProvider = FutureProvider.autoDispose
   return requireRepo(ref).customerCreditStatus(contactId);
 });
 
+final warehousesProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).warehouses();
+});
+
+final stockOnHandProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>((ref, warehouseId) {
+  return requireRepo(ref).stockOnHand(warehouseId: warehouseId);
+});
+
+final stockAdjustmentsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).stockAdjustments();
+});
+
 final fixedAssetsProvider =
     FutureProvider.autoDispose.family<List<FixedAsset>, bool>(
         (ref, includeDisposed) {

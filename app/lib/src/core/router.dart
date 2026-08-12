@@ -10,6 +10,7 @@ import '../features/crm/pipeline_screen.dart';
 import '../features/admin/platform_console_screen.dart';
 import '../features/assets/assets_screen.dart';
 import '../features/banking/reconciliation_screen.dart';
+import '../features/stock/stock_take_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/documents/document_editor.dart';
 import '../features/documents/document_list_screen.dart';
@@ -215,6 +216,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/einvoice', builder: (_, __) => const EinvoiceScreen()),
           GoRoute(path: '/journals', builder: (_, __) => const JournalsScreen()),
           GoRoute(path: '/assets', builder: (_, __) => const AssetsScreen()),
+          GoRoute(
+            path: '/stock-take',
+            builder: (_, __) => const StockTakeScreen(),
+          ),
           GoRoute(
             path: '/reconcile',
             builder: (_, __) => const ReconciliationScreen(),
