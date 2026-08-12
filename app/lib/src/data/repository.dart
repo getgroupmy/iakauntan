@@ -296,6 +296,82 @@ class Repo {
   }
 
   // ------------------------------------------------------------------
+  // Bank reconciliation
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> bankStatementLines(
+    String bankAccountId, {
+    bool onlyOpen = false,
+  }) async {
+    var q = client
+        .from('bank_transactions')
+        .select()
+        .eq('org_id', orgId)
+        .eq('bank_account_id', bankAccountId);
+    if (onlyOpen) q = q.isFilter('reconciliation_id', null);
+    return _rows(await q.order('transaction_date'));
+  }
+
+  /// Imports statement lines, skipping any already on the account.
+  /// Returns {'imported': n, 'skipped': n}.
+  Future<Map<String, dynamic>> importBankTransactions(
+    String bankAccountId,
+    List<Map<String, dynamic>> rows,
+  ) async {
+    final data = await client.rpc('import_bank_transactions', params: {
+      'p_bank_account_id': bankAccountId,
+      'p_rows': rows,
+    });
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> suggestBankMatches(
+          String transactionId) async =>
+      _rows(await client.rpc('suggest_bank_matches',
+          params: {'p_transaction_id': transactionId}));
+
+  Future<void> matchBankTransaction({
+    required String transactionId,
+    required String sourceTable,
+    required String sourceId,
+  }) =>
+      client.rpc('match_bank_transaction', params: {
+        'p_transaction_id': transactionId,
+        'p_source_table': sourceTable,
+        'p_source_id': sourceId,
+      });
+
+  Future<void> unmatchBankTransaction(String transactionId) =>
+      client.rpc('unmatch_bank_transaction',
+          params: {'p_transaction_id': transactionId});
+
+  /// Book balance, unpresented items, and what is left over.
+  Future<Map<String, dynamic>> bankReconciliationStatus({
+    required String bankAccountId,
+    required DateTime asAt,
+    required double statementBalance,
+  }) async {
+    final data = await client.rpc('bank_reconciliation_status', params: {
+      'p_bank_account_id': bankAccountId,
+      'p_as_at': Fmt.iso(asAt),
+      'p_statement_balance': statementBalance,
+    });
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<String> completeBankReconciliation({
+    required String bankAccountId,
+    required DateTime statementDate,
+    required double statementBalance,
+  }) async {
+    final data = await client.rpc('complete_bank_reconciliation', params: {
+      'p_bank_account_id': bankAccountId,
+      'p_statement_date': Fmt.iso(statementDate),
+      'p_statement_balance': statementBalance,
+    });
+    return data as String;
+  }
+
+  // ------------------------------------------------------------------
   // Fixed assets
   // ------------------------------------------------------------------
   Future<List<FixedAsset>> fixedAssets({bool includeDisposed = false}) async {

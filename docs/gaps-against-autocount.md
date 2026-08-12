@@ -74,7 +74,7 @@ design. The rest are capabilities nobody can reach:
 
 | Capability | Tables in the schema | Callable? |
 | --- | --- | --- |
-| **Bank reconciliation** | `bank_reconciliations`, `bank_transactions` (with `import_batch_id`, `matched_table`, `matched_id`, `is_reconciled`) | No UI, and no posting or matching function either |
+| ~~Bank reconciliation~~ | `bank_reconciliations`, `bank_transactions` | Done — `0085` |
 | **Multi-location stock** | `warehouses`, `stock_levels.warehouse_id`, `purchase_document_lines.warehouse_id` | No UI. Every movement lands in one implied place |
 | **Stock adjustment / stock take** | `stock_adjustments`, `stock_adjustment_lines` | No UI **and no `post_stock_adjustment` function** — unreachable even from SQL |
 | **Recurring journals** | `recurring_journals`, run nightly by `app.run_recurring_journals` via the `iakauntan-daily` cron | The runner works; nothing can create a template to run |
@@ -140,8 +140,9 @@ Ranked by how many businesses each unblocks, not by size:
    **bank** balances are still outside it; see the migration for why.
 3. ~~**Fixed assets and depreciation.**~~ Done — `0084`, with a register,
    straight-line and reducing-balance depreciation, and disposal.
-4. **Bank reconciliation.** Two tables, fully designed, nothing on top.
-   Reconciling is monthly work for every bookkeeper alive.
+4. ~~**Bank reconciliation.**~~ Done — `0085`, with CSV import,
+   suggested matches and a reconciliation that refuses to close while it
+   is out.
 5. **Credit control.** Smallest job here: check the limit before posting
    an invoice and say so. The field is already collected.
 6. **Stock adjustment and warehouses.** Needs a posting function as well
@@ -161,7 +162,7 @@ A gap here is a client who cannot move:
 | Trading company, MYR, simple stock | Yes |
 | Company invoicing in foreign currency | Yes |
 | Anyone with fixed assets to depreciate | Yes |
-| Anyone reconciling a bank account monthly | No |
+| Anyone reconciling a bank account monthly | Yes |
 | Distribution with cartons and pieces | No — until multi-UOM |
 | Electronics, pharma, anything serialised | No — until serial tracking |
 | Light manufacturing with a BOM | No — until assembly |

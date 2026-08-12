@@ -65,6 +65,8 @@ const _destinations = <_Dest>[
   _Dest('HR setup', Icons.tune_outlined, Icons.tune, '/hr/setup', module: 'hr'),
   _Dest('Secretarial', Icons.domain_outlined, Icons.domain, '/secretarial',
       module: 'secretarial'),
+  _Dest('Reconcile', Icons.account_balance_outlined, Icons.account_balance,
+      '/reconcile'),
   _Dest('Fixed assets', Icons.inventory_2_outlined, Icons.inventory_2,
       '/assets'),
   _Dest('Journals', Icons.menu_book_outlined, Icons.menu_book, '/journals'),

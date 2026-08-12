@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786521443.5767846,
-    "ast_hash": "4e9ef63b7c1d8239f2ff7789f4808472",
+    "mtime": 1786522005.3098848,
+    "ast_hash": "7b00cce92dd6fae5acde08d1c1cf2172",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786521308.5736291,
-    "ast_hash": "49f072790837f8b380e46a2361afcd70",
+    "mtime": 1786521856.9962091,
+    "ast_hash": "296e085c0728f7249351b95148820244",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": "d2c9729b108d770de90c22637a2bb8ae"
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1786521443.5770867,
-    "ast_hash": "19d84aa020c7487ea3ab9066ce4f2c96",
+    "mtime": 1786522005.310102,
+    "ast_hash": "04801801d9aa7d8287d514c809fe7df9",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786521264.2272882,
-    "ast_hash": "e9dfacf590832e9580cb5332c8ee65a2",
+    "mtime": 1786521819.237906,
+    "ast_hash": "0ee5bacd28808ffcd6d964b57fbf5c8a",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1195,8 +1195,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-autocount.md": {
-    "mtime": 1786520843.9036548,
-    "ast_hash": "5f0a7b8b1d14a31c4a73437cc01cbd3e",
+    "mtime": 1786521563.3827257,
+    "ast_hash": "5790a591cd1832f6352f97f10f852ec2",
     "semantic_hash": ""
   },
   "docs/migrating-from-autocount.md": {
@@ -1277,6 +1277,31 @@
   "supabase/tests/fixed_assets.sql": {
     "mtime": 1786521264.212234,
     "ast_hash": "4a13ce95e46fe33dce3eb1fae7161738",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/banking/reconciliation_screen.dart": {
+    "mtime": 1786521995.0122035,
+    "ast_hash": "db03aabd105bb2d9f9be77003baca483",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/banking/statement_import.dart": {
+    "mtime": 1786521895.2082076,
+    "ast_hash": "bc22c33effc6c41229d8668128dde2e1",
+    "semantic_hash": ""
+  },
+  "app/test/statement_import_test.dart": {
+    "mtime": 1786521920.2017727,
+    "ast_hash": "c895c2906625e38f4623b9bd9dfe2eb1",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0085_bank_reconciliation.sql": {
+    "mtime": 1786521695.504216,
+    "ast_hash": "b960118aa1fe9ddf36dcb94d715d84cc",
+    "semantic_hash": ""
+  },
+  "supabase/tests/bank_reconciliation.sql": {
+    "mtime": 1786521819.227411,
+    "ast_hash": "12d5a19a8f518dac36a2d24860a1a4a2",
     "semantic_hash": ""
   }
 }
