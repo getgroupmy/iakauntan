@@ -42,6 +42,13 @@ class Ageing {
 /// overdue is in "1–30", not "31–60" — which is the convention every
 /// Malaysian aged-receivables report uses, and the one a customer
 /// checking your statement against theirs will assume.
+///
+/// Every balance is converted to base currency at the rate its own
+/// document was raised at. Adding USD 10,000 to RM 5,000 and printing
+/// 15,000 is the arithmetic this file exists to prevent, and it only
+/// became reachable when the editor started letting anyone pick a
+/// currency. Documents in base currency carry a rate of 1, so nothing
+/// changes for books that never leave the ringgit.
 Ageing ageing(List<BusinessDocument> documents, DateTime asAt) {
   var current = 0.0, upTo30 = 0.0, upTo60 = 0.0, upTo90 = 0.0, over90 = 0.0;
 
@@ -50,7 +57,7 @@ Ageing ageing(List<BusinessDocument> documents, DateTime asAt) {
   final today = DateTime(asAt.year, asAt.month, asAt.day);
 
   for (final doc in documents) {
-    final balance = doc.balanceAmount;
+    final balance = doc.balanceAmount * doc.exchangeRate;
     if (balance == 0) continue;
 
     final due = doc.dueDate;

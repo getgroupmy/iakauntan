@@ -106,15 +106,28 @@ Future<Uint8List> buildStatementPdf({
               'Balance',
             ],
             data: [
+              // The money columns are all in base currency, converted at
+              // each document's own rate, so they foot to the total
+              // underneath. What the customer was actually invoiced is
+              // stated alongside the document number instead — dropping
+              // it would leave them unable to match this against their
+              // own ledger.
               for (final d in open)
                 [
                   Fmt.date(d.docDate),
-                  [d.docNo, if (_present(d.reference)) d.reference!]
-                      .join('  ·  '),
+                  [
+                    d.docNo,
+                    if (_present(d.reference)) d.reference!,
+                    if (d.currency != org.baseCurrency)
+                      Fmt.money(d.balanceAmount, currency: d.currency),
+                  ].join('  ·  '),
                   d.dueDate == null ? '—' : Fmt.date(d.dueDate!),
-                  Fmt.money(d.totalAmount),
-                  Fmt.money(d.paidAmount),
-                  Fmt.money(d.balanceAmount),
+                  Fmt.money(d.totalAmount * d.exchangeRate,
+                      currency: org.baseCurrency),
+                  Fmt.money(d.paidAmount * d.exchangeRate,
+                      currency: org.baseCurrency),
+                  Fmt.money(d.balanceAmount * d.exchangeRate,
+                      currency: org.baseCurrency),
                 ],
             ],
           ),
@@ -133,7 +146,7 @@ Future<Uint8List> buildStatementPdf({
                   children: [
                     pw.Text('Total due ${org.baseCurrency}',
                         style: kit.style(size: 11, strong: true)),
-                    pw.Text(Fmt.money(aged.total),
+                    pw.Text(Fmt.money(aged.total, currency: org.baseCurrency),
                         style: kit.style(size: 11, strong: true)),
                   ],
                 ),
@@ -159,7 +172,10 @@ Future<Uint8List> buildStatementPdf({
                 const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
             headers: [for (final (label, _) in aged.buckets) label],
             data: [
-              [for (final (_, amount) in aged.buckets) Fmt.money(amount)],
+              [
+                for (final (_, amount) in aged.buckets)
+                  Fmt.money(amount, currency: org.baseCurrency),
+              ],
             ],
           ),
         ],

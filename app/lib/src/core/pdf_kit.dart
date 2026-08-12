@@ -192,7 +192,9 @@ class PdfKit {
   /// A right-aligned amount line: the shape of every total on both
   /// documents.
   pw.Widget amountRow(String label, num amount,
-          {bool strong = false, double width = 190}) =>
+          {bool strong = false,
+          double width = 190,
+          String currency = 'MYR'}) =>
       pw.Container(
         width: width,
         padding: const pw.EdgeInsets.symmetric(vertical: 2),
@@ -200,7 +202,8 @@ class PdfKit {
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text(label, style: style(strong: strong)),
-            pw.Text(Fmt.money(amount.toDouble()), style: style(strong: strong)),
+            pw.Text(Fmt.money(amount.toDouble(), currency: currency),
+                style: style(strong: strong)),
           ],
         ),
       );

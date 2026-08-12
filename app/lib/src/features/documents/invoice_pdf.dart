@@ -100,10 +100,11 @@ Future<Uint8List> buildInvoicePdf({
               [
                 line.description,
                 Fmt.qty(line.quantity),
-                Fmt.money(line.unitPrice),
-                if (anyDiscount) Fmt.money(line.discountAmount),
-                if (anyTax) Fmt.money(line.taxAmount),
-                Fmt.money(line.lineTotal),
+                Fmt.money(line.unitPrice, currency: doc.currency),
+                if (anyDiscount)
+                  Fmt.money(line.discountAmount, currency: doc.currency),
+                if (anyTax) Fmt.money(line.taxAmount, currency: doc.currency),
+                Fmt.money(line.lineTotal, currency: doc.currency),
               ],
           ],
         ),
@@ -115,27 +116,47 @@ Future<Uint8List> buildInvoicePdf({
             pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
-                kit.amountRow('Subtotal', doc.subtotal),
+                kit.amountRow('Subtotal', doc.subtotal,
+                    currency: doc.currency),
                 if (doc.discountAmount != 0)
-                  kit.amountRow('Discount', -doc.discountAmount),
+                  kit.amountRow('Discount', -doc.discountAmount,
+                      currency: doc.currency),
                 if (doc.shippingAmount != 0)
-                  kit.amountRow('Shipping', doc.shippingAmount),
-                if (doc.taxAmount != 0) kit.amountRow('Tax', doc.taxAmount),
+                  kit.amountRow('Shipping', doc.shippingAmount,
+                      currency: doc.currency),
+                if (doc.taxAmount != 0)
+                  kit.amountRow('Tax', doc.taxAmount, currency: doc.currency),
                 // Malaysia rounds cash settlement to the nearest 5 sen and
                 // the adjustment is shown, not folded into the total.
                 if (doc.roundingAmount != 0)
-                  kit.amountRow('Rounding', doc.roundingAmount),
+                  kit.amountRow('Rounding', doc.roundingAmount,
+                      currency: doc.currency),
                 pw.Container(
                   width: 190,
                   margin: const pw.EdgeInsets.symmetric(vertical: 4),
                   height: 0.7,
                   color: PdfColors.grey500,
                 ),
-                kit.amountRow('Total ${doc.currency}', doc.totalAmount,
-                    strong: true),
+                kit.amountRow('Total', doc.totalAmount,
+                    strong: true, currency: doc.currency),
                 if (doc.paidAmount != 0) ...[
-                  kit.amountRow('Paid', doc.paidAmount),
-                  kit.amountRow('Balance due', doc.balanceAmount, strong: true),
+                  kit.amountRow('Paid', doc.paidAmount,
+                      currency: doc.currency),
+                  kit.amountRow('Balance due', doc.balanceAmount,
+                      strong: true, currency: doc.currency),
+                ],
+                // LHDN wants the rate stated on a foreign-currency
+                // invoice, and the customer's accounts department wants
+                // the ringgit figure their books will carry. One line
+                // answers both.
+                if (doc.currency != org.baseCurrency) ...[
+                  pw.SizedBox(height: 4),
+                  kit.amountRow(
+                    'Total ${org.baseCurrency} at ${Fmt.rate(doc.exchangeRate)}',
+                    doc.totalAmount * doc.exchangeRate,
+                    currency: org.baseCurrency,
+                    width: 260,
+                  ),
                 ],
               ],
             ),

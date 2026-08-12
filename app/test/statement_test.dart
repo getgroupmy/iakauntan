@@ -10,7 +10,13 @@ void main() {
 
   final asAt = DateTime(2026, 8, 11);
 
-  BusinessDocument doc(String no, DateTime? due, double balance) =>
+  BusinessDocument doc(
+    String no,
+    DateTime? due,
+    double balance, {
+    String currency = 'MYR',
+    double rate = 1,
+  }) =>
       BusinessDocument(
         id: no,
         docType: 'invoice',
@@ -19,6 +25,8 @@ void main() {
         dueDate: due,
         contactId: 'c1',
         einvoiceStatus: 'valid',
+        currency: currency,
+        exchangeRate: rate,
         totalAmount: balance,
         balanceAmount: balance,
       );
@@ -88,6 +96,24 @@ void main() {
 
     test('a settled document contributes nothing', () {
       expect(ageing([doc('A', asAt, 0)], asAt).total, 0);
+    });
+
+    test('a foreign balance is converted before it is added', () {
+      // USD 10,000 raised at 4.70, plus RM 5,000. Adding the face
+      // values gives 15,000 and a statement that is wrong by RM 42,000 —
+      // which nothing else in the system would have objected to.
+      final aged = ageing([
+        doc('USD-1', asAt, 10000, currency: 'USD', rate: 4.70),
+        doc('MYR-1', asAt, 5000),
+      ], asAt);
+
+      expect(aged.total, closeTo(52000, 0.005));
+    });
+
+    test('base-currency books are untouched by the conversion', () {
+      // Every existing document carries a rate of 1, in the column
+      // default and in the model default alike.
+      expect(ageing([doc('A', asAt, 1234.56)], asAt).total, 1234.56);
     });
   });
 
