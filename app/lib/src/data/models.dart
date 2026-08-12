@@ -444,6 +444,7 @@ class Item {
     this.averageCost = 0,
     this.reorderLevel = 0,
     this.trackInventory = true,
+    this.tracking = 'none',
     this.isActive = true,
     this.salesTaxCodeId,
     this.purchaseTaxCodeId,
@@ -464,6 +465,11 @@ class Item {
   final double averageCost;
   final double reorderLevel;
   final bool trackInventory;
+
+  /// `none`, `batch` or `serial`. Identity, not cost: a serialised item
+  /// still values at weighted average, because making it cost-specific
+  /// would restate every figure already filed.
+  final String tracking;
   final bool isActive;
   final String? salesTaxCodeId;
   final String? purchaseTaxCodeId;
@@ -487,6 +493,7 @@ class Item {
         averageCost: Fmt.toDouble(j['average_cost']),
         reorderLevel: Fmt.toDouble(j['reorder_level']),
         trackInventory: j['track_inventory'] != false,
+        tracking: j['tracking']?.toString() ?? 'none',
         isActive: j['is_active'] != false,
         salesTaxCodeId: j['sales_tax_code_id'] as String?,
         purchaseTaxCodeId: j['purchase_tax_code_id'] as String?,
@@ -505,6 +512,7 @@ class Item {
         'cost_price': costPrice,
         'reorder_level': reorderLevel,
         'track_inventory': trackInventory,
+        'tracking': trackInventory ? tracking : 'none',
         'is_active': isActive,
         'sales_tax_code_id': salesTaxCodeId,
         'purchase_tax_code_id': purchaseTaxCodeId,

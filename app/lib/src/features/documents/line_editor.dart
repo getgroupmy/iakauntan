@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'line_draft.dart';
+import '../stock/lot_dialog.dart';
 
 /// Editable document lines. Wide screens get a spreadsheet-style grid;
 /// phones get one card per line so every field stays reachable.
@@ -19,6 +20,7 @@ class LineEditorCard extends ConsumerWidget {
     required this.onChanged,
     required this.onAdd,
     required this.onRemove,
+    this.receiving = false,
     this.priceFor,
   });
 
@@ -33,6 +35,11 @@ class LineEditorCard extends ConsumerWidget {
   final VoidCallback onChanged;
   final VoidCallback onAdd;
   final ValueChanged<int> onRemove;
+
+  /// Stock coming in rather than going out. Changes what the lot dialog
+  /// is for: typing numbers off the boxes, or choosing from what is on
+  /// hand.
+  final bool receiving;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -59,6 +66,9 @@ class LineEditorCard extends ConsumerWidget {
             ),
             if (wide) _wideHeader(context),
             for (var i = 0; i < lines.length; i++)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
               wide
                   ? _WideLine(
                       key: ObjectKey(lines[i]),
@@ -83,10 +93,39 @@ class LineEditorCard extends ConsumerWidget {
                       onRemove: () => onRemove(i),
                       priceFor: priceFor,
                     ),
+              // Only for an item somebody has chosen to track. Everybody
+              // else never sees it, which is what keeps the feature from
+              // being a tax on the businesses that will never use it.
+              if (_trackingOf(items, lines[i]) != 'none')
+                _LotStrip(
+                  line: lines[i],
+                  tracking: _trackingOf(items, lines[i]),
+                  itemCode: _codeOf(items, lines[i]),
+                  editable: editable,
+                  receiving: receiving,
+                  onChanged: onChanged,
+                ),
+                ],
+              ),
           ],
         ),
       ),
     );
+  }
+
+  static String _trackingOf(List<Item> items, LineDraft line) {
+    if (line.itemId == null) return 'none';
+    for (final i in items) {
+      if (i.id == line.itemId) return i.tracking;
+    }
+    return 'none';
+  }
+
+  static String _codeOf(List<Item> items, LineDraft line) {
+    for (final i in items) {
+      if (i.id == line.itemId) return i.code;
+    }
+    return '';
   }
 
   Widget _wideHeader(BuildContext context) {
@@ -594,6 +633,88 @@ class _TaxField extends StatelessWidget {
               onChanged();
             }
           : null,
+    );
+  }
+}
+
+
+/// What this line is made of, under the line itself.
+///
+/// Deliberately loud when it is short. A tracked line that nobody has
+/// broken down will not post, and finding that out at the posting button
+/// is finding out too late — whoever presses it is rarely the person who
+/// knows which boxes were picked.
+class _LotStrip extends StatelessWidget {
+  const _LotStrip({
+    required this.line,
+    required this.tracking,
+    required this.itemCode,
+    required this.editable,
+    required this.receiving,
+    required this.onChanged,
+  });
+
+  final LineDraft line;
+  final String tracking;
+  final String itemCode;
+  final bool editable;
+  final bool receiving;
+  final VoidCallback onChanged;
+
+  double get _named => line.lots.fold(
+      0, (a, l) => a + (Fmt.toDouble(l['quantity']) == 0 ? 1 : Fmt.toDouble(l['quantity'])));
+
+  @override
+  Widget build(BuildContext context) {
+    final short = line.quantity - _named;
+    final ok = short == 0 && line.lots.isNotEmpty;
+    final noun = tracking == 'serial' ? 'serial numbers' : 'batches';
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Row(children: [
+        Icon(
+          ok ? Icons.check_circle_outline : Icons.error_outline,
+          size: 16,
+          color: ok ? context.colors.success : context.colors.danger,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            ok
+                ? '${line.lots.length} $noun named'
+                : line.lots.isEmpty
+                    ? 'No $noun named — this line will not post'
+                    : '${Fmt.qty(short)} of ${Fmt.qty(line.quantity)} still to name',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: ok ? null : context.colors.danger,
+                  fontWeight: ok ? null : FontWeight.w600,
+                ),
+          ),
+        ),
+        if (editable)
+          TextButton(
+            onPressed: () async {
+              final result = await showDialog<List<Map<String, dynamic>>>(
+                context: context,
+                builder: (_) => LotDialog(
+                  existing: line.lots,
+                  itemId: line.itemId!,
+                  itemCode: itemCode,
+                  tracking: tracking,
+                  quantity: line.quantity,
+                  receiving: receiving,
+                  warehouseId: line.warehouseId,
+                ),
+              );
+              if (result != null) {
+                line.lots = result;
+                onChanged();
+              }
+            },
+            child: Text(line.lots.isEmpty ? 'Name them' : 'Change'),
+          ),
+      ]),
     );
   }
 }

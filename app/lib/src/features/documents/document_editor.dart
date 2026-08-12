@@ -147,6 +147,28 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           ..clear()
           ..addAll(doc.lines.map(LineDraft.fromLine));
         if (_lines.isEmpty) _lines.add(LineDraft());
+
+        // Without this, opening a tracked document and saving it again
+        // would quietly throw its batch numbers away: the save deletes
+        // every line and reinserts it, and the allocation goes with the
+        // line it hung off. Read back in the same order it will be
+        // written out.
+        final ids = [
+          for (final l in doc.lines)
+            if (l.id != null) l.id!
+        ];
+        if (ids.isNotEmpty) {
+          final byLine =
+              await repo.lotsForDocument(kind: _kind, lineIds: ids);
+          if (byLine.isNotEmpty) {
+            for (var i = 0; i < doc.lines.length && i < _lines.length; i++) {
+              final id = doc.lines[i].id;
+              if (id != null && byLine[id] != null) {
+                _lines[i].lots = byLine[id]!;
+              }
+            }
+          }
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -290,7 +312,8 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
 
     setState(() => _saving = true);
     try {
-      final id = await ref.read(repoProvider)!.saveDocument(
+      final repo = ref.read(repoProvider)!;
+      final id = await repo.saveDocument(
             kind: _kind,
             id: widget.documentId,
             docType: widget.docType,
@@ -314,6 +337,22 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
               return l.toJson();
             }).toList(),
           );
+
+      // Only now, because until `saveDocument` returned the lines did
+      // not exist under ids anything could point at. Matched by order,
+      // which is the one property that survives delete-and-reinsert.
+      final tracked = validLines.toList();
+      if (tracked.any((l) => l.lots.isNotEmpty)) {
+        final saved = await repo.documentLineIds(kind: _kind, documentId: id);
+        for (var i = 0; i < tracked.length && i < saved.length; i++) {
+          if (tracked[i].lots.isEmpty) continue;
+          await repo.setLineLots(
+            lineTable: _kind.lineTable,
+            lineId: saved[i]['id'] as String,
+            lots: tracked[i].lots,
+          );
+        }
+      }
 
       ref.invalidate(documentsProvider);
       if (mounted) setState(() => _dirty = false);
@@ -795,6 +834,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         lines: _lines,
                         editable: editable,
                         currency: _currency,
+                        receiving: !_kind.isSales,
                         // Sales only: a price level is what we charge a
                         // customer, not what a supplier charges us.
                         priceFor: _kind.isSales && _contactId != null

@@ -158,6 +158,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
   late String _classification;
   String? _salesTaxCodeId;
   bool _trackInventory = true;
+  String _tracking = 'none';
   bool _saving = false;
 
   @override
@@ -174,6 +175,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
     _classification = i?.classificationCode ?? '022';
     _salesTaxCodeId = i?.salesTaxCodeId;
     _trackInventory = i?.trackInventory ?? true;
+    _tracking = i?.tracking ?? 'none';
     if (i == null) _suggestCode();
   }
 
@@ -212,6 +214,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
               costPrice: double.tryParse(_cost.text) ?? 0,
               reorderLevel: double.tryParse(_reorder.text) ?? 0,
               trackInventory: _itemType == 'stock' && _trackInventory,
+              tracking: _trackInventory ? _tracking : 'none',
               salesTaxCodeId: _salesTaxCodeId,
             ),
             id: widget.item?.id,
@@ -354,6 +357,28 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                     title: const Text('Track inventory'),
                     subtitle: const Text('Move stock and post cost of sales'),
                   ),
+                  if (_trackInventory) ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: _tracking,
+                      decoration: const InputDecoration(
+                        labelText: 'Identify each unit',
+                        // Said here because it is the decision people get
+                        // wrong: turning this on makes the batch number
+                        // compulsory on every receipt and every despatch,
+                        // and there is no half-way setting on purpose.
+                        helperText: 'Batch and serial numbers become required',
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'none', child: Text('Not tracked')),
+                        DropdownMenuItem(
+                            value: 'batch', child: Text('By batch or lot number')),
+                        DropdownMenuItem(
+                            value: 'serial', child: Text('By serial number')),
+                      ],
+                      onChanged: (v) => setState(() => _tracking = v ?? 'none'),
+                    ),
+                  ],
                   TextFormField(
                     controller: _reorder,
                     keyboardType:

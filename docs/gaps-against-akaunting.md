@@ -182,6 +182,41 @@ Commission is computed from the rate on file and **posted nowhere** —
 whether it falls due on invoice, on payment or on margin is a policy
 decision, and a figure accrued on a guess is worse than no figure.
 
+## 8d. Serial numbers and batches
+
+Built. `stock_movements` had carried `batch_no`, `serial_no` and
+`expiry_date` since 0006 with nothing ever written to any of them — the
+third dead column found in a week, and the wrong shape besides: one issue
+of ten units can draw on three batches and a scalar column holds one.
+They are dropped.
+
+`items.tracking` is `none`, `batch` or `serial`, defaulting to none, so
+nothing that exists changes. Turn it on and the detail stops being
+optional — posting refuses a line that has not been broken down.
+
+**It does not touch costing.** A serialised item still values at weighted
+average. MFRS 102 permits weighted average and requires specific
+identification only for items not ordinarily interchangeable, so tracking
+here is identity — which unit, whose it was, when it expires — and not
+value. Making serials cost-specific would restate figures already filed
+and is separate work.
+
+Numbers are typed on the **document line** before posting, because once a
+movement exists the posting has happened and it is too late to ask
+anybody anything. Posting itself was not reopened: it already writes
+`source_line_id` onto every movement, so a trigger copies the allocation
+across. Balances are derived from movements and never stored — the one
+failure that would make this worse than useless is a recall list saying a
+batch is on the shelf when it was sold last month.
+
+Picking is first-expired-first-out, not first-in-first-out; for anything
+with a shelf life those differ, and the difference is stock written off at
+the back of the warehouse. `report_expiring_stock` includes what is
+already past its date, because it is still there and still on the balance
+sheet at cost. `trace_lot` answers the recall question in both
+directions, which is the only thing that justifies making somebody type a
+batch number on every receipt.
+
 ## 9. Coarse permissions
 
 Akaunting seeds per-resource permissions (`database/seeds/Permissions.php`)

@@ -11,6 +11,7 @@ import '../features/crm/pipeline_screen.dart';
 import '../features/admin/platform_console_screen.dart';
 import '../features/assets/assets_screen.dart';
 import '../features/banking/reconciliation_screen.dart';
+import '../features/stock/lots_screen.dart';
 import '../features/stock/stock_take_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/documents/document_editor.dart';
@@ -263,6 +264,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const SalespeopleScreen(),
           ),
           GoRoute(path: '/assets', builder: (_, __) => const AssetsScreen()),
+          GoRoute(path: '/lots', builder: (_, __) => const LotsScreen()),
           GoRoute(
             path: '/stock-take',
             builder: (_, __) => const StockTakeScreen(),

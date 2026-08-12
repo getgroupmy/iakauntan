@@ -72,6 +72,8 @@ const _destinations = <_Dest>[
       module: 'secretarial'),
   _Dest('Stock take', Icons.checklist_outlined, Icons.checklist, '/stock-take',
       module: 'inventory'),
+  _Dest('Batches', Icons.qr_code_2_outlined, Icons.qr_code_2, '/lots',
+      module: 'inventory'),
   _Dest('Reconcile', Icons.account_balance_outlined, Icons.account_balance,
       '/reconcile'),
   _Dest('Fixed assets', Icons.inventory_2_outlined, Icons.inventory_2,

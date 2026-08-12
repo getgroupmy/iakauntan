@@ -1041,6 +1041,120 @@ class Repo {
   }
 
   // ------------------------------------------------------------------
+  // Batches and serial numbers
+  //
+  // Identity, not cost. A tracked item still values at weighted average
+  // — see 0106 — so nothing here touches a figure on the balance sheet.
+  // What it does is make a recall answerable.
+  // ------------------------------------------------------------------
+
+  /// The saved lines of a document, in line order.
+  ///
+  /// Needed because `saveDocument` deletes and reinserts lines, so the
+  /// ids an editor was holding are gone by the time it wants to attach
+  /// anything to them. Line order is what survives.
+  Future<List<Map<String, dynamic>>> documentLineIds({
+    required DocKind kind,
+    required String documentId,
+  }) async =>
+      _rows(await client
+          .from(kind.lineTable)
+          .select('id, line_no')
+          .eq('document_id', documentId)
+          .order('line_no'));
+
+  /// Every lot allocation on a document, keyed by line id.
+  Future<Map<String, List<Map<String, dynamic>>>> lotsForDocument({
+    required DocKind kind,
+    required List<String> lineIds,
+  }) async {
+    if (lineIds.isEmpty) return {};
+    final column = kind.isSales ? 'sales_line_id' : 'purchase_line_id';
+    final rows = _rows(await client
+        .from('document_line_lots')
+        .select()
+        .inFilter(column, lineIds)
+        .order('lot_ref'));
+    final out = <String, List<Map<String, dynamic>>>{};
+    for (final r in rows) {
+      (out[r[column] as String] ??= []).add(r);
+    }
+    return out;
+  }
+
+  /// Replaces the whole breakdown for one document line.
+  ///
+  /// The database refuses a breakdown that does not add up to the line,
+  /// so a screen can send what it has and let the message come back
+  /// rather than doing the arithmetic twice and disagreeing with itself.
+  Future<int> setLineLots({
+    required String lineTable,
+    required String lineId,
+    required List<Map<String, dynamic>> lots,
+  }) async {
+    final data = await client.rpc('set_line_lots', params: {
+      'p_line_table': lineTable,
+      'p_line_id': lineId,
+      'p_lots': lots,
+    });
+    return (data as num?)?.toInt() ?? 0;
+  }
+
+  Future<List<Map<String, dynamic>>> lineLots({
+    required String lineTable,
+    required String lineId,
+  }) async =>
+      _rows(await client.rpc('line_lots', params: {
+        'p_line_table': lineTable,
+        'p_line_id': lineId,
+      }));
+
+  /// What still has to be named before this document can post. Empty
+  /// means it is ready.
+  Future<List<Map<String, dynamic>>> documentLotProblems({
+    required String documentId,
+    required bool sales,
+  }) async =>
+      _rows(await client.rpc('document_lot_problems', params: {
+        'p_document_id': documentId,
+        'p_kind': sales ? 'sales' : 'purchase',
+      }));
+
+  /// First expired, first out. Advisory — a physical pick is a physical
+  /// fact, and refusing the box in somebody's hand gets worked around.
+  Future<List<Map<String, dynamic>>> suggestLots({
+    required String itemId,
+    String? warehouseId,
+    required double quantity,
+  }) async =>
+      _rows(await client.rpc('suggest_lots', params: {
+        'p_item_id': itemId,
+        'p_warehouse_id': warehouseId,
+        'p_quantity': quantity,
+      }));
+
+  Future<List<Map<String, dynamic>>> lotBalances({String? itemId}) async =>
+      _rows(await client.rpc('report_lot_balances', params: {
+        'p_org_id': orgId,
+        'p_item_id': itemId,
+        'p_warehouse_id': null,
+      }));
+
+  Future<List<Map<String, dynamic>>> expiringStock({int withinDays = 90}) async =>
+      _rows(await client.rpc('report_expiring_stock', params: {
+        'p_org_id': orgId,
+        'p_within_days': withinDays,
+      }));
+
+  /// Where a batch came from and everywhere it went — the recall
+  /// question, and the only thing that justifies typing batch numbers.
+  Future<List<Map<String, dynamic>>> traceLot(String lotId) async =>
+      _rows(await client.rpc('trace_lot', params: {
+        'p_org_id': orgId,
+        'p_lot_id': lotId,
+      }));
+
+  // ------------------------------------------------------------------
   // Salespeople
   //
   // Their own table rather than a pointer at a user, because the person

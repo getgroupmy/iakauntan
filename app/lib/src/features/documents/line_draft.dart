@@ -17,6 +17,7 @@ class LineDraft {
     this.warehouseId,
     this.sourceLineId,
     this.projectCode,
+    this.lots = const [],
   });
 
   String? itemId;
@@ -30,6 +31,12 @@ class LineDraft {
   String? classificationCode;
   bool isTaxInclusive;
   String? warehouseId;
+
+  /// Which batches or serial numbers this line is made up of, held here
+  /// rather than written straight through. Saving a document deletes its
+  /// lines and reinserts them, so a line id is not stable enough to hang
+  /// an allocation off until the save has finished.
+  List<Map<String, dynamic>> lots;
 
   /// Where this line came from, if it was transferred. Never edited —
   /// only carried, so that saving the document does not sever the link
