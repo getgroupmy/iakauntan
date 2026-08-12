@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'fx.dart';
 
 /// Records a customer receipt or a supplier payment and allocates it
 /// against open documents. Both directions share this dialog because the
@@ -45,6 +46,7 @@ class _SettlementDialog extends ConsumerStatefulWidget {
 class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
   final _reference = TextEditingController();
   final _charges = TextEditingController();
+  final _rate = TextEditingController(text: '1');
 
   String? _contactId;
   String? _bankAccountId;
@@ -55,7 +57,21 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
   /// Amount being applied to each open document.
   final Map<String, double> _allocations = {};
 
+  /// Rate at which the money actually moved, which is not the rate the
+  /// invoice was raised at — the difference between the two is the whole
+  /// point of realised FX.
+  double? _exchangeRate = 1;
+  bool _resolvingRate = false;
+
+  /// currency@date the rate in the field was fetched for, so ticking a
+  /// different invoice or moving the date fetches again and nothing else
+  /// does.
+  String? _rateResolvedFor;
+
   bool get _isReceipt => widget.kind.isSales;
+
+  String get _base =>
+      ref.read(currentOrgProvider).valueOrNull?.baseCurrency ?? 'MYR';
 
   @override
   void initState() {
@@ -67,6 +83,7 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
   void dispose() {
     _reference.dispose();
     _charges.dispose();
+    _rate.dispose();
     super.dispose();
   }
 
@@ -75,7 +92,46 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
 
   double get _bankCharges => double.tryParse(_charges.text) ?? 0;
 
-  Future<void> _save() async {
+  /// The documents money is actually being applied to.
+  List<BusinessDocument> _allocatedDocs(List<BusinessDocument> open) => [
+        for (final d in open)
+          if ((_allocations[d.id] ?? 0) > 0) d,
+      ];
+
+  Future<void> _resolveRate(String currency, String key) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+
+    setState(() => _resolvingRate = true);
+    try {
+      final rate = await repo.exchangeRateFor(currency, _date);
+      if (!mounted) return;
+      setState(() {
+        _rateResolvedFor = key;
+        _exchangeRate = rate;
+        if (rate != null) _rate.text = Fmt.rate(rate);
+      });
+    } catch (e) {
+      // Marked as resolved so the lookup is not retried on every frame,
+      // and cleared so a rate fetched for another currency cannot be
+      // recorded as this one's.
+      if (mounted) {
+        setState(() {
+          _rateResolvedFor = key;
+          _exchangeRate = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not read the exchange rate: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _resolvingRate = false);
+    }
+  }
+
+  Future<void> _save({
+    required String currency,
+    required double exchangeRate,
+  }) async {
     if (_contactId == null) return;
     if (_allocated <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -98,6 +154,8 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                 ? null
                 : _reference.text.trim(),
             bankCharges: _bankCharges,
+            currency: currency,
+            exchangeRate: exchangeRate,
             allocations: [
               for (final e in _allocations.entries)
                 if (e.value > 0) (documentId: e.key, amount: e.value),
@@ -124,6 +182,55 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
         const <Contact>[];
     final banks = ref.watch(bankAccountsProvider).value ?? const [];
     final modes = ref.watch(paymentModesProvider).value ?? const [];
+
+    // The currency is not the user's to choose: it is whatever the
+    // documents being settled were raised in, and the ledger refuses a
+    // receipt that disagrees with them.
+    final open = _contactId == null
+        ? const <BusinessDocument>[]
+        : ref
+                .watch(outstandingProvider(
+                    (kind: widget.kind, contactId: _contactId!)))
+                .valueOrNull ??
+            const <BusinessDocument>[];
+    final allocated = _allocatedDocs(open);
+    final currency = settlementCurrency(allocated, _base);
+    final isForeign = currency.code != _base;
+
+    final rateKey = '${currency.code}@${Fmt.iso(_date)}';
+    if (isForeign && _rateResolvedFor != rateKey && !_resolvingRate) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _resolveRate(currency.code, rateKey);
+      });
+    } else if (!isForeign && _exchangeRate != 1) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _exchangeRate = 1;
+            _rate.text = '1';
+            _rateResolvedFor = null;
+          });
+        }
+      });
+    }
+
+    final rateUsable = rateIsUsable(
+        currency: currency.code, baseCurrency: _base, rate: _exchangeRate);
+    final blocked = currency.isConflicting || !rateUsable;
+
+    final fx = !isForeign || !rateUsable
+        ? 0.0
+        : realisedFx(
+            isReceipt: _isReceipt,
+            settlementRate: _exchangeRate!,
+            allocations: [
+              for (final d in allocated)
+                (
+                  amount: _allocations[d.id] ?? 0,
+                  documentRate: d.exchangeRate,
+                ),
+            ],
+          );
 
     return AlertDialog(
       title: Text(_isReceipt ? 'Receive payment' : 'Pay supplier'),
@@ -157,6 +264,25 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                 preselect: widget.preselectDocumentId,
                 onChanged: () => setState(() {}),
               ),
+              if (currency.conflict != null) ...[
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: context.colors.danger.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(children: [
+                    Icon(Icons.error_outline,
+                        size: 18, color: context.colors.danger),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(currency.conflict!,
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ),
+                  ]),
+                ),
+              ],
               const SizedBox(height: 14),
               Row(children: [
                 Expanded(
@@ -223,13 +349,42 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Bank charges',
-                      prefixText: 'RM ',
+                      // In the currency of the payment, because that is
+                      // what post_receipt multiplies by the rate.
+                      prefixText: Fmt.prefix(currency.code),
                     ),
                   ),
                 ),
               ]),
+              if (isForeign) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _rate,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (v) => setState(() {
+                    _exchangeRate = parseRate(v);
+                    _rateResolvedFor = rateKey;
+                  }),
+                  decoration: InputDecoration(
+                    labelText: 'Exchange rate on the day of payment',
+                    helperMaxLines: 2,
+                    helperText: _resolvingRate
+                        ? 'Looking up the rate…'
+                        : _exchangeRate == null
+                            ? 'No rate on file for ${Fmt.date(_date)} — enter one'
+                            : rateCaption(
+                                currency: currency.code,
+                                baseCurrency: _base,
+                                rate: _exchangeRate!),
+                    helperStyle: _exchangeRate == null && !_resolvingRate
+                        ? TextStyle(color: context.colors.warning)
+                        : null,
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               TextField(
                 controller: _reference,
@@ -251,7 +406,7 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                       child: Text('Total being settled',
                           style: TextStyle(fontWeight: FontWeight.w600)),
                     ),
-                    Money(_allocated, bold: true),
+                    Money(_allocated, currency: currency.code, bold: true),
                   ],
                 ),
               ),
@@ -260,9 +415,37 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     _isReceipt
-                        ? 'Bank will be debited ${Fmt.money(_allocated - _bankCharges)} after charges.'
-                        : 'Bank will be credited ${Fmt.money(_allocated + _bankCharges)} including charges.',
+                        ? 'Bank will be debited ${Fmt.money(_allocated - _bankCharges, currency: currency.code)} after charges.'
+                        : 'Bank will be credited ${Fmt.money(_allocated + _bankCharges, currency: currency.code)} including charges.',
                     style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              // What the currency movement between document and payment
+              // will cost or earn. Said before the fact, because after
+              // posting it is a line in the journal nobody was expecting.
+              if (fx.abs() >= 0.005)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    fx > 0
+                        ? 'Exchange gain of ${Fmt.money(fx, currency: _base)} will be posted.'
+                        : 'Exchange loss of ${Fmt.money(-fx, currency: _base)} will be posted.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: fx > 0
+                              ? context.colors.success
+                              : context.colors.warning,
+                        ),
+                  ),
+                ),
+              if (isForeign && !_resolvingRate && _exchangeRate == null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Enter the exchange rate before recording this payment.',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: context.colors.warning),
                   ),
                 ),
             ],
@@ -275,7 +458,12 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: _saving || _allocated <= 0 ? null : _save,
+          onPressed: _saving || _allocated <= 0 || blocked
+              ? null
+              : () => _save(
+                    currency: currency.code,
+                    exchangeRate: _exchangeRate!,
+                  ),
           child: _saving
               ? const SizedBox(
                   height: 18,
@@ -459,7 +647,8 @@ class _AllocationRowState extends State<_AllocationRow> {
               textAlign: TextAlign.right,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(isDense: true, prefixText: 'RM '),
+              decoration: InputDecoration(
+                  isDense: true, prefixText: Fmt.prefix(doc.currency)),
               onChanged: (v) => widget.onChanged(double.tryParse(v) ?? 0),
             ),
           ),

@@ -272,6 +272,13 @@ final paymentModesProvider =
   return requireRepo(ref).paymentModes();
 });
 
+/// ISO 4217 codes, shared across tenants and effectively static — kept
+/// alive rather than autoDisposed so opening an invoice does not refetch
+/// the same forty rows.
+final currenciesProvider = FutureProvider<List<Currency>>((ref) {
+  return requireRepo(ref).currencies();
+});
+
 final expensesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).expenses();

@@ -211,6 +211,36 @@ class Contact {
       };
 }
 
+/// A row of `ref_currencies`. Shared across every tenant, so it is read
+/// once and cached rather than fetched per organization.
+class Currency {
+  const Currency({
+    required this.code,
+    required this.name,
+    this.symbol,
+    this.decimalPlaces = 2,
+  });
+
+  final String code;
+  final String name;
+  final String? symbol;
+
+  /// Yen and won have none. Kept because a rate field that offers cents
+  /// on a currency without them invites a figure that cannot be paid.
+  final int decimalPlaces;
+
+  /// "USD — US Dollar", which is how a picker has to read: the code is
+  /// what appears on the invoice, the name is what makes it findable.
+  String get label => '$code — $name';
+
+  factory Currency.fromJson(Map<String, dynamic> j) => Currency(
+        code: j['code']?.toString() ?? '',
+        name: j['name']?.toString() ?? '',
+        symbol: j['symbol'] as String?,
+        decimalPlaces: (j['decimal_places'] as num?)?.toInt() ?? 2,
+      );
+}
+
 class Item {
   Item({
     required this.id,
@@ -464,6 +494,7 @@ class BusinessDocument {
     this.reference,
     this.supplierDocNo,
     this.currency = 'MYR',
+    this.exchangeRate = 1,
     this.subtotal = 0,
     this.discountAmount = 0,
     this.taxAmount = 0,
@@ -494,6 +525,12 @@ class BusinessDocument {
   /// The supplier's own invoice number. Purchase documents only.
   final String? supplierDocNo;
   final String currency;
+
+  /// Units of base currency per unit of [currency], frozen at the moment
+  /// the document was raised. Every posting multiplies by this and not
+  /// by today's rate, which is what makes the gain or loss on settlement
+  /// computable at all.
+  final double exchangeRate;
   final double subtotal;
   final double discountAmount;
   final double taxAmount;
@@ -534,6 +571,9 @@ class BusinessDocument {
       reference: j['reference'] as String?,
       supplierDocNo: j['supplier_doc_no'] as String?,
       currency: j['currency']?.toString() ?? 'MYR',
+      exchangeRate: j['exchange_rate'] == null
+          ? 1
+          : Fmt.toDouble(j['exchange_rate']),
       subtotal: Fmt.toDouble(j['subtotal']),
       discountAmount: Fmt.toDouble(j['discount_amount']),
       taxAmount: Fmt.toDouble(j['tax_amount']),

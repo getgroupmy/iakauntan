@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/download.dart';
 import '../../core/format.dart';
+import '../../core/layout.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'doc_types.dart';
+import 'fx.dart';
 import 'invoice_pdf.dart';
 import 'line_draft.dart';
 import 'line_editor.dart';
@@ -31,12 +33,26 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   final _reference = TextEditingController();
   final _supplierDocNo = TextEditingController();
   final _notes = TextEditingController();
+  final _rate = TextEditingController(text: '1');
 
   String? _contactId;
   String _docNo = '';
   DateTime _docDate = DateTime.now();
   DateTime? _dueDate;
   String _currency = 'MYR';
+
+  /// Null means no rate is known. Distinct from 1, which is a rate — and
+  /// on a foreign document, the wrong one.
+  double? _exchangeRate = 1;
+
+  /// Whether the rate in the field was typed rather than looked up. A
+  /// contract rate agreed with the customer outranks the table, so once
+  /// it has been typed, changing the date must not quietly overwrite it.
+  bool _rateOverridden = false;
+  bool _resolvingRate = false;
+
+  /// The table was asked and had nothing for this currency and date.
+  bool _rateMissing = false;
   String _status = 'draft';
   String _einvoiceStatus = 'not_applicable';
   String? _glEntryId;
@@ -52,6 +68,10 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   bool get _isNew => widget.documentId == null;
   bool get _isPosted => _glEntryId != null;
 
+  String get _base =>
+      ref.read(currentOrgProvider).valueOrNull?.baseCurrency ?? 'MYR';
+  bool get _isForeign => _currency != _base;
+
   @override
   void initState() {
     super.initState();
@@ -63,6 +83,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     _reference.dispose();
     _supplierDocNo.dispose();
     _notes.dispose();
+    _rate.dispose();
     super.dispose();
   }
 
@@ -74,6 +95,9 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       if (_isNew) {
         _docNo = await repo.nextDocumentNumber(widget.docType);
         _dueDate = DateTime.now().add(const Duration(days: 30));
+        _currency = _base;
+        _exchangeRate = 1;
+        _rate.text = '1';
         _lines.add(LineDraft());
       } else {
         final doc = await repo.document(_kind, widget.documentId!);
@@ -82,6 +106,12 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _docDate = doc.docDate;
         _dueDate = doc.dueDate;
         _currency = doc.currency;
+        // The stored rate, not today's. This is the figure the ledger
+        // posted at and the figure the gain on settlement is measured
+        // from; re-resolving it here would rewrite history.
+        _exchangeRate = doc.exchangeRate;
+        _rate.text = Fmt.rate(doc.exchangeRate);
+        _rateOverridden = true;
         _status = doc.status;
         _einvoiceStatus = doc.einvoiceStatus;
         _glEntryId = doc.glEntryId;
@@ -119,6 +149,99 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
 
   void _markDirty() => setState(() => _dirty = true);
 
+  // ------------------------------------------------------------------
+  // Currency and rate
+  // ------------------------------------------------------------------
+
+  /// Switches the document's currency and starts again on the rate.
+  ///
+  /// Any override is dropped: a rate typed for dollars is not a rate for
+  /// euros, and carrying it across would be the same silent mis-statement
+  /// as defaulting to 1.
+  void _changeCurrency(String code) {
+    setState(() {
+      _currency = code;
+      _rateOverridden = false;
+    });
+    _markDirty();
+    _resolveRate();
+  }
+
+  /// Fills the rate from `exchange_rates` for the document's date.
+  ///
+  /// The client asks for the same rate the database would use rather
+  /// than working one out, so what the form shows before saving and what
+  /// posts afterwards cannot disagree.
+  Future<void> _resolveRate() async {
+    if (!_isForeign) {
+      setState(() {
+        _exchangeRate = 1;
+        _rate.text = '1';
+        _rateMissing = false;
+      });
+      return;
+    }
+
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+
+    setState(() => _resolvingRate = true);
+    try {
+      final rate = await repo.exchangeRateFor(_currency, _docDate);
+      if (!mounted) return;
+      setState(() {
+        _rateMissing = rate == null;
+        if (rate != null) {
+          _exchangeRate = rate;
+          _rate.text = Fmt.rate(rate);
+        } else {
+          // Left as whatever is in the field so a rate typed a moment
+          // ago is not erased by a lookup that found nothing.
+          _exchangeRate = parseRate(_rate.text);
+        }
+      });
+    } catch (e) {
+      // Cleared rather than left as it was. A lookup for euros that
+      // fails must not leave the rate for dollars sitting in the field
+      // where it would be saved as the euro rate.
+      if (mounted) {
+        setState(() => _exchangeRate = null);
+        _toast('Could not read the exchange rate: $e', error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _resolvingRate = false);
+    }
+  }
+
+  void _onRateTyped(String text) {
+    setState(() {
+      _exchangeRate = parseRate(text);
+      _rateOverridden = true;
+    });
+    _markDirty();
+  }
+
+  /// Remembers a typed rate so the next document in this currency does
+  /// not have to be told again.
+  Future<void> _storeRate() async {
+    final rate = _exchangeRate;
+    if (rate == null || !_isForeign) return;
+
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.saveExchangeRate(
+            from: _currency,
+            to: _base,
+            rate: rate,
+            date: _docDate,
+          ),
+      successMessage: '${rateCaption(currency: _currency, baseCurrency: _base, rate: rate)} '
+          'saved for ${Fmt.date(_docDate)}',
+      pendingMessage: 'Saving rate…',
+    );
+    if (ok && mounted) setState(() => _rateMissing = false);
+  }
+
   Future<String?> _save({bool silent = false}) async {
     if (_contactId == null) {
       _toast('Choose a ${_kind.contactLabel.toLowerCase()} first.');
@@ -128,6 +251,16 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _lines.where((l) => l.description.trim().isNotEmpty || l.itemId != null);
     if (validLines.isEmpty) {
       _toast('Add at least one line.');
+      return null;
+    }
+    // Refused here rather than left to post at 1. A foreign document
+    // saved without a rate converts at par, balances, and understates
+    // the ledger by the whole currency movement without a single check
+    // objecting — see migration 0078.
+    if (!rateIsUsable(
+        currency: _currency, baseCurrency: _base, rate: _exchangeRate)) {
+      _toast('Enter the exchange rate for $_currency on '
+          '${Fmt.date(_docDate)} before saving.');
       return null;
     }
 
@@ -147,6 +280,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                 'supplier_doc_no': _nullIfBlank(_supplierDocNo.text),
               'notes': _nullIfBlank(_notes.text),
               'currency': _currency,
+              'exchange_rate': _exchangeRate ?? 1,
             },
             lines: validLines.map((l) => l.toJson()).toList(),
           );
@@ -451,13 +585,31 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         supplierDocNo: _supplierDocNo,
                         editable: editable,
                         requiresEinvoice: _meta.einvoice,
-                        onContactChanged: (id) {
-                          setState(() => _contactId = id);
+                        currency: _currency,
+                        baseCurrency: _base,
+                        rate: _rate,
+                        rateMissing: _rateMissing,
+                        resolvingRate: _resolvingRate,
+                        exchangeRate: _exchangeRate,
+                        onCurrencyChanged: _changeCurrency,
+                        onRateChanged: _onRateTyped,
+                        onStoreRate: _storeRate,
+                        onContactChanged: (contact) {
+                          setState(() => _contactId = contact.id);
                           _markDirty();
+                          // A new document takes the customer's currency;
+                          // an existing one keeps what it was raised in.
+                          if (_isNew && contact.currency != _currency) {
+                            _changeCurrency(contact.currency);
+                          }
                         },
                         onDocDate: (d) {
                           setState(() => _docDate = d);
                           _markDirty();
+                          // Rates are quoted per day, so moving the date
+                          // moves the rate — unless one was typed, which
+                          // is a decision the date does not overrule.
+                          if (!_rateOverridden) _resolveRate();
                         },
                         onDueDate: (d) {
                           setState(() => _dueDate = d);
@@ -487,6 +639,8 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         total: _grandTotal,
                         rounding: _grandTotal - (_subtotal + _taxTotal),
                         currency: _currency,
+                        baseCurrency: _base,
+                        exchangeRate: _exchangeRate,
                         notes: _notes,
                         editable: editable,
                         onNotesChanged: _markDirty,
@@ -566,6 +720,15 @@ class _HeaderCard extends ConsumerWidget {
     required this.supplierDocNo,
     required this.editable,
     required this.requiresEinvoice,
+    required this.currency,
+    required this.baseCurrency,
+    required this.rate,
+    required this.rateMissing,
+    required this.resolvingRate,
+    required this.exchangeRate,
+    required this.onCurrencyChanged,
+    required this.onRateChanged,
+    required this.onStoreRate,
     required this.onContactChanged,
     required this.onDocDate,
     required this.onDueDate,
@@ -581,7 +744,16 @@ class _HeaderCard extends ConsumerWidget {
   final TextEditingController supplierDocNo;
   final bool editable;
   final bool requiresEinvoice;
-  final ValueChanged<String> onContactChanged;
+  final String currency;
+  final String baseCurrency;
+  final TextEditingController rate;
+  final bool rateMissing;
+  final bool resolvingRate;
+  final double? exchangeRate;
+  final ValueChanged<String> onCurrencyChanged;
+  final ValueChanged<String> onRateChanged;
+  final VoidCallback onStoreRate;
+  final ValueChanged<Contact> onContactChanged;
   final ValueChanged<DateTime> onDocDate;
   final ValueChanged<DateTime> onDueDate;
   final VoidCallback onTextChanged;
@@ -615,46 +787,90 @@ class _HeaderCard extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis),
               ),
           ],
-          onChanged: editable ? (v) => v == null ? null : onContactChanged(v) : null,
+          onChanged: editable
+              ? (v) {
+                  final picked = list.where((c) => c.id == v).firstOrNull;
+                  if (picked != null) onContactChanged(picked);
+                }
+              : null,
         );
       },
       loading: () => const LinearProgressIndicator(),
       error: (e, _) => Text('Could not load contacts: $e'),
     );
 
-    final fields = <Widget>[
-      contactField,
-      _DateField(
-        label: 'Document date',
-        value: docDate,
-        enabled: editable,
-        onChanged: onDocDate,
-      ),
-      _DateField(
-        label: 'Due date',
-        value: dueDate,
-        enabled: editable,
-        onChanged: onDueDate,
-      ),
-      TextFormField(
-        controller: reference,
-        enabled: editable,
-        onChanged: (_) => onTextChanged(),
-        decoration: InputDecoration(
-          labelText: kind.isSales
-              ? 'Customer reference / PO no.'
-              : 'Internal reference',
+    final isForeign = currency != baseCurrency;
+
+    final fields = <({Widget child, int flex})>[
+      (child: contactField, flex: 2),
+      (
+        child: _DateField(
+          label: 'Document date',
+          value: docDate,
+          enabled: editable,
+          onChanged: onDocDate,
         ),
+        flex: 1
       ),
-      if (!kind.isSales)
-        TextFormField(
-          controller: supplierDocNo,
+      (
+        child: _DateField(
+          label: 'Due date',
+          value: dueDate,
+          enabled: editable,
+          onChanged: onDueDate,
+        ),
+        flex: 1
+      ),
+      (
+        child: _CurrencyField(
+          value: currency,
+          baseCurrency: baseCurrency,
+          enabled: editable,
+          onChanged: onCurrencyChanged,
+        ),
+        flex: 1
+      ),
+      if (isForeign)
+        (
+          child: _RateField(
+            controller: rate,
+            currency: currency,
+            baseCurrency: baseCurrency,
+            date: docDate,
+            rate: exchangeRate,
+            missing: rateMissing,
+            resolving: resolvingRate,
+            enabled: editable,
+            onChanged: onRateChanged,
+            onStore: onStoreRate,
+          ),
+          flex: 1
+        ),
+      (
+        child: TextFormField(
+          controller: reference,
           enabled: editable,
           onChanged: (_) => onTextChanged(),
-          decoration: const InputDecoration(
-            labelText: 'Supplier invoice no.',
-            helperText: 'Their document number, needed for SST records',
+          decoration: InputDecoration(
+            labelText: kind.isSales
+                ? 'Customer reference / PO no.'
+                : 'Internal reference',
           ),
+        ),
+        flex: 2
+      ),
+      if (!kind.isSales)
+        (
+          child: TextFormField(
+            controller: supplierDocNo,
+            enabled: editable,
+            onChanged: (_) => onTextChanged(),
+            decoration: const InputDecoration(
+              labelText: 'Supplier invoice no.',
+              helperText: 'Their document number, needed for SST records',
+            ),
+          ),
+          flex: 1
         ),
     ];
 
@@ -671,38 +887,146 @@ class _HeaderCard extends ConsumerWidget {
                   for (final f in fields)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 14),
-                      child: f,
+                      child: f.child,
                     ),
                 ],
               )
             else
-              Column(
-                children: [
-                  Row(
+              for (final row in packRows([for (final f in fields) f.flex]))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(flex: 2, child: fields[0]),
-                      const SizedBox(width: 14),
-                      Expanded(child: fields[1]),
+                      for (final i in row) ...[
+                        if (i != row.first) const SizedBox(width: 14),
+                        Expanded(
+                            flex: fields[i].flex, child: fields[i].child),
+                      ],
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 2, child: fields[3]),
-                      const SizedBox(width: 14),
-                      Expanded(child: fields[2]),
-                    ],
-                  ),
-                  if (fields.length > 4) ...[
-                    const SizedBox(height: 14),
-                    Row(children: [Expanded(child: fields[4])]),
-                  ],
-                ],
-              ),
+                ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The currency the document is quoted in.
+///
+/// Every organization's own currency sorts first: it is the answer
+/// almost every time, and scrolling past AED and AUD to reach MYR on a
+/// Malaysian invoice would be a small insult repeated all day.
+class _CurrencyField extends ConsumerWidget {
+  const _CurrencyField({
+    required this.value,
+    required this.baseCurrency,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final String value;
+  final String baseCurrency;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final available = ref.watch(currenciesProvider).valueOrNull ?? const [];
+
+    final codes = [
+      baseCurrency,
+      for (final c in available)
+        if (c.code != baseCurrency) c.code,
+    ];
+    // A document already in a currency that has since been deactivated
+    // still has to be able to display itself.
+    if (!codes.contains(value)) codes.insert(1, value);
+
+    final names = {for (final c in available) c.code: c.name};
+
+    return DropdownButtonFormField<String>(
+      value: value,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: 'Currency'),
+      items: [
+        for (final code in codes)
+          DropdownMenuItem(
+            value: code,
+            child: Text(
+              names[code] == null ? code : '$code — ${names[code]}',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+      onChanged: enabled ? (v) => v == null ? null : onChanged(v) : null,
+    );
+  }
+}
+
+/// Units of base currency per unit of the document's currency.
+///
+/// Shown only on foreign documents, because on a ringgit invoice in a
+/// ringgit company the answer is 1 and a field that can only be wrong is
+/// worse than no field.
+class _RateField extends StatelessWidget {
+  const _RateField({
+    required this.controller,
+    required this.currency,
+    required this.baseCurrency,
+    required this.date,
+    required this.rate,
+    required this.missing,
+    required this.resolving,
+    required this.enabled,
+    required this.onChanged,
+    required this.onStore,
+  });
+
+  final TextEditingController controller;
+  final String currency;
+  final String baseCurrency;
+  final DateTime date;
+  final double? rate;
+  final bool missing;
+  final bool resolving;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onStore;
+
+  @override
+  Widget build(BuildContext context) {
+    final helper = switch (null) {
+      _ when resolving => 'Looking up the rate…',
+      _ when rate == null =>
+        'No rate on file for ${Fmt.date(date)} — enter one',
+      _ => rateCaption(
+          currency: currency, baseCurrency: baseCurrency, rate: rate!),
+    };
+
+    return TextFormField(
+      controller: controller,
+      enabled: enabled,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        labelText: 'Exchange rate',
+        helperText: helper,
+        helperMaxLines: 2,
+        helperStyle: rate == null && !resolving
+            ? TextStyle(color: context.colors.warning)
+            : null,
+        // Offered whenever there is a rate to keep, so a rate typed for
+        // one invoice does not have to be typed again for the next.
+        suffixIcon: !enabled || rate == null || resolving
+            ? null
+            : IconButton(
+                tooltip: 'Save as the rate for ${Fmt.date(date)}',
+                icon: Icon(missing ? Icons.bookmark_add_outlined : Icons.save_outlined,
+                    size: 18),
+                onPressed: onStore,
+              ),
       ),
     );
   }
@@ -754,6 +1078,8 @@ class _TotalsAndNotes extends StatelessWidget {
     required this.total,
     required this.rounding,
     required this.currency,
+    required this.baseCurrency,
+    required this.exchangeRate,
     required this.notes,
     required this.editable,
     required this.onNotesChanged,
@@ -764,6 +1090,8 @@ class _TotalsAndNotes extends StatelessWidget {
   final double total;
   final double rounding;
   final String currency;
+  final String baseCurrency;
+  final double? exchangeRate;
   final TextEditingController notes;
   final bool editable;
   final VoidCallback onNotesChanged;
@@ -817,6 +1145,21 @@ class _TotalsAndNotes extends StatelessWidget {
               currency: currency,
               emphasise: true,
             ),
+            // What the ledger will actually carry. Shown because the
+            // whole document is quoted in the customer's currency and
+            // the books are not, and the difference between the two is
+            // the only figure an accountant can reconcile against.
+            if (currency != baseCurrency && exchangeRate != null) ...[
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '${Fmt.money(total * exchangeRate!, currency: baseCurrency)} '
+                  'at ${Fmt.rate(exchangeRate)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ],
           ],
         ),
       ),

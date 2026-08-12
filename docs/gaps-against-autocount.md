@@ -12,27 +12,34 @@ should be confirmed against a live plan page before anything is promised
 to a customer.
 
 Everything about **iAkauntan** below was read from the live schema and
-the Dart source, and is accurate as at migration `0077`.
+the Dart source, and was accurate as at migration `0077`. Migrations
+`0078`–`0080` and the currency picker have since closed most of the
+multi-currency gap; the rows below are marked where that has happened.
 
 ## The finding that matters most
 
-Not a missing feature. **Four capabilities are already in the database
-and cannot be reached from the app.** They were built and then never
+Not a missing feature. **Four capabilities were already in the database
+and could not be reached from the app.** They were built and then never
 wired up:
 
 | Capability | In the schema | References in `app/lib` |
 | --- | --- | --- |
-| Multi-currency | `ref_currencies`, `exchange_rates`, `currency` + `exchange_rate` on every document and journal | **0** |
+| Multi-currency | `ref_currencies`, `exchange_rates`, `currency` + `exchange_rate` on every document and journal | ~~0~~ → picker, rate lookup and settlement FX shipped |
 | Project / department dimensions | `gl_lines.project_code`, `gl_lines.department_code` | **0** |
 | Price levels | `price_levels`, `item_prices` | **0** |
 | FX revaluation | `journal_source` has an `fx_revaluation` value | no function exists |
 
-The multi-currency case is the clearest. `document_editor.dart` holds
-`String _currency = 'MYR'`, reads it back from a saved document, and
-writes it on save — but **no widget ever changes it.** The plumbing runs
-from the client to the ledger and the tap that would start the water is
-missing. A foreign-currency invoice cannot be raised, and no revaluation
-function exists to restate the balances if one could be.
+The multi-currency case was the clearest. `document_editor.dart` held
+`String _currency = 'MYR'`, read it back from a saved document, and
+wrote it on save — but **no widget ever changed it.** The plumbing ran
+from the client to the ledger and the tap that would start the water was
+missing.
+
+That tap now exists: a currency selector and rate field on the document,
+the rate resolved from `exchange_rates` at the document date, and
+realised gain and loss posted on settlement. What is still missing is
+period-end revaluation, so **open** foreign balances are still carried at
+the rate they were raised at until they settle.
 
 This is the same pattern this project has hit repeatedly — the fiscal
 year RPC with no caller, `reverse_gl_entry` with no caller, the leave and
@@ -79,13 +86,13 @@ these as separate products or not at all:
 
 In this order, by commercial value:
 
-**Multi-currency.** The largest gap with the smallest remaining work,
-because the storage and the posting path already exist. Needed by any
-client who exports, imports, or invoices Singapore. What is left: a
-currency selector on the document, a rate lookup at document date, the
-realised gain/loss posting on settlement, and an `fx_revaluation`
-function for period end. Without the last one the balances are wrong
-after any rate movement, so it is not optional.
+**Multi-currency.** ~~The largest gap with the smallest remaining
+work~~ — mostly done. The rate resolver (`0078`), realised gain and loss
+on settlement (`0079`) and the currency picker are in. What is left is
+the `fx_revaluation` function for period end: until it exists, an open
+foreign invoice sits on the balance sheet at the rate it was raised at,
+so the balances are wrong after any rate movement by exactly the
+unrealised difference. It is not optional, and it is the last piece.
 
 **Project and department dimensions.** `gl_lines` already carries both
 codes. What is left: a `projects` table, pickers on the document and
@@ -116,9 +123,11 @@ match a feature grid.
 
 `docs/migrating-from-autocount.md` and this document are the same problem
 seen from two sides. **A gap here is a client who cannot move.** A
-company on AutoCount Pro using multi-currency or serial numbers cannot be
-migrated into iAkauntan today at any level of effort, because there is
-nowhere to put the data.
+company on AutoCount Pro using serial numbers cannot be migrated into
+iAkauntan today at any level of effort, because there is nowhere to put
+the data. Foreign-currency books are no longer in that category — they
+can be moved and transacted, with period-end revaluation the one thing
+still to finish.
 
 So the gap list doubles as a migration eligibility list:
 
@@ -126,7 +135,7 @@ So the gap list doubles as a migration eligibility list:
 | --- | --- |
 | Services company, MYR only, no stock | Yes |
 | Trading company, MYR, simple stock | Yes |
-| Any company invoicing in foreign currency | **No** — until multi-currency is finished |
+| Any company invoicing in foreign currency | Yes to invoice and settle; **not yet** for period-end reporting, until revaluation lands |
 | Distribution with cartons/pieces | **No** — until multi-UOM |
 | Electronics, pharma, anything serialised | **No** — until serial tracking |
 | Retail with a counter | No, and by choice |

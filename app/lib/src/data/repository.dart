@@ -260,6 +260,61 @@ class Repo {
   }
 
   // ------------------------------------------------------------------
+  // Foreign exchange
+  // ------------------------------------------------------------------
+  Future<List<Currency>> currencies() async {
+    final data = await client
+        .from('ref_currencies')
+        .select()
+        .eq('is_active', true)
+        .order('code');
+    return _rows(data).map(Currency.fromJson).toList();
+  }
+
+  /// The rate the database would apply to a document in [currency] dated
+  /// [onDate], or null when there is none on file.
+  ///
+  /// Null rather than 1. `app.exchange_rate_for` raises P0002 instead of
+  /// defaulting, for the reason set out in migration 0078 — defaulting
+  /// turns a USD 10,000 invoice into RM 10,000 and every check in the
+  /// system still passes. The absence is translated here into something
+  /// the form can act on, and nothing else about it is softened: a null
+  /// stops the save.
+  Future<double?> exchangeRateFor(String currency, DateTime onDate) async {
+    try {
+      final data = await client.rpc('exchange_rate_for', params: {
+        'p_org_id': orgId,
+        'p_currency': currency,
+        'p_on_date': Fmt.iso(onDate),
+      });
+      return Fmt.toDouble(data);
+    } on PostgrestException catch (e) {
+      if (e.code == 'P0002') return null;
+      rethrow;
+    }
+  }
+
+  /// Records a rate so the next document does not have to be told again.
+  ///
+  /// Upserted on the natural key, because two rates for one pair on one
+  /// day is not a history — it is a tie the resolver would break by
+  /// insertion order, which is no answer at all.
+  Future<void> saveExchangeRate({
+    required String from,
+    required String to,
+    required double rate,
+    required DateTime date,
+  }) =>
+      client.from('exchange_rates').upsert({
+        'org_id': orgId,
+        'from_currency': from,
+        'to_currency': to,
+        'rate': rate,
+        'rate_date': Fmt.iso(date),
+        'source': 'manual',
+      }, onConflict: 'org_id,from_currency,to_currency,rate_date');
+
+  // ------------------------------------------------------------------
   // Sales and purchase documents
   //
   // Both cycles use the same table shape, so one set of methods serves
@@ -385,6 +440,8 @@ class Repo {
     String? paymentModeCode,
     String? reference,
     double bankCharges = 0,
+    String currency = 'MYR',
+    double exchangeRate = 1,
   }) async {
     final isReceipt = kind.isSales;
     final table = isReceipt ? 'receipts' : 'purchase_payments';
@@ -401,6 +458,12 @@ class Repo {
           'contact_id': contactId,
           'amount': amount,
           'unapplied_amount': amount,
+          // Both are in the currency of the documents being settled;
+          // post_receipt multiplies them by the rate. A receipt in a
+          // currency other than its invoices is refused by
+          // app.realised_fx_on_settlement, so the dialog never sends one.
+          'currency': currency,
+          'exchange_rate': exchangeRate,
           'bank_charges': bankCharges,
           'bank_account_id': bankAccountId,
           'payment_mode_code': paymentModeCode,

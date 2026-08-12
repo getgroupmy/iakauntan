@@ -12,15 +12,28 @@ class Fmt {
   static final _compact = NumberFormat.compact(locale: 'en');
   static final _whole = NumberFormat('#,##0');
   static final _fractional = NumberFormat('#,##0.####');
+  static final _rate = NumberFormat('#,##0.00####');
 
   /// RM 1,234.56 — the symbol is spaced, which is how it appears on
   /// Malaysian tax invoices.
-  static String money(num? value, {String currency = 'MYR'}) {
-    final amount = _plain.format(value ?? 0);
-    return currency == 'MYR' ? 'RM $amount' : '$currency $amount';
-  }
+  static String money(num? value, {String currency = 'MYR'}) =>
+      '${prefix(currency)}${_plain.format(value ?? 0)}';
+
+  /// What an amount field puts in front of the figure being typed.
+  /// Shares [money]'s rule so an entered amount and a formatted one read
+  /// the same way.
+  static String prefix(String currency) =>
+      currency == 'MYR' ? 'RM ' : '$currency ';
 
   static String plain(num? value) => _plain.format(value ?? 0);
+
+  /// An exchange rate, at the precision the pair actually needs.
+  ///
+  /// `exchange_rates.rate` is numeric(18, 8) because thinly quoted pairs
+  /// need it — IDR to MYR is around 0.00028 — but printing 4.70000000
+  /// beside a US dollar invoice is noise. Two decimals minimum, six
+  /// maximum, trailing zeros dropped in between.
+  static String rate(num? value) => _rate.format(value ?? 0);
 
   static String compact(num? value) => _compact.format(value ?? 0);
 
