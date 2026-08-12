@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786509388.760608,
-    "ast_hash": "736e0111cd53b36300b496220b527be9",
+    "mtime": 1786511049.1847854,
+    "ast_hash": "b2ff45bbce9972418827ea8d0704d991",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -1147,6 +1147,11 @@
   "supabase/tests/demo_accounts.sql": {
     "mtime": 1786508453.2694304,
     "ast_hash": "e9a2bf8af2dff29a20dd080d0fcc4779",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0077_unflag_platform_operator.sql": {
+    "mtime": 1786511007.0593312,
+    "ast_hash": "825ae65327e514ce07a1357f4062f6cf",
     "semantic_hash": ""
   }
 }

@@ -1,16 +1,16 @@
 # Graph Report - iakauntan  (2026-08-12)
 
 ## Corpus Check
-- 199 files · ~191,333 words
+- 200 files · ~191,648 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3392 nodes · 5020 edges · 202 communities (174 shown, 28 thin omitted)
+- 3393 nodes · 5020 edges · 202 communities (174 shown, 28 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 3 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `95544a6a`
+- Built from commit: `ff48e8e9`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -189,7 +189,6 @@
 - corpEntityProvider
 - package:flutter/material.dart
 - 0076_lock_demo_credentials.sql
-- revenueTrendProvider
 
 ## God Nodes (most connected - your core abstractions)
 1. `repoProvider` - 90 edges
@@ -277,8 +276,8 @@ Cohesion: 0.06
 Nodes (33): PaymentLine, PayrollRun, _buildForm, createState, _DateField, dispose, emphasise, _export (+25 more)
 
 ### Community 14 - "matter_detail_screen.dart"
-Cohesion: 0.07
-Nodes (31): clientTransactionsProvider, disbursementsProvider, timeEntriesProvider, _activity, _amount, _billable, build, canPost (+23 more)
+Cohesion: 0.06
+Nodes (37): clientTransactionsProvider, disbursementsProvider, mattersProvider, timeEntriesProvider, _activity, _amount, _billable, build (+29 more)
 
 ### Community 15 - "entity_editor.dart"
 Cohesion: 0.07
@@ -297,8 +296,8 @@ Cohesion: 0.17
 Nodes (30): public.bank_reconciliations, public.bank_transactions, public.expenses, public.purchase_document_lines, public.purchase_documents, public.purchase_payments, public.stock_adjustment_lines, public.stock_adjustments (+22 more)
 
 ### Community 19 - "dashboard_screen.dart"
-Cohesion: 0.11
-Nodes (17): DashboardSummary, _activityIcon, color, data, _delta, _EinvoiceBanner, _Greeting, label (+9 more)
+Cohesion: 0.10
+Nodes (20): revenueTrendProvider, DashboardSummary, _activityIcon, color, data, _delta, _EinvoiceBanner, _Greeting (+12 more)
 
 ### Community 20 - "report_spec.dart"
 Cohesion: 0.05
@@ -341,8 +340,8 @@ Cohesion: 0.08
 Nodes (26): _, _compact, _date, _dateTime, days, Fmt, _fractional, initials (+18 more)
 
 ### Community 30 - "pipeline_screen.dart"
-Cohesion: 0.09
-Nodes (25): opportunitiesProvider, pipelineStagesProvider, Opportunity, PipelineStage, _amount, build, canWrite, _closeDate (+17 more)
+Cohesion: 0.11
+Nodes (18): Opportunity, PipelineStage, _amount, canWrite, _closeDate, _contactId, createState, deal (+10 more)
 
 ### Community 31 - "items_screen.dart"
 Cohesion: 0.08
@@ -409,8 +408,8 @@ Cohesion: 0.10
 Nodes (21): AttachmentsCard, _AttachmentsCardState, attachmentsProvider, build, _busy, canWrite, createState, file (+13 more)
 
 ### Community 47 - "matters_screen.dart"
-Cohesion: 0.09
-Nodes (26): mattersProvider, matterSummaryProvider, Matter, MatterSummary, initState, build, _clientId, _courtRef (+18 more)
+Cohesion: 0.10
+Nodes (20): Matter, MatterSummary, _clientId, _courtRef, createState, _deposit, dispose, _formKey (+12 more)
 
 ### Community 48 - "line_draft.dart"
 Cohesion: 0.10
@@ -550,7 +549,7 @@ Nodes (11): bold, buildDocumentPdf, doc, _inline, kit, _paragraphs, parts, regul
 
 ### Community 82 - "ConsumerState"
 Cohesion: 0.09
-Nodes (34): canPostProvider, canWriteProvider, contactsProvider, documentsProvider, PlatformConsoleScreen, _PlatformConsoleScreenState, ContactEditor, build (+26 more)
+Nodes (39): canPostProvider, canWriteProvider, contactsProvider, documentsProvider, matterSummaryProvider, opportunitiesProvider, pipelineStagesProvider, PlatformConsoleScreen (+31 more)
 
 ### Community 83 - "0020_platform_admin_rpcs.sql"
 Cohesion: 0.17
@@ -645,8 +644,8 @@ Cohesion: 0.29
 Nodes (5): public.audit_list_payslips(), public.pay_periods, public.payroll_runs, public.payslip_lines, public.payslips
 
 ### Community 108 - "repoProvider"
-Cohesion: 0.07
-Nodes (42): corpBeneficialOwnersProvider, corpChargesProvider, corpDocumentsProvider, corpMembersProvider, corpOfficersProvider, corpShareEventsProvider, corpSignaturesProvider, corpTemplatesProvider (+34 more)
+Cohesion: 0.06
+Nodes (44): corpBeneficialOwnersProvider, corpChargesProvider, corpDocumentsProvider, corpMembersProvider, corpOfficersProvider, corpShareEventsProvider, corpSignaturesProvider, corpTemplatesProvider (+36 more)
 
 ### Community 109 - "0012_bootstrap.sql"
 Cohesion: 0.40
@@ -804,10 +803,6 @@ Nodes (7): corpEntityProvider, build, CorpEntityEditor, _CorpEntityEditorState, 
 Cohesion: 0.13
 Nodes (14): main, pump, filters, main, phone, pump, main, range (+6 more)
 
-### Community 200 - "revenueTrendProvider"
-Cohesion: 0.67
-Nodes (3): revenueTrendProvider, _MetricGrid, _TrendCard
-
 ## Knowledge Gaps
 - **1721 isolated node(s):** `XCTest`, `error`, `main`, `build`, `false` (+1716 more)
   These have ≤1 connection - possible missing edges or undocumented components.
@@ -818,7 +813,7 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `_` connect `_` to `static const`, `package:flutter/material.dart`, `AppColorsX`, `dashboard_screen.dart`, `_`, `AppColors`?**
   _High betweenness centrality (0.023) - this node is a cross-community bridge._
-- **Why does `_` connect `_` to `../../data/models.dart`, `payslip_pdf.dart`, `report_pdf.dart`, `download_web.dart`?**
+- **Why does `_` connect `_` to `../../data/models.dart`, `document_pdf.dart`, `payslip_pdf.dart`, `download_web.dart`?**
   _High betweenness centrality (0.018) - this node is a cross-community bridge._
 - **What connects `XCTest`, `error`, `main` to the rest of the system?**
   _1721 weakly-connected nodes found - possible documentation gaps or missing edges._

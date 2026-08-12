@@ -998,14 +998,16 @@ status, which would include a real company the day one signs up.
 
 Leaving it off the list is not the same as closing it: the account still
 signs in if somebody types the password above, which this file publishes.
-**Rotate it before this deployment is anything but a demo.** The
-credential lock has to be lifted first, since that account carries the
-demo flag:
+**Rotate it.** `0077` has already taken the credential lock off that one
+account, which is what makes the password changeable — so the only step
+left is setting a new one, in **Supabase → Authentication → Users →
+superadmin@iakauntan.my → Reset password**.
 
-```sql
-update auth.users set raw_app_meta_data = raw_app_meta_data - 'demo'
- where email = 'superadmin@iakauntan.my';
-``` It is the same
+Until that is done the account is at its least protected: the published
+password works *and* can now be changed by anybody who uses it. That is
+the unavoidable shape of the fix — a password cannot be rotated while it
+is frozen — but it is a reason to do it now rather than later. To put the
+freeze back instead, reverse `0077`. It is the same
 `signInWithPassword` call the form makes, not a side door — a visitor
 should reach the app the way everybody else does, or the demo is
 demonstrating something other than the product.

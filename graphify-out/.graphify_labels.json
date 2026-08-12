@@ -199,6 +199,6 @@
   "197": "attendance.sql",
   "198": "package:flutter/material.dart",
   "199": "0076_lock_demo_credentials.sql",
-  "200": "revenueTrendProvider",
+  "200": "0077_unflag_platform_operator.sql",
   "201": "demo_accounts.sql"
 }
