@@ -107,10 +107,19 @@ end $$;
 -- ---------------------------------------------------------------------
 -- Chasing, and not chasing twice
 -- ---------------------------------------------------------------------
+-- `app.queue_overdue_reminders` walks every organization in the
+-- database, which is what the nightly job wants and what makes its
+-- return value useless as an assertion here: the blocks above have left
+-- their own overdue invoices behind, and this file runs in one
+-- transaction. Counting messages against *this* document is the only
+-- thing that is a fact about this test.
+--
+-- That difference is exactly what CI caught and a hosted run did not,
+-- because there each block was its own transaction.
 do $$
 declare
   v_org uuid := pg_temp.mail_org('Chaser Sdn Bhd');
-  v_contact uuid; v_doc uuid; v_n integer;
+  v_contact uuid; v_doc uuid;
 begin
   insert into public.email_settings (org_id, is_enabled, reminder_days)
   values (v_org, true, '{0,7,30}');
@@ -120,37 +129,41 @@ begin
 
   v_doc := pg_temp.invoice_due(v_org, v_contact, 'INV-1', 900, date '2026-03-31');
 
-  v_n := app.queue_overdue_reminders(date '2026-03-30');
-  perform pg_temp.check_eq('nothing the day before it is due', v_n, 0);
+  perform app.queue_overdue_reminders(date '2026-03-30');
+  perform pg_temp.check_eq('nothing the day before it is due',
+    (select count(*) from public.email_outbox where document_id = v_doc), 0);
 
-  v_n := app.queue_overdue_reminders(date '2026-03-31');
-  perform pg_temp.check_eq('one on the due date', v_n, 1);
+  perform app.queue_overdue_reminders(date '2026-03-31');
+  perform pg_temp.check_eq('one on the due date',
+    (select count(*) from public.email_outbox where document_id = v_doc), 1);
 
   -- The dedupe key is what makes the nightly job safe to re-run, and a
   -- reminder sent twice is worse than one sent late.
-  v_n := app.queue_overdue_reminders(date '2026-03-31');
-  perform pg_temp.check_eq('and running the job again sends nothing', v_n, 0);
-  perform pg_temp.check_eq('leaving one message, not two',
-    (select count(*) from public.email_outbox
-      where document_id = v_doc and template_code = 'invoice_reminder'), 1);
+  perform app.queue_overdue_reminders(date '2026-03-31');
+  perform pg_temp.check_eq('and running the job again leaves one, not two',
+    (select count(*) from public.email_outbox where document_id = v_doc), 1);
 
-  v_n := app.queue_overdue_reminders(date '2026-04-07');
-  perform pg_temp.check_eq('another at seven days over', v_n, 1);
-  v_n := app.queue_overdue_reminders(date '2026-04-08');
-  perform pg_temp.check_eq('but not on a day nobody configured', v_n, 0);
+  perform app.queue_overdue_reminders(date '2026-04-07');
+  perform pg_temp.check_eq('another at seven days over',
+    (select count(*) from public.email_outbox where document_id = v_doc), 2);
+
+  perform app.queue_overdue_reminders(date '2026-04-08');
+  perform pg_temp.check_eq('but nothing on a day nobody configured',
+    (select count(*) from public.email_outbox where document_id = v_doc), 2);
 
   -- Paid is paid.
   update public.sales_documents
      set balance_amount = 0, status = 'completed' where id = v_doc;
-  v_n := app.queue_overdue_reminders(date '2026-04-30');
-  perform pg_temp.check_eq('a settled invoice is left alone', v_n, 0);
+  perform app.queue_overdue_reminders(date '2026-04-30');
+  perform pg_temp.check_eq('a settled invoice is left alone',
+    (select count(*) from public.email_outbox where document_id = v_doc), 2);
 end $$;
 
 -- A floor under what is worth chasing, and a customer with no address.
 do $$
 declare
   v_org uuid := pg_temp.mail_org('Threshold Sdn Bhd');
-  v_small uuid; v_silent uuid; v_n integer;
+  v_small uuid; v_silent uuid;
 begin
   insert into public.email_settings
     (org_id, is_enabled, reminder_days, reminder_min_amount)
@@ -166,12 +179,13 @@ begin
   returning id into v_silent;
   perform pg_temp.invoice_due(v_org, v_silent, 'INV-2', 5000, date '2026-03-31');
 
-  v_n := app.queue_overdue_reminders(date '2026-03-31');
+  perform app.queue_overdue_reminders(date '2026-03-31');
 
   -- One is below the floor and one has nowhere to send to. Neither is
   -- an error worth stopping the run for — the second is a phone call.
-  perform pg_temp.check_eq('neither is chased', v_n, 0);
-  perform pg_temp.check_eq('and nothing was queued',
+  -- Counted for this organization, not from the function's return: it
+  -- reports what it did across the whole database.
+  perform pg_temp.check_eq('neither is chased',
     (select count(*) from public.email_outbox where org_id = v_org), 0);
 end $$;
 
