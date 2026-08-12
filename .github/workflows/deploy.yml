@@ -111,7 +111,31 @@ jobs:
           # fetches CanvasKit from www.gstatic.com before main() runs, and
           # anyone behind a network that blocks it gets a blank page with
           # no error screen, because the app never starts.
-          flutter build web --release --no-web-resources-cdn "${defines[@]}"
+          #
+          # --pwa-strategy=none is load-bearing for a different reason.
+          # Flutter's default service worker caches flutter_bootstrap.js,
+          # and that bootstrap carries the serviceWorkerVersion it was
+          # built with — so once a device holds a stale copy the worker
+          # believes it is current, never updates, and serves old code
+          # forever. A deployed fix then never reaches the user and a
+          # reload cannot break the loop. Nothing here works offline
+          # anyway: every screen reads Supabase.
+          flutter build web --release --no-web-resources-cdn \
+            --pwa-strategy=none "${defines[@]}"
+
+          # Registration must not come back by accident — if it does,
+          # every later deploy silently stops reaching anyone who has
+          # already used the app.
+          #
+          # The check is a sentinel from web/flutter_bootstrap.js, not a
+          # grep for "serviceWorkerVersion": flutter.js is inlined into
+          # the bootstrap and always contains that identifier whether or
+          # not anything calls it, so that grep matches a clean build too.
+          if ! grep -q "iakauntan:no-service-worker" build/web/flutter_bootstrap.js; then
+            echo "::error::The custom web/flutter_bootstrap.js is not in the build."
+            echo "::error::Flutter's default bootstrap registers a caching service worker."
+            exit 1
+          fi
 
       - name: Assemble the Vercel build output
         if: steps.creds.outputs.ready == 'true'

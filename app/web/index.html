@@ -37,6 +37,57 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <!--
+    A one-time rescue for browsers still carrying the service worker this
+    app used to register.
+
+    The app is built with --pwa-strategy=none, so nothing registers a
+    worker any more. But a device that installed the old one keeps it:
+    the worker serves flutter_bootstrap.js from its cache, that stale
+    bootstrap carries the serviceWorkerVersion it was built with, so the
+    worker concludes it is current and never updates. The app then runs
+    old code indefinitely and an ordinary reload cannot break the loop —
+    which is how a shipped fix can sit in production, deployed and
+    correct, while the phone in your hand never sees it.
+
+    This runs because index.html is the one thing Flutter's worker
+    fetches network-first, so a new copy of this file does reach the
+    browser even while everything around it is stale.
+
+    It only ever acts when a registration is actually present, so a clean
+    visitor pays nothing, and the sessionStorage guard means it cannot
+    turn into a reload loop if a browser reports registrations it will
+    not let go of.
+  -->
+  <script>
+    (function () {
+      if (!('serviceWorker' in navigator)) return;
+
+      function dropCaches() {
+        if (!window.caches) return Promise.resolve();
+        return caches.keys().then(function (keys) {
+          return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        });
+      }
+
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        var had = regs.length > 0;
+        return Promise.all(regs.map(function (r) { return r.unregister(); }))
+          // Unconditional, because the pass that unregisters cannot also
+          // finish the cleanup: it reloads, and after the reload there is
+          // no registration left to notice by. A cache with no worker to
+          // read it is inert rather than harmful, but leaving one behind
+          // for good is the kind of debris that misleads whoever debugs
+          // this next.
+          .then(dropCaches)
+          .then(function () {
+            if (!had || sessionStorage.getItem('sw-evicted')) return;
+            sessionStorage.setItem('sw-evicted', '1');
+            window.location.reload();
+          });
+      }).catch(function () { /* Nothing useful to do; the app still loads. */ });
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
