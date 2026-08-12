@@ -260,11 +260,17 @@ begin
       select 1 from pg_policies
        where tablename = 'payslip_access_requests' and cmd <> 'SELECT'));
 
-  -- Two functions are deliberately open to an unauthenticated caller:
-  -- the signing link, which exists precisely so a director with no
-  -- account can sign one resolution. Everything else being closed is the
-  -- assertion — an allowlist rather than deleting the check, so a third
-  -- one appearing is caught.
+  -- Three functions are deliberately open to an unauthenticated caller,
+  -- and each earned its place by someone who has no account needing to
+  -- do exactly one thing: a director signing one resolution, and a
+  -- customer reading one invoice they were sent a link to.
+  --
+  -- The allowlist is the point. Deleting this check would be easier and
+  -- would stop it doing its job — it caught `open_shared_document` on
+  -- the commit that added it, which is what an allowlist is for. Adding
+  -- a name here should feel like a decision, and anybody doing it should
+  -- be able to say which stranger needs the function and why nothing
+  -- else in the database is reachable through it.
   perform pg_temp.check_true('nothing new is exposed to anon',
     not exists (
       select 1
@@ -273,7 +279,13 @@ begin
        where n.nspname in ('public', 'app')
          and p.prosecdef
          and has_function_privilege('anon', p.oid, 'execute')
-         and p.proname not in ('corp_open_signing_link', 'corp_sign_with_link')));
+         and p.proname not in (
+           'corp_open_signing_link',
+           'corp_sign_with_link',
+           -- Takes a share token and returns one sales document, with
+           -- internal notes and line cost deliberately left out.
+           -- `supabase/tests/document_share.sql` asserts both absences.
+           'open_shared_document')));
 
   perform pg_temp.check_true('and the link tables stay shut to anon',
     not exists (

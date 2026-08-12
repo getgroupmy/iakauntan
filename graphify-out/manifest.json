@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786530151.6461658,
-    "ast_hash": "eed565abf3f23dc98928994288a601b7",
+    "mtime": 1786530909.0477922,
+    "ast_hash": "243de0f17d95adc0b268115b33e66538",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786530157.4649334,
-    "ast_hash": "c5d5a56660cc05f8ff62b1f973196c87",
+    "mtime": 1786530984.5915308,
+    "ast_hash": "9e53d9cdd337610df2cf8b488fc9fefb",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786530151.6451793,
-    "ast_hash": "f20b3f02f60e6bf015974bfad3bc0e35",
+    "mtime": 1786530909.0475123,
+    "ast_hash": "5c814679dc2d394856b51841b8130851",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -150,8 +150,8 @@
     "semantic_hash": "88f373b2bbe85ad1d830bbd9c2bf8c6c"
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1786530270.5369287,
-    "ast_hash": "77a0df8ee75535bfcb181887edcdb177",
+    "mtime": 1786531009.0193634,
+    "ast_hash": "9f3a33e5b2974508099d685a82b5527c",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": "d2c9729b108d770de90c22637a2bb8ae"
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1786528306.4164927,
-    "ast_hash": "d78ffafd01e57ba33ee7abd0c720267c",
+    "mtime": 1786530984.592461,
+    "ast_hash": "11027850b9aee7b717c106d0bc7a5f91",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -740,9 +740,9 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory.sql": {
-    "mtime": 1786441816.0291908,
-    "ast_hash": "2b2895ba79638459e41e5971bdd39d0c",
-    "semantic_hash": "2b2895ba79638459e41e5971bdd39d0c"
+    "mtime": 1786530768.552908,
+    "ast_hash": "414de014d4b42c8375c1f681c83f7f7f",
+    "semantic_hash": ""
   },
   ".claude/CLAUDE.md": {
     "mtime": 1786449136.6433768,
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786530073.144937,
-    "ast_hash": "8624b02f103ab04630fe40a3bb393372",
+    "mtime": 1786530909.0468926,
+    "ast_hash": "2f8da5c322cddd611cbd407bf5925f7d",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1507,6 +1507,31 @@
   "docs/gaps-against-akaunting.md": {
     "mtime": 1786529761.63695,
     "ast_hash": "b478b2df08942cd686df5c3722770530",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/settings/email_screen.dart": {
+    "mtime": 1786530967.5408998,
+    "ast_hash": "8f65fdea759ff3193a2597bed55caca1",
+    "semantic_hash": ""
+  },
+  "supabase/functions/send-email/index.ts": {
+    "mtime": 1786530713.4729104,
+    "ast_hash": "a2387a5e998e1609251d4a4bf6a73c89",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0095_outbound_email.sql": {
+    "mtime": 1786530821.3329058,
+    "ast_hash": "3ba5c103fc6dd67d4356b99d84e83bb0",
+    "semantic_hash": ""
+  },
+  "supabase/tests/outbound_email.sql": {
+    "mtime": 1786530863.096904,
+    "ast_hash": "37afd09a01752696a14ea62af058bf90",
+    "semantic_hash": ""
+  },
+  "docs/email-setup.md": {
+    "mtime": 1786531068.4648955,
+    "ast_hash": "cc788d650f7519f6abed447a18043a7e",
     "semantic_hash": ""
   }
 }

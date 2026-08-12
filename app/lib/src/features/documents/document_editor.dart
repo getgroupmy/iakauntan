@@ -10,6 +10,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../../data/repository.dart';
 import 'doc_types.dart';
 import 'fx.dart';
 import 'invoice_pdf.dart';
@@ -324,6 +325,23 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// Reloaded from the database rather than assembled from the form, so
   /// what prints is what was stored — an unsaved edit in a text field is
   /// not part of the invoice yet, and printing it would say otherwise.
+  Future<void> _emailDocument() async {
+    final ok = await confirm(
+      context,
+      title: 'Email $_docNo?',
+      message: 'A message is queued to the customer with a link to this '
+          'document. It goes out on the next send.',
+      confirmLabel: 'Queue it',
+    );
+    if (!ok || !mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.emailDocument(widget.documentId!),
+      successMessage: 'Queued — it will go out on the next send',
+    );
+  }
+
   Future<void> _downloadPdf() async {
     final messenger = ScaffoldMessenger.of(context);
     final org = ref.read(currentOrgProvider).valueOrNull;
@@ -586,6 +604,16 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           onPressed: _saving
               ? null
               : () => showShareDialog(context, widget.documentId!, _docNo),
+        ),
+
+      // Queues a message carrying a fresh share link. It does not send:
+      // the edge function drains the queue, so this returns as soon as
+      // the row is written rather than waiting on a mail provider.
+      if (!_isNew && _kind.isSales && _status != 'draft' && _status != 'void')
+        IconButton(
+          tooltip: 'Email to the customer',
+          icon: const Icon(Icons.mail_outline, size: 20),
+          onPressed: _saving ? null : _emailDocument,
         ),
 
       if (!narrow)

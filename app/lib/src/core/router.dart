@@ -26,6 +26,7 @@ import '../features/ledger/recurring_screen.dart';
 import '../features/reports/reports_screen.dart';
 import '../features/secretarial/entity_editor.dart';
 import '../features/documents/shared_document_page.dart';
+import '../features/settings/email_screen.dart';
 import '../features/secretarial/signing_page.dart';
 import '../features/secretarial/entity_screen.dart';
 import '../features/secretarial/secretarial_screen.dart';
@@ -234,6 +235,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(path: '/einvoice', builder: (_, __) => const EinvoiceScreen()),
           GoRoute(path: '/journals', builder: (_, __) => const JournalsScreen()),
+          GoRoute(path: '/email', builder: (_, __) => const EmailScreen()),
           GoRoute(
             path: '/recurring',
             builder: (_, __) => const RecurringScreen(),

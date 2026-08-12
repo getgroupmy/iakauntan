@@ -2431,6 +2431,54 @@ extension RepoHrSetup on Repo {
           .eq('document_id', documentId)
           .order('created_at', ascending: false));
 
+  // ------------------------------------------------------------------
+  // Outbound email
+  //
+  // Queued here and sent by the `send-email` edge function, which is
+  // the only thing holding a provider key. Nothing in the app can send.
+  // ------------------------------------------------------------------
+  Future<Map<String, dynamic>?> emailSettings() async {
+    final rows = await client
+        .from('email_settings')
+        .select()
+        .eq('org_id', orgId)
+        .limit(1);
+    final list = Repo._rows(rows);
+    return list.isEmpty ? null : list.first;
+  }
+
+  Future<void> saveEmailSettings(Map<String, dynamic> values) => client
+      .from('email_settings')
+      .upsert({...values, 'org_id': orgId, 'updated_at': 'now()'});
+
+  Future<String> emailDocument(String documentId,
+      {String? to, String templateCode = 'document_new'}) async {
+    final data = await client.rpc('email_document', params: {
+      'p_document_id': documentId,
+      if (to != null && to.trim().isNotEmpty) 'p_to': to.trim(),
+      'p_template_code': templateCode,
+    });
+    return data as String;
+  }
+
+  Future<List<Map<String, dynamic>>> emailOutbox({String? status}) async {
+    var q = client
+        .from('email_outbox')
+        .select('*, sales_documents(doc_no)')
+        .eq('org_id', orgId);
+    if (status != null && status != 'all') q = q.eq('status', status);
+    return Repo._rows(await q.order('queued_at', ascending: false).limit(200));
+  }
+
+  /// Asks the edge function to drain the queue now rather than waiting
+  /// for the schedule. Used from the outbox when somebody has just
+  /// fixed whatever was wrong.
+  Future<Map<String, dynamic>> sendQueuedEmail({String? id}) async {
+    final res = await client.functions
+        .invoke('send-email', body: {if (id != null) 'id': id});
+    return Map<String, dynamic>.from(res.data as Map? ?? {});
+  }
+
   Future<List<Map<String, dynamic>>> appraisalGoals(String appraisalId) async =>
       Repo._rows(await client
           .from('appraisal_goals')
