@@ -1251,3 +1251,21 @@ Stated plainly so nothing here is mistaken for finished:
   plans one from AutoCount Cloud and names what has to be built first —
   chiefly that **no table records where a row came from**, so no import
   can be re-run, reconciled or rolled back until it does
+
+### Built, but not reachable from the app
+
+Worse than unbuilt, because the schema suggests otherwise.
+`docs/gaps-against-autocount.md` has the detail; the short version is
+that four capabilities exist in the database with **zero references in
+`app/lib`**:
+
+- **Multi-currency.** `ref_currencies`, `exchange_rates` and a `currency`
+  and `exchange_rate` on every document and journal. The editor holds
+  `_currency`, reads it from a saved document and writes it back, but no
+  widget ever changes it — so no foreign-currency document can be raised,
+  and there is no revaluation function to restate balances if one could be
+- **Project and department dimensions.** `gl_lines.project_code` and
+  `gl_lines.department_code`, with nothing writing them and no report
+  reading them
+- **Price levels.** `price_levels` and `item_prices`, unused by the line
+  editor
