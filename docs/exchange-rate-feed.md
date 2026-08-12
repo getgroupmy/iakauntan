@@ -60,21 +60,38 @@ to be 1.
 
 ## Deploying it
 
-There is **no API key**. BNM's Open API is public; the only credential
-involved is the project's own service role key, which the platform
-injects into the function.
+**Already deployed** — version 2, active. Redeploy after a change with:
 
 ```bash
 supabase functions deploy fetch-rates --project-ref ewwcgtnniwqndrzukksm
 ```
 
-Then call it once to check:
+There is **no API key**. BNM's Open API is public; the only credential
+involved is the project's own service role key, which the platform
+injects into the function.
+
+**It must be called with the service role key**, not the publishable
+one. `verify_jwt` alone accepts any JWT this project signed, and the
+publishable key ships inside the web bundle — so without the check in
+the function anybody could make the project hammer Bank Negara. The app
+cannot call this and should not want to: rates belong to every
+organization at once, so fetching them is not an action any one user
+takes.
 
 ```bash
 curl -X POST https://ewwcgtnniwqndrzukksm.supabase.co/functions/v1/fetch-rates \
   -H "Authorization: Bearer <service role key>" \
   -H "Content-Type: application/json" -d '{}'
 ```
+
+**This has not been run yet.** The sandbox the function was written in
+cannot reach `api.bnm.gov.my` or `*.supabase.co` — both are refused by
+its egress policy — so the mapping from BNM's response onto
+`ingest_exchange_rates` is written from the documented shape and has
+never met the live API. The first real call is the test. Read the reply
+rather than glancing at the status code, and check one thing in
+particular: **JPY should come back around 0.028, not around 2.8.** The
+first is right, the second means `unit` was ignored.
 
 It answers with a count and the full per-currency verdict:
 
@@ -87,6 +104,9 @@ It answers with a count and the full per-currency verdict:
 `skipped` is normal — it counts currencies BNM lists that
 `ref_currencies` does not hold, and the ringgit quoting against itself.
 `errors` should be zero; anything there names the currency and says why.
+
+A 403 saying the scheduler calls this means the publishable key was
+used instead of the service role key.
 
 ### Scheduling
 

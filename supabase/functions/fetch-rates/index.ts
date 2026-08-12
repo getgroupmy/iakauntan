@@ -22,10 +22,35 @@
  * user — a rate that prices everybody's ledger is not one organization's
  * business.
  *
- * Called on a schedule. See the README for wiring it up.
+ * Called on a schedule. See docs/exchange-rate-feed.md.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { corsHeaders, fail, json } from "../_shared/cors.ts";
+
+// Repeated from `_shared/cors.ts` rather than imported, and the reason
+// is deployment rather than taste. The CLI resolves `../_shared/` from
+// `supabase/functions/fetch-rates/`, which is where the shared file
+// lives; the API deploy roots the entrypoint one directory deeper, so
+// the same path escapes the bundle and the function will not build.
+// Twelve duplicated lines are cheaper than two deployment routes that
+// produce different bytes — `send-email` and `myinvois` keep the import
+// because they are only ever deployed by the CLI.
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+};
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function fail(message: string, status = 400, extra?: unknown): Response {
+  return json({ error: message, details: extra ?? null }, status);
+}
 
 const BNM_ENDPOINT = "https://api.bnm.gov.my/public/exchange-rate";
 
@@ -97,6 +122,27 @@ Deno.serve(async (req) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const url = Deno.env.get("SUPABASE_URL");
   if (!serviceKey || !url) return fail("Function is missing its own keys", 500);
+
+  // `verify_jwt` is not enough on its own, and the gap is easy to miss.
+  // It accepts any JWT this project signed — including the publishable
+  // key, which ships inside the web bundle and is therefore public. So
+  // without this check anybody at all could make the project hammer
+  // Bank Negara. The effect would be bounded (the same public rates,
+  // upserted onto the same rows) but the door should not be open.
+  //
+  // Presenting the service role key is what marks the caller as the
+  // scheduler. The app cannot call this and should not want to: rates
+  // belong to every organization at once, so fetching them is not an
+  // action any one user takes.
+  const presented = (req.headers.get("Authorization") ?? "")
+    .replace(/^Bearer\s+/i, "").trim();
+  if (presented !== serviceKey) {
+    return fail(
+      "This function is called by the scheduler with the service role " +
+        "key, not from the app.",
+      403,
+    );
+  }
 
   let body: { session?: string; date?: string } = {};
   try {
