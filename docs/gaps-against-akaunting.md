@@ -82,9 +82,12 @@ happened somewhere else. For Malaysia this would be FPX or DuitNow.
 so an invoice, a bill or a transaction can recur, with `auto_send` and
 `limit_by` (never, by date, or by count).
 
-iAkauntan has `recurring_journals` and nothing else, so a monthly
-retainer invoice is typed by hand twelve times a year while the runner
-that would produce it sits there working on an empty table.
+Built — `recurring_documents`, for invoices and bills. The schedule
+holds a snapshot of a real document rather than a pointer to one, so
+editing the document it was made from does not silently change next
+month's billing. `limit_by` is an end date or a number of occurrences,
+either or neither. The nightly run catches up rather than raising one
+document per run, and posts through the same code a person does.
 
 ## 6. No bank-to-bank transfer
 
@@ -135,6 +138,6 @@ somebody wants "sees purchases, not payroll".
 
 1 and 2 belong together: email plus a signed invoice link is one
 workflow, and it is the difference between a bookkeeping tool and a
-business system. Both are built, and so is the aging. Then recurring
-invoices, then withholding tax. Bank transfer and import are small and
-fit anywhere.
+business system. Both are built, and so is the aging, and so are
+recurring invoices and bills. Withholding tax is next. Bank transfer and
+import are small and fit anywhere.

@@ -291,6 +291,11 @@ final recurringJournalsProvider =
   return requireRepo(ref).recurringJournals();
 });
 
+final recurringDocumentsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).recurringDocuments();
+});
+
 final priceLevelsProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).priceLevels();

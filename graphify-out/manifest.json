@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786533637.7274787,
-    "ast_hash": "b79bb65de1cdbb6dacdfc7f628e083d1",
+    "mtime": 1786535620.1104276,
+    "ast_hash": "ffe94dabddec5ed363b1b3e024b63481",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786530984.5915308,
-    "ast_hash": "9e53d9cdd337610df2cf8b488fc9fefb",
+    "mtime": 1786535720.714658,
+    "ast_hash": "6a26b554364c4d50f5e4111a90947057",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786533628.8554785,
-    "ast_hash": "c0c35589bfb010655236be9a10bc617f",
+    "mtime": 1786535611.9024274,
+    "ast_hash": "1a0ab6d44e44ef065eefed5bde6fb94a",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -150,8 +150,8 @@
     "semantic_hash": "88f373b2bbe85ad1d830bbd9c2bf8c6c"
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1786531009.0193634,
-    "ast_hash": "9f3a33e5b2974508099d685a82b5527c",
+    "mtime": 1786535720.713629,
+    "ast_hash": "911e998823916250eb180d7899218df7",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": "d2c9729b108d770de90c22637a2bb8ae"
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1786530984.592461,
-    "ast_hash": "11027850b9aee7b717c106d0bc7a5f91",
+    "mtime": 1786535720.7148118,
+    "ast_hash": "a694ff84d5edb33baf5feaef2bed1427",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786533727.535482,
-    "ast_hash": "11460c9e403cc9779915055693a7a87a",
+    "mtime": 1786535593.1704266,
+    "ast_hash": "fa01edab14cfcce8c44831f89379da2f",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1505,8 +1505,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-akaunting.md": {
-    "mtime": 1786533881.8114874,
-    "ast_hash": "b8068389eb5a22e35c64752bdfb6ad12",
+    "mtime": 1786535798.1625843,
+    "ast_hash": "664ecf3e46bba4dad3ba76557974f559",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/email_screen.dart": {
@@ -1542,6 +1542,26 @@
   "supabase/tests/aged_balances.sql": {
     "mtime": 1786533506.275474,
     "ast_hash": "4babd6f8fb0fa490af9ce8be13b4f1e6",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/recurring_documents_screen.dart": {
+    "mtime": 1786535751.5544844,
+    "ast_hash": "1207200fb193bca95fc210f1596bd53d",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/repeat_dialog.dart": {
+    "mtime": 1786535751.5542963,
+    "ast_hash": "9d8226b71de1a0e863013a68f1b3c6c5",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0097_recurring_documents.sql": {
+    "mtime": 1786535140.6576326,
+    "ast_hash": "c08057c23e5ed9c933f75f918b28068c",
+    "semantic_hash": ""
+  },
+  "supabase/tests/recurring_documents.sql": {
+    "mtime": 1786535030.2784066,
+    "ast_hash": "408bf617605400a75d56e5f23d5c3ae7",
     "semantic_hash": ""
   }
 }

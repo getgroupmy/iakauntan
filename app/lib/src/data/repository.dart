@@ -421,6 +421,74 @@ class Repo {
     return (data as num?)?.toInt() ?? 0;
   }
 
+  // ------------------------------------------------------------------
+  // Recurring invoices and bills
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> recurringDocuments() async =>
+      _rows(await client
+          .from('recurring_documents')
+          .select()
+          .eq('org_id', orgId)
+          .order('is_active', ascending: false)
+          .order('next_run_date'));
+
+  /// Copies a posted invoice or bill into a schedule. The document is
+  /// snapshotted, not pointed at: editing it afterwards does not change
+  /// what gets billed next month.
+  Future<String> createRecurringDocument({
+    required String documentId,
+    required String name,
+    required String frequency,
+    required DateTime startDate,
+    int intervalCount = 1,
+    DateTime? endDate,
+    int? maxOccurrences,
+    bool autoPost = false,
+    bool autoEmail = false,
+  }) async {
+    final data = await client.rpc('create_recurring_document', params: {
+      'p_document_id': documentId,
+      'p_name': name,
+      'p_frequency': frequency,
+      'p_start_date': Fmt.iso(startDate),
+      'p_interval_count': intervalCount,
+      if (endDate != null) 'p_end_date': Fmt.iso(endDate),
+      if (maxOccurrences != null) 'p_max_occurrences': maxOccurrences,
+      'p_auto_post': autoPost,
+      'p_auto_email': autoEmail,
+    });
+    return data as String;
+  }
+
+  /// Re-snapshots the schedule from another document — last month's
+  /// invoice with the new price on it.
+  Future<void> updateRecurringTemplate({
+    required String id,
+    required String documentId,
+  }) async {
+    await client.rpc('update_recurring_template',
+        params: {'p_id': id, 'p_document_id': documentId});
+  }
+
+  Future<void> saveRecurringDocument(
+      String id, Map<String, dynamic> patch) async {
+    await client.from('recurring_documents').update(patch).eq('id', id);
+  }
+
+  Future<void> deleteRecurringDocument(String id) async {
+    await client.from('recurring_documents').delete().eq('id', id);
+  }
+
+  /// Raises whatever is due now rather than waiting for the nightly
+  /// job. Returns how many documents it made.
+  Future<int> runRecurringDocuments({DateTime? on}) async {
+    final data = await client.rpc('run_recurring_documents_for', params: {
+      'p_org_id': orgId,
+      if (on != null) 'p_on': Fmt.iso(on),
+    });
+    return (data as num?)?.toInt() ?? 0;
+  }
+
   /// What this customer pays for this item at this quantity: a price
   /// named for their level, a level-wide percentage, or the list price.
   Future<double> itemPrice({

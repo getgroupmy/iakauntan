@@ -19,6 +19,7 @@ import 'line_editor.dart';
 import 'settlement_dialog.dart';
 import 'transfer.dart';
 import 'transfer_dialog.dart';
+import 'repeat_dialog.dart';
 import 'share_dialog.dart';
 
 /// One editor for every document type in both cycles. What changes
@@ -614,6 +615,20 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           tooltip: 'Email to the customer',
           icon: const Icon(Icons.mail_outline, size: 20),
           onPressed: _saving ? null : _emailDocument,
+        ),
+
+      // Only an invoice or a bill repeats, and only one that exists:
+      // `create_recurring_document` refuses anything else, so offering
+      // it on a quotation would be a button that only ever errors.
+      if (!_isNew &&
+          (widget.docType == 'invoice' || widget.docType == 'bill') &&
+          _status != 'void')
+        IconButton(
+          tooltip: 'Repeat this document',
+          icon: const Icon(Icons.event_repeat_outlined, size: 20),
+          onPressed: _saving
+              ? null
+              : () => showRepeatDialog(context, widget.documentId!, _docNo),
         ),
 
       if (!narrow)
