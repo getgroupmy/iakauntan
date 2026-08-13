@@ -11,6 +11,7 @@ import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
 import 'doc_types.dart';
 import '../shared/scan_intake.dart';
+import '../shared/supplier_from_scan.dart';
 import 'settlement_dialog.dart';
 
 /// One list screen for every document type in both cycles. The doc type
@@ -45,7 +46,17 @@ Future<void> _scanInto(
   final repo = ref.read(repoProvider)!;
   final read = staged.read;
 
-  final contactId = await _pickSupplier(context, ref, read?.supplierName);
+  // Looked up before anybody is asked. The document names its supplier
+  // on the letterhead, and searching for a name that is already on
+  // screen is work the machine should have done.
+  final match = await resolveSupplier(context, ref, read);
+  if (!context.mounted) return;
+
+  String? contactId = match.contactId;
+  if (match.outcome == SupplierOutcome.ask) {
+    contactId = await _pickSupplier(context, ref, read?.supplierName);
+  }
+
   if (contactId == null) {
     // Abandoned at the supplier. The capture was filed against a
     // placeholder that will never become a document, so it goes with it

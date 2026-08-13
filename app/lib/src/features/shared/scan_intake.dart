@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers.dart';
 import '../../core/theme.dart';
+import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
 import 'doc_scanner.dart';
 import 'receipt_capture.dart';
@@ -54,13 +56,16 @@ Future<StagedReceipt?> showScanIntake(
     );
   }
 
-  // Declined. The paper still goes on the record — it is the evidence
-  // either way, and only the *reading* was rejected.
-  return StagedReceipt(
-    attachmentId: staged.attachmentId,
-    placeholderId: staged.placeholderId,
-    read: null,
-  );
+  // Discarded, and that means the whole thing.
+  //
+  // It used to mean only the *reading* was rejected: the capture was
+  // handed back, the next screen asked which supplier it was for, and
+  // somebody who had already decided to abandon this had to abandon it
+  // twice. Discard is the button people press to get out, so it gets
+  // them out — the parked capture goes with it rather than sitting in
+  // the bucket attached to a document that will never exist.
+  await ref.read(repoProvider)?.deleteAttachmentById(staged.attachmentId);
+  return null;
 }
 
 /// Upload, photograph, or scan.

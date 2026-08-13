@@ -158,6 +158,10 @@ class OcrExtraction {
   const OcrExtraction({
     this.supplierName,
     this.supplierTaxId,
+    this.supplierRegistrationNo,
+    this.supplierEmail,
+    this.supplierPhone,
+    this.supplierAddress,
     this.documentNo,
     this.documentDate,
     this.currency,
@@ -169,7 +173,26 @@ class OcrExtraction {
   });
 
   final String? supplierName;
+
+  /// The TIN — LHDN's number, the one an e-Invoice is validated against.
   final String? supplierTaxId;
+
+  /// The SSM number, which is not the same thing and is printed far more
+  /// often. Malaysian companies carry two: the twelve-digit one issued
+  /// since 2019 and the older `571389-H` form, and a letterhead usually
+  /// shows both. Whichever is printed is worth keeping — it is what
+  /// identifies the company at the registry.
+  final String? supplierRegistrationNo;
+
+  final String? supplierEmail;
+  final String? supplierPhone;
+
+  /// The whole address as printed, newlines and all. Not split into
+  /// street, city and postcode here: a Malaysian address on a receipt
+  /// runs to four lines in no fixed order, and guessing which line is
+  /// the city would put wrong data in a field that looks authoritative.
+  final String? supplierAddress;
+
   final String? documentNo;
   final DateTime? documentDate;
   final String? currency;
@@ -192,6 +215,10 @@ class OcrExtraction {
   factory OcrExtraction.fromJson(Map<String, dynamic> j) => OcrExtraction(
         supplierName: _text(j['supplier_name']),
         supplierTaxId: _text(j['supplier_tax_id']),
+        supplierRegistrationNo: _text(j['supplier_registration_no']),
+        supplierEmail: _text(j['supplier_email']),
+        supplierPhone: _text(j['supplier_phone']),
+        supplierAddress: _text(j['supplier_address']),
         documentNo: _text(j['document_no']),
         documentDate: DateTime.tryParse(_text(j['document_date']) ?? ''),
         // Upper-cased here as well as on the way out of the reader: a
@@ -213,6 +240,10 @@ class OcrExtraction {
   Map<String, dynamic> toJson() => {
         'supplier_name': supplierName,
         'supplier_tax_id': supplierTaxId,
+        'supplier_registration_no': supplierRegistrationNo,
+        'supplier_email': supplierEmail,
+        'supplier_phone': supplierPhone,
+        'supplier_address': supplierAddress,
         'document_no': documentNo,
         'document_date': documentDate == null
             ? null

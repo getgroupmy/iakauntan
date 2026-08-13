@@ -73,6 +73,60 @@ final _companySuffix = RegExp(
   caseSensitive: false,
 );
 
+/// The SSM number, in both forms a Malaysian company carries.
+///
+/// Since 2019 the registrar issues a twelve-digit number — `201901030189`
+/// — and every company registered before that also keeps its old one,
+/// `571389-H`. A letterhead usually prints both, one after the other,
+/// which is why this finds either and the caller prefers the new form.
+///
+/// The leading twelve digits are anchored on a word boundary and *not*
+/// preceded by a digit, so a phone number or an account number running
+/// to twelve digits is not mistaken for a registration.
+final _newRegistration =
+    RegExp(r'(?<![\d-])(20\d{10}|19\d{10})(?![\d-])');
+
+final _oldRegistration = RegExp(
+  r'(?<![\w-])(\d{5,8}\s*-\s*[A-Z])(?![\w-])',
+  caseSensitive: false,
+);
+
+/// Labelled explicitly, which government and utility bills tend to do.
+final _registrationLabel = RegExp(
+  r'\b(?:ssm|co(?:mpany)?|reg(?:istration|istered)?|syarikat|no\.?\s*pendaftaran)'
+  r'[\s.]*(?:no|number|#)?\s*[:.\-]?\s*'
+  r'(20\d{10}|19\d{10}|\d{5,8}\s*-\s*[A-Z])\b',
+  caseSensitive: false,
+);
+
+/// Deliberately conservative. A receipt is full of things with an `@` in
+/// them once a reader has had its way with the printing, and a wrong
+/// email address on a supplier record is worse than none: it is where a
+/// remittance advice gets sent.
+final _email = RegExp(
+  r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b',
+);
+
+/// A Malaysian telephone number as printed.
+///
+/// `03-1234 5678`, `+603 1234 5678`, `012-345 6789`, `1-300-88-9515`.
+/// Anchored on `0`, `+6` or `1-300`, because an unanchored run of nine
+/// digits matches half the numbers on a till roll.
+final _phone = RegExp(
+  r'(?<![\d])((?:\+?60|0)\s*\d{1,2}[\s\-]?\d{3,4}[\s\-]?\d{4}'
+  r'|1[\s\-]?300[\s\-]?\d{2}[\s\-]?\d{4})(?![\d])',
+);
+
+/// The line a phone number sits on, when it is labelled.
+final _phoneLabel = RegExp(
+  r'\b(?:tel|telephone|phone|hp|h/p|mobile|fax|faks|no\.?\s*tel)\b',
+  caseSensitive: false,
+);
+
+/// Five digits on their own, which in Malaysia is a postcode and is the
+/// most reliable marker that a run of lines is an address.
+final _postcode = RegExp(r'(?<![\d])\d{5}(?![\d])');
+
 const _months = {
   'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
   'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
@@ -107,9 +161,15 @@ OcrExtraction parseReceiptText(String text) {
     }
   }
 
+  final supplier = _supplier(lines);
+
   return OcrExtraction(
-    supplierName: _supplier(lines),
+    supplierName: supplier,
     supplierTaxId: _taxId(lines),
+    supplierRegistrationNo: _registrationNo(lines, text),
+    supplierEmail: _email2(text),
+    supplierPhone: _phoneNo(lines),
+    supplierAddress: _address(lines, supplier),
     documentNo: _documentNo(lines),
     documentDate: _date(lines),
     // Nothing on a Malaysian till roll says MYR; the RM prefix and the
@@ -231,6 +291,98 @@ String? _supplier(List<String> lines) {
 
 String _tidy(String s) =>
     s.replaceAll(RegExp(r'\s{2,}'), ' ').replaceAll(RegExp(r'[*=_]+'), '').trim();
+
+/// The SSM number, preferring the twelve-digit form.
+///
+/// A company registered before 2019 prints both, and the new number is
+/// the one the registry and LHDN now key on. A labelled match wins over
+/// a bare one — `Co. Reg: 571389-H` is a statement, a stray `571389-H`
+/// further down the page is a hope.
+String? _registrationNo(List<String> lines, String text) {
+  for (final line in lines) {
+    final labelled = _registrationLabel.firstMatch(line);
+    if (labelled != null) {
+      final value = _tidyReg(labelled.group(1)!);
+      // A labelled *old* number still loses to a new one printed
+      // anywhere, because they identify the same company and only one
+      // of them is what anybody will be asked for.
+      final modern = _newRegistration.firstMatch(text)?.group(1);
+      return modern ?? value;
+    }
+  }
+  final modern = _newRegistration.firstMatch(text)?.group(1);
+  if (modern != null) return modern;
+  return _tidyRegOrNull(_oldRegistration.firstMatch(text)?.group(1));
+}
+
+String _tidyReg(String s) => s.replaceAll(RegExp(r'\s+'), '').toUpperCase();
+
+String? _tidyRegOrNull(String? s) => s == null ? null : _tidyReg(s);
+
+/// The first email address on the document, if there plainly is one.
+String? _email2(String text) => _email.firstMatch(text)?.group(0);
+
+/// A telephone number, preferring one on a line that says it is one.
+///
+/// A receipt carries plenty of digits that look like phone numbers —
+/// an approval code, a terminal id — so a labelled line is worth far
+/// more than the first match on the page.
+String? _phoneNo(List<String> lines) {
+  for (final line in lines) {
+    if (!_phoneLabel.hasMatch(line)) continue;
+    final match = _phone.firstMatch(line);
+    if (match != null) return _tidyPhone(match.group(1)!);
+  }
+  // Only the head of the document unlabelled: a supplier prints its
+  // number on its letterhead, and a number halfway down a till roll is
+  // more likely to be somebody else's.
+  for (final line in lines.take(10)) {
+    final match = _phone.firstMatch(line);
+    if (match != null) return _tidyPhone(match.group(1)!);
+  }
+  return null;
+}
+
+String _tidyPhone(String s) => s.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+
+/// The supplier's address, as printed.
+///
+/// Found by its postcode: five digits on their own is a Malaysian
+/// postcode and almost nothing else, and the address is the run of lines
+/// around it. Taken whole rather than split into street, city and state
+/// — a receipt address runs to four lines in no fixed order, and a
+/// wrongly split one looks authoritative while being wrong.
+///
+/// Returns null rather than guessing when no postcode is printed. An
+/// address is not worth inventing: it goes on a supplier record and then
+/// onto correspondence.
+String? _address(List<String> lines, String? supplierName) {
+  final head = lines.take(14).toList();
+  final at = head.indexWhere(_postcode.hasMatch);
+  if (at < 0) return null;
+
+  // Back up to the start of the address block: consecutive lines above
+  // the postcode that are not the company name, not a figure and not a
+  // labelled field.
+  var from = at;
+  while (from > 0) {
+    final line = head[from - 1];
+    if (line.trim().isEmpty) break;
+    if (supplierName != null && _tidy(line) == supplierName) break;
+    if (_money.hasMatch(line)) break;
+    if (_phoneLabel.hasMatch(line) || _email.hasMatch(line)) break;
+    if (_registrationLabel.hasMatch(line)) break;
+    if (_docNoLabel.hasMatch(line)) break;
+    from--;
+  }
+
+  final block = head
+      .sublist(from, at + 1)
+      .map(_tidy)
+      .where((l) => l.isNotEmpty)
+      .toList();
+  return block.isEmpty ? null : block.join('\n');
+}
 
 String? _currency(String text) {
   if (RegExp(r'\bRM\b|\bMYR\b', caseSensitive: false).hasMatch(text)) {

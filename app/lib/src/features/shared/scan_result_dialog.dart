@@ -39,6 +39,10 @@ class _ScanResultDialog extends StatefulWidget {
 class _ScanResultDialogState extends State<_ScanResultDialog> {
   late final TextEditingController _supplier;
   late final TextEditingController _taxId;
+  late final TextEditingController _registrationNo;
+  late final TextEditingController _email;
+  late final TextEditingController _phone;
+  late final TextEditingController _address;
   late final TextEditingController _documentNo;
   late final TextEditingController _currency;
   late final TextEditingController _subtotal;
@@ -54,6 +58,11 @@ class _ScanResultDialogState extends State<_ScanResultDialog> {
     super.initState();
     _supplier = TextEditingController(text: read.supplierName ?? '');
     _taxId = TextEditingController(text: read.supplierTaxId ?? '');
+    _registrationNo =
+        TextEditingController(text: read.supplierRegistrationNo ?? '');
+    _email = TextEditingController(text: read.supplierEmail ?? '');
+    _phone = TextEditingController(text: read.supplierPhone ?? '');
+    _address = TextEditingController(text: read.supplierAddress ?? '');
     _documentNo = TextEditingController(text: read.documentNo ?? '');
     _currency = TextEditingController(text: read.currency ?? '');
     _subtotal = TextEditingController(text: _money(read.subtotal));
@@ -67,6 +76,10 @@ class _ScanResultDialogState extends State<_ScanResultDialog> {
   void dispose() {
     _supplier.dispose();
     _taxId.dispose();
+    _registrationNo.dispose();
+    _email.dispose();
+    _phone.dispose();
+    _address.dispose();
     _documentNo.dispose();
     _currency.dispose();
     _subtotal.dispose();
@@ -131,6 +144,10 @@ class _ScanResultDialogState extends State<_ScanResultDialog> {
   OcrExtraction get _edited => OcrExtraction(
         supplierName: _trimmed(_supplier),
         supplierTaxId: _trimmed(_taxId),
+        supplierRegistrationNo: _trimmed(_registrationNo),
+        supplierEmail: _trimmed(_email),
+        supplierPhone: _trimmed(_phone),
+        supplierAddress: _trimmed(_address),
         documentNo: _trimmed(_documentNo),
         documentDate: _date,
         currency: _trimmed(_currency)?.toUpperCase(),
@@ -187,8 +204,15 @@ class _ScanResultDialogState extends State<_ScanResultDialog> {
               // back empty and a form that refuses to open are the same
               // dead end, and the paper is already attached either way.
               const SizedBox(height: Space.sm),
-              _Field(label: 'Supplier', controller: _supplier),
+              // Three lines, because a Malaysian company name plus its
+              // two registration numbers does not fit on one and the
+              // whole point of showing it is that it can be checked.
+              _Field(label: 'Supplier', controller: _supplier, lines: 3),
+              _Field(label: 'SSM no', controller: _registrationNo),
               _Field(label: 'Tax number', controller: _taxId),
+              _Field(label: 'Email', controller: _email, email: true),
+              _Field(label: 'Phone', controller: _phone, phone: true),
+              _Field(label: 'Address', controller: _address, lines: 4),
               _Field(label: 'Document no', controller: _documentNo),
               _DateField(
                 label: 'Date',
@@ -410,6 +434,9 @@ class _Field extends StatelessWidget {
     this.money = false,
     this.bold = false,
     this.capitals = false,
+    this.email = false,
+    this.phone = false,
+    this.lines = 1,
     this.maxLength,
     this.onChanged,
   });
@@ -419,6 +446,14 @@ class _Field extends StatelessWidget {
   final bool money;
   final bool bold;
   final bool capitals;
+  final bool email;
+  final bool phone;
+
+  /// How tall the box may grow. One for a figure; more for a company
+  /// name or an address, which wrap and are the fields somebody most
+  /// needs to read in full before accepting them.
+  final int lines;
+
   final int? maxLength;
   final ValueChanged<String>? onChanged;
 
@@ -426,10 +461,16 @@ class _Field extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: Space.sm),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+      child: Row(
+          crossAxisAlignment:
+              lines > 1 ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+          children: [
         SizedBox(
           width: 110,
-          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+          child: Padding(
+            padding: EdgeInsets.only(top: lines > 1 ? 10 : 0),
+            child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+          ),
         ),
         Expanded(
           child: TextField(
@@ -443,9 +484,17 @@ class _Field extends StatelessWidget {
                 ? TextCapitalization.characters
                 : TextCapitalization.none,
             inputFormatters: capitals ? const [_Upper()] : null,
+            minLines: 1,
+            maxLines: lines,
             keyboardType: money
                 ? const TextInputType.numberWithOptions(decimal: true)
-                : null,
+                : email
+                    ? TextInputType.emailAddress
+                    : phone
+                        ? TextInputType.phone
+                        : lines > 1
+                            ? TextInputType.multiline
+                            : null,
             style: TextStyle(
               fontWeight: bold ? FontWeight.w600 : FontWeight.w400,
             ),

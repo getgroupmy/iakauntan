@@ -62,6 +62,10 @@ const MAX_BYTES = 5 * 1024 * 1024;
 interface Extraction {
   supplier_name: string | null;
   supplier_tax_id: string | null;
+  supplier_registration_no: string | null;
+  supplier_email: string | null;
+  supplier_phone: string | null;
+  supplier_address: string | null;
   document_no: string | null;
   document_date: string | null;
   currency: string | null;
@@ -116,6 +120,10 @@ const SCHEMA = {
   required: [
     "supplier_name",
     "supplier_tax_id",
+    "supplier_registration_no",
+    "supplier_email",
+    "supplier_phone",
+    "supplier_address",
     "document_no",
     "document_date",
     "currency",
@@ -133,7 +141,35 @@ const SCHEMA = {
     supplier_tax_id: {
       type: ["string", "null"],
       description:
-        "SST registration number, GST number or TIN if one is printed.",
+        "SST registration number, GST number or TIN if one is printed. " +
+        "Not the SSM company registration number, which has its own field.",
+    },
+    supplier_registration_no: {
+      type: ["string", "null"],
+      description:
+        "The SSM company registration number. Malaysian companies carry " +
+        "two: the twelve-digit number issued since 2019 (201901030189) " +
+        "and the older form (571389-H). Where both are printed, return " +
+        "the twelve-digit one.",
+    },
+    supplier_email: {
+      type: ["string", "null"],
+      description:
+        "The supplier's email address as printed. Null unless one is " +
+        "plainly there — a wrong address is where a remittance goes.",
+    },
+    supplier_phone: {
+      type: ["string", "null"],
+      description:
+        "The supplier's telephone number as printed. Not an approval " +
+        "code, a terminal id or a customer service number for somebody " +
+        "else's product.",
+    },
+    supplier_address: {
+      type: ["string", "null"],
+      description:
+        "The supplier's full address as printed, newlines preserved. Do " +
+        "not split it into fields and do not reorder it.",
     },
     document_no: {
       type: ["string", "null"],
@@ -483,7 +519,15 @@ async function readGoogle(
 
   return {
     supplier_name: pick("supplier_name", "receiver_name"),
-    supplier_tax_id: pick("supplier_tax_id", "supplier_registration"),
+    supplier_tax_id: pick("supplier_tax_id"),
+    // No `receiver_*` fallbacks on any of these, unlike the name above.
+    // In Document AI the receiver is the *customer* — us — so falling
+    // back to it would file our own address and email against the
+    // supplier, and look entirely plausible doing it.
+    supplier_registration_no: pick("supplier_registration"),
+    supplier_email: pick("supplier_email"),
+    supplier_phone: pick("supplier_phone"),
+    supplier_address: pick("supplier_address"),
     document_no: pick("invoice_id", "receipt_id", "purchase_order"),
     document_date: pick("invoice_date", "receipt_date", "due_date"),
     currency: pick("currency"),
@@ -503,6 +547,10 @@ function normalise(raw: Record<string, unknown>): Extraction {
   return {
     supplier_name: str(raw.supplier_name),
     supplier_tax_id: str(raw.supplier_tax_id),
+    supplier_registration_no: str(raw.supplier_registration_no),
+    supplier_email: str(raw.supplier_email),
+    supplier_phone: str(raw.supplier_phone),
+    supplier_address: str(raw.supplier_address),
     document_no: str(raw.document_no),
     document_date: str(raw.document_date),
     currency: str(raw.currency)?.toUpperCase() ?? null,
