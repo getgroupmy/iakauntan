@@ -35,6 +35,13 @@ import 'dart:typed_data';
 /// On a route like `/purchases/bill` the relative form went looking in
 /// the wrong place and came back `NetworkError: Load failed`, which
 /// names the symptom and nothing else.
+///
+/// Everything except the language model sits flat in this one directory,
+/// which is not untidiness either. The engine's own loader resolves its
+/// `.wasm` against a base that is the worker's URL in a worker and the
+/// script's URL on a page — one directory makes those two the same
+/// answer. The language model is the exception because the code builds
+/// that URL from `langPath` explicitly, so it can live in `lang/`.
 String _asset(String path) => Uri.parse(_baseUri).resolve(path).toString();
 
 @JS('document.baseURI')
@@ -45,6 +52,36 @@ external JSObject? get _tesseractOrNull;
 
 @JS('fetch')
 external JSPromise<_Response> _fetch(String url, JSObject init);
+
+@JS('WebAssembly.validate')
+external bool _wasmValidate(JSUint8Array bytes);
+
+/// Whether this browser runs WebAssembly SIMD.
+///
+/// A module whose only function returns a `v128` — twenty-nine bytes that
+/// every engine either accepts or rejects, which is the published way to
+/// ask. Recognition is several times faster where the answer is yes, and
+/// the answer is no on iOS before 16.4, which is still in people's
+/// pockets.
+bool get _simd => _wasmValidate(Uint8List.fromList(const [
+      0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, //
+      0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7b, //
+      0x03, 0x02, 0x01, 0x00, //
+      0x0a, 0x0a, 0x01, 0x08, 0x00, 0x41, 0x00, 0xfd, 0x0f, 0xfd, 0x62, 0x0b,
+    ]).toJS);
+
+/// The recognition engine this browser should load.
+///
+/// Named as a file rather than as the directory holding both, and that is
+/// the fix for a fortnight of `NetworkError: Load failed`. Handed a
+/// directory, `tesseract.js` picks the variant itself — and its first
+/// choice is a *relaxed* SIMD build that ships in the npm package and is
+/// not vendored here, so it asked for a file that was never there and
+/// reported the 404 as the browser's generic network message. Given a
+/// path ending `.js` it loads exactly that and asks for nothing else.
+String get _corePath => _asset(
+    _simd ? 'tesseract/tesseract-core-simd-lstm.wasm.js'
+          : 'tesseract/tesseract-core-lstm.wasm.js');
 
 extension type _Response._(JSObject _) implements JSObject {
   external bool get ok;
@@ -111,16 +148,22 @@ Future<String> readTextFromBytes(Uint8List bytes) async {
 
   // Before handing over to an engine that will only say "Load failed".
   final worker = _asset('tesseract/worker.min.js');
+  final core = _corePath;
   await _mustReach('reader', worker);
-  await _mustReach(
-      'recognition engine', _asset('tesseract/core/tesseract-core-lstm.wasm'));
+  await _mustReach('recognition engine', core);
+  // Not named anywhere we control: the engine's loader asks for the
+  // `.wasm` beside its own `.js`, which is why the two sit in one
+  // directory rather than in a tidier arrangement that resolved
+  // differently inside a worker than it did on the page.
+  await _mustReach('recognition engine',
+      core.replaceFirst(RegExp(r'\.js$'), ''));
   await _mustReach(
       'English language model', _asset('tesseract/lang/eng.traineddata'));
 
   final options = JSObject()
     // Each of these would otherwise default to a CDN.
     ..setProperty('workerPath'.toJS, worker.toJS)
-    ..setProperty('corePath'.toJS, _asset('tesseract/core').toJS)
+    ..setProperty('corePath'.toJS, core.toJS)
     ..setProperty('langPath'.toJS, _asset('tesseract/lang').toJS)
     // Loaded straight from our own origin rather than fetched into a
     // blob and run from that. A blob worker resolves its own imports
