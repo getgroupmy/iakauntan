@@ -566,10 +566,11 @@ class _OnDeviceNotice extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(
-          'It needs the iAkauntan app on a phone or tablet: in a browser '
-          'there is nothing to run it, and the Scan button does not '
-          'appear. Check what it fills in — it reads the printing rather '
-          'than understanding the document.',
+          'Works everywhere: ML Kit on the phone app, and Tesseract in a '
+          'browser, both served from us. The browser fetches about 8MB '
+          'the first time it reads something and caches it after that. '
+          'Check what it fills in — it reads the printing rather than '
+          'understanding the document, and it cannot open a PDF.',
           style: Theme.of(context)
               .textTheme
               .bodySmall

@@ -88,6 +88,18 @@
       }).catch(function () { /* Nothing useful to do; the app still loads. */ });
     })();
   </script>
+  <!-- The free reader, served from here rather than from a CDN.
+
+       `tesseract.js` defaults to fetching its worker, its WebAssembly
+       core and its language model from unpkg. That would mean a third
+       party learns every time somebody reads a receipt, and could serve
+       different code tomorrow; everything it needs is vendored under
+       tesseract/ and the paths are set in `text_reader_web.dart`.
+
+       Only this 63kB shim is loaded up front. The core and the model are
+       several megabytes and are fetched the first time somebody actually
+       scans — and cached by the browser after that. -->
+  <script src="tesseract/tesseract.min.js" defer></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

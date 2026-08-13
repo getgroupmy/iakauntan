@@ -8,7 +8,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
-import 'mlkit_reader.dart';
+import 'text_reader.dart';
 import 'doc_scanner.dart';
 import 'receipt_capture.dart';
 import 'scan_runner.dart';
@@ -269,6 +269,7 @@ class _FileRowState extends ConsumerState<_FileRow> {
         ocr: ref.read(ocrStatusProvider).valueOrNull ?? OcrSettings.off,
         attachmentId: file.id,
         storagePath: file.storagePath,
+        mimeType: file.mimeType,
       );
       if (!mounted) return;
       // The balance moved, so what the next tooltip says about it should

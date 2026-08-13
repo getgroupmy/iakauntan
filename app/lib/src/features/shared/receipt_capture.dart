@@ -195,6 +195,7 @@ Future<StagedReceipt?> captureAndRead(
       ocr: ref.read(ocrStatusProvider).valueOrNull ?? OcrSettings.off,
       attachmentId: attachmentId,
       storagePath: '',
+      mimeType: file.mimeType,
       // Already on this device, so the on-device reader reads it where
       // it is rather than fetching back the copy just uploaded.
       localPath: file.path,

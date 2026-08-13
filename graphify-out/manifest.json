@@ -290,13 +290,13 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1786623886.0652487,
-    "ast_hash": "56a30cc5f8ad40e25c550b8fa82a0b3b",
+    "mtime": 1786628436.63831,
+    "ast_hash": "d44b3684394397097899ced17671e2d7",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
-    "mtime": 1786624692.0214865,
-    "ast_hash": "c81596054b6da2c0f0b4a79bea5348c0",
+    "mtime": 1786628436.637716,
+    "ast_hash": "f0dda76630493b8e255bf804c0de966b",
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
@@ -835,8 +835,8 @@
     "semantic_hash": ""
   },
   "app/web/index.html": {
-    "mtime": 1786504525.2635295,
-    "ast_hash": "b8aed9d22250c0ee388c3de060a6697b",
+    "mtime": 1786628386.439941,
+    "ast_hash": "aecbd837922e4eb884aea53f08f47ec5",
     "semantic_hash": ""
   },
   "app/android/app/src/main/res/mipmap-hdpi/ic_launcher.png": {
@@ -1755,8 +1755,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/receipt_capture.dart": {
-    "mtime": 1786624652.8412461,
-    "ast_hash": "295fc0e33be25db1883d49d88ed1d549",
+    "mtime": 1786628436.6378381,
+    "ast_hash": "760e3adda9ebc48576e7175f784fa7e5",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/scan_result_dialog.dart": {
@@ -1829,29 +1829,14 @@
     "ast_hash": "8ec94c54d151e9805f1aa18b8138c6ff",
     "semantic_hash": ""
   },
-  "app/lib/src/features/shared/mlkit_reader.dart": {
-    "mtime": 1786623182.3200078,
-    "ast_hash": "9cd8e1537ac1cb91930d4796dda4f209",
-    "semantic_hash": ""
-  },
-  "app/lib/src/features/shared/mlkit_reader_io.dart": {
-    "mtime": 1786623316.4262626,
-    "ast_hash": "ea6ba93ab1b32a94de37bbf5dd5b6f63",
-    "semantic_hash": ""
-  },
-  "app/lib/src/features/shared/mlkit_reader_stub.dart": {
-    "mtime": 1786623316.427994,
-    "ast_hash": "c556575a898515a9e3524950d9fe8235",
-    "semantic_hash": ""
-  },
   "app/lib/src/features/shared/receipt_text.dart": {
     "mtime": 1786623087.6934988,
     "ast_hash": "657a002509a1d2772f838ac83a3eaff1",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/scan_runner.dart": {
-    "mtime": 1786623899.8366394,
-    "ast_hash": "3b59813a262c18c5d6bf329d08daa782",
+    "mtime": 1786628436.6374943,
+    "ast_hash": "9bc7a715ef6a0bf9367120b627df3eb4",
     "semantic_hash": ""
   },
   "app/test/receipt_text_test.dart": {
@@ -1887,6 +1872,61 @@
   "app/lib/src/features/shared/scan_intake.dart": {
     "mtime": 1786627831.706499,
     "ast_hash": "1b6dfa3a79d7c1135c560cae4e9410cf",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/shared/text_reader.dart": {
+    "mtime": 1786628347.426199,
+    "ast_hash": "457e3163e9002e5f5582cb24a76a56c7",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/shared/text_reader_io.dart": {
+    "mtime": 1786623316.4262626,
+    "ast_hash": "ea6ba93ab1b32a94de37bbf5dd5b6f63",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/shared/text_reader_web.dart": {
+    "mtime": 1786628400.0189617,
+    "ast_hash": "5f97aeb0a5ca1401e0f68304d8952e76",
+    "semantic_hash": ""
+  },
+  "app/web/tesseract/core/tesseract-core-lstm.js": {
+    "mtime": 1786628331.4708738,
+    "ast_hash": "ac3fdb18a4fce7af237dd9b0234724d5",
+    "semantic_hash": ""
+  },
+  "app/web/tesseract/core/tesseract-core-simd-lstm.js": {
+    "mtime": 1786628331.4741533,
+    "ast_hash": "c5b9204e9b00c2728c56f46c43c2f6a5",
+    "semantic_hash": ""
+  },
+  "app/web/tesseract/tesseract.min.js": {
+    "mtime": 1786628331.465285,
+    "ast_hash": "f986aa1f194139ec6bee969f02a3c707",
+    "semantic_hash": ""
+  },
+  "app/web/tesseract/worker.min.js": {
+    "mtime": 1786628331.4671335,
+    "ast_hash": "b1ab464237e687b323da236fff45ba05",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0114_free_reader_everywhere.sql": {
+    "mtime": 1786628470.614537,
+    "ast_hash": "b58f5ea9480ae9055143d4afeb19e9cf",
+    "semantic_hash": ""
+  },
+  "app/web/tesseract/TESSERACT-JS-LICENSE.md": {
+    "mtime": 1786628331.4775584,
+    "ast_hash": "e3fc50a88d0a364313df4b21ef20c29e",
+    "semantic_hash": ""
+  },
+  "app/web/tesseract/tesseract.min.js.LICENSE.txt": {
+    "mtime": 1786628331.4690442,
+    "ast_hash": "4e0e34f265fae8f33b01b27ae29d9d6f",
+    "semantic_hash": ""
+  },
+  "app/web/tesseract/worker.min.js.LICENSE.txt": {
+    "mtime": 1786628331.4690819,
+    "ast_hash": "57972f64a6919c719526ec58ad735c09",
     "semantic_hash": ""
   }
 }

@@ -3,16 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
-import 'mlkit_reader.dart';
+import 'text_reader.dart';
 import 'receipt_text.dart';
 
 /// Reads one filed document, whichever reader the organization chose.
 ///
-/// The two paths behind this are not variations on each other. Claude
-/// and Document AI happen in an edge function: the charge is taken
+/// The two paths behind this are not variations on each other. The
+/// server-side readers happen in an edge function: the charge is taken
 /// before the provider is called and returned if it fails, and the app
 /// only ever sees the answer. ML Kit happens here, on the phone, for
-/// nothing — the file never leaves the device, and the log is written
+/// nothing — ML Kit on a phone, Tesseract in a browser — so the file
+/// never leaves the device, and the log is written
 /// afterwards rather than around it, because there is no money to
 /// protect and nothing to refund.
 ///
@@ -23,6 +24,7 @@ Future<OcrExtraction> readDocument(
   required OcrSettings ocr,
   required String attachmentId,
   required String storagePath,
+  String? mimeType,
 
   /// The file on this device, when there is one. A receipt just
   /// photographed has a path already, and fetching a copy of it back
@@ -34,9 +36,19 @@ Future<OcrExtraction> readDocument(
 
   if (!onDeviceReaderAvailable) {
     throw OcrException(
-      'This organization reads documents on the device, which a browser '
-      'cannot do. Use the app on a phone or tablet, or switch to a '
-      'reader that runs on the server in Settings.',
+      'The on-device reader did not load. Reload the page, or switch to '
+      'a reader that runs on the server in Settings.',
+    );
+  }
+
+  // Neither on-device engine opens a PDF: ML Kit takes an image and
+  // Tesseract takes a bitmap. Refused by name rather than handed over to
+  // fail as "nothing legible", which would send somebody looking at the
+  // photograph instead of at the format.
+  if (mimeType == 'application/pdf') {
+    throw OcrException(
+      'The on-device reader takes photographs, not PDFs. Photograph the '
+      'page, or use a reader that runs on the server.',
     );
   }
 
