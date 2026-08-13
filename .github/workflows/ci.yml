@@ -117,6 +117,15 @@ jobs:
       # and if it ever needs to, that is worth noticing.
       - run: deno test supabase/functions/_shared/scheduler_test.ts
 
+      # The functions themselves, type-checked but not run. They cannot
+      # be unit tested here — every one of them exists to call somebody
+      # else — but a typo in a field name is caught by the compiler, and
+      # the alternative is finding it in the deploy job's log or, worse,
+      # in an invoice that did not send.
+      - run: deno check supabase/functions/send-email/index.ts
+                        supabase/functions/fetch-rates/index.ts
+                        supabase/functions/myinvois/index.ts
+
   # -------------------------------------------------------------------
   # The edge functions
   #

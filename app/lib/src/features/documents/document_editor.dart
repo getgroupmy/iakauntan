@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -372,8 +374,29 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// Reloaded from the database rather than assembled from the form, so
   /// what prints is what was stored — an unsaved edit in a text field is
   /// not part of the invoice yet, and printing it would say otherwise.
+  /// The same renderer feeds the download button and the email
+  /// attachment, so a customer who is sent the PDF and a colleague who
+  /// downloads it are looking at the same document.
+  Future<Uint8List> _renderPdf() async {
+    final org = ref.read(currentOrgProvider).valueOrNull;
+    final repo = ref.read(repoProvider);
+    if (org == null || repo == null || widget.documentId == null) {
+      throw StateError('Nothing to render yet');
+    }
+    return buildInvoicePdf(
+      org: org,
+      doc: await repo.document(_kind, widget.documentId!),
+      documentLabel: _meta.singular,
+      logo: await ref.read(orgLogoProvider.future),
+      mode: org.usesPreprintedLetterhead
+          ? LetterheadMode.stationery
+          : LetterheadMode.printed,
+    );
+  }
+
   /// Opens the send dialog: queue it, send it now, send it somewhere
-  /// else, and read what has already been sent, shared or downloaded.
+  /// else, attach the PDF or not, and read what has already been sent,
+  /// shared or downloaded.
   ///
   /// The customer's address is looked up first so the field shows what
   /// it would go to rather than an empty box — "send it to somebody
@@ -399,6 +422,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       documentId: widget.documentId!,
       docNo: _docNo,
       defaultTo: (to != null && to.trim().isNotEmpty) ? to.trim() : null,
+      buildPdf: _renderPdf,
     );
   }
 
@@ -409,18 +433,9 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     if (org == null || repo == null || widget.documentId == null) return;
 
     try {
-      final doc = await repo.document(_kind, widget.documentId!);
-      final bytes = await buildInvoicePdf(
-        org: org,
-        doc: doc,
-        documentLabel: _meta.singular,
-        logo: await ref.read(orgLogoProvider.future),
-        mode: org.usesPreprintedLetterhead
-            ? LetterheadMode.stationery
-            : LetterheadMode.printed,
-      );
+      final bytes = await _renderPdf();
       final stem =
-          doc.docNo.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
+          _docNo.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
       final saved =
           await saveBytesFile('$stem.pdf', 'application/pdf', bytes);
 

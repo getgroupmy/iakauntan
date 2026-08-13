@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -27,11 +29,17 @@ import '../../data/repository.dart';
 /// The history is the interesting one: it merges messages, share links
 /// and PDF downloads, so an opened link sitting under a sent message is
 /// the strongest evidence available that a human read the invoice.
+/// [buildPdf] renders the same PDF the download button produces. It is
+/// passed in rather than built here because the renderer needs the
+/// organization, its logo and its letterhead mode, all of which the
+/// editor already has — and because a dialog that knew how to lay out an
+/// invoice would be a dialog nobody could change safely.
 Future<bool?> showEmailDialog(
   BuildContext context, {
   required String documentId,
   required String docNo,
   String? defaultTo,
+  Future<Uint8List> Function()? buildPdf,
 }) {
   return showDialog<bool>(
     context: context,
@@ -39,6 +47,7 @@ Future<bool?> showEmailDialog(
       documentId: documentId,
       docNo: docNo,
       defaultTo: defaultTo,
+      buildPdf: buildPdf,
     ),
   );
 }
@@ -48,11 +57,13 @@ class _EmailDialog extends ConsumerStatefulWidget {
     required this.documentId,
     required this.docNo,
     this.defaultTo,
+    this.buildPdf,
   });
 
   final String documentId;
   final String docNo;
   final String? defaultTo;
+  final Future<Uint8List> Function()? buildPdf;
 
   @override
   ConsumerState<_EmailDialog> createState() => _EmailDialogState();
@@ -64,6 +75,10 @@ class _EmailDialogState extends ConsumerState<_EmailDialog> {
   bool _busy = false;
   String? _error;
   bool _sentSomething = false;
+
+  /// Off by default. A link is the better thing to send and the one
+  /// that reports back; attaching is the accommodation, not the norm.
+  bool _attachPdf = false;
 
   @override
   void dispose() {
@@ -117,6 +132,30 @@ class _EmailDialogState extends ConsumerState<_EmailDialog> {
                 'any link issued before.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+              if (widget.buildPdf != null)
+                CheckboxListTile(
+                  value: _attachPdf,
+                  onChanged: _busy
+                      ? null
+                      : (v) => setState(() => _attachPdf = v ?? false),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('Attach the PDF as well'),
+                  // The honest case for leaving it off. A link is always
+                  // the current document and records that somebody
+                  // opened it; a PDF is a snapshot that will still be
+                  // sitting in a mailbox looking authoritative after the
+                  // invoice has been credited and reissued.
+                  subtitle: Text(
+                    _attachPdf
+                        ? 'A copy of the document as it stands now travels '
+                            'with the message and stays as it is.'
+                        : 'Link only. It always shows the current document, '
+                            'and tells you when it was opened.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
               if (_error != null) ...[
                 const SizedBox(height: Space.md),
                 Text(_error!,
@@ -175,9 +214,25 @@ class _EmailDialogState extends ConsumerState<_EmailDialog> {
     });
 
     try {
+      // Rendered and uploaded before the row is queued, because the row
+      // has to name the file. A failure here stops the send rather than
+      // quietly posting a link-only message somebody believed carried an
+      // attachment.
+      String? path;
+      String? name;
+      if (_attachPdf && widget.buildPdf != null) {
+        final stem = widget.docNo
+            .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')
+            .toLowerCase();
+        name = '$stem.pdf';
+        path = await repo.uploadDocumentPdf(
+            widget.documentId, name, await widget.buildPdf!());
+      }
+
       String message;
       if (now) {
-        final row = await repo.emailDocumentNow(widget.documentId, to: to);
+        final row = await repo.emailDocumentNow(widget.documentId,
+            to: to, attachmentPath: path, attachmentName: name);
         final status = row['status'] as String?;
         // The row is the truth, not the fact that the call returned.
         // A drain that failed leaves it queued, and saying "sent" then
@@ -189,7 +244,8 @@ class _EmailDialogState extends ConsumerState<_EmailDialog> {
               'out on the next scheduled send',
         };
       } else {
-        await repo.emailDocument(widget.documentId, to: to);
+        await repo.emailDocument(widget.documentId,
+            to: to, attachmentPath: path, attachmentName: name);
         message = 'Queued — it will go out on the next send';
       }
 

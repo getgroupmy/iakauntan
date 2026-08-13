@@ -2906,14 +2906,40 @@ extension RepoHrSetup on Repo {
   Future<String> emailDocument(String documentId,
       {String? to,
       String templateCode = 'document_new',
-      String dispatch = 'queued'}) async {
+      String dispatch = 'queued',
+      String? attachmentPath,
+      String? attachmentName}) async {
     final data = await client.rpc('email_document', params: {
       'p_document_id': documentId,
       if (to != null && to.trim().isNotEmpty) 'p_to': to.trim(),
       'p_template_code': templateCode,
       'p_dispatch': dispatch,
+      if (attachmentPath != null) 'p_attachment_path': attachmentPath,
+      if (attachmentName != null) 'p_attachment_name': attachmentName,
     });
     return data as String;
+  }
+
+  /// Puts a rendered PDF where a queued message can attach it, and
+  /// returns the object name to hand to [emailDocument].
+  ///
+  /// The path is the convention 0068's storage policies enforce —
+  /// {org}/{entity}/{id}/{file} — so writing here is already gated on
+  /// `app.can_write`, and `email_document` re-checks that the path names
+  /// this document before it will reference one.
+  ///
+  /// `upsert` so sending the same invoice twice replaces the file rather
+  /// than failing on the second attempt or accumulating copies.
+  Future<String> uploadDocumentPdf(
+      String documentId, String fileName, Uint8List bytes) async {
+    final path = '$orgId/sales_documents/$documentId/$fileName';
+    await client.storage.from('attachments').uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(
+              contentType: 'application/pdf', upsert: true),
+        );
+    return path;
   }
 
   /// Queues one message and drains that row immediately.
@@ -2924,9 +2950,16 @@ extension RepoHrSetup on Repo {
   /// then, and telling somebody their invoice was not sent when it is
   /// about to go out half an hour later would be wrong.
   Future<Map<String, dynamic>> emailDocumentNow(String documentId,
-      {String? to, String templateCode = 'document_new'}) async {
+      {String? to,
+      String templateCode = 'document_new',
+      String? attachmentPath,
+      String? attachmentName}) async {
     final id = await emailDocument(documentId,
-        to: to, templateCode: templateCode, dispatch: 'immediate');
+        to: to,
+        templateCode: templateCode,
+        dispatch: 'immediate',
+        attachmentPath: attachmentPath,
+        attachmentName: attachmentName);
     try {
       await sendQueuedEmail(id: id);
     } catch (_) {

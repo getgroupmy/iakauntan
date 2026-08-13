@@ -44,6 +44,54 @@ interface OutboxRow {
   reply_to: string | null;
   from_name: string | null;
   attempts: number;
+  attachment_path: string | null;
+  attachment_name: string | null;
+}
+
+/** Resend takes attachments as base64 in the JSON body. */
+interface Attachment {
+  filename: string;
+  content: string;
+}
+
+/**
+ * Fetches the attachment out of the `attachments` bucket.
+ *
+ * With the service role, because the bucket is private and the message
+ * is being sent on behalf of somebody who is not in the room. The path
+ * was checked against the organization and the document when the row was
+ * queued, so what arrives here is already pinned to one document.
+ *
+ * Returns null rather than throwing: a message with a missing attachment
+ * should go out as a link-only message rather than not go out at all,
+ * and the row records which it was.
+ */
+async function loadAttachment(
+  db: ReturnType<typeof createClient>,
+  row: OutboxRow,
+): Promise<Attachment | null> {
+  if (!row.attachment_path) return null;
+  const { data, error } = await db.storage
+    .from("attachments")
+    .download(row.attachment_path);
+  if (error || !data) {
+    console.error("attachment missing", row.attachment_path, error?.message);
+    return null;
+  }
+
+  // Chunked rather than String.fromCharCode(...bytes): spreading a
+  // whole PDF into an argument list blows the stack somewhere north of
+  // 100kB, which is an ordinary invoice with a logo on it.
+  const bytes = new Uint8Array(await data.arrayBuffer());
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  }
+
+  return {
+    filename: row.attachment_name ?? row.attachment_path.split("/").pop()!,
+    content: btoa(binary),
+  };
 }
 
 Deno.serve(async (req) => {
@@ -114,7 +162,8 @@ Deno.serve(async (req) => {
 
   let query = reader
     .from("email_outbox")
-    .select("id, to_email, subject, body, reply_to, from_name, attempts")
+    .select("id, to_email, subject, body, reply_to, from_name, attempts, " +
+      "attachment_path, attachment_name")
     .eq("status", "queued")
     .lt("attempts", MAX_ATTEMPTS)
     .order("queued_at", { ascending: true })
@@ -130,6 +179,7 @@ Deno.serve(async (req) => {
 
   for (const row of rows) {
     try {
+      const attachment = await loadAttachment(db, row);
       const response = await fetch(RESEND_ENDPOINT, {
         method: "POST",
         headers: {
@@ -145,6 +195,7 @@ Deno.serve(async (req) => {
           subject: row.subject,
           text: row.body,
           ...(row.reply_to ? { reply_to: row.reply_to } : {}),
+          ...(attachment ? { attachments: [attachment] } : {}),
         }),
       });
 

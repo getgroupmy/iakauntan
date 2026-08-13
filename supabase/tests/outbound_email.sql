@@ -175,6 +175,45 @@ begin
   exception when sqlstate '23514' then
     raise notice 'ok   and one with no domain';
   end;
+
+  -- The attachment path arrives from the client, so it is a claim about
+  -- a file rather than a fact. It is pinned to this organization and
+  -- this document; the storage policy governs who may *write* there,
+  -- and would happily let a member reference their own upload against
+  -- somebody else's invoice if this did not check.
+  v_msg := public.email_document(v_doc, null, 'document_new', 30, 'queued',
+    v_org || '/sales_documents/' || v_doc || '/inv-9.pdf');
+  perform pg_temp.check_true('an attachment under this document is kept',
+    (select ob.attachment_path is not null and ob.attachment_name = 'inv-9.pdf'
+       from public.email_outbox ob where ob.id = v_msg));
+
+  perform pg_temp.check_true('and link-only is the default',
+    (select ob.attachment_path is null from public.email_outbox ob
+      where ob.id = public.email_document(v_doc)));
+
+  begin
+    perform public.email_document(v_doc, null, 'document_new', 30, 'queued',
+      v_org || '/sales_documents/' || gen_random_uuid() || '/other.pdf');
+    raise exception 'FAIL: attached a file belonging to another document';
+  exception when sqlstate '42501' then
+    raise notice 'ok   an attachment from another document is refused';
+  end;
+
+  begin
+    perform public.email_document(v_doc, null, 'document_new', 30, 'queued',
+      gen_random_uuid() || '/sales_documents/' || v_doc || '/theirs.pdf');
+    raise exception 'FAIL: attached a file from another organization';
+  exception when sqlstate '42501' then
+    raise notice 'ok   nor one from another organization';
+  end;
+
+  begin
+    perform public.email_document(v_doc, null, 'document_new', 30, 'queued',
+      v_org || '/sales_documents/' || v_doc || '/');
+    raise exception 'FAIL: accepted a path with no file on the end';
+  exception when sqlstate '42501' then
+    raise notice 'ok   nor a directory with no file';
+  end;
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -376,10 +415,12 @@ begin
 
   perform pg_temp.check_true('a member may send a document',
     has_function_privilege('authenticated',
-      'public.email_document(uuid, text, text, integer, text)', 'execute'));
+      'public.email_document(uuid, text, text, integer, text, text, text)',
+      'execute'));
   perform pg_temp.check_true('a stranger may not',
     not has_function_privilege('anon',
-      'public.email_document(uuid, text, text, integer, text)', 'execute'));
+      'public.email_document(uuid, text, text, integer, text, text, text)',
+      'execute'));
 
   -- 0108 replaced the four-argument form rather than overloading it.
   -- Both existing would be two functions of the same name, one silently
