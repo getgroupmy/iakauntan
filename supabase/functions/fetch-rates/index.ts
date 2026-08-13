@@ -26,6 +26,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders, fail, json } from "../_shared/cors.ts";
+import { isSchedulerCall } from "../_shared/scheduler.ts";
 
 const BNM_ENDPOINT = "https://api.bnm.gov.my/public/exchange-rate";
 
@@ -105,16 +106,19 @@ Deno.serve(async (req) => {
   // Bank Negara. The effect would be bounded (the same public rates,
   // upserted onto the same rows) but the door should not be open.
   //
-  // Presenting the service role key is what marks the caller as the
-  // scheduler. The app cannot call this and should not want to: rates
-  // belong to every organization at once, so fetching them is not an
-  // action any one user takes.
-  const presented = (req.headers.get("Authorization") ?? "")
-    .replace(/^Bearer\s+/i, "").trim();
-  if (presented !== serviceKey) {
+  // The app cannot call this and should not want to: rates belong to
+  // every organization at once, so fetching them is not an action any
+  // one user takes. See `_shared/scheduler.ts` for what counts as proof.
+  if (
+    !isSchedulerCall(req, {
+      secret: Deno.env.get("SCHEDULER_SECRET"),
+      serviceKey,
+    })
+  ) {
     return fail(
-      "This function is called by the scheduler with the service role " +
-        "key, not from the app.",
+      "This function is called by the scheduler, not from the app. " +
+        "Present X-Scheduler-Secret, or the service role key as the " +
+        "bearer token.",
       403,
     );
   }

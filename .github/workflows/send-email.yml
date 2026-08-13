@@ -56,18 +56,41 @@ jobs:
     name: Drain the outbox
     runs-on: ubuntu-latest
     env:
+      # Preferred. Any random string, set here and on the function. See
+      # docs/schedulers.md — and `supabase/functions/_shared/scheduler.ts`
+      # for why this exists rather than the key below.
+      SCHEDULER_SECRET: ${{ secrets.SCHEDULER_SECRET }}
+      # Still accepted, and far more authority than this job needs.
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'ewwcgtnniwqndrzukksm' }}
+
+      # Public by design — it ships inside the web bundle. It is here to
+      # satisfy `verify_jwt`, which wants a JWT this project signed and
+      # is not the security boundary; the scheduler secret is. Override
+      # with a repository variable if the legacy anon key is ever
+      # disabled, using the publishable key instead.
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3d2NndG5uaXdxbmRyenVra3NtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMzk0MzUsImV4cCI6MjEwMTgxNTQzNX0.PaBEcFIim8Jjn3zoLpw3uBEnaGGJFAPKO-E856sklWs' }}
     steps:
       - name: Call send-email
         run: |
-          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "::warning::Nothing was sent. Set the repository secret SUPABASE_SERVICE_ROLE_KEY."
+          # Two ways in, and the first one is the one to use. See
+          # docs/schedulers.md.
+          auth=""
+          headers=()
+          if [ -n "$SCHEDULER_SECRET" ]; then
+            auth="$SUPABASE_ANON_KEY"
+            headers=(-H "X-Scheduler-Secret: $SCHEDULER_SECRET")
+          elif [ -n "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            auth="$SUPABASE_SERVICE_ROLE_KEY"
+          else
+            echo "::warning::Nothing was sent. Set the repository secret SCHEDULER_SECRET."
             {
               echo "### Nothing was sent"
               echo
-              echo "The repository secret \`SUPABASE_SERVICE_ROLE_KEY\` is not set."
-              echo "Add it under **Settings → Secrets and variables → Actions**."
+              echo "Neither \`SCHEDULER_SECRET\` nor \`SUPABASE_SERVICE_ROLE_KEY\`"
+              echo "is set as a repository secret. Add one under **Settings →"
+              echo "Secrets and variables → Actions** — \`docs/schedulers.md\`"
+              echo "says which and why."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -80,7 +103,8 @@ jobs:
           out="$(mktemp)"
           code="$(curl -sS -X POST \
             "https://${PROJECT_REF}.supabase.co/functions/v1/send-email" \
-            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Authorization: Bearer ${auth}" \
+            "${headers[@]}" \
             -H 'Content-Type: application/json' \
             -d "$body" \
             -o "$out" -w '%{http_code}')"
@@ -88,6 +112,16 @@ jobs:
           echo "HTTP $code"
           cat "$out"
           echo
+
+          # The platform refusing the bearer token, which is a different
+          # thing from the function refusing the scheduler secret. That
+          # second case does not 403 here — an unrecognised caller reads
+          # the outbox as `anon`, matches no organization and drains
+          # nothing, so it shows up as a permanent `considered: 0`.
+          if [ "$code" = "401" ]; then
+            echo "::error::The platform rejected the bearer token. If the legacy anon key was disabled, set the repository variable SUPABASE_ANON_KEY to the publishable key."
+            exit 1
+          fi
 
           # Mail not configured yet. A known, pending setup step rather
           # than a fault, so it warns instead of failing — but it warns
@@ -106,6 +140,24 @@ jobs:
 
           if [ "$code" != "200" ]; then
             echo "::error::send-email answered $code"
+            exit 1
+          fi
+
+          # The assertion that stops a wrong secret from looking like an
+          # empty queue. `scheduler: false` means the function did not
+          # recognise this caller, so it drained one organization's mail
+          # — none — rather than everybody's. Red, immediately.
+          scheduler="$(python3 -c "import json;print(json.load(open('$out')).get('scheduler'))")"
+          if [ "$scheduler" != "True" ]; then
+            echo "::error::send-email did not recognise this caller as the scheduler, so nothing was drained. SCHEDULER_SECRET here must match the one set on the function in the Supabase dashboard."
+            {
+              echo "### The outbox was not drained"
+              echo
+              echo "\`send-email\` answered \`scheduler: false\`. The secret set"
+              echo "here does not match the one on the function, so it drained"
+              echo "nothing rather than everybody's queue. See"
+              echo "\`docs/schedulers.md\`."
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 

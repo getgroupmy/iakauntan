@@ -14,19 +14,22 @@
  * wrong.
  *
  * Those two callers are not the same and are not treated the same. The
- * scheduler presents the service role key and drains every
- * organization. Anybody else drains only their own, because the rows to
- * send are chosen under *their* token and `email_outbox` carries
- * `app.is_org_member(org_id)` — so one company's staff cannot push
- * another company's mail out early, which is what this function used to
- * allow anyone holding the publishable key to do.
+ * scheduler drains every organization. Anybody else drains only their
+ * own, because the rows to send are chosen under *their* token and
+ * `email_outbox` carries `app.is_org_member(org_id)` — so one company's
+ * staff cannot push another company's mail out early, which is what this
+ * function used to allow anyone holding the publishable key to do.
+ *
+ * What marks a caller as the scheduler is in `_shared/scheduler.ts`.
  *
  * Secrets, none of which are in the repository:
  *   RESEND_API_KEY   from resend.com, the one thing that can send
  *   MAIL_FROM        the verified sender, e.g. "billing@iakauntan.com"
+ *   SCHEDULER_SECRET any random string, shared with the workflow
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders, fail, json } from "../_shared/cors.ts";
+import { isSchedulerCall } from "../_shared/scheduler.ts";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
@@ -54,8 +57,10 @@ Deno.serve(async (req) => {
   if (!serviceKey || !url) return fail("Function is missing its own keys", 500);
 
   const auth = req.headers.get("Authorization") ?? "";
-  const presented = auth.replace(/^Bearer\s+/i, "").trim();
-  const isScheduler = presented !== "" && presented === serviceKey;
+  const isScheduler = isSchedulerCall(req, {
+    secret: Deno.env.get("SCHEDULER_SECRET"),
+    serviceKey,
+  });
 
   const apiKey = Deno.env.get("RESEND_API_KEY");
   const from = Deno.env.get("MAIL_FROM");
@@ -77,7 +82,9 @@ Deno.serve(async (req) => {
 
   // *Choosing* the rows is a different question, and the answer is the
   // caller's. The scheduler reads with the service key and sees every
-  // organization. Anyone else reads under their own token, so the
+  // organization — note that this is the function's own copy of that key,
+  // not one the caller had to present. Anyone else reads under their own
+  // token, so the
   // `app.is_org_member(org_id)` policy on `email_outbox` decides what
   // they can push out — and a caller presenting nothing but the
   // publishable key is `anon`, matches no organization, and drains
@@ -176,5 +183,11 @@ Deno.serve(async (req) => {
     }
   }
 
-  return json({ considered: rows.length, sent, failed });
+  // `scheduler` is reported because the alternative is a silent failure
+  // with a long fuse. An unrecognised caller is not refused here — it
+  // reads the outbox under its own token, matches no organization, and
+  // drains nothing. So a scheduler with the wrong secret returns
+  // `considered: 0`, which is exactly what an empty queue returns, and
+  // the mail would pile up for weeks behind a green tick.
+  return json({ scheduler: isScheduler, considered: rows.length, sent, failed });
 });

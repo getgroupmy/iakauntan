@@ -751,14 +751,21 @@ through a real call, so this cannot come back quietly.
 `.github/workflows/ci.yml` analyzes and tests the Flutter app, then
 starts a throwaway Supabase stack and runs every file in
 `supabase/tests/` against the migrations *in that commit* rather than
-against the hosted project. Two more jobs in the same workflow publish
-what those two have passed, and both wait on them: `deploy` builds the
-web bundle and hands it to Vercel — see the Vercel pipeline below for why
-that gate is there — and `functions` pushes the three edge functions to
-Supabase. `functions` additionally runs on the default branch only, since
-there is one Supabase project and no such thing as a preview of it;
-[docs/edge-functions.md](docs/edge-functions.md) has the rest, including
-the drift it was written to end.
+against the hosted project. A third job, `edge`, runs `deno test` over
+the one piece of edge-function logic worth asserting — the check that
+decides whether a caller may act for every organization at once, where a
+mistake in the permissive direction does not fail but hands the outbox to
+whoever asks.
+
+Two more jobs publish what those have passed, and wait on them: `deploy`
+builds the web bundle and hands it to Vercel — see the Vercel pipeline
+below for why that gate is there — and `functions` pushes the three edge
+functions to Supabase. `functions` additionally runs on the default
+branch only, since there is one Supabase project and no such thing as a
+preview of it; [docs/edge-functions.md](docs/edge-functions.md) has the
+rest, including the drift it was written to end, and
+[docs/schedulers.md](docs/schedulers.md) covers the two timers and the
+credential they share.
 
 That second job had been failing, unnoticed, since the suite grew a
 second fixture organization. `app.seed_chart_of_accounts` creates a temp

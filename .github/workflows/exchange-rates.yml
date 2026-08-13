@@ -70,8 +70,20 @@ jobs:
     name: Fetch the day's rates
     runs-on: ubuntu-latest
     env:
+      # Preferred. Any random string, set here and on the function. See
+      # docs/schedulers.md — and `supabase/functions/_shared/scheduler.ts`
+      # for why this exists rather than the key below.
+      SCHEDULER_SECRET: ${{ secrets.SCHEDULER_SECRET }}
+      # Still accepted, and far more authority than this job needs.
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'ewwcgtnniwqndrzukksm' }}
+
+      # Public by design — it ships inside the web bundle. It is here to
+      # satisfy `verify_jwt`, which wants a JWT this project signed and
+      # is not the security boundary; the scheduler secret is. Override
+      # with a repository variable if the legacy anon key is ever
+      # disabled, using the publishable key instead.
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3d2NndG5uaXdxbmRyenVra3NtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMzk0MzUsImV4cCI6MjEwMTgxNTQzNX0.PaBEcFIim8Jjn3zoLpw3uBEnaGGJFAPKO-E856sklWs' }}
 
       # Kept out of the step so the shell never has to quote it. Every
       # refused rate is listed by name: a currency that silently stops
@@ -92,18 +104,28 @@ jobs:
     steps:
       - name: Call fetch-rates
         run: |
-          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+          # Two ways in, and the first one is the one to use. See
+          # docs/schedulers.md.
+          auth=""
+          headers=()
+          if [ -n "$SCHEDULER_SECRET" ]; then
+            auth="$SUPABASE_ANON_KEY"
+            headers=(-H "X-Scheduler-Secret: $SCHEDULER_SECRET")
+          elif [ -n "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            auth="$SUPABASE_SERVICE_ROLE_KEY"
+          else
             # A warning on the run summary rather than a silent success.
             # A scheduler that is not running looks exactly like a
             # scheduler with nothing to report, and the symptom shows up
             # a month later as a revaluation that will not post.
-            echo "::warning::No rates were fetched. Set the repository secret SUPABASE_SERVICE_ROLE_KEY."
+            echo "::warning::No rates were fetched. Set the repository secret SCHEDULER_SECRET."
             {
               echo "### No rates were fetched"
               echo
-              echo "The repository secret \`SUPABASE_SERVICE_ROLE_KEY\` is not set."
-              echo "Add it under **Settings → Secrets and variables → Actions**,"
-              echo "then re-run this workflow."
+              echo "Neither \`SCHEDULER_SECRET\` nor \`SUPABASE_SERVICE_ROLE_KEY\`"
+              echo "is set as a repository secret. Add one under **Settings →"
+              echo "Secrets and variables → Actions**, then re-run this"
+              echo "workflow — \`docs/schedulers.md\` says which and why."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -123,7 +145,8 @@ jobs:
           out="$(mktemp)"
           code="$(curl -sS -X POST \
             "https://${PROJECT_REF}.supabase.co/functions/v1/fetch-rates" \
-            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Authorization: Bearer ${auth}" \
+            "${headers[@]}" \
             -H 'Content-Type: application/json' \
             -d "$body" \
             -o "$out" -w '%{http_code}')"
@@ -131,6 +154,18 @@ jobs:
           echo "HTTP $code"
           cat "$out"
           echo
+
+          # Named, because these two are the confusing ones and they mean
+          # different things: 401 is the platform refusing the bearer
+          # token, 403 is the function refusing the scheduler secret.
+          if [ "$code" = "401" ]; then
+            echo "::error::The platform rejected the bearer token. If the legacy anon key was disabled, set the repository variable SUPABASE_ANON_KEY to the publishable key."
+            exit 1
+          fi
+          if [ "$code" = "403" ]; then
+            echo "::error::fetch-rates rejected the credential. SCHEDULER_SECRET here must match the one set on the function in the Supabase dashboard."
+            exit 1
+          fi
 
           # A public holiday is not a failure. Bank Negara publishes on
           # business days, this runs on weekdays, and the two are not the

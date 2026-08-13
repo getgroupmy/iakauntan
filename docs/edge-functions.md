@@ -70,16 +70,20 @@ and is therefore public:
 
 - `myinvois` resolves the caller and their membership of the organization
   named in the request body.
-- `send-email` decides, from whether the service role key was presented,
-  whether the caller drains one organization's outbox or everybody's.
-- `fetch-rates` requires the service role key outright.
+- `send-email` decides, from whether the caller proved it is the
+  scheduler, whether it drains one organization's outbox or everybody's.
+- `fetch-rates` requires that proof outright.
+
+The proof is `_shared/scheduler.ts`, asserted by the CI `edge` job on
+every push. [schedulers.md](schedulers.md) covers it.
 
 **Function secrets are not deployed by this job**, and should not be.
-`RESEND_API_KEY` and `MAIL_FROM` are set once with `supabase secrets
-set` (see [email-setup.md](email-setup.md)) and live only in the
-function's environment — never in this repository, a migration, a table,
-or the Flutter bundle. `SUPABASE_URL`, `SUPABASE_ANON_KEY` and
-`SUPABASE_SERVICE_ROLE_KEY` are injected by the platform.
+`RESEND_API_KEY`, `MAIL_FROM` and `SCHEDULER_SECRET` are set once in the
+Supabase dashboard under **Edge Functions → Secrets** (or with `supabase
+secrets set`) and live only in the function's environment — never in this
+repository, a migration, a table, or the Flutter bundle. `SUPABASE_URL`,
+`SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected by the
+platform.
 
 ## Deploying one by hand
 

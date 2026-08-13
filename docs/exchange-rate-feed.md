@@ -67,17 +67,19 @@ There is **no API key**. BNM's Open API is public; the only credential
 involved is the project's own service role key, which the platform
 injects into the function.
 
-**It must be called with the service role key**, not the publishable
-one. `verify_jwt` alone accepts any JWT this project signed, and the
-publishable key ships inside the web bundle — so without the check in
-the function anybody could make the project hammer Bank Negara. The app
-cannot call this and should not want to: rates belong to every
+**It must be called by the scheduler**, which means presenting
+`SCHEDULER_SECRET` (or, still accepted, the service role key as the
+bearer token). `verify_jwt` alone accepts any JWT this project signed,
+and the publishable key ships inside the web bundle — so without the
+check in the function anybody could make the project hammer Bank Negara.
+The app cannot call this and should not want to: rates belong to every
 organization at once, so fetching them is not an action any one user
-takes.
+takes. [schedulers.md](schedulers.md) has the credential.
 
 ```bash
 curl -X POST https://ewwcgtnniwqndrzukksm.supabase.co/functions/v1/fetch-rates \
-  -H "Authorization: Bearer <service role key>" \
+  -H "Authorization: Bearer <publishable key>" \
+  -H "X-Scheduler-Secret: <scheduler secret>" \
   -H "Content-Type: application/json" -d '{}'
 ```
 
@@ -102,8 +104,8 @@ It answers with a count and the full per-currency verdict:
 `ref_currencies` does not hold, and the ringgit quoting against itself.
 `errors` should be zero; anything there names the currency and says why.
 
-A 403 saying the scheduler calls this means the publishable key was
-used instead of the service role key.
+A 403 saying the scheduler calls this means no recognised credential was
+presented — see [schedulers.md](schedulers.md).
 
 ### Scheduling
 
@@ -111,10 +113,10 @@ used instead of the service role key.
 UTC, which is 17:30 in Malaysia: half an hour after the `1700` session
 closes the day.
 
-It needs one thing set by hand, once:
-
-> **Settings → Secrets and variables → Actions → New repository secret**
-> `SUPABASE_SERVICE_ROLE_KEY`, from Supabase → Project Settings → API.
+It needs one thing set by hand, once: `SCHEDULER_SECRET`, a random string
+set both on the function and as a repository secret. See
+[schedulers.md](schedulers.md), which covers this feed and the outbox
+drain together — they share the credential.
 
 Until that exists the job runs, warns on the run summary, and exits
 green having done nothing — deliberately, because a scheduler that is
@@ -140,14 +142,15 @@ need the field mapping written a second time in SQL beside the one in
 the edge function. Two implementations of the same thing is how they
 drift.
 
-The trade being made is that the service role key sits in this
-repository's Actions secrets. That is not the repository and not the app
-bundle, which is the rule it has to satisfy. It *is* readable by anybody
-with write access here.
+The trade being made is that a credential sits in this repository's
+Actions secrets, readable by anybody with write access here. Which
+credential matters a great deal, and this used to be the service role
+key — full read and write over every organization's books, to run a
+timer. It is now `SCHEDULER_SECRET`, which proves only that the caller
+is the timer. [schedulers.md](schedulers.md) has the reasoning.
 
-`send-email` needs the same treatment and can reuse the same secret —
-that workflow does not exist yet, and until `RESEND_API_KEY` is set the
-function answers 503 anyway.
+`.github/workflows/send-email.yml` does the same for the outbox and
+shares the same secret.
 
 Running it more often is harmless. The same quote arriving again
 rewrites the same row rather than adding one, which is what the partial

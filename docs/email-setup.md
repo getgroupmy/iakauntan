@@ -34,15 +34,15 @@ Until the two secrets below exist the function answers 503 and the
 workflow warns on every run. Messages queue up meanwhile and go out as
 soon as it is configured; nothing is lost.
 
-The workflow also needs the repository secret
-`SUPABASE_SERVICE_ROLE_KEY` (**Settings → Secrets and variables →
-Actions**) — the same one the exchange rate feed uses.
+The workflow also needs `SCHEDULER_SECRET` — one random string, set both
+on the function and as a repository secret. It shares that with the
+exchange rate feed, and [schedulers.md](schedulers.md) covers both.
 
 ### Who may drain the outbox
 
-The scheduler presents the service role key and drains every
-organization. Anybody else — the **Send now** button on the outbox
-screen — drains only their own, because the rows are chosen under their
+The scheduler drains every organization. Anybody else — the **Send now**
+button on the outbox screen — drains only their own, because the rows
+are chosen under their
 token and `email_outbox` carries `app.is_org_member(org_id)`.
 
 That distinction was missing until the scheduler was built. The function

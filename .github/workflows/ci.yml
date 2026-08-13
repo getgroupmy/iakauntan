@@ -92,6 +92,32 @@ jobs:
         run: supabase stop --no-backup
 
   # -------------------------------------------------------------------
+  # The one piece of edge-function logic worth asserting
+  #
+  # Most of what these functions do is call somebody else and write down
+  # the answer, which a unit test can only restate. `isSchedulerCall` is
+  # different: it decides whether a caller may act for every organization
+  # at once, and getting it wrong in the permissive direction does not
+  # fail — it hands the outbox to whoever asks. `send-email` had that bug
+  # once already.
+  #
+  # Its own job rather than a step in `functions`, because that one only
+  # runs on the default branch and by then the code has shipped.
+  # -------------------------------------------------------------------
+  edge:
+    name: Edge function assertions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno check supabase/functions/_shared/scheduler_test.ts
+      # No permission flags: it touches no network, environment or disk,
+      # and if it ever needs to, that is worth noticing.
+      - run: deno test supabase/functions/_shared/scheduler_test.ts
+
+  # -------------------------------------------------------------------
   # The edge functions
   #
   # These are the parts of the system that are not in the database and
@@ -122,7 +148,7 @@ jobs:
   functions:
     name: Deploy the edge functions
     runs-on: ubuntu-latest
-    needs: [flutter, database]
+    needs: [flutter, database, edge]
     if: >-
       github.event_name != 'pull_request' &&
       github.ref_name == github.event.repository.default_branch
