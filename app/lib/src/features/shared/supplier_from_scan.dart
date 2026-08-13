@@ -289,23 +289,17 @@ Future<String?> _create(
   final messenger = ScaffoldMessenger.of(context);
 
   try {
-    String code;
-    try {
-      code = await repo.nextDocumentNumber('contact');
-    } catch (_) {
-      // The numbering is a convenience, not a requirement. A supplier
-      // with an awkward code beats a scan that failed at the last step.
-      code = 'S${DateTime.now().millisecondsSinceEpoch % 1000000}';
-    }
-
     final address = read.supplierAddress?.split('\n')
         .map((l) => l.trim())
         .where((l) => l.isNotEmpty)
         .toList();
 
-    final saved = await repo.saveContact(Contact(
+    // The code is generated rather than typed, so a collision with one
+    // that reached the table another way is this code's problem to
+    // solve and not something to show somebody holding a receipt.
+    final saved = await repo.createContactWithGeneratedCode(Contact(
       id: '',
-      code: code,
+      code: '',
       name: read.supplierName!.trim(),
       contactType: 'supplier',
       registrationNo: read.supplierRegistrationNo,

@@ -196,6 +196,38 @@ class Contact {
         entityType: j['entity_type']?.toString() ?? 'sdn_bhd',
       );
 
+  /// The same contact under a different code, for the one caller that
+  /// has to try more than one — see
+  /// [Repo.createContactWithGeneratedCode].
+  Contact withCode(String value) => Contact(
+        id: id,
+        code: value,
+        name: name,
+        contactType: contactType,
+        legalName: legalName,
+        tin: tin,
+        registrationNo: registrationNo,
+        idType: idType,
+        idValue: idValue,
+        sstRegistrationNo: sstRegistrationNo,
+        isTinVerified: isTinVerified,
+        email: email,
+        phone: phone,
+        mobile: mobile,
+        addressLine1: addressLine1,
+        addressLine2: addressLine2,
+        city: city,
+        postcode: postcode,
+        stateCode: stateCode,
+        countryCode: countryCode,
+        currency: currency,
+        creditLimit: creditLimit,
+        paymentTermId: paymentTermId,
+        priceLevelId: priceLevelId,
+        isActive: isActive,
+        entityType: entityType,
+      );
+
   Map<String, dynamic> toJson() => {
         'code': code,
         'name': name,

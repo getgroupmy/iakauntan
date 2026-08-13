@@ -147,6 +147,48 @@ class Repo {
     return Contact.fromJson(data);
   }
 
+  /// Creates a contact nobody typed a code for, and keeps trying until
+  /// the code is one that is free.
+  ///
+  /// `next_document_number` counts; it does not check. A code can reach
+  /// the table without ever passing through it — the CSV import writes
+  /// whatever the file said, and a seeded organization arrives with
+  /// contacts already numbered — so the counter can sit at 1 while
+  /// `C-2026-00001` is taken, and the insert fails on
+  /// `contacts_org_id_code_key`.
+  ///
+  /// Retried rather than pre-checked, because a check would be a guess
+  /// about the moment in between. Each call to the sequence yields the
+  /// next number, so a second attempt is a different code by
+  /// construction; the collision also leaves the counter advanced, which
+  /// is how this heals rather than repeating.
+  ///
+  /// Only for codes this app generates. Where a *person* typed one, a
+  /// collision is theirs to see and resolve — silently filing their
+  /// supplier under a different number would be worse than the error.
+  Future<Contact> createContactWithGeneratedCode(Contact contact) async {
+    const attempts = 5;
+    for (var attempt = 1;; attempt++) {
+      String code;
+      try {
+        code = await nextDocumentNumber('contact');
+      } catch (_) {
+        // The numbering is a convenience. A supplier with an awkward
+        // code beats a scan that failed at the last step.
+        code = 'C-${DateTime.now().microsecondsSinceEpoch}';
+      }
+
+      try {
+        return await saveContact(contact.withCode(code));
+      } on PostgrestException catch (e) {
+        final taken = e.code == '23505' &&
+            (e.message.contains('contacts_org_id_code_key') ||
+                e.message.contains('code'));
+        if (!taken || attempt >= attempts) rethrow;
+      }
+    }
+  }
+
   Future<Contact> saveContact(Contact contact, {String? id}) async {
     final payload = contact.toJson()..['org_id'] = orgId;
     final data = id == null

@@ -88,7 +88,8 @@ jobs:
                    supabase/tests/salespeople.sql \
                    supabase/tests/serial_and_batch.sql \
                    supabase/tests/einvoice_credentials.sql \
-                   supabase/tests/ocr_credit.sql; do
+                   supabase/tests/ocr_credit.sql \
+                   supabase/tests/contact_numbering.sql; do
             echo "== $f"
             psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done
