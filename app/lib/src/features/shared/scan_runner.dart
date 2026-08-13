@@ -55,7 +55,18 @@ Future<OcrExtraction> readDocument(
   // Tesseract takes a bitmap. Refused by name rather than handed over to
   // fail as "nothing legible", which would send somebody looking at the
   // photograph instead of at the format.
-  if (mimeType == 'application/pdf') {
+  // Refused by what it *is* as well as by what it says it is. A file
+  // picked in a browser does not always carry a type, and a PDF that
+  // arrives unlabelled otherwise reaches the engine and comes back
+  // "Error attempting to read image" — which sends somebody looking at
+  // the photograph rather than at the format.
+  final looksPdf = localBytes != null &&
+      localBytes.length >= 4 &&
+      localBytes[0] == 0x25 && // %
+      localBytes[1] == 0x50 && // P
+      localBytes[2] == 0x44 && // D
+      localBytes[3] == 0x46; //  F
+  if (mimeType == 'application/pdf' || looksPdf) {
     throw OcrException(
       'The on-device reader takes photographs, not PDFs. Photograph the '
       'page, or use a reader that runs on the server.',

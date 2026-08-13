@@ -21,7 +21,6 @@
 /// the same expense.
 library;
 
-import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
@@ -111,6 +110,135 @@ Future<void> _mustReach(String what, String url) async {
   }
 }
 
+@JS('createImageBitmap')
+external JSPromise<_Bitmap> _createImageBitmap(_Blob blob);
+
+@JS('URL.createObjectURL')
+external String _objectUrl(_Blob blob);
+
+@JS('URL.revokeObjectURL')
+external void _revokeObjectUrl(String url);
+
+@JS('document.createElement')
+external JSObject _createElement(String tag);
+
+@JS('Blob')
+extension type _Blob._(JSObject _) implements JSObject {
+  external factory _Blob(JSArray<JSAny> parts);
+}
+
+extension type _Bitmap._(JSObject _) implements JSObject {
+  external int get width;
+  external int get height;
+  external void close();
+}
+
+@JS('Image')
+extension type _Img._(JSObject _) implements JSObject {
+  external factory _Img();
+  external set src(String value);
+  external JSPromise<JSAny?> decode();
+  external int get naturalWidth;
+  external int get naturalHeight;
+}
+
+extension type _Canvas._(JSObject _) implements JSObject {
+  external set width(int value);
+  external set height(int value);
+  external _Context? getContext(String kind);
+  external String toDataURL(String type, double quality);
+}
+
+extension type _Context._(JSObject _) implements JSObject {
+  external void drawImage(JSObject image, num x, num y, num w, num h);
+}
+
+/// The longest edge we hand the engine.
+///
+/// Not a quality setting so much as a working limit. `image_picker`'s
+/// `maxWidth` is mobile-only — on the web it is ignored — so what arrives
+/// here is whatever the camera took, which on a current phone is twelve
+/// megapixels of thermal receipt. Tesseract would work through all of it
+/// in WebAssembly, slowly, and small print survives the reduction: 2400px
+/// down a receipt is far more than the ~300dpi the engine wants.
+const _longestEdge = 2400;
+
+/// Re-encodes a photograph into something the engine can actually open.
+///
+/// Leptonica, inside Tesseract, reads JPEG, PNG, BMP and TIFF. An iPhone
+/// photographs in **HEIC**, and handing those bytes over gets `Error
+/// attempting to read image` — accurate, and no help at all to somebody
+/// holding a receipt.
+///
+/// The browser already knows how to decode everything it can display,
+/// HEIC included on Safari, so the picture is decoded here and drawn
+/// into a canvas that gives back a JPEG. That fixes the format and the
+/// size in one pass, and means the `image/jpeg` this function claims is
+/// true rather than assumed.
+Future<String> _asReadableJpeg(Uint8List bytes) async {
+  final blob = _Blob([bytes.toJS].toJS);
+
+  // `createImageBitmap` where it exists, an `<img>` where it does not or
+  // where it refuses the format. Safari has decoded HEIC in an image
+  // element far longer than it has anywhere else, so the fallback is the
+  // one that matters on the device this failed on.
+  JSObject source;
+  int width;
+  int height;
+  _Bitmap? bitmap;
+  String? url;
+  try {
+    bitmap = await _createImageBitmap(blob).toDart;
+    source = bitmap;
+    width = bitmap.width;
+    height = bitmap.height;
+  } catch (_) {
+    url = _objectUrl(blob);
+    final img = _Img()..src = url;
+    try {
+      await img.decode().toDart;
+    } catch (_) {
+      _revokeObjectUrl(url);
+      throw StateError(
+        'This file is not a picture the browser can open. Photograph the '
+        'receipt, or attach it as a JPEG or a PNG.',
+      );
+    }
+    source = img;
+    width = img.naturalWidth;
+    height = img.naturalHeight;
+  }
+
+  try {
+    if (width == 0 || height == 0) {
+      throw StateError('The picture came back empty.');
+    }
+
+    // Only ever smaller. Enlarging a small photograph invents detail the
+    // engine would then try to read.
+    final longest = width > height ? width : height;
+    final scale = longest > _longestEdge ? _longestEdge / longest : 1.0;
+    final w = (width * scale).round();
+    final h = (height * scale).round();
+
+    final canvas = _createElement('canvas') as _Canvas
+      ..width = w
+      ..height = h;
+    final context = canvas.getContext('2d');
+    if (context == null) {
+      throw StateError('This browser would not give us a drawing surface.');
+    }
+    context.drawImage(source, 0, 0, w, h);
+
+    // High quality on purpose: the artefacts of a hard-compressed JPEG
+    // land exactly on the thin strokes of small print.
+    return canvas.toDataURL('image/jpeg', 0.92);
+  } finally {
+    bitmap?.close();
+    if (url != null) _revokeObjectUrl(url);
+  }
+}
+
 extension type _Tesseract._(JSObject _) implements JSObject {
   external JSPromise<_RecognizeResult> recognize(
       JSAny image, String langs, JSObject options);
@@ -183,7 +311,7 @@ Future<String> readTextFromBytes(Uint8List bytes) async {
   // A data URL rather than a blob: `tesseract.js` takes either, and a
   // data URL needs no object URL to revoke afterwards — one less thing
   // to leak on a screen somebody scans a dozen receipts from.
-  final image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+  final image = await _asReadableJpeg(bytes);
 
   final result =
       await (engine as _Tesseract).recognize(image.toJS, 'eng', options).toDart;
