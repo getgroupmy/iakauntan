@@ -24,11 +24,16 @@ The database cannot send. It writes rows; the edge function drains them.
 
 ## What is already done
 
-`send-email` is **deployed** (version 1, active) and
-`.github/workflows/send-email.yml` **drains the outbox on a schedule** —
+`send-email` is **deployed** — by CI, on every push to the default
+branch, so it never drifts from this repository — and
+`.github/workflows/send-email.yml` **drains the outbox on a schedule**:
 every half hour through the Malaysian working day, plus a pass at 17:15
 UTC, fifteen minutes after `app.run_daily_jobs` queues the overdue
 reminders.
+
+The scheduler's credential is set and **confirmed working against the
+hosted function** — the drain returns `scheduler: true`. Resend is the
+only thing left.
 
 Until the two secrets below exist the function answers 503 and the
 workflow warns on every run. Messages queue up meanwhile and go out as
@@ -74,10 +79,6 @@ costs nothing per run and needs the service role key pasted into Vault.
 
 ## 1. A Resend account and a verified domain
 
-Sign up at resend.com, add the sending domain, and publish the DNS
-records it gives you — SPF and DKIM at least, and DMARC if the domain
-does not already have one.
-
 **This part is not optional and not quick.** Mail from an unverified
 domain goes to spam or is rejected outright, and the failure looks like
 the software being broken rather than the domain being unverified.
@@ -85,21 +86,93 @@ Chasing a customer for payment with a message that lands in junk is
 worse than not chasing them, because everybody involved believes it was
 sent.
 
+### Which domain, and why it is one decision not two
+
+`MAIL_FROM` is a single value on the function, so **every organization's
+mail leaves from the same address**. What varies per organization is the
+display name and the reply-to, both from `email_settings` — so a customer
+of Sinar Teknologi sees `Sinar Teknologi Sdn Bhd <billing@…>` and their
+reply reaches Sinar Teknologi, not this platform.
+
+That makes the sending domain shared infrastructure. One tenant's bounce
+rate is every tenant's reputation, which decides the choice:
+
+- **Does the domain already carry human mail** (Google Workspace,
+  Microsoft 365, anything with MX records)? Then send from a
+  **subdomain** — `send.iakauntan.com` or `mail.iakauntan.com`. It keeps
+  bulk transactional reputation away from the mailboxes people actually
+  read, and it means not touching the apex SPF record, which is where
+  this goes wrong (below).
+- **Is it a bare domain with no mail on it?** The apex is fine and the
+  From address reads better on an invoice.
+
+Either way the From address must be at whatever domain Resend verified.
+Verify `send.iakauntan.com` and you send from `billing@send.iakauntan.com`.
+
+### The records
+
+Resend → **Domains** → Add Domain, then publish the records it shows you
+at whatever hosts that domain's DNS. Copy them from Resend rather than
+from anywhere else, this file included — the values are theirs and they
+change.
+
+Two things about publishing them:
+
+**SPF: a domain may have exactly one SPF record.** If the domain already
+has a `v=spf1 …` TXT record, *merge* Resend's `include:` into it. Adding
+a second TXT record starting `v=spf1` does not add a sender — it makes
+the domain's SPF a permanent error and **every** sender fails, including
+the mail that worked yesterday. This is the single most common way this
+step goes wrong, and it breaks more than it was meant to fix.
+
+**DKIM does not have that problem.** It sits at its own selector, so it
+never collides with an existing one.
+
+**DMARC, if the domain has none:** publish `p=none` first and read the
+reports for a week or two before tightening. Starting at `p=reject` on a
+domain whose other senders were never checked will bin legitimate mail
+from sources nobody remembered.
+
+Verification is usually minutes, occasionally hours, and is bounded by
+the TTL of whatever the records replaced. Resend shows the domain as
+verified when it is; nothing here needs doing until it does.
+
+### Proving the plumbing before the DNS is ready
+
+Resend provides a shared test sender that delivers only to the address
+the account was registered with — check the dashboard for the current
+address, as `onboarding@resend.dev` has been the one historically. Set
+`MAIL_FROM` to it and the whole path can be proven today: queue a
+document to yourself, run the workflow, watch the row go to `sent`.
+
+Worth doing. It separates "the pipeline works" from "the domain is
+verified", so if mail does not arrive later, only one of the two is in
+question.
+
 ## 2. The secrets
 
-```
-supabase secrets set RESEND_API_KEY=re_xxxxxxxx --project-ref ewwcgtnniwqndrzukksm
-supabase secrets set MAIL_FROM=billing@yourdomain.com --project-ref ewwcgtnniwqndrzukksm
-```
+Both go here, the same screen as `SCHEDULER_SECRET`:
 
-`MAIL_FROM` must be at the domain verified in step 1.
+> https://supabase.com/dashboard/project/ewwcgtnniwqndrzukksm/functions/secrets
+
+| Name | Value |
+| --- | --- |
+| `RESEND_API_KEY` | the `re_…` key from Resend → API Keys |
+| `MAIL_FROM` | a bare address at the verified domain, e.g. `billing@iakauntan.com` |
+
+Give the API key **sending permission only**, and scope it to the one
+domain if Resend offers that. It is shown once; if it is lost, make
+another and delete the old one rather than hunting for it.
+
+`MAIL_FROM` is the address alone, not `Name <addr>` — the function
+composes the display name from each organization's settings.
 
 Neither value belongs in this repository, in a migration, in a table, or
 in the Flutter bundle. The edge function reads them from its own
 environment and nothing else in the system can see them.
 
-Until they are set, `send-email` returns 503 and says so in as many
-words, rather than leaving messages queued with nobody able to explain
+Until both are set, `send-email` returns 503 and names which one is
+missing, rather than leaving messages queued with nobody able to explain
 why.
 
 ## 3. Deploy the function
@@ -110,18 +183,13 @@ default branch, along with the other two edge functions — see
 
 ## 4. Drain the queue on a schedule
 
-Queueing happens in the database; sending has to be driven. Either:
+Done — `.github/workflows/send-email.yml`, on the cadence above, holding
+`SCHEDULER_SECRET` rather than the service role key. See
+[schedulers.md](schedulers.md).
 
-- **pg_cron plus pg_net** — schedule a call to the function's URL every
-  few minutes with the service role key in the header. The key would
-  then be stored in the database, which is a real trade-off and the
-  reason this is not already done in a migration.
-- **An external scheduler** — GitHub Actions on a cron, or the Supabase
-  dashboard's scheduled functions, holding the key outside the database.
-
-The second is preferable. Until one of them is set up, the Outbox screen
-has a **Send queued** button that drains it by hand, which is enough to
-work with and not enough to rely on.
+The Outbox screen's **Send queued** button still works and drains only
+the signed-in user's own organization, which is the right answer for
+somebody who does not want to wait half an hour.
 
 ## 5. Switch it on per company
 
@@ -134,7 +202,15 @@ week later and a month later. Empty means never chase.
 
 ## What to check first when nothing arrives
 
-1. Outbox → Failed. `last_error` carries what Resend said.
-2. Still queued and nothing failing? Nothing is draining the queue —
-   step 4.
-3. Sent but not received? The domain is not verified — step 1.
+1. **Outbox → Failed.** `last_error` carries what Resend said, verbatim.
+   A 4xx there is a bad address or an unverified From; it is marked
+   failed immediately rather than retried five times to the same end.
+2. **Still queued, nothing failing?** Read the last scheduler run. A 503
+   means the two secrets above are not both set — it names which.
+3. **Sent but not received?** The domain is not verified, or SPF broke
+   when Resend's include was added as a second record rather than merged
+   into the existing one — step 1. Check the recipient's spam folder
+   before assuming the software.
+4. **Some recipients only?** That is reputation or a specific provider,
+   not this system. The row says `sent` because Resend accepted it;
+   what happened after is in Resend's own dashboard.
