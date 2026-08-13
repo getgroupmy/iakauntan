@@ -30,7 +30,7 @@ Future<OcrExtraction> readDocument(
   String? localPath,
 }) async {
   final repo = ref.read(repoProvider)!;
-  if (ocr.provider != 'mlkit') return repo.scanAttachment(attachmentId);
+  if (!ocr.onDevice) return repo.scanAttachment(attachmentId);
 
   if (!onDeviceReaderAvailable) {
     throw OcrException(

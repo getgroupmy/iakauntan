@@ -290,13 +290,13 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1786623417.3207862,
-    "ast_hash": "1d54cf4295423cdf2ca038a7a8e7b9d5",
+    "mtime": 1786623886.0652487,
+    "ast_hash": "56a30cc5f8ad40e25c550b8fa82a0b3b",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
-    "mtime": 1786623349.6658223,
-    "ast_hash": "ad5ef2c772d81898d0041e45740e1f05",
+    "mtime": 1786623899.8362694,
+    "ast_hash": "a1b35b95e7d0cc9e6a6aeecce45563f3",
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
@@ -1730,8 +1730,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/ocr_repository.dart": {
-    "mtime": 1786623375.4602752,
-    "ast_hash": "45ad55b0850d58c1ecdfaebff9390a81",
+    "mtime": 1786623886.0513017,
+    "ast_hash": "51e56040e00d096f5325adbfad282990",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/credit_admin.dart": {
@@ -1790,8 +1790,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/ocr/index.ts": {
-    "mtime": 1786617898.932905,
-    "ast_hash": "4a90fe1cab31736e1363de4aba8e928c",
+    "mtime": 1786623793.0225618,
+    "ast_hash": "644922d5504cee66c3a63ab7fb1498b0",
     "semantic_hash": ""
   },
   "supabase/migrations/0108_email_send_now.sql": {
@@ -1815,8 +1815,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/ocr_credit.sql": {
-    "mtime": 1786620801.0290775,
-    "ast_hash": "cf2fb4afd2e82cf874191601ab6802ba",
+    "mtime": 1786624057.5101733,
+    "ast_hash": "00b3804da5a5f1041f1ac61f30128bbf",
     "semantic_hash": ""
   },
   "docs/edge-functions.md": {
@@ -1850,8 +1850,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/scan_runner.dart": {
-    "mtime": 1786623328.7682762,
-    "ast_hash": "b3da908e56aee26526de93a273fb4991",
+    "mtime": 1786623899.8366394,
+    "ast_hash": "3b59813a262c18c5d6bf329d08daa782",
     "semantic_hash": ""
   },
   "app/test/receipt_text_test.dart": {
@@ -1862,6 +1862,11 @@
   "supabase/migrations/0112_ocr_on_device.sql": {
     "mtime": 1786622808.252288,
     "ast_hash": "88bab559cd10833ebb45266768e78884",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0113_ocr_provider_catalog.sql": {
+    "mtime": 1786623668.2522686,
+    "ast_hash": "61f32f0519bf0354361715feffa4935c",
     "semantic_hash": ""
   }
 }

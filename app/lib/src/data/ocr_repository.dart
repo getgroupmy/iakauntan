@@ -1,6 +1,46 @@
 import 'attachments_repository.dart' show RepoAttachments;
 import 'repository.dart';
 
+/// One reader on offer, as the platform has it configured.
+class OcrProvider {
+  const OcrProvider({
+    required this.code,
+    required this.name,
+    required this.price,
+    required this.takesKey,
+    required this.runsOnDevice,
+    required this.ready,
+    this.blurb,
+  });
+
+  final String code;
+  final String name;
+  final double price;
+
+  /// False for the on-device reader, which has no key for anybody to
+  /// bring — so the "my own key" choice is not offered for it.
+  final bool takesKey;
+  final bool runsOnDevice;
+
+  /// Whether the platform has finished setting it up. A reader whose
+  /// model has not been chosen is listed and refused rather than hidden,
+  /// so an administrator can see it exists and ask for it.
+  final bool ready;
+  final String? blurb;
+
+  factory OcrProvider.fromJson(Map<String, dynamic> j) => OcrProvider(
+        code: j['code'].toString(),
+        name: j['name']?.toString() ?? j['code'].toString(),
+        price: OcrSettings._num(j['price']),
+        takesKey: j['takes_key'] != false,
+        runsOnDevice: j['runs_on_device'] == true,
+        ready: j['ready'] != false,
+        blurb: (j['blurb']?.toString().trim().isEmpty ?? true)
+            ? null
+            : j['blurb'].toString().trim(),
+      );
+}
+
 /// What an organization has chosen about reading its own paperwork.
 ///
 /// Off is the default and there is no row until somebody turns it on, so
@@ -15,14 +55,18 @@ class OcrSettings {
     required this.keys,
     required this.balance,
     required this.price,
+    this.providers = const [],
   });
 
   final bool enabled;
 
-  /// `claude` or `google`.
+  /// A code off the `ocr_providers` catalog. Not an enum on purpose:
+  /// the platform adds readers without an app release, so the app has
+  /// to be able to show one it has never heard of.
   final String provider;
 
-  /// `platform` — drawn from purchased credit — or `own`.
+  /// `platform` — drawn from purchased credit — `own`, or `device`,
+  /// which means no key and no charge.
   final String keySource;
 
   /// Whether a key is on file for the currently chosen provider.
@@ -38,6 +82,13 @@ class OcrSettings {
   /// Ringgit per scan at the current provider, as set by the platform.
   final double price;
 
+  /// Every reader on offer. Comes off a table rather than a constant, so
+  /// the platform can add one without an app release.
+  final List<OcrProvider> providers;
+
+  OcrProvider? get current =>
+      providers.where((p) => p.code == provider).firstOrNull;
+
   static const off = OcrSettings(
     enabled: false,
     provider: 'claude',
@@ -49,9 +100,12 @@ class OcrSettings {
   );
 
   /// True when a scan would be refused for want of money. An
-  /// organization on its own key never runs out.
+  /// organization on its own key, or on the device, never runs out.
   bool get outOfCredit =>
       enabled && keySource == 'platform' && price > 0 && balance < price;
+
+  /// Whether the chosen reader runs in the app rather than on a server.
+  bool get onDevice => current?.runsOnDevice ?? (provider == 'mlkit');
 
   /// Roughly how many more scans the balance buys.
   int get scansLeft =>
@@ -69,6 +123,10 @@ class OcrSettings {
             .toSet(),
         balance: _num(j['balance']),
         price: _num(j['price']),
+        providers: ((j['providers'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((p) => OcrProvider.fromJson(Map<String, dynamic>.from(p)))
+            .toList(),
       );
 
   static double _num(Object? v) =>

@@ -11,7 +11,8 @@
  * cannot override any of them:
  *
  *   * whether the organization has switched scanning on at all;
- *   * which provider, and whose key;
+ *   * which reader, which protocol it speaks, where to reach it, and
+ *     whose key;
  *   * whether there is credit to pay for it.
  *
  * `public.ocr_begin` answers all three under the *caller's* token, so
@@ -25,36 +26,34 @@
  * ---------------------------------------------------------------------
  * Why raw HTTP rather than a provider SDK
  *
- * Both providers are called with `fetch`, as Resend, MyInvois and Bank
- * Negara are elsewhere in this directory. Document AI has no Deno client
- * worth the cold start, so one of the two was always going to be a
- * hand-written request; and `anthropic-version: 2023-06-01` pins the
- * wire format explicitly, where an unpinned `npm:` specifier would let a
- * library release change what a deployed function does on the next
- * deploy without a commit.
+ * Every reader is called with `fetch`, as Resend, MyInvois and Bank
+ * Negara are elsewhere in this directory. With four protocols and a
+ * catalog that can grow, an SDK per vendor would be four cold-start
+ * costs and four release cadences to track; the wire formats are stable
+ * and documented, and `anthropic-version: 2023-06-01` pins one of them
+ * explicitly where an unpinned `npm:` specifier would let a library
+ * release change what a deployed function does without a commit.
  *
  * Secrets, none of which are in the repository or in the database, and
  * only needed for organizations using the platform's key rather than
  * their own:
- *   OCR_ANTHROPIC_API_KEY     the platform's Claude key
+ *   OCR_KEY_<CODE>            the platform's key for that reader, by its
+ *                             catalog code: OCR_KEY_CLAUDE, OCR_KEY_OPENAI,
+ *                             OCR_KEY_GROK, and so on for whatever is
+ *                             added next
  *   OCR_GOOGLE_CREDENTIALS    the platform's service account JSON
  *   OCR_GOOGLE_PROJECT        its project id
  *   OCR_GOOGLE_LOCATION       e.g. "us" or "eu"
  *   OCR_GOOGLE_PROCESSOR      the Document AI processor id
+ *
+ * `OCR_ANTHROPIC_API_KEY` from before the catalog existed is still read
+ * as a fallback for Claude.
  */
 import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders, fail, json } from "../_shared/cors.ts";
 import { googleAccessToken, ServiceAccount } from "../_shared/google_auth.ts";
 
-const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
-
-/**
- * One constant, deliberately. The per-scan price the tenant pays is set
- * in the platform console; what it costs to serve is set here, and the
- * two want to be looked at together whenever either moves.
- */
-const MODEL = "claude-opus-5";
 
 /** A phone photo of a receipt is well under this. A scan of a lease is not. */
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -80,8 +79,16 @@ interface Extraction {
 
 interface BeginResult {
   scan_id: string;
-  provider: "claude" | "google";
-  key_source: "platform" | "own";
+  /** The catalog code — `claude`, `openai`, `grok`, and whatever else
+   * has been added since. Only ever used for the secret's name and the
+   * log; what to *do* is decided by `kind`. */
+  provider: string;
+  provider_name: string;
+  /** The protocol, which is the only thing this function switches on. */
+  kind: "anthropic" | "openai" | "google_docai" | "device";
+  endpoint: string | null;
+  model: string | null;
+  key_source: "platform" | "own" | "device";
   storage_path: string;
   mime_type: string | null;
   charged: number;
@@ -220,6 +227,8 @@ function toNumber(v: unknown): number | null {
 
 async function readClaude(
   apiKey: string,
+  endpoint: string,
+  model: string,
   bytes: Uint8Array,
   mime: string,
 ): Promise<Extraction> {
@@ -233,7 +242,7 @@ async function readClaude(
     data: toBase64(bytes),
   };
 
-  const response = await fetch(ANTHROPIC_ENDPOINT, {
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "x-api-key": apiKey,
@@ -241,7 +250,7 @@ async function readClaude(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       max_tokens: 4000,
       system: SYSTEM,
       // No extended thinking. This is a bounded transcription with a
@@ -287,6 +296,102 @@ async function readClaude(
     parsed = JSON.parse(text);
   } catch {
     throw new Error("Claude answered with something that was not the schema.");
+  }
+  return normalise(parsed);
+}
+
+/**
+ * ChatGPT, Grok, and whatever else speaks chat-completions.
+ *
+ * Kept as one function rather than one per vendor because the vendors
+ * differ by two strings — the endpoint and the model — and both are
+ * columns on `ocr_providers`. Adding a reader that speaks this shape is
+ * a row in the console and a secret; nothing here changes.
+ *
+ * The bearer token and the `messages` array are the parts they agree on.
+ * `response_format` with a json_schema is the part they mostly agree on,
+ * and where a particular one does not support it the schema is still
+ * described in the system prompt, so the worst case is prose that
+ * happens to parse rather than a hard failure.
+ */
+async function readOpenAiShaped(
+  apiKey: string,
+  endpoint: string,
+  model: string,
+  bytes: Uint8Array,
+  mime: string,
+): Promise<Extraction> {
+  // Chat-completions takes images, not documents. A PDF would have to go
+  // through a different endpoint on every one of these, so it is refused
+  // by name rather than sent and misread.
+  if (mime === "application/pdf") {
+    throw new Error(
+      "This reader takes photographs, not PDFs. Photograph the document, " +
+        "or switch to Claude, which reads PDFs.",
+    );
+  }
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      max_completion_tokens: 4000,
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "purchase_document", strict: true, schema: SCHEMA },
+      },
+      messages: [
+        { role: "system", content: SYSTEM },
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: { url: `data:${mime};base64,${toBase64(bytes)}` },
+            },
+            { type: "text", text: "Read this document." },
+          ],
+        },
+      ],
+    }),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(
+      `The reader refused the document: ${
+        body?.error?.message ?? `HTTP ${response.status}`
+      }`,
+    );
+  }
+
+  const choice = body?.choices?.[0];
+  if (choice?.finish_reason === "length") {
+    throw new Error(
+      "The document was too long to read in one pass. Attach the page " +
+        "with the totals on it.",
+    );
+  }
+  const text = choice?.message?.content;
+  if (typeof text !== "string" || text.trim() === "") {
+    // A refusal comes back as `message.refusal` with no content, and
+    // indexing straight into `content` would turn that into a parse
+    // error blamed on the schema.
+    throw new Error(
+      choice?.message?.refusal ??
+        "The reader answered with nothing.",
+    );
+  }
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("The reader answered with something that was not the schema.");
   }
   return normalise(parsed);
 }
@@ -442,23 +547,29 @@ async function credentialFor(
     return data as unknown as OwnCredential;
   }
 
-  if (begin.provider === "claude") {
-    const key = Deno.env.get("OCR_ANTHROPIC_API_KEY");
-    if (!key) {
-      throw new Error(
-        "Scanning is not configured on the platform: OCR_ANTHROPIC_API_KEY " +
-          "is not set on this function.",
-      );
-    }
-    return { api_key: key, project_id: null, location: null, processor_id: null };
-  }
+  // `OCR_KEY_<CODE>` by convention, so a reader added as a row in the
+  // console needs a secret beside it and no code at all. The two names
+  // from before the catalog existed are still honoured, so turning this
+  // on does not turn off what somebody already configured.
+  const generic = `OCR_KEY_${begin.provider.toUpperCase()}`;
+  const legacy = begin.kind === "google_docai"
+    ? "OCR_GOOGLE_CREDENTIALS"
+    : begin.provider === "claude"
+    ? "OCR_ANTHROPIC_API_KEY"
+    : null;
 
-  const key = Deno.env.get("OCR_GOOGLE_CREDENTIALS");
+  const key = Deno.env.get(generic) ??
+    (legacy ? Deno.env.get(legacy) : undefined);
   if (!key) {
     throw new Error(
-      "Scanning is not configured on the platform: OCR_GOOGLE_CREDENTIALS " +
-        "is not set on this function.",
+      `${begin.provider_name} is not configured on the platform: set ` +
+        `${generic} on this function, or ask the organization to supply ` +
+        "its own key.",
     );
+  }
+
+  if (begin.kind !== "google_docai") {
+    return { api_key: key, project_id: null, location: null, processor_id: null };
   }
   return {
     api_key: key,
@@ -540,16 +651,47 @@ Deno.serve(async (req) => {
     }
 
     const credential = await credentialFor(db, begin, orgId);
-    const extraction = begin.provider === "claude"
-      ? await readClaude(credential.api_key, bytes, mime)
-      : await readGoogle(
-        credential.api_key,
-        credential.project_id ?? "",
-        credential.location ?? "us",
-        credential.processor_id ?? "",
-        bytes,
-        mime,
-      );
+    // On `kind`, never on the provider's name. That is what lets a
+    // reader be added as a row: a new ChatGPT-shaped endpoint arrives
+    // here already understood.
+    let extraction: Extraction;
+    switch (begin.kind) {
+      case "anthropic":
+        extraction = await readClaude(
+          credential.api_key,
+          begin.endpoint ?? "https://api.anthropic.com/v1/messages",
+          begin.model ?? "",
+          bytes,
+          mime,
+        );
+        break;
+      case "openai":
+        extraction = await readOpenAiShaped(
+          credential.api_key,
+          begin.endpoint ?? "",
+          begin.model ?? "",
+          bytes,
+          mime,
+        );
+        break;
+      case "google_docai":
+        extraction = await readGoogle(
+          credential.api_key,
+          credential.project_id ?? "",
+          credential.location ?? "us",
+          credential.processor_id ?? "",
+          bytes,
+          mime,
+        );
+        break;
+      default:
+        // `device` never reaches here — ocr_begin refuses it — and an
+        // unknown kind means the catalog has outrun this function.
+        throw new Error(
+          `This deployment does not know how to talk to a ${begin.kind} ` +
+            "reader. It needs updating before that one can be used.",
+        );
+    }
 
     const { error } = await db.rpc("ocr_finish", {
       p_scan_id: begin.scan_id,

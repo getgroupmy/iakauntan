@@ -432,40 +432,60 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
               ),
               if (ocr.enabled) ...[
                 const SizedBox(height: 8),
-                SegmentedButton<String>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: 'claude', label: Text('Claude')),
-                    ButtonSegment(
-                        value: 'google', label: Text('Document AI')),
-                    ButtonSegment(
-                        value: 'mlkit', label: Text('On this device')),
+                // A dropdown rather than segments: the list comes off a
+                // table the platform can add to, so it has no fixed
+                // width and cannot be laid out as buttons.
+                DropdownButtonFormField<String>(
+                  value: ocr.providers.any((p) => p.code == ocr.provider)
+                      ? ocr.provider
+                      : null,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Reader'),
+                  items: [
+                    for (final p in ocr.providers)
+                      DropdownMenuItem(
+                        value: p.code,
+                        child: Text(
+                          p.runsOnDevice
+                              ? '${p.name} — free'
+                              : '${p.name} — ${Fmt.money(p.price)} a scan',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                   ],
-                  selected: {ocr.provider},
-                  onSelectionChanged: widget.canEdit && !_saving
-                      ? (s) {
-                          // A half-finished choice belongs to the
-                          // provider it was made for. Changing provider
-                          // abandons it rather than carrying a banner
-                          // about a key nobody asked to set.
+                  onChanged: widget.canEdit && !_saving
+                      ? (code) {
+                          if (code == null) return;
+                          // A half-finished choice belongs to the reader
+                          // it was made for. Changing reader abandons it
+                          // rather than carrying a banner about a key
+                          // nobody asked to set.
                           setState(() => _pendingKeySource = null);
                           _write(
                             () => ref.read(repoProvider)!.setOcrSettings(
                                   enabled: true,
-                                  provider: s.first,
-                                  // Switching to a provider you have no
-                                  // key for would be refused, so it
-                                  // falls back to the platform's.
-                                  keySource: ocr.keys.contains(s.first)
+                                  provider: code,
+                                  // Switching to a reader you have no key
+                                  // for would be refused, so it falls
+                                  // back to the platform's.
+                                  keySource: ocr.keys.contains(code)
                                       ? ocr.keySource
                                       : 'platform',
                                 ),
-                            'Provider changed',
+                            'Reader changed',
                           );
                         }
                       : null,
                 ),
-                if (ocr.provider != 'mlkit') ...[
+                if (ocr.current?.blurb != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    ocr.current!.blurb!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: context.scheme.onSurfaceVariant),
+                  ),
+                ],
+                if (ocr.current?.takesKey ?? true) ...[
                   const SizedBox(height: 12),
                   SegmentedButton<String>(
                     showSelectedIcon: false,
@@ -481,7 +501,7 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                   ),
                 ],
                 const SizedBox(height: 16),
-                if (ocr.provider == 'mlkit')
+                if (ocr.onDevice)
                   const _OnDeviceNotice()
                 else if (_keySource(ocr) == 'platform')
                   _CreditBalance(ocr: ocr)
@@ -538,8 +558,7 @@ class _OnDeviceNotice extends StatelessWidget {
             const SizedBox(width: 10),
             const Expanded(
               child: Text(
-                'Free, and the photograph never leaves the phone. No key '
-                'to hold and no credit to buy.',
+                'Nothing to configure: no key to hold and no credit to buy.',
                 style: TextStyle(fontSize: 13),
               ),
             ),
@@ -547,11 +566,10 @@ class _OnDeviceNotice extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(
-          'It reads the printing rather than understanding the document, '
-          'so it is best on a receipt and weaker on a long bill — check '
-          'what it fills in. It needs the iAkauntan app on a phone or '
-          'tablet: in a browser there is nothing to run it, and the Scan '
-          'button does not appear.',
+          'It needs the iAkauntan app on a phone or tablet: in a browser '
+          'there is nothing to run it, and the Scan button does not '
+          'appear. Check what it fills in — it reads the printing rather '
+          'than understanding the document.',
           style: Theme.of(context)
               .textTheme
               .bodySmall

@@ -243,7 +243,7 @@ class _FileRowState extends ConsumerState<_FileRow> {
 
   /// Whether the reader this organization chose exists on this device.
   bool _readerHere(OcrSettings ocr) =>
-      ocr.provider != 'mlkit' || onDeviceReaderAvailable;
+      !ocr.onDevice || onDeviceReaderAvailable;
 
   Future<void> _scan() async {
     setState(() => _scanning = true);

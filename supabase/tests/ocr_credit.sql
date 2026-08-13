@@ -308,6 +308,121 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- The catalog, which is what makes the next reader a row
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.scannable('Katalog Sdn Bhd');
+  v_file uuid := pg_temp.receipt(v_org, 'grab-01.jpg');
+begin
+  -- A reader nobody has finished setting up is refused by name, with
+  -- the reason and who can fix it. ChatGPT and Grok ship with no model
+  -- deliberately: guessing an identifier produces a migration that
+  -- looks finished and a 404 at the first scan.
+  begin
+    perform public.set_ocr_settings(v_org, true, 'openai', 'platform');
+    raise exception 'FAIL: switched on a reader with no model set';
+  exception when sqlstate '23514' then
+    raise notice 'ok   a reader with no model cannot be chosen';
+  end;
+
+  -- Once the platform sets one, it works — and this is the whole point:
+  -- no migration, no deploy, no app release.
+  update public.ocr_providers set model = 'a-vision-model' where code = 'openai';
+  perform public.set_ocr_settings(v_org, true, 'openai', 'platform');
+  perform pg_temp.check_eq('a reader set up in the console can be chosen',
+    (select count(*) from public.org_ocr_settings
+      where org_id = v_org and provider = 'openai'), 1);
+
+  -- Price comes off the catalog row, so a scan is charged what the
+  -- console says and not what a second table remembers.
+  update public.ocr_providers set price = 0.45 where code = 'openai';
+  perform pg_temp.check_eq('the price is the catalog price',
+    (public.ocr_status(v_org) -> 'price')::numeric, 0.45);
+
+  -- Grok speaks the same protocol as ChatGPT, which is why it is a row
+  -- and not a code path.
+  perform pg_temp.check_true('Grok and ChatGPT share one protocol',
+    (select count(distinct kind) = 1 from public.ocr_providers
+      where code in ('openai', 'grok')));
+
+  -- Choosing the on-device reader forces `device` whatever was asked
+  -- for — including `own`, which it has no key for — so nothing later
+  -- goes looking for a key or bills for a free reading. Coerced rather
+  -- than refused: the caller's mistake is harmless and the stored row
+  -- is right either way, which is not true of the reverse.
+  perform public.set_ocr_settings(v_org, true, 'mlkit', 'own');
+  perform pg_temp.check_true('the on-device reader forces its own source',
+    (select key_source = 'device' from public.org_ocr_settings
+      where org_id = v_org));
+  perform public.set_ocr_settings(v_org, true, 'mlkit', 'platform');
+  perform pg_temp.check_true('however it is asked for',
+    (select key_source = 'device' from public.org_ocr_settings
+      where org_id = v_org));
+
+  -- The reverse is refused, because there is nothing to coerce it to: a
+  -- reader that needs a key cannot be told it runs on the device.
+  begin
+    perform public.set_ocr_settings(v_org, true, 'openai', 'device');
+    raise exception 'FAIL: claimed a server reader runs on the device';
+  exception when sqlstate '23514' then
+    raise notice 'ok   a server reader cannot claim to run on the device';
+  end;
+
+  -- And the server refuses to start a scan it cannot serve.
+  begin
+    perform public.ocr_begin(v_org, v_file);
+    raise exception 'FAIL: started a server scan for an on-device reader';
+  exception when sqlstate '0A000' then
+    raise notice 'ok   the server will not start an on-device scan';
+  end;
+
+  -- The reverse: the local log refuses a reading the organization did
+  -- not choose to make locally.
+  perform public.set_ocr_settings(v_org, true, 'claude', 'platform');
+  begin
+    perform public.ocr_record_local(v_org, v_file, '{}'::jsonb);
+    raise exception 'FAIL: logged a local scan for a server reader';
+  exception when sqlstate '23514' then
+    raise notice 'ok   nor log a local scan against a server reader';
+  end;
+
+  -- A local reading costs nothing and still leaves a row, because
+  -- "where did this figure come from" is asked about free readings too.
+  perform public.set_ocr_settings(v_org, true, 'mlkit', 'platform');
+  perform public.ocr_record_local(v_org, v_file,
+    '{"supplier_name":"99 Speedmart","total_amount":33.91}'::jsonb);
+  perform pg_temp.check_eq('a local reading is logged at zero',
+    (select amount_charged from public.ocr_scans
+      where org_id = v_org order by created_at desc limit 1), 0);
+  perform pg_temp.check_eq('and moves no money',
+    (select count(*) from public.credit_ledger where org_id = v_org), 0);
+  perform pg_temp.check_true('and is settled, not left pending',
+    (select status = 'ok' from public.ocr_scans
+      where org_id = v_org order by created_at desc limit 1));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A reader in use cannot be deleted out from under an organization
+-- ---------------------------------------------------------------------
+do $$
+declare v_org uuid := pg_temp.scannable('Pengguna Setia Sdn Bhd');
+begin
+  perform public.set_ocr_settings(v_org, true, 'claude', 'platform');
+  begin
+    delete from public.ocr_providers where code = 'claude';
+    raise exception 'FAIL: deleted a reader an organization is using';
+  exception when foreign_key_violation then
+    raise notice 'ok   a reader in use cannot be deleted';
+  end;
+  -- Retiring one is a flag, which stops it being chosen without
+  -- breaking whoever already has it.
+  update public.ocr_providers set is_active = false where code = 'claude';
+  perform pg_temp.check_true('a retired reader still reads back',
+    (public.ocr_status(v_org) ->> 'provider') = 'claude');
+end $$;
+
+-- ---------------------------------------------------------------------
 -- What a signed-in user cannot reach
 --
 -- Both of these are grants rather than policies, so they hold even if a
@@ -328,6 +443,17 @@ begin
   perform pg_temp.check_true('nor move a balance directly',
     not has_function_privilege('authenticated',
       'app.move_credit(uuid, text, numeric, text, uuid, uuid, boolean)', 'execute'));
+
+  -- The catalog decides where documents are sent. A tenant able to
+  -- write it could point the whole system at an endpoint of their
+  -- choosing, which is a data exfiltration path and not a setting.
+  perform pg_temp.check_true('a signed-in user cannot edit the reader catalog',
+    not has_function_privilege('anon',
+      'public.platform_set_ocr_provider(text, text, text, text, text, numeric, boolean, text)',
+      'execute'));
+  perform pg_temp.check_true('and reading it is all a tenant may do',
+    (select count(*) = 1 from pg_policies
+      where tablename = 'ocr_providers' and cmd = 'SELECT'));
 
   -- The anonymous role reaches none of it either.
   perform pg_temp.check_true('and anon reaches none of it',
