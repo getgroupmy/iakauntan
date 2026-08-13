@@ -13,6 +13,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../shared/attachments_card.dart';
 import 'doc_types.dart';
 import 'email_dialog.dart';
 import 'fx.dart';
@@ -928,6 +929,25 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         editable: editable,
                         onNotesChanged: _markDirty,
                       ),
+
+                      // The supplier's own paperwork, filed against the
+                      // document it justifies. Purchases only: a bill is
+                      // evidence somebody else produced and an auditor
+                      // will ask for, where an invoice is evidence this
+                      // company produced and already holds.
+                      //
+                      // Only once saved, because an attachment hangs off
+                      // a record id and a new document has none yet.
+                      if (!_isNew && !_kind.isSales) ...[
+                        const SizedBox(height: 16),
+                        AttachmentsCard(
+                          table: 'purchase_documents',
+                          recordId: widget.documentId!,
+                          title: 'Supplier paperwork',
+                          subtitle: 'The bill, delivery order or quotation '
+                              'this was raised from.',
+                        ),
+                      ],
                       const SizedBox(height: 40),
                     ],
                   ),

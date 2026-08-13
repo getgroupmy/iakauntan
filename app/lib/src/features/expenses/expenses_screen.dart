@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../shared/attachments_card.dart';
 
 /// Money already spent, captured and posted in one step — there is no
 /// useful draft state for an expense that has already left the bank.
@@ -114,6 +115,15 @@ class ExpensesScreen extends ConsumerWidget {
                       ),
                       trailing:
                           Money(Fmt.toDouble(e['total_amount']), bold: true),
+                      // Until now an expense could be created and never
+                      // opened again, which is why its receipt had
+                      // nowhere to live. An expense without the receipt
+                      // behind it is the line an auditor asks about and
+                      // nobody can answer.
+                      onTap: () => showDialog<void>(
+                        context: context,
+                        builder: (_) => _ExpenseDetail(expense: e),
+                      ),
                     );
                   },
                 ),
@@ -363,6 +373,77 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Text('Record and post'),
+        ),
+      ],
+    );
+  }
+}
+
+/// An expense after it has been recorded, and the receipt behind it.
+///
+/// Read-only on purpose. A posted expense has a journal entry against
+/// it, and letting the amount be edited here would put the two out of
+/// step silently — correcting one means reversing it, which is a
+/// different verb and a different screen. What was missing was not
+/// editing but *evidence*: the paper the expense came from, which an
+/// auditor asks for and which had nowhere to be filed.
+class _ExpenseDetail extends ConsumerWidget {
+  const _ExpenseDetail({required this.expense});
+
+  final Map<String, dynamic> expense;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final account = expense['accounts'] as Map?;
+    final no = expense['expense_no']?.toString() ?? 'Expense';
+
+    Widget line(String label, String value) => Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            SizedBox(
+              width: 110,
+              child: Text(label,
+                  style: Theme.of(context).textTheme.bodySmall),
+            ),
+            Expanded(child: Text(value)),
+          ]),
+        );
+
+    return AlertDialog(
+      title: Row(children: [
+        Expanded(child: Text(no)),
+        StatusChip(expense['status']?.toString() ?? 'draft', compact: true),
+      ]),
+      content: SizedBox(
+        width: 620,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              line('Description', expense['description']?.toString() ?? '—'),
+              line('Date', Fmt.date(Fmt.parseDate(expense['expense_date']))),
+              if (account != null)
+                line('Account', '${account['code']} ${account['name']}'),
+              if (expense['reference'] != null &&
+                  '${expense['reference']}'.trim().isNotEmpty)
+                line('Reference', '${expense['reference']}'),
+              line('Amount', Fmt.money(Fmt.toDouble(expense['total_amount']))),
+              const SizedBox(height: Space.md),
+              AttachmentsCard(
+                table: 'expenses',
+                recordId: '${expense['id']}',
+                title: 'Receipt',
+                subtitle: 'The paper this expense came from.',
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
         ),
       ],
     );

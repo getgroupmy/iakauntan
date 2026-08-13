@@ -1,6 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
@@ -61,16 +65,35 @@ class _AttachmentsCardState extends ConsumerState<AttachmentsCard> {
               widget.title,
               subtitle: widget.subtitle,
               action: canWrite
-                  ? OutlinedButton.icon(
-                      onPressed: _busy ? null : _pick,
-                      icon: _busy
-                          ? const SizedBox(
-                              height: 16,
-                              width: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.attach_file, size: 18),
-                      label: const Text('Attach'),
-                    )
+                  ? Row(mainAxisSize: MainAxisSize.min, children: [
+                      // Shown where there is plausibly a camera, which is
+                      // the question `defaultTargetPlatform` actually
+                      // answers: on the web it reports the browser's
+                      // platform, so a phone browser says android or iOS
+                      // and a laptop says macOS or Windows. That covers
+                      // the app and the mobile web from one condition,
+                      // and keeps a redundant button off a desktop where
+                      // the capture attribute would silently degrade to
+                      // an ordinary file dialog.
+                      if (_cameraLikely)
+                        IconButton(
+                          tooltip: 'Photograph it',
+                          onPressed: _busy ? null : _photograph,
+                          icon: const Icon(Icons.photo_camera_outlined,
+                              size: 20),
+                        ),
+                      OutlinedButton.icon(
+                        onPressed: _busy ? null : _pick,
+                        icon: _busy
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.attach_file, size: 18),
+                        label: const Text('Attach'),
+                      ),
+                    ])
                   : null,
             ),
             AsyncView(
@@ -103,22 +126,56 @@ class _AttachmentsCardState extends ConsumerState<AttachmentsCard> {
     );
   }
 
+  static bool get _cameraLikely =>
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+
   Future<void> _pick() async {
     final file = await openFile();
     if (file == null || !mounted) return;
+    await _upload(file.name, await file.readAsBytes(), file.mimeType);
+  }
 
-    setState(() => _busy = true);
-    final bytes = await file.readAsBytes();
+  /// Straight to the camera, not to a chooser.
+  ///
+  /// Somebody standing at a counter holding a receipt wants the shutter,
+  /// not a menu offering them a photo library they have not put anything
+  /// in yet. The library remains reachable through Attach, which on a
+  /// phone offers it among everything else.
+  Future<void> _photograph() async {
+    final shot = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      // A receipt only has to be legible, and a full-resolution phone
+      // photo is several megabytes of thermal paper. This keeps enough
+      // detail to read the small print off the storage bill.
+      imageQuality: 85,
+      maxWidth: 2000,
+    );
+    if (shot == null || !mounted) return;
+
+    // The camera names files things like `image_picker_XYZ.jpg`, which
+    // tells nobody anything a year later.
+    final stamp = DateTime.now();
+    final name = 'receipt-${stamp.year}'
+        '${stamp.month.toString().padLeft(2, '0')}'
+        '${stamp.day.toString().padLeft(2, '0')}'
+        '-${stamp.millisecondsSinceEpoch % 100000}.jpg';
+
+    await _upload(name, await shot.readAsBytes(),
+        shot.mimeType ?? 'image/jpeg');
+  }
+
+  Future<void> _upload(String name, Uint8List bytes, String? mimeType) async {
     if (!mounted) return;
-
+    setState(() => _busy = true);
     await runWithFeedback(
       context,
       action: () => ref.read(repoProvider)!.uploadAttachment(
             table: widget.table,
             recordId: widget.recordId,
-            fileName: file.name,
+            fileName: name,
             bytes: bytes,
-            mimeType: file.mimeType,
+            mimeType: mimeType,
           ),
       successMessage: 'Attached',
     );

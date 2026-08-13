@@ -32,6 +32,15 @@ dependencies:
   # Picking a file to attach. Works on web and mobile from one call,
   # which is why it beats hand-rolling an <input type=file>.
   file_selector: ^1.0.3
+  # Photographing a receipt. `file_selector` deliberately does not open a
+  # camera — it picks files that already exist — and the receipt somebody
+  # is holding is not a file yet.
+  #
+  # On Android and iOS this hands off to the camera app. On the web it
+  # becomes <input type="file" accept="image/*" capture>, which opens the
+  # camera on a mobile browser and quietly falls back to a file dialog
+  # where there is none, so the same call is right on all four surfaces.
+  image_picker: ^1.1.2
   crypto: ^3.0.6
   # Real PDFs for the documents a secretary has to print, sign
   # and lodge. Markdown is fine for a diff; it is not fine for
