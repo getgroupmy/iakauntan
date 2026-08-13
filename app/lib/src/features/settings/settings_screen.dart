@@ -310,6 +310,19 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
   final _processor = TextEditingController();
   bool _saving = false;
 
+  /// "My own key", chosen but not yet saved.
+  ///
+  /// The database refuses to store `own` until a key exists — rightly, or
+  /// an organization sits switched on with nothing to call. But the key
+  /// field only appeared once `own` was stored, so choosing it was
+  /// refused and there was no way to reach the field that would have
+  /// satisfied it. A deadlock, and the guard was not the half that was
+  /// wrong.
+  ///
+  /// So the choice is held here until there is a key to go with it, and
+  /// the two are written together.
+  String? _pendingKeySource;
+
   @override
   void dispose() {
     _apiKey.dispose();
@@ -325,7 +338,58 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
         action: action, successMessage: message);
     if (mounted) setState(() => _saving = false);
     if (ok) ref.invalidate(ocrStatusProvider);
+    return;
   }
+
+  /// What the screen is showing, which is the stored answer unless
+  /// somebody has just asked for a different one.
+  String _keySource(OcrSettings ocr) => _pendingKeySource ?? ocr.keySource;
+
+  void _chooseKeySource(OcrSettings ocr, String chosen) {
+    // Going back to the platform's key, or choosing your own when a key
+    // is already on file, are both storable straight away.
+    if (chosen == 'platform' || ocr.keys.contains(ocr.provider)) {
+      setState(() => _pendingKeySource = null);
+      _write(
+        () => ref.read(repoProvider)!.setOcrSettings(
+              enabled: true,
+              provider: ocr.provider,
+              keySource: chosen,
+            ),
+        'Saved',
+      );
+      return;
+    }
+    // Otherwise show the field first. Nothing is written until there is
+    // a key to write with it.
+    setState(() => _pendingKeySource = 'own');
+  }
+
+  /// Saves the key, then the choice that needed it — in that order,
+  /// which is the order the database's own guard requires.
+  Future<void> _saveKey(OcrSettings ocr) => _write(
+        () async {
+          final repo = ref.read(repoProvider)!;
+          await repo.setOcrCredentials(
+            provider: ocr.provider,
+            apiKey: _apiKey.text.trim().isEmpty ? null : _apiKey.text.trim(),
+            projectId:
+                _project.text.trim().isEmpty ? null : _project.text.trim(),
+            location:
+                _location.text.trim().isEmpty ? null : _location.text.trim(),
+            processorId:
+                _processor.text.trim().isEmpty ? null : _processor.text.trim(),
+          );
+          await repo.setOcrSettings(
+            enabled: ocr.enabled,
+            provider: ocr.provider,
+            keySource: 'own',
+          );
+          _apiKey.clear();
+          if (mounted) setState(() => _pendingKeySource = null);
+        },
+        'Scanning is on your own key',
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -377,7 +441,13 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                   ],
                   selected: {ocr.provider},
                   onSelectionChanged: widget.canEdit && !_saving
-                      ? (s) => _write(
+                      ? (s) {
+                          // A half-finished choice belongs to the
+                          // provider it was made for. Changing provider
+                          // abandons it rather than carrying a banner
+                          // about a key nobody asked to set.
+                          setState(() => _pendingKeySource = null);
+                          _write(
                             () => ref.read(repoProvider)!.setOcrSettings(
                                   enabled: true,
                                   provider: s.first,
@@ -389,7 +459,8 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                                       : 'platform',
                                 ),
                             'Provider changed',
-                          )
+                          );
+                        }
                       : null,
                 ),
                 const SizedBox(height: 12),
@@ -400,51 +471,27 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                         value: 'platform', label: Text('Buy credit')),
                     ButtonSegment(value: 'own', label: Text('My own key')),
                   ],
-                  selected: {ocr.keySource},
+                  selected: {_keySource(ocr)},
                   onSelectionChanged: widget.canEdit && !_saving
-                      ? (s) => _write(
-                            () => ref.read(repoProvider)!.setOcrSettings(
-                                  enabled: true,
-                                  provider: ocr.provider,
-                                  keySource: s.first,
-                                ),
-                            'Saved',
-                          )
+                      ? (s) => _chooseKeySource(ocr, s.first)
                       : null,
                 ),
                 const SizedBox(height: 16),
-                if (ocr.keySource == 'platform')
+                if (_keySource(ocr) == 'platform')
                   _CreditBalance(ocr: ocr)
                 else
                   _OwnKeyFields(
                     ocr: ocr,
                     canEdit: widget.canEdit,
                     saving: _saving,
+                    // True while the choice is made but unsaved, which is
+                    // what the field below is there to finish.
+                    pending: _pendingKeySource != null,
                     apiKey: _apiKey,
                     project: _project,
                     location: _location,
                     processor: _processor,
-                    onSave: () => _write(
-                      () async {
-                        await ref.read(repoProvider)!.setOcrCredentials(
-                              provider: ocr.provider,
-                              apiKey: _apiKey.text.trim().isEmpty
-                                  ? null
-                                  : _apiKey.text.trim(),
-                              projectId: _project.text.trim().isEmpty
-                                  ? null
-                                  : _project.text.trim(),
-                              location: _location.text.trim().isEmpty
-                                  ? null
-                                  : _location.text.trim(),
-                              processorId: _processor.text.trim().isEmpty
-                                  ? null
-                                  : _processor.text.trim(),
-                            );
-                        _apiKey.clear();
-                      },
-                      'Key saved',
-                    ),
+                    onSave: () => _saveKey(ocr),
                     onClear: () => _write(
                       () => ref
                           .read(repoProvider)!
@@ -515,6 +562,7 @@ class _OwnKeyFields extends StatelessWidget {
     required this.ocr,
     required this.canEdit,
     required this.saving,
+    required this.pending,
     required this.apiKey,
     required this.project,
     required this.location,
@@ -526,6 +574,9 @@ class _OwnKeyFields extends StatelessWidget {
   final OcrSettings ocr;
   final bool canEdit;
   final bool saving;
+
+  /// Chosen but not stored yet, because there is no key to store with it.
+  final bool pending;
   final TextEditingController apiKey;
   final TextEditingController project;
   final TextEditingController location;
@@ -559,6 +610,25 @@ class _OwnKeyFields extends StatelessWidget {
                 child: const Text('Remove'),
               ),
             ]),
+          )
+        else if (pending)
+          // Says which half is missing. Without this the screen looks
+          // switched over when nothing has been stored, and the first
+          // scan is the thing that finds out.
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(Space.md),
+            decoration: BoxDecoration(
+              color: context.colors.warning.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              'Not switched over yet. Paste your '
+              '${isGoogle ? 'Document AI' : 'Anthropic'} key below and save '
+              'it — scanning moves onto it in the same step. Until then it '
+              'stays on purchased credit.',
+              style: const TextStyle(fontSize: 13),
+            ),
           ),
         TextField(
           controller: apiKey,
@@ -610,7 +680,7 @@ class _OwnKeyFields extends StatelessWidget {
             alignment: Alignment.centerRight,
             child: FilledButton(
               onPressed: saving ? null : onSave,
-              child: const Text('Save key'),
+              child: Text(pending ? 'Save key and switch' : 'Save key'),
             ),
           ),
       ],

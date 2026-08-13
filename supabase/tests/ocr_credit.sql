@@ -198,6 +198,12 @@ declare
   v_file uuid := pg_temp.receipt(v_org, 'astro-jul.jpg');
   v_out  jsonb;
 begin
+  -- Key first, then the setting that needs it. That order is not
+  -- incidental: `set_ocr_settings` refuses `own` while no key is on file
+  -- (asserted above), so it is the only sequence that works, and the
+  -- Settings screen writes both in exactly this order for that reason.
+  -- The first version of that screen wrote the setting alone and put
+  -- the key field behind it, which nothing could reach.
   perform public.set_ocr_credentials(v_org, 'claude', 'sk-ant-fixture');
   perform public.set_ocr_settings(v_org, true, 'claude', 'own');
 

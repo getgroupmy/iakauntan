@@ -290,8 +290,8 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1786618491.2526278,
-    "ast_hash": "fb903ab26aa2a75a11794d7a6e3987d3",
+    "mtime": 1786620752.5210745,
+    "ast_hash": "de9752820ddffe8e331f45194a7daa33",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -1815,8 +1815,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/ocr_credit.sql": {
-    "mtime": 1786617554.4528844,
-    "ast_hash": "a002fcc10d812f8ddc80426cf5352acd",
+    "mtime": 1786620801.0290775,
+    "ast_hash": "cf2fb4afd2e82cf874191601ab6802ba",
     "semantic_hash": ""
   },
   "docs/edge-functions.md": {
