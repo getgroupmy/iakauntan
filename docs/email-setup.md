@@ -95,9 +95,9 @@ why.
 
 ## 3. Deploy the function
 
-```
-supabase functions deploy send-email --project-ref ewwcgtnniwqndrzukksm
-```
+Nothing to do. `send-email` is deployed by CI on every push to the
+default branch, along with the other two edge functions — see
+[edge-functions.md](edge-functions.md).
 
 ## 4. Drain the queue on a schedule
 

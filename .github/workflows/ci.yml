@@ -92,6 +92,124 @@ jobs:
         run: supabase stop --no-backup
 
   # -------------------------------------------------------------------
+  # The edge functions
+  #
+  # These are the parts of the system that are not in the database and
+  # not in the app: talking to LHDN, to Resend, to Bank Negara. Until now
+  # they were the only thing here deployed by hand, and it showed — the
+  # deployed `myinvois` carried a `loadCredentials` that the repository
+  # had already fixed, and nothing anywhere would have said so. A
+  # function that has drifted from the repository is worse than one that
+  # was never deployed, because the repository reads as though it is
+  # live.
+  #
+  # So: every push to the default branch redeploys all of them, whether
+  # or not their files changed. Deploying an unchanged function costs a
+  # few seconds and produces a new version number; the alternative is
+  # working out which functions a change to `_shared/` reaches, and being
+  # wrong about that is exactly the failure this job exists to end.
+  #
+  # Only the default branch. There is one Supabase project, so a feature
+  # branch deploying its functions would put half-finished work in front
+  # of production — unlike the Vercel deploy above, which gets its own
+  # preview URL. That is why this cannot simply share that job's
+  # condition.
+  #
+  # `cancel-in-progress: false` for the same reason it is false on the
+  # schedulers: a deploy interrupted partway leaves some functions on the
+  # new commit and some on the old, which is the drift again.
+  # -------------------------------------------------------------------
+  functions:
+    name: Deploy the edge functions
+    runs-on: ubuntu-latest
+    needs: [flutter, database]
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref_name == github.event.repository.default_branch
+    concurrency:
+      group: functions-${{ github.ref }}
+      cancel-in-progress: false
+    env:
+      # A personal access token from
+      # https://supabase.com/dashboard/account/tokens — the same thing
+      # `supabase login` stores on a laptop. Set it under Settings →
+      # Secrets and variables → Actions.
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      # An identifier rather than a credential, so it is written down
+      # here for the same reason the Vercel project id is.
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF || vars.SUPABASE_PROJECT_REF || 'ewwcgtnniwqndrzukksm' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the access token is present
+        id: creds
+        run: |
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            # Warned rather than failed, so that adding the secret is
+            # something that can happen later without every push in
+            # between showing a red tick. Named on the summary, though,
+            # because a green run that deployed nothing is the same shape
+            # as one that deployed everything.
+            echo "::warning::The edge functions were not deployed. SUPABASE_ACCESS_TOKEN is not set."
+            {
+              echo "### The edge functions were not deployed"
+              echo
+              echo "\`SUPABASE_ACCESS_TOKEN\` is not set, so the functions on"
+              echo "the hosted project are whatever was last put there by"
+              echo "hand — which may not be this commit."
+              echo
+              echo "Create a token at **supabase.com → Account → Access"
+              echo "Tokens**, add it under **Settings → Secrets and variables"
+              echo "→ Actions**, then re-run this workflow."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: supabase/setup-cli@v1
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          version: latest
+
+      - name: Deploy
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+
+          # Read from the directory rather than a list written out here,
+          # so a function added in some later commit is deployed by the
+          # commit that adds it and not by whoever next remembers this
+          # file. `_shared` is skipped: it is imported by the others and
+          # is not itself a function, which is what the underscore means
+          # to the CLI too.
+          names=()
+          for dir in supabase/functions/*/; do
+            name="$(basename "$dir")"
+            case "$name" in _*) continue ;; esac
+            [ -f "$dir/index.ts" ] || continue
+            names+=("$name")
+          done
+
+          if [ "${#names[@]}" -eq 0 ]; then
+            echo "::error::No edge functions found under supabase/functions."
+            exit 1
+          fi
+
+          # One at a time, so a failure names the function that failed
+          # rather than the batch. `verify_jwt` is not passed on the
+          # command line — the CLI takes it from supabase/config.toml,
+          # which is where it should be read and reviewed.
+          echo "### Edge functions" >> "$GITHUB_STEP_SUMMARY"
+          for name in "${names[@]}"; do
+            echo "== $name"
+            supabase functions deploy "$name" \
+              --project-ref "$SUPABASE_PROJECT_REF"
+            echo "- \`$name\`" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  # -------------------------------------------------------------------
   # Publishing
   #
   # This lived in its own workflow, and the separation was a mistake that

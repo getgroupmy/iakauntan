@@ -751,9 +751,14 @@ through a real call, so this cannot come back quietly.
 `.github/workflows/ci.yml` analyzes and tests the Flutter app, then
 starts a throwaway Supabase stack and runs every file in
 `supabase/tests/` against the migrations *in that commit* rather than
-against the hosted project. Publishing is a third job in the same
-workflow, and it waits on both of the other two — see the Vercel
-pipeline below for why that gate is there.
+against the hosted project. Two more jobs in the same workflow publish
+what those two have passed, and both wait on them: `deploy` builds the
+web bundle and hands it to Vercel — see the Vercel pipeline below for why
+that gate is there — and `functions` pushes the three edge functions to
+Supabase. `functions` additionally runs on the default branch only, since
+there is one Supabase project and no such thing as a preview of it;
+[docs/edge-functions.md](docs/edge-functions.md) has the rest, including
+the drift it was written to end.
 
 That second job had been failing, unnoticed, since the suite grew a
 second fixture organization. `app.seed_chart_of_accounts` creates a temp
@@ -931,8 +936,14 @@ rather than copied from a template:
 ```bash
 supabase link --project-ref ewwcgtnniwqndrzukksm
 supabase db push
-supabase functions deploy myinvois
 ```
+
+The edge functions are **not** in that list. All three are redeployed by
+CI on every push to the default branch, so a hand deploy is only ever a
+way for the hosted copy to stop matching the repository — which is what
+it did, undetected, until the `functions` job existed. See
+[docs/edge-functions.md](docs/edge-functions.md), which is also where the
+one repository secret it needs is written down.
 
 ### The knowledge graph
 

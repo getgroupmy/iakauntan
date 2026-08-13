@@ -27,5 +27,25 @@ enable_signup = true
 enable_signup = true
 enable_confirmations = false
 
+# Every function is deployed from CI (see .github/workflows/ci.yml), and
+# the CLI reads these settings from here — so what is written here is what
+# the hosted project ends up with. All three are `verify_jwt = true`, and
+# each one checks something further on top of it, because a JWT this
+# project signed includes the publishable key that ships inside the web
+# bundle:
+#
+#   myinvois     also resolves the caller and their membership of the
+#                organization named in the body.
+#   send-email   also decides, from whether the service role key was
+#                presented, whether to drain one organization's outbox or
+#                everybody's.
+#   fetch-rates  requires the service role key outright. It is called by
+#                the scheduler and by nothing else.
 [functions.myinvois]
+verify_jwt = true
+
+[functions.send-email]
+verify_jwt = true
+
+[functions.fetch-rates]
 verify_jwt = true

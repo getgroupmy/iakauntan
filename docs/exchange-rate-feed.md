@@ -60,11 +60,8 @@ to be 1.
 
 ## Deploying it
 
-**Already deployed** — version 2, active. Redeploy after a change with:
-
-```bash
-supabase functions deploy fetch-rates --project-ref ewwcgtnniwqndrzukksm
-```
+**Deployed, and redeployed by CI on every push to the default branch** —
+see [edge-functions.md](edge-functions.md). Nothing to run by hand.
 
 There is **no API key**. BNM's Open API is public; the only credential
 involved is the project's own service role key, which the platform
