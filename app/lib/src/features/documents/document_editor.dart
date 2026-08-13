@@ -12,6 +12,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import 'doc_types.dart';
+import 'email_dialog.dart';
 import 'fx.dart';
 import 'invoice_pdf.dart';
 import 'line_draft.dart';
@@ -371,20 +372,33 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// Reloaded from the database rather than assembled from the form, so
   /// what prints is what was stored — an unsaved edit in a text field is
   /// not part of the invoice yet, and printing it would say otherwise.
+  /// Opens the send dialog: queue it, send it now, send it somewhere
+  /// else, and read what has already been sent, shared or downloaded.
+  ///
+  /// The customer's address is looked up first so the field shows what
+  /// it would go to rather than an empty box — "send it to somebody
+  /// else" is hard to mean if you cannot see who it was going to. A
+  /// failed lookup is not fatal: the dialog falls back to the same
+  /// address server-side.
   Future<void> _emailDocument() async {
-    final ok = await confirm(
-      context,
-      title: 'Email $_docNo?',
-      message: 'A message is queued to the customer with a link to this '
-          'document. It goes out on the next send.',
-      confirmLabel: 'Queue it',
-    );
-    if (!ok || !mounted) return;
+    final repo = ref.read(repoProvider);
+    if (repo == null || widget.documentId == null) return;
 
-    await runWithFeedback(
+    String? to;
+    if (_contactId != null) {
+      try {
+        to = (await repo.contact(_contactId!)).email;
+      } catch (_) {
+        to = null;
+      }
+    }
+    if (!mounted) return;
+
+    await showEmailDialog(
       context,
-      action: () => ref.read(repoProvider)!.emailDocument(widget.documentId!),
-      successMessage: 'Queued — it will go out on the next send',
+      documentId: widget.documentId!,
+      docNo: _docNo,
+      defaultTo: (to != null && to.trim().isNotEmpty) ? to.trim() : null,
     );
   }
 
@@ -409,6 +423,21 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           doc.docNo.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
       final saved =
           await saveBytesFile('$stem.pdf', 'application/pdf', bytes);
+
+      // Recorded only when a file actually reached the user, and only
+      // for sales documents — the activity trail is about what the
+      // customer received, and nobody sends a supplier their own bill.
+      // Best-effort: a document that downloaded fine should not report
+      // an error because the audit row did not write.
+      if (saved && _kind.isSales) {
+        try {
+          await repo.logDocumentDownload(widget.documentId!);
+          ref.invalidate(documentActivityProvider(widget.documentId!));
+        } catch (_) {
+          // Nothing the person downloading can do about it.
+        }
+      }
+
       messenger.showSnackBar(SnackBar(
         content: Text(saved
             ? 'Downloaded'
@@ -652,12 +681,13 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
               : () => showShareDialog(context, widget.documentId!, _docNo),
         ),
 
-      // Queues a message carrying a fresh share link. It does not send:
-      // the edge function drains the queue, so this returns as soon as
-      // the row is written rather than waiting on a mail provider.
+      // Queue it, send it now, or send it to a different address — and
+      // read what has already gone out. Even "send now" writes the row
+      // first and drains it after, so the outbox stays the record of
+      // everything and the database still never waits on a provider.
       if (!_isNew && _kind.isSales && _status != 'draft' && _status != 'void')
         IconButton(
-          tooltip: 'Email to the customer',
+          tooltip: 'Email, or see what was sent',
           icon: const Icon(Icons.mail_outline, size: 20),
           onPressed: _saving ? null : _emailDocument,
         ),

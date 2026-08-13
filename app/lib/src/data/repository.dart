@@ -2896,14 +2896,62 @@ extension RepoHrSetup on Repo {
       .from('email_settings')
       .upsert({...values, 'org_id': orgId, 'updated_at': 'now()'});
 
+  /// Queues a document for sending and returns the outbox row's id.
+  ///
+  /// `dispatch` records which button was pressed and nothing more — the
+  /// database never talks to a mail provider. Sending now is this call
+  /// followed by [sendQueuedEmail] on the id it returns; if that second
+  /// call fails the row is still queued and the schedule collects it,
+  /// so send now degrades to send soon rather than to lost.
   Future<String> emailDocument(String documentId,
-      {String? to, String templateCode = 'document_new'}) async {
+      {String? to,
+      String templateCode = 'document_new',
+      String dispatch = 'queued'}) async {
     final data = await client.rpc('email_document', params: {
       'p_document_id': documentId,
       if (to != null && to.trim().isNotEmpty) 'p_to': to.trim(),
       'p_template_code': templateCode,
+      'p_dispatch': dispatch,
     });
     return data as String;
+  }
+
+  /// Queues one message and drains that row immediately.
+  ///
+  /// Returns the outbox row as it stands afterwards, so the caller can
+  /// say what actually happened rather than "probably sent". A failure
+  /// to drain is deliberately not rethrown: the message is queued by
+  /// then, and telling somebody their invoice was not sent when it is
+  /// about to go out half an hour later would be wrong.
+  Future<Map<String, dynamic>> emailDocumentNow(String documentId,
+      {String? to, String templateCode = 'document_new'}) async {
+    final id = await emailDocument(documentId,
+        to: to, templateCode: templateCode, dispatch: 'immediate');
+    try {
+      await sendQueuedEmail(id: id);
+    } catch (_) {
+      // Swallowed on purpose; the row below reports the truth.
+    }
+    final row = await client
+        .from('email_outbox')
+        .select('id, status, to_email, sent_at, last_error, attempts')
+        .eq('id', id)
+        .maybeSingle();
+    return Map<String, dynamic>.from(row as Map? ?? {'id': id});
+  }
+
+  /// Everything that ever left the building for this document: messages,
+  /// share links and PDF downloads, newest first.
+  Future<List<Map<String, dynamic>>> documentActivity(String documentId) async =>
+      Repo._rows(await client
+          .rpc('document_activity', params: {'p_document_id': documentId}));
+
+  /// Records that somebody took the PDF. The file is built in the
+  /// browser, so this is a record of what the app did rather than an
+  /// access log — see the migration for why that distinction matters.
+  Future<void> logDocumentDownload(String documentId) async {
+    await client.rpc('log_document_download',
+        params: {'p_document_id': documentId});
   }
 
   Future<List<Map<String, dynamic>>> emailOutbox({String? status}) async {

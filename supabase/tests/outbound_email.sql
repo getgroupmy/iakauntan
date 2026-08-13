@@ -105,6 +105,149 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- Send now, and sending it somewhere else
+--
+-- `dispatch` records which button was pressed, not what became of the
+-- message. Nothing here sends: an `immediate` row is queued exactly like
+-- any other and the app drains that one row straight after. If that
+-- drain fails the scheduler still picks it up, so the assertion that
+-- matters is that `immediate` and `queued` both leave a *queued* row.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.mail_org('Urgent Sdn Bhd');
+  v_contact uuid; v_doc uuid; v_msg uuid; v_body text; v_token text;
+begin
+  insert into public.contacts (org_id, code, name, contact_type, email)
+  values (v_org, 'C-001', 'Buyer Bhd', 'customer', 'ap@buyer.example')
+  returning id into v_contact;
+  insert into public.email_settings (org_id, is_enabled, reminder_days)
+  values (v_org, true, '{}');
+
+  v_doc := pg_temp.invoice_due(v_org, v_contact, 'INV-9', 900, date '2026-03-31');
+
+  v_msg := public.email_document(v_doc);
+  perform pg_temp.check_true('queueing is still the default',
+    (select ob.dispatch = 'queued' and ob.status = 'queued'
+       from public.email_outbox ob where ob.id = v_msg));
+
+  v_msg := public.email_document(v_doc, null, 'document_new', 30, 'immediate');
+  perform pg_temp.check_true('send now records the choice',
+    (select ob.dispatch = 'immediate' from public.email_outbox ob
+      where ob.id = v_msg));
+  perform pg_temp.check_true('and still only queues a row',
+    (select ob.status = 'queued' and ob.sent_at is null
+       from public.email_outbox ob where ob.id = v_msg));
+
+  begin
+    perform public.email_document(v_doc, null, 'document_new', 30, 'now');
+    raise exception 'FAIL: accepted a dispatch that is not a choice';
+  exception when sqlstate '23514' then
+    raise notice 'ok   an unknown dispatch is refused';
+  end;
+
+  -- Somewhere else. The address overrides the customer record, and the
+  -- share token has to be issued against it — reusing one cut for the
+  -- customer would mean the audit trail names the wrong person.
+  v_msg := public.email_document(v_doc, '  accounts@theiragent.example  ');
+  perform pg_temp.check_true('an address overrides the customer record',
+    (select ob.to_email = 'accounts@theiragent.example'
+       from public.email_outbox ob where ob.id = v_msg));
+
+  select ob.body into v_body from public.email_outbox ob where ob.id = v_msg;
+  v_token := substring(v_body from '/#/share/([a-f0-9]+)');
+  perform pg_temp.check_true('with the share link issued to that address',
+    (select l.sent_to_email = 'accounts@theiragent.example'
+       from public.document_share_links l
+      where l.token_hash = app.corp_token_hash(v_token)));
+
+  -- A typo is a message that goes nowhere and comes back hours later as
+  -- a provider error, if it comes back at all.
+  begin
+    perform public.email_document(v_doc, 'not an address');
+    raise exception 'FAIL: queued a message to something with no @';
+  exception when sqlstate '23514' then
+    raise notice 'ok   an address with no @ is refused';
+  end;
+  begin
+    perform public.email_document(v_doc, 'a@b');
+    raise exception 'FAIL: queued a message to a domain with no dot';
+  exception when sqlstate '23514' then
+    raise notice 'ok   and one with no domain';
+  end;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- What ever left the building
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.mail_org('Trail Sdn Bhd');
+  v_contact uuid; v_doc uuid; v_rows int; r record;
+begin
+  insert into public.contacts (org_id, code, name, contact_type, email)
+  values (v_org, 'C-001', 'Buyer Bhd', 'customer', 'ap@buyer.example')
+  returning id into v_contact;
+  insert into public.email_settings (org_id, is_enabled, reminder_days)
+  values (v_org, true, '{}');
+
+  v_doc := pg_temp.invoice_due(v_org, v_contact, 'INV-7', 400, date '2026-03-31');
+
+  perform pg_temp.check_eq('a document nobody has touched has no history',
+    (select count(*) from public.document_activity(v_doc)), 0);
+
+  perform public.email_document(v_doc, null, 'document_new', 30, 'immediate');
+  perform app.issue_share_token(v_doc, 30, 'ap@buyer.example');
+  perform public.log_document_download(v_doc);
+
+  perform pg_temp.check_eq('all three kinds appear',
+    (select count(distinct kind) from public.document_activity(v_doc)), 3);
+
+  -- Two links, not one: emailing issues a token of its own, and the
+  -- explicit share above then issues a second. `issue_share_token`
+  -- revokes whatever was live before inserting, so the trail should
+  -- show one revoked and one live rather than two live — a link that
+  -- was superseded is exactly what somebody is looking for when a
+  -- customer says their link stopped working.
+  perform pg_temp.check_eq('emailing also issues a link, and both show',
+    (select count(*) from public.document_activity(v_doc)
+      where kind = 'share link'), 2);
+  perform pg_temp.check_eq('the superseded one reads as revoked',
+    (select count(*) from public.document_activity(v_doc)
+      where kind = 'share link' and status = 'revoked'), 1);
+  perform pg_temp.check_eq('and only the newest is live',
+    (select count(*) from public.document_activity(v_doc)
+      where kind = 'share link' and status = 'live'), 1);
+
+  select * into r from public.document_activity(v_doc) where kind = 'email';
+  perform pg_temp.check_true('the email names the address and the choice',
+    r.recipient = 'ap@buyer.example' and r.detail = 'sent now');
+  perform pg_temp.check_true('and reports what became of it',
+    r.status = 'queued');
+
+  select * into r from public.document_activity(v_doc) where kind = 'pdf';
+  perform pg_temp.check_true('the download is recorded', r.status = 'downloaded');
+
+  -- Newest first: this list is read to answer "what happened last".
+  perform pg_temp.check_true('newest first',
+    (select bool_and(ordered) from (
+       select at <= lag(at) over (order by rn) as ordered
+         from (select at, row_number() over () as rn
+                 from public.document_activity(v_doc)) x) y
+      where ordered is not null));
+
+  perform pg_temp.check_true('a member may read the trail',
+    has_function_privilege('authenticated',
+      'public.document_activity(uuid)', 'execute'));
+  perform pg_temp.check_true('a stranger may not',
+    not has_function_privilege('anon',
+      'public.document_activity(uuid)', 'execute'));
+  perform pg_temp.check_true('downloads are not writable around the function',
+    not has_table_privilege('authenticated',
+      'public.document_downloads', 'insert'));
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Chasing, and not chasing twice
 -- ---------------------------------------------------------------------
 -- `app.queue_overdue_reminders` walks every organization in the
@@ -233,10 +376,17 @@ begin
 
   perform pg_temp.check_true('a member may send a document',
     has_function_privilege('authenticated',
-      'public.email_document(uuid, text, text, integer)', 'execute'));
+      'public.email_document(uuid, text, text, integer, text)', 'execute'));
   perform pg_temp.check_true('a stranger may not',
     not has_function_privilege('anon',
-      'public.email_document(uuid, text, text, integer)', 'execute'));
+      'public.email_document(uuid, text, text, integer, text)', 'execute'));
+
+  -- 0108 replaced the four-argument form rather than overloading it.
+  -- Both existing would be two functions of the same name, one silently
+  -- ignoring `p_dispatch`, with PostgREST choosing between them by the
+  -- keys in the request body.
+  perform pg_temp.check_eq('and there is exactly one email_document',
+    (select count(*) from pg_proc where proname = 'email_document'), 1);
 
   -- Bodies name a customer and an amount owed.
   perform pg_temp.check_true('the outbox is closed to anon',

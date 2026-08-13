@@ -847,6 +847,12 @@ final documentShareLinksProvider = FutureProvider.autoDispose
   return requireRepo(ref).documentShareLinks(documentId);
 });
 
+/// Messages, share links and downloads for one document, newest first.
+final documentActivityProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, documentId) {
+  return requireRepo(ref).documentActivity(documentId);
+});
+
 final appraisalGoalsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, appraisalId) {
   return requireRepo(ref).appraisalGoals(appraisalId);
