@@ -32,8 +32,17 @@ UTC, fifteen minutes after `app.run_daily_jobs` queues the overdue
 reminders.
 
 The scheduler's credential is set and **confirmed working against the
-hosted function** — the drain returns `scheduler: true`. Resend is the
-only thing left.
+hosted function** — the drain returns `scheduler: true`.
+
+**Mail is live.** Resend is configured against the verified domain
+`send.iakauntan.com`, and the first message went out on 13 August 2026:
+an invoice queued through `email_document`, drained by the workflow,
+accepted by Resend with a provider id, the row moving `queued → sent` in
+one attempt with no error. Queue, template, share token, function,
+scheduler and provider have now all run once in anger.
+
+Everything below is the setup that produced that, kept because it is
+the record of how it was done and what to check when it stops working.
 
 Until the two secrets below exist the function answers 503 and the
 workflow warns on every run. Messages queue up meanwhile and go out as
