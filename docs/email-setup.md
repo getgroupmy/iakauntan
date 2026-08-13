@@ -35,7 +35,8 @@ The scheduler's credential is set and **confirmed working against the
 hosted function** — the drain returns `scheduler: true`.
 
 **Mail is live.** Resend is configured against the verified domain
-`send.iakauntan.com`, and the first message went out on 13 August 2026:
+`iakauntan.com` — the apex, not a subdomain — and the first message went
+out on 13 August 2026:
 an invoice queued through `email_document`, drained by the workflow,
 accepted by Resend with a provider id, the row moving `queued → sent` in
 one attempt with no error. Queue, template, share token, function,
