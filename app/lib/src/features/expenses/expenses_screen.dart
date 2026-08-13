@@ -11,7 +11,29 @@ import '../../data/ocr_repository.dart';
 import '../shared/attachments_card.dart';
 import '../shared/doc_scanner.dart';
 import '../shared/receipt_capture.dart';
+import '../shared/scan_intake.dart';
 import '../shared/scan_result_dialog.dart';
+
+/// Photograph a receipt, then finish what the paper could not say.
+///
+/// The reading fills the description, the date, the reference and the
+/// amount. What is left is what no receipt carries: which expense
+/// account it belongs to, which tax code, and what it was paid from —
+/// so the form opens with those empty and everything else already in.
+Future<void> _scanExpense(BuildContext context, WidgetRef ref) async {
+  final staged = await showScanIntake(
+    context,
+    ref,
+    table: 'expenses',
+    title: 'Scan an expense',
+  );
+  if (staged == null || !context.mounted) return;
+
+  await showDialog<void>(
+    context: context,
+    builder: (_) => _ExpenseDialog(scanned: staged),
+  );
+}
 
 /// Money already spent, captured and posted in one step — there is no
 /// useful draft state for an expense that has already left the bank.
@@ -27,9 +49,18 @@ class ExpensesScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Expenses'),
         actions: [
+          // Scan first, and before the blank form, because that is the
+          // order the work happens in: somebody is holding a receipt and
+          // has not yet decided which account it belongs to.
+          if (canPost)
+            TextButton.icon(
+              onPressed: () => _scanExpense(context, ref),
+              icon: const Icon(Icons.document_scanner_outlined, size: 18),
+              label: const Text('Scan expense'),
+            ),
           if (canPost)
             Padding(
-              padding: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: FilledButton.icon(
                 onPressed: () => showDialog<void>(
                   context: context,
@@ -142,7 +173,11 @@ class ExpensesScreen extends ConsumerWidget {
 }
 
 class _ExpenseDialog extends ConsumerStatefulWidget {
-  const _ExpenseDialog();
+  const _ExpenseDialog({this.scanned});
+
+  /// A receipt already captured, filed and read. The form opens filled
+  /// in from it; abandoning the form still cleans the file up.
+  final StagedReceipt? scanned;
 
   @override
   ConsumerState<_ExpenseDialog> createState() => _ExpenseDialogState();
@@ -167,6 +202,15 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
   /// abandoned — an orphan under a record that was never created is
   /// storage nobody will ever find again.
   StagedReceipt? _receipt;
+
+  @override
+  void initState() {
+    super.initState();
+    final scanned = widget.scanned;
+    if (scanned == null) return;
+    _receipt = scanned;
+    if (scanned.read != null) _apply(scanned.read!);
+  }
 
   @override
   void dispose() {

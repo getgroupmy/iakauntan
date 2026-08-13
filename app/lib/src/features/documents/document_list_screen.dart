@@ -7,11 +7,71 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../../data/ocr_repository.dart';
 import 'doc_types.dart';
+import '../shared/scan_intake.dart';
 import 'settlement_dialog.dart';
 
 /// One list screen for every document type in both cycles. The doc type
 /// in the route decides which table, contact kind and actions apply.
+/// Scan a supplier's paperwork into a draft, then finish it in the
+/// editor.
+///
+/// The draft is created *first*, empty but for the supplier's number and
+/// date, because the attachment has to hang off something — the storage
+/// policies read the record out of the object name, so a file cannot be
+/// filed against a document that does not exist yet. The reading is
+/// parked and applied once the editor is on screen, which is where the
+/// lines and the supplier get finished.
+///
+/// Deliberately a draft and not a posted document. Nothing here is
+/// certain enough to post: the supplier is not matched by name, the tax
+/// code is not guessed, and both are decisions with a ledger entry
+/// behind them.
+Future<void> _scanInto(
+  BuildContext context,
+  WidgetRef ref, {
+  required String docType,
+  required DocTypeMeta meta,
+}) async {
+  final staged = await showScanIntake(
+    context,
+    ref,
+    table: meta.kind.table,
+    title: 'Scan a ${meta.singular.toLowerCase()}',
+  );
+  if (staged == null || !context.mounted) return;
+
+  final repo = ref.read(repoProvider)!;
+  final read = staged.read;
+
+  try {
+    final id = await repo.saveDocument(
+      kind: meta.kind,
+      docType: docType,
+      header: {
+        'doc_date': Fmt.iso(read?.documentDate ?? DateTime.now()),
+        if (read?.documentNo != null) 'supplier_doc_no': read!.documentNo,
+      },
+      lines: const [],
+    );
+    await repo.refileAttachment(
+      attachmentId: staged.attachmentId,
+      table: meta.kind.table,
+      recordId: id,
+    );
+    if (read != null) ref.read(pendingScanProvider.notifier).park(id, read);
+    if (context.mounted) {
+      context.go('${meta.kind.routePrefix}/$docType/$id');
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Could not start it: $e')));
+    }
+  }
+}
+
 class DocumentListScreen extends ConsumerStatefulWidget {
   const DocumentListScreen({super.key, required this.docType});
 
@@ -68,6 +128,16 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                 icon: const Icon(Icons.payments_outlined, size: 18),
                 label: Text(kind.isSales ? 'Receive payment' : 'Pay supplier'),
               ),
+            ),
+          // Only on the purchase side. A sales invoice is raised from
+          // what we are owed, not read off a piece of paper somebody
+          // handed us — there is nothing to scan.
+          if (canWrite && !kind.isSales)
+            TextButton.icon(
+              onPressed: () =>
+                  _scanInto(context, ref, docType: widget.docType, meta: meta),
+              icon: const Icon(Icons.document_scanner_outlined, size: 18),
+              label: Text('Scan ${meta.singular.toLowerCase()}'),
             ),
           if (canWrite)
             Padding(

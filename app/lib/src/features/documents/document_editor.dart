@@ -15,6 +15,7 @@ import '../../data/models.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/repository.dart';
 import '../shared/attachments_card.dart';
+import '../shared/scan_intake.dart';
 import 'doc_types.dart';
 import 'email_dialog.dart';
 import 'fx.dart';
@@ -174,6 +175,16 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
             }
           }
         }
+      }
+      // A reading parked by "Scan a bill" on the list screen, taken
+      // once. The draft it created is empty but for the supplier's
+      // number and date; this is where the lines arrive, and where
+      // somebody chooses the supplier and the tax code that nothing
+      // guessed for them.
+      final id = widget.documentId;
+      if (id != null) {
+        final scanned = ref.read(pendingScanProvider.notifier).take(id);
+        if (scanned != null) _applyScan(scanned);
       }
     } catch (e) {
       if (mounted) {
