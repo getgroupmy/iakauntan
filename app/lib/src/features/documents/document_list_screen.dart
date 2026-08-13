@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
 import 'doc_types.dart';
 import '../shared/scan_intake.dart';
@@ -14,20 +15,19 @@ import 'settlement_dialog.dart';
 
 /// One list screen for every document type in both cycles. The doc type
 /// in the route decides which table, contact kind and actions apply.
-/// Scan a supplier's paperwork into a draft, then finish it in the
-/// editor.
+/// Scan a supplier's paperwork, then start the bill it describes.
 ///
-/// The draft is created *first*, empty but for the supplier's number and
-/// date, because the attachment has to hang off something — the storage
-/// policies read the record out of the object name, so a file cannot be
-/// filed against a document that does not exist yet. The reading is
-/// parked and applied once the editor is on screen, which is where the
-/// lines and the supplier get finished.
+/// The supplier is asked for *before* anything is created, and that is
+/// the database's rule rather than a preference: `purchase_documents`
+/// has `contact_id not null`, because a payable that is owed to nobody
+/// is not a payable. The first version of this created the draft first
+/// and left the supplier to the editor, which the constraint refused —
+/// correctly.
 ///
-/// Deliberately a draft and not a posted document. Nothing here is
-/// certain enough to post: the supplier is not matched by name, the tax
-/// code is not guessed, and both are decisions with a ledger entry
-/// behind them.
+/// It is asked rather than matched. The reading's supplier name seeds
+/// the search, so the right contact is usually one tap away, but two
+/// contacts called "Syarikat Maju" are ordinary and picking the wrong
+/// one surfaces months later in an aged payables listing.
 Future<void> _scanInto(
   BuildContext context,
   WidgetRef ref, {
@@ -45,11 +45,21 @@ Future<void> _scanInto(
   final repo = ref.read(repoProvider)!;
   final read = staged.read;
 
+  final contactId = await _pickSupplier(context, ref, read?.supplierName);
+  if (contactId == null) {
+    // Abandoned at the supplier. The capture was filed against a
+    // placeholder that will never become a document, so it goes with it
+    // rather than sitting in the bucket forever.
+    await repo.deleteAttachmentById(staged.attachmentId);
+    return;
+  }
+
   try {
     final id = await repo.saveDocument(
       kind: meta.kind,
       docType: docType,
       header: {
+        'contact_id': contactId,
         'doc_date': Fmt.iso(read?.documentDate ?? DateTime.now()),
         if (read?.documentNo != null) 'supplier_doc_no': read!.documentNo,
       },
@@ -69,6 +79,109 @@ Future<void> _scanInto(
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Could not start it: $e')));
     }
+  }
+}
+
+/// Which supplier this is from — the one thing no scan can decide.
+Future<String?> _pickSupplier(
+    BuildContext context, WidgetRef ref, String? readName) {
+  return showDialog<String>(
+    context: context,
+    builder: (_) => _SupplierPicker(readName: readName),
+  );
+}
+
+class _SupplierPicker extends ConsumerStatefulWidget {
+  const _SupplierPicker({this.readName});
+
+  /// What the document said, used to seed the search and shown as a
+  /// reminder — never selected automatically.
+  final String? readName;
+
+  @override
+  ConsumerState<_SupplierPicker> createState() => _SupplierPickerState();
+}
+
+class _SupplierPickerState extends ConsumerState<_SupplierPicker> {
+  late final TextEditingController _search =
+      TextEditingController(text: widget.readName ?? '');
+  late String _query = widget.readName ?? '';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final contacts = ref.watch(
+        contactsProvider((type: 'supplier', search: _query)));
+
+    return AlertDialog(
+      title: const Text('Which supplier?'),
+      content: SizedBox(
+        width: 460,
+        height: 420,
+        child: Column(children: [
+          if (widget.readName != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Space.sm),
+              child: Row(children: [
+                const Icon(Icons.description_outlined, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('The document says “${widget.readName}”',
+                      style: const TextStyle(fontSize: 13)),
+                ),
+              ]),
+            ),
+          TextField(
+            controller: _search,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Search suppliers',
+              isDense: true,
+              prefixIcon: Icon(Icons.search, size: 18),
+            ),
+            onChanged: (v) => setState(() => _query = v),
+          ),
+          const SizedBox(height: Space.sm),
+          Expanded(
+            child: AsyncView(
+              value: contacts,
+              onRetry: () => ref.invalidate(contactsProvider(
+                  (type: 'supplier', search: _query))),
+              loading: const LinearProgressIndicator(),
+              builder: (list) => list.isEmpty
+                  ? const EmptyState(
+                      icon: Icons.person_search_outlined,
+                      title: 'No supplier matches',
+                      message: 'Clear the search to see them all, or add '
+                          'the supplier under Contacts first.',
+                    )
+                  : ListView.separated(
+                      itemCount: list.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, i) => ListTile(
+                        dense: true,
+                        title: Text(list[i].name),
+                        subtitle: Text(list[i].code,
+                            style: const TextStyle(fontSize: 12)),
+                        onTap: () => Navigator.pop(context, list[i].id),
+                      ),
+                    ),
+            ),
+          ),
+        ]),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
   }
 }
 

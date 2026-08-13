@@ -266,7 +266,10 @@ class _FileRowState extends ConsumerState<_FileRow> {
     try {
       final read = await readDocument(
         ref,
-        ocr: ref.read(ocrStatusProvider).valueOrNull ?? OcrSettings.off,
+        // Awaited rather than read off the cache, for the same reason
+        // the capture path is: a cold provider reads as "not on the
+        // device" and sends the scan somewhere it was never meant to go.
+        ocr: await ref.read(ocrStatusProvider.future),
         attachmentId: file.id,
         storagePath: file.storagePath,
         mimeType: file.mimeType,

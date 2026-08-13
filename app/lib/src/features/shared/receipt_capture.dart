@@ -190,9 +190,14 @@ Future<StagedReceipt?> captureAndRead(
   }
 
   try {
+    // Awaited, not read off the cache. On the expenses screen something
+    // watches this provider so it is warm; on the document list nothing
+    // does, and `valueOrNull` came back null there — which read as "not
+    // on the device" and sent a browser scan to the server, where the
+    // server correctly refused it.
     final read = await readDocument(
       ref,
-      ocr: ref.read(ocrStatusProvider).valueOrNull ?? OcrSettings.off,
+      ocr: await ref.read(ocrStatusProvider.future),
       attachmentId: attachmentId,
       mimeType: file.mimeType,
       // Already on this device, so the on-device reader reads what is
