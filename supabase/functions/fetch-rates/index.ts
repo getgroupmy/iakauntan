@@ -109,16 +109,25 @@ Deno.serve(async (req) => {
   // The app cannot call this and should not want to: rates belong to
   // every organization at once, so fetching them is not an action any
   // one user takes. See `_shared/scheduler.ts` for what counts as proof.
-  if (
-    !isSchedulerCall(req, {
-      secret: Deno.env.get("SCHEDULER_SECRET"),
-      serviceKey,
-    })
-  ) {
+  const schedulerSecret = Deno.env.get("SCHEDULER_SECRET");
+  if (!isSchedulerCall(req, { secret: schedulerSecret, serviceKey })) {
+    // Which of the two ways this failed, because they have completely
+    // different fixes and the caller cannot see either side. "403" alone
+    // sends somebody comparing a secret that was never set.
+    //
+    // It says whether a secret is configured, never anything about its
+    // value. That reveals only whether this door is locked to somebody
+    // who still cannot open it — and behind it is a public exchange
+    // rate feed.
+    const configured = (schedulerSecret ?? "").trim() !== "";
     return fail(
-      "This function is called by the scheduler, not from the app. " +
-        "Present X-Scheduler-Secret, or the service role key as the " +
-        "bearer token.",
+      configured
+        ? "The X-Scheduler-Secret presented does not match the " +
+          "SCHEDULER_SECRET set on this function."
+        : "No SCHEDULER_SECRET is set on this function, so the service " +
+          "role key as the bearer token is the only thing it will " +
+          "accept. Set it under Edge Functions → Secrets in the " +
+          "Supabase dashboard.",
       403,
     );
   }
