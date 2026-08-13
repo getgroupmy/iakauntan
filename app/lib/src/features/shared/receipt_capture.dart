@@ -194,11 +194,13 @@ Future<StagedReceipt?> captureAndRead(
       ref,
       ocr: ref.read(ocrStatusProvider).valueOrNull ?? OcrSettings.off,
       attachmentId: attachmentId,
-      storagePath: '',
       mimeType: file.mimeType,
-      // Already on this device, so the on-device reader reads it where
-      // it is rather than fetching back the copy just uploaded.
+      // Already on this device, so the on-device reader reads what is
+      // here rather than fetching back the copy just uploaded. A phone
+      // capture has a path; a browser capture has only bytes, and
+      // passing both means neither platform falls back to storage.
       localPath: file.path,
+      localBytes: file.bytes,
     );
     ref.invalidate(ocrStatusProvider);
     return StagedReceipt(

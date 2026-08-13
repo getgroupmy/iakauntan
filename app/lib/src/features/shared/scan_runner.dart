@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
@@ -9,13 +11,12 @@ import 'receipt_text.dart';
 /// Reads one filed document, whichever reader the organization chose.
 ///
 /// The two paths behind this are not variations on each other. The
-/// server-side readers happen in an edge function: the charge is taken
-/// before the provider is called and returned if it fails, and the app
-/// only ever sees the answer. ML Kit happens here, on the phone, for
-/// nothing — ML Kit on a phone, Tesseract in a browser — so the file
-/// never leaves the device, and the log is written
-/// afterwards rather than around it, because there is no money to
-/// protect and nothing to refund.
+/// paid readers happen in an edge function: the charge is taken before
+/// the provider is called and returned if it fails, and the app only
+/// ever sees the answer. The free one happens here — ML Kit on a phone,
+/// Tesseract in a browser — so the file never leaves the machine, and
+/// the log is written afterwards rather than around it, because there
+/// is no money to protect and nothing to refund.
 ///
 /// Both callers go through this, so neither has to know which reader is
 /// in force and the on-device path cannot quietly stop logging.
@@ -23,13 +24,22 @@ Future<OcrExtraction> readDocument(
   WidgetRef ref, {
   required OcrSettings ocr,
   required String attachmentId,
-  required String storagePath,
   String? mimeType,
 
-  /// The file on this device, when there is one. A receipt just
-  /// photographed has a path already, and fetching a copy of it back
+  /// Where the file lives in the bucket. Only needed when neither
+  /// [localPath] nor [localBytes] is given — reading a document filed
+  /// some time ago rather than one just captured.
+  String? storagePath,
+
+  /// The file on this device, when it is a file. A receipt just
+  /// photographed on a phone has a path, and fetching a copy of it back
   /// out of storage to read it would be silly.
   String? localPath,
+
+  /// The file in memory, which is what a capture in a *browser* has —
+  /// there is no path there, only bytes. This being absent is why the
+  /// first web scan went looking in storage with an empty key.
+  Uint8List? localBytes,
 }) async {
   final repo = ref.read(repoProvider)!;
   if (!ocr.onDevice) return repo.scanAttachment(attachmentId);
@@ -52,10 +62,22 @@ Future<OcrExtraction> readDocument(
     );
   }
 
+  // The bytes, from wherever they already are. Going back to the bucket
+  // for a file that is in memory is a round trip for nothing, and doing
+  // it with no key is a 400 that reads as though the reader broke.
+  if (localPath == null &&
+      localBytes == null &&
+      (storagePath == null || storagePath.isEmpty)) {
+    throw OcrException(
+      'There is nothing to read: no file was given and none is on record.',
+    );
+  }
+
   try {
     final text = localPath != null
         ? await readTextFromFile(localPath)
-        : await readTextFromBytes(await repo.attachmentBytes(storagePath));
+        : await readTextFromBytes(
+            localBytes ?? await repo.attachmentBytes(storagePath!));
 
     final read = parseReceiptText(text);
     // Logged whether or not much came back. "Why is this figure blank"
