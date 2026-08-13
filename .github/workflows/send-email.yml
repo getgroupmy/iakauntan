@@ -149,14 +149,19 @@ jobs:
             if [ "$sched" != "True" ]; then
               echo "::warning::This send-email deployment does not report whether the caller is the scheduler, so the credential is unverified. It is confirmed on the next deploy."
             fi
-            echo "::warning::Mail is not configured. Set RESEND_API_KEY and MAIL_FROM on the function."
+            # Name the one that is missing, not both. The function knows
+            # which, and "set A and B" when B is already set costs
+            # somebody a round of checking the half that was fine — as
+            # it did on the first run that had one of the two.
+            miss="$(python3 -c "import json;print(' and '.join((json.load(open('$out')).get('details') or {}).get('missing') or ['RESEND_API_KEY','MAIL_FROM']))")"
+            echo "::warning::Mail is not configured. Set $miss on the function."
             {
               echo "### Mail is not configured"
               echo
               echo "The scheduler credential is good — nothing can be sent"
-              echo "because \`RESEND_API_KEY\` and \`MAIL_FROM\` are not set"
-              echo "on the \`send-email\` function. Messages queue meanwhile"
-              echo "and go out as soon as it is configured; nothing is lost."
+              echo "because \`$miss\` is not set on the \`send-email\`"
+              echo "function. Messages queue meanwhile and go out as soon"
+              echo "as it is configured; nothing is lost."
               echo "See \`docs/email-setup.md\`."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
