@@ -2973,6 +2973,62 @@ extension RepoHrSetup on Repo {
     return Map<String, dynamic>.from(row as Map? ?? {'id': id});
   }
 
+  /// Money received from customers, or paid to suppliers.
+  ///
+  /// These have been recorded and posted since the settlement dialog was
+  /// built and have never been listed anywhere — a receipt existed in the
+  /// database that no screen could show.
+  Future<List<Map<String, dynamic>>> settlements({
+    required bool isSales,
+    String? contactId,
+    int limit = 200,
+  }) async {
+    final table = isSales ? 'receipts' : 'purchase_payments';
+    final dateField = isSales ? 'receipt_date' : 'payment_date';
+    var q = client
+        .from(table)
+        .select('*, contacts(name, code), bank_accounts(name)')
+        .eq('org_id', orgId)
+        .filter('deleted_at', 'is', null);
+    if (contactId != null) q = q.eq('contact_id', contactId);
+    return Repo._rows(
+        await q.order(dateField, ascending: false).limit(limit));
+  }
+
+  /// One settlement with what it was set against.
+  ///
+  /// The document embed names its constraint because
+  /// `payment_allocations` reaches `sales_documents` twice — once for the
+  /// invoice being paid and once for a credit note being applied. Left
+  /// ambiguous, PostgREST refuses the whole query.
+  Future<Map<String, dynamic>> settlement(String id,
+      {required bool isSales}) async {
+    final table = isSales ? 'receipts' : 'purchase_payments';
+    final head = await client
+        .from(table)
+        .select('*, contacts(name, code, email, address_line1, address_line2, '
+            'city, postcode, state_code), bank_accounts(name)')
+        .eq('id', id)
+        .single();
+
+    final allocations = Repo._rows(await client
+        .from('payment_allocations')
+        .select(isSales
+            ? 'amount, discount_amount, '
+                'sales_documents!payment_allocations_invoice_id_fkey'
+                '(doc_no, doc_type, doc_date, total_amount)'
+            : 'amount, discount_amount, '
+                'purchase_documents!payment_allocations_bill_fk'
+                '(doc_no, doc_type, doc_date, total_amount)')
+        .eq(isSales ? 'receipt_id' : 'payment_id', id)
+        .order('created_at'));
+
+    return {
+      ...Map<String, dynamic>.from(head as Map),
+      'allocations': allocations,
+    };
+  }
+
   /// Everything that ever left the building for this document: messages,
   /// share links and PDF downloads, newest first.
   Future<List<Map<String, dynamic>>> documentActivity(String documentId) async =>

@@ -847,6 +847,19 @@ final documentShareLinksProvider = FutureProvider.autoDispose
   return requireRepo(ref).documentShareLinks(documentId);
 });
 
+/// Money in (`true`) or money out (`false`).
+final settlementsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, bool>((ref, isSales) {
+  return requireRepo(ref).settlements(isSales: isSales);
+});
+
+/// One settlement and its allocations. Keyed by id and direction,
+/// because a receipt and a supplier payment are different tables.
+final settlementProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, ({String id, bool isSales})>((ref, key) {
+  return requireRepo(ref).settlement(key.id, isSales: key.isSales);
+});
+
 /// Messages, share links and downloads for one document, newest first.
 final documentActivityProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, documentId) {
