@@ -15,6 +15,18 @@ bool get onDeviceReaderAvailable =>
     defaultTargetPlatform == TargetPlatform.android ||
     defaultTargetPlatform == TargetPlatform.iOS;
 
+/// ML Kit takes an image and nothing else.
+///
+/// A browser has `pdf.js` and can do both halves — read the text out of
+/// a typed PDF, render a photographed one — but that is 1.8MB of
+/// JavaScript with no equivalent here worth carrying. On a phone the
+/// camera is in your hand anyway, which is what the refusal says.
+bool get onDeviceReadsPdf => false;
+
+Future<String> readTextFromPdfBytes(Uint8List bytes) => throw UnsupportedError(
+      'A PDF cannot be read on this device.',
+    );
+
 /// The printing on one image, as ML Kit reads it.
 ///
 /// Latin script: Malaysian receipts are printed in Malay and English,

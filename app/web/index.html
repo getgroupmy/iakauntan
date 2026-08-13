@@ -100,6 +100,15 @@
        several megabytes and are fetched the first time somebody actually
        scans — and cached by the browser after that. -->
   <script src="tesseract/tesseract.min.js" defer></script>
+  <!-- The same bargain for PDFs, which is how a supplier bill usually
+       arrives. `pdf.js` reads the text straight out of a PDF that was
+       typed rather than photographed, which beats reading a picture of
+       it; where the page really is a photograph, it renders it and the
+       reader above takes over.
+
+       This shim is 200 bytes. The 1.8MB behind it is fetched the first
+       time somebody scans a PDF and not before. -->
+  <script src="pdfjs/loader.js" defer></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

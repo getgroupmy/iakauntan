@@ -239,6 +239,177 @@ Future<String> _asReadableJpeg(Uint8List bytes) async {
   }
 }
 
+/// Whether a PDF can be read here without sending it anywhere.
+///
+/// True in a browser and false on a phone: ML Kit takes an image and
+/// nothing else, while `pdf.js` gives a browser both halves of the
+/// problem — the text of a PDF that was typed, and a rendering of one
+/// that was photographed.
+bool get onDeviceReadsPdf => true;
+
+@JS('loadPdfjs')
+external JSPromise<_PdfLib> _loadPdfjs();
+
+extension type _PdfLib._(JSObject _) implements JSObject {
+  external _LoadingTask getDocument(JSObject src);
+}
+
+extension type _LoadingTask._(JSObject _) implements JSObject {
+  external JSPromise<_PdfDoc> get promise;
+}
+
+extension type _PdfDoc._(JSObject _) implements JSObject {
+  external int get numPages;
+  external JSPromise<_PdfPage> getPage(int number);
+  external JSPromise<JSAny?> destroy();
+}
+
+extension type _PdfPage._(JSObject _) implements JSObject {
+  external JSPromise<_TextContent> getTextContent();
+  external _Viewport getViewport(JSObject options);
+  external _RenderTask render(JSObject options);
+}
+
+extension type _RenderTask._(JSObject _) implements JSObject {
+  external JSPromise<JSAny?> get promise;
+}
+
+extension type _Viewport._(JSObject _) implements JSObject {
+  external double get width;
+  external double get height;
+}
+
+extension type _TextContent._(JSObject _) implements JSObject {
+  external JSArray<_TextItem> get items;
+}
+
+extension type _TextItem._(JSObject _) implements JSObject {
+  external String? get str;
+  external bool? get hasEOL;
+}
+
+/// How many pages of a PDF are worth reading.
+///
+/// A bill is one page and occasionally two; a contract is forty, and
+/// rendering forty pages to read a total off the first would be a way
+/// of making somebody wait for nothing.
+const _pagesRead = 3;
+
+/// Below this much text, the PDF is a photograph in a wrapper.
+///
+/// A scanned page still yields a few stray characters — a fax header, a
+/// page number stamped by whatever produced it — so "no text at all" is
+/// the wrong test. A real bill has hundreds of characters on it.
+const _typedIfOver = 60;
+
+/// The printing in a PDF, read whichever way that PDF calls for.
+///
+/// Two quite different documents share the extension. One was typed and
+/// carries its text: reading that text is exact, instant, and better
+/// than any OCR of a picture of it. The other is a photograph in a PDF
+/// wrapper and carries no text at all, so the page is rendered and
+/// handed to Tesseract like any other picture.
+///
+/// Which one this is decides itself, by how much text came out.
+Future<String> readTextFromPdfBytes(Uint8List bytes) async {
+  final _PdfLib lib;
+  try {
+    lib = await _loadPdfjs().toDart;
+  } catch (e) {
+    throw StateError(
+      'The PDF reader did not load ($e). Reload the page and try again.',
+    );
+  }
+
+  // `getDocument` takes the bytes, so nothing is fetched and nothing
+  // leaves the tab.
+  final src = JSObject()..setProperty('data'.toJS, bytes.toJS);
+  final doc = await lib.getDocument(src).promise.toDart;
+
+  try {
+    final pages = doc.numPages < _pagesRead ? doc.numPages : _pagesRead;
+    if (pages < 1) throw StateError('That PDF has no pages in it.');
+
+    // The typed reading first, because it costs one pass and no
+    // rendering, and where it works it is not an approximation.
+    final typed = StringBuffer();
+    for (var n = 1; n <= pages; n++) {
+      final page = await doc.getPage(n).toDart;
+      final content = await page.getTextContent().toDart;
+      for (final item in content.items.toDart) {
+        final text = item.str;
+        if (text == null) continue;
+        typed.write(text);
+        // `hasEOL` is what keeps this readable by the receipt parser,
+        // which works a line at a time. Without it a whole bill arrives
+        // as one line and every label runs into its own figure.
+        typed.write(item.hasEOL == true ? '\n' : ' ');
+      }
+    }
+
+    final asTyped = typed.toString();
+    if (asTyped.replaceAll(RegExp(r'\s'), '').length >= _typedIfOver) {
+      return asTyped;
+    }
+
+    // Nothing worth having, so it is a photograph. Render and read.
+    final engine = _tesseractOrNull;
+    if (engine == null) {
+      throw StateError(
+        'That PDF is a scan rather than a typed document, and the reader '
+        'that handles pictures did not load. Reload the page and try again.',
+      );
+    }
+    await _mustReachEngine();
+
+    final read = StringBuffer();
+    for (var n = 1; n <= pages; n++) {
+      final page = await doc.getPage(n).toDart;
+      read.write(await _readRenderedPage(engine, page));
+      read.write('\n');
+    }
+    return read.toString();
+  } finally {
+    // The worker holds the document open otherwise, and a second scan
+    // in the same tab then competes with the first for memory.
+    try {
+      await doc.destroy().toDart;
+    } catch (_) {}
+  }
+}
+
+/// One page of a PDF, drawn and then read as a picture.
+Future<String> _readRenderedPage(JSObject engine, _PdfPage page) async {
+  // A PDF page is measured in points, so a bill is 595 wide at scale 1
+  // — far too coarse for OCR. Scaled to roughly the same 2400px the
+  // camera path settles on, which is around 200dpi on A4.
+  final unit = page.getViewport(JSObject()..setProperty('scale'.toJS, 1.0.toJS));
+  final longest = unit.width > unit.height ? unit.width : unit.height;
+  final scale = longest > 0 ? (_longestEdge / longest).clamp(1.0, 4.0) : 2.0;
+  final viewport =
+      page.getViewport(JSObject()..setProperty('scale'.toJS, scale.toJS));
+
+  final canvas = _createElement('canvas') as _Canvas
+    ..width = viewport.width.round()
+    ..height = viewport.height.round();
+  final context = canvas.getContext('2d');
+  if (context == null) {
+    throw StateError('This browser would not give us a drawing surface.');
+  }
+
+  await page
+      .render(JSObject()
+        ..setProperty('canvasContext'.toJS, context)
+        ..setProperty('viewport'.toJS, viewport))
+      .promise
+      .toDart;
+
+  final result = await (engine as _Tesseract)
+      .recognize(canvas.toDataURL('image/jpeg', 0.92).toJS, 'eng', _options())
+      .toDart;
+  return result.data.text;
+}
+
 extension type _Tesseract._(JSObject _) implements JSObject {
   external JSPromise<_RecognizeResult> recognize(
       JSAny image, String langs, JSObject options);
@@ -266,32 +437,30 @@ Future<String> readTextFromFile(String path) => throw UnsupportedError(
       'In a browser a document is read from its bytes, not from a path.',
     );
 
-Future<String> readTextFromBytes(Uint8List bytes) async {
-  final engine = _tesseractOrNull;
-  if (engine == null) {
-    throw StateError(
-      'The reader did not load. Reload the page and try again.',
-    );
-  }
-
-  // Before handing over to an engine that will only say "Load failed".
-  final worker = _asset('tesseract/worker.min.js');
+/// Checks the three files the engine will go and fetch for itself.
+///
+/// Before handing over to something that will only ever say "Load
+/// failed", whichever of the three is missing.
+Future<void> _mustReachEngine() async {
   final core = _corePath;
-  await _mustReach('reader', worker);
+  await _mustReach('reader', _asset('tesseract/worker.min.js'));
   await _mustReach('recognition engine', core);
   // Not named anywhere we control: the engine's loader asks for the
   // `.wasm` beside its own `.js`, which is why the two sit in one
   // directory rather than in a tidier arrangement that resolved
   // differently inside a worker than it did on the page.
-  await _mustReach('recognition engine',
-      core.replaceFirst(RegExp(r'\.js$'), ''));
+  await _mustReach(
+      'recognition engine', core.replaceFirst(RegExp(r'\.js$'), ''));
   await _mustReach(
       'English language model', _asset('tesseract/lang/eng.traineddata'));
+}
 
-  final options = JSObject()
+/// Where the engine should look for each of its own pieces.
+JSObject _options() {
+  return JSObject()
     // Each of these would otherwise default to a CDN.
-    ..setProperty('workerPath'.toJS, worker.toJS)
-    ..setProperty('corePath'.toJS, core.toJS)
+    ..setProperty('workerPath'.toJS, _asset('tesseract/worker.min.js').toJS)
+    ..setProperty('corePath'.toJS, _corePath.toJS)
     ..setProperty('langPath'.toJS, _asset('tesseract/lang').toJS)
     // Loaded straight from our own origin rather than fetched into a
     // blob and run from that. A blob worker resolves its own imports
@@ -307,13 +476,24 @@ Future<String> readTextFromBytes(Uint8List bytes) async {
     // the header rules in the deploy config, beats a size saving that
     // depends on what a CDN decides to do with a file extension.
     ..setProperty('gzip'.toJS, false.toJS);
+}
+
+Future<String> readTextFromBytes(Uint8List bytes) async {
+  final engine = _tesseractOrNull;
+  if (engine == null) {
+    throw StateError(
+      'The reader did not load. Reload the page and try again.',
+    );
+  }
+  await _mustReachEngine();
 
   // A data URL rather than a blob: `tesseract.js` takes either, and a
   // data URL needs no object URL to revoke afterwards — one less thing
   // to leak on a screen somebody scans a dozen receipts from.
   final image = await _asReadableJpeg(bytes);
 
-  final result =
-      await (engine as _Tesseract).recognize(image.toJS, 'eng', options).toDart;
+  final result = await (engine as _Tesseract)
+      .recognize(image.toJS, 'eng', _options())
+      .toDart;
   return result.data.text;
 }
