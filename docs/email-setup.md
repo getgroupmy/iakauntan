@@ -38,6 +38,15 @@ The workflow also needs `SCHEDULER_SECRET` — one random string, set both
 on the function and as a repository secret. It shares that with the
 exchange rate feed, and [schedulers.md](schedulers.md) covers both.
 
+The 503 reports `scheduler: true|false` alongside the complaint about
+mail, and the workflow fails on `false`. That matters more than it
+sounds: without it, a scheduler whose secret was wrong would be told
+"mail is not configured" on every run, exactly like a scheduler whose
+secret was right, and the credential would stay unproven until the day
+Resend was finally set up and somebody expected mail to start moving.
+Two faults found one at a time, the second only after the thing looked
+finished.
+
 ### Who may drain the outbox
 
 The scheduler drains every organization. Anybody else — the **Send now**

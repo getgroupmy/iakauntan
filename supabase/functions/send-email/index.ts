@@ -67,10 +67,23 @@ Deno.serve(async (req) => {
   if (!apiKey || !from) {
     // Deliberately explicit. The alternative is messages sitting queued
     // with nobody able to say why.
+    //
+    // It names which of the two is missing, and it reports `scheduler`
+    // even though nothing was sent. Without that flag this 503 hides the
+    // credential: the scheduler would be told "mail is not configured"
+    // every run, and whether its secret was even accepted would stay
+    // unknown until the day Resend was set up and somebody expected mail
+    // to start moving. Two problems discovered one at a time, the second
+    // only after it looked finished.
+    const missing = [
+      !apiKey ? "RESEND_API_KEY" : null,
+      !from ? "MAIL_FROM" : null,
+    ].filter(Boolean);
     return fail(
-      "Mail is not configured: set RESEND_API_KEY and MAIL_FROM on this " +
+      `Mail is not configured: set ${missing.join(" and ")} on this ` +
         "function before anything can be sent.",
       503,
+      { scheduler: isScheduler, missing },
     );
   }
 
