@@ -202,6 +202,20 @@ week later and a month later. Empty means never chase.
 
 ## What to check first when nothing arrives
 
+0. **Nothing in the outbox at all — not queued, not failed?** Then
+   nothing ever queued, and the send never happened. `email_document`
+   refuses before it writes a row:
+
+   ```
+   Email is switched off for this organization
+   ```
+
+   That is step 5, and it is a prerequisite for the others rather than a
+   finishing touch: an organization with no `email_settings` row has
+   `is_enabled` null, which `coalesce(s.is_enabled, false)` reads as off.
+   A brand new deployment has no such row for anybody, so the first thing
+   anyone tries to send fails this way.
+
 1. **Outbox → Failed.** `last_error` carries what Resend said, verbatim.
    A 4xx there is a bad address or an unverified From; it is marked
    failed immediately rather than retried five times to the same end.
