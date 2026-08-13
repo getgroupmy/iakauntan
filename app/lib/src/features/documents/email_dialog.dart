@@ -29,6 +29,43 @@ import '../../data/repository.dart';
 /// The history is the interesting one: it merges messages, share links
 /// and PDF downloads, so an opened link sitting under a sent message is
 /// the strongest evidence available that a human read the invoice.
+/// What a send-now actually did, read off the outbox row rather than
+/// inferred from the call returning.
+///
+/// Shared by the document and receipt dialogs because this is the part
+/// worth getting right once: the call succeeding does not mean the
+/// message went. A drain that failed leaves the row queued, and saying
+/// "Sent" over that is a lie the customer discovers before you do.
+///
+/// `finished` is whether the dialog has done its job and should close.
+/// Everything except an outright refusal has — a queued row is still
+/// going out on the schedule. A refusal keeps it open, because the
+/// address that caused it is on screen and usually needs editing.
+({String message, bool finished, String? error}) sendNowOutcome(
+    Map<String, dynamic> row) {
+  final status = row['status'] as String?;
+  return switch (status) {
+    'sent' => (
+        message: 'Sent to ${row['to_email']}',
+        finished: true,
+        error: null,
+      ),
+    'failed' => (
+        message: 'Could not send: '
+            '${row['last_error'] ?? 'the provider refused it'}',
+        finished: false,
+        error: row['last_error'] as String? ??
+            'The provider refused it. Check the address and try again.',
+      ),
+    _ => (
+        message: 'Queued — mail is not sending right now, so it will go '
+            'out on the next scheduled send',
+        finished: true,
+        error: null,
+      ),
+  };
+}
+
 /// [buildPdf] renders the same PDF the download button produces. It is
 /// passed in rather than built here because the renderer needs the
 /// organization, its logo and its letterhead mode, all of which the
@@ -239,23 +276,14 @@ class _EmailDialogState extends ConsumerState<_EmailDialog> {
       var finished = true;
 
       if (now) {
-        final row = await repo.emailDocumentNow(widget.documentId,
-            to: to, attachmentPath: path, attachmentName: name);
-        final status = row['status'] as String?;
-        // The row is the truth, not the fact that the call returned.
-        // A drain that failed leaves it queued, and saying "sent" then
-        // would be a lie the customer discovers before you do.
-        message = switch (status) {
-          'sent' => 'Sent to ${row['to_email']}',
-          'failed' => 'Could not send: ${row['last_error'] ?? 'the provider refused it'}',
-          _ => 'Queued — mail is not sending right now, so it will go '
-              'out on the next scheduled send',
-        };
-        if (status == 'failed') {
-          finished = false;
-          _error = row['last_error'] as String? ??
-              'The provider refused it. Check the address and try again.';
-        }
+        final outcome = sendNowOutcome(await repo.emailDocumentNow(
+            widget.documentId,
+            to: to,
+            attachmentPath: path,
+            attachmentName: name));
+        message = outcome.message;
+        finished = outcome.finished;
+        _error = outcome.error;
       } else {
         await repo.emailDocument(widget.documentId,
             to: to, attachmentPath: path, attachmentName: name);

@@ -2973,6 +2973,69 @@ extension RepoHrSetup on Repo {
     return Map<String, dynamic>.from(row as Map? ?? {'id': id});
   }
 
+  /// Queues the customer's receipt. Attaches rather than links: see
+  /// migration 0110 for why a receipt is the one message here that
+  /// should not carry a share token.
+  Future<String> emailReceipt(String receiptId,
+      {String? to,
+      String dispatch = 'queued',
+      String? attachmentPath,
+      String? attachmentName}) async {
+    final data = await client.rpc('email_receipt', params: {
+      'p_receipt_id': receiptId,
+      if (to != null && to.trim().isNotEmpty) 'p_to': to.trim(),
+      'p_dispatch': dispatch,
+      if (attachmentPath != null) 'p_attachment_path': attachmentPath,
+      if (attachmentName != null) 'p_attachment_name': attachmentName,
+    });
+    return data as String;
+  }
+
+  /// Queues the receipt and drains that row immediately, returning the
+  /// row as it stands afterwards. Same contract as [emailDocumentNow].
+  Future<Map<String, dynamic>> emailReceiptNow(String receiptId,
+      {String? to, String? attachmentPath, String? attachmentName}) async {
+    final id = await emailReceipt(receiptId,
+        to: to,
+        dispatch: 'immediate',
+        attachmentPath: attachmentPath,
+        attachmentName: attachmentName);
+    try {
+      await sendQueuedEmail(id: id);
+    } catch (_) {
+      // Swallowed on purpose; the row below reports the truth.
+    }
+    final row = await client
+        .from('email_outbox')
+        .select('id, status, to_email, sent_at, last_error, attempts')
+        .eq('id', id)
+        .maybeSingle();
+    return Map<String, dynamic>.from(row as Map? ?? {'id': id});
+  }
+
+  /// The receipt PDF, where a queued message can attach it. Same path
+  /// convention and the same storage policies as a document's.
+  Future<String> uploadReceiptPdf(
+      String receiptId, String fileName, Uint8List bytes) async {
+    final path = '$orgId/receipts/$receiptId/$fileName';
+    await client.storage.from('attachments').uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(
+              contentType: 'application/pdf', upsert: true),
+        );
+    return path;
+  }
+
+  /// What has been emailed for this receipt, newest first.
+  Future<List<Map<String, dynamic>>> receiptEmails(String receiptId) async =>
+      Repo._rows(await client
+          .from('email_outbox')
+          .select('id, to_email, status, dispatch, queued_at, sent_at, '
+              'last_error, attachment_name')
+          .eq('receipt_id', receiptId)
+          .order('queued_at', ascending: false));
+
   /// Money received from customers, or paid to suppliers.
   ///
   /// These have been recorded and posted since the settlement dialog was

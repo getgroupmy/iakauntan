@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +10,10 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+// The settlement and email methods live in an `extension on Repo`, and
+// an extension is only in scope where its library is imported.
+import '../../data/repository.dart';
+import 'email_dialog.dart' show sendNowOutcome;
 import 'receipt_pdf.dart';
 import 'settlement_dialog.dart';
 
@@ -177,13 +183,23 @@ class _SettlementDetail extends ConsumerWidget {
           onPressed: () => Navigator.pop(context),
           child: const Text('Close'),
         ),
-        FilledButton.icon(
+        OutlinedButton.icon(
           onPressed: data.valueOrNull == null
               ? null
               : () => _download(context, ref, data.value!),
           icon: const Icon(Icons.download_outlined, size: 18),
-          label: Text(isSales ? 'Receipt PDF' : 'Voucher PDF'),
+          label: const Text('PDF'),
         ),
+        // Sales only. A supplier does not want a copy of the voucher we
+        // wrote to record paying them — they issue their own receipt.
+        if (isSales)
+          FilledButton.icon(
+            onPressed: data.valueOrNull == null
+                ? null
+                : () => _email(context, ref, data.value!),
+            icon: const Icon(Icons.mail_outline, size: 18),
+            label: const Text('Email it'),
+          ),
       ],
     );
   }
@@ -252,6 +268,30 @@ class _SettlementDetail extends ConsumerWidget {
       (a[isSales ? 'sales_documents' : 'purchase_documents'] as Map?)
           ?.cast<String, dynamic>();
 
+  Future<void> _email(
+      BuildContext context, WidgetRef ref, Map<String, dynamic> s) async {
+    final to = '${(s['contacts'] as Map?)?['email'] ?? ''}'.trim();
+    await showReceiptEmailDialog(
+      context,
+      receiptId: id,
+      receiptNo: '${s['receipt_no'] ?? ''}',
+      defaultTo: to.isEmpty ? null : to,
+      buildPdf: () async {
+        final org = ref.read(currentOrgProvider).valueOrNull;
+        if (org == null) throw StateError('No organization loaded');
+        return buildReceiptPdf(
+          org: org,
+          settlement: s,
+          isSales: true,
+          logo: await ref.read(orgLogoProvider.future),
+          mode: org.usesPreprintedLetterhead
+              ? LetterheadMode.stationery
+              : LetterheadMode.printed,
+        );
+      },
+    );
+  }
+
   Future<void> _download(
       BuildContext context, WidgetRef ref, Map<String, dynamic> s) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -284,3 +324,192 @@ class _SettlementDetail extends ConsumerWidget {
 
 double _num(dynamic v) =>
     v == null ? 0 : (v is num ? v.toDouble() : double.tryParse('$v') ?? 0);
+
+/// Sending a customer their receipt.
+///
+/// Separate from the document send dialog rather than a mode of it: this
+/// one attaches by default and offers no link, because a receipt is
+/// evidence of a completed fact rather than a document that stays
+/// current, and issuing a share token here would revoke the invoice's
+/// live link as a side effect. The two are the same shape and not the
+/// same thing.
+///
+/// The parts worth getting right are shared: [sendNowOutcome] decides
+/// what actually happened from the outbox row, so "Sent" here means the
+/// same as it does there.
+Future<void> showReceiptEmailDialog(
+  BuildContext context, {
+  required String receiptId,
+  required String receiptNo,
+  String? defaultTo,
+  required Future<Uint8List> Function() buildPdf,
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (_) => _ReceiptEmailDialog(
+      receiptId: receiptId,
+      receiptNo: receiptNo,
+      defaultTo: defaultTo,
+      buildPdf: buildPdf,
+    ),
+  );
+}
+
+class _ReceiptEmailDialog extends ConsumerStatefulWidget {
+  const _ReceiptEmailDialog({
+    required this.receiptId,
+    required this.receiptNo,
+    required this.buildPdf,
+    this.defaultTo,
+  });
+
+  final String receiptId;
+  final String receiptNo;
+  final String? defaultTo;
+  final Future<Uint8List> Function() buildPdf;
+
+  @override
+  ConsumerState<_ReceiptEmailDialog> createState() =>
+      _ReceiptEmailDialogState();
+}
+
+class _ReceiptEmailDialogState extends ConsumerState<_ReceiptEmailDialog> {
+  late final TextEditingController _to =
+      TextEditingController(text: widget.defaultTo ?? '');
+
+  /// On by default, unlike a document. The attachment is the point of a
+  /// receipt — there is no link to send instead.
+  bool _attach = true;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _to.dispose();
+    super.dispose();
+  }
+
+  bool get _addressLooksSane {
+    final v = _to.text.trim();
+    if (v.isEmpty) return true;
+    return RegExp(r'^[^@\s,]+@[^@\s,]+\.[^@\s,]{2,}$').hasMatch(v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Email ${widget.receiptNo}'),
+      content: SizedBox(
+        width: 520,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _to,
+              keyboardType: TextInputType.emailAddress,
+              autofocus: true,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                labelText: 'Send to',
+                hintText: widget.defaultTo ?? 'the address on the customer',
+                helperText: widget.defaultTo == null
+                    ? 'This customer has no address saved — type one'
+                    : 'Leave as-is to use the customer’s address',
+                errorText: _addressLooksSane
+                    ? null
+                    : 'That does not look like an email address',
+              ),
+            ),
+            CheckboxListTile(
+              value: _attach,
+              onChanged:
+                  _busy ? null : (v) => setState(() => _attach = v ?? false),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: const Text('Attach the receipt'),
+              subtitle: Text(
+                _attach
+                    ? 'The customer gets a PDF they can file.'
+                    : 'Just the message — nothing to keep.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: Space.sm),
+              Text(_error!, style: TextStyle(color: context.colors.danger)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        OutlinedButton.icon(
+          onPressed: _busy || !_addressLooksSane ? null : () => _send(now: false),
+          icon: const Icon(Icons.schedule_send_outlined, size: 18),
+          label: const Text('Queue it'),
+        ),
+        FilledButton.icon(
+          onPressed: _busy || !_addressLooksSane ? null : () => _send(now: true),
+          icon: const Icon(Icons.send_outlined, size: 18),
+          label: const Text('Send now'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _send({required bool now}) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final to = _to.text.trim().isEmpty ? null : _to.text.trim();
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    try {
+      String? path;
+      String? name;
+      if (_attach) {
+        final stem = widget.receiptNo
+            .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')
+            .toLowerCase();
+        name = '$stem.pdf';
+        path = await repo.uploadReceiptPdf(
+            widget.receiptId, name, await widget.buildPdf());
+      }
+
+      String message;
+      var finished = true;
+      if (now) {
+        final outcome = sendNowOutcome(await repo.emailReceiptNow(
+            widget.receiptId,
+            to: to,
+            attachmentPath: path,
+            attachmentName: name));
+        message = outcome.message;
+        finished = outcome.finished;
+        _error = outcome.error;
+      } else {
+        await repo.emailReceipt(widget.receiptId,
+            to: to, attachmentPath: path, attachmentName: name);
+        message = 'Queued — it will go out on the next send';
+      }
+
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+      if (finished) Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+}
