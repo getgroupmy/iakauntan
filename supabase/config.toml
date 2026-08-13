@@ -41,6 +41,9 @@ enable_confirmations = false
 #                everybody's.
 #   fetch-rates  requires the service role key outright. It is called by
 #                the scheduler and by nothing else.
+#   ocr          starts every scan under the caller's own token, so the
+#                database decides whether they may scan and whether
+#                their organization has the credit for it.
 [functions.myinvois]
 verify_jwt = true
 
@@ -48,4 +51,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.fetch-rates]
+verify_jwt = true
+
+[functions.ocr]
 verify_jwt = true

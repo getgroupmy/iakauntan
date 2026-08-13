@@ -1,0 +1,324 @@
+-- =====================================================================
+-- iAkauntan :: document scanning, and the money it costs
+--
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/ocr_credit.sql
+--
+-- Not statutory arithmetic, but arithmetic somebody is billed for, which
+-- earns the same treatment: every ringgit that moves is asserted, and a
+-- refund that pays out twice has to break CI rather than a balance.
+--
+-- The properties asserted here are the ones that would be expensive to
+-- get wrong:
+--
+--   * scanning is off until an administrator turns it on, and an absent
+--     settings row is off rather than a default;
+--   * a scan on an empty balance is refused before the provider is
+--     called, not after;
+--   * a scan that fails at the provider returns exactly what it took —
+--     once, however many times the callback arrives;
+--   * a scan that succeeds returns nothing;
+--   * the ledger and the balance say the same number after every move;
+--   * a top-up raises an invoice from the issuer in platform_settings,
+--     with service tax on top of the credit rather than out of it;
+--   * a signed-in user cannot reach the table holding provider keys, and
+--     cannot reach the function that hands money back.
+--
+-- Nothing is written; the file rolls back.
+-- =====================================================================
+
+begin;
+
+\i supabase/tests/_helpers.sql
+
+-- An organization with a receipt already filed against an expense, which
+-- is the only thing there is to scan.
+create or replace function pg_temp.scannable(p_name text)
+returns uuid language plpgsql as $$
+declare v_org uuid := pg_temp.test_org(p_name);
+begin
+  return v_org;
+end;
+$$;
+
+create or replace function pg_temp.receipt(p_org uuid, p_file text)
+returns uuid language plpgsql as $$
+declare
+  v_entity uuid := gen_random_uuid();
+  v_id     uuid;
+begin
+  insert into public.attachments
+    (org_id, entity_table, entity_id, file_name, storage_path, mime_type,
+     file_size)
+  values (p_org, 'expenses', v_entity, p_file,
+          format('%s/expenses/%s/%s', p_org, v_entity, p_file),
+          'image/jpeg', 120000)
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+
+-- The ledger is the history and org_credits is the number. They are
+-- written together or not at all, so every assertion below checks both.
+create or replace function pg_temp.check_balance(
+  p_label text, p_org uuid, p_expected numeric)
+returns void language plpgsql as $$
+begin
+  perform pg_temp.check_eq(p_label,
+    (select balance from public.org_credits where org_id = p_org), p_expected);
+  perform pg_temp.check_eq(p_label || ' — ledger agrees',
+    (select coalesce(sum(amount), 0) from public.credit_ledger where org_id = p_org),
+    p_expected);
+  perform pg_temp.check_eq(p_label || ' — last balance_after agrees',
+    coalesce((select balance_after from public.credit_ledger
+               where org_id = p_org order by created_at desc, ctid desc limit 1),
+             0),
+    p_expected);
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Off, and staying off
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.scannable('Scanner Sdn Bhd');
+  v_file uuid := pg_temp.receipt(v_org, 'tenaga-jun.jpg');
+begin
+  perform pg_temp.check_true('an organization starts with no scanning row',
+    not exists (select 1 from public.org_ocr_settings where org_id = v_org));
+  perform pg_temp.check_true('and reads as off rather than as a default',
+    (public.ocr_status(v_org) ->> 'enabled')::boolean is false);
+
+  begin
+    perform public.ocr_begin(v_org, v_file);
+    raise exception 'FAIL: scanned with scanning switched off';
+  exception when sqlstate '42501' then
+    raise notice 'ok   a scan is refused until somebody turns it on';
+  end;
+
+  -- Switching on with your own key you have not supplied is caught at
+  -- the moment somebody can still do something about it, rather than at
+  -- the first scan.
+  begin
+    perform public.set_ocr_settings(v_org, true, 'claude', 'own');
+    raise exception 'FAIL: enabled own-key scanning with no key';
+  exception when sqlstate '23514' then
+    raise notice 'ok   own-key scanning needs a key first';
+  end;
+
+  -- Google wants a processor, not just a key.
+  begin
+    perform public.set_ocr_credentials(v_org, 'google', '{"type":"service_account"}');
+    raise exception 'FAIL: stored a Document AI key with no processor';
+  exception when sqlstate '23514' then
+    raise notice 'ok   Document AI needs a project, location and processor';
+  end;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The platform key, which is the one that costs money
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.scannable('Kredit Sdn Bhd');
+  v_user  uuid := pg_temp.test_user();
+  v_file  uuid := pg_temp.receipt(v_org, 'petrol-01.jpg');
+  v_file2 uuid := pg_temp.receipt(v_org, 'petrol-02.jpg');
+  v_scan  uuid;
+  v_top   jsonb;
+begin
+  perform public.set_ocr_settings(v_org, true, 'claude', 'platform');
+  perform pg_temp.check_eq('the platform price is what the console says',
+    (public.ocr_status(v_org) -> 'price')::numeric, 0.30);
+
+  -- Nothing bought yet.
+  begin
+    perform public.ocr_begin(v_org, v_file);
+    raise exception 'FAIL: scanned on an empty balance';
+  exception when sqlstate '23514' then
+    raise notice 'ok   a scan on an empty balance is refused';
+  end;
+  perform pg_temp.check_eq('and nothing was recorded as pending',
+    (select count(*) from public.ocr_scans where org_id = v_org), 0);
+
+  -- Selling the credit. Only the platform may.
+  begin
+    perform public.platform_topup_credit(v_org, 10);
+    raise exception 'FAIL: a tenant topped up its own balance';
+  exception when sqlstate '42501' then
+    raise notice 'ok   a tenant cannot top itself up';
+  end;
+
+  insert into public.platform_admins (user_id) values (v_user)
+  on conflict do nothing;
+
+  v_top := public.platform_topup_credit(v_org, 10, 'First purchase');
+  perform pg_temp.check_eq('a top-up grants the ringgit it sold',
+    (v_top -> 'subtotal')::numeric, 10.00);
+  perform pg_temp.check_balance('and the balance carries it', v_org, 10.00);
+
+  -- One scan, one charge.
+  v_scan := (public.ocr_begin(v_org, v_file) ->> 'scan_id')::uuid;
+  perform pg_temp.check_balance('a scan takes the price', v_org, 9.70);
+  perform pg_temp.check_eq('and records what it took',
+    (select amount_charged from public.ocr_scans where id = v_scan), 0.30);
+
+  -- Failed at the provider: exactly what it took comes back.
+  perform public.ocr_finish(v_scan, 'failed', null, 'provider returned 500');
+  perform pg_temp.check_balance('a failed scan gives it back', v_org, 10.00);
+  perform pg_temp.check_true('and says so on the scan',
+    (select refunded and status = 'failed' from public.ocr_scans where id = v_scan));
+
+  -- A retried callback must not pay out twice. This is the assertion the
+  -- whole `status <> 'pending'` guard exists for.
+  perform public.ocr_finish(v_scan, 'failed', null, 'provider returned 500');
+  perform pg_temp.check_balance('and only once, however often it arrives',
+    v_org, 10.00);
+  perform pg_temp.check_eq('one usage line and one refund line, no more',
+    (select count(*) from public.credit_ledger
+      where org_id = v_org and scan_id = v_scan), 2);
+
+  -- A scan that works keeps the money.
+  v_scan := (public.ocr_begin(v_org, v_file2) ->> 'scan_id')::uuid;
+  perform public.ocr_finish(v_scan, 'ok',
+    '{"supplier":"Petron","total":85.40}'::jsonb, null);
+  perform pg_temp.check_balance('a scan that works keeps the charge',
+    v_org, 9.70);
+  perform pg_temp.check_true('and hands back what it read',
+    (select extracted ->> 'supplier' = 'Petron'
+       from public.ocr_scans where id = v_scan));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Their own key, which costs the platform nothing
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.scannable('Kunci Sendiri Sdn Bhd');
+  v_file uuid := pg_temp.receipt(v_org, 'astro-jul.jpg');
+  v_out  jsonb;
+begin
+  perform public.set_ocr_credentials(v_org, 'claude', 'sk-ant-fixture');
+  perform public.set_ocr_settings(v_org, true, 'claude', 'own');
+
+  v_out := public.ocr_begin(v_org, v_file);
+  perform pg_temp.check_eq('an organization on its own key is not charged',
+    (v_out -> 'charged')::numeric, 0);
+  perform pg_temp.check_eq('and no ledger line is written',
+    (select count(*) from public.credit_ledger where org_id = v_org), 0);
+
+  -- The key never comes back through anything the app calls.
+  perform pg_temp.check_true('the status says a key is set',
+    (public.ocr_status(v_org) ->> 'has_own_key')::boolean);
+  perform pg_temp.check_true('and does not say what it is',
+    public.ocr_status(v_org)::text not like '%sk-ant-fixture%');
+
+  -- Removing the key switches scanning off rather than leaving a run of
+  -- failures behind it.
+  perform public.clear_ocr_credentials(v_org, 'claude');
+  perform pg_temp.check_true('removing the key switches scanning off',
+    (public.ocr_status(v_org) ->> 'enabled')::boolean is false);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The invoice Kabeer Holdings issues for the credit
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.scannable('Pembeli Kredit Sdn Bhd');
+  v_user uuid := pg_temp.test_user();
+  v_top  jsonb;
+  inv    public.platform_invoices;
+begin
+  insert into public.platform_admins (user_id) values (v_user)
+  on conflict do nothing;
+
+  v_top := public.platform_topup_credit(v_org, 250, 'Bank transfer 11 Aug');
+  select * into inv from public.platform_invoices
+   where id = (v_top ->> 'invoice_id')::uuid;
+
+  perform pg_temp.check_true('the invoice is numbered by year',
+    inv.invoice_no like 'KH-' || to_char(current_date, 'YYYY') || '-%');
+  perform pg_temp.check_true('and carries both registration numbers',
+    inv.issuer_registration_no = '201901030189'
+    and inv.issuer_old_registration_no = '1339519K');
+  perform pg_temp.check_true('and names the issuer',
+    inv.issuer_name = 'Kabeer Holdings Sdn Bhd');
+  perform pg_temp.check_true('and the customer it was raised on',
+    inv.bill_to_name = 'Pembeli Kredit Sdn Bhd');
+
+  -- Not registered for service tax, so there is none — and the invoice
+  -- says zero rather than leaving it to be inferred.
+  perform pg_temp.check_eq('no service tax while unregistered',
+    inv.tax_amount, 0.00);
+  perform pg_temp.check_eq('so the total is the credit', inv.total_amount, 250.00);
+  perform pg_temp.check_balance('and the credit landed', v_org, 250.00);
+
+  -- The day Kabeer Holdings registers. Tax goes on top of the credit:
+  -- RM 250 bought is RM 250 spendable, whatever the tax on the supply.
+  update public.platform_settings
+     set value = value || '{"sst_registered": true, "sst_rate": 8, "sst_no": "W10-1808-31000123"}'::jsonb
+   where key = 'platform_issuer';
+
+  v_top := public.platform_topup_credit(v_org, 250, 'Second purchase');
+  select * into inv from public.platform_invoices
+   where id = (v_top ->> 'invoice_id')::uuid;
+
+  perform pg_temp.check_eq('service tax at 8 per cent once registered',
+    inv.tax_amount, 20.00);
+  perform pg_temp.check_eq('charged on top of the credit',
+    inv.total_amount, 270.00);
+  perform pg_temp.check_true('with the registration number on the document',
+    inv.issuer_sst_no = 'W10-1808-31000123');
+  perform pg_temp.check_balance('and the credit is still what was bought',
+    v_org, 500.00);
+
+  perform pg_temp.check_true('numbers run in sequence',
+    inv.invoice_no like '%-0002');
+
+  -- Goodwill, and taking it back, both leave a line.
+  perform public.platform_adjust_credit(v_org, 25, 'Outage on 12 Aug');
+  perform pg_temp.check_balance('an adjustment moves the balance',
+    v_org, 525.00);
+  perform pg_temp.check_true('and says why',
+    (select description = 'Outage on 12 Aug' from public.credit_ledger
+      where org_id = v_org order by created_at desc, ctid desc limit 1));
+
+  begin
+    perform public.platform_adjust_credit(v_org, -1000, 'Clawback');
+    raise exception 'FAIL: adjusted a balance below zero';
+  exception when sqlstate '23514' then
+    raise notice 'ok   an adjustment cannot push a balance negative';
+  end;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- What a signed-in user cannot reach
+--
+-- Both of these are grants rather than policies, so they hold even if a
+-- policy is dropped — the lesson 0107 exists for.
+-- ---------------------------------------------------------------------
+do $$
+begin
+  perform pg_temp.check_true('a signed-in user cannot read provider keys',
+    not has_table_privilege('authenticated', 'public.org_ocr_credentials', 'select'));
+  perform pg_temp.check_true('nor write them',
+    not has_table_privilege('authenticated', 'public.org_ocr_credentials', 'insert'));
+
+  -- ocr_finish hands money back. Reachable from a browser it would be a
+  -- refund button with no scan behind it.
+  perform pg_temp.check_true('nor settle a scan, which is what refunds',
+    not has_function_privilege('authenticated',
+      'public.ocr_finish(uuid, text, jsonb, text)', 'execute'));
+  perform pg_temp.check_true('nor move a balance directly',
+    not has_function_privilege('authenticated',
+      'app.move_credit(uuid, text, numeric, text, uuid, uuid, boolean)', 'execute'));
+
+  -- The anonymous role reaches none of it either.
+  perform pg_temp.check_true('and anon reaches none of it',
+    not has_function_privilege('anon', 'public.ocr_begin(uuid, uuid)', 'execute')
+    and not has_function_privilege('anon',
+      'public.platform_topup_credit(uuid, numeric, text)', 'execute'));
+end $$;
+
+rollback;
