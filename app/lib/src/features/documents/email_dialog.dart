@@ -230,6 +230,14 @@ class _EmailDialogState extends ConsumerState<_EmailDialog> {
       }
 
       String message;
+      // Whether the dialog has done its job and should get out of the
+      // way. Everything except an outright provider refusal has: a row
+      // that is queued rather than sent is still going, and the snackbar
+      // says so. A refusal is the one case with something left to do
+      // here — usually the address in the field above — so that stays
+      // open with the reason on screen.
+      var finished = true;
+
       if (now) {
         final row = await repo.emailDocumentNow(widget.documentId,
             to: to, attachmentPath: path, attachmentName: name);
@@ -243,6 +251,11 @@ class _EmailDialogState extends ConsumerState<_EmailDialog> {
           _ => 'Queued — mail is not sending right now, so it will go '
               'out on the next scheduled send',
         };
+        if (status == 'failed') {
+          finished = false;
+          _error = row['last_error'] as String? ??
+              'The provider refused it. Check the address and try again.';
+        }
       } else {
         await repo.emailDocument(widget.documentId,
             to: to, attachmentPath: path, attachmentName: name);
@@ -254,6 +267,10 @@ class _EmailDialogState extends ConsumerState<_EmailDialog> {
       ref.invalidate(documentShareLinksProvider(widget.documentId));
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text(message)));
+      // Popped after the snackbar is handed to the messenger, which
+      // outlives this route — otherwise the message goes with the
+      // dialog and nobody learns what happened.
+      if (finished) Navigator.pop(context, true);
     } catch (e) {
       // Shown in the dialog rather than a snackbar: the address that
       // caused it is on screen and usually needs editing, and a banner
@@ -263,6 +280,61 @@ class _EmailDialogState extends ConsumerState<_EmailDialog> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+}
+
+/// The history on its own, for looking rather than sending.
+///
+/// The same list appears inside the send dialog, where it answers "have
+/// I already sent this?" before you send it again. This one answers the
+/// question a week later, when the customer says they never received it
+/// and nobody wants to open a compose box to find out.
+Future<void> showActivityDialog(
+    BuildContext context, String documentId, String docNo) {
+  return showDialog<void>(
+    context: context,
+    builder: (_) => _ActivityDialog(documentId: documentId, docNo: docNo),
+  );
+}
+
+class _ActivityDialog extends ConsumerWidget {
+  const _ActivityDialog({required this.documentId, required this.docNo});
+
+  final String documentId;
+  final String docNo;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final activity = ref.watch(documentActivityProvider(documentId));
+    return AlertDialog(
+      title: Text('History of $docNo'),
+      content: SizedBox(
+        width: 620,
+        child: SingleChildScrollView(
+          child: AsyncView(
+            value: activity,
+            onRetry: () => ref.invalidate(documentActivityProvider(documentId)),
+            builder: (list) => list.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: Space.md),
+                    child: Text(
+                        'Nothing has been sent, shared or downloaded yet.'),
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [for (final e in list) _ActivityTile(entry: e)],
+                  ),
+          ),
+        ),
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
   }
 }
 

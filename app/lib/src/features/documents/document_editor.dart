@@ -702,9 +702,23 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       // everything and the database still never waits on a provider.
       if (!_isNew && _kind.isSales && _status != 'draft' && _status != 'void')
         IconButton(
-          tooltip: 'Email, or see what was sent',
+          tooltip: 'Email to the customer',
           icon: const Icon(Icons.mail_outline, size: 20),
           onPressed: _saving ? null : _emailDocument,
+        ),
+
+      // Broader than the mail button on purpose. A voided invoice cannot
+      // be emailed and is exactly when somebody needs to know what went
+      // out before it was voided, and a draft can still have been
+      // downloaded as a PDF.
+      if (!_isNew && _kind.isSales)
+        IconButton(
+          tooltip: 'What was sent, shared and downloaded',
+          icon: const Icon(Icons.history, size: 20),
+          onPressed: _saving
+              ? null
+              : () => showActivityDialog(
+                  context, widget.documentId!, _docNo),
         ),
 
       // Withholding comes off a posted bill: the certificate debits the
