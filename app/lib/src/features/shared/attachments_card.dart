@@ -9,6 +9,7 @@ import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
 import 'mlkit_reader.dart';
+import 'doc_scanner.dart';
 import 'receipt_capture.dart';
 import 'scan_runner.dart';
 import 'scan_result_dialog.dart';
@@ -75,6 +76,18 @@ class _AttachmentsCardState extends ConsumerState<AttachmentsCard> {
               subtitle: widget.subtitle,
               action: canWrite
                   ? Row(mainAxisSize: MainAxisSize.min, children: [
+                      // The scanner where there is one, then the plain
+                      // shutter. Both, rather than one replacing the
+                      // other: the scanner insists on finding a document
+                      // in the frame, and somebody photographing a
+                      // damaged label or a whiteboard needs the camera.
+                      if (docScannerLikely)
+                        IconButton(
+                          tooltip: 'Scan a document',
+                          onPressed: _busy ? null : _scanDocument,
+                          icon: const Icon(Icons.document_scanner_outlined,
+                              size: 20),
+                        ),
                       if (cameraLikely)
                         IconButton(
                           tooltip: 'Photograph it',
@@ -132,6 +145,8 @@ class _AttachmentsCardState extends ConsumerState<AttachmentsCard> {
   Future<void> _pick() async => _upload(await pickReceipt());
 
   Future<void> _photograph() async => _upload(await photographReceipt());
+
+  Future<void> _scanDocument() async => _upload(await scanReceipt());
 
   Future<void> _upload(CapturedFile? file) async {
     if (file == null || !mounted) return;

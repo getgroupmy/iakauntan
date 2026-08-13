@@ -9,6 +9,7 @@ import '../../data/attachments_repository.dart';
 import '../../data/models.dart';
 import '../../data/ocr_repository.dart';
 import '../shared/attachments_card.dart';
+import '../shared/doc_scanner.dart';
 import '../shared/receipt_capture.dart';
 import '../shared/scan_result_dialog.dart';
 
@@ -175,10 +176,10 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
     super.dispose();
   }
 
-  Future<void> _capture({required bool camera}) async {
+  Future<void> _capture(CaptureSource source) async {
     setState(() => _reading = true);
     final staged = await captureAndRead(context, ref,
-        camera: camera, table: 'expenses');
+        source: source, table: 'expenses');
     if (!mounted) {
       // The dialog closed under it. Nothing here to attach it to, so it
       // is not left lying in the bucket.
@@ -312,9 +313,17 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                     reading: _reading,
                     receipt: _receipt,
                     price: ocr.keySource == 'platform' ? ocr.price : 0,
-                    onPhotograph:
-                        cameraLikely ? () => _capture(camera: true) : null,
-                    onPick: () => _capture(camera: false),
+                    // Scan first where there is a scanner: it crops and
+                    // straightens before anything reads it, which every
+                    // reader does better on and a filed receipt looks
+                    // better as.
+                    onScan: docScannerLikely
+                        ? () => _capture(CaptureSource.scanner)
+                        : null,
+                    onPhotograph: cameraLikely
+                        ? () => _capture(CaptureSource.camera)
+                        : null,
+                    onPick: () => _capture(CaptureSource.file),
                     onDiscard: _discardReceipt,
                   ),
                   const SizedBox(height: 16),
@@ -483,6 +492,7 @@ class _ReceiptStrip extends StatelessWidget {
     required this.reading,
     required this.receipt,
     required this.price,
+    required this.onScan,
     required this.onPhotograph,
     required this.onPick,
     required this.onDiscard,
@@ -491,6 +501,10 @@ class _ReceiptStrip extends StatelessWidget {
   final bool reading;
   final StagedReceipt? receipt;
   final double price;
+
+  /// Null where there is no scanner, which leaves the plain camera as
+  /// the first thing on the strip rather than a gap.
+  final VoidCallback? onScan;
   final VoidCallback? onPhotograph;
   final VoidCallback onPick;
   final VoidCallback onDiscard;
@@ -519,9 +533,9 @@ class _ReceiptStrip extends StatelessWidget {
                 : held
                     ? 'Receipt attached. It will be filed against this expense.'
                     : price > 0
-                        ? 'Photograph the receipt and it fills this in '
+                        ? 'Scan the receipt and it fills this in '
                             '(${Fmt.money(price)}).'
-                        : 'Photograph the receipt and it fills this in.',
+                        : 'Scan the receipt and it fills this in.',
             style: const TextStyle(fontSize: 13),
           ),
         ),
@@ -537,6 +551,12 @@ class _ReceiptStrip extends StatelessWidget {
             onPressed: onDiscard,
           )
         else ...[
+          if (onScan != null)
+            IconButton(
+              tooltip: 'Scan it',
+              icon: const Icon(Icons.document_scanner_outlined, size: 20),
+              onPressed: onScan,
+            ),
           if (onPhotograph != null)
             IconButton(
               tooltip: 'Photograph it',

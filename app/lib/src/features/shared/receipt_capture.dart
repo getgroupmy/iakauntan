@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/providers.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
+import 'doc_scanner.dart';
 import 'scan_runner.dart';
 
 /// Whether there is plausibly a camera, which is the question
@@ -75,6 +76,46 @@ Future<CapturedFile?> photographReceipt() async {
   );
 }
 
+/// The scanner, which is the better shutter where there is one.
+///
+/// Edge detection, perspective correction and glare removal before
+/// anything is read. It sits upstream of the reader rather than beside
+/// it: a deskewed, cropped receipt reads better whichever reader is in
+/// force, and better still when nobody reads it at all and the file is
+/// just the evidence on a claim.
+///
+/// Falls back to the plain camera where the scanner is not there —
+/// on Android it is delivered through Play services, so a Huawei or a
+/// de-Googled build has the camera and not this. That is a fallback and
+/// not an error, and it happens without saying anything, because
+/// somebody holding a receipt does not need to be told which of two
+/// camera implementations opened.
+Future<CapturedFile?> scanReceipt() async {
+  if (!docScannerLikely) return photographReceipt();
+
+  final ScannedPage? page;
+  try {
+    page = await scanDocumentPage();
+  } catch (e) {
+    if (isScannerUnavailable(e)) return photographReceipt();
+    rethrow;
+  }
+  if (page == null) return null;
+
+  final stamp = DateTime.now();
+  final name = 'scan-${stamp.year}'
+      '${stamp.month.toString().padLeft(2, '0')}'
+      '${stamp.day.toString().padLeft(2, '0')}'
+      '-${stamp.millisecondsSinceEpoch % 100000}.jpg';
+
+  return CapturedFile(
+    name: name,
+    bytes: page.bytes,
+    mimeType: 'image/jpeg',
+    path: page.path,
+  );
+}
+
 Future<CapturedFile?> pickReceipt() async {
   final file = await openFile();
   if (file == null) return null;
@@ -85,6 +126,9 @@ Future<CapturedFile?> pickReceipt() async {
     path: kIsWeb ? null : file.path,
   );
 }
+
+/// Where a capture comes from.
+enum CaptureSource { scanner, camera, file }
 
 /// A receipt filed and read before the record it belongs to exists.
 ///
@@ -117,10 +161,14 @@ class StagedReceipt {
 Future<StagedReceipt?> captureAndRead(
   BuildContext context,
   WidgetRef ref, {
-  required bool camera,
+  required CaptureSource source,
   required String table,
 }) async {
-  final file = camera ? await photographReceipt() : await pickReceipt();
+  final file = switch (source) {
+    CaptureSource.scanner => await scanReceipt(),
+    CaptureSource.camera => await photographReceipt(),
+    CaptureSource.file => await pickReceipt(),
+  };
   if (file == null || !context.mounted) return null;
 
   final repo = ref.read(repoProvider)!;

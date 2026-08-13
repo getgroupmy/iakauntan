@@ -47,6 +47,16 @@ dependencies:
   # all three. Android and iOS only: there is no web implementation and
   # there cannot be one, so every call site is gated on the platform.
   google_mlkit_text_recognition: ^0.16.0
+  # The scanner UI: edge detection, perspective correction and glare
+  # removal before anything is read. ML Kit Document Scanner on Android,
+  # VisionKit on iOS. It sits *upstream* of the reader rather than beside
+  # it — a deskewed, cropped receipt reads better whichever of the five
+  # readers is in force, and better still when nobody reads it at all
+  # and the file is just evidence on a claim.
+  #
+  # Pinned tight. This is a 0.0.x package: useful, actively maintained,
+  # and entitled to break its API on any release.
+  flutter_doc_scanner: 0.0.21
   # ML Kit takes a file path, not bytes, so an attachment pulled out of
   # storage needs somewhere to land first.
   path_provider: ^2.1.5

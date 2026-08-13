@@ -192,8 +192,56 @@ somebody creates one and no row means off. A receipt carries a supplier,
 an amount and sometimes a person's movements; sending that to a third
 party is a decision, not a default to discover afterwards.
 
-Three choices: **Claude**, **Google Document AI**, or nothing. And two
-ways to pay for it:
+**Capture first.** Where the device has a document scanner — ML Kit on
+Android, VisionKit on iOS — the **Scan** button opens it rather than the
+plain shutter: edge detection, perspective correction and glare removal
+before anything reads the page. That sits *upstream* of the reader, so a
+deskewed, cropped receipt reads better whichever reader is in force, and
+better still when nobody reads it at all and the file is simply the
+evidence on a claim. Where there is no scanner — a browser, or an
+Android device without Play services — it falls back to the camera
+silently, because somebody holding a receipt does not need to be told
+which of two camera implementations opened.
+
+On Android the scanner hands back a `content://` URI rather than a file
+path, and neither Dart nor ML Kit can open one: the grant that makes it
+readable is attached to the URI and understood only by Android's
+ContentResolver. `MainActivity.kt` carries the twenty lines that read it
+and hand back bytes, and the bytes are copied somewhere this app owns
+straight away — the grant does not outlive the screen it was issued for.
+
+**The readers are a table, not a list in the code.** `ocr_providers`
+carries a name, the protocol it speaks, an endpoint, a model and a
+price, and a platform operator edits it in the console. Adding one that
+speaks a protocol already known is a row and a secret: no migration, no
+deploy, no app release. Seeded with:
+
+| Reader | Protocol | Notes |
+|---|---|---|
+| Claude | `anthropic` | Reads the document rather than the printing. Best on a long bill. |
+| ChatGPT | `openai` | Set the model in the console before use. |
+| Grok | `openai` | xAI, same chat-completions shape as ChatGPT. |
+| Document AI | `google_docai` | Google's invoice and expense parsers. |
+| On this device | `device` | Free, offline, never leaves the phone. |
+
+The edge function switches on **protocol**, not on brand — which is why
+ChatGPT and Grok are two rows and one handler.
+
+**No model is invented.** ChatGPT and Grok ship with `model` null and
+cannot be switched on until an operator sets one, because guessing an
+identifier produces a migration that looks finished and a 404 at the
+first scan. Platform keys follow the catalog code: `OCR_KEY_OPENAI`,
+`OCR_KEY_GROK`, and so on.
+
+The on-device reader is different in kind. It costs nothing, holds no
+key, and the server never sees it — so `ocr_begin` refuses it by name
+and `ocr_record_local` writes the log instead, which is safe for an
+ordinary user to call precisely because there is no money in it. It
+returns printing rather than fields, so `receipt_text.dart` turns
+"JUMLAH 45.90" into a total, asserted in `receipt_text_test.dart`
+against four real receipt shapes.
+
+And two ways to pay for the readers that charge:
 
 - **Your own key.** Scans run on your account with the provider and cost
   nothing here. The key is stored the way LHDN client secrets are — RLS
@@ -238,6 +286,12 @@ Secrets for the platform key live in **Edge Functions → Secrets**, never
 in the repository or the database: `OCR_ANTHROPIC_API_KEY`, or
 `OCR_GOOGLE_CREDENTIALS` with `OCR_GOOGLE_PROJECT`,
 `OCR_GOOGLE_LOCATION` and `OCR_GOOGLE_PROCESSOR`.
+
+The catalog decides where documents are sent, which makes it an
+exfiltration path if a tenant could write it: readable by anyone signed
+in, written by the platform alone. A reader an organization is using
+cannot be deleted out from under them — retiring one is
+`is_active = false`.
 
 `supabase/tests/ocr_credit.sql` asserts the money: that an empty balance
 refuses before the provider is called, that a failed scan returns exactly

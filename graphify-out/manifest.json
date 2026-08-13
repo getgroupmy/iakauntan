@@ -5,9 +5,9 @@
     "semantic_hash": "9a972a40059625fd9bd912ea6be79015"
   },
   "app/android/app/src/main/kotlin/my/iakauntan/iakauntan/MainActivity.kt": {
-    "mtime": 1786258833.074314,
-    "ast_hash": "975d09950a98951ad119cfa6f53665d1",
-    "semantic_hash": "975d09950a98951ad119cfa6f53665d1"
+    "mtime": 1786624551.6723416,
+    "ast_hash": "55f933359e1db634e9130254e0779a67",
+    "semantic_hash": ""
   },
   "app/android/build.gradle.kts": {
     "mtime": 1786258833.078998,
@@ -180,8 +180,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/expenses/expenses_screen.dart": {
-    "mtime": 1786618417.5409358,
-    "ast_hash": "ced5cedce481592338d95a89de20b04d",
+    "mtime": 1786624692.0074131,
+    "ast_hash": "7f393fe252d892aaae5cfda08bbf8ebc",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/claims_screen.dart": {
@@ -295,8 +295,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
-    "mtime": 1786623899.8362694,
-    "ast_hash": "a1b35b95e7d0cc9e6a6aeecce45563f3",
+    "mtime": 1786624692.0214865,
+    "ast_hash": "c81596054b6da2c0f0b4a79bea5348c0",
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786618874.968963,
-    "ast_hash": "66ba110abf57ac78234b9bea0695fdd6",
+    "mtime": 1786624931.3972256,
+    "ast_hash": "af79a3b018b4f3be3bea9f7cb5f296da",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -830,8 +830,8 @@
     "semantic_hash": ""
   },
   "app/pubspec.yaml": {
-    "mtime": 1786622945.3103218,
-    "ast_hash": "68c08e978bd28ecb5d7ecdd02f6a0e0c",
+    "mtime": 1786624562.957132,
+    "ast_hash": "60bd698b66b7ba849a5144222d024a6d",
     "semantic_hash": ""
   },
   "app/web/index.html": {
@@ -1755,8 +1755,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/receipt_capture.dart": {
-    "mtime": 1786623390.1976507,
-    "ast_hash": "d03b2e9129d371377d9ddc6a8f190c32",
+    "mtime": 1786624652.8412461,
+    "ast_hash": "295fc0e33be25db1883d49d88ed1d549",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/scan_result_dialog.dart": {
@@ -1867,6 +1867,21 @@
   "supabase/migrations/0113_ocr_provider_catalog.sql": {
     "mtime": 1786623668.2522686,
     "ast_hash": "61f32f0519bf0354361715feffa4935c",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/shared/doc_scanner.dart": {
+    "mtime": 1786624604.6799183,
+    "ast_hash": "5bd788f0c0c92350ec1a69ec80d66172",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/shared/doc_scanner_io.dart": {
+    "mtime": 1786624621.3327556,
+    "ast_hash": "d182946cf8eb5c18393651660af172be",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/shared/doc_scanner_stub.dart": {
+    "mtime": 1786624604.6777625,
+    "ast_hash": "45504812191af364813af76c8fb274e2",
     "semantic_hash": ""
   }
 }
