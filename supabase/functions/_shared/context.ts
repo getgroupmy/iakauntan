@@ -5,7 +5,7 @@
  * (for credentials the client must never see).
  */
 import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { MyInvoisEnv } from "./myinvois.ts";
+import { ApiCall, MyInvoisEnv } from "./myinvois.ts";
 
 export interface Ctx {
   userClient: SupabaseClient;
@@ -119,7 +119,13 @@ export async function loadCredentials(ctx: Ctx): Promise<Credentials> {
 /** Persists the API call trail LHDN expects to be retained for 7 years. */
 export async function persistLogs(
   ctx: Ctx,
-  calls: Array<Record<string, unknown>>,
+  // `ApiCall[]`, which is what every caller actually passes.
+  // `Record<string, unknown>[]` looked more permissive and was in fact
+  // narrower: an interface without an index signature does not satisfy
+  // it, so all four MyInvois actions were type errors nothing was
+  // checking. Naming the real type fixes them and documents the
+  // contract.
+  calls: ApiCall[],
   extra: { submissionId?: string; einvoiceId?: string } = {},
 ): Promise<void> {
   if (calls.length === 0) return;

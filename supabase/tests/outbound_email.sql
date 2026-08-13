@@ -187,9 +187,14 @@ begin
     (select ob.attachment_path is not null and ob.attachment_name = 'inv-9.pdf'
        from public.email_outbox ob where ob.id = v_msg));
 
+  -- Queued first, then read. Calling `email_document` inside the WHERE
+  -- clause evaluates it per candidate row rather than once, so the id
+  -- being compared changes as the scan proceeds and nothing matches —
+  -- which is exactly how CI failed this the first time.
+  v_msg := public.email_document(v_doc);
   perform pg_temp.check_true('and link-only is the default',
-    (select ob.attachment_path is null from public.email_outbox ob
-      where ob.id = public.email_document(v_doc)));
+    (select ob.attachment_path is null and ob.attachment_name is null
+       from public.email_outbox ob where ob.id = v_msg));
 
   begin
     perform public.email_document(v_doc, null, 'document_new', 30, 'queued',

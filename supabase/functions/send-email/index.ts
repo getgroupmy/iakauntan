@@ -27,7 +27,7 @@
  *   MAIL_FROM        the verified sender, e.g. "billing@iakauntan.com"
  *   SCHEDULER_SECRET any random string, shared with the workflow
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders, fail, json } from "../_shared/cors.ts";
 import { isSchedulerCall } from "../_shared/scheduler.ts";
 
@@ -67,7 +67,11 @@ interface Attachment {
  * and the row records which it was.
  */
 async function loadAttachment(
-  db: ReturnType<typeof createClient>,
+  // The named type, not `ReturnType<typeof createClient>`: the latter
+  // resolves to a fully-defaulted generic that the client built with a
+  // schema does not satisfy, so it reads as the safer choice and is the
+  // one that does not compile.
+  db: SupabaseClient,
   row: OutboxRow,
 ): Promise<Attachment | null> {
   if (!row.attachment_path) return null;
@@ -173,7 +177,11 @@ Deno.serve(async (req) => {
   const { data, error } = await query;
   if (error) return fail(`Could not read the outbox: ${error.message}`, 500);
 
-  const rows = (data ?? []) as OutboxRow[];
+  // Through `unknown`: the client types a failed select's `data` as
+  // GenericStringError[], which does not overlap with OutboxRow, so the
+  // direct cast is the one TypeScript refuses. `error` is handled above,
+  // so by here `data` is rows.
+  const rows = (data ?? []) as unknown as OutboxRow[];
   let sent = 0;
   let failed = 0;
 
