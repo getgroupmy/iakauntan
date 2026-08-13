@@ -41,6 +41,15 @@ dependencies:
   # camera on a mobile browser and quietly falls back to a file dialog
   # where there is none, so the same call is right on all four surfaces.
   image_picker: ^1.1.2
+  # Reading a receipt on the phone itself. The model ships inside the
+  # app, so there is no key, no network call and no per-scan cost — which
+  # is the whole reason it is offered beside the two readers that have
+  # all three. Android and iOS only: there is no web implementation and
+  # there cannot be one, so every call site is gated on the platform.
+  google_mlkit_text_recognition: ^0.16.0
+  # ML Kit takes a file path, not bytes, so an attachment pulled out of
+  # storage needs somewhere to land first.
+  path_provider: ^2.1.5
   crypto: ^3.0.6
   # Real PDFs for the documents a secretary has to print, sign
   # and lodge. Markdown is fine for a diff; it is not fine for

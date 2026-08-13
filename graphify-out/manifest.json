@@ -90,8 +90,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/attachments_repository.dart": {
-    "mtime": 1786618345.3329315,
-    "ast_hash": "d9760303809f6806a3d3d7aa86269871",
+    "mtime": 1786623334.0682762,
+    "ast_hash": "e07686d231ef65d49c495fcee0953e7f",
     "semantic_hash": ""
   },
   "app/lib/src/data/corp_models.dart": {
@@ -290,13 +290,13 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1786620752.5210745,
-    "ast_hash": "de9752820ddffe8e331f45194a7daa33",
+    "mtime": 1786623417.3207862,
+    "ast_hash": "1d54cf4295423cdf2ca038a7a8e7b9d5",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
-    "mtime": 1786618414.2489355,
-    "ast_hash": "52d85be3eb5b5947a2c4548138d24dd3",
+    "mtime": 1786623349.6658223,
+    "ast_hash": "ad5ef2c772d81898d0041e45740e1f05",
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
@@ -830,8 +830,8 @@
     "semantic_hash": ""
   },
   "app/pubspec.yaml": {
-    "mtime": 1786615981.7176108,
-    "ast_hash": "c5fa707d15a861ea915103620a2c0ae9",
+    "mtime": 1786622945.3103218,
+    "ast_hash": "68c08e978bd28ecb5d7ecdd02f6a0e0c",
     "semantic_hash": ""
   },
   "app/web/index.html": {
@@ -1730,8 +1730,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/ocr_repository.dart": {
-    "mtime": 1786618796.4209583,
-    "ast_hash": "167d2ddfe3a979a308f31de03674e688",
+    "mtime": 1786623375.4602752,
+    "ast_hash": "45ad55b0850d58c1ecdfaebff9390a81",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/credit_admin.dart": {
@@ -1755,8 +1755,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/receipt_capture.dart": {
-    "mtime": 1786618291.1529284,
-    "ast_hash": "52cad2bbea4819e8f4d1551558b47558",
+    "mtime": 1786623390.1976507,
+    "ast_hash": "d03b2e9129d371377d9ddc6a8f190c32",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/scan_result_dialog.dart": {
@@ -1827,6 +1827,41 @@
   "docs/schedulers.md": {
     "mtime": 1786595407.6921983,
     "ast_hash": "8ec94c54d151e9805f1aa18b8138c6ff",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/shared/mlkit_reader.dart": {
+    "mtime": 1786623182.3200078,
+    "ast_hash": "9cd8e1537ac1cb91930d4796dda4f209",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/shared/mlkit_reader_io.dart": {
+    "mtime": 1786623316.4262626,
+    "ast_hash": "ea6ba93ab1b32a94de37bbf5dd5b6f63",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/shared/mlkit_reader_stub.dart": {
+    "mtime": 1786623316.427994,
+    "ast_hash": "c556575a898515a9e3524950d9fe8235",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/shared/receipt_text.dart": {
+    "mtime": 1786623087.6934988,
+    "ast_hash": "657a002509a1d2772f838ac83a3eaff1",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/shared/scan_runner.dart": {
+    "mtime": 1786623328.7682762,
+    "ast_hash": "b3da908e56aee26526de93a273fb4991",
+    "semantic_hash": ""
+  },
+  "app/test/receipt_text_test.dart": {
+    "mtime": 1786623038.096283,
+    "ast_hash": "059f5a2e8a9a27cdeeaa64a113e80f98",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0112_ocr_on_device.sql": {
+    "mtime": 1786622808.252288,
+    "ast_hash": "88bab559cd10833ebb45266768e78884",
     "semantic_hash": ""
   }
 }

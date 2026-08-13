@@ -2,7 +2,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/providers.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
+import 'scan_runner.dart';
 
 /// Whether there is plausibly a camera, which is the question
 /// `defaultTargetPlatform` actually answers: on the web it reports the
@@ -27,11 +28,18 @@ class CapturedFile {
     required this.name,
     required this.bytes,
     required this.mimeType,
+    this.path,
   });
 
   final String name;
   final Uint8List bytes;
   final String? mimeType;
+
+  /// Where the file sits on this device, when it sits anywhere. Null on
+  /// the web, where a picked file is a blob and not a path. The
+  /// on-device reader wants this: reading the file that is already here
+  /// beats uploading it and fetching a copy back.
+  final String? path;
 }
 
 /// Straight to the camera, not to a chooser.
@@ -63,6 +71,7 @@ Future<CapturedFile?> photographReceipt() async {
     name: name,
     bytes: await shot.readAsBytes(),
     mimeType: shot.mimeType ?? 'image/jpeg',
+    path: kIsWeb ? null : shot.path,
   );
 }
 
@@ -73,6 +82,7 @@ Future<CapturedFile?> pickReceipt() async {
     name: file.name,
     bytes: await file.readAsBytes(),
     mimeType: file.mimeType,
+    path: kIsWeb ? null : file.path,
   );
 }
 
@@ -132,7 +142,15 @@ Future<StagedReceipt?> captureAndRead(
   }
 
   try {
-    final read = await repo.scanAttachment(attachmentId);
+    final read = await readDocument(
+      ref,
+      ocr: ref.read(ocrStatusProvider).valueOrNull ?? OcrSettings.off,
+      attachmentId: attachmentId,
+      storagePath: '',
+      // Already on this device, so the on-device reader reads it where
+      // it is rather than fetching back the copy just uploaded.
+      localPath: file.path,
+    );
     ref.invalidate(ocrStatusProvider);
     return StagedReceipt(
       attachmentId: attachmentId,

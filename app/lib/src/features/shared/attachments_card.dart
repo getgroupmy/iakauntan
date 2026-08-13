@@ -8,7 +8,9 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
+import 'mlkit_reader.dart';
 import 'receipt_capture.dart';
+import 'scan_runner.dart';
 import 'scan_result_dialog.dart';
 
 final attachmentsProvider = FutureProvider.autoDispose
@@ -206,7 +208,10 @@ class _FileRowState extends ConsumerState<_FileRow> {
         style: const TextStyle(fontSize: 12),
       ),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        if (ocr.enabled && _readable && widget.canWrite)
+        // Not offered where the chosen reader cannot run: an
+        // organization on the on-device reader has no scan button in a
+        // browser, because pressing it could only ever explain itself.
+        if (ocr.enabled && _readable && widget.canWrite && _readerHere(ocr))
           IconButton(
             icon: _scanning
                 ? const SizedBox(
@@ -236,11 +241,20 @@ class _FileRowState extends ConsumerState<_FileRow> {
     );
   }
 
+  /// Whether the reader this organization chose exists on this device.
+  bool _readerHere(OcrSettings ocr) =>
+      ocr.provider != 'mlkit' || onDeviceReaderAvailable;
+
   Future<void> _scan() async {
     setState(() => _scanning = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final read = await ref.read(repoProvider)!.scanAttachment(file.id);
+      final read = await readDocument(
+        ref,
+        ocr: ref.read(ocrStatusProvider).valueOrNull ?? OcrSettings.off,
+        attachmentId: file.id,
+        storagePath: file.storagePath,
+      );
       if (!mounted) return;
       // The balance moved, so what the next tooltip says about it should
       // be true.

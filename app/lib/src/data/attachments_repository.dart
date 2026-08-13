@@ -104,6 +104,11 @@ extension RepoAttachments on Repo {
           .from(bucket)
           .createSignedUrl(storagePath, validFor.inSeconds);
 
+  /// The file itself, for the on-device reader — which takes bytes
+  /// rather than a link, because it never goes near the network.
+  Future<Uint8List> attachmentBytes(String storagePath) =>
+      client.storage.from(bucket).download(storagePath);
+
   /// For a file whose row was never displayed — a receipt captured for a
   /// record that was then abandoned.
   Future<void> deleteAttachmentById(String id) async {

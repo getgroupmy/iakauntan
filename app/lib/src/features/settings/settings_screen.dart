@@ -438,6 +438,8 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                     ButtonSegment(value: 'claude', label: Text('Claude')),
                     ButtonSegment(
                         value: 'google', label: Text('Document AI')),
+                    ButtonSegment(
+                        value: 'mlkit', label: Text('On this device')),
                   ],
                   selected: {ocr.provider},
                   onSelectionChanged: widget.canEdit && !_saving
@@ -463,21 +465,25 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                         }
                       : null,
                 ),
-                const SizedBox(height: 12),
-                SegmentedButton<String>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(
-                        value: 'platform', label: Text('Buy credit')),
-                    ButtonSegment(value: 'own', label: Text('My own key')),
-                  ],
-                  selected: {_keySource(ocr)},
-                  onSelectionChanged: widget.canEdit && !_saving
-                      ? (s) => _chooseKeySource(ocr, s.first)
-                      : null,
-                ),
+                if (ocr.provider != 'mlkit') ...[
+                  const SizedBox(height: 12),
+                  SegmentedButton<String>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(
+                          value: 'platform', label: Text('Buy credit')),
+                      ButtonSegment(value: 'own', label: Text('My own key')),
+                    ],
+                    selected: {_keySource(ocr)},
+                    onSelectionChanged: widget.canEdit && !_saving
+                        ? (s) => _chooseKeySource(ocr, s.first)
+                        : null,
+                  ),
+                ],
                 const SizedBox(height: 16),
-                if (_keySource(ocr) == 'platform')
+                if (ocr.provider == 'mlkit')
+                  const _OnDeviceNotice()
+                else if (_keySource(ocr) == 'platform')
                   _CreditBalance(ocr: ocr)
                 else
                   _OwnKeyFields(
@@ -504,6 +510,54 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The on-device reader, which is the one with nothing to configure.
+///
+/// Says what it costs (nothing), where the photograph goes (nowhere),
+/// and — because this is a web app as much as a phone one — where it
+/// does not work.
+class _OnDeviceNotice extends StatelessWidget {
+  const _OnDeviceNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(Space.md),
+          decoration: BoxDecoration(
+            color: context.colors.success.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(children: [
+            const Icon(Icons.phonelink_lock_outlined, size: 20),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Free, and the photograph never leaves the phone. No key '
+                'to hold and no credit to buy.',
+                style: TextStyle(fontSize: 13),
+              ),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'It reads the printing rather than understanding the document, '
+          'so it is best on a receipt and weaker on a long bill — check '
+          'what it fills in. It needs the iAkauntan app on a phone or '
+          'tablet: in a browser there is nothing to run it, and the Scan '
+          'button does not appear.',
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: context.scheme.onSurfaceVariant),
+        ),
+      ],
     );
   }
 }

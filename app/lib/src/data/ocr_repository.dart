@@ -150,6 +150,33 @@ class OcrExtraction {
         note: _text(j['note']),
       );
 
+  /// The same shape the server-side readers return, so a scan logged
+  /// from the phone and one logged from Claude read alike afterwards.
+  Map<String, dynamic> toJson() => {
+        'supplier_name': supplierName,
+        'supplier_tax_id': supplierTaxId,
+        'document_no': documentNo,
+        'document_date': documentDate == null
+            ? null
+            : '${documentDate!.year.toString().padLeft(4, '0')}-'
+                '${documentDate!.month.toString().padLeft(2, '0')}-'
+                '${documentDate!.day.toString().padLeft(2, '0')}',
+        'currency': currency,
+        'subtotal': subtotal,
+        'tax_amount': taxAmount,
+        'total_amount': totalAmount,
+        'lines': [
+          for (final l in lines)
+            {
+              'description': l.description,
+              'quantity': l.quantity,
+              'unit_price': l.unitPrice,
+              'amount': l.amount,
+            },
+        ],
+        'note': note,
+      };
+
   static String? _text(Object? v) {
     final s = v?.toString().trim() ?? '';
     return s.isEmpty ? null : s;
@@ -229,6 +256,24 @@ extension RepoOcr on Repo {
     return OcrExtraction.fromJson(
         Map<String, dynamic>.from(body['extraction'] as Map));
   }
+
+  /// Records a reading that happened on the phone.
+  ///
+  /// The on-device reader never touches the edge function, so there is
+  /// no `ocr_begin`/`ocr_finish` pair around it — and no charge, which
+  /// is why this one is safe for an ordinary user to call where
+  /// `ocr_finish` deliberately is not. The row is written settled.
+  Future<void> recordLocalScan({
+    required String attachmentId,
+    OcrExtraction? read,
+    String? error,
+  }) =>
+      client.rpc('ocr_record_local', params: {
+        'p_org_id': orgId,
+        'p_attachment_id': attachmentId,
+        'p_extracted': read?.toJson(),
+        'p_error': error,
+      });
 
   /// Every movement of the scanning balance, newest first.
   Future<List<Map<String, dynamic>>> creditLedger() async => Repo.rows(
