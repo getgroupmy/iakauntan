@@ -263,11 +263,24 @@ begin
     (select count(*) from public.document_activity(v_doc)
       where kind = 'share link' and status = 'live'), 1);
 
+  -- `detail` carries both halves of the choice, and asserting the whole
+  -- string is deliberate: 0109 appended the attachment half and this
+  -- assertion still expected 'sent now', which is how CI caught that the
+  -- two had been changed apart. A `like 'sent now%'` here would have
+  -- passed and told nobody.
   select * into r from public.document_activity(v_doc) where kind = 'email';
   perform pg_temp.check_true('the email names the address and the choice',
-    r.recipient = 'ap@buyer.example' and r.detail = 'sent now');
+    r.recipient = 'ap@buyer.example' and r.detail = 'sent now · link only');
   perform pg_temp.check_true('and reports what became of it',
     r.status = 'queued');
+
+  -- The other half of that sentence. "I sent you the invoice" and "I
+  -- sent you a link to the invoice" are different claims.
+  perform public.email_document(v_doc, null, 'document_new', 30, 'queued',
+    v_org || '/sales_documents/' || v_doc || '/inv-7.pdf');
+  perform pg_temp.check_eq('an attached message says so',
+    (select count(*) from public.document_activity(v_doc)
+      where kind = 'email' and detail = 'queued · PDF attached'), 1);
 
   select * into r from public.document_activity(v_doc) where kind = 'pdf';
   perform pg_temp.check_true('the download is recorded', r.status = 'downloaded');
