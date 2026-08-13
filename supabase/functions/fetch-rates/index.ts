@@ -25,32 +25,7 @@
  * Called on a schedule. See docs/exchange-rate-feed.md.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-// Repeated from `_shared/cors.ts` rather than imported, and the reason
-// is deployment rather than taste. The CLI resolves `../_shared/` from
-// `supabase/functions/fetch-rates/`, which is where the shared file
-// lives; the API deploy roots the entrypoint one directory deeper, so
-// the same path escapes the bundle and the function will not build.
-// Twelve duplicated lines are cheaper than two deployment routes that
-// produce different bytes — `send-email` and `myinvois` keep the import
-// because they are only ever deployed by the CLI.
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
-function fail(message: string, status = 400, extra?: unknown): Response {
-  return json({ error: message, details: extra ?? null }, status);
-}
+import { corsHeaders, fail, json } from "../_shared/cors.ts";
 
 const BNM_ENDPOINT = "https://api.bnm.gov.my/public/exchange-rate";
 

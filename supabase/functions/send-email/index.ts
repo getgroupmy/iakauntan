@@ -26,29 +26,7 @@
  *   MAIL_FROM        the verified sender, e.g. "billing@iakauntan.com"
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-// Repeated from `_shared/cors.ts` rather than imported, for the same
-// reason `fetch-rates` repeats it: the CLI resolves `../_shared/` from
-// this directory, the management API roots the entrypoint a level
-// deeper, and the same path cannot satisfy both. `myinvois` keeps the
-// import because the CLI is the only thing that deploys it.
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
-function fail(message: string, status = 400, extra?: unknown): Response {
-  return json({ error: message, details: extra ?? null }, status);
-}
+import { corsHeaders, fail, json } from "../_shared/cors.ts";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 

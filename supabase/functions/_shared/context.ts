@@ -80,16 +80,32 @@ export interface Credentials {
 }
 
 export async function loadCredentials(ctx: Ctx): Promise<Credentials> {
+  // Which environment is in force is the organization's setting, not a
+  // property of the credentials. Since 0107 an organization holds both
+  // sandbox and production at once — so this has to say which one it
+  // wants. Selecting on `org_id` alone, as this did, would now match two
+  // rows and `maybeSingle()` would throw on the second one somebody
+  // configured.
+  const { data: org } = await ctx.admin
+    .from("organizations")
+    .select("einvoice_environment")
+    .eq("id", ctx.orgId)
+    .maybeSingle();
+
+  const environment = (org?.einvoice_environment ?? "sandbox") as MyInvoisEnv;
+
   const { data } = await ctx.admin
     .from("einvoice_credentials")
     .select("client_id, client_secret, environment")
     .eq("org_id", ctx.orgId)
+    .eq("environment", environment)
     .maybeSingle();
 
   if (!data) {
     throw new HttpError(
       400,
-      "MyInvois credentials are not configured. Add them under Settings > e-Invoice.",
+      `MyInvois ${environment} credentials are not configured. Add them ` +
+        "under Settings > e-Invoice.",
     );
   }
 

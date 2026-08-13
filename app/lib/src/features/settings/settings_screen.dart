@@ -152,27 +152,34 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
     final ok = await runWithFeedback(
       context,
       action: () async {
-        final client = ref.read(supabaseProvider);
+        final repo = ref.read(repoProvider)!;
 
-        await client.from('organizations').update({
+        // Credentials first, deliberately. This used to run the other
+        // way round, and because the table refused the write every time,
+        // a failed save still left the organization flagged as
+        // e-Invoice-enabled with a client id and no secret anywhere — a
+        // company marked live against a submitter that cannot log in.
+        // Now the part that can fail is the part that runs first.
+        if (_clientId.text.trim().isNotEmpty) {
+          await repo.setEinvoiceCredentials(
+            environment: _environment,
+            clientId: _clientId.text.trim(),
+            // Blank means "leave the stored one alone", which is what
+            // lets somebody correct a client id without re-typing a
+            // secret they may not have to hand.
+            clientSecret: _clientSecret.text.trim().isEmpty
+                ? null
+                : _clientSecret.text.trim(),
+          );
+        }
+
+        await ref.read(supabaseProvider).from('organizations').update({
           'einvoice_enabled': _enabled,
           'einvoice_environment': _environment,
           'einvoice_client_id': _clientId.text.trim().isEmpty
               ? null
               : _clientId.text.trim(),
         }).eq('id', widget.org.id);
-
-        // Only write credentials when a secret was actually entered, so
-        // saving other settings does not wipe them.
-        if (_clientId.text.trim().isNotEmpty &&
-            _clientSecret.text.trim().isNotEmpty) {
-          await client.from('einvoice_credentials').upsert({
-            'org_id': widget.org.id,
-            'client_id': _clientId.text.trim(),
-            'client_secret': _clientSecret.text.trim(),
-            'environment': _environment,
-          });
-        }
       },
       successMessage: 'e-Invoice settings saved',
     );
@@ -182,6 +189,7 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
       _clientSecret.clear();
       ref.invalidate(organizationsProvider);
       ref.invalidate(currentOrgProvider);
+      ref.invalidate(einvoiceStatusProvider);
     }
   }
 

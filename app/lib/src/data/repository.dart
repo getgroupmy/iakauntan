@@ -1041,6 +1041,41 @@ class Repo {
   }
 
   // ------------------------------------------------------------------
+  // LHDN credentials
+  //
+  // Never the table. `einvoice_credentials` holds client secrets and
+  // certificate private keys, so it has RLS with no policies and no
+  // grants at all — the app could not write it even when it tried to,
+  // which is why nobody could set up e-Invoice until 0107.
+  // ------------------------------------------------------------------
+
+  /// What is configured, per environment. Never returns a secret — only
+  /// whether one is on file.
+  Future<List<Map<String, dynamic>>> einvoiceCredentialStatus() async =>
+      _rows(await client.rpc('einvoice_credential_status',
+          params: {'p_org_id': orgId}));
+
+  /// Leave [clientSecret] null to keep the stored one, which is what
+  /// makes correcting a typo in the client id safe.
+  Future<void> setEinvoiceCredentials({
+    required String environment,
+    required String clientId,
+    String? clientSecret,
+  }) =>
+      client.rpc('set_einvoice_credentials', params: {
+        'p_org_id': orgId,
+        'p_environment': environment,
+        'p_client_id': clientId,
+        'p_client_secret': clientSecret,
+      });
+
+  Future<void> clearEinvoiceCredentials(String environment) =>
+      client.rpc('clear_einvoice_credentials', params: {
+        'p_org_id': orgId,
+        'p_environment': environment,
+      });
+
+  // ------------------------------------------------------------------
   // Batches and serial numbers
   //
   // Identity, not cost. A tracked item still values at weighted average

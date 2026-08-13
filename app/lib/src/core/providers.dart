@@ -323,6 +323,12 @@ final projectsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
 /// Only the people still selling. A dropdown listing everyone who ever
 /// worked here grows without bound and makes the current team harder to
 /// find; the report still shows leavers, because their sales happened.
+/// What LHDN credentials each environment has, without the secrets.
+final einvoiceStatusProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).einvoiceCredentialStatus();
+});
+
 final salespeopleProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).salespeople(activeOnly: true);
 });

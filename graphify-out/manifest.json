@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786548418.4722989,
-    "ast_hash": "71a97b21ef070dd50ef51ac08169c9ff",
+    "mtime": 1786584708.1557562,
+    "ast_hash": "d15aa94b7990c5947e84aa3ec4a94dda",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786550574.371868,
-    "ast_hash": "e14098384e46d14b3543faa14ffb7e42",
+    "mtime": 1786584683.6227803,
+    "ast_hash": "a01144406649a3393373054fa66b3fb7",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1786522332.6212761,
-    "ast_hash": "708b91e831e88b8d0d87c167b7a83dd6",
+    "mtime": 1786584699.609517,
+    "ast_hash": "b4b24b1196718827aac5cb77ab78300f",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -330,9 +330,9 @@
     "semantic_hash": ""
   },
   "supabase/functions/_shared/context.ts": {
-    "mtime": 1786259149.0303025,
-    "ast_hash": "53faccd9c76916742bf57cdeab886757",
-    "semantic_hash": "53faccd9c76916742bf57cdeab886757"
+    "mtime": 1786584478.7754173,
+    "ast_hash": "c9e3d2e71b7e88d8003bed46f635197e",
+    "semantic_hash": ""
   },
   "supabase/functions/_shared/cors.ts": {
     "mtime": 1786258939.4023101,
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786550416.8734863,
-    "ast_hash": "3960d597809118dd6d3d1cfdfb866c1f",
+    "mtime": 1786584808.9750397,
+    "ast_hash": "0b37d9d63f2c6c4d918e7b9ab7a36753",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1510,8 +1510,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/send-email/index.ts": {
-    "mtime": 1786530713.4729104,
-    "ast_hash": "a2387a5e998e1609251d4a4bf6a73c89",
+    "mtime": 1786584490.0160031,
+    "ast_hash": "7c5d1121d62e1e1208654da6432ced4f",
     "semantic_hash": ""
   },
   "supabase/migrations/0095_outbound_email.sql": {
@@ -1525,8 +1525,8 @@
     "semantic_hash": ""
   },
   "docs/email-setup.md": {
-    "mtime": 1786531068.4648955,
-    "ast_hash": "cc788d650f7519f6abed447a18043a7e",
+    "mtime": 1786556815.449627,
+    "ast_hash": "6603e5ee66785b2e956e6320df73d919",
     "semantic_hash": ""
   },
   "supabase/migrations/0096_aged_balances.sql": {
@@ -1650,8 +1650,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/fetch-rates/index.ts": {
-    "mtime": 1786547437.509123,
-    "ast_hash": "0447d9d8600683c4984252f74e72e0eb",
+    "mtime": 1786584490.0150998,
+    "ast_hash": "ad0cdde60fca871e6870ad891fd2b057",
     "semantic_hash": ""
   },
   "supabase/migrations/0104_live_exchange_rates.sql": {
@@ -1665,8 +1665,8 @@
     "semantic_hash": ""
   },
   "docs/exchange-rate-feed.md": {
-    "mtime": 1786547675.0411181,
-    "ast_hash": "6fc1103dbc374ac3eb7243a5f2b07b65",
+    "mtime": 1786556459.880412,
+    "ast_hash": "0c7c121716e9083fb1e57e458fc342c0",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/salespeople_screen.dart": {
@@ -1707,6 +1707,26 @@
   "supabase/tests/serial_and_batch.sql": {
     "mtime": 1786550293.915137,
     "ast_hash": "251255a78b530633a9b3c9029e9a45c5",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0107_einvoice_credentials_per_org.sql": {
+    "mtime": 1786584414.452991,
+    "ast_hash": "cced924efacdfe0304452efedc460682",
+    "semantic_hash": ""
+  },
+  "supabase/tests/einvoice_credentials.sql": {
+    "mtime": 1786584669.5479813,
+    "ast_hash": "506295e101daa4e391d7d95857240207",
+    "semantic_hash": ""
+  },
+  ".github/workflows/exchange-rates.yml": {
+    "mtime": 1786556406.4017413,
+    "ast_hash": "0e903b5efce9f0bd3a3408a5b67e1f72",
+    "semantic_hash": ""
+  },
+  ".github/workflows/send-email.yml": {
+    "mtime": 1786556778.3252082,
+    "ast_hash": "8b3f70b81e723931a886184112a3d15b",
     "semantic_hash": ""
   }
 }
