@@ -22,8 +22,15 @@ Two pastes of the same random string.
 openssl rand -base64 32
 ```
 
-**2. Give it to the functions.** Supabase dashboard → **Edge Functions →
-Secrets** → add `SCHEDULER_SECRET`. This is the same screen where
+**2. Give it to the functions.** Add `SCHEDULER_SECRET` here:
+
+> https://supabase.com/dashboard/project/ewwcgtnniwqndrzukksm/functions/secrets
+
+The direct link, because this is the step that goes wrong. It has to be
+the **Edge Functions → Secrets** list — that is what becomes `Deno.env`
+inside a function. Project Settings → API is for keys, and Vault is a
+different store the functions do not read; a secret in either of those
+looks set and is invisible to the code. It is the same screen where
 `RESEND_API_KEY` and `MAIL_FROM` go, so do all three in one visit — see
 [email-setup.md](email-setup.md).
 
@@ -32,6 +39,13 @@ Secrets** → add `SCHEDULER_SECRET`. This is the same screen where
 
 That is the whole setup. The next scheduled run picks it up, or run
 either workflow by hand from the Actions tab to check now.
+
+The 403 from `fetch-rates` distinguishes the two ways this goes wrong,
+so a failed run says which half to fix: *"No SCHEDULER_SECRET is set on
+this function"* means step 2 did not land where the function reads;
+*"does not match"* means the two copies differ. Copy from one field into
+the other rather than generating twice — that second message is what
+generating twice produces.
 
 ## Why not the service role key
 

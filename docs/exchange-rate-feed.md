@@ -83,26 +83,54 @@ curl -X POST https://ewwcgtnniwqndrzukksm.supabase.co/functions/v1/fetch-rates \
   -H "Content-Type: application/json" -d '{}'
 ```
 
-**This has not been run yet.** The sandbox the function was written in
-cannot reach `api.bnm.gov.my` or `*.supabase.co` — both are refused by
-its egress policy — so the mapping from BNM's response onto
-`ingest_exchange_rates` is written from the documented shape and has
-never met the live API. The first real call is the test. Read the reply
-rather than glancing at the status code, and check one thing in
-particular: **JPY should come back around 0.028, not around 2.8.** The
-first is right, the second means `unit` was ignored.
+**Run against the live API on 13 August 2026, and the arithmetic is
+right.** It had never met Bank Negara before that — the sandbox this was
+written in cannot reach `api.bnm.gov.my`, so the mapping came from the
+documented shape alone. 21 currencies stored from the `0900` session.
 
-It answers with a count and the full per-currency verdict:
+The check that mattered was the `unit` division, since ignoring it is
+the failure that balances and foots and is wrong by a hundred:
+
+> **JPY stored as 0.025636**, not 2.5636. A JPY 1,000,000 invoice books
+> at RM 25,636 rather than RM 2,563,600.
+
+Three cross-checks confirmed it across different quote bases, which is
+worth more than the one figure on its own:
+
+| Check | Expected | Stored |
+| --- | --- | --- |
+| AED, pegged to USD at 3.6725 | `4.0845 ÷ 3.6725 = 1.11219` | 1.112094 |
+| BND, pegged 1:1 to SGD | identical to SGD | both 3.19190 |
+| IDR / KRW / VND, quoted per 100 or 1000 | ~1e-4 to ~3e-3 | 0.000229 / 0.00289 / 0.000157 |
+
+`app.exchange_rate_for` was then confirmed to resolve those system rows
+for an organization that holds no rates of its own, which is the whole
+path the ledger uses.
+
+It answers with a count and the full per-currency verdict. The reply from
+that first live run, abridged:
 
 ```json
-{"session":"1700","published":21,"stored":18,"skipped":3,"errors":0,
- "rates":[{"currency":"JPY","applied_rate":0.0285,"status":"stored",
-           "message":"quoted per 100 units"}, ...]}
+{"session":"0900","date":null,"published":27,"stored":21,"skipped":6,
+ "errors":0,
+ "rates":[{"currency":"JPY","quoted_on":"2026-08-13",
+           "applied_rate":0.025636,"status":"stored",
+           "message":"quoted per 100 units"},
+          {"currency":"USD","applied_rate":4.0845,"status":"stored",
+           "message":null},
+          {"currency":"MMK","applied_rate":null,"status":"skipped",
+           "message":"not a currency this system holds"}, ...],
+ "unreadable":[]}
 ```
 
 `skipped` is normal — it counts currencies BNM lists that
 `ref_currencies` does not hold, and the ringgit quoting against itself.
-`errors` should be zero; anything there names the currency and says why.
+On that run the six were MMK, EGP, KHR, NPR, PKR and SDR. `errors`
+should be zero; anything there names the currency and says why.
+
+`message` is the audit trail for the division: every currency BNM quotes
+per 100 says so, and one that stopped saying it would be visible rather
+than inferred.
 
 A 403 saying the scheduler calls this means no recognised credential was
 presented — see [schedulers.md](schedulers.md).
