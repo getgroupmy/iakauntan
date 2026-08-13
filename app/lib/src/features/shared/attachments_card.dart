@@ -283,8 +283,10 @@ class _FileRowState extends ConsumerState<_FileRow> {
       if (apply == null) {
         await showScanResult(context, read);
       } else {
+        // What comes back is what the person on the screen settled on,
+        // which is not always what the reader said.
         final accepted = await showScanResult(context, read, canApply: true);
-        if (accepted == true) apply(read);
+        if (accepted != null) apply(accepted);
       }
     } catch (e) {
       // The database's own refusals — scanning switched off, no credit,

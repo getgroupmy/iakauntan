@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/format.dart';
 import '../../core/theme.dart';
@@ -7,32 +8,164 @@ import '../../data/ocr_repository.dart';
 /// What was read off a document, before anybody acts on it.
 ///
 /// Shown rather than applied silently, because a machine reading a faded
-/// thermal receipt is a good first draft and not a source document. The
-/// figures are on screen next to the paper they came from, and it takes
-/// a deliberate press to put them in the form.
+/// thermal receipt is a good first draft and not a source document. And
+/// editable, because a first draft that cannot be corrected is worse
+/// than useless — it makes somebody discard the whole reading over one
+/// figure picked off the wrong line.
 ///
-/// Returns true when [canApply] and the reader accepted it.
-Future<bool?> showScanResult(
+/// Returns the reading, with any corrections, when [canApply] and it was
+/// accepted. Null when it was discarded, or whenever it is only being
+/// shown.
+Future<OcrExtraction?> showScanResult(
   BuildContext context,
   OcrExtraction read, {
   bool canApply = false,
 }) =>
-    showDialog<bool>(
+    showDialog<OcrExtraction>(
       context: context,
       builder: (_) => _ScanResultDialog(read: read, canApply: canApply),
     );
 
-class _ScanResultDialog extends StatelessWidget {
+class _ScanResultDialog extends StatefulWidget {
   const _ScanResultDialog({required this.read, required this.canApply});
 
   final OcrExtraction read;
   final bool canApply;
 
   @override
+  State<_ScanResultDialog> createState() => _ScanResultDialogState();
+}
+
+class _ScanResultDialogState extends State<_ScanResultDialog> {
+  late final TextEditingController _supplier;
+  late final TextEditingController _taxId;
+  late final TextEditingController _documentNo;
+  late final TextEditingController _currency;
+  late final TextEditingController _subtotal;
+  late final TextEditingController _tax;
+  late final TextEditingController _total;
+  late DateTime? _date;
+  late final List<_EditableLine> _lines;
+
+  OcrExtraction get read => widget.read;
+
+  @override
+  void initState() {
+    super.initState();
+    _supplier = TextEditingController(text: read.supplierName ?? '');
+    _taxId = TextEditingController(text: read.supplierTaxId ?? '');
+    _documentNo = TextEditingController(text: read.documentNo ?? '');
+    _currency = TextEditingController(text: read.currency ?? '');
+    _subtotal = TextEditingController(text: _money(read.subtotal));
+    _tax = TextEditingController(text: _money(read.taxAmount));
+    _total = TextEditingController(text: _money(read.totalAmount));
+    _date = read.documentDate;
+    _lines = [for (final line in read.lines) _EditableLine.from(line)];
+  }
+
+  @override
+  void dispose() {
+    _supplier.dispose();
+    _taxId.dispose();
+    _documentNo.dispose();
+    _currency.dispose();
+    _subtotal.dispose();
+    _tax.dispose();
+    _total.dispose();
+    for (final line in _lines) {
+      line.dispose();
+    }
+    super.dispose();
+  }
+
+  /// Blank rather than zero for a figure the document does not carry.
+  /// The distinction is the whole point of the reading — a receipt with
+  /// no tax line and a receipt with RM 0.00 of tax are different
+  /// documents, and typing the second when you meant the first is how a
+  /// wrong return gets filed.
+  static String _money(double? value) =>
+      value == null ? '' : value.toStringAsFixed(2);
+
+  /// What somebody typed, as a figure. Thousands separators and a stray
+  /// `RM` are what a person copying off a bill actually types.
+  static double? _parse(String raw) {
+    final cleaned =
+        raw.replaceAll(RegExp(r'[^0-9.\-]'), '').replaceAll(RegExp(r'(?!^)-'), '');
+    if (cleaned.isEmpty || cleaned == '-' || cleaned == '.') return null;
+    return double.tryParse(cleaned);
+  }
+
+  double? get _subtotalValue => _parse(_subtotal.text);
+  double? get _taxValue => _parse(_tax.text);
+  double? get _totalValue => _parse(_total.text);
+
+  /// The one figure the form can check for itself.
+  ///
+  /// Recomputed as it is typed rather than carried over from the
+  /// reading, so correcting the total clears the warning instead of
+  /// leaving a complaint about figures that are no longer on screen.
+  String? get _doesNotFoot {
+    final net = _subtotalValue;
+    final tax = _taxValue;
+    final total = _totalValue;
+    if (net == null || tax == null || total == null) return null;
+    if ((net + tax - total).abs() < 0.005) return null;
+    return 'The figures do not add up: ${Fmt.money(net)} + ${Fmt.money(tax)} '
+        'is ${Fmt.money(net + tax)}, not ${Fmt.money(total)}.';
+  }
+
+  /// Whether the form can check the arithmetic itself.
+  ///
+  /// When it can, its answer replaces the reader's — otherwise correcting
+  /// a total clears the live warning only for the reader's original
+  /// complaint about that same total to appear underneath it, which is
+  /// both stale and infuriating.
+  bool get _allThreeFigures =>
+      _subtotalValue != null && _taxValue != null && _totalValue != null;
+
+  bool get _nothing =>
+      read.supplierName == null &&
+      read.totalAmount == null &&
+      read.documentNo == null;
+
+  OcrExtraction get _edited => OcrExtraction(
+        supplierName: _trimmed(_supplier),
+        supplierTaxId: _trimmed(_taxId),
+        documentNo: _trimmed(_documentNo),
+        documentDate: _date,
+        currency: _trimmed(_currency)?.toUpperCase(),
+        subtotal: _subtotalValue,
+        taxAmount: _taxValue,
+        totalAmount: _totalValue,
+        lines: [
+          for (final line in _lines)
+            if (!line.isEmpty) line.toLine(),
+        ],
+        // The reader's own note is dropped once a person has been
+        // through the figures: it described what the reader saw, and
+        // what is on screen now is what somebody decided.
+        note: _doesNotFoot,
+      );
+
+  static String? _trimmed(TextEditingController c) {
+    final text = c.text.trim();
+    return text.isEmpty ? null : text;
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date ?? now,
+      firstDate: DateTime(now.year - 10),
+      lastDate: DateTime(now.year + 2),
+    );
+    if (picked != null) setState(() => _date = picked);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final nothing = read.supplierName == null &&
-        read.totalAmount == null &&
-        read.documentNo == null;
+    final foots = _doesNotFoot;
 
     return AlertDialog(
       title: const Text('What the document says'),
@@ -43,54 +176,115 @@ class _ScanResultDialog extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (nothing)
+              if (_nothing)
                 Text(
                   'Nothing legible came back. A sharper photograph of the '
-                  'whole receipt, flat and in daylight, usually does it.',
+                  'whole receipt, flat and in daylight, usually does it — '
+                  'or type the figures in below.',
                   style: Theme.of(context).textTheme.bodyMedium,
-                )
-              else ...[
-                _Row('Supplier', read.supplierName),
-                _Row('Tax number', read.supplierTaxId),
-                _Row('Document no', read.documentNo),
-                _Row('Date',
-                    read.documentDate == null ? null : Fmt.date(read.documentDate)),
-                _Row('Currency', read.currency),
-                _Row('Subtotal',
-                    read.subtotal == null ? null : Fmt.money(read.subtotal!)),
-                _Row('Tax',
-                    read.taxAmount == null ? null : Fmt.money(read.taxAmount!)),
-                _Row('Total',
-                    read.totalAmount == null
-                        ? null
-                        : Fmt.money(read.totalAmount!),
-                    bold: true),
-                if (read.lines.isNotEmpty) ...[
-                  const Divider(height: Space.xl),
-                  Text('Lines',
+                ),
+              // Editable even when nothing was read: a reading that came
+              // back empty and a form that refuses to open are the same
+              // dead end, and the paper is already attached either way.
+              const SizedBox(height: Space.sm),
+              _Field(label: 'Supplier', controller: _supplier),
+              _Field(label: 'Tax number', controller: _taxId),
+              _Field(label: 'Document no', controller: _documentNo),
+              _DateField(
+                label: 'Date',
+                value: _date,
+                onPick: _pickDate,
+                onClear: () => setState(() => _date = null),
+              ),
+              _Field(
+                label: 'Currency',
+                controller: _currency,
+                capitals: true,
+                maxLength: 3,
+              ),
+              _Field(
+                label: 'Subtotal',
+                controller: _subtotal,
+                money: true,
+                onChanged: (_) => setState(() {}),
+              ),
+              _Field(
+                label: 'Tax',
+                controller: _tax,
+                money: true,
+                onChanged: (_) => setState(() {}),
+              ),
+              _Field(
+                label: 'Total',
+                controller: _total,
+                money: true,
+                bold: true,
+                onChanged: (_) => setState(() {}),
+              ),
+              const Divider(height: Space.xl),
+              Row(children: [
+                Expanded(
+                  child: Text('Lines',
                       style: Theme.of(context).textTheme.labelLarge),
-                  const SizedBox(height: 6),
-                  for (final line in read.lines)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Row(children: [
-                        Expanded(
-                          child: Text(line.description ?? '—',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 13)),
+                ),
+                TextButton.icon(
+                  onPressed: () =>
+                      setState(() => _lines.add(_EditableLine.blank())),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add'),
+                ),
+              ]),
+              if (_lines.isEmpty)
+                Text(
+                  'No lines were read.',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: context.scheme.onSurfaceVariant),
+                ),
+              for (var i = 0; i < _lines.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: Space.sm),
+                  child: Row(children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _lines[i].description,
+                        style: const TextStyle(fontSize: 13),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          hintText: 'Description',
                         ),
-                        if (line.amount != null)
-                          Text(Fmt.money(line.amount!),
-                              style: const TextStyle(fontSize: 13)),
-                      ]),
+                      ),
                     ),
-                ],
-              ],
-              // Anything the reader flagged as needing a human. Put last
-              // and given its own box, because it is the one line here
-              // that is a warning rather than a figure.
-              if (read.note != null) ...[
+                    const SizedBox(width: Space.sm),
+                    SizedBox(
+                      width: 96,
+                      child: TextField(
+                        controller: _lines[i].amount,
+                        textAlign: TextAlign.end,
+                        style: const TextStyle(fontSize: 13),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          hintText: '0.00',
+                        ),
+                      ),
+                    ),
+                    // The reason this is here. A bill's footer reads as
+                    // lines to anything working off printing alone, so a
+                    // credit limit and a deposit arrive looking like
+                    // charges and have to be removable.
+                    IconButton(
+                      tooltip: 'Remove this line',
+                      icon: const Icon(Icons.close, size: 16),
+                      onPressed: () => setState(() {
+                        _lines.removeAt(i).dispose();
+                      }),
+                    ),
+                  ]),
+                ),
+              if (foots != null) ...[
                 const SizedBox(height: Space.md),
                 Container(
                   padding: const EdgeInsets.all(Space.md),
@@ -98,8 +292,35 @@ class _ScanResultDialog extends StatelessWidget {
                     color: context.colors.warning.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text(read.note!,
-                      style: const TextStyle(fontSize: 13)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(foots, style: const TextStyle(fontSize: 13)),
+                      // Offered, not applied. The sum is arithmetic
+                      // nobody disputes, but which of the three figures
+                      // was misread is a judgement, so it takes a press.
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          onPressed: () => setState(() => _total.text =
+                              ((_subtotalValue ?? 0) + (_taxValue ?? 0))
+                                  .toStringAsFixed(2)),
+                          child: Text('Set total to '
+                              '${Fmt.money((_subtotalValue ?? 0) + (_taxValue ?? 0))}'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else if (read.note != null && !_allThreeFigures) ...[
+                const SizedBox(height: Space.md),
+                Container(
+                  padding: const EdgeInsets.all(Space.md),
+                  decoration: BoxDecoration(
+                    color: context.colors.warning.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(read.note!, style: const TextStyle(fontSize: 13)),
                 ),
               ],
             ],
@@ -108,12 +329,12 @@ class _ScanResultDialog extends StatelessWidget {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: Text(canApply ? 'Discard' : 'Close'),
+          onPressed: () => Navigator.pop(context),
+          child: Text(widget.canApply ? 'Discard' : 'Close'),
         ),
-        if (canApply && !nothing)
+        if (widget.canApply)
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(context, _edited),
             child: const Text('Use these'),
           ),
       ],
@@ -121,32 +342,175 @@ class _ScanResultDialog extends StatelessWidget {
   }
 }
 
-class _Row extends StatelessWidget {
-  const _Row(this.label, this.value, {this.bold = false});
+/// One line of the document, while somebody is editing it.
+class _EditableLine {
+  _EditableLine({
+    required this.description,
+    required this.amount,
+    this.quantity,
+    this.unitPrice,
+  });
+
+  factory _EditableLine.from(OcrLine line) => _EditableLine(
+        description: TextEditingController(text: line.description ?? ''),
+        amount: TextEditingController(
+            text: line.amount == null ? '' : line.amount!.toStringAsFixed(2)),
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+      );
+
+  factory _EditableLine.blank() => _EditableLine(
+        description: TextEditingController(),
+        amount: TextEditingController(),
+      );
+
+  final TextEditingController description;
+  final TextEditingController amount;
+
+  /// Carried through untouched. Neither is shown — a bill's quantity and
+  /// unit price are rarely what needs correcting, and two more boxes per
+  /// line would make the common case worse to serve the rare one.
+  final double? quantity;
+  final double? unitPrice;
+
+  bool get isEmpty =>
+      description.text.trim().isEmpty && amount.text.trim().isEmpty;
+
+  OcrLine toLine() => OcrLine(
+        description: description.text.trim().isEmpty
+            ? null
+            : description.text.trim(),
+        quantity: quantity,
+        unitPrice: unitPrice,
+        amount: _ScanResultDialogState._parse(amount.text),
+      );
+
+  void dispose() {
+    description.dispose();
+    amount.dispose();
+  }
+}
+
+/// `myr` is not a currency anywhere it is compared against ISO codes,
+/// and a lower-case one matching nothing is a silent wrong answer rather
+/// than an error. Fixed as it is typed, on a phone keyboard that offers
+/// no capitals of its own in this field.
+class _Upper extends TextInputFormatter {
+  const _Upper();
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue _, TextEditingValue next) =>
+      next.copyWith(text: next.text.toUpperCase());
+}
+
+class _Field extends StatelessWidget {
+  const _Field({
+    required this.label,
+    required this.controller,
+    this.money = false,
+    this.bold = false,
+    this.capitals = false,
+    this.maxLength,
+    this.onChanged,
+  });
 
   final String label;
-  final String? value;
+  final TextEditingController controller;
+  final bool money;
   final bool bold;
+  final bool capitals;
+  final int? maxLength;
+  final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) {
-    // A field the document does not carry is shown as absent rather than
-    // hidden: "no tax number printed" is worth knowing when the reason
-    // an e-Invoice will be rejected is that there is not one.
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      padding: const EdgeInsets.only(bottom: Space.sm),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
         SizedBox(
           width: 110,
           child: Text(label, style: Theme.of(context).textTheme.bodySmall),
         ),
         Expanded(
-          child: Text(
-            value ?? 'Not on the document',
+          child: TextField(
+            // Named so a test can reach a figure by what it is rather
+            // than by where it happens to sit in the column.
+            key: ValueKey('scan-$label'),
+            controller: controller,
+            onChanged: onChanged,
+            maxLength: maxLength,
+            textCapitalization: capitals
+                ? TextCapitalization.characters
+                : TextCapitalization.none,
+            inputFormatters: capitals ? const [_Upper()] : null,
+            keyboardType: money
+                ? const TextInputType.numberWithOptions(decimal: true)
+                : null,
             style: TextStyle(
               fontWeight: bold ? FontWeight.w600 : FontWeight.w400,
-              color: value == null ? context.scheme.onSurfaceVariant : null,
-              fontStyle: value == null ? FontStyle.italic : null,
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              counterText: '',
+              // What the reader could not find, said in the box rather
+              // than in a row that looks filled in.
+              hintText: 'Not on the document',
+              prefixText: money ? Fmt.prefix('MYR') : null,
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _DateField extends StatelessWidget {
+  const _DateField({
+    required this.label,
+    required this.value,
+    required this.onPick,
+    required this.onClear,
+  });
+
+  final String label;
+  final DateTime? value;
+  final VoidCallback onPick;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Space.sm),
+      child: Row(children: [
+        SizedBox(
+          width: 110,
+          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ),
+        Expanded(
+          child: InkWell(
+            onTap: onPick,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(children: [
+                Expanded(
+                  child: Text(
+                    value == null ? 'Not on the document' : Fmt.date(value),
+                    style: TextStyle(
+                      color: value == null
+                          ? context.scheme.onSurfaceVariant
+                          : null,
+                      fontStyle: value == null ? FontStyle.italic : null,
+                    ),
+                  ),
+                ),
+                if (value != null)
+                  IconButton(
+                    tooltip: 'Clear',
+                    icon: const Icon(Icons.close, size: 16),
+                    onPressed: onClear,
+                  ),
+                const Icon(Icons.calendar_today_outlined, size: 16),
+              ]),
             ),
           ),
         ),

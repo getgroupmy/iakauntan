@@ -246,7 +246,7 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
     // Shown before it is applied. A machine reading a faded thermal
     // receipt is a good first draft, not a source document.
     final accepted = await showScanResult(context, staged!.read!, canApply: true);
-    if (accepted == true && mounted) setState(() => _apply(staged.read!));
+    if (accepted != null && mounted) setState(() => _apply(accepted));
   }
 
   void _apply(OcrExtraction read) {

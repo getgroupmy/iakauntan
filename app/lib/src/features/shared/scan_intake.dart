@@ -43,8 +43,16 @@ Future<StagedReceipt?> showScanIntake(
   // filed against whatever gets created, and let the form be typed in.
   if (staged.read == null) return staged;
 
+  // The corrected reading, not the original one — the whole point of
+  // showing it is that somebody may put a figure right.
   final accepted = await showScanResult(context, staged.read!, canApply: true);
-  if (accepted == true) return staged;
+  if (accepted != null) {
+    return StagedReceipt(
+      attachmentId: staged.attachmentId,
+      placeholderId: staged.placeholderId,
+      read: accepted,
+    );
+  }
 
   // Declined. The paper still goes on the record — it is the evidence
   // either way, and only the *reading* was rejected.
