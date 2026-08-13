@@ -34,7 +34,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # `version: latest` means the action asks the GitHub API which
+      # release is newest, and an Actions runner shares its address with
+      # every other runner on that host. Unauthenticated that allowance
+      # is sixty calls an hour between all of them, and run 113 died on
+      # `Failed to resolve latest Supabase CLI release: rate limit
+      # exceeded` — nothing to do with the commit under test.
+      #
+      # The token raises the allowance to a thousand an hour against this
+      # repository. It grants nothing here that the job does not already
+      # have: it is the automatic per-run token, scoped to this
+      # repository, and it is being spent on a public read.
       - uses: supabase/setup-cli@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           version: latest
 
@@ -89,8 +103,13 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_embeds.py "$DB"
 
+      # Tearing down a container that is about to be deleted anyway, so
+      # this must never be what fails a run. When the CLI itself failed
+      # to install, this step used to exit 127 with `supabase: command
+      # not found` — which is the first error a reader sees and the one
+      # that explains nothing, sitting above the one that does.
       - if: always()
-        run: supabase stop --no-backup
+        run: command -v supabase >/dev/null && supabase stop --no-backup || true
 
   # -------------------------------------------------------------------
   # The one piece of edge-function logic worth asserting
@@ -205,8 +224,11 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # Authenticated for the same reason as the database job above.
       - uses: supabase/setup-cli@v1
         if: steps.creds.outputs.ready == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           version: latest
 
