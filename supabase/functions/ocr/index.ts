@@ -173,7 +173,12 @@ const SCHEMA = {
     },
     document_no: {
       type: ["string", "null"],
-      description: "Invoice, bill or receipt number.",
+      description:
+        "The document's own number — invoice, bill or receipt. Labelled " +
+        "`Invoice No`, `Bill No`, `No. Resit`, `No. Invois`, or printed " +
+        "under such a label rather than beside it. Not the approval code " +
+        "or reference from a card terminal, not the SSM or SST number, " +
+        "and not the customer's account number.",
     },
     document_date: {
       type: ["string", "null"],

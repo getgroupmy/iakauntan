@@ -59,11 +59,35 @@ final _taxIdLabel = RegExp(
   caseSensitive: false,
 );
 
-final _docNoLabel = RegExp(
-  r'\b(?:tax\s*)?(?:invoice|inv|receipt|resit|bill|doc(?:ument)?|ref(?:erence)?)'
-  r'\s*(?:no|number|#)?\s*[:.\-]\s*([A-Za-z0-9][A-Za-z0-9/\-]{2,})',
+/// What the document calls its own number.
+///
+/// Two lists, tried in order, because they are not equally trustworthy.
+/// `Invoice No` means one thing; `Ref` on a card slip is an approval
+/// code that has nothing to do with the bill — worth taking when there
+/// is nothing better, and never in preference to something better.
+///
+/// No separator is required. `INVOICE NO 12345` with nothing but spaces
+/// is the common printing, and demanding a colon is why a DirectD
+/// receipt came back with no number at all.
+final _docNoStrong = RegExp(
+  r'\b(?:tax\s+)?(?:invoice|invois|receipt|resit|bill|cash\s+bill|'
+  r'doc(?:ument)?)\b\.?\s*(?:no\b\.?|number\b|nombor\b|id\b|#)?\s*[:\-]?\s*',
   caseSensitive: false,
 );
+
+/// Weaker, and only consulted once the strong labels have found nothing.
+/// `inv` is here rather than above because it is three letters and turns
+/// up inside other words often enough to be worth demoting.
+final _docNoWeak = RegExp(
+  r'\b(?:inv|order|transaction|trans|slip|ref(?:erence)?|rujukan)\b\.?\s*'
+  r'(?:no\b\.?|number\b|nombor\b|id\b|#)?\s*[:\-]?\s*',
+  caseSensitive: false,
+);
+
+/// The token itself. Three characters at least, and no full stops: an
+/// invoice number does not end a sentence, and allowing one is how the
+/// prose after a label gets captured.
+final _docNoValue = RegExp(r'^#?\s*([A-Za-z0-9][A-Za-z0-9/_\-]{2,})');
 
 /// What a company is called in Malaysia, more or less.
 final _companySuffix = RegExp(
@@ -255,16 +279,46 @@ String? _taxId(List<String> lines) {
 }
 
 String? _documentNo(List<String> lines) {
-  for (final line in lines) {
-    final m = _docNoLabel.firstMatch(line);
-    final value = m?.group(1);
-    // A bare date caught by the "ref:" pattern is not a document number.
-    if (value == null || RegExp(r'^\d{1,2}[/-]\d{1,2}').hasMatch(value)) {
-      continue;
-    }
-    return value.toUpperCase();
+  // Every strong label first, across the whole document, before any weak
+  // one is considered. A card slip's `Ref` often sits above the invoice
+  // number rather than below it, so first-match-wins on a single pass
+  // would take the wrong one.
+  return _documentNoBy(lines, _docNoStrong) ??
+      _documentNoBy(lines, _docNoWeak);
+}
+
+String? _documentNoBy(List<String> lines, RegExp label) {
+  for (var i = 0; i < lines.length; i++) {
+    final m = label.firstMatch(lines[i]);
+    if (m == null) continue;
+
+    // Beside the label, or on the line under it. Receipts are printed in
+    // columns and a photograph read line by line splits the two often
+    // enough that only looking beside it misses a third of them.
+    final value = _docNoValueIn(lines[i].substring(m.end)) ??
+        (i + 1 < lines.length ? _docNoValueIn(lines[i + 1]) : null);
+    if (value != null) return value.toUpperCase();
   }
   return null;
+}
+
+String? _docNoValueIn(String rest) {
+  final value = _docNoValue.firstMatch(rest.trim())?.group(1);
+  if (value == null) return null;
+
+  // A document number carries a digit. Without this the line under a
+  // label yields whatever word happens to be there — `DATE`, `CASHIER`,
+  // the start of an address.
+  if (!RegExp(r'\d').hasMatch(value)) return null;
+
+  // A date is not a document number, however it was labelled.
+  if (RegExp(r'^\d{1,2}[/-]\d{1,2}').hasMatch(value)) return null;
+
+  // Nor is a figure of money, which is what sits beside `Bill` on a
+  // statement.
+  if (RegExp(r'^\d+\.\d{2}$').hasMatch(value)) return null;
+
+  return value;
 }
 
 /// The trading name, which is almost always at the top and almost always
@@ -372,7 +426,7 @@ String? _address(List<String> lines, String? supplierName) {
     if (_money.hasMatch(line)) break;
     if (_phoneLabel.hasMatch(line) || _email.hasMatch(line)) break;
     if (_registrationLabel.hasMatch(line)) break;
-    if (_docNoLabel.hasMatch(line)) break;
+    if (_docNoStrong.hasMatch(line)) break;
     from--;
   }
 
@@ -475,7 +529,7 @@ List<OcrLine> _lineItems(List<String> lines) {
     final amount = _amountOn(line);
     if (amount == null) continue;
     if (_notATotal.hasMatch(line) || _taxLabel.hasMatch(line)) continue;
-    if (_docNoLabel.hasMatch(line) || _dateIn(line) != null) continue;
+    if (_docNoStrong.hasMatch(line) || _dateIn(line) != null) continue;
 
     // Everything before the figure is the description.
     final at = _money.allMatches(line).last.start;
