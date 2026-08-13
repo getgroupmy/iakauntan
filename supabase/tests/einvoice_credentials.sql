@@ -109,11 +109,21 @@ begin
 
   -- The whole point of the reader. If this ever returns the secret, the
   -- table might as well have a select policy on it.
-  perform pg_temp.check_true('and the secret is not among the columns at all',
+  --
+  -- Matched against `client_secret` and `private_key`, the actual column
+  -- names, rather than the word "secret" — which `has_secret` contains,
+  -- so the obvious version of this assertion contradicts itself and can
+  -- never pass. It went in that way and CI caught it.
+  perform pg_temp.check_true('the secret is not among the columns at all',
     pg_get_function_result(
       (select oid from pg_proc where proname = 'einvoice_credential_status'))
-      not ilike '%secret%'
-    and pg_get_function_result(
+      not ilike '%client_secret%');
+  perform pg_temp.check_true('nor the certificate private key',
+    pg_get_function_result(
+      (select oid from pg_proc where proname = 'einvoice_credential_status'))
+      not ilike '%private_key%');
+  perform pg_temp.check_true('only whether one is on file',
+    pg_get_function_result(
       (select oid from pg_proc where proname = 'einvoice_credential_status'))
       ilike '%has_secret%');
 
