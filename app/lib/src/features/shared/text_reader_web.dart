@@ -26,8 +26,19 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
-/// Where the vendored engine lives, relative to the document base.
-const _base = 'tesseract';
+/// Where the vendored engine lives.
+///
+/// Absolute, resolved against the document base, and that is not
+/// tidiness. `tesseract.js` fetches the worker and then runs the core
+/// and the language model fetches *inside* that worker — where a
+/// relative URL resolves against the worker's own script, not the page.
+/// On a route like `/purchases/bill` the relative form went looking in
+/// the wrong place and came back `NetworkError: Load failed`, which
+/// names the symptom and nothing else.
+String _asset(String path) => Uri.parse(_baseUri).resolve(path).toString();
+
+@JS('document.baseURI')
+external String get _baseUri;
 
 @JS('Tesseract')
 external JSObject? get _tesseractOrNull;
@@ -69,9 +80,9 @@ Future<String> readTextFromBytes(Uint8List bytes) async {
 
   final options = JSObject()
     // Each of these would otherwise default to a CDN.
-    ..setProperty('workerPath'.toJS, '$_base/worker.min.js'.toJS)
-    ..setProperty('corePath'.toJS, '$_base/core'.toJS)
-    ..setProperty('langPath'.toJS, '$_base/lang'.toJS)
+    ..setProperty('workerPath'.toJS, _asset('tesseract/worker.min.js').toJS)
+    ..setProperty('corePath'.toJS, _asset('tesseract/core').toJS)
+    ..setProperty('langPath'.toJS, _asset('tesseract/lang').toJS)
     // The model is served gzipped — 4.1MB down to 1.9MB, which on a
     // Malaysian mobile connection is the difference between a pause and
     // a wait. Fetched once and then in the browser's cache.
