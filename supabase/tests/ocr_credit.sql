@@ -227,8 +227,9 @@ do $$
 declare
   v_org  uuid := pg_temp.scannable('Pembeli Kredit Sdn Bhd');
   v_user uuid := pg_temp.test_user();
-  v_top  jsonb;
-  inv    public.platform_invoices;
+  v_top   jsonb;
+  inv     public.platform_invoices;
+  v_first integer;
 begin
   insert into public.platform_admins (user_id) values (v_user)
   on conflict do nothing;
@@ -236,6 +237,7 @@ begin
   v_top := public.platform_topup_credit(v_org, 250, 'Bank transfer 11 Aug');
   select * into inv from public.platform_invoices
    where id = (v_top ->> 'invoice_id')::uuid;
+  v_first := substring(inv.invoice_no from '[0-9]+$')::integer;
 
   perform pg_temp.check_true('the invoice is numbered by year',
     inv.invoice_no like 'KH-' || to_char(current_date, 'YYYY') || '-%');
@@ -273,8 +275,15 @@ begin
   perform pg_temp.check_balance('and the credit is still what was bought',
     v_org, 500.00);
 
-  perform pg_temp.check_true('numbers run in sequence',
-    inv.invoice_no like '%-0002');
+  -- One higher than the last one issued, not a fixed number: the block
+  -- above this one already sold credit to a different organization, so
+  -- the first invoice here is not the first invoice of the year. That
+  -- is the whole point of the counter, and asserting a literal tested
+  -- the fixture rather than the code.
+  perform pg_temp.check_eq('numbers run in sequence',
+    substring(inv.invoice_no from '[0-9]+$')::integer, v_first + 1);
+  perform pg_temp.check_true('and stay padded and prefixed',
+    inv.invoice_no ~ ('^KH-' || to_char(current_date, 'YYYY') || '-[0-9]{4}$'));
 
   -- Goodwill, and taking it back, both leave a line.
   perform public.platform_adjust_credit(v_org, 25, 'Outage on 12 Aug');
