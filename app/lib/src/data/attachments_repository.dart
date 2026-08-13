@@ -59,7 +59,9 @@ extension RepoAttachments on Repo {
           .map(Attachment.fromJson)
           .toList();
 
-  Future<void> uploadAttachment({
+  /// Returns the id of the row created, which is what a scan is asked
+  /// for.
+  Future<String> uploadAttachment({
     required String table,
     required String recordId,
     required String fileName,
@@ -77,15 +79,20 @@ extension RepoAttachments on Repo {
     final path = '$orgId/$table/$recordId/$key';
 
     await client.storage.from(bucket).uploadBinary(path, bytes);
-    await client.from('attachments').insert({
-      'org_id': orgId,
-      'entity_table': table,
-      'entity_id': recordId,
-      'file_name': fileName,
-      'storage_path': path,
-      'mime_type': mimeType,
-      'file_size': bytes.length,
-    });
+    final row = await client
+        .from('attachments')
+        .insert({
+          'org_id': orgId,
+          'entity_table': table,
+          'entity_id': recordId,
+          'file_name': fileName,
+          'storage_path': path,
+          'mime_type': mimeType,
+          'file_size': bytes.length,
+        })
+        .select('id')
+        .single();
+    return row['id'].toString();
   }
 
   /// A short-lived link. The bucket is private, so there is no public URL
@@ -96,6 +103,19 @@ extension RepoAttachments on Repo {
       client.storage
           .from(bucket)
           .createSignedUrl(storagePath, validFor.inSeconds);
+
+  /// For a file whose row was never displayed — a receipt captured for a
+  /// record that was then abandoned.
+  Future<void> deleteAttachmentById(String id) async {
+    final row = await client
+        .from('attachments')
+        .select('storage_path')
+        .eq('id', id)
+        .maybeSingle();
+    if (row == null) return;
+    await client.storage.from(bucket).remove([row['storage_path'].toString()]);
+    await client.from('attachments').delete().eq('id', id);
+  }
 
   Future<void> deleteAttachment(Attachment attachment) async {
     await client.storage.from(bucket).remove([attachment.storagePath]);

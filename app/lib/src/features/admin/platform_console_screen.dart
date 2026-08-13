@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'credit_admin.dart';
 import 'statutory_rates_admin.dart';
 
 /// Platform operator console. Everything here goes through SECURITY
@@ -21,7 +22,7 @@ class PlatformConsoleScreen extends ConsumerStatefulWidget {
 
 class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 4, vsync: this);
+  late final TabController _tabs = TabController(length: 5, vsync: this);
 
   @override
   void dispose() {
@@ -47,6 +48,7 @@ class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen>
           tabs: const [
             Tab(text: 'Overview'),
             Tab(text: 'Organizations'),
+            Tab(text: 'Scanning credit'),
             Tab(text: 'Service settings'),
             Tab(text: 'Statutory rates'),
           ],
@@ -67,6 +69,7 @@ class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen>
             children: const [
               _OverviewTab(),
               _OrganizationsTab(),
+              CreditAdminTab(),
               _SettingsTab(),
               StatutoryRatesAdminTab(),
             ],

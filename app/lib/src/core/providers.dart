@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../data/corp_models.dart';
 import '../data/corp_repository.dart';
 import '../data/models.dart';
+import '../data/ocr_repository.dart';
 import '../data/repository.dart';
 
 final supabaseProvider = Provider<SupabaseClient>((_) => Supabase.instance.client);
@@ -921,4 +922,37 @@ final orgLogoProvider = FutureProvider<Uint8List?>((ref) async {
   final org = ref.watch(currentOrgProvider).valueOrNull;
   if (repo == null || org?.logoUrl == null) return null;
   return repo.orgLogoBytes();
+});
+
+/// Whether this organization reads its own paperwork, and what is left
+/// to pay for it.
+///
+/// Not autoDispose: half a dozen screens ask, the answer changes only
+/// when somebody edits a setting or spends a scan, and both of those
+/// invalidate it.
+final ocrStatusProvider = FutureProvider<OcrSettings>((ref) {
+  return requireRepo(ref).ocrStatus();
+});
+
+final creditLedgerProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).creditLedger();
+});
+
+final creditInvoicesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).creditInvoices();
+});
+
+/// Every tenant's scanning balance, emptiest first, and the invoices
+/// raised for what they bought. Platform staff only — the RPCs behind
+/// these re-check that.
+final platformCreditProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return ref.watch(platformRepoProvider).creditSummary();
+});
+
+final platformInvoicesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return ref.watch(platformRepoProvider).creditInvoices();
 });

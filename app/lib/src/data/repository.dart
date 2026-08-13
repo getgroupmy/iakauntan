@@ -1416,7 +1416,9 @@ class Repo {
 
   /// Creates an expense and posts it in one step — expenses are always
   /// money already spent, so there is no useful draft state.
-  Future<void> recordExpense({
+  /// Returns the id of the expense created, so a receipt photographed
+  /// before it existed can be filed against it.
+  Future<String> recordExpense({
     required String accountId,
     required double amount,
     required DateTime date,
@@ -1449,6 +1451,7 @@ class Repo {
         .single();
 
     await client.rpc('post_expense', params: {'p_id': row['id']});
+    return row['id'].toString();
   }
 
   // ------------------------------------------------------------------
@@ -1697,6 +1700,53 @@ class PlatformRepo {
   Future<void> updateSetting(String key, Map<String, dynamic> value) =>
       client.rpc('platform_update_setting',
           params: {'p_key': key, 'p_value': value});
+
+  // ------------------------------------------------------------------
+  // Scanning credit
+  //
+  // Sold in ringgit rather than in scans, because the price is set here
+  // and will move. What a tenant bought stays what they bought.
+  // ------------------------------------------------------------------
+
+  /// Every tenant's balance and what they have spent lately, emptiest
+  /// first — which is the order somebody chasing top-ups wants.
+  Future<List<Map<String, dynamic>>> creditSummary() async =>
+      Repo._rows(await client.rpc('platform_credit_summary'));
+
+  /// Grants [amount] of credit and raises the invoice for it. Service
+  /// tax, if the issuer is registered for it, goes on top.
+  Future<Map<String, dynamic>> topUpCredit(
+    String orgId,
+    double amount, {
+    String? note,
+  }) async {
+    final data = await client.rpc('platform_topup_credit', params: {
+      'p_org_id': orgId,
+      'p_amount': amount,
+      'p_note': note,
+    });
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  /// Signed. Goodwill after an outage, or clawing back a mis-keyed
+  /// top-up — either way it writes the same ledger line everything else
+  /// does, so it cannot be done invisibly.
+  Future<void> adjustCredit(String orgId, double amount, String reason) =>
+      client.rpc('platform_adjust_credit', params: {
+        'p_org_id': orgId,
+        'p_amount': amount,
+        'p_reason': reason,
+      });
+
+  Future<List<Map<String, dynamic>>> creditInvoices({String? orgId}) async {
+    var query = client.from('platform_invoices').select();
+    if (orgId != null) query = query.eq('org_id', orgId);
+    return Repo._rows(await query.order('issue_date', ascending: false));
+  }
+
+  Future<void> markInvoicePaid(String invoiceId, {String? note}) =>
+      client.rpc('platform_mark_invoice_paid',
+          params: {'p_invoice_id': invoiceId, 'p_note': note});
 }
 
 /// Tenant-scoped extras: team management, module entitlements and the

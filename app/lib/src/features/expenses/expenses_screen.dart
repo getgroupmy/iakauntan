@@ -5,8 +5,12 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/attachments_repository.dart';
 import '../../data/models.dart';
+import '../../data/ocr_repository.dart';
 import '../shared/attachments_card.dart';
+import '../shared/receipt_capture.dart';
+import '../shared/scan_result_dialog.dart';
 
 /// Money already spent, captured and posted in one step — there is no
 /// useful draft state for an expense that has already left the bank.
@@ -155,6 +159,13 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
   String _paymentMode = '03';
   DateTime _date = DateTime.now();
   bool _saving = false;
+  bool _reading = false;
+
+  /// The receipt, filed before this expense existed. Moved onto the
+  /// expense when it is recorded, and deleted if this dialog is
+  /// abandoned — an orphan under a record that was never created is
+  /// storage nobody will ever find again.
+  StagedReceipt? _receipt;
 
   @override
   void dispose() {
@@ -162,6 +173,55 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
     _amount.dispose();
     _reference.dispose();
     super.dispose();
+  }
+
+  Future<void> _capture({required bool camera}) async {
+    setState(() => _reading = true);
+    final staged = await captureAndRead(context, ref,
+        camera: camera, table: 'expenses');
+    if (!mounted) {
+      // The dialog closed under it. Nothing here to attach it to, so it
+      // is not left lying in the bucket.
+      if (staged != null) {
+        ref.read(repoProvider)?.deleteAttachmentById(staged.attachmentId);
+      }
+      return;
+    }
+    setState(() {
+      _reading = false;
+      // A second capture replaces the first, so the earlier file goes.
+      final previous = _receipt;
+      if (previous != null && staged != null) {
+        ref.read(repoProvider)?.deleteAttachmentById(previous.attachmentId);
+      }
+      if (staged != null) _receipt = staged;
+    });
+    if (staged?.read == null) return;
+
+    // Shown before it is applied. A machine reading a faded thermal
+    // receipt is a good first draft, not a source document.
+    final accepted = await showScanResult(context, staged!.read!, canApply: true);
+    if (accepted == true && mounted) setState(() => _apply(staged.read!));
+  }
+
+  void _apply(OcrExtraction read) {
+    final net = read.netAmount;
+    if (net != null) _amount.text = net.toStringAsFixed(2);
+    if (read.documentDate != null) _date = read.documentDate!;
+    // The supplier and the document number, joined, because an expense
+    // has one description field and both belong in it.
+    final description = [read.supplierName, read.documentNo]
+        .whereType<String>()
+        .join(' · ');
+    if (description.isNotEmpty) _description.text = description;
+    if (read.documentNo != null) _reference.text = read.documentNo!;
+  }
+
+  Future<void> _discardReceipt() async {
+    final staged = _receipt;
+    if (staged == null) return;
+    setState(() => _receipt = null);
+    await ref.read(repoProvider)?.deleteAttachmentById(staged.attachmentId);
   }
 
   double get _net => double.tryParse(_amount.text) ?? 0;
@@ -180,21 +240,37 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
     setState(() => _saving = true);
     final ok = await runWithFeedback(
       context,
-      action: () => ref.read(repoProvider)!.recordExpense(
-            accountId: _accountId!,
-            amount: _net,
-            date: _date,
-            description: _description.text.trim().isEmpty
-                ? null
-                : _description.text.trim(),
-            bankAccountId: _bankAccountId,
-            paymentModeCode: _paymentMode,
-            taxCodeId: _taxCodeId,
-            taxAmount: _tax,
-            reference: _reference.text.trim().isEmpty
-                ? null
-                : _reference.text.trim(),
-          ),
+      action: () async {
+        final repo = ref.read(repoProvider)!;
+        final id = await repo.recordExpense(
+          accountId: _accountId!,
+          amount: _net,
+          date: _date,
+          description: _description.text.trim().isEmpty
+              ? null
+              : _description.text.trim(),
+          bankAccountId: _bankAccountId,
+          paymentModeCode: _paymentMode,
+          taxCodeId: _taxCodeId,
+          taxAmount: _tax,
+          reference: _reference.text.trim().isEmpty
+              ? null
+              : _reference.text.trim(),
+        );
+
+        // The receipt was photographed before the expense existed, so it
+        // is filed onto it now. Last, and deliberately: an expense that
+        // posted is worth keeping even if moving the file fails, and the
+        // file is still findable by its scan either way.
+        final staged = _receipt;
+        if (staged != null) {
+          await repo.refileAttachment(
+            attachmentId: staged.attachmentId,
+            table: 'expenses',
+            recordId: id,
+          );
+        }
+      },
       successMessage: 'Expense recorded and posted',
       pendingMessage: 'Posting…',
     );
@@ -216,6 +292,8 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
     final taxCodes = ref.watch(taxCodesProvider).value ?? const <TaxCode>[];
     final modes = ref.watch(paymentModesProvider).value ?? const [];
 
+    final ocr = ref.watch(ocrStatusProvider).valueOrNull ?? OcrSettings.off;
+
     return AlertDialog(
       title: const Text('Record expense'),
       content: SizedBox(
@@ -226,6 +304,21 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Before the form, because this is the order the work
+                // happens in: somebody is holding a receipt and has not
+                // yet decided which account it belongs to.
+                if (ocr.enabled) ...[
+                  _ReceiptStrip(
+                    reading: _reading,
+                    receipt: _receipt,
+                    price: ocr.keySource == 'platform' ? ocr.price : 0,
+                    onPhotograph:
+                        cameraLikely ? () => _capture(camera: true) : null,
+                    onPick: () => _capture(camera: false),
+                    onDiscard: _discardReceipt,
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 DropdownButtonFormField<String>(
                   value: _accountId,
                   isExpanded: true,
@@ -361,7 +454,12 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            // A receipt captured for an expense that was never recorded
+            // has nothing to hang off, so it goes with the dialog.
+            _discardReceipt();
+            Navigator.pop(context);
+          },
           child: const Text('Cancel'),
         ),
         FilledButton(
@@ -375,6 +473,83 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
               : const Text('Record and post'),
         ),
       ],
+    );
+  }
+}
+
+/// The receipt, before there is an expense to file it against.
+class _ReceiptStrip extends StatelessWidget {
+  const _ReceiptStrip({
+    required this.reading,
+    required this.receipt,
+    required this.price,
+    required this.onPhotograph,
+    required this.onPick,
+    required this.onDiscard,
+  });
+
+  final bool reading;
+  final StagedReceipt? receipt;
+  final double price;
+  final VoidCallback? onPhotograph;
+  final VoidCallback onPick;
+  final VoidCallback onDiscard;
+
+  @override
+  Widget build(BuildContext context) {
+    final held = receipt != null;
+
+    return Container(
+      padding: const EdgeInsets.all(Space.md),
+      decoration: BoxDecoration(
+        color: context.scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(children: [
+        Icon(
+          held ? Icons.check_circle_outline : Icons.receipt_long_outlined,
+          size: 20,
+          color: held ? context.colors.success : context.scheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            reading
+                ? 'Reading it…'
+                : held
+                    ? 'Receipt attached. It will be filed against this expense.'
+                    : price > 0
+                        ? 'Photograph the receipt and it fills this in '
+                            '(${Fmt.money(price)}).'
+                        : 'Photograph the receipt and it fills this in.',
+            style: const TextStyle(fontSize: 13),
+          ),
+        ),
+        if (reading)
+          const SizedBox(
+              height: 18,
+              width: 18,
+              child: CircularProgressIndicator(strokeWidth: 2))
+        else if (held)
+          IconButton(
+            tooltip: 'Remove the receipt',
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: onDiscard,
+          )
+        else ...[
+          if (onPhotograph != null)
+            IconButton(
+              tooltip: 'Photograph it',
+              icon: const Icon(Icons.photo_camera_outlined, size: 20),
+              onPressed: onPhotograph,
+            ),
+          IconButton(
+            tooltip: 'Choose a file',
+            icon: const Icon(Icons.attach_file, size: 20),
+            onPressed: onPick,
+          ),
+        ],
+      ]),
     );
   }
 }

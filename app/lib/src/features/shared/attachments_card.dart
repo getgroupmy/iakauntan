@@ -1,10 +1,5 @@
-import 'dart:typed_data';
-
-import 'package:file_selector/file_selector.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
@@ -12,6 +7,9 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
+import '../../data/ocr_repository.dart';
+import 'receipt_capture.dart';
+import 'scan_result_dialog.dart';
 
 final attachmentsProvider = FutureProvider.autoDispose
     .family<List<Attachment>, ({String table, String id})>((ref, key) {
@@ -33,12 +31,21 @@ class AttachmentsCard extends ConsumerStatefulWidget {
     required this.recordId,
     this.title = 'Attachments',
     this.subtitle,
+    this.onExtracted,
   });
 
   final String table;
   final String recordId;
   final String title;
   final String? subtitle;
+
+  /// Where a scanned document's fields should go.
+  ///
+  /// Given a callback, Scan hands the extraction straight to the form
+  /// behind this card. Without one it shows what was read, which is
+  /// still worth having on a record that is finished and read-only —
+  /// somebody checking a posted bill against its paper.
+  final void Function(OcrExtraction)? onExtracted;
 
   @override
   ConsumerState<AttachmentsCard> createState() => _AttachmentsCardState();
@@ -66,16 +73,7 @@ class _AttachmentsCardState extends ConsumerState<AttachmentsCard> {
               subtitle: widget.subtitle,
               action: canWrite
                   ? Row(mainAxisSize: MainAxisSize.min, children: [
-                      // Shown where there is plausibly a camera, which is
-                      // the question `defaultTargetPlatform` actually
-                      // answers: on the web it reports the browser's
-                      // platform, so a phone browser says android or iOS
-                      // and a laptop says macOS or Windows. That covers
-                      // the app and the mobile web from one condition,
-                      // and keeps a redundant button off a desktop where
-                      // the capture attribute would silently degrade to
-                      // an ordinary file dialog.
-                      if (_cameraLikely)
+                      if (cameraLikely)
                         IconButton(
                           tooltip: 'Photograph it',
                           onPressed: _busy ? null : _photograph,
@@ -116,6 +114,7 @@ class _AttachmentsCardState extends ConsumerState<AttachmentsCard> {
                           canWrite: canWrite,
                           onChanged: () =>
                               ref.invalidate(attachmentsProvider(_key)),
+                          onExtracted: widget.onExtracted,
                         ),
                       ],
                     ]),
@@ -126,56 +125,23 @@ class _AttachmentsCardState extends ConsumerState<AttachmentsCard> {
     );
   }
 
-  static bool get _cameraLikely =>
-      defaultTargetPlatform == TargetPlatform.android ||
-      defaultTargetPlatform == TargetPlatform.iOS;
+  /// The library stays reachable through Attach, which on a phone offers
+  /// it among everything else.
+  Future<void> _pick() async => _upload(await pickReceipt());
 
-  Future<void> _pick() async {
-    final file = await openFile();
+  Future<void> _photograph() async => _upload(await photographReceipt());
+
+  Future<void> _upload(CapturedFile? file) async {
     if (file == null || !mounted) return;
-    await _upload(file.name, await file.readAsBytes(), file.mimeType);
-  }
-
-  /// Straight to the camera, not to a chooser.
-  ///
-  /// Somebody standing at a counter holding a receipt wants the shutter,
-  /// not a menu offering them a photo library they have not put anything
-  /// in yet. The library remains reachable through Attach, which on a
-  /// phone offers it among everything else.
-  Future<void> _photograph() async {
-    final shot = await ImagePicker().pickImage(
-      source: ImageSource.camera,
-      // A receipt only has to be legible, and a full-resolution phone
-      // photo is several megabytes of thermal paper. This keeps enough
-      // detail to read the small print off the storage bill.
-      imageQuality: 85,
-      maxWidth: 2000,
-    );
-    if (shot == null || !mounted) return;
-
-    // The camera names files things like `image_picker_XYZ.jpg`, which
-    // tells nobody anything a year later.
-    final stamp = DateTime.now();
-    final name = 'receipt-${stamp.year}'
-        '${stamp.month.toString().padLeft(2, '0')}'
-        '${stamp.day.toString().padLeft(2, '0')}'
-        '-${stamp.millisecondsSinceEpoch % 100000}.jpg';
-
-    await _upload(name, await shot.readAsBytes(),
-        shot.mimeType ?? 'image/jpeg');
-  }
-
-  Future<void> _upload(String name, Uint8List bytes, String? mimeType) async {
-    if (!mounted) return;
     setState(() => _busy = true);
     await runWithFeedback(
       context,
       action: () => ref.read(repoProvider)!.uploadAttachment(
             table: widget.table,
             recordId: widget.recordId,
-            fileName: name,
-            bytes: bytes,
-            mimeType: mimeType,
+            fileName: file.name,
+            bytes: file.bytes,
+            mimeType: file.mimeType,
           ),
       successMessage: 'Attached',
     );
@@ -184,16 +150,33 @@ class _AttachmentsCardState extends ConsumerState<AttachmentsCard> {
   }
 }
 
-class _FileRow extends ConsumerWidget {
+class _FileRow extends ConsumerStatefulWidget {
   const _FileRow({
     required this.file,
     required this.canWrite,
     required this.onChanged,
+    this.onExtracted,
   });
 
   final Attachment file;
   final bool canWrite;
   final VoidCallback onChanged;
+  final void Function(OcrExtraction)? onExtracted;
+
+  @override
+  ConsumerState<_FileRow> createState() => _FileRowState();
+}
+
+class _FileRowState extends ConsumerState<_FileRow> {
+  bool _scanning = false;
+
+  Attachment get file => widget.file;
+
+  /// There is nothing to read in a spreadsheet or a zip.
+  bool get _readable {
+    final m = file.mimeType ?? '';
+    return m.startsWith('image/') || m.contains('pdf');
+  }
 
   IconData get _icon {
     final m = file.mimeType ?? '';
@@ -206,7 +189,12 @@ class _FileRow extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    // Off for most organizations, and there is no row until somebody
+    // turns it on, so the absent case has to read as off rather than as
+    // a spinner that never resolves.
+    final ocr = ref.watch(ocrStatusProvider).valueOrNull ?? OcrSettings.off;
+
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: Icon(_icon, size: 22, color: context.scheme.onSurfaceVariant),
@@ -218,22 +206,66 @@ class _FileRow extends ConsumerWidget {
         style: const TextStyle(fontSize: 12),
       ),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (ocr.enabled && _readable && widget.canWrite)
+          IconButton(
+            icon: _scanning
+                ? const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.document_scanner_outlined, size: 18),
+            // Says what it costs before it is pressed, because it is
+            // the one button on this screen that spends money.
+            tooltip: ocr.keySource == 'platform' && ocr.price > 0
+                ? 'Read this document (${Fmt.money(ocr.price)})'
+                : 'Read this document',
+            onPressed: _scanning ? null : _scan,
+          ),
         IconButton(
           icon: const Icon(Icons.open_in_new, size: 18),
           tooltip: 'Open',
-          onPressed: () => _open(context, ref),
+          onPressed: _open,
         ),
-        if (canWrite)
+        if (widget.canWrite)
           IconButton(
             icon: const Icon(Icons.delete_outline, size: 18),
             tooltip: 'Remove',
-            onPressed: () => _remove(context, ref),
+            onPressed: _remove,
           ),
       ]),
     );
   }
 
-  Future<void> _open(BuildContext context, WidgetRef ref) async {
+  Future<void> _scan() async {
+    setState(() => _scanning = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final read = await ref.read(repoProvider)!.scanAttachment(file.id);
+      if (!mounted) return;
+      // The balance moved, so what the next tooltip says about it should
+      // be true.
+      ref.invalidate(ocrStatusProvider);
+
+      final apply = widget.onExtracted;
+      if (apply == null) {
+        await showScanResult(context, read);
+      } else {
+        final accepted = await showScanResult(context, read, canApply: true);
+        if (accepted == true) apply(read);
+      }
+    } catch (e) {
+      // The database's own refusals — scanning switched off, no credit,
+      // a provider that would not read it — arrive already written for
+      // somebody to read, so they are shown rather than summarised.
+      messenger.showSnackBar(SnackBar(
+        content: Text(e is OcrException ? e.message : 'Could not read it: $e'),
+      ));
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  Future<void> _open() async {
     final messenger = ScaffoldMessenger.of(context);
     try {
       // The bucket is private, so this is a link that expires rather
@@ -245,20 +277,20 @@ class _FileRow extends ConsumerWidget {
     }
   }
 
-  Future<void> _remove(BuildContext context, WidgetRef ref) async {
+  Future<void> _remove() async {
     final ok = await confirm(
       context,
       title: 'Remove ${file.fileName}?',
       message: 'The file is deleted from storage as well as from the record.',
       confirmLabel: 'Remove',
     );
-    if (!ok || !context.mounted) return;
+    if (!ok || !mounted) return;
 
     await runWithFeedback(
       context,
       action: () => ref.read(repoProvider)!.deleteAttachment(file),
       successMessage: 'Removed',
     );
-    onChanged();
+    widget.onChanged();
   }
 }

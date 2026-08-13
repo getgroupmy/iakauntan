@@ -178,6 +178,75 @@ your organisation's certificate before enabling it.
 
 ---
 
+## Reading receipts and bills
+
+Photograph a receipt and the supplier, the date, the number and the
+figures come back filled in. It reaches a bill through **Supplier
+paperwork** in the document editor, and an expense through **Record
+expense**, where the capture happens before the expense exists and the
+file is moved onto it once it does.
+
+**It is off until an administrator turns it on**, per organization, under
+Settings → *Read receipts and bills*. There is no settings row until
+somebody creates one and no row means off. A receipt carries a supplier,
+an amount and sometimes a person's movements; sending that to a third
+party is a decision, not a default to discover afterwards.
+
+Three choices: **Claude**, **Google Document AI**, or nothing. And two
+ways to pay for it:
+
+- **Your own key.** Scans run on your account with the provider and cost
+  nothing here. The key is stored the way LHDN client secrets are — RLS
+  on with no policies, and the grants to `anon` and `authenticated`
+  revoked outright, so both have to fail together before it is readable
+  by anyone holding the publishable key that ships in the web bundle.
+  Nothing returns it, including the administrator who set it.
+- **The platform's key**, drawn against credit bought in advance.
+
+**Credit is in ringgit, not in scans.** The price per scan is set in the
+platform console and will move; a balance of "40 scans" bought at one
+price and spent at another is an argument waiting to happen. The balance
+is one row taken `FOR UPDATE` with an append-only ledger beside it, and
+the charge is taken *before* the provider is called and given back if the
+call fails — taking it afterwards makes a crashed function a free scan,
+and not returning it makes a provider outage a paid-for nothing. Both
+directions are ledger lines, so the statement shows what happened rather
+than a balance that quietly healed.
+
+**A top-up raises a real invoice**, from Kabeer Holdings Sdn Bhd
+(registration `201901030189`, formerly `1339519K`), with both parties
+snapshotted onto the document so a later rename does not rewrite it.
+Deliberately not a `sales_documents` row: that would put the platform's
+revenue inside a customer's trial balance.
+
+Service tax is off. `platform_settings.platform_issuer` carries
+`sst_registered`, `sst_no` and `sst_rate`, so the day the issuer
+registers those go in the console and every invoice raised afterwards
+carries them — nothing already issued changes. These invoices are issued
+by the platform rather than by a tenant, so they sit outside every
+MyInvois submitter this system holds credentials for; bringing them
+within the e-Invoice mandate needs Kabeer Holdings' own credentials and
+its own submission path, which is not built.
+
+What is read is shown before it is applied, and a figure the reader could
+not make out comes back as *absent* rather than as zero. The supplier is
+never matched by name: two contacts called the same thing are ordinary,
+and putting a bill against the wrong one surfaces months later in an aged
+payables listing.
+
+Secrets for the platform key live in **Edge Functions → Secrets**, never
+in the repository or the database: `OCR_ANTHROPIC_API_KEY`, or
+`OCR_GOOGLE_CREDENTIALS` with `OCR_GOOGLE_PROJECT`,
+`OCR_GOOGLE_LOCATION` and `OCR_GOOGLE_PROCESSOR`.
+
+`supabase/tests/ocr_credit.sql` asserts the money: that an empty balance
+refuses before the provider is called, that a failed scan returns exactly
+what it took and does so once however often the callback arrives, that
+the ledger and the balance agree after every move, and that a signed-in
+user reaches neither the key table nor the function that refunds.
+
+---
+
 ## Legal firm accounting (add-on)
 
 For law firms, where client money is not the firm's money. Built to the

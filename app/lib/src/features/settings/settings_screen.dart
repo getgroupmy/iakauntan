@@ -8,6 +8,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../../data/ocr_repository.dart';
 import '../../data/repository.dart';
 import '../auth/reset_password_screen.dart' show validatePassword;
 
@@ -44,6 +45,8 @@ class SettingsScreen extends ConsumerWidget {
                   _CompanyCard(org: organization),
                   const SizedBox(height: 16),
                   _EinvoiceCard(org: organization, canEdit: isAdmin),
+                  const SizedBox(height: 16),
+                  _ScanningCard(canEdit: isAdmin),
                   const SizedBox(height: 16),
                   _ModulesCard(canAdmin: isAdmin),
                   const SizedBox(height: 16),
@@ -280,6 +283,337 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Reading receipts and bills, which is off until somebody here says
+/// otherwise.
+///
+/// The default is off and there is no row until this card writes one,
+/// because a receipt carries a supplier, an amount and sometimes a
+/// person's movements, and sending that to a third party is a decision
+/// rather than something to discover afterwards.
+class _ScanningCard extends ConsumerStatefulWidget {
+  const _ScanningCard({required this.canEdit});
+
+  final bool canEdit;
+
+  @override
+  ConsumerState<_ScanningCard> createState() => _ScanningCardState();
+}
+
+class _ScanningCardState extends ConsumerState<_ScanningCard> {
+  final _apiKey = TextEditingController();
+  final _project = TextEditingController();
+  final _location = TextEditingController();
+  final _processor = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _apiKey.dispose();
+    _project.dispose();
+    _location.dispose();
+    _processor.dispose();
+    super.dispose();
+  }
+
+  Future<void> _write(Future<void> Function() action, String message) async {
+    setState(() => _saving = true);
+    final ok = await runWithFeedback(context,
+        action: action, successMessage: message);
+    if (mounted) setState(() => _saving = false);
+    if (ok) ref.invalidate(ocrStatusProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = ref.watch(ocrStatusProvider);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: AsyncView(
+          value: status,
+          onRetry: () => ref.invalidate(ocrStatusProvider),
+          loading: const LinearProgressIndicator(),
+          builder: (ocr) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SectionHeader(
+                'Read receipts and bills',
+                subtitle:
+                    'Photograph a receipt and have the supplier, date and '
+                    'amount filled in for you',
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: ocr.enabled,
+                onChanged: widget.canEdit && !_saving
+                    ? (v) => _write(
+                          () => ref.read(repoProvider)!.setOcrSettings(
+                                enabled: v,
+                                provider: ocr.provider,
+                                keySource: ocr.keySource,
+                              ),
+                          v ? 'Scanning is on' : 'Scanning is off',
+                        )
+                    : null,
+                title: const Text('Send documents to a reader'),
+                subtitle: const Text(
+                  'Off unless you turn it on. A receipt carries a supplier, '
+                  'an amount and sometimes a customer.',
+                ),
+              ),
+              if (ocr.enabled) ...[
+                const SizedBox(height: 8),
+                SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: 'claude', label: Text('Claude')),
+                    ButtonSegment(
+                        value: 'google', label: Text('Document AI')),
+                  ],
+                  selected: {ocr.provider},
+                  onSelectionChanged: widget.canEdit && !_saving
+                      ? (s) => _write(
+                            () => ref.read(repoProvider)!.setOcrSettings(
+                                  enabled: true,
+                                  provider: s.first,
+                                  // Switching to a provider you have no
+                                  // key for would be refused, so it
+                                  // falls back to the platform's.
+                                  keySource: ocr.keys.contains(s.first)
+                                      ? ocr.keySource
+                                      : 'platform',
+                                ),
+                            'Provider changed',
+                          )
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(
+                        value: 'platform', label: Text('Buy credit')),
+                    ButtonSegment(value: 'own', label: Text('My own key')),
+                  ],
+                  selected: {ocr.keySource},
+                  onSelectionChanged: widget.canEdit && !_saving
+                      ? (s) => _write(
+                            () => ref.read(repoProvider)!.setOcrSettings(
+                                  enabled: true,
+                                  provider: ocr.provider,
+                                  keySource: s.first,
+                                ),
+                            'Saved',
+                          )
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                if (ocr.keySource == 'platform')
+                  _CreditBalance(ocr: ocr)
+                else
+                  _OwnKeyFields(
+                    ocr: ocr,
+                    canEdit: widget.canEdit,
+                    saving: _saving,
+                    apiKey: _apiKey,
+                    project: _project,
+                    location: _location,
+                    processor: _processor,
+                    onSave: () => _write(
+                      () async {
+                        await ref.read(repoProvider)!.setOcrCredentials(
+                              provider: ocr.provider,
+                              apiKey: _apiKey.text.trim().isEmpty
+                                  ? null
+                                  : _apiKey.text.trim(),
+                              projectId: _project.text.trim().isEmpty
+                                  ? null
+                                  : _project.text.trim(),
+                              location: _location.text.trim().isEmpty
+                                  ? null
+                                  : _location.text.trim(),
+                              processorId: _processor.text.trim().isEmpty
+                                  ? null
+                                  : _processor.text.trim(),
+                            );
+                        _apiKey.clear();
+                      },
+                      'Key saved',
+                    ),
+                    onClear: () => _write(
+                      () => ref
+                          .read(repoProvider)!
+                          .clearOcrCredentials(ocr.provider),
+                      'Key removed',
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CreditBalance extends StatelessWidget {
+  const _CreditBalance({required this.ocr});
+
+  final OcrSettings ocr;
+
+  @override
+  Widget build(BuildContext context) {
+    final empty = ocr.outOfCredit;
+
+    return Container(
+      padding: const EdgeInsets.all(Space.md),
+      decoration: BoxDecoration(
+        color: (empty ? context.colors.warning : context.scheme.primary)
+            .withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(children: [
+        Icon(empty ? Icons.error_outline : Icons.account_balance_wallet_outlined,
+            size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${Fmt.money(ocr.balance)} of scanning credit',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              Text(
+                empty
+                    ? 'Not enough for another scan at '
+                        '${Fmt.money(ocr.price)} each. Ask us to top it up.'
+                    : '${Fmt.money(ocr.price)} a scan — about '
+                        '${ocr.scansLeft} more.',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+/// An organization's own provider key.
+///
+/// The key itself never comes back from the server — the table holding
+/// it has RLS with no policies and no grants, so the only reader is the
+/// edge function. What this shows is whether one is on file.
+class _OwnKeyFields extends StatelessWidget {
+  const _OwnKeyFields({
+    required this.ocr,
+    required this.canEdit,
+    required this.saving,
+    required this.apiKey,
+    required this.project,
+    required this.location,
+    required this.processor,
+    required this.onSave,
+    required this.onClear,
+  });
+
+  final OcrSettings ocr;
+  final bool canEdit;
+  final bool saving;
+  final TextEditingController apiKey;
+  final TextEditingController project;
+  final TextEditingController location;
+  final TextEditingController processor;
+  final VoidCallback onSave;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final isGoogle = ocr.provider == 'google';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (ocr.hasOwnKey)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(children: [
+              Icon(Icons.key_outlined,
+                  size: 18, color: context.colors.success),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'A key is on file. Scans run on your account with the '
+                  'provider and cost nothing here.',
+                  style: TextStyle(fontSize: 13),
+                ),
+              ),
+              TextButton(
+                onPressed: canEdit && !saving ? onClear : null,
+                child: const Text('Remove'),
+              ),
+            ]),
+          ),
+        TextField(
+          controller: apiKey,
+          enabled: canEdit,
+          obscureText: !isGoogle,
+          maxLines: isGoogle ? 4 : 1,
+          decoration: InputDecoration(
+            labelText: isGoogle ? 'Service account JSON' : 'API key',
+            helperText: ocr.hasOwnKey
+                ? 'Leave blank to keep the one already stored'
+                : 'Stored server-side only; never sent back to the app',
+          ),
+        ),
+        if (isGoogle) ...[
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(
+              child: TextField(
+                controller: project,
+                enabled: canEdit,
+                decoration:
+                    const InputDecoration(labelText: 'Project id'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 120,
+              child: TextField(
+                controller: location,
+                enabled: canEdit,
+                decoration: const InputDecoration(
+                    labelText: 'Location', hintText: 'us'),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          TextField(
+            controller: processor,
+            enabled: canEdit,
+            decoration: const InputDecoration(
+              labelText: 'Processor id',
+              helperText: 'The Expense or Invoice parser you created',
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+        if (canEdit)
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              onPressed: saving ? null : onSave,
+              child: const Text('Save key'),
+            ),
+          ),
+      ],
     );
   }
 }

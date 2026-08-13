@@ -12,6 +12,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../../data/ocr_repository.dart';
 import '../../data/repository.dart';
 import '../shared/attachments_card.dart';
 import 'doc_types.dart';
@@ -198,6 +199,58 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   }
 
   void _markDirty() => setState(() => _dirty = true);
+
+  /// Fills this bill in from the supplier's own paperwork.
+  ///
+  /// The supplier is deliberately not matched by name. Two contacts
+  /// called "Syarikat Maju" are an ordinary thing in a contact list, and
+  /// putting the bill against the wrong one is a mistake that surfaces
+  /// months later in an aged payables listing. The number, the date and
+  /// the lines are what this fills; who it is from stays a person's
+  /// decision.
+  ///
+  /// Tax codes are left alone for the same reason: a rate guessed off a
+  /// printed figure is a posted amount that does not match the return.
+  void _applyScan(OcrExtraction read) {
+    setState(() {
+      if (read.documentNo != null) _supplierDocNo.text = read.documentNo!;
+      if (read.documentDate != null) _docDate = read.documentDate!;
+
+      // Only into an empty document. Somebody who has already keyed the
+      // lines and is scanning to attach the paper should not lose them.
+      final blank = _lines.every(
+          (l) => l.description.trim().isEmpty && l.itemId == null);
+      if (!blank) return;
+
+      final lines = read.lines
+          .where((l) => (l.description ?? '').trim().isNotEmpty)
+          .map((l) => LineDraft(
+                description: l.description!.trim(),
+                quantity: l.quantity ?? 1,
+                unitPrice: l.unitPrice ??
+                    (l.amount != null && (l.quantity ?? 1) != 0
+                        ? l.amount! / (l.quantity ?? 1)
+                        : 0),
+              ))
+          .toList();
+
+      // A receipt that prints one total and no breakdown still has to
+      // become a line, or there is nothing to post.
+      final net = read.netAmount;
+      if (lines.isEmpty && net != null) {
+        lines.add(LineDraft(
+          description: read.supplierName ?? 'Per the attached document',
+          unitPrice: net,
+        ));
+      }
+      if (lines.isEmpty) return;
+
+      _lines
+        ..clear()
+        ..addAll(lines);
+      _dirty = true;
+    });
+  }
 
   // ------------------------------------------------------------------
   // Currency and rate
@@ -946,6 +999,10 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                           title: 'Supplier paperwork',
                           subtitle: 'The bill, delivery order or quotation '
                               'this was raised from.',
+                          // Reading it fills the number, the date and the
+                          // lines — which is the whole reason the paper
+                          // is here rather than in a filing cabinet.
+                          onExtracted: _applyScan,
                         ),
                       ],
                       const SizedBox(height: 40),
