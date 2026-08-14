@@ -245,6 +245,74 @@ class Repo {
     return _rows(data).map(TaxCode.fromJson).toList();
   }
 
+  /// Add a rate this company charges.
+  ///
+  /// The seeded codes cover SST as it stands, which is not the same as
+  /// covering every company: a rate changes in a budget, a business is
+  /// exempt on one service line and not another, and until now the only
+  /// way to record either was a migration.
+  ///
+  /// `is_default` is set through [setDefaultTaxCode] rather than here,
+  /// because making one default means unmaking another and that is one
+  /// operation, not two.
+  Future<void> createTaxCode({
+    required String code,
+    required String name,
+    required double rate,
+    String taxTypeCode = '06',
+    bool isExempt = false,
+  }) =>
+      client.from('tax_codes').insert({
+        'org_id': orgId,
+        'code': code,
+        'name': name,
+        'rate': rate,
+        'tax_type_code': taxTypeCode,
+        'is_exempt': isExempt,
+      });
+
+  Future<void> updateTaxCode(
+    String id, {
+    required String code,
+    required String name,
+    required double rate,
+    required String taxTypeCode,
+    required bool isExempt,
+  }) =>
+      client.from('tax_codes').update({
+        'code': code,
+        'name': name,
+        'rate': rate,
+        'tax_type_code': taxTypeCode,
+        'is_exempt': isExempt,
+      }).eq('id', id).eq('org_id', orgId);
+
+  /// Exactly one default, so the two writes go together. Clearing first
+  /// and setting second: the other order leaves two defaults if the
+  /// second write fails, and a document editor picking "the default"
+  /// would then pick whichever came back first.
+  Future<void> setDefaultTaxCode(String id) async {
+    await client
+        .from('tax_codes')
+        .update({'is_default': false})
+        .eq('org_id', orgId)
+        .neq('id', id);
+    await client
+        .from('tax_codes')
+        .update({'is_default': true})
+        .eq('id', id)
+        .eq('org_id', orgId);
+  }
+
+  /// Retired rather than deleted. A tax code is on every document that
+  /// ever used it, and a rate that stops applying today did apply last
+  /// year — the trial balance still has to explain itself.
+  Future<void> retireTaxCode(String id) => client
+      .from('tax_codes')
+      .update({'is_active': false, 'is_default': false})
+      .eq('id', id)
+      .eq('org_id', orgId);
+
   Future<List<FiscalYear>> fiscalYears() async {
     final data = await client
         .from('fiscal_years')

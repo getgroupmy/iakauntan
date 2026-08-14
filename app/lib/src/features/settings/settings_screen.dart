@@ -1332,10 +1332,28 @@ class _ChartOfAccountsCard extends ConsumerWidget {
   }
 }
 
+/// The rates this company charges.
+///
+/// The seeded codes cover SST as it stands, which is not the same thing
+/// as covering every company: a rate moves in a budget, a business is
+/// exempt on one service line and not another, and until this card the
+/// only way to record either was a migration. The database has allowed
+/// the write since 0010 — `tax_codes` has had insert, update and delete
+/// policies for anyone who can post all along — so this is a screen
+/// catching up with a permission, not a permission being widened.
 class _TaxCodesCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final taxCodes = ref.watch(taxCodesProvider);
+    final canEdit = ref.watch(canPostProvider);
+
+    Future<void> edit([TaxCode? existing]) async {
+      final saved = await showDialog<bool>(
+        context: context,
+        builder: (_) => _TaxCodeDialog(existing: existing),
+      );
+      if (saved == true) ref.invalidate(taxCodesProvider);
+    }
 
     return Card(
       child: Padding(
@@ -1343,9 +1361,16 @@ class _TaxCodesCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SectionHeader(
+            SectionHeader(
               'Tax codes',
               subtitle: 'Sales and service tax rates used on documents',
+              action: canEdit
+                  ? TextButton.icon(
+                      onPressed: () => edit(),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Add'),
+                    )
+                  : null,
             ),
             AsyncView(
               value: taxCodes,
@@ -1354,29 +1379,38 @@ class _TaxCodesCard extends ConsumerWidget {
               builder: (list) => Column(
                 children: [
                   for (final t in list)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 5),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 64,
-                            child: Text(
-                              t.code,
+                    InkWell(
+                      key: ValueKey('tax-code-${t.code}'),
+                      onTap: canEdit ? () => edit(t) : null,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 64,
+                              child: Text(
+                                t.code,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            Expanded(child: Text(t.name)),
+                            if (t.isDefault)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 8),
+                                child: StatusChip('default', compact: true),
+                              ),
+                            Text(
+                              Fmt.percent(t.rate),
                               style:
                                   const TextStyle(fontWeight: FontWeight.w600),
                             ),
-                          ),
-                          Expanded(child: Text(t.name)),
-                          if (t.isDefault)
-                            const Padding(
-                              padding: EdgeInsets.only(right: 8),
-                              child: StatusChip('default', compact: true),
-                            ),
-                          Text(
-                            Fmt.percent(t.rate),
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                        ],
+                            if (canEdit) ...[
+                              const SizedBox(width: 4),
+                              const Icon(Icons.chevron_right, size: 18),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
                 ],
@@ -1386,6 +1420,239 @@ class _TaxCodesCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// Adding a rate, or correcting one.
+///
+/// Retiring rather than deleting is the only part with an opinion in it.
+/// A tax code is on every document that ever used it, and a rate that
+/// stops applying today still applied last year — a deleted one would
+/// leave the trial balance unable to explain itself.
+class _TaxCodeDialog extends ConsumerStatefulWidget {
+  const _TaxCodeDialog({this.existing});
+
+  final TaxCode? existing;
+
+  @override
+  ConsumerState<_TaxCodeDialog> createState() => _TaxCodeDialogState();
+}
+
+class _TaxCodeDialogState extends ConsumerState<_TaxCodeDialog> {
+  final _code = TextEditingController();
+  final _name = TextEditingController();
+  final _rate = TextEditingController();
+  late String _taxType;
+  late bool _exempt;
+  bool _saving = false;
+
+  bool get _isNew => widget.existing == null;
+
+  @override
+  void initState() {
+    super.initState();
+    final t = widget.existing;
+    _code.text = t?.code ?? '';
+    _name.text = t?.name ?? '';
+    _rate.text = t == null ? '' : t.rate.toStringAsFixed(2);
+    _taxType = t?.taxTypeCode ?? '06';
+    _exempt = t?.isExempt ?? false;
+  }
+
+  @override
+  void dispose() {
+    _code.dispose();
+    _name.dispose();
+    _rate.dispose();
+    super.dispose();
+  }
+
+  double? get _parsedRate => double.tryParse(_rate.text.trim());
+
+  bool get _valid =>
+      _code.text.trim().isNotEmpty &&
+      _name.text.trim().isNotEmpty &&
+      _parsedRate != null &&
+      _parsedRate! >= 0 &&
+      _parsedRate! <= 100;
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    final repo = ref.read(repoProvider)!;
+    final ok = await runWithFeedback(
+      context,
+      action: () => _isNew
+          ? repo.createTaxCode(
+              code: _code.text.trim().toUpperCase(),
+              name: _name.text.trim(),
+              rate: _parsedRate!,
+              taxTypeCode: _taxType,
+              isExempt: _exempt,
+            )
+          : repo.updateTaxCode(
+              widget.existing!.id,
+              code: _code.text.trim().toUpperCase(),
+              name: _name.text.trim(),
+              rate: _parsedRate!,
+              taxTypeCode: _taxType,
+              isExempt: _exempt,
+            ),
+      successMessage: _isNew ? 'Tax code added' : 'Tax code saved',
+    );
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (ok) Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(_isNew ? 'New tax code' : 'Edit ${widget.existing!.code}'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 120,
+                  child: TextField(
+                    key: const ValueKey('tax-code-code'),
+                    controller: _code,
+                    enabled: !_saving,
+                    textCapitalization: TextCapitalization.characters,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(labelText: 'Code'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    key: const ValueKey('tax-code-name'),
+                    controller: _name,
+                    enabled: !_saving,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(labelText: 'Name'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 120,
+                  child: TextField(
+                    key: const ValueKey('tax-code-rate'),
+                    controller: _rate,
+                    enabled: !_saving,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      labelText: 'Rate',
+                      suffixText: '%',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: _taxType,
+                    decoration:
+                        const InputDecoration(labelText: 'LHDN tax type'),
+                    items: const [
+                      DropdownMenuItem(value: '01', child: Text('01 — Sales')),
+                      DropdownMenuItem(
+                          value: '02', child: Text('02 — Service')),
+                      DropdownMenuItem(
+                          value: '06', child: Text('06 — Not applicable')),
+                      DropdownMenuItem(value: 'E', child: Text('E — Exempt')),
+                    ],
+                    onChanged:
+                        _saving ? null : (v) => setState(() => _taxType = v!),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _exempt,
+              onChanged: _saving ? null : (v) => setState(() => _exempt = v!),
+              title: const Text('Exempt'),
+              subtitle: const Text('Shown on the document as exempt, not zero'),
+            ),
+            if (!_isNew) ...[
+              const Divider(height: Space.xl),
+              Row(
+                children: [
+                  if (!widget.existing!.isDefault)
+                    TextButton(
+                      onPressed: _saving ? null : _makeDefault,
+                      child: const Text('Make default'),
+                    ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: _saving ? null : _retire,
+                    child: Text('Retire',
+                        style: TextStyle(color: context.colors.danger)),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _valid && !_saving ? _save : null,
+          child: Text(_isNew ? 'Add' : 'Save'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _makeDefault() async {
+    setState(() => _saving = true);
+    final ok = await runWithFeedback(
+      context,
+      action: () =>
+          ref.read(repoProvider)!.setDefaultTaxCode(widget.existing!.id),
+      successMessage: 'Default tax code changed',
+    );
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (ok) Navigator.of(context).pop(true);
+  }
+
+  Future<void> _retire() async {
+    final sure = await confirm(
+      context,
+      title: 'Retire ${widget.existing!.code}?',
+      message: 'It stops being offered on new documents. Documents that '
+          'already use it keep it, and the figures they carry do not move.',
+      confirmLabel: 'Retire',
+      destructive: true,
+    );
+    if (!sure || !mounted) return;
+
+    setState(() => _saving = true);
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.retireTaxCode(widget.existing!.id),
+      successMessage: 'Tax code retired',
+    );
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (ok) Navigator.of(context).pop(true);
   }
 }
 

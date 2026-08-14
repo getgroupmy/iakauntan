@@ -667,6 +667,15 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     final narrow = MediaQuery.sizeOf(context).width < 640;
     final einvoiceValid = _einvoiceStatus == 'valid';
 
+    // Two different questions, and both have to be yes. `_meta.einvoice`
+    // says this kind of document is one LHDN wants; this says the
+    // company has switched submission on and has credentials behind it.
+    // Offering the button to a company that has not is offering a button
+    // whose only outcome is being told to go to Settings, which is a
+    // worse way to say "not set up" than not being there at all.
+    final einvoiceOn =
+        ref.watch(currentOrgProvider).value?.einvoiceEnabled == true;
+
     final primary = switch (null) {
       _ when editable && canPost && _meta.posts => (
           label: 'Post',
@@ -674,7 +683,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           icon: null,
           onTap: _saving ? null : _post,
         ),
-      _ when _isPosted && _meta.einvoice => (
+      _ when _isPosted && _meta.einvoice && einvoiceOn => (
           label: einvoiceValid ? 'e-Invoice valid' : 'Submit e-Invoice',
           short: einvoiceValid ? 'Valid' : 'Submit',
           icon: einvoiceValid ? Icons.verified : Icons.cloud_upload_outlined,
@@ -910,7 +919,15 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         reference: _reference,
                         supplierDocNo: _supplierDocNo,
                         editable: editable,
-                        requiresEinvoice: _meta.einvoice,
+                        // Warning somebody that a customer has no TIN is
+                        // only useful where the document is actually
+                        // going to LHDN. With submission off it is a
+                        // complaint about a rejection that will never
+                        // happen.
+                        requiresEinvoice: _meta.einvoice &&
+                            ref.watch(currentOrgProvider).value
+                                    ?.einvoiceEnabled ==
+                                true,
                         currency: _currency,
                         baseCurrency: _base,
                         rate: _rate,
