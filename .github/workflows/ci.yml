@@ -96,7 +96,8 @@ jobs:
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \
                    supabase/tests/claim_attachments.sql \
-                   supabase/tests/claim_approval_chain.sql; do
+                   supabase/tests/claim_approval_chain.sql \
+                   supabase/tests/table_grants.sql; do
             echo "== $f"
             psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done

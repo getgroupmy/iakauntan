@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786678127.0036564,
-    "ast_hash": "2d1b4d85fef0bfee1017e5a787640ef5",
+    "mtime": 1786685099.740781,
+    "ast_hash": "db1f09740c0acdf3f93c652e6cfff26e",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -2082,6 +2082,16 @@
   "supabase/migrations/0124_a_claim_moves_while_you_watch.sql": {
     "mtime": 1786684474.944744,
     "ast_hash": "4b2b466e0a9a4cbedbcbaa672687cc0d",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0125_the_api_can_reach_what_rls_guards.sql": {
+    "mtime": 1786685075.3887796,
+    "ast_hash": "c2824e82775873e8c0f8cace75d55b98",
+    "semantic_hash": ""
+  },
+  "supabase/tests/table_grants.sql": {
+    "mtime": 1786685096.136781,
+    "ast_hash": "fd48fc740087011cf13dbd1e75677d8a",
     "semantic_hash": ""
   }
 }
