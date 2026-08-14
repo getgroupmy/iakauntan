@@ -1,0 +1,589 @@
+import 'package:file_selector/file_selector.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/format.dart';
+import '../../core/providers.dart';
+import '../../core/theme.dart';
+import '../../core/widgets.dart';
+import '../../data/models.dart';
+import '../../data/repository.dart';
+
+class CompanyCard extends ConsumerWidget {
+  const CompanyCard({super.key, required this.org});
+
+  final Organization org;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final canAdmin = ref.watch(canAdminProvider);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionHeader(
+              'Company',
+              action: canAdmin
+                  ? TextButton.icon(
+                      key: const ValueKey('edit-company'),
+                      onPressed: () async {
+                        final saved = await showDialog<bool>(
+                          context: context,
+                          builder: (_) => _CompanyDialog(org: org),
+                        );
+                        if (saved == true) {
+                          ref.invalidate(organizationsProvider);
+                          refreshOrganization(ref);
+                        }
+                      },
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label: const Text('Edit'),
+                    )
+                  : null,
+            ),
+            _LogoRow(org: org),
+            const SizedBox(height: Space.md),
+            _StationeryRow(org: org),
+            const Divider(height: Space.xl),
+            FieldRow(label: 'Name', value: org.name),
+            FieldRow(label: 'Entity type', value: Fmt.label(org.entityType)),
+            FieldRow(
+              label: 'SSM registration',
+              value: org.registrationNo ?? 'Not set',
+            ),
+            FieldRow(label: 'LHDN TIN', value: org.tin ?? 'Not set'),
+            FieldRow(
+              label: 'SST',
+              value: org.isSstRegistered
+                  ? (org.sstRegistrationNo ?? 'Registered')
+                  : 'Not registered',
+            ),
+            FieldRow(label: 'MSIC code', value: org.msicCode ?? 'Not set'),
+            FieldRow(label: 'Base currency', value: org.baseCurrency),
+            FieldRow(label: 'Rounding', value: Fmt.label(org.roundingMethod)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The company's own particulars.
+///
+/// These were read-only on screen and had been writable in the database
+/// since 0010 — `organizations_update` has checked `can_admin` all along
+/// — so nothing here widens a permission. There was simply never a form.
+///
+/// Base currency is the exception and is handled apart from the rest.
+class _CompanyDialog extends ConsumerStatefulWidget {
+  const _CompanyDialog({required this.org});
+
+  final Organization org;
+
+  @override
+  ConsumerState<_CompanyDialog> createState() => _CompanyDialogState();
+}
+
+class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
+  final _name = TextEditingController();
+  final _registrationNo = TextEditingController();
+  final _tin = TextEditingController();
+  final _sstNo = TextEditingController();
+  final _msic = TextEditingController();
+  final _currency = TextEditingController();
+
+  late String _entityType;
+  late String _rounding;
+  late bool _sstRegistered;
+  bool _saving = false;
+
+  static const _entityTypes = {
+    'sdn_bhd': 'Private limited (Sdn Bhd)',
+    'bhd': 'Public limited (Berhad)',
+    'llp': 'Limited liability partnership (PLT)',
+    'enterprise': 'Enterprise',
+    'sole_proprietor': 'Sole proprietor',
+    'partnership': 'Partnership',
+    'association': 'Association',
+    'government': 'Government',
+    'individual': 'Individual',
+    'other': 'Other',
+  };
+
+  static const _roundings = {
+    'none': 'None',
+    'nearest_5cent': 'Nearest 5 sen',
+    'nearest_10cent': 'Nearest 10 sen',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    final o = widget.org;
+    _name.text = o.name;
+    _registrationNo.text = o.registrationNo ?? '';
+    _tin.text = o.tin ?? '';
+    _sstNo.text = o.sstRegistrationNo ?? '';
+    _msic.text = o.msicCode ?? '';
+    _currency.text = o.baseCurrency;
+    _entityType = _entityTypes.containsKey(o.entityType)
+        ? o.entityType
+        : 'other';
+    _rounding = _roundings.containsKey(o.roundingMethod)
+        ? o.roundingMethod
+        : 'none';
+    _sstRegistered = o.isSstRegistered;
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _registrationNo.dispose();
+    _tin.dispose();
+    _sstNo.dispose();
+    _msic.dispose();
+    _currency.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    final repo = ref.read(repoProvider)!;
+
+    final ok = await runWithFeedback(
+      context,
+      action: () async {
+        await repo.updateCompanyDetails(
+          name: _name.text.trim(),
+          entityType: _entityType,
+          roundingMethod: _rounding,
+          registrationNo: _registrationNo.text,
+          tin: _tin.text,
+          msicCode: _msic.text,
+          isSstRegistered: _sstRegistered,
+          sstRegistrationNo: _sstNo.text,
+        );
+
+        // Separately, and only when it actually changed, so a company
+        // that has posted nothing does not get a second write every
+        // time somebody corrects a phone number.
+        final code = _currency.text.trim().toUpperCase();
+        if (code.isNotEmpty && code != widget.org.baseCurrency) {
+          await repo.setBaseCurrency(code);
+        }
+      },
+      successMessage: 'Company details saved',
+    );
+
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (ok) Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Anything in the ledger and the base currency stops being editable.
+    // Loading counts as posted: guessing "probably empty" the one time
+    // it is wrong relabels every figure the company has.
+    final posted = ref.watch(hasPostingsProvider).value ?? true;
+
+    return AlertDialog(
+      title: const Text('Company details'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                key: const ValueKey('company-name'),
+                controller: _name,
+                enabled: !_saving,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                value: _entityType,
+                decoration: const InputDecoration(labelText: 'Entity type'),
+                items: [
+                  for (final e in _entityTypes.entries)
+                    DropdownMenuItem(value: e.key, child: Text(e.value)),
+                ],
+                onChanged: _saving
+                    ? null
+                    : (v) => setState(() => _entityType = v!),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey('company-registration'),
+                controller: _registrationNo,
+                enabled: !_saving,
+                decoration: const InputDecoration(
+                  labelText: 'SSM registration',
+                  hintText: '202401234567',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey('company-tin'),
+                controller: _tin,
+                enabled: !_saving,
+                decoration: const InputDecoration(
+                  labelText: 'LHDN TIN',
+                  helperText: 'Required before anything goes to MyInvois',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _msic,
+                enabled: !_saving,
+                decoration: const InputDecoration(
+                  labelText: 'MSIC code',
+                  hintText: '62010',
+                ),
+              ),
+              const Divider(height: Space.xl),
+              SwitchListTile(
+                key: const ValueKey('company-sst'),
+                contentPadding: EdgeInsets.zero,
+                value: _sstRegistered,
+                onChanged: _saving
+                    ? null
+                    : (v) => setState(() => _sstRegistered = v),
+                title: const Text('Registered for SST'),
+              ),
+              if (_sstRegistered)
+                TextField(
+                  controller: _sstNo,
+                  enabled: !_saving,
+                  decoration: const InputDecoration(
+                    labelText: 'SST registration number',
+                  ),
+                ),
+              const Divider(height: Space.xl),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                value: _rounding,
+                decoration: const InputDecoration(
+                  labelText: 'Rounding',
+                  helperText: 'Applied to the cash total on a document',
+                ),
+                items: [
+                  for (final e in _roundings.entries)
+                    DropdownMenuItem(value: e.key, child: Text(e.value)),
+                ],
+                onChanged: _saving
+                    ? null
+                    : (v) => setState(() => _rounding = v!),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey('company-currency'),
+                controller: _currency,
+                enabled: !_saving && !posted,
+                textCapitalization: TextCapitalization.characters,
+                maxLength: 3,
+                decoration: InputDecoration(
+                  labelText: 'Base currency',
+                  counterText: '',
+                  // The whole reason this field is locked, said where
+                  // somebody would otherwise go looking for a bug.
+                  helperText: posted
+                      ? 'Fixed once anything is posted — every amount in '
+                            'the ledger is a number in this currency, and '
+                            'changing it would re-label them all rather '
+                            'than convert them.'
+                      : 'Can still be changed: nothing has been posted yet.',
+                  helperMaxLines: 4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _name.text.trim().isEmpty || _saving ? null : _save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _LogoRow extends ConsumerStatefulWidget {
+  const _LogoRow({required this.org});
+
+  final Organization org;
+
+  @override
+  ConsumerState<_LogoRow> createState() => _LogoRowState();
+}
+
+class _LogoRowState extends ConsumerState<_LogoRow> {
+  bool _busy = false;
+
+  Future<void> _pick() async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+
+    final file = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'Image', extensions: ['png', 'jpg', 'jpeg', 'webp']),
+      ],
+    );
+    if (file == null) return;
+
+    final bytes = await file.readAsBytes();
+    // The bucket caps at 5 MB; refusing here says why, rather than
+    // letting storage return a bare 413.
+    if (bytes.length > 5 * 1024 * 1024) {
+      if (mounted) _say('That image is over 5 MB. Try a smaller one.');
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      await repo.uploadOrgLogo(bytes, file.mimeType ?? 'image/png');
+      refreshOrganization(ref);
+      ref.invalidate(orgLogoProvider);
+      if (mounted) _say('Logo updated');
+    } catch (e) {
+      if (mounted) _say('$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _remove() async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    setState(() => _busy = true);
+    try {
+      await repo.removeOrgLogo();
+      refreshOrganization(ref);
+      ref.invalidate(orgLogoProvider);
+      if (mounted) _say('Logo removed');
+    } catch (e) {
+      if (mounted) _say('$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _say(String message) => ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(message)));
+
+  @override
+  Widget build(BuildContext context) {
+    final canAdmin = ref.watch(canAdminProvider);
+    final url = widget.org.logoUrl;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 180,
+          child: Text(
+            'Logo',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: context.scheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                height: 64,
+                width: 128,
+                alignment: Alignment.centerLeft,
+                decoration: BoxDecoration(
+                  border: Border.all(color: context.scheme.outlineVariant),
+                  borderRadius: BorderRadius.circular(Radii.sm),
+                ),
+                padding: const EdgeInsets.all(6),
+                child: url == null
+                    ? Center(
+                        child: Text(
+                          'None',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      )
+                    : Image.network(
+                        url,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Center(
+                          child: Text(
+                            'Could not load',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ),
+              ),
+              const SizedBox(height: Space.sm),
+              if (canAdmin)
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : _pick,
+                      icon: _busy
+                          ? const SizedBox(
+                              height: 14,
+                              width: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.upload_outlined, size: 18),
+                      label: Text(url == null ? 'Upload' : 'Replace'),
+                    ),
+                    if (url != null) ...[
+                      const SizedBox(width: Space.sm),
+                      TextButton(
+                        onPressed: _busy ? null : _remove,
+                        child: const Text('Remove'),
+                      ),
+                    ],
+                  ],
+                )
+              else
+                Text(
+                  'Ask an administrator to change this.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              const SizedBox(height: Space.xs),
+              Text(
+                'PNG or JPEG, up to 5 MB. Printed at the top left of every '
+                'invoice, payslip and generated document.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: context.scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Companies that print onto their own letterhead paper.
+///
+/// Whether a business owns pre-printed stationery is a fact about the
+/// business rather than about one invoice, so it lives here instead of in
+/// a menu on every download. Off means the PDF is complete on its own,
+/// which is the only safe default for a file that gets e-mailed.
+
+class _StationeryRow extends ConsumerStatefulWidget {
+  const _StationeryRow({required this.org});
+
+  final Organization org;
+
+  @override
+  ConsumerState<_StationeryRow> createState() => _StationeryRowState();
+}
+
+class _StationeryRowState extends ConsumerState<_StationeryRow> {
+  bool _busy = false;
+
+  Future<void> _set(bool value) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    setState(() => _busy = true);
+    try {
+      await repo.setPreprintedLetterhead(value);
+      refreshOrganization(ref);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              value
+                  ? 'Invoices and payslips will leave room for your letterhead'
+                  : 'Invoices and payslips will print their own letterhead',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canAdmin = ref.watch(canAdminProvider);
+    final on = widget.org.usesPreprintedLetterhead;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 180,
+          child: Text(
+            'Printed stationery',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: context.scheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Switch(
+                    value: on,
+                    onChanged: canAdmin && !_busy ? _set : null,
+                  ),
+                  const SizedBox(width: Space.sm),
+                  Flexible(
+                    child: Text(
+                      on
+                          ? 'Leaving room for your letterhead'
+                          : 'Printing our own letterhead',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: Space.xs),
+              Text(
+                on
+                    ? 'Invoices and payslips start 42 mm down the first page, '
+                          'so nothing lands on top of your printed header. Your '
+                          'registration and SST numbers are still printed, '
+                          'smaller, because a tax invoice has to carry them and '
+                          'stationery usually does not.'
+                    : 'Turn this on only if you print onto paper that already '
+                          'carries your header. A PDF you e-mail should keep its '
+                          'own letterhead — nothing outside the file supplies '
+                          'your address.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: context.scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}

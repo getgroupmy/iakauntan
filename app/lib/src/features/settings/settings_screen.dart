@@ -1,4 +1,3 @@
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -12,6 +11,7 @@ import '../../data/ocr_repository.dart';
 import '../../data/repository.dart';
 import '../auth/reset_password_screen.dart' show validatePassword;
 import 'claim_approval_card.dart';
+import 'company_card.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -43,7 +43,7 @@ class SettingsScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _CompanyCard(org: organization),
+                  CompanyCard(org: organization),
                   const SizedBox(height: 16),
                   _EinvoiceCard(org: organization, canEdit: isAdmin),
                   const SizedBox(height: 16),
@@ -73,49 +73,6 @@ class SettingsScreen extends ConsumerWidget {
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _CompanyCard extends ConsumerWidget {
-  const _CompanyCard({required this.org});
-
-  final Organization org;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(Space.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SectionHeader('Company'),
-            _LogoRow(org: org),
-            const SizedBox(height: Space.md),
-            _StationeryRow(org: org),
-            const Divider(height: Space.xl),
-            _Field(label: 'Name', value: org.name),
-            _Field(label: 'Entity type', value: Fmt.label(org.entityType)),
-            _Field(
-                label: 'SSM registration',
-                value: org.registrationNo ?? 'Not set'),
-            _Field(label: 'LHDN TIN', value: org.tin ?? 'Not set'),
-            _Field(
-              label: 'SST',
-              value: org.isSstRegistered
-                  ? (org.sstRegistrationNo ?? 'Registered')
-                  : 'Not registered',
-            ),
-            _Field(label: 'MSIC code', value: org.msicCode ?? 'Not set'),
-            _Field(label: 'Base currency', value: org.baseCurrency),
-            _Field(
-              label: 'Rounding',
-              value: Fmt.label(org.roundingMethod),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1672,8 +1629,8 @@ class _AboutCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SectionHeader('Your account'),
-            _Field(label: 'Signed in as', value: user?.email ?? '—'),
-            _Field(label: 'Role', value: Fmt.label(role)),
+            FieldRow(label: 'Signed in as', value: user?.email ?? '—'),
+            FieldRow(label: 'Role', value: Fmt.label(role)),
             const SizedBox(height: 12),
             // A demo login is shared with everybody else looking at the
             // demo, so changing its password would lock all of them out.
@@ -1854,282 +1811,3 @@ class _ChangePasswordDialogState extends ConsumerState<_ChangePasswordDialog> {
   }
 }
 
-class _Field extends StatelessWidget {
-  const _Field({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 160,
-            child: Text(label, style: Theme.of(context).textTheme.bodySmall),
-          ),
-          Expanded(
-            child: SelectableText(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The mark that goes at the top of every invoice, payslip and letter.
-///
-/// Admin only, matching the storage policy — the bucket refuses a write
-/// whose first path segment is not an organization the caller administers,
-/// so showing the button to anyone else would only produce a refusal.
-class _LogoRow extends ConsumerStatefulWidget {
-  const _LogoRow({required this.org});
-
-  final Organization org;
-
-  @override
-  ConsumerState<_LogoRow> createState() => _LogoRowState();
-}
-
-class _LogoRowState extends ConsumerState<_LogoRow> {
-  bool _busy = false;
-
-  Future<void> _pick() async {
-    final repo = ref.read(repoProvider);
-    if (repo == null) return;
-
-    final file = await openFile(acceptedTypeGroups: const [
-      XTypeGroup(label: 'Image', extensions: ['png', 'jpg', 'jpeg', 'webp']),
-    ]);
-    if (file == null) return;
-
-    final bytes = await file.readAsBytes();
-    // The bucket caps at 5 MB; refusing here says why, rather than
-    // letting storage return a bare 413.
-    if (bytes.length > 5 * 1024 * 1024) {
-      if (mounted) _say('That image is over 5 MB. Try a smaller one.');
-      return;
-    }
-
-    setState(() => _busy = true);
-    try {
-      await repo.uploadOrgLogo(bytes, file.mimeType ?? 'image/png');
-      refreshOrganization(ref);
-      ref.invalidate(orgLogoProvider);
-      if (mounted) _say('Logo updated');
-    } catch (e) {
-      if (mounted) _say('$e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _remove() async {
-    final repo = ref.read(repoProvider);
-    if (repo == null) return;
-    setState(() => _busy = true);
-    try {
-      await repo.removeOrgLogo();
-      refreshOrganization(ref);
-      ref.invalidate(orgLogoProvider);
-      if (mounted) _say('Logo removed');
-    } catch (e) {
-      if (mounted) _say('$e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  void _say(String message) => ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(message)));
-
-  @override
-  Widget build(BuildContext context) {
-    final canAdmin = ref.watch(canAdminProvider);
-    final url = widget.org.logoUrl;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 180,
-          child: Text('Logo',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: context.scheme.onSurfaceVariant)),
-        ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                height: 64,
-                width: 128,
-                alignment: Alignment.centerLeft,
-                decoration: BoxDecoration(
-                  border: Border.all(color: context.scheme.outlineVariant),
-                  borderRadius: BorderRadius.circular(Radii.sm),
-                ),
-                padding: const EdgeInsets.all(6),
-                child: url == null
-                    ? Center(
-                        child: Text('None',
-                            style: Theme.of(context).textTheme.bodySmall),
-                      )
-                    : Image.network(url,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => Center(
-                              child: Text('Could not load',
-                                  style:
-                                      Theme.of(context).textTheme.bodySmall),
-                            )),
-              ),
-              const SizedBox(height: Space.sm),
-              if (canAdmin)
-                Row(children: [
-                  OutlinedButton.icon(
-                    onPressed: _busy ? null : _pick,
-                    icon: _busy
-                        ? const SizedBox(
-                            height: 14,
-                            width: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.upload_outlined, size: 18),
-                    label: Text(url == null ? 'Upload' : 'Replace'),
-                  ),
-                  if (url != null) ...[
-                    const SizedBox(width: Space.sm),
-                    TextButton(
-                      onPressed: _busy ? null : _remove,
-                      child: const Text('Remove'),
-                    ),
-                  ],
-                ])
-              else
-                Text('Ask an administrator to change this.',
-                    style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: Space.xs),
-              Text(
-                'PNG or JPEG, up to 5 MB. Printed at the top left of every '
-                'invoice, payslip and generated document.',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: context.scheme.onSurfaceVariant),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Companies that print onto their own letterhead paper.
-///
-/// Whether a business owns pre-printed stationery is a fact about the
-/// business rather than about one invoice, so it lives here instead of in
-/// a menu on every download. Off means the PDF is complete on its own,
-/// which is the only safe default for a file that gets e-mailed.
-class _StationeryRow extends ConsumerStatefulWidget {
-  const _StationeryRow({required this.org});
-
-  final Organization org;
-
-  @override
-  ConsumerState<_StationeryRow> createState() => _StationeryRowState();
-}
-
-class _StationeryRowState extends ConsumerState<_StationeryRow> {
-  bool _busy = false;
-
-  Future<void> _set(bool value) async {
-    final repo = ref.read(repoProvider);
-    if (repo == null) return;
-    setState(() => _busy = true);
-    try {
-      await repo.setPreprintedLetterhead(value);
-      refreshOrganization(ref);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(value
-              ? 'Invoices and payslips will leave room for your letterhead'
-              : 'Invoices and payslips will print their own letterhead'),
-        ));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final canAdmin = ref.watch(canAdminProvider);
-    final on = widget.org.usesPreprintedLetterhead;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 180,
-          child: Text('Printed stationery',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: context.scheme.onSurfaceVariant)),
-        ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Switch(
-                  value: on,
-                  onChanged: canAdmin && !_busy ? _set : null,
-                ),
-                const SizedBox(width: Space.sm),
-                Flexible(
-                  child: Text(
-                    on
-                        ? 'Leaving room for your letterhead'
-                        : 'Printing our own letterhead',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-              ]),
-              const SizedBox(height: Space.xs),
-              Text(
-                on
-                    ? 'Invoices and payslips start 42 mm down the first page, '
-                        'so nothing lands on top of your printed header. Your '
-                        'registration and SST numbers are still printed, '
-                        'smaller, because a tax invoice has to carry them and '
-                        'stationery usually does not.'
-                    : 'Turn this on only if you print onto paper that already '
-                        'carries your header. A PDF you e-mail should keep its '
-                        'own letterhead — nothing outside the file supplies '
-                        'your address.',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: context.scheme.onSurfaceVariant),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}

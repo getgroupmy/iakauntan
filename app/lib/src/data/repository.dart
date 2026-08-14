@@ -1742,6 +1742,63 @@ extension RepoOrgLogo on Repo {
       .from('organizations')
       .update({'credit_control': mode}).eq('id', orgId);
 
+  /// The company's own particulars.
+  ///
+  /// RLS lets an owner or administrator through — `organizations_update`
+  /// has checked `can_admin` since 0010 — so this is a form catching up
+  /// with a permission rather than a permission being widened.
+  ///
+  /// `baseCurrency` is deliberately separate and not here: changing it
+  /// is not the same kind of act as correcting a registration number.
+  /// See [setBaseCurrency].
+  Future<void> updateCompanyDetails({
+    required String name,
+    required String entityType,
+    required String roundingMethod,
+    String? registrationNo,
+    String? tin,
+    String? msicCode,
+    required bool isSstRegistered,
+    String? sstRegistrationNo,
+  }) =>
+      client.from('organizations').update({
+        'name': name,
+        'entity_type': entityType,
+        'rounding_method': roundingMethod,
+        'registration_no': _orNull(registrationNo),
+        'tin': _orNull(tin),
+        'msic_code': _orNull(msicCode),
+        'is_sst_registered': isSstRegistered,
+        // Unregistering keeps no number. A company that deregistered and
+        // left the old number behind would put it on invoices that must
+        // not carry one.
+        'sst_registration_no':
+            isSstRegistered ? _orNull(sstRegistrationNo) : null,
+      }).eq('id', orgId);
+
+  static String? _orNull(String? v) =>
+      (v == null || v.trim().isEmpty) ? null : v.trim();
+
+  /// Whether anything has reached the ledger yet.
+  ///
+  /// Asked before offering to change the base currency, which is the one
+  /// field on the company that cannot be corrected later: every amount
+  /// in the ledger is stored as a number in this currency and nowhere
+  /// says which. Changing it does not convert anything — it silently
+  /// re-labels every figure the company has ever recorded.
+  Future<bool> hasPostings() async {
+    final rows = Repo._rows(await client
+        .from('gl_entries')
+        .select('id')
+        .eq('org_id', orgId)
+        .limit(1));
+    return rows.isNotEmpty;
+  }
+
+  Future<void> setBaseCurrency(String code) => client
+      .from('organizations')
+      .update({'base_currency': code}).eq('id', orgId);
+
   /// Whether the generated PDFs should leave room for a header already
   /// printed on the paper. RLS lets only an administrator through, which
   /// is the same bar as replacing the logo.

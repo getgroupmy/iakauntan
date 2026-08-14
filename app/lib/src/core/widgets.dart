@@ -263,7 +263,12 @@ class StatusChip extends StatelessWidget {
 /// shape of the last twelve months, with the latest point called out.
 /// No axes — this answers "which way is it going", not "by how much".
 class Sparkline extends StatelessWidget {
-  const Sparkline(this.values, {super.key, required this.color, this.height = 30});
+  const Sparkline(
+    this.values, {
+    super.key,
+    required this.color,
+    this.height = 30,
+  });
 
   final List<double> values;
   final Color color;
@@ -295,9 +300,9 @@ class _SparklinePainter extends CustomPainter {
     final dx = size.width / (values.length - 1);
 
     Offset at(int i) => Offset(
-          i * dx,
-          size.height - ((values[i] - lo) / span) * (size.height - 3) - 1.5,
-        );
+      i * dx,
+      size.height - ((values[i] - lo) / span) * (size.height - 3) - 1.5,
+    );
 
     final line = Path()..moveTo(at(0).dx, at(0).dy);
     for (var i = 1; i < values.length; i++) {
@@ -399,8 +404,8 @@ class StatTile extends StatelessWidget {
                     child: Text(
                       label,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w500,
-                          ),
+                        fontWeight: FontWeight.w500,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -413,9 +418,9 @@ class StatTile extends StatelessWidget {
                 child: Text(
                   value,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.5,
-                      ),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.5,
+                  ),
                 ),
               ),
               if (caption != null || delta != null) ...[
@@ -430,10 +435,8 @@ class StatTile extends StatelessWidget {
                       Expanded(
                         child: Text(
                           caption!,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: scheme.onSurfaceVariant,
-                                  ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: scheme.onSurfaceVariant),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -464,14 +467,16 @@ class _DeltaBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final up = delta >= 0;
     final welcome = up == isGood;
-    final color =
-        welcome ? context.colors.success : context.colors.warning;
+    final color = welcome ? context.colors.success : context.colors.warning;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(up ? Icons.arrow_upward : Icons.arrow_downward,
-            size: 12, color: color),
+        Icon(
+          up ? Icons.arrow_upward : Icons.arrow_downward,
+          size: 12,
+          color: color,
+        ),
         const SizedBox(width: 2),
         Text(
           '${(delta.abs() * 100).toStringAsFixed(0)}%',
@@ -506,14 +511,12 @@ class SectionHeader extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 if (subtitle != null)
-                  Text(subtitle!,
-                      style: Theme.of(context).textTheme.bodySmall),
+                  Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
           ),
@@ -626,18 +629,25 @@ Future<bool> runWithFeedback(
 }) async {
   final messenger = ScaffoldMessenger.of(context);
   if (pendingMessage != null) {
-    messenger.showSnackBar(SnackBar(
-      content: Row(children: [
-        const SizedBox(
-          width: 16,
-          height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+    messenger.showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(pendingMessage),
+          ],
         ),
-        const SizedBox(width: 12),
-        Text(pendingMessage),
-      ]),
-      duration: const Duration(seconds: 30),
-    ));
+        duration: const Duration(seconds: 30),
+      ),
+    );
   }
 
   // Read the colours before awaiting: the widget that supplied this
@@ -650,19 +660,20 @@ Future<bool> runWithFeedback(
     await action();
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Text(successMessage),
-        backgroundColor: success,
-      ));
+      ..showSnackBar(
+        SnackBar(content: Text(successMessage), backgroundColor: success),
+      );
     return true;
   } catch (err) {
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Text('$err'),
-        backgroundColor: danger,
-        duration: const Duration(seconds: 6),
-      ));
+      ..showSnackBar(
+        SnackBar(
+          content: Text('$err'),
+          backgroundColor: danger,
+          duration: const Duration(seconds: 6),
+        ),
+      );
     return false;
   }
 }
@@ -696,3 +707,42 @@ Future<bool> confirm(
   );
   return result ?? false;
 }
+
+/// A label beside a value, for the read-only halves of settings cards.
+///
+/// The value is selectable: a registration number or a TIN exists to be
+/// copied into somebody else's form.
+class FieldRow extends StatelessWidget {
+  const FieldRow({super.key, required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 160,
+            child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+          ),
+          Expanded(
+            child: SelectableText(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The mark that goes at the top of every invoice, payslip and letter.
+///
+/// Admin only, matching the storage policy — the bucket refuses a write
+/// whose first path segment is not an organization the caller administers,
+/// so showing the button to anyone else would only produce a refusal.

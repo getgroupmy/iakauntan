@@ -557,6 +557,12 @@ final teamProvider = FutureProvider.autoDispose<List<TeamMember>>((ref) {
   return requireRepo(ref).team();
 });
 
+/// Whether anything has reached the ledger yet. Asked before offering to
+/// change the base currency, which cannot be corrected afterwards.
+final hasPostingsProvider = FutureProvider.autoDispose<bool>((ref) {
+  return requireRepo(ref).hasPostings();
+});
+
 /// The access types a company has defined for itself.
 final accessTypesProvider =
     FutureProvider.autoDispose<List<AccessType>>((ref) {
