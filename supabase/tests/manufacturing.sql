@@ -432,6 +432,63 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- An order names its own company's branch
+--
+-- The column has a foreign key to `branches`, which refuses a branch
+-- that does not exist and does not care whose it is — a foreign key
+-- pointing at the right table looks exactly like a constraint that
+-- works. This is what 0134 exists for, and the two controls are what
+-- found it: without them "was it refused?" was answered yes by a
+-- not-null violation on an unrelated column.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_a uuid := pg_temp.mfg_org('Kilang Cawangan Sdn Bhd');
+  v_b uuid := pg_temp.mfg_org('Kilang Lain Sdn Bhd');
+  v_item_a uuid := pg_temp.stocked(v_a, 'WIDGET', 0, 0);
+  v_item_b uuid := pg_temp.stocked(v_b, 'WIDGET', 0, 0);
+  v_branch uuid;
+  v_ok boolean;
+begin
+  insert into public.branches (org_id, code, name)
+  values (v_a, 'KL', 'Kuala Lumpur') returning id into v_branch;
+
+  -- Control one: no branch at all is the ordinary case and has to stay
+  -- ordinary, or this guard broke every company that never opens a
+  -- second place.
+  begin
+    insert into public.manufacturing_orders
+      (org_id, order_no, item_id, warehouse_id, quantity)
+    values (v_b, 'MO-NONE', v_item_b, app.default_warehouse(v_b), 1);
+    v_ok := true;
+  exception when others then v_ok := false;
+  end;
+  perform pg_temp.check_true('an order with no branch is fine', v_ok);
+
+  -- Control two: its own company's branch is the point of the feature.
+  begin
+    insert into public.manufacturing_orders
+      (org_id, order_no, item_id, warehouse_id, quantity, branch_id)
+    values (v_a, 'MO-OWN', v_item_a, app.default_warehouse(v_a), 1, v_branch);
+    v_ok := true;
+  exception when others then v_ok := false;
+  end;
+  perform pg_temp.check_true('and its own company''s branch is fine', v_ok);
+
+  -- The one that matters.
+  begin
+    insert into public.manufacturing_orders
+      (org_id, order_no, item_id, warehouse_id, quantity, branch_id)
+    values (v_b, 'MO-BORROWED', v_item_b, app.default_warehouse(v_b), 1,
+            v_branch);
+    v_ok := true;
+  exception when others then v_ok := false;
+  end;
+  perform pg_temp.check_true(
+    'but another company''s branch is refused', not v_ok);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- The absorption account is made, not assumed
 --
 -- The seeded chart of accounts is a fixed list written long before this
