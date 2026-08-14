@@ -11,7 +11,9 @@ import '../../data/ocr_repository.dart';
 import '../../data/repository.dart';
 import '../auth/reset_password_screen.dart' show validatePassword;
 import 'claim_approval_card.dart';
+import 'branches_card.dart';
 import 'company_card.dart';
+import 'company_group_card.dart';
 import 'warehouses_card.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -45,6 +47,14 @@ class SettingsScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   CompanyCard(org: organization),
+                  const SizedBox(height: 16),
+                  // Beside the company they describe: a branch is part
+                  // of this company, a group is the companies beside it.
+                  if (moduleEnabled(ref, 'branches')) ...[
+                    const BranchesCard(),
+                    const SizedBox(height: 16),
+                  ],
+                  const CompanyGroupCard(),
                   const SizedBox(height: 16),
                   _EinvoiceCard(org: organization, canEdit: isAdmin),
                   const SizedBox(height: 16),

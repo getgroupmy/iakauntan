@@ -856,6 +856,133 @@ class Repo {
         .order('code'),
   );
 
+  // ------------------------------------------------------------------
+  // Branches
+  //
+  // A place the company trades from, under the same registration and the
+  // same ledger. Two shops with *different* registrations are two
+  // companies, not two branches — that is a group, and the database says
+  // so: a trigger refuses a document that names another company's
+  // branch.
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> branches() async => _rows(
+    await client
+        .from('branches')
+        .select()
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('code'),
+  );
+
+  Future<void> createBranch({
+    required String code,
+    required String name,
+    String? registrationNo,
+    String? tin,
+    String? sstRegistrationNo,
+    String? addressLine1,
+    String? postcode,
+    String? city,
+    String? stateCode,
+    String? phone,
+    String? email,
+  }) => client.from('branches').insert({
+    'org_id': orgId,
+    'code': code,
+    'name': name,
+    // Null unless this branch is registered in its own right. The
+    // company's own numbers are the default.
+    'registration_no': _orNull(registrationNo),
+    'tin': _orNull(tin),
+    'sst_registration_no': _orNull(sstRegistrationNo),
+    'address_line1': _orNull(addressLine1),
+    'postcode': _orNull(postcode),
+    'city': _orNull(city),
+    'state_code': _orNull(stateCode),
+    'phone': _orNull(phone),
+    'email': _orNull(email),
+  });
+
+  Future<void> updateBranch(
+    String id, {
+    required String code,
+    required String name,
+    String? registrationNo,
+    String? tin,
+    String? sstRegistrationNo,
+    String? addressLine1,
+    String? postcode,
+    String? city,
+    String? stateCode,
+    String? phone,
+    String? email,
+  }) => client
+      .from('branches')
+      .update({
+        'code': code,
+        'name': name,
+        'registration_no': _orNull(registrationNo),
+        'tin': _orNull(tin),
+        'sst_registration_no': _orNull(sstRegistrationNo),
+        'address_line1': _orNull(addressLine1),
+        'postcode': _orNull(postcode),
+        'city': _orNull(city),
+        'state_code': _orNull(stateCode),
+        'phone': _orNull(phone),
+        'email': _orNull(email),
+      })
+      .eq('id', id)
+      .eq('org_id', orgId);
+
+  Future<void> setDefaultBranch(String id) async {
+    await client
+        .from('branches')
+        .update({'is_default': false})
+        .eq('org_id', orgId)
+        .neq('id', id);
+    await client
+        .from('branches')
+        .update({'is_default': true})
+        .eq('id', id)
+        .eq('org_id', orgId);
+  }
+
+  /// Closed rather than deleted. Documents point at it, and a branch
+  /// that shut last year still has to explain last year's takings.
+  Future<void> retireBranch(String id) => client
+      .from('branches')
+      .update({'is_active': false, 'is_default': false})
+      .eq('id', id)
+      .eq('org_id', orgId);
+
+  // ------------------------------------------------------------------
+  // The group of companies this one belongs to
+  //
+  // Separate registrations mean separate companies, each filing its own
+  // return. A group names the ones with the same owner. It does not
+  // merge ledgers and does not let anybody read a company they are not
+  // already a member of.
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> groupCompanies() async => _rows(
+    await client.rpc('my_group_companies', params: {'p_org_id': orgId}),
+  );
+
+  Future<String> createCompanyGroup(String name) async {
+    final row = await client
+        .from('company_groups')
+        .insert({'name': name, 'created_by': client.auth.currentUser?.id})
+        .select('id')
+        .single();
+    final id = row['id'] as String;
+    await joinCompanyGroup(id);
+    return id;
+  }
+
+  Future<void> joinCompanyGroup(String? groupId) => client.rpc(
+    'join_company_group',
+    params: {'p_org_id': orgId, 'p_group_id': groupId},
+  );
+
   /// Somewhere else to keep stock.
   ///
   /// `ensure_default_warehouse` below has been making one silently since
@@ -2503,8 +2630,9 @@ extension RepoHr on Repo {
           '*, departments!employees_department_id_fkey(name), positions(title)',
         )
         .eq('org_id', orgId);
-    if (status != null && status != 'all')
+    if (status != null && status != 'all') {
       q = q.eq('employment_status', status);
+    }
     if (search != null && search.trim().isNotEmpty) {
       final s = '%${search.trim()}%';
       q = q.or('full_name.ilike.$s,employee_no.ilike.$s');

@@ -557,6 +557,20 @@ final teamProvider = FutureProvider.autoDispose<List<TeamMember>>((ref) {
   return requireRepo(ref).team();
 });
 
+/// The places this company trades from. Empty for a company that has
+/// never opened a second one, which is most of them.
+final branchesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).branches();
+});
+
+/// The other companies in this one's group that the person asking is
+/// already a member of — never one more than that.
+final groupCompaniesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).groupCompanies();
+});
+
 /// Whether anything has reached the ledger yet. Asked before offering to
 /// change the base currency, which cannot be corrected afterwards.
 final hasPostingsProvider = FutureProvider.autoDispose<bool>((ref) {

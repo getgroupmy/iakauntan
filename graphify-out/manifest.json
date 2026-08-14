@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786688659.1746707,
-    "ast_hash": "05af540aa0b929855fa9a936e3c8ea38",
+    "mtime": 1786691207.1645792,
+    "ast_hash": "242c71916d1a873faa36295280b160ad",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786690421.3280115,
-    "ast_hash": "c941477e8fce2d4fe3c36ebb19ac1b6b",
+    "mtime": 1786691243.6905632,
+    "ast_hash": "7a0da6547440d93277be0d9c2f7c49a8",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1786690421.0600116,
-    "ast_hash": "2c35925c154e88b2442075d0c213bc11",
+    "mtime": 1786691357.1776102,
+    "ast_hash": "5b3bfad1c67f08784fefe18eb358b455",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786687593.4969294,
-    "ast_hash": "d41cd42ab8d71d8bccaa62cc37e4c776",
+    "mtime": 1786691179.7104602,
+    "ast_hash": "21a4c88007b2a90e9e32dc187e1958d5",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -2147,6 +2147,31 @@
   "supabase/migrations/0130_a_company_has_two_addresses.sql": {
     "mtime": 1786690188.0719976,
     "ast_hash": "8081f3ffe4efcb4b3825a4211da80202",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/settings/branches_card.dart": {
+    "mtime": 1786691286.7865658,
+    "ast_hash": "bcafbf0eb10e29f4dfbf097929bc3e2b",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/settings/company_group_card.dart": {
+    "mtime": 1786691312.3465672,
+    "ast_hash": "bc38f5d27246010996ee35b0f64117b7",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0131_branches.sql": {
+    "mtime": 1786691025.7345502,
+    "ast_hash": "8d86daebc83a7a3bf4f0787099fb06b4",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0132_company_groups.sql": {
+    "mtime": 1786691058.5225523,
+    "ast_hash": "dd642417e723080ba2c523a4476a8fbd",
+    "semantic_hash": ""
+  },
+  "supabase/tests/branches_and_groups.sql": {
+    "mtime": 1786691172.2505589,
+    "ast_hash": "354f72b59f4098c6e44ea15b6e6b8b50",
     "semantic_hash": ""
   }
 }
