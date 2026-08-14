@@ -44,6 +44,10 @@ enable_confirmations = false
 #   ocr          starts every scan under the caller's own token, so the
 #                database decides whether they may scan and whether
 #                their organization has the credit for it.
+#   call-token   mints entry to a call room, so it must know who is
+#                asking. It reads the call under the caller's own token
+#                and refuses anybody whose participant row has not
+#                joined.
 [functions.myinvois]
 verify_jwt = true
 
@@ -54,4 +58,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.ocr]
+verify_jwt = true
+
+[functions.call-token]
 verify_jwt = true

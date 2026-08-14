@@ -7,6 +7,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'call_incoming.dart';
 import 'chat_attachments.dart';
 import 'chat_group.dart';
 import 'chat_live.dart';
@@ -37,6 +38,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     final wide = MediaQuery.sizeOf(context).width >= _twoPane;
 
+    return _panes(context, wide: wide);
+  }
+
+  Widget _panes(BuildContext context, {required bool wide}) {
     if (wide) {
       return Scaffold(
         appBar: AppBar(title: const Text('Chat')),
@@ -781,6 +786,12 @@ class _ThreadHeader extends ConsumerWidget {
                   ),
                 ],
               ),
+            ),
+            CallButtons(
+              conversationId: id,
+              title: group
+                  ? (row['title']?.toString() ?? 'Group')
+                  : row['other_name']?.toString(),
             ),
             if (group)
               IconButton(

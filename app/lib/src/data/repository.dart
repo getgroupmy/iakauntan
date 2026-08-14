@@ -2055,6 +2055,66 @@ class Repo {
         ),
       );
 
+  // ------------------------------------------------------------------
+  // Calls
+  //
+  // Signalling only. Every one of these moves a row and rings a phone;
+  // none of them carries a byte of audio. The media goes over WebRTC to
+  // the SFU named by `room_name`.
+  // ------------------------------------------------------------------
+  Future<String> chatStartCall(String conversationId, {bool video = false}) async {
+    final id = await client.rpc(
+      'chat_start_call',
+      params: {
+        'p_conversation_id': conversationId,
+        'p_kind': video ? 'video' : 'voice',
+      },
+    );
+    return id as String;
+  }
+
+  Future<void> chatJoinCall(String callId) =>
+      client.rpc('chat_join_call', params: {'p_call_id': callId});
+
+  Future<void> chatDeclineCall(String callId) =>
+      client.rpc('chat_decline_call', params: {'p_call_id': callId});
+
+  Future<void> chatLeaveCall(String callId) =>
+      client.rpc('chat_leave_call', params: {'p_call_id': callId});
+
+  Future<void> chatEndCall(String callId) =>
+      client.rpc('chat_end_call', params: {'p_call_id': callId});
+
+  /// The call happening in this conversation right now, if any.
+  Future<Map<String, dynamic>?> chatActiveCall(String conversationId) async {
+    final rows = _rows(await client.rpc(
+      'chat_active_call',
+      params: {'p_conversation_id': conversationId},
+    ));
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// Every phone that should be ringing for this person, anywhere.
+  Future<List<Map<String, dynamic>>> chatIncomingCalls() async =>
+      _rows(await client.rpc('chat_incoming_calls'));
+
+  /// Where the media server is and what this person may do there.
+  ///
+  /// Minted by an edge function because it is signed with the SFU's
+  /// secret, which the database and the app must never hold. The
+  /// function checks the caller is actually in the call before it signs
+  /// anything — a room name is not a credential.
+  Future<Map<String, dynamic>> chatCallCredentials(String callId) async {
+    final res = await client.functions.invoke(
+      'call-token',
+      body: {'call_id': callId},
+    );
+    if (res.status >= 400) {
+      throw Exception('The call server refused: ${res.data}');
+    }
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<void> chatMarkRead(String conversationId) => client.rpc(
     'chat_mark_read',
     params: {'p_conversation_id': conversationId},

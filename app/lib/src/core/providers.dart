@@ -627,6 +627,19 @@ final chatDirectoryProvider =
 /// Who is in a conversation, with their company named. A room that
 /// crosses a boundary is exactly where "who can hear this?" has to be
 /// answerable without leaving it.
+/// The call happening in a conversation right now, if any.
+final chatActiveCallProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, conversationId) {
+  return requireRepo(ref).chatActiveCall(conversationId);
+});
+
+/// Every phone that should be ringing for this person. Watched by the
+/// shell so a call arrives wherever they are in the app.
+final chatIncomingCallsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).chatIncomingCalls();
+});
+
 final chatMembersProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, conversationId) {
       return requireRepo(ref).chatMembers(conversationId);

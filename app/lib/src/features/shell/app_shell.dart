@@ -7,6 +7,8 @@ import '../../core/live_updates.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
+import '../chat/call_incoming.dart';
+import '../chat/chat_live.dart';
 
 /// Navigation destination shared by the rail (wide) and bottom bar (narrow).
 class _Dest {
@@ -175,9 +177,33 @@ class AppShell extends ConsumerWidget {
     if (dests.length < 2) return _bareLayout(context, dests);
 
     final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
-    return wide
-        ? _wideLayout(context, ref, dests)
-        : _narrowLayout(context, ref, dests);
+    return _reachableByCall(
+      ref,
+      wide
+          ? _wideLayout(context, ref, dests)
+          : _narrowLayout(context, ref, dests),
+    );
+  }
+
+  /// A ringing phone, wherever in the app somebody happens to be.
+  ///
+  /// This started on the chat screen, which meant a call reached only
+  /// people who already had chat open — which is nobody, because the
+  /// reason to ring somebody is that they are doing something else. The
+  /// socket that carries it belongs here for the same reason.
+  ///
+  /// Still gated, and on an answer rather than a guess: `moduleEnabled`
+  /// reads "still loading" as yes so navigation does not flicker, which
+  /// is right for a menu item and wrong for opening a socket and
+  /// starting a heartbeat in a company that never bought chat. So this
+  /// waits for the real answer.
+  Widget _reachableByCall(WidgetRef ref, Widget child) {
+    final modules = ref.watch(enabledModulesProvider).value;
+    if (modules == null || !modules.contains('chat')) return child;
+    if (!moduleEnabled(ref, 'chat')) return child;
+
+    ref.watch(chatLiveProvider);
+    return IncomingCallWatcher(child: child);
   }
 
   /// No navigation, because there is nowhere else to go — but still the

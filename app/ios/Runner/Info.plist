@@ -49,10 +49,17 @@
 	     camera or library is opened without one of these, so their
 	     absence is a crash rather than a refused permission. -->
 	<key>NSCameraUsageDescription</key>
-	<string>Photograph a receipt or bill to file it against an expense.</string>
+	<string>Photograph a receipt or bill to file it against an expense, and show your camera on a video call.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Attach a photo of a receipt or bill you have already taken.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Recording a voice note to send in a chat.</string>
+	<string>Recording a voice note, and speaking on a call.</string>
+	<!-- Audio in the background so a call keeps its sound when the
+	     screen locks or somebody switches app mid-conversation. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>voip</string>
+	</array>
 </dict>
 </plist>

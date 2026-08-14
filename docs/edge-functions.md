@@ -1,22 +1,27 @@
 # The edge functions, and how they get deployed
 
-Three things in this system are neither in the database nor in the app,
-because they talk to somebody else:
+Some things in this system are neither in the database nor in the app,
+because they talk to somebody else — or because they hold a secret that
+must reach neither:
 
 | Function | Talks to | Called by |
 | --- | --- | --- |
 | `myinvois` | LHDN MyInvois | the app, when a document is submitted, cancelled, or a TIN is checked |
 | `send-email` | Resend | the app's **Send queued** button, and the outbox scheduler |
 | `fetch-rates` | Bank Negara Malaysia | the exchange-rate scheduler |
+| `ocr` | whichever reader the company has chosen | the app, when a receipt is scanned |
+| `call-token` | nobody — it signs | the app, once somebody has joined a call |
 
 They live in `supabase/functions/`. `_shared/` is not a function — it is
-what the three of them import, and the underscore is what tells both the
-CLI and the deploy job to skip it.
+what they import, and the underscore is what tells both the CLI and the
+deploy job to skip it.
 
 ## They are deployed by CI
 
-Every push to the default branch redeploys all three, from the `functions`
-job in `.github/workflows/ci.yml`. There is nothing to run by hand.
+Every push to the default branch redeploys all of them, from the
+`functions` job in `.github/workflows/ci.yml`. There is nothing to run by
+hand, and nothing to add to a list when a function is added — the job
+reads the directory.
 
 The job needs one repository secret:
 
@@ -78,12 +83,32 @@ The proof is `_shared/scheduler.ts`, asserted by the CI `edge` job on
 every push. [schedulers.md](schedulers.md) covers it.
 
 **Function secrets are not deployed by this job**, and should not be.
-`RESEND_API_KEY`, `MAIL_FROM` and `SCHEDULER_SECRET` are set once in the
-Supabase dashboard under **Edge Functions → Secrets** (or with `supabase
-secrets set`) and live only in the function's environment — never in this
-repository, a migration, a table, or the Flutter bundle. `SUPABASE_URL`,
+`RESEND_API_KEY`, `MAIL_FROM`, `SCHEDULER_SECRET`, the OCR provider keys,
+and the two call secrets below are set once in the Supabase dashboard
+under **Edge Functions → Secrets** (or with `supabase secrets set`) and
+live only in the function's environment — never in this repository, a
+migration, a table, or the Flutter bundle. `SUPABASE_URL`,
 `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected by the
 platform.
+
+### Calling
+
+`call-token` needs these before a call can connect. Until they are set it
+returns 503 and says so, rather than failing as a network error:
+
+| Name | Secret? | What it is |
+| --- | --- | --- |
+| `CALL_SFU_URL` | no | `wss://…`, the signalling socket |
+| `CALL_SFU_SECRET` | **yes** | signs the room token the media server checks |
+| `CALL_TURN_URLS` | no | comma separated `turn:`/`turns:` URLs |
+| `CALL_TURN_SECRET` | **yes** | coturn's `static-auth-secret` |
+| `CALL_STUN_URLS` | no | comma separated, optional |
+
+Both secrets are HMAC keys. Either one in the database or in the app
+would let anybody mint their own entry to any room, which is the whole
+reason this is a function and not a SQL function.
+[call-signalling.md](call-signalling.md) is the protocol the server on
+the other end has to implement.
 
 ## Deploying one by hand
 

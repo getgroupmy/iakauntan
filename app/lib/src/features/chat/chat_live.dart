@@ -49,6 +49,11 @@ class ChatLive {
       'chat_participants',
       'chat_typing',
       'chat_presence',
+      // A phone rings because a row appeared. Nothing polls for a call:
+      // `chat_start_call` writes a participant row per member and this
+      // is what turns that into a ringing handset.
+      'chat_calls',
+      'chat_call_participants',
     ]) {
       channel.onPostgresChanges(
         event: PostgresChangeEvent.all,
@@ -104,6 +109,11 @@ class ChatLive {
     }
     if (tables.contains('chat_presence')) {
       _ref.invalidate(chatDirectoryProvider);
+    }
+    if (tables.contains('chat_calls') ||
+        tables.contains('chat_call_participants')) {
+      _ref.invalidate(chatIncomingCallsProvider);
+      _ref.invalidate(chatActiveCallProvider);
     }
   }
 

@@ -77,6 +77,30 @@ dependencies:
   # and lodge. Markdown is fine for a diff; it is not fine for
   # something that goes in a minute book.
   pdf: ^3.11.1
+  # Calls. mediasoup is a media server library rather than a server, and
+  # defines no client protocol at all — what the app speaks is written
+  # down in `docs/call-signalling.md`, which is a contract the server has
+  # to implement rather than a description of one that exists.
+  flutter_webrtc: ^1.6.0
+  # `mediasfu_mediasoup_client` rather than `mediasoup_client_flutter`,
+  # which is the better-known name and does not compile. The latter was
+  # last released in 2022 against `flutter_webrtc 0.9.x`; since then
+  # `webrtc_interface` changed two types under it and `dart_webrtc`
+  # moved to `package:web`, so it fails the analyzer on mobile and the
+  # dart2js compiler on web. No set of version constraints fixes that —
+  # pinning the interface back to what it expects breaks `dart_webrtc`
+  # instead, and the web renderer in `flutter_webrtc 0.9.48` cannot
+  # build against any `dart_webrtc` new enough for `package:web ^1.0.0`,
+  # which this app needs elsewhere.
+  #
+  # This is the same library, forked and kept current. Same API — the
+  # engine code is unchanged apart from the import — and it tracks
+  # `flutter_webrtc ^1.5.2`, so nothing else here is held back.
+  mediasfu_mediasoup_client: ^0.1.4
+  # The signalling socket. Already present transitively through
+  # supabase_flutter; named here because `call_engine.dart` imports it
+  # directly and a transitive dependency is not a promise.
+  web_socket_channel: ^3.0.3
 
 dev_dependencies:
   flutter_test:
