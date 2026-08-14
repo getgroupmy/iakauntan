@@ -9,7 +9,9 @@ import '../data/models.dart';
 import '../data/ocr_repository.dart';
 import '../data/repository.dart';
 
-final supabaseProvider = Provider<SupabaseClient>((_) => Supabase.instance.client);
+final supabaseProvider = Provider<SupabaseClient>(
+  (_) => Supabase.instance.client,
+);
 
 /// Emits on sign-in, sign-out and token refresh; the router listens to it.
 final authStateProvider = StreamProvider<AuthState>(
@@ -61,7 +63,8 @@ class PasswordRecoveryNotifier extends Notifier<bool> {
 
 final passwordRecoveryProvider =
     NotifierProvider<PasswordRecoveryNotifier, bool>(
-        PasswordRecoveryNotifier.new);
+      PasswordRecoveryNotifier.new,
+    );
 
 /// Organizations the signed-in user belongs to.
 final organizationsProvider = FutureProvider<List<Organization>>((ref) async {
@@ -90,15 +93,21 @@ class CurrentOrgNotifier extends Notifier<String?> {
           .from('profiles')
           .update({'last_org_id': orgId})
           .eq('id', user.id)
-          .then((_) {}, onError: (_) {/* non-critical */});
+          .then(
+            (_) {},
+            onError: (_) {
+              /* non-critical */
+            },
+          );
     }
   }
 
   void clear() => state = null;
 }
 
-final currentOrgIdProvider =
-    NotifierProvider<CurrentOrgNotifier, String?>(CurrentOrgNotifier.new);
+final currentOrgIdProvider = NotifierProvider<CurrentOrgNotifier, String?>(
+  CurrentOrgNotifier.new,
+);
 
 /// Re-reads the organization after something about it has changed.
 ///
@@ -207,7 +216,12 @@ final canPostProvider = Provider<bool>((ref) {
 final canWriteProvider = Provider<bool>((ref) {
   final role = ref.watch(memberRoleProvider).value ?? 'viewer';
   return const [
-    'owner', 'admin', 'accountant', 'accounts_clerk', 'sales', 'purchaser'
+    'owner',
+    'admin',
+    'accountant',
+    'accounts_clerk',
+    'sales',
+    'purchaser',
   ].contains(role);
 });
 
@@ -220,8 +234,13 @@ final canAdminProvider = Provider<bool>((ref) {
 /// everything; sales and purchasing staff do not.
 final canReadLedgerProvider = Provider<bool>((ref) {
   final role = ref.watch(memberRoleProvider).value ?? 'viewer';
-  return const ['owner', 'admin', 'accountant', 'accounts_clerk', 'auditor']
-      .contains(role);
+  return const [
+    'owner',
+    'admin',
+    'accountant',
+    'accounts_clerk',
+    'auditor',
+  ].contains(role);
 });
 
 // ---------------------------------------------------------------------
@@ -233,16 +252,18 @@ final dashboardProvider = FutureProvider.autoDispose<DashboardSummary>((ref) {
 
 final revenueTrendProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).revenueTrend();
-});
+      return requireRepo(ref).revenueTrend();
+    });
 
 final contactsProvider = FutureProvider.autoDispose
     .family<List<Contact>, ({String type, String search})>((ref, args) {
-  return requireRepo(ref).contacts(type: args.type, search: args.search);
-});
+      return requireRepo(ref).contacts(type: args.type, search: args.search);
+    });
 
-final itemsProvider =
-    FutureProvider.autoDispose.family<List<Item>, String>((ref, search) {
+final itemsProvider = FutureProvider.autoDispose.family<List<Item>, String>((
+  ref,
+  search,
+) {
   return requireRepo(ref).items(search: search);
 });
 
@@ -254,8 +275,7 @@ final accountsProvider = FutureProvider<List<Account>>((ref) {
   return requireRepo(ref).accounts();
 });
 
-final fiscalYearsProvider =
-    FutureProvider.autoDispose<List<FiscalYear>>((ref) {
+final fiscalYearsProvider = FutureProvider.autoDispose<List<FiscalYear>>((ref) {
   return requireRepo(ref).fiscalYears();
 });
 
@@ -264,11 +284,14 @@ final fiscalYearsProvider =
 final journalSourceFilterProvider = StateProvider<String?>((ref) => null);
 
 final journalsProvider = FutureProvider.autoDispose<List<JournalEntry>>((ref) {
-  return requireRepo(ref).journals(source: ref.watch(journalSourceFilterProvider));
+  return requireRepo(
+    ref,
+  ).journals(source: ref.watch(journalSourceFilterProvider));
 });
 
-final classificationCodesProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) {
+final classificationCodesProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) {
   return requireRepo(ref).classificationCodes();
 });
 
@@ -276,43 +299,44 @@ typedef DocQuery = ({
   DocKind kind,
   String docType,
   String status,
-  String search
+  String search,
 });
 
 final documentsProvider = FutureProvider.autoDispose
     .family<List<BusinessDocument>, DocQuery>((ref, args) {
-  return requireRepo(ref).documents(
-    kind: args.kind,
-    docType: args.docType,
-    status: args.status,
-    search: args.search,
-  );
-});
+      return requireRepo(ref).documents(
+        kind: args.kind,
+        docType: args.docType,
+        status: args.status,
+        search: args.search,
+      );
+    });
 
 final documentProvider = FutureProvider.autoDispose
     .family<BusinessDocument, ({DocKind kind, String id})>((ref, args) {
-  return requireRepo(ref).document(args.kind, args.id);
-});
+      return requireRepo(ref).document(args.kind, args.id);
+    });
 
 final outstandingProvider = FutureProvider.autoDispose
-    .family<List<BusinessDocument>, ({DocKind kind, String contactId})>(
-        (ref, args) {
-  return requireRepo(ref)
-      .outstandingFor(kind: args.kind, contactId: args.contactId);
-});
+    .family<List<BusinessDocument>, ({DocKind kind, String contactId})>((
+      ref,
+      args,
+    ) {
+      return requireRepo(
+        ref,
+      ).outstandingFor(kind: args.kind, contactId: args.contactId);
+    });
 
-final bankAccountsProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) {
+final bankAccountsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).bankAccounts();
 });
 
 final bankTransfersProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).bankTransfers();
-});
+      return requireRepo(ref).bankTransfers();
+    });
 
-final paymentModesProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) {
+final paymentModesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).paymentModes();
 });
 
@@ -327,31 +351,31 @@ final currenciesProvider = FutureProvider<List<Currency>>((ref) {
 /// contact so switching customers on a document refetches.
 final customerCreditProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, String>((ref, contactId) {
-  return requireRepo(ref).customerCreditStatus(contactId);
-});
+      return requireRepo(ref).customerCreditStatus(contactId);
+    });
 
 final recurringJournalsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).recurringJournals();
-});
+      return requireRepo(ref).recurringJournals();
+    });
 
-final withholdingTypesProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) {
+final withholdingTypesProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) {
   return requireRepo(ref).withholdingTypes();
 });
 
 final withholdingReportProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).withholdingReport();
-});
+      return requireRepo(ref).withholdingReport();
+    });
 
 final recurringDocumentsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).recurringDocuments();
-});
+      return requireRepo(ref).recurringDocuments();
+    });
 
-final priceLevelsProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) {
+final priceLevelsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).priceLevels();
 });
 
@@ -363,8 +387,9 @@ final projectsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
 /// worked here grows without bound and makes the current team harder to
 /// find; the report still shows leavers, because their sales happened.
 /// What LHDN credentials each environment has, without the secrets.
-final einvoiceStatusProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) {
+final einvoiceStatusProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) {
   return requireRepo(ref).einvoiceCredentialStatus();
 });
 
@@ -372,85 +397,89 @@ final salespeopleProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).salespeople(activeOnly: true);
 });
 
-final warehousesProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) {
+final warehousesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).warehouses();
 });
 
 final stockOnHandProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String?>((ref, warehouseId) {
-  return requireRepo(ref).stockOnHand(warehouseId: warehouseId);
-});
+      return requireRepo(ref).stockOnHand(warehouseId: warehouseId);
+    });
 
 final stockAdjustmentsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).stockAdjustments();
-});
+      return requireRepo(ref).stockAdjustments();
+    });
 
-final fixedAssetsProvider =
-    FutureProvider.autoDispose.family<List<FixedAsset>, bool>(
-        (ref, includeDisposed) {
-  return requireRepo(ref).fixedAssets(includeDisposed: includeDisposed);
-});
+final fixedAssetsProvider = FutureProvider.autoDispose
+    .family<List<FixedAsset>, bool>((ref, includeDisposed) {
+      return requireRepo(ref).fixedAssets(includeDisposed: includeDisposed);
+    });
 
 final depreciationPreviewProvider = FutureProvider.autoDispose
     .family<List<DepreciationLine>, DateTime>((ref, asAt) {
-  return requireRepo(ref).depreciationPreview(asAt);
-});
+      return requireRepo(ref).depreciationPreview(asAt);
+    });
 
 /// What revaluing the open foreign balances at [asAt] would do. Kept
 /// autoDispose because the answer moves with every rate and every
 /// settlement.
 final fxRevaluationPreviewProvider = FutureProvider.autoDispose
     .family<List<FxRevaluation>, DateTime>((ref, asAt) {
-  return requireRepo(ref).fxRevaluationPreview(asAt);
-});
+      return requireRepo(ref).fxRevaluationPreview(asAt);
+    });
 
-final expensesProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).expenses();
-});
+final expensesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+  (ref) {
+    return requireRepo(ref).expenses();
+  },
+);
 
-final einvoicesProvider =
-    FutureProvider.autoDispose.family<List<EinvoiceDocument>, String>((ref, status) {
-  return requireRepo(ref).einvoices(status: status);
-});
+final einvoicesProvider = FutureProvider.autoDispose
+    .family<List<EinvoiceDocument>, String>((ref, status) {
+      return requireRepo(ref).einvoices(status: status);
+    });
 
 final pipelineStagesProvider = FutureProvider<List<PipelineStage>>((ref) {
   return requireRepo(ref).pipelineStages();
 });
 
-final opportunitiesProvider =
-    FutureProvider.autoDispose<List<Opportunity>>((ref) {
+final opportunitiesProvider = FutureProvider.autoDispose<List<Opportunity>>((
+  ref,
+) {
   return requireRepo(ref).opportunities();
 });
 
 /// Today's receivables, aged. The dashboard card and the Reports tab
 /// read the same function so the two cannot drift; the tab passes an
 /// as-at date and this one does not.
-final arAgingProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+final arAgingProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((
+  ref,
+) {
   return requireRepo(ref).agedBalances(receivable: true);
 });
 
 /// Keyed by side and as-at date, so changing either restates the report
 /// rather than leaving the last one on screen while it reloads.
 final agedBalancesProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, ({bool receivable, DateTime asAt})>(
-        (ref, args) {
-  return requireRepo(ref)
-      .agedBalances(receivable: args.receivable, asAt: args.asAt);
-});
+    .family<List<Map<String, dynamic>>, ({bool receivable, DateTime asAt})>((
+      ref,
+      args,
+    ) {
+      return requireRepo(
+        ref,
+      ).agedBalances(receivable: args.receivable, asAt: args.asAt);
+    });
 
 final trialBalanceProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).trialBalance();
-});
+      return requireRepo(ref).trialBalance();
+    });
 
 final activitiesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).activities();
-});
+      return requireRepo(ref).activities();
+    });
 
 /// Invalidates everything that could change after a document is posted.
 void refreshLedgerData(WidgetRef ref) {
@@ -467,8 +496,9 @@ void refreshLedgerData(WidgetRef ref) {
 // ---------------------------------------------------------------------
 // Platform administration
 // ---------------------------------------------------------------------
-final platformRepoProvider =
-    Provider<PlatformRepo>((ref) => PlatformRepo(ref.watch(supabaseProvider)));
+final platformRepoProvider = Provider<PlatformRepo>(
+  (ref) => PlatformRepo(ref.watch(supabaseProvider)),
+);
 
 /// Whether the signed-in user is platform staff. Drives whether the
 /// admin console appears at all.
@@ -481,13 +511,15 @@ final isPlatformAdminProvider = FutureProvider<bool>((ref) async {
   }
 });
 
-final platformStatsProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>>((ref) {
+final platformStatsProvider = FutureProvider.autoDispose<Map<String, dynamic>>((
+  ref,
+) {
   return ref.watch(platformRepoProvider).stats();
 });
 
-final platformOrgsProvider =
-    FutureProvider.autoDispose<List<PlatformOrg>>((ref) {
+final platformOrgsProvider = FutureProvider.autoDispose<List<PlatformOrg>>((
+  ref,
+) {
   return ref.watch(platformRepoProvider).organizations();
 });
 
@@ -497,8 +529,8 @@ final platformModulesProvider = FutureProvider<List<ModuleInfo>>((ref) {
 
 final platformSettingsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return ref.watch(platformRepoProvider).settings();
-});
+      return ref.watch(platformRepoProvider).settings();
+    });
 
 // ---------------------------------------------------------------------
 // Module entitlements for the active tenant
@@ -534,7 +566,9 @@ bool moduleEnabled(WidgetRef ref, String code) {
   );
   if (!entitled) return false;
 
-  return ref.watch(myModuleAccessProvider).when(
+  return ref
+      .watch(myModuleAccessProvider)
+      .when(
         data: (access) => (access[code] ?? 'write') != 'none',
         loading: () => true,
         error: (_, __) => true,
@@ -543,12 +577,13 @@ bool moduleEnabled(WidgetRef ref, String code) {
 
 /// Whether this person may change anything in a module, as opposed to
 /// only looking at it.
-bool moduleWritable(WidgetRef ref, String code) =>
-    ref.watch(myModuleAccessProvider).when(
-          data: (access) => (access[code] ?? 'write') == 'write',
-          loading: () => true,
-          error: (_, __) => true,
-        );
+bool moduleWritable(WidgetRef ref, String code) => ref
+    .watch(myModuleAccessProvider)
+    .when(
+      data: (access) => (access[code] ?? 'write') == 'write',
+      loading: () => true,
+      error: (_, __) => true,
+    );
 
 // ---------------------------------------------------------------------
 // Team
@@ -559,17 +594,18 @@ final teamProvider = FutureProvider.autoDispose<List<TeamMember>>((ref) {
 
 /// The places this company trades from. Empty for a company that has
 /// never opened a second one, which is most of them.
-final branchesProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).branches();
-});
+final branchesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+  (ref) {
+    return requireRepo(ref).branches();
+  },
+);
 
 /// The other companies in this one's group that the person asking is
 /// already a member of — never one more than that.
 final groupCompaniesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).groupCompanies();
-});
+      return requireRepo(ref).groupCompanies();
+    });
 
 // ---------------------------------------------------------------------
 // Chat
@@ -579,43 +615,53 @@ final groupCompaniesProvider =
 /// presence and how far they have read.
 final chatConversationsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).chatConversations();
-});
+      return requireRepo(ref).chatConversations();
+    });
 
 /// Who you may start a conversation with.
 final chatDirectoryProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).chatDirectory();
-});
+      return requireRepo(ref).chatDirectory();
+    });
+
+/// Who is in a conversation, with their company named. A room that
+/// crosses a boundary is exactly where "who can hear this?" has to be
+/// answerable without leaving it.
+final chatMembersProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, conversationId) {
+      return requireRepo(ref).chatMembers(conversationId);
+    });
 
 final chatThreadProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, conversationId) {
-  return requireRepo(ref).chatThread(conversationId);
-});
+      return requireRepo(ref).chatThread(conversationId);
+    });
 
 final chatTypingProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, conversationId) {
-  return requireRepo(ref).chatWhoIsTyping(conversationId);
-});
+      return requireRepo(ref).chatWhoIsTyping(conversationId);
+    });
 
 /// Everybody in the company and whether the administrator has switched
 /// them on. Administrators only — the function refuses anybody else.
 final chatAccessListProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).chatAccessList();
-});
+      return requireRepo(ref).chatAccessList();
+    });
 
 /// Links to other companies, in both directions, pending ones first.
 final chatLinksProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).chatLinks();
-});
+      return requireRepo(ref).chatLinks();
+    });
 
 /// How many messages are waiting, for the badge on the rail. Derived
 /// from the list rather than counted separately, so the two can never
 /// disagree.
 final chatUnreadProvider = Provider.autoDispose<int>((ref) {
-  return ref.watch(chatConversationsProvider).maybeWhen(
+  return ref
+      .watch(chatConversationsProvider)
+      .maybeWhen(
         data: (rows) => rows.fold<int>(
           0,
           (sum, r) => sum + ((r['unread'] as num?)?.toInt() ?? 0),
@@ -629,34 +675,35 @@ final chatUnreadProvider = Provider.autoDispose<int>((ref) {
 // ---------------------------------------------------------------------
 
 /// What things are made of.
-final bomsProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+final bomsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((
+  ref,
+) {
   return requireRepo(ref).billsOfMaterials();
 });
 
 /// Where the work happens, and what an hour of it costs.
 final workCentresProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).workCentres();
-});
+      return requireRepo(ref).workCentres();
+    });
 
 /// Orders to make something. [openOnly] is the shop floor's view — the
 /// ones still to be made — rather than everything ever made.
 final manufacturingOrdersProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, bool>((ref, openOnly) {
-  return requireRepo(ref).manufacturingOrders(openOnly: openOnly);
-});
+      return requireRepo(ref).manufacturingOrders(openOnly: openOnly);
+    });
 
 final manufacturingOrderProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, String>((ref, id) {
-  return requireRepo(ref).manufacturingOrder(id);
-});
+      return requireRepo(ref).manufacturingOrder(id);
+    });
 
 /// What is missing before the line can start.
 final manufacturingShortagesProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, id) {
-  return requireRepo(ref).manufacturingShortages(id);
-});
+      return requireRepo(ref).manufacturingShortages(id);
+    });
 
 /// Whether anything has reached the ledger yet. Asked before offering to
 /// change the base currency, which cannot be corrected afterwards.
@@ -665,8 +712,7 @@ final hasPostingsProvider = FutureProvider.autoDispose<bool>((ref) {
 });
 
 /// The access types a company has defined for itself.
-final accessTypesProvider =
-    FutureProvider.autoDispose<List<AccessType>>((ref) {
+final accessTypesProvider = FutureProvider.autoDispose<List<AccessType>>((ref) {
   return requireRepo(ref).accessTypes();
 });
 
@@ -675,28 +721,29 @@ final accessTypesProvider =
 // ---------------------------------------------------------------------
 final mattersProvider = FutureProvider.autoDispose
     .family<List<Matter>, ({String status, String search})>((ref, args) {
-  return requireRepo(ref).matters(status: args.status, search: args.search);
-});
+      return requireRepo(ref).matters(status: args.status, search: args.search);
+    });
 
-final matterSummaryProvider =
-    FutureProvider.autoDispose<List<MatterSummary>>((ref) {
+final matterSummaryProvider = FutureProvider.autoDispose<List<MatterSummary>>((
+  ref,
+) {
   return requireRepo(ref).matterSummary();
 });
 
 final clientTransactionsProvider = FutureProvider.autoDispose
     .family<List<ClientTransaction>, String>((ref, matterId) {
-  return requireRepo(ref).clientTransactions(matterId);
-});
+      return requireRepo(ref).clientTransactions(matterId);
+    });
 
-final timeEntriesProvider =
-    FutureProvider.autoDispose.family<List<TimeEntry>, String>((ref, matterId) {
-  return requireRepo(ref).timeEntries(matterId);
-});
+final timeEntriesProvider = FutureProvider.autoDispose
+    .family<List<TimeEntry>, String>((ref, matterId) {
+      return requireRepo(ref).timeEntries(matterId);
+    });
 
 final disbursementsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, matterId) {
-  return requireRepo(ref).disbursements(matterId);
-});
+      return requireRepo(ref).disbursements(matterId);
+    });
 
 /// Refresh everything a matter screen shows after money moves.
 void refreshMatter(WidgetRef ref, String matterId) {
@@ -729,13 +776,15 @@ final directoryProvider = FutureProvider.autoDispose<List<Employee>>((ref) {
   return requireRepo(ref).directory();
 });
 
-final employeesProvider =
-    FutureProvider.autoDispose.family<List<Employee>, String?>((ref, status) {
-  return requireRepo(ref).employees(status: status);
-});
+final employeesProvider = FutureProvider.autoDispose
+    .family<List<Employee>, String?>((ref, status) {
+      return requireRepo(ref).employees(status: status);
+    });
 
-final employeeProvider =
-    FutureProvider.autoDispose.family<Employee?, String>((ref, id) {
+final employeeProvider = FutureProvider.autoDispose.family<Employee?, String>((
+  ref,
+  id,
+) {
   return requireRepo(ref).employee(id);
 });
 
@@ -743,15 +792,15 @@ final employeeProvider =
 /// reliefs they have declared. Keyed by employee because the tax year is
 /// always the current one — a past year is history, not something the
 /// projection can still act on.
-final ytdOpeningProvider =
-    FutureProvider.autoDispose.family<YtdOpening?, String>((ref, employeeId) {
-  return requireRepo(ref).ytdOpening(employeeId, DateTime.now().year);
-});
+final ytdOpeningProvider = FutureProvider.autoDispose
+    .family<YtdOpening?, String>((ref, employeeId) {
+      return requireRepo(ref).ytdOpening(employeeId, DateTime.now().year);
+    });
 
 final declaredReliefsProvider = FutureProvider.autoDispose
     .family<List<DeclaredRelief>, String>((ref, employeeId) {
-  return requireRepo(ref).declaredReliefs(employeeId, DateTime.now().year);
-});
+      return requireRepo(ref).declaredReliefs(employeeId, DateTime.now().year);
+    });
 
 final reliefTypesProvider = FutureProvider<List<ReliefType>>((ref) {
   return requireRepo(ref).reliefTypes(DateTime.now());
@@ -765,34 +814,36 @@ final myEmployeeProvider = FutureProvider<Employee?>((ref) {
   return repo.myEmployee();
 });
 
-final myAttendanceTodayProvider =
-    FutureProvider.autoDispose<AttendanceRecord?>((ref) async {
-  final me = await ref.watch(myEmployeeProvider.future);
-  if (me == null) return null;
-  final today = DateTime.now();
-  final rows = await requireRepo(ref).attendance(
-    employeeId: me.id,
-    from: DateTime(today.year, today.month, today.day),
-    to: DateTime(today.year, today.month, today.day),
-  );
-  return rows.isEmpty ? null : rows.first;
-});
+final myAttendanceTodayProvider = FutureProvider.autoDispose<AttendanceRecord?>(
+  (ref) async {
+    final me = await ref.watch(myEmployeeProvider.future);
+    if (me == null) return null;
+    final today = DateTime.now();
+    final rows = await requireRepo(ref).attendance(
+      employeeId: me.id,
+      from: DateTime(today.year, today.month, today.day),
+      to: DateTime(today.year, today.month, today.day),
+    );
+    return rows.isEmpty ? null : rows.first;
+  },
+);
 
 final attendanceProvider = FutureProvider.autoDispose
     .family<List<AttendanceRecord>, String?>((ref, employeeId) {
-  final now = DateTime.now();
-  return requireRepo(ref).attendance(
-    employeeId: employeeId,
-    from: DateTime(now.year, now.month, 1),
-  );
-});
+      final now = DateTime.now();
+      return requireRepo(ref).attendance(
+        employeeId: employeeId,
+        from: DateTime(now.year, now.month, 1),
+      );
+    });
 
 final leaveTypesProvider = FutureProvider<List<LeaveType>>((ref) {
   return requireRepo(ref).leaveTypes();
 });
 
-final myLeaveBalancesProvider =
-    FutureProvider.autoDispose<List<LeaveBalance>>((ref) async {
+final myLeaveBalancesProvider = FutureProvider.autoDispose<List<LeaveBalance>>((
+  ref,
+) async {
   final me = await ref.watch(myEmployeeProvider.future);
   if (me == null) return const [];
   return requireRepo(ref).leaveBalances(me.id, DateTime.now().year);
@@ -800,34 +851,36 @@ final myLeaveBalancesProvider =
 
 final leaveRequestsProvider = FutureProvider.autoDispose
     .family<List<LeaveRequest>, String>((ref, status) {
-  return requireRepo(ref).leaveRequests(status: status);
-});
+      return requireRepo(ref).leaveRequests(status: status);
+    });
 
-final claimsProvider =
-    FutureProvider.autoDispose.family<List<ExpenseClaim>, String>((ref, status) {
-  return requireRepo(ref).claims(status: status);
-});
+final claimsProvider = FutureProvider.autoDispose
+    .family<List<ExpenseClaim>, String>((ref, status) {
+      return requireRepo(ref).claims(status: status);
+    });
 
 /// The claims this person is the one holding up.
-final claimsAwaitingMeProvider =
-    FutureProvider.autoDispose<List<ExpenseClaim>>((ref) {
-  return requireRepo(ref).claimsAwaitingMe();
-});
+final claimsAwaitingMeProvider = FutureProvider.autoDispose<List<ExpenseClaim>>(
+  (ref) {
+    return requireRepo(ref).claimsAwaitingMe();
+  },
+);
 
 /// The approval chain on one claim.
 final claimApprovalsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, claimId) {
-  return requireRepo(ref).claimApprovals(claimId);
-});
+      return requireRepo(ref).claimApprovals(claimId);
+    });
 
-final claimTypesProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) {
+final claimTypesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).claimTypes();
 });
 
 /// Where the approval chain becomes the full chain. Null until a company
 /// sets one, which the database reads as zero.
-final claimApprovalThresholdProvider = FutureProvider.autoDispose<double?>((ref) {
+final claimApprovalThresholdProvider = FutureProvider.autoDispose<double?>((
+  ref,
+) {
   return requireRepo(ref).claimApprovalThreshold();
 });
 
@@ -835,24 +888,28 @@ final payrollRunsProvider = FutureProvider.autoDispose<List<PayrollRun>>((ref) {
   return requireRepo(ref).payrollRuns();
 });
 
-final payslipsForRunProvider =
-    FutureProvider.autoDispose.family<List<Payslip>, String>((ref, runId) {
-  // Payroll reads the table directly; a granted reader goes through the
-  // function that logs the read.
-  final repo = requireRepo(ref);
-  return ref.watch(canRunPayrollProvider)
-      ? repo.payslips(runId: runId)
-      : repo.auditPayslips(runId: runId);
-});
+final payslipsForRunProvider = FutureProvider.autoDispose
+    .family<List<Payslip>, String>((ref, runId) {
+      // Payroll reads the table directly; a granted reader goes through the
+      // function that logs the read.
+      final repo = requireRepo(ref);
+      return ref.watch(canRunPayrollProvider)
+          ? repo.payslips(runId: runId)
+          : repo.auditPayslips(runId: runId);
+    });
 
-final myPayslipsProvider = FutureProvider.autoDispose<List<Payslip>>((ref) async {
+final myPayslipsProvider = FutureProvider.autoDispose<List<Payslip>>((
+  ref,
+) async {
   final me = await ref.watch(myEmployeeProvider.future);
   if (me == null) return const [];
   return requireRepo(ref).payslips(employeeId: me.id);
 });
 
-final payslipProvider =
-    FutureProvider.autoDispose.family<Payslip?, String>((ref, id) async {
+final payslipProvider = FutureProvider.autoDispose.family<Payslip?, String>((
+  ref,
+  id,
+) async {
   final repo = requireRepo(ref);
   if (ref.watch(canRunPayrollProvider)) return repo.payslip(id);
   // An employee opening their own payslip still reads the table; only a
@@ -864,53 +921,54 @@ final payslipProvider =
 
 /// The bank instruction for a posted run. Only payroll may ask; the
 /// function refuses anyone else, so the screen guards on the same right.
-final paymentInstructionProvider =
-    FutureProvider.autoDispose.family<List<PaymentLine>, String>((ref, runId) {
-  return requireRepo(ref).paymentInstruction(runId);
-});
+final paymentInstructionProvider = FutureProvider.autoDispose
+    .family<List<PaymentLine>, String>((ref, runId) {
+      return requireRepo(ref).paymentInstruction(runId);
+    });
 
 // ---------------------------------------------------------------------
 // Corporate secretarial
 // ---------------------------------------------------------------------
-final corpEntitiesProvider =
-    FutureProvider.autoDispose<List<CorpEntity>>((ref) {
+final corpEntitiesProvider = FutureProvider.autoDispose<List<CorpEntity>>((
+  ref,
+) {
   return requireRepo(ref).corpEntities();
 });
 
-final corpEntityProvider =
-    FutureProvider.autoDispose.family<CorpEntity?, String>((ref, id) {
-  return requireRepo(ref).corpEntity(id);
-});
+final corpEntityProvider = FutureProvider.autoDispose
+    .family<CorpEntity?, String>((ref, id) {
+      return requireRepo(ref).corpEntity(id);
+    });
 
-final corpOfficersProvider =
-    FutureProvider.autoDispose.family<List<CorpOfficer>, String>((ref, id) {
-  return requireRepo(ref).corpOfficers(id);
-});
+final corpOfficersProvider = FutureProvider.autoDispose
+    .family<List<CorpOfficer>, String>((ref, id) {
+      return requireRepo(ref).corpOfficers(id);
+    });
 
-final corpMembersProvider =
-    FutureProvider.autoDispose.family<List<CorpMember>, String>((ref, id) {
-  return requireRepo(ref).corpRegisterOfMembers(id);
-});
+final corpMembersProvider = FutureProvider.autoDispose
+    .family<List<CorpMember>, String>((ref, id) {
+      return requireRepo(ref).corpRegisterOfMembers(id);
+    });
 
-final corpShareEventsProvider =
-    FutureProvider.autoDispose.family<List<CorpShareEvent>, String>((ref, id) {
-  return requireRepo(ref).corpShareEvents(id);
-});
+final corpShareEventsProvider = FutureProvider.autoDispose
+    .family<List<CorpShareEvent>, String>((ref, id) {
+      return requireRepo(ref).corpShareEvents(id);
+    });
 
 final corpBeneficialOwnersProvider = FutureProvider.autoDispose
     .family<List<CorpBeneficialOwner>, String>((ref, id) {
-  return requireRepo(ref).corpBeneficialOwners(id);
-});
+      return requireRepo(ref).corpBeneficialOwners(id);
+    });
 
-final corpChargesProvider =
-    FutureProvider.autoDispose.family<List<CorpCharge>, String>((ref, id) {
-  return requireRepo(ref).corpCharges(id);
-});
+final corpChargesProvider = FutureProvider.autoDispose
+    .family<List<CorpCharge>, String>((ref, id) {
+      return requireRepo(ref).corpCharges(id);
+    });
 
-final corpDocumentsProvider =
-    FutureProvider.autoDispose.family<List<CorpDocument>, String>((ref, id) {
-  return requireRepo(ref).corpDocuments(id);
-});
+final corpDocumentsProvider = FutureProvider.autoDispose
+    .family<List<CorpDocument>, String>((ref, id) {
+      return requireRepo(ref).corpDocuments(id);
+    });
 
 /// Every obligation falling due, computed from each entity's own dates.
 final corpFilingsProvider = FutureProvider.autoDispose<List<CorpFiling>>((ref) {
@@ -921,17 +979,18 @@ final corpTemplatesProvider = FutureProvider<List<CorpTemplate>>((ref) {
   return requireRepo(ref).corpTemplates();
 });
 
-final corpSignaturesProvider =
-    FutureProvider.autoDispose.family<List<CorpSignature>, String>((ref, id) {
-  return requireRepo(ref).corpSignatures(id);
-});
+final corpSignaturesProvider = FutureProvider.autoDispose
+    .family<List<CorpSignature>, String>((ref, id) {
+      return requireRepo(ref).corpSignatures(id);
+    });
 
 final corpPersonsProvider = FutureProvider.autoDispose<List<CorpPerson>>((ref) {
   return requireRepo(ref).corpPersons();
 });
 
-final requisitionsProvider =
-    FutureProvider.autoDispose<List<JobRequisition>>((ref) {
+final requisitionsProvider = FutureProvider.autoDispose<List<JobRequisition>>((
+  ref,
+) {
   return requireRepo(ref).requisitions();
 });
 
@@ -952,8 +1011,8 @@ final myPayslipAccessProvider = FutureProvider.autoDispose<bool>((ref) {
 
 final payslipAccessRequestsProvider =
     FutureProvider.autoDispose<List<PayslipAccessRequest>>((ref) {
-  return requireRepo(ref).payslipAccessRequests();
-});
+      return requireRepo(ref).payslipAccessRequests();
+    });
 
 /// True for an auditor: no payroll rights, but may ask for them.
 final canRequestPayslipAccessProvider = Provider<bool>((ref) {
@@ -962,19 +1021,17 @@ final canRequestPayslipAccessProvider = Provider<bool>((ref) {
 
 final payslipAccessLogProvider =
     FutureProvider.autoDispose<List<PayslipAccessLogEntry>>((ref) {
-  return requireRepo(ref).payslipAccessLog();
-});
+      return requireRepo(ref).payslipAccessLog();
+    });
 
 /// The change history. Owners and admins only — the RPC refuses anyone
 /// else, so the screen guards on the same right rather than showing an
 /// error where a card should be.
-final auditTrailProvider =
-    FutureProvider.autoDispose<List<AuditEntry>>((ref) {
+final auditTrailProvider = FutureProvider.autoDispose<List<AuditEntry>>((ref) {
   return requireRepo(ref).auditTrail();
 });
 
-final departmentsProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) {
+final departmentsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).departments();
 });
 
@@ -984,15 +1041,17 @@ final positionsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
 
 final payrollSettingsProvider =
     FutureProvider.autoDispose<Map<String, dynamic>?>((ref) {
-  return requireRepo(ref).payrollSettings();
-});
+      return requireRepo(ref).payrollSettings();
+    });
 
 /// One provider for every simple configuration list, keyed by table.
 final setupRowsProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, ({String table, String orderBy})>(
-        (ref, arg) {
-  return requireRepo(ref).setupRows(arg.table, orderBy: arg.orderBy);
-});
+    .family<List<Map<String, dynamic>>, ({String table, String orderBy})>((
+      ref,
+      arg,
+    ) {
+      return requireRepo(ref).setupRows(arg.table, orderBy: arg.orderBy);
+    });
 
 /// The thirteen states and three federal territories. Most Malaysian
 /// public holidays are observed in some of them and not others.
@@ -1002,79 +1061,81 @@ final statesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
 
 final publicHolidaysProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, int>((ref, year) {
-  return requireRepo(ref).publicHolidays(year);
-});
+      return requireRepo(ref).publicHolidays(year);
+    });
 
 final leaveBandsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, leaveTypeId) {
-  return requireRepo(ref).leaveBands(leaveTypeId);
-});
+      return requireRepo(ref).leaveBands(leaveTypeId);
+    });
 
 /// Not autoDispose: the statutory tables are the same for every
 /// organization in the database and change a few times a decade.
-final statutorySchedulesProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) {
+final statutorySchedulesProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) {
   return requireRepo(ref).statutorySchedules();
 });
 
 final itemPricesProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, itemId) {
-  return requireRepo(ref).itemPrices(itemId);
-});
+      return requireRepo(ref).itemPrices(itemId);
+    });
 
 final contactPersonsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, contactId) {
-  return requireRepo(ref).contactPersons(contactId);
-});
+      return requireRepo(ref).contactPersons(contactId);
+    });
 
 final contactAddressesProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, contactId) {
-  return requireRepo(ref).contactAddresses(contactId);
-});
+      return requireRepo(ref).contactAddresses(contactId);
+    });
 
-final emailSettingsProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>?>((ref) {
-  return requireRepo(ref).emailSettings();
-});
+final emailSettingsProvider = FutureProvider.autoDispose<Map<String, dynamic>?>(
+  (ref) {
+    return requireRepo(ref).emailSettings();
+  },
+);
 
 final emailOutboxProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, status) {
-  return requireRepo(ref).emailOutbox(status: status);
-});
+      return requireRepo(ref).emailOutbox(status: status);
+    });
 
 final documentShareLinksProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, documentId) {
-  return requireRepo(ref).documentShareLinks(documentId);
-});
+      return requireRepo(ref).documentShareLinks(documentId);
+    });
 
 /// Money in (`true`) or money out (`false`).
 final settlementsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, bool>((ref, isSales) {
-  return requireRepo(ref).settlements(isSales: isSales);
-});
+      return requireRepo(ref).settlements(isSales: isSales);
+    });
 
 /// One settlement and its allocations. Keyed by id and direction,
 /// because a receipt and a supplier payment are different tables.
 final settlementProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, ({String id, bool isSales})>((ref, key) {
-  return requireRepo(ref).settlement(key.id, isSales: key.isSales);
-});
+      return requireRepo(ref).settlement(key.id, isSales: key.isSales);
+    });
 
 /// Messages, share links and downloads for one document, newest first.
 final documentActivityProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, documentId) {
-  return requireRepo(ref).documentActivity(documentId);
-});
+      return requireRepo(ref).documentActivity(documentId);
+    });
 
 final appraisalGoalsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, appraisalId) {
-  return requireRepo(ref).appraisalGoals(appraisalId);
-});
+      return requireRepo(ref).appraisalGoals(appraisalId);
+    });
 
 final leadsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, status) {
-  return requireRepo(ref).leads(status: status);
-});
+      return requireRepo(ref).leads(status: status);
+    });
 
 final pipelinesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).pipelines();
@@ -1082,33 +1143,38 @@ final pipelinesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
 
 final interviewsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, applicantId) {
-  return requireRepo(ref).interviews(applicantId);
-});
+      return requireRepo(ref).interviews(applicantId);
+    });
 
 final onboardingChecklistsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, bool>((ref, openOnly) {
-  return requireRepo(ref).onboardingChecklists(openOnly: openOnly);
-});
+      return requireRepo(ref).onboardingChecklists(openOnly: openOnly);
+    });
 
 final onboardingTasksProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, checklistId) {
-  return requireRepo(ref).onboardingTasks(checklistId);
-});
+      return requireRepo(ref).onboardingTasks(checklistId);
+    });
 
 final templateItemsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, templateId) {
-  return requireRepo(ref).onboardingTemplateItems(templateId);
-});
+      return requireRepo(ref).onboardingTemplateItems(templateId);
+    });
 
 /// Dependants, documents and shifts all hang off one employee and are
 /// read the same way, so they share a provider keyed by table.
-final employeeRowsProvider = FutureProvider.autoDispose.family<
-    List<Map<String, dynamic>>,
-    ({String table, String employeeId, String select, String orderBy})>(
-        (ref, arg) {
-  return requireRepo(ref).employeeRows(arg.table, arg.employeeId,
-      select: arg.select, orderBy: arg.orderBy);
-});
+final employeeRowsProvider = FutureProvider.autoDispose
+    .family<
+      List<Map<String, dynamic>>,
+      ({String table, String employeeId, String select, String orderBy})
+    >((ref, arg) {
+      return requireRepo(ref).employeeRows(
+        arg.table,
+        arg.employeeId,
+        select: arg.select,
+        orderBy: arg.orderBy,
+      );
+    });
 
 /// The company logo as raw bytes, for embedding in a PDF.
 ///
@@ -1135,23 +1201,23 @@ final ocrStatusProvider = FutureProvider<OcrSettings>((ref) {
 
 final creditLedgerProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).creditLedger();
-});
+      return requireRepo(ref).creditLedger();
+    });
 
 final creditInvoicesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).creditInvoices();
-});
+      return requireRepo(ref).creditInvoices();
+    });
 
 /// Every tenant's scanning balance, emptiest first, and the invoices
 /// raised for what they bought. Platform staff only — the RPCs behind
 /// these re-check that.
 final platformCreditProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return ref.watch(platformRepoProvider).creditSummary();
-});
+      return ref.watch(platformRepoProvider).creditSummary();
+    });
 
 final platformInvoicesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return ref.watch(platformRepoProvider).creditInvoices();
-});
+      return ref.watch(platformRepoProvider).creditInvoices();
+    });

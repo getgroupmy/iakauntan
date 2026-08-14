@@ -416,6 +416,153 @@ begin
     app.chat_orgs_linked(v_a, v_b));
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- More than two people
+--
+-- The rule groups introduce, and the reason it is not the obvious one.
+-- A is linked to B and A is linked to C, but B and C are not linked to
+-- each other. If "may I add somebody?" were answered against the
+-- adder's company, A could drop C into a room with B and C would read
+-- everything B says — B never agreed to talk to C and is never asked.
+-- That is how a supplier and a competitor end up in one thread.
+--
+-- So: to join, your company must be linked to *every* company already
+-- in the room. The control is the same scenario once B and C do agree.
+-- ---------------------------------------------------------------------
+create or replace function pg_temp.chat_link(
+  p_a uuid, p_ua uuid, p_b uuid, p_ub uuid)
+returns void language plpgsql as $$
+declare v_link uuid;
+begin
+  perform pg_temp.sign_in_as(p_ua);
+  v_link := public.chat_request_link(p_a, p_b, null);
+  perform pg_temp.sign_in_as(p_ub);
+  perform public.chat_decide_link(v_link, true);
+end; $$;
+
+do $$
+declare
+  v_ua uuid := pg_temp.another_user('ua@group.test');
+  v_ua2 uuid := pg_temp.another_user('ua2@group.test');
+  v_ub uuid := pg_temp.another_user('ub@group.test');
+  v_uc uuid := pg_temp.another_user('uc@group.test');
+  v_a uuid; v_b uuid; v_c uuid; v_grp uuid; v_dm uuid;
+  v_ok boolean; v_n int; v_role text;
+begin
+  v_a := pg_temp.chat_org('Group A Sdn Bhd', v_ua);
+  v_b := pg_temp.chat_org('Group B Sdn Bhd', v_ub);
+  v_c := pg_temp.chat_org('Group C Sdn Bhd', v_uc);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_ua2, 'accountant', 'active', now());
+
+  perform pg_temp.sign_in_as(v_ua);
+  perform public.chat_set_access(v_a, v_ua, true);
+  perform public.chat_set_access(v_a, v_ua2, true);
+  perform pg_temp.sign_in_as(v_ub);
+  perform public.chat_set_access(v_b, v_ub, true);
+  perform pg_temp.sign_in_as(v_uc);
+  perform public.chat_set_access(v_c, v_uc, true);
+
+  perform pg_temp.chat_link(v_a, v_ua, v_b, v_ub);
+  perform pg_temp.chat_link(v_a, v_ua, v_c, v_uc);
+
+  perform pg_temp.sign_in_as(v_ua);
+  v_grp := public.chat_create_group(v_a, 'Projek Baru',
+    jsonb_build_array(
+      jsonb_build_object('user_id', v_ua2, 'org_id', v_a),
+      jsonb_build_object('user_id', v_ub,  'org_id', v_b)));
+  perform pg_temp.check_eq('a group holds everybody put in it',
+    (select count(*) from public.chat_participants
+      where conversation_id = v_grp), 3);
+
+  begin
+    perform public.chat_add_participant(v_grp, v_uc, v_c);
+    v_ok := true;
+  exception when sqlstate '42501' then v_ok := false;
+  end;
+  perform pg_temp.sign_in_as(v_ua);
+  perform pg_temp.check_true(
+    'a company linked to the adder but not to everybody is refused',
+    not v_ok);
+  perform pg_temp.check_eq('so the room is unchanged',
+    (select count(*) from public.chat_participants
+      where conversation_id = v_grp), 3);
+
+  -- The control: the same person, once their company has agreed with
+  -- everybody in the room.
+  perform pg_temp.chat_link(v_b, v_ub, v_c, v_uc);
+  perform pg_temp.sign_in_as(v_ua);
+  perform public.chat_add_participant(v_grp, v_uc, v_c);
+  perform pg_temp.check_eq('and admitted once every pair has agreed',
+    (select count(*) from public.chat_participants
+      where conversation_id = v_grp), 4);
+
+  -- The list bug groups would otherwise have: a join on "the other
+  -- participant" returns one row per other person.
+  perform pg_temp.check_eq('the group appears once in the list',
+    (select count(*) from public.chat_my_conversations(v_a)
+      where conversation_id = v_grp), 1);
+  perform pg_temp.check_eq('counted correctly',
+    (select member_count from public.chat_my_conversations(v_a)
+      where conversation_id = v_grp), 4);
+  perform pg_temp.check_true('and flagged as crossing companies',
+    (select is_cross_company from public.chat_my_conversations(v_a)
+      where conversation_id = v_grp));
+  perform pg_temp.check_eq('everybody is listed with their company',
+    (select count(*) from public.chat_members(v_grp)), 4);
+
+  -- In a room, "read" means read by everybody, not by somebody.
+  insert into public.chat_messages
+    (conversation_id, sender_id, sender_org_id, body)
+  values (v_grp, v_ua, v_a, 'Pagi semua');
+  perform pg_temp.sign_in_as(v_ub);
+  perform public.chat_mark_read(v_grp);
+  perform pg_temp.sign_in_as(v_ua);
+  perform pg_temp.check_true('one reader is not everybody',
+    (select state from public.chat_thread(v_grp) where is_mine limit 1)
+      = 'sent');
+
+  perform pg_temp.sign_in_as(v_ua2);
+  perform public.chat_mark_read(v_grp);
+  perform pg_temp.sign_in_as(v_uc);
+  perform public.chat_mark_read(v_grp);
+  perform pg_temp.sign_in_as(v_ua);
+  perform pg_temp.check_true('once all of them have, it reads as read',
+    (select state from public.chat_thread(v_grp) where is_mine limit 1)
+      = 'read');
+
+  -- A private exchange cannot quietly become a room.
+  v_dm := public.chat_start_direct(v_a, v_ub, v_b);
+  begin
+    perform public.chat_add_participant(v_dm, v_ua2, v_a);
+    v_ok := true;
+  exception when sqlstate '22023' then v_ok := false;
+  end;
+  perform pg_temp.sign_in_as(v_ua);
+  perform pg_temp.check_true('a direct conversation takes no third person',
+    not v_ok);
+
+  -- Leaving takes the room away, the same way being switched off does.
+  perform pg_temp.sign_in_as(v_uc);
+  perform public.chat_leave(v_grp);
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    select count(*) into v_n
+      from public.chat_messages where conversation_id = v_grp;
+  end;
+  reset role;
+  perform pg_temp.check_true('the test ran under row level security',
+    v_role = 'authenticated');
+  perform pg_temp.check_eq('somebody who leaves can no longer read it',
+    v_n, 0);
+  perform pg_temp.sign_in_as(v_ua);
+  perform pg_temp.check_eq('and is out of the room',
+    (select count(*) from public.chat_participants
+      where conversation_id = v_grp), 3);
+end $$;
+
 -- ---------------------------------------------------------------------
 -- Reachability
 --

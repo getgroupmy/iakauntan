@@ -8,6 +8,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'chat_attachments.dart';
+import 'chat_group.dart';
 import 'chat_live.dart';
 
 /// Talking to people, in the app the work is already in.
@@ -104,7 +105,16 @@ class _ConversationList extends ConsumerWidget {
                   key: const ValueKey('chat-new'),
                   onPressed: () => _startOne(context, ref),
                   icon: const Icon(Icons.edit_outlined, size: 18),
-                  label: const Text('New conversation'),
+                  label: const Text('New'),
+                ),
+              ),
+              const SizedBox(width: Space.sm),
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const ValueKey('chat-new-group'),
+                  onPressed: () => _startGroup(context, ref),
+                  icon: const Icon(Icons.groups_outlined, size: 18),
+                  label: const Text('Group'),
                 ),
               ),
             ],
@@ -135,11 +145,16 @@ class _ConversationList extends ConsumerWidget {
                         key: ValueKey('chat-${c['conversation_id']}'),
                         selected: c['conversation_id'] == selectedId,
                         onTap: () => onOpen(c['conversation_id'] as String),
-                        leading: _Avatar(
-                          name: c['other_name']?.toString(),
-                          url: c['other_avatar_url']?.toString(),
-                          state: c['other_state']?.toString(),
-                        ),
+                        leading: c['is_direct'] == false
+                            ? const CircleAvatar(
+                                radius: 18,
+                                child: Icon(Icons.groups_outlined, size: 18),
+                              )
+                            : _Avatar(
+                                name: c['other_name']?.toString(),
+                                url: c['other_avatar_url']?.toString(),
+                                state: c['other_state']?.toString(),
+                              ),
                         title: Row(
                           children: [
                             Expanded(
@@ -173,7 +188,18 @@ class _ConversationList extends ConsumerWidget {
                             // row, always. In a thread that leaves the
                             // building, who you are talking to matters
                             // more than what they said.
-                            if (c['is_cross_company'] == true)
+                            if (c['is_direct'] == false)
+                              Text(
+                                '${c['member_count'] ?? 0} people'
+                                '${c['is_cross_company'] == true ? ' · more than one company' : ''}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: c['is_cross_company'] == true
+                                      ? context.colors.info
+                                      : null,
+                                ),
+                              )
+                            else if (c['is_cross_company'] == true)
                               Text(
                                 c['other_org_name']?.toString() ?? '',
                                 style: TextStyle(
@@ -208,6 +234,16 @@ class _ConversationList extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  Future<void> _startGroup(BuildContext context, WidgetRef ref) async {
+    final id = await showDialog<String>(
+      context: context,
+      builder: (_) => const NewGroupDialog(),
+    );
+    if (id == null) return;
+    ref.invalidate(chatConversationsProvider);
+    onOpen(id);
   }
 
   Future<void> _startOne(BuildContext context, WidgetRef ref) async {
@@ -407,8 +443,19 @@ class _ThreadState extends ConsumerState<_Thread> {
     // attach a file to anyway.
     final myOrg = ref.watch(currentOrgProvider).value?.id;
 
+    // The row for this conversation, for the header. Read rather than
+    // passed in so the header follows presence and membership changes
+    // arriving over the socket.
+    final row = (ref.watch(chatConversationsProvider).value ?? const [])
+        .cast<Map<String, dynamic>?>()
+        .firstWhere(
+          (c) => c?['conversation_id'] == widget.conversationId,
+          orElse: () => null,
+        );
+
     return Column(
       children: [
+        if (row != null) _ThreadHeader(row: row),
         Expanded(
           child: AsyncView(
             value: thread,
@@ -680,6 +727,75 @@ class _DirectoryDialogState extends ConsumerState<_DirectoryDialog> {
           child: const Text('Cancel'),
         ),
       ],
+    );
+  }
+}
+
+/// Who this conversation is with, and — for a room — the way into the
+/// list of who else can hear it.
+class _ThreadHeader extends ConsumerWidget {
+  const _ThreadHeader({required this.row});
+
+  final Map<String, dynamic> row;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final group = row['is_direct'] == false;
+    final id = row['conversation_id'] as String;
+
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Space.lg,
+          vertical: Space.sm,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    group
+                        ? (row['title']?.toString() ?? 'Group')
+                        : (row['other_name']?.toString() ?? 'Conversation'),
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    group
+                        ? '${row['member_count'] ?? 0} people'
+                              '${row['is_cross_company'] == true ? ' · more than one company' : ''}'
+                        : [
+                            row['other_org_name']?.toString() ?? '',
+                            if (row['other_state'] == 'online') 'online',
+                            if (row['other_state'] == 'idle') 'away',
+                          ].where((e) => e.isNotEmpty).join('  ·  '),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: row['is_cross_company'] == true
+                          ? context.colors.info
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (group)
+              IconButton(
+                key: const ValueKey('chat-members'),
+                tooltip: 'Who is in this',
+                icon: const Icon(Icons.groups_outlined, size: 20),
+                onPressed: () => showModalBottomSheet<bool>(
+                  context: context,
+                  showDragHandle: true,
+                  builder: (_) => MembersSheet(conversationId: id),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

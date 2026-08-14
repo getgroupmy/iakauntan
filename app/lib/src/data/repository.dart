@@ -2007,6 +2007,54 @@ class Repo {
     ).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
+  /// A room rather than a pair. Members arrive as (user, company) pairs
+  /// because a person is only reachable *as* a member of one — the same
+  /// shape the directory returns.
+  Future<String> chatCreateGroup({
+    required String title,
+    required List<Map<String, dynamic>> members,
+  }) async {
+    final id = await client.rpc(
+      'chat_create_group',
+      params: {
+        'p_my_org': orgId,
+        'p_title': title,
+        'p_members': [
+          for (final m in members)
+            {'user_id': m['user_id'], 'org_id': m['org_id']},
+        ],
+      },
+    );
+    return id as String;
+  }
+
+  /// Refused unless the newcomer's company is linked to *every* company
+  /// already in the room — not merely to yours, which would let one
+  /// company introduce a stranger into another's conversation.
+  Future<void> chatAddParticipant(
+    String conversationId,
+    String userId,
+    String userOrgId,
+  ) => client.rpc(
+    'chat_add_participant',
+    params: {
+      'p_conversation_id': conversationId,
+      'p_user_id': userId,
+      'p_org_id': userOrgId,
+    },
+  );
+
+  Future<void> chatLeave(String conversationId) =>
+      client.rpc('chat_leave', params: {'p_conversation_id': conversationId});
+
+  Future<List<Map<String, dynamic>>> chatMembers(String conversationId) async =>
+      _rows(
+        await client.rpc(
+          'chat_members',
+          params: {'p_conversation_id': conversationId},
+        ),
+      );
+
   Future<void> chatMarkRead(String conversationId) => client.rpc(
     'chat_mark_read',
     params: {'p_conversation_id': conversationId},
