@@ -1898,6 +1898,93 @@ extension RepoExtras on Repo {
     return Repo._rows(data).map(TeamMember.fromJson).toList();
   }
 
+  // ------------------------------------------------------------------
+  // Access types
+  //
+  // A company's own answer to "who may see what". The ten built-in roles
+  // decide what kind of thing somebody may do; an access type decides
+  // which modules they may reach, and whether they may change anything
+  // there. Enforced by the restrictive policies 0127 added — everything
+  // here is the screen for it, not the rule.
+  // ------------------------------------------------------------------
+  Future<List<AccessType>> accessTypes() async => Repo._rows(await client
+          .from('access_types')
+          .select('*, access_type_modules(module_code, access)')
+          .eq('org_id', orgId)
+          .eq('is_active', true)
+          .order('name'))
+      .map(AccessType.fromJson)
+      .toList();
+
+  Future<String> createAccessType(String name, {String? description}) async {
+    final row = await client
+        .from('access_types')
+        .insert({
+          'org_id': orgId,
+          'name': name,
+          if (description != null && description.isNotEmpty)
+            'description': description,
+        })
+        .select('id')
+        .single();
+    return row['id'] as String;
+  }
+
+  Future<void> renameAccessType(String id, String name,
+          {String? description}) =>
+      client.from('access_types').update({
+        'name': name,
+        'description': description,
+      }).eq('id', id).eq('org_id', orgId);
+
+  /// Retired rather than deleted, and the members holding it are handed
+  /// back their unrestricted access first. Deleting the row alone would
+  /// do the second part silently through `on delete set null`, which is
+  /// the same outcome arrived at without anybody deciding it.
+  Future<void> retireAccessType(String id) => client
+      .from('access_types')
+      .update({'is_active': false})
+      .eq('id', id)
+      .eq('org_id', orgId);
+
+  /// `none` removes the row rather than storing it, so the table holds
+  /// grants and only grants — and the absence of a row keeps meaning the
+  /// same thing whether nobody ever set it or somebody set it back.
+  Future<void> setModuleAccess(
+      String accessTypeId, String moduleCode, String access) async {
+    if (access == 'none') {
+      await client
+          .from('access_type_modules')
+          .delete()
+          .eq('access_type_id', accessTypeId)
+          .eq('module_code', moduleCode);
+      return;
+    }
+    await client.from('access_type_modules').upsert({
+      'access_type_id': accessTypeId,
+      'module_code': moduleCode,
+      'access': access,
+    }, onConflict: 'access_type_id,module_code');
+  }
+
+  Future<void> setMemberAccessType(String memberId, String? accessTypeId) =>
+      client.rpc('set_member_access_type', params: {
+        'p_member_id': memberId,
+        'p_access_type_id': accessTypeId,
+      });
+
+  /// What the person asking may do, module by module. The same
+  /// `app.module_access` the policies use, so a screen cannot disagree
+  /// with the database about what somebody may reach.
+  Future<Map<String, String>> myModuleAccess() async {
+    final rows = Repo._rows(
+        await client.rpc('my_module_access', params: {'p_org_id': orgId}));
+    return {
+      for (final r in rows)
+        r['module_code'].toString(): r['access']?.toString() ?? 'none',
+    };
+  }
+
   Future<void> inviteMember(String email, String role) =>
       client.rpc('invite_member', params: {
         'p_org_id': orgId,

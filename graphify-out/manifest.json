@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786683718.856699,
-    "ast_hash": "cc681f212aba273c585e8864449967f5",
+    "mtime": 1786687437.4369202,
+    "ast_hash": "508b7d13dafc0a1bbce3a5f62f9fa393",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1786648866.2911615,
-    "ast_hash": "84922e7c8ad80b873dbf58ba2d879534",
+    "mtime": 1786687406.119383,
+    "ast_hash": "2dadabcb6623786341eccf2b105b039f",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786683714.0326989,
-    "ast_hash": "ff8a3be4e33a07ba590f1dec17795109",
+    "mtime": 1786687422.0049193,
+    "ast_hash": "a766ba5b38a999470967fccbc2e1780d",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -150,8 +150,8 @@
     "semantic_hash": "88f373b2bbe85ad1d830bbd9c2bf8c6c"
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1786627892.0625026,
-    "ast_hash": "bad9a42afb5184c325fe55bd38300a3a",
+    "mtime": 1786686907.7368886,
+    "ast_hash": "f34a492dcbc6dfb110f457616c1be883",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1786681539.5346472,
-    "ast_hash": "f9a8c06f18f2f666d11acd3a3dedf2bc",
+    "mtime": 1786687065.828898,
+    "ast_hash": "68570409c150f03095c7a7eaa317d1ba",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -310,9 +310,9 @@
     "semantic_hash": "98cb2370b61e1252dca2af748bd8dfdd"
   },
   "app/lib/src/features/team/team_screen.dart": {
-    "mtime": 1786390695.7864585,
-    "ast_hash": "54922b477fa7b04ec424fb008441766d",
-    "semantic_hash": "54922b477fa7b04ec424fb008441766d"
+    "mtime": 1786687520.826623,
+    "ast_hash": "6f7850fecc1534a8095be0a5d9797bb2",
+    "semantic_hash": ""
   },
   "app/test/format_test.dart": {
     "mtime": 1786439076.1123168,
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786685988.1768339,
-    "ast_hash": "82bf14cc81d279362c22a0a94e46752a",
+    "mtime": 1786687593.4969294,
+    "ast_hash": "d41cd42ab8d71d8bccaa62cc37e4c776",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -2102,6 +2102,31 @@
   "supabase/tests/attachment_lifecycle.sql": {
     "mtime": 1786686051.0140681,
     "ast_hash": "a406214379cecefe9e07fd999e68430f",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/team/access_types_card.dart": {
+    "mtime": 1786687546.4369266,
+    "ast_hash": "776011965726f67da6257c088571c713",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0127_access_types.sql": {
+    "mtime": 1786687214.8209069,
+    "ast_hash": "b7a328c6b0b1b638791944e01a32a592",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0128_what_am_i_allowed_to_see.sql": {
+    "mtime": 1786687333.0569139,
+    "ast_hash": "b4479aceb44187b5e3a13223df42747f",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0129_who_holds_which_access_type.sql": {
+    "mtime": 1786687375.8049164,
+    "ast_hash": "b7c6141d0f98e61af438cc495da35fc7",
+    "semantic_hash": ""
+  },
+  "supabase/tests/access_types.sql": {
+    "mtime": 1786687587.376929,
+    "ast_hash": "14e2c192d18c4a880bf94d9133c355f9",
     "semantic_hash": ""
   }
 }

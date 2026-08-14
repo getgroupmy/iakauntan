@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'access_types_card.dart';
 import 'audit_trail_card.dart';
 
 /// Who is in the company and what they may do. Inviting someone creates
@@ -64,6 +65,8 @@ class TeamScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
                 if (canAdmin) ...[
+                  const AccessTypesCard(),
+                  const SizedBox(height: 24),
                   const _PayslipAccessCard(),
                   const SizedBox(height: 24),
                   const AuditTrailCard(),
@@ -126,7 +129,12 @@ class _MemberTile extends ConsumerWidget {
         ],
       ]),
       subtitle: Text(
-        member.email ?? '—',
+        // The access type belongs next to the person, not only in the
+        // card that defines it — "what can Aminah see" is asked about
+        // Aminah.
+        member.accessTypeName == null
+            ? (member.email ?? '—')
+            : '${member.email ?? '—'} · ${member.accessTypeName}',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 12),
@@ -153,6 +161,12 @@ class _MemberTile extends ConsumerWidget {
             ),
           if (editable)
             IconButton(
+              tooltip: 'Access type',
+              icon: const Icon(Icons.key_outlined, size: 18),
+              onPressed: () => _chooseAccessType(context, ref),
+            ),
+          if (editable)
+            IconButton(
               tooltip: 'Remove from company',
               icon: const Icon(Icons.person_remove_outlined, size: 18),
               onPressed: () => _remove(context, ref),
@@ -172,6 +186,62 @@ class _MemberTile extends ConsumerWidget {
       successMessage: '${member.displayName} is now ${roleLabel(role)}',
     );
     ref.invalidate(teamProvider);
+  }
+
+  /// Which access type this person holds, or none at all.
+  ///
+  /// "Everything" is first and is what everybody has until a company
+  /// decides otherwise, so the list reads as a narrowing rather than a
+  /// grant.
+  Future<void> _chooseAccessType(BuildContext context, WidgetRef ref) async {
+    final types = await ref.read(accessTypesProvider.future);
+    if (!context.mounted) return;
+
+    final chosen = await showDialog<({String? id})>(
+      context: context,
+      builder: (_) => SimpleDialog(
+        title: Text('Access for ${member.displayName}'),
+        children: [
+          RadioListTile<String?>(
+            value: null,
+            groupValue: member.accessTypeId,
+            title: const Text('Everything'),
+            subtitle: const Text('Every module the company has'),
+            onChanged: (_) => Navigator.of(context).pop((id: null)),
+          ),
+          for (final t in types)
+            RadioListTile<String?>(
+              value: t.id,
+              groupValue: member.accessTypeId,
+              title: Text(t.name),
+              subtitle: Text(t.grantedCount == 0
+                  ? 'No modules — reaches nothing'
+                  : '${t.grantedCount} '
+                      '${t.grantedCount == 1 ? "module" : "modules"}'),
+              onChanged: (_) => Navigator.of(context).pop((id: t.id)),
+            ),
+          if (types.isEmpty)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(24, 8, 24, 16),
+              child: Text(
+                'No access types yet. Create one below the team list.',
+                style: TextStyle(fontSize: 13),
+              ),
+            ),
+        ],
+      ),
+    );
+    if (chosen == null || !context.mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () => ref
+          .read(repoProvider)!
+          .setMemberAccessType(member.memberId, chosen.id),
+      successMessage: 'Access updated',
+    );
+    ref.invalidate(teamProvider);
+    ref.invalidate(myModuleAccessProvider);
   }
 
   Future<void> _remove(BuildContext context, WidgetRef ref) async {

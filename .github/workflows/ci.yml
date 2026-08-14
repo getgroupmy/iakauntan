@@ -98,7 +98,8 @@ jobs:
                    supabase/tests/claim_attachments.sql \
                    supabase/tests/claim_approval_chain.sql \
                    supabase/tests/table_grants.sql \
-                   supabase/tests/attachment_lifecycle.sql; do
+                   supabase/tests/attachment_lifecycle.sql \
+                   supabase/tests/access_types.sql; do
             echo "== $f"
             psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done

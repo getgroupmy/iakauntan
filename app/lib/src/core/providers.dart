@@ -509,22 +509,58 @@ final enabledModulesProvider = FutureProvider<Set<String>>((ref) async {
   return repo.enabledModules();
 });
 
+/// What the person signed in may do in each module: `none`, `read` or
+/// `write`. Everything is `write` until their company defines an access
+/// type and assigns it, which is how every member stands today.
+final myModuleAccessProvider = FutureProvider<Map<String, String>>((ref) async {
+  final repo = ref.watch(repoProvider);
+  if (repo == null) return const {};
+  return repo.myModuleAccess();
+});
+
 /// Synchronous check for widgets. Treats "still loading" as enabled so
 /// navigation does not flicker on start-up.
+///
+/// Two different questions, and both have to be yes: the company must
+/// have bought the module, and this person must be allowed into it.
+/// Hiding is a courtesy — the restrictive policies 0127 added are the
+/// control, and they do not care what the client believes.
 bool moduleEnabled(WidgetRef ref, String code) {
   final modules = ref.watch(enabledModulesProvider);
-  return modules.when(
+  final entitled = modules.when(
     data: (set) => set.contains(code),
     loading: () => true,
     error: (_, __) => true,
   );
+  if (!entitled) return false;
+
+  return ref.watch(myModuleAccessProvider).when(
+        data: (access) => (access[code] ?? 'write') != 'none',
+        loading: () => true,
+        error: (_, __) => true,
+      );
 }
+
+/// Whether this person may change anything in a module, as opposed to
+/// only looking at it.
+bool moduleWritable(WidgetRef ref, String code) =>
+    ref.watch(myModuleAccessProvider).when(
+          data: (access) => (access[code] ?? 'write') == 'write',
+          loading: () => true,
+          error: (_, __) => true,
+        );
 
 // ---------------------------------------------------------------------
 // Team
 // ---------------------------------------------------------------------
 final teamProvider = FutureProvider.autoDispose<List<TeamMember>>((ref) {
   return requireRepo(ref).team();
+});
+
+/// The access types a company has defined for itself.
+final accessTypesProvider =
+    FutureProvider.autoDispose<List<AccessType>>((ref) {
+  return requireRepo(ref).accessTypes();
 });
 
 // ---------------------------------------------------------------------

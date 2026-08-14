@@ -1115,6 +1115,8 @@ class TeamMember {
     this.email,
     this.fullName,
     this.joinedAt,
+    this.accessTypeId,
+    this.accessTypeName,
   });
 
   final String memberId;
@@ -1124,6 +1126,11 @@ class TeamMember {
   final String role;
   final String status;
   final DateTime? joinedAt;
+
+  /// Null where nobody has narrowed this person's access, which is how
+  /// every member stands until a company defines an access type.
+  final String? accessTypeId;
+  final String? accessTypeName;
 
   bool get isPending => status == 'invited';
   String get displayName =>
@@ -1137,6 +1144,52 @@ class TeamMember {
         role: j['role']?.toString() ?? 'viewer',
         status: j['status']?.toString() ?? 'active',
         joinedAt: Fmt.parseDate(j['joined_at']),
+        accessTypeId: j['access_type_id'] as String?,
+        accessTypeName: j['access_type_name'] as String?,
+      );
+}
+
+/// A named set of module permissions a company defines for itself.
+///
+/// The ten built-in roles say what *kind* of thing somebody may do —
+/// post to the ledger, run payroll, administer the company. An access
+/// type says which *modules* they may reach and whether they may change
+/// anything there. Both have to say yes; an access type can only take
+/// away.
+class AccessType {
+  AccessType({
+    required this.id,
+    required this.name,
+    this.description,
+    this.isActive = true,
+    this.modules = const {},
+  });
+
+  final String id;
+  final String name;
+  final String? description;
+  final bool isActive;
+
+  /// Module code to one of `none`, `read`, `write`. A module absent from
+  /// the map is `none` — an access type grants what it lists and nothing
+  /// else, so forgetting one denies it rather than opening it.
+  final Map<String, String> modules;
+
+  String accessTo(String moduleCode) => modules[moduleCode] ?? 'none';
+
+  int get grantedCount =>
+      modules.values.where((a) => a == 'read' || a == 'write').length;
+
+  factory AccessType.fromJson(Map<String, dynamic> j) => AccessType(
+        id: j['id'] as String,
+        name: j['name']?.toString() ?? '',
+        description: j['description'] as String?,
+        isActive: j['is_active'] != false,
+        modules: {
+          for (final m in (j['access_type_modules'] as List? ?? const []))
+            (m as Map)['module_code'].toString():
+                m['access']?.toString() ?? 'none',
+        },
       );
 }
 
