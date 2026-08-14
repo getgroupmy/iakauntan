@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786685099.740781,
-    "ast_hash": "db1f09740c0acdf3f93c652e6cfff26e",
+    "mtime": 1786685988.1768339,
+    "ast_hash": "82bf14cc81d279362c22a0a94e46752a",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -2092,6 +2092,16 @@
   "supabase/tests/table_grants.sql": {
     "mtime": 1786685096.136781,
     "ast_hash": "fd48fc740087011cf13dbd1e75677d8a",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0126_an_attachment_does_not_outlive_its_record.sql": {
+    "mtime": 1786685958.5048323,
+    "ast_hash": "eb9bbdd5615cce5d8b36e1eb3eaade0b",
+    "semantic_hash": ""
+  },
+  "supabase/tests/attachment_lifecycle.sql": {
+    "mtime": 1786686051.0140681,
+    "ast_hash": "a406214379cecefe9e07fd999e68430f",
     "semantic_hash": ""
   }
 }
