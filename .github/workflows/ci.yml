@@ -100,7 +100,8 @@ jobs:
                    supabase/tests/table_grants.sql \
                    supabase/tests/attachment_lifecycle.sql \
                    supabase/tests/access_types.sql \
-                   supabase/tests/branches_and_groups.sql; do
+                   supabase/tests/branches_and_groups.sql \
+                   supabase/tests/manufacturing.sql; do
             echo "== $f"
             psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done

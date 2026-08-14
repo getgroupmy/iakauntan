@@ -571,6 +571,40 @@ final groupCompaniesProvider =
   return requireRepo(ref).groupCompanies();
 });
 
+// ---------------------------------------------------------------------
+// Manufacturing
+// ---------------------------------------------------------------------
+
+/// What things are made of.
+final bomsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).billsOfMaterials();
+});
+
+/// Where the work happens, and what an hour of it costs.
+final workCentresProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).workCentres();
+});
+
+/// Orders to make something. [openOnly] is the shop floor's view — the
+/// ones still to be made — rather than everything ever made.
+final manufacturingOrdersProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, bool>((ref, openOnly) {
+  return requireRepo(ref).manufacturingOrders(openOnly: openOnly);
+});
+
+final manufacturingOrderProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, String>((ref, id) {
+  return requireRepo(ref).manufacturingOrder(id);
+});
+
+/// What is missing before the line can start.
+final manufacturingShortagesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, id) {
+  return requireRepo(ref).manufacturingShortages(id);
+});
+
 /// Whether anything has reached the ledger yet. Asked before offering to
 /// change the base currency, which cannot be corrected afterwards.
 final hasPostingsProvider = FutureProvider.autoDispose<bool>((ref) {

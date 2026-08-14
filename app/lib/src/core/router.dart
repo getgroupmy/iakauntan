@@ -24,6 +24,8 @@ import '../features/expenses/expenses_screen.dart';
 import '../features/items/items_screen.dart';
 import '../features/legal/matter_detail_screen.dart';
 import '../features/legal/matters_screen.dart';
+import '../features/manufacturing/manufacturing_screen.dart';
+import '../features/manufacturing/order_screen.dart';
 import '../features/onboarding/create_org_screen.dart';
 import '../features/ledger/journals_screen.dart';
 import '../features/documents/recurring_documents_screen.dart';
@@ -273,6 +275,19 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/stock-take',
             builder: (_, __) => const StockTakeScreen(),
+          ),
+          GoRoute(
+            path: '/manufacturing',
+            builder: (_, __) => const ManufacturingScreen(),
+            routes: [
+              GoRoute(
+                path: ':id',
+                parentNavigatorKey: _rootKey,
+                builder: (_, state) => ManufacturingOrderScreen(
+                  orderId: state.pathParameters['id']!,
+                ),
+              ),
+            ],
           ),
           GoRoute(
             path: '/reconcile',

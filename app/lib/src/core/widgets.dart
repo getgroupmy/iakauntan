@@ -225,9 +225,9 @@ class StatusChip extends StatelessWidget {
     const dim = Color(0xFF94A3B8);
     return switch (status) {
       'draft' => neutral,
-      'pending' || 'queued' || 'partial' => c.warning,
-      'submitted' || 'approved' => c.info,
-      'posted' || 'valid' || 'completed' || 'fulfilled' => c.success,
+      'pending' || 'queued' || 'partial' || 'in_progress' => c.warning,
+      'submitted' || 'approved' || 'confirmed' => c.info,
+      'posted' || 'valid' || 'completed' || 'fulfilled' || 'done' => c.success,
       'overdue' || 'invalid' || 'failed' || 'rejected' => c.danger,
       'void' || 'cancelled' || 'not_applicable' => dim,
       _ => neutral,

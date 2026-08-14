@@ -75,6 +75,9 @@ const _destinations = <_Dest>[
       module: 'inventory'),
   _Dest('Batches', Icons.qr_code_2_outlined, Icons.qr_code_2, '/lots',
       module: 'inventory'),
+  _Dest('Manufacturing', Icons.precision_manufacturing_outlined,
+      Icons.precision_manufacturing, '/manufacturing',
+      module: 'manufacturing'),
   // Directly after the documents it settles, because "has this been
   // paid?" is asked in the same breath as "did we invoice them?".
   _Dest('Receipts & payments', Icons.payments_outlined, Icons.payments,

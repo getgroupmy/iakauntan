@@ -1623,6 +1623,246 @@ class Repo {
   );
 
   // ------------------------------------------------------------------
+  // Manufacturing
+  //
+  // Three things, in the order somebody sets them up: what a thing is
+  // made of, where the work happens, and an order to make some. The
+  // arithmetic all lives in the database — `confirm_manufacturing_order`
+  // takes the snapshot and `post_manufacturing_order` moves the stock
+  // and writes the journal in one transaction — so nothing here computes
+  // a cost.
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> billsOfMaterials() async => _rows(
+    await client
+        .from('bills_of_materials')
+        .select('*, items(code, name)')
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('code'),
+  );
+
+  Future<Map<String, dynamic>> billOfMaterials(String id) async =>
+      Map<String, dynamic>.from(
+        await client
+            .from('bills_of_materials')
+            .select(
+              '*, items(code, name), '
+              'bom_lines(*, items(code, name)), '
+              'bom_operations(*, work_centres(code, name, cost_per_hour))',
+            )
+            .eq('id', id)
+            .eq('org_id', orgId)
+            .single(),
+      );
+
+  /// Header and both sets of children in one call. The lines are deleted
+  /// and re-inserted rather than merged: a recipe is short, and the
+  /// alternative is reconciling three lists by hand for no gain.
+  Future<String> saveBillOfMaterials({
+    String? id,
+    required String code,
+    required String itemId,
+    String? name,
+    required num outputQuantity,
+    required List<Map<String, dynamic>> lines,
+    required List<Map<String, dynamic>> operations,
+  }) async {
+    final header = {
+      'org_id': orgId,
+      'code': code,
+      'item_id': itemId,
+      'name': _orNull(name),
+      'output_quantity': outputQuantity,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+
+    final String bomId;
+    if (id == null) {
+      final row = await client
+          .from('bills_of_materials')
+          .insert(header)
+          .select('id')
+          .single();
+      bomId = row['id'] as String;
+    } else {
+      bomId = id;
+      await client
+          .from('bills_of_materials')
+          .update(header)
+          .eq('id', id)
+          .eq('org_id', orgId);
+      await client.from('bom_lines').delete().eq('bom_id', id);
+      await client.from('bom_operations').delete().eq('bom_id', id);
+    }
+
+    if (lines.isNotEmpty) {
+      await client.from('bom_lines').insert([
+        for (var i = 0; i < lines.length; i++)
+          {
+            'org_id': orgId,
+            'bom_id': bomId,
+            'line_no': i + 1,
+            'item_id': lines[i]['item_id'],
+            'quantity': lines[i]['quantity'],
+            'scrap_percent': lines[i]['scrap_percent'] ?? 0,
+          },
+      ]);
+    }
+    if (operations.isNotEmpty) {
+      await client.from('bom_operations').insert([
+        for (var i = 0; i < operations.length; i++)
+          {
+            'org_id': orgId,
+            'bom_id': bomId,
+            'step_no': i + 1,
+            'work_centre_id': operations[i]['work_centre_id'],
+            'name': operations[i]['name'],
+            'minutes': operations[i]['minutes'],
+          },
+      ]);
+    }
+    return bomId;
+  }
+
+  /// Retired rather than deleted: orders already posted against it are
+  /// what explains last quarter's cost of sales.
+  Future<void> retireBillOfMaterials(String id) => client
+      .from('bills_of_materials')
+      .update({'is_active': false})
+      .eq('id', id)
+      .eq('org_id', orgId);
+
+  Future<List<Map<String, dynamic>>> workCentres() async => _rows(
+    await client
+        .from('work_centres')
+        .select()
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('code'),
+  );
+
+  Future<void> saveWorkCentre({
+    String? id,
+    required String code,
+    required String name,
+    required num costPerHour,
+    required num capacityHoursPerDay,
+  }) async {
+    final payload = {
+      'code': code,
+      'name': name,
+      'cost_per_hour': costPerHour,
+      'capacity_hours_per_day': capacityHoursPerDay,
+    };
+    if (id == null) {
+      await client.from('work_centres').insert({'org_id': orgId, ...payload});
+    } else {
+      await client
+          .from('work_centres')
+          .update(payload)
+          .eq('id', id)
+          .eq('org_id', orgId);
+    }
+  }
+
+  Future<void> retireWorkCentre(String id) => client
+      .from('work_centres')
+      .update({'is_active': false})
+      .eq('id', id)
+      .eq('org_id', orgId);
+
+  Future<List<Map<String, dynamic>>> manufacturingOrders({
+    bool openOnly = false,
+  }) async {
+    var q = client
+        .from('manufacturing_orders')
+        .select('*, items(code, name), bills_of_materials(code)')
+        .eq('org_id', orgId);
+    if (openOnly) {
+      q = q.inFilter('status', ['draft', 'confirmed', 'in_progress']);
+    }
+    return _rows(await q.order('created_at', ascending: false));
+  }
+
+  Future<Map<String, dynamic>> manufacturingOrder(String id) async =>
+      Map<String, dynamic>.from(
+        await client
+            .from('manufacturing_orders')
+            .select(
+              '*, items(code, name), bills_of_materials(code, name), '
+              'warehouses(code, name), '
+              'mo_components(*, items(code, name)), '
+              'mo_operations(*, work_centres(code, name, cost_per_hour))',
+            )
+            .eq('id', id)
+            .eq('org_id', orgId)
+            .single(),
+      );
+
+  Future<String> createManufacturingOrder({
+    required String bomId,
+    required String itemId,
+    required String warehouseId,
+    required num quantity,
+    DateTime? plannedStart,
+    DateTime? plannedFinish,
+    String? notes,
+  }) async {
+    final row = await client
+        .from('manufacturing_orders')
+        .insert({
+          'org_id': orgId,
+          'order_no': await nextDocumentNumber('manufacturing_order'),
+          'bom_id': bomId,
+          'item_id': itemId,
+          'warehouse_id': warehouseId,
+          'quantity': quantity,
+          'planned_start': plannedStart?.toIso8601String(),
+          'planned_finish': plannedFinish?.toIso8601String(),
+          'notes': _orNull(notes),
+          'created_by': client.auth.currentUser?.id,
+        })
+        .select('id')
+        .single();
+    return row['id'] as String;
+  }
+
+  /// Copies the recipe onto the order. A snapshot on purpose: the recipe
+  /// can change tomorrow and this order was costed against today's.
+  Future<void> confirmManufacturingOrder(String id) =>
+      client.rpc('confirm_manufacturing_order', params: {'p_mo_id': id});
+
+  /// What is missing, in this order's own warehouse. Stock sitting in
+  /// another warehouse is a transfer somebody has to make, not stock
+  /// this order can consume.
+  Future<List<Map<String, dynamic>>> manufacturingShortages(String id) async =>
+      _rows(await client.rpc('mo_shortages', params: {'p_mo_id': id}));
+
+  /// Moves the stock and writes the journal, together or not at all.
+  /// [quantityDone] short of the order is a partial run, costed
+  /// proportionally.
+  Future<void> postManufacturingOrder(String id, {num? quantityDone}) =>
+      client.rpc(
+        'post_manufacturing_order',
+        params: {'p_mo_id': id, 'p_quantity_done': quantityDone},
+      );
+
+  /// Time booked against a step. Where it is left at zero the plan
+  /// stands in, because a shop that has not booked its hours still has
+  /// to cost its output.
+  Future<void> bookOperationMinutes(String operationId, num minutes) => client
+      .from('mo_operations')
+      .update({'actual_minutes': minutes})
+      .eq('id', operationId)
+      .eq('org_id', orgId);
+
+  Future<void> cancelManufacturingOrder(String id) => client
+      .from('manufacturing_orders')
+      .update({'status': 'cancelled'})
+      .eq('id', id)
+      .eq('org_id', orgId);
+
+  // ------------------------------------------------------------------
   // Salespeople
   //
   // Their own table rather than a pointer at a user, because the person
