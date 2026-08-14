@@ -676,6 +676,12 @@ final claimTypesProvider =
   return requireRepo(ref).claimTypes();
 });
 
+/// Where the approval chain becomes the full chain. Null until a company
+/// sets one, which the database reads as zero.
+final claimApprovalThresholdProvider = FutureProvider.autoDispose<double?>((ref) {
+  return requireRepo(ref).claimApprovalThreshold();
+});
+
 final payrollRunsProvider = FutureProvider.autoDispose<List<PayrollRun>>((ref) {
   return requireRepo(ref).payrollRuns();
 });

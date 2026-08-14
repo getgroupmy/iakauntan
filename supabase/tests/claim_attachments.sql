@@ -45,6 +45,7 @@ declare
   v_mine uuid;
   v_theirs uuid;
   v_refused boolean;
+  v_allowed boolean;
 begin
   -- Two people who are members of the company but not staff: no
   -- `can_write`, which is the ordinary case for somebody who only ever
@@ -95,16 +96,54 @@ begin
 
   -- The row policy agrees with the function, which is the half that
   -- actually stops anything.
+  --
+  -- Two things here are load-bearing, and this assertion was worthless
+  -- without either of them.
+  --
+  -- `set local role authenticated` is the first. CI connects as the
+  -- `postgres` superuser, and a superuser bypasses row level security
+  -- altogether — so a policy test on the default connection asserts
+  -- nothing whatsoever about the policy. The role has to be the one
+  -- PostgREST actually uses.
+  --
+  -- A well-formed `storage_path` is the second. The column has a check
+  -- that the path reads `<org>/<table>/<record>/<file>`, and the first
+  -- version of this test passed a placeholder that failed it. Paired
+  -- with `when others`, that turned a constraint violation into what
+  -- looked like a refusal: the insert would have been rejected the same
+  -- way on the employee's *own* claim, which is the opposite of what is
+  -- being claimed. The handler is now narrowed to the one error that
+  -- means "the policy said no".
+  perform pg_temp.sign_in_as(v_staff_user);
+  set local role authenticated;
   begin
     insert into public.attachments
       (org_id, entity_table, entity_id, file_name, storage_path)
-    values (v_org, 'expense_claims', v_theirs, 'not-mine.jpg', 'x/y/z/w');
+    values (v_org, 'expense_claims', v_theirs, 'not-mine.jpg',
+            v_org || '/expense_claims/' || v_theirs || '/not-mine.jpg');
     v_refused := false;
-  exception when insufficient_privilege or others then
+  exception when insufficient_privilege then
     v_refused := true;
   end;
+
+  -- The positive control, and the reason the above means anything: the
+  -- identical insert on their own claim goes through. Without this, a
+  -- refusal for any reason at all reads as the policy working.
+  begin
+    insert into public.attachments
+      (org_id, entity_table, entity_id, file_name, storage_path)
+    values (v_org, 'expense_claims', v_mine, 'mine.jpg',
+            v_org || '/expense_claims/' || v_mine || '/mine.jpg');
+    v_allowed := true;
+  exception when insufficient_privilege then
+    v_allowed := false;
+  end;
+  reset role;
+
   perform pg_temp.check_true(
     'the policy refuses a receipt on somebody else''s claim', v_refused);
+  perform pg_temp.check_true(
+    'and accepts one on their own', v_allowed);
 
   -- ------------------------------------------------------------------
   -- Once it is in the ledger it is the accountant's record

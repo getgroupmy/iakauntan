@@ -2304,6 +2304,28 @@ extension RepoHr on Repo {
         if (approvedAmount != null) 'p_approved_amount': approvedAmount,
       });
 
+  /// The amount at or above which a claim goes up the full chain.
+  ///
+  /// Below it the employee's manager decides alone. Null where the
+  /// company has never set one, which the database reads as zero — every
+  /// claim, however small, asks all four stages.
+  Future<double?> claimApprovalThreshold() async {
+    final row = await client
+        .from('claim_approval_settings')
+        .select('full_chain_from')
+        .eq('org_id', orgId)
+        .maybeSingle();
+    return (row?['full_chain_from'] as num?)?.toDouble();
+  }
+
+  /// Upsert rather than update: most companies have no row until the
+  /// first time somebody opens this setting.
+  Future<void> setClaimApprovalThreshold(double amount) =>
+      client.from('claim_approval_settings').upsert(
+        {'org_id': orgId, 'full_chain_from': amount},
+        onConflict: 'org_id',
+      );
+
   Future<List<Map<String, dynamic>>> claimTypes() async => Repo._rows(await client
       .from('claim_types')
       .select()

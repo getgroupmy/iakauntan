@@ -11,6 +11,7 @@ import '../../data/models.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/repository.dart';
 import '../auth/reset_password_screen.dart' show validatePassword;
+import 'claim_approval_card.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -54,6 +55,10 @@ class SettingsScreen extends ConsumerWidget {
                   const SizedBox(height: 16),
                   _CreditControlCard(org: organization, canAdmin: isAdmin),
                   const SizedBox(height: 16),
+                  if (moduleEnabled(ref, 'hr')) ...[
+                    ClaimApprovalCard(org: organization, canAdmin: isAdmin),
+                    const SizedBox(height: 16),
+                  ],
                   if (organization.baseCurrency.isNotEmpty)
                     _ForeignBalancesCard(org: organization, canPost: canPost),
                   const SizedBox(height: 16),
