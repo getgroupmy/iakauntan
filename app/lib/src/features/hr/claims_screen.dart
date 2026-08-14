@@ -5,8 +5,11 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/attachments_repository.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../shared/attachments_card.dart';
+import '../shared/receipt_capture.dart';
 
 /// Expense claims, and the two ways one gets settled.
 ///
@@ -95,6 +98,13 @@ class _ClaimTile extends ConsumerWidget {
     return ListTile(
       contentPadding:
           const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
+      // Every claim opens, so every claim can carry its receipt — the
+      // one being approved as much as the one being typed.
+      onTap: () => showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => _ClaimSheet(claim: claim),
+      ),
       title: Row(children: [
         Flexible(
           child: Text(claim.title ?? claim.claimNo,
@@ -313,6 +323,14 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
   bool _saving = false;
   bool _payWithPayroll = true;
 
+  /// Receipts chosen before the claim exists.
+  ///
+  /// Held as bytes rather than uploaded against a placeholder, which is
+  /// how the scanned-bill flow does it: a claimant has no permission to
+  /// write anything against an id that is not yet a claim of theirs, so
+  /// the upload waits until there is a claim to hang it on.
+  final _receipts = <CapturedFile>[];
+
   @override
   void dispose() {
     _title.dispose();
@@ -380,6 +398,11 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
                   return null;
                 },
               ),
+              const SizedBox(height: Space.md),
+              _ReceiptPicker(
+                files: _receipts,
+                onChanged: () => setState(() {}),
+              ),
               const SizedBox(height: Space.sm),
               // The column has always defaulted to true and nothing ever
               // set it, so every claim went down the payroll route by
@@ -426,21 +449,37 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
     }
     setState(() => _saving = true);
 
+    final repo = ref.read(repoProvider)!;
     final ok = await runWithFeedback(
       context,
-      action: () => ref.read(repoProvider)!.createClaim(
-            employeeId: me.id,
-            title: _title.text.trim(),
-            lines: [
-              {
-                'claim_type_id': _typeId,
-                'expense_date': Fmt.iso(_date),
-                'description': _description.text.trim(),
-                'amount': double.parse(_amount.text.trim()),
-              }
-            ],
-            payWithPayroll: _payWithPayroll,
-          ),
+      action: () async {
+        final id = await repo.createClaim(
+          employeeId: me.id,
+          title: _title.text.trim(),
+          lines: [
+            {
+              'claim_type_id': _typeId,
+              'expense_date': Fmt.iso(_date),
+              'description': _description.text.trim(),
+              'amount': double.parse(_amount.text.trim()),
+            }
+          ],
+          payWithPayroll: _payWithPayroll,
+        );
+
+        // Now that there is a claim to attach to. A failure here must
+        // not lose the claim, so it is reported and the claim stands —
+        // the receipt can be added again from the claim itself.
+        for (final file in _receipts) {
+          await repo.uploadAttachment(
+            table: 'expense_claims',
+            recordId: id,
+            fileName: file.name,
+            bytes: file.bytes,
+            mimeType: file.mimeType,
+          );
+        }
+      },
       successMessage: 'Submitted for approval',
     );
 
@@ -449,5 +488,137 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
       ref.invalidate(claimsProvider);
       Navigator.pop(context);
     }
+  }
+}
+
+
+/// Receipts chosen while a claim is still being typed.
+///
+/// A claim is a request to be paid back for money already spent, and the
+/// receipt is the evidence. Offering it here rather than only afterwards
+/// matters: somebody photographing a receipt is holding it *now*, and
+/// "attach it later from the claim" is how a claim reaches a manager
+/// with nothing behind it.
+class _ReceiptPicker extends StatelessWidget {
+  const _ReceiptPicker({required this.files, required this.onChanged});
+
+  final List<CapturedFile> files;
+  final VoidCallback onChanged;
+
+  Future<void> _add(CapturedFile? file) async {
+    if (file == null) return;
+    files.add(file);
+    onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Expanded(
+            child: Text('Receipts',
+                style: Theme.of(context).textTheme.labelLarge),
+          ),
+          if (cameraLikely)
+            IconButton(
+              tooltip: 'Photograph it',
+              icon: const Icon(Icons.photo_camera_outlined, size: 20),
+              onPressed: () async => _add(await photographReceipt()),
+            ),
+          TextButton.icon(
+            onPressed: () async => _add(await pickReceipt()),
+            icon: const Icon(Icons.attach_file, size: 18),
+            label: const Text('Attach'),
+          ),
+        ]),
+        if (files.isEmpty)
+          Text(
+            'None yet. A claim with its receipt behind it is approved '
+            'faster than one without.',
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else
+          Wrap(
+            spacing: Space.sm,
+            runSpacing: Space.xs,
+            children: [
+              for (final file in files)
+                Chip(
+                  label: Text(file.name, overflow: TextOverflow.ellipsis),
+                  onDeleted: () {
+                    files.remove(file);
+                    onChanged();
+                  },
+                ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+/// One claim, with whatever was filed against it.
+///
+/// Reached by tapping the claim. Every claim can carry documents — the
+/// one being typed, through the picker above, and every claim that
+/// already exists, through here — which is what "all claims should have
+/// an attachment option" asks for.
+class _ClaimSheet extends ConsumerWidget {
+  const _ClaimSheet({required this.claim});
+
+  final ExpenseClaim claim;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              Expanded(
+                child: Text(claim.title ?? claim.claimNo,
+                    style: Theme.of(context).textTheme.titleMedium),
+              ),
+              StatusChip(claim.status, compact: true),
+            ]),
+            const SizedBox(height: Space.xs),
+            Text(
+              '${claim.claimNo} · ${Fmt.date(claim.claimDate)}'
+              '${claim.employeeName == null ? '' : ' · ${claim.employeeName}'}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: Space.md),
+            Money(claim.totalAmount, bold: true),
+            const SizedBox(height: Space.lg),
+            Flexible(
+              child: SingleChildScrollView(
+                child: AttachmentsCard(
+                  table: 'expense_claims',
+                  recordId: claim.id,
+                  title: 'Receipts',
+                  // The claimant is not staff, and the database knows
+                  // it. Once the claim is in the ledger its paperwork
+                  // stops being theirs to change — which is exactly what
+                  // `app.can_attach_to` enforces, so a button offered
+                  // here is one the database will honour.
+                  canAttach: claim.glEntryId == null,
+                  subtitle: claim.glEntryId != null
+                      // Said plainly, because the buttons go away and an
+                      // unexplained absence reads as a fault.
+                      ? 'This claim is in the ledger, so its paperwork is '
+                          'now the accountant\'s record.'
+                      : 'The evidence behind the claim.',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -35,12 +35,23 @@ class AttachmentsCard extends ConsumerStatefulWidget {
     this.title = 'Attachments',
     this.subtitle,
     this.onExtracted,
+    this.canAttach,
   });
 
   final String table;
   final String recordId;
   final String title;
   final String? subtitle;
+
+  /// Who may file something here, when it is not the usual answer.
+  ///
+  /// The usual answer is `can_write` on the organization, which is right
+  /// for a bill and wrong for an expense claim: the person holding the
+  /// receipt is the claimant, and a claimant is not staff. The database
+  /// says the same — see `app.can_attach_to` — and this is the screen
+  /// agreeing with it rather than hiding a button the database would
+  /// have allowed.
+  final bool? canAttach;
 
   /// Where a scanned document's fields should go.
   ///
@@ -63,7 +74,11 @@ class _AttachmentsCardState extends ConsumerState<AttachmentsCard> {
   @override
   Widget build(BuildContext context) {
     final files = ref.watch(attachmentsProvider(_key));
-    final canWrite = ref.watch(canWriteProvider);
+    // Typed, not inferred. `ProviderListenable` is covariant, so `??`
+    // makes the context type `bool?` and `ref.watch` obligingly returns
+    // one — leaving `canWrite` nullable for no reason anybody reading
+    // this would guess.
+    final bool canWrite = widget.canAttach ?? ref.watch(canWriteProvider);
 
     return Card(
       child: Padding(
