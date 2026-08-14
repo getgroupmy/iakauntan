@@ -233,6 +233,114 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- Files and voice notes
+--
+-- The bucket is keyed by conversation rather than by company, because a
+-- file sent to a supplier is opened by somebody who is not a member of
+-- the company that sent it — which is the one thing the `attachments`
+-- bucket, keyed `<org_id>/…` since 0010, cannot express.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_al uuid := pg_temp.another_user('al@file.test');
+  v_bi uuid := pg_temp.another_user('bi@file.test');
+  v_out uuid := pg_temp.another_user('out@file.test');
+  v_a uuid; v_b uuid; v_link uuid; v_conv uuid; v_msg uuid;
+  v_n int; v_ok boolean; v_role text; v_att jsonb;
+begin
+  v_a := pg_temp.chat_org('Fail A Sdn Bhd', v_al);
+  v_b := pg_temp.chat_org('Fail B Sdn Bhd', v_bi);
+  -- A colleague of the sender, switched on for chat, who is simply not
+  -- in this conversation. The control that makes the last check mean
+  -- something.
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_out, 'accountant', 'active', now());
+
+  perform pg_temp.sign_in_as(v_al);
+  perform public.chat_set_access(v_a, v_al, true);
+  perform public.chat_set_access(v_a, v_out, true);
+  perform pg_temp.sign_in_as(v_bi);
+  perform public.chat_set_access(v_b, v_bi, true);
+  perform pg_temp.sign_in_as(v_al);
+  v_link := public.chat_request_link(v_a, v_b, null);
+  perform pg_temp.sign_in_as(v_bi);
+  perform public.chat_decide_link(v_link, true);
+  perform pg_temp.sign_in_as(v_al);
+  v_conv := public.chat_start_direct(v_a, v_bi, v_b);
+
+  -- A voice note carries no caption, which the original check refused.
+  insert into public.chat_messages
+    (conversation_id, sender_id, sender_org_id, body, kind)
+  values (v_conv, v_al, v_a, '', 'voice') returning id into v_msg;
+  insert into public.chat_attachments
+    (message_id, conversation_id, file_name, storage_path, mime_type,
+     file_size, duration_ms)
+  values (v_msg, v_conv, 'note.m4a', v_conv::text || '/abc-note.m4a',
+          'audio/mp4', 9100, 4200);
+
+  -- And the relaxation is narrow: a text message that says nothing is
+  -- still refused.
+  begin
+    insert into public.chat_messages
+      (conversation_id, sender_id, sender_org_id, body, kind)
+    values (v_conv, v_al, v_a, '   ', 'text');
+    v_ok := true;
+  exception when sqlstate '23514' then v_ok := false;
+  end;
+  perform pg_temp.sign_in_as(v_al);
+  perform pg_temp.check_true('an empty text message is still refused', not v_ok);
+
+  -- A row whose path does not start with its own conversation would be a
+  -- file nobody could open, because the bucket policy reads that segment.
+  begin
+    insert into public.chat_attachments
+      (message_id, conversation_id, file_name, storage_path)
+    values (v_msg, v_conv, 'x.pdf', gen_random_uuid()::text || '/x.pdf');
+    v_ok := true;
+  exception when sqlstate '23514' then v_ok := false;
+  end;
+  perform pg_temp.sign_in_as(v_al);
+  perform pg_temp.check_true('a path outside its own conversation is refused',
+    not v_ok);
+
+  select attachments into v_att from public.chat_thread(v_conv) limit 1;
+  perform pg_temp.check_eq('the thread carries the attachment',
+    jsonb_array_length(v_att), 1);
+  perform pg_temp.check_true('with the duration the client recorded',
+    (v_att -> 0 ->> 'duration_ms') = '4200');
+  perform pg_temp.check_true('and the message reads as a voice note',
+    (select kind from public.chat_thread(v_conv) limit 1) = 'voice');
+
+  -- A photograph with no caption would otherwise show as a blank line in
+  -- the list, which reads as a bug rather than as a picture.
+  perform pg_temp.check_true('the conversation list names it',
+    (select last_message from public.chat_my_conversations(v_a)
+      where conversation_id = v_conv) = 'Voice note');
+
+  perform pg_temp.sign_in_as(v_bi);
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    select count(*) into v_n
+      from public.chat_attachments where message_id = v_msg;
+  end;
+  reset role;
+  perform pg_temp.check_true('the test ran under row level security',
+    v_role = 'authenticated');
+  perform pg_temp.check_eq('the other company can reach the file', v_n, 1);
+
+  perform pg_temp.sign_in_as(v_out);
+  begin
+    set local role authenticated;
+    select count(*) into v_n
+      from public.chat_attachments where message_id = v_msg;
+  end;
+  reset role;
+  perform pg_temp.check_eq(
+    'while a colleague outside the conversation cannot', v_n, 0);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- A link takes no writes from the client
 --
 -- This is what 0135 settled on after two attempts at a policy. A

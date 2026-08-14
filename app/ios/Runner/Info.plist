@@ -52,5 +52,7 @@
 	<string>Photograph a receipt or bill to file it against an expense.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Attach a photo of a receipt or bill you have already taken.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Recording a voice note to send in a chat.</string>
 </dict>
 </plist>

@@ -61,6 +61,18 @@ dependencies:
   # storage needs somewhere to land first.
   path_provider: ^2.1.5
   crypto: ^3.0.6
+  # Any file, from any of the four surfaces. `image_picker` above only
+  # does images, which is right for a receipt and not enough for a chat
+  # that has to carry a quotation as well as a photograph of one.
+  file_picker: ^8.1.7
+  # Voice notes. Records to opus/aac through MediaRecorder on the web and
+  # the platform recorder on Android and iOS, so one call site covers
+  # all of them. Both of these need microphone permission on mobile,
+  # which the manifests below declare.
+  record: ^5.2.0
+  # Playing one back. Chosen over just_audio for having a web
+  # implementation in the same package rather than a federated one.
+  audioplayers: ^6.1.0
   # Real PDFs for the documents a secretary has to print, sign
   # and lodge. Markdown is fine for a diff; it is not fine for
   # something that goes in a minute book.

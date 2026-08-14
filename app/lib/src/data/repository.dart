@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -1878,9 +1879,8 @@ class Repo {
 
   /// Who you may start a conversation with. Colleagues first, then
   /// anyone in a company yours is linked to.
-  Future<List<Map<String, dynamic>>> chatDirectory() async => _rows(
-    await client.rpc('chat_directory', params: {'p_org_id': orgId}),
-  );
+  Future<List<Map<String, dynamic>>> chatDirectory() async =>
+      _rows(await client.rpc('chat_directory', params: {'p_org_id': orgId}));
 
   /// Newest first, which is the order a thread is read in and the order
   /// a reversed list view wants.
@@ -1911,20 +1911,106 @@ class Repo {
     return id as String;
   }
 
-  Future<void> chatSend(String conversationId, String body,
-          {required String senderOrgId}) =>
-      client.from('chat_messages').insert({
-        'conversation_id': conversationId,
-        'sender_id': client.auth.currentUser?.id,
-        // The company you are in this conversation *as*, which the
-        // database checks against your participant row rather than
-        // taking on trust.
-        'sender_org_id': senderOrgId,
-        'body': body,
-      });
+  Future<void> chatSend(
+    String conversationId,
+    String body, {
+    required String senderOrgId,
+  }) => client.from('chat_messages').insert({
+    'conversation_id': conversationId,
+    'sender_id': client.auth.currentUser?.id,
+    // The company you are in this conversation *as*, which the
+    // database checks against your participant row rather than
+    // taking on trust.
+    'sender_org_id': senderOrgId,
+    'body': body,
+  });
 
-  Future<void> chatMarkRead(String conversationId) => client
-      .rpc('chat_mark_read', params: {'p_conversation_id': conversationId});
+  /// A file or a voice note, which is a message rather than a decoration
+  /// on one — so the row goes in first and the attachment hangs off it.
+  ///
+  /// The bytes go to the `chat` bucket, keyed by conversation. That is
+  /// not the `attachments` bucket: that one is keyed by company and its
+  /// policies read the first path segment as the tenant boundary, which
+  /// is exactly what a file sent to another company must not be judged
+  /// by.
+  Future<void> chatSendAttachment({
+    required String conversationId,
+    required String senderOrgId,
+    required String fileName,
+    required Uint8List bytes,
+    String? mimeType,
+    String caption = '',
+    int? durationMs,
+  }) async {
+    final voice = durationMs != null;
+    // Prefixed with a uuid rather than trusting the name: two people
+    // sending `scan.pdf` must not collide, and a name from a phone can
+    // contain anything at all.
+    final path = '$conversationId/${_uuid()}-${_safeName(fileName)}';
+
+    await client.storage
+        .from('chat')
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(contentType: mimeType, upsert: false),
+        );
+
+    final row = await client
+        .from('chat_messages')
+        .insert({
+          'conversation_id': conversationId,
+          'sender_id': client.auth.currentUser?.id,
+          'sender_org_id': senderOrgId,
+          'body': caption.trim(),
+          'kind': voice ? 'voice' : 'file',
+        })
+        .select('id')
+        .single();
+
+    await client.from('chat_attachments').insert({
+      'message_id': row['id'],
+      'conversation_id': conversationId,
+      'file_name': fileName,
+      'storage_path': path,
+      'mime_type': mimeType,
+      'file_size': bytes.length,
+      'duration_ms': durationMs,
+    });
+  }
+
+  /// Short-lived, because the object is private and the policy that
+  /// guards it asks whether you are in the conversation *now*.
+  Future<String> chatFileUrl(String storagePath) =>
+      client.storage.from('chat').createSignedUrl(storagePath, 60 * 60);
+
+  Future<Uint8List> chatFileBytes(String storagePath) =>
+      client.storage.from('chat').download(storagePath);
+
+  /// Storage rejects a key with characters it cannot round-trip, and a
+  /// name typed on a phone is not a key. The original is kept in
+  /// `file_name` and is what the reader sees.
+  static String _safeName(String name) {
+    final cleaned = name
+        .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-')
+        .replaceAll(RegExp(r'-+'), '-');
+    final trimmed = cleaned.replaceAll(RegExp(r'^-|-$'), '');
+    if (trimmed.isEmpty) return 'file';
+    return trimmed.length > 80 ? trimmed.substring(0, 80) : trimmed;
+  }
+
+  static String _uuid() {
+    final r = Random.secure();
+    return List.generate(
+      16,
+      (_) => r.nextInt(256),
+    ).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  Future<void> chatMarkRead(String conversationId) => client.rpc(
+    'chat_mark_read',
+    params: {'p_conversation_id': conversationId},
+  );
 
   Future<void> chatMarkDelivered(String conversationId) => client.rpc(
     'chat_mark_delivered',
@@ -1933,11 +2019,15 @@ class Repo {
 
   /// Throttled by the caller to roughly one every three seconds, never
   /// per keystroke.
-  Future<void> chatTypingPing(String conversationId) => client
-      .rpc('chat_typing_ping', params: {'p_conversation_id': conversationId});
+  Future<void> chatTypingPing(String conversationId) => client.rpc(
+    'chat_typing_ping',
+    params: {'p_conversation_id': conversationId},
+  );
 
-  Future<void> chatTypingStop(String conversationId) => client
-      .rpc('chat_typing_stop', params: {'p_conversation_id': conversationId});
+  Future<void> chatTypingStop(String conversationId) => client.rpc(
+    'chat_typing_stop',
+    params: {'p_conversation_id': conversationId},
+  );
 
   Future<List<Map<String, dynamic>>> chatWhoIsTyping(
     String conversationId,
@@ -1955,18 +2045,16 @@ class Repo {
 
   // --- administration ---------------------------------------------
 
-  Future<List<Map<String, dynamic>>> chatAccessList() async => _rows(
-    await client.rpc('chat_access_list', params: {'p_org_id': orgId}),
-  );
+  Future<List<Map<String, dynamic>>> chatAccessList() async =>
+      _rows(await client.rpc('chat_access_list', params: {'p_org_id': orgId}));
 
   Future<void> chatSetAccess(String userId, bool enabled) => client.rpc(
     'chat_set_access',
     params: {'p_org_id': orgId, 'p_user_id': userId, 'p_enabled': enabled},
   );
 
-  Future<List<Map<String, dynamic>>> chatLinks() async => _rows(
-    await client.rpc('chat_links_for', params: {'p_org_id': orgId}),
-  );
+  Future<List<Map<String, dynamic>>> chatLinks() async =>
+      _rows(await client.rpc('chat_links_for', params: {'p_org_id': orgId}));
 
   Future<void> chatRequestLink(String targetOrgId, {String? note}) =>
       client.rpc(

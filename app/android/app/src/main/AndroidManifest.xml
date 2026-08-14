@@ -4,6 +4,11 @@
          call to Supabase, which looks like a broken backend rather than
          a missing permission. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Voice notes in chat. Declared here because a permission the
+         manifest does not ask for cannot be granted at runtime however
+         politely the plugin asks: the request returns "denied" with no
+         dialog, which looks exactly like the user refusing. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="iAkauntan"
         android:name="${applicationName}"

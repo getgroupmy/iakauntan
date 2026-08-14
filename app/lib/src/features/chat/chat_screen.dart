@@ -7,6 +7,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'chat_attachments.dart';
 import 'chat_live.dart';
 
 /// Talking to people, in the app the work is already in.
@@ -401,6 +402,10 @@ class _ThreadState extends ConsumerState<_Thread> {
   Widget build(BuildContext context) {
     final thread = ref.watch(chatThreadProvider(widget.conversationId));
     final typing = ref.watch(chatTypingProvider(widget.conversationId));
+    // The company we are in this conversation as. Null only while the
+    // organization is still loading, which is when there is nothing to
+    // attach a file to anyway.
+    final myOrg = ref.watch(currentOrgProvider).value?.id;
 
     return Column(
       children: [
@@ -455,6 +460,15 @@ class _ThreadState extends ConsumerState<_Thread> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              if (myOrg != null)
+                ChatComposerActions(
+                  conversationId: widget.conversationId,
+                  senderOrgId: myOrg,
+                  onSent: () {
+                    ref.invalidate(chatThreadProvider(widget.conversationId));
+                    ref.invalidate(chatConversationsProvider);
+                  },
+                ),
               Expanded(
                 child: TextField(
                   key: const ValueKey('chat-input'),
@@ -521,7 +535,14 @@ class _Bubble extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-            Text(message['body']?.toString() ?? ''),
+            for (final a in (message['attachments'] as List? ?? const []))
+              ChatAttachmentView(
+                attachment: Map<String, dynamic>.from(a as Map),
+              ),
+            // A file or a voice note may arrive with nothing said about
+            // it, and an empty line under it reads as a rendering fault.
+            if ((message['body']?.toString() ?? '').trim().isNotEmpty)
+              Text(message['body'].toString()),
             const SizedBox(height: 2),
             Row(
               mainAxisSize: MainAxisSize.min,
