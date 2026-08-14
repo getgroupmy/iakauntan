@@ -102,6 +102,27 @@ create table public.chat_typing (
 alter table public.chat_presence enable row level security;
 alter table public.chat_typing enable row level security;
 
+-- `app.chat_orgs_linked` stays closed to clients; the presence policy
+-- needs the same answer, so it gets a callable wrapper rather than the
+-- policy reaching for something it may not execute. This is the mistake
+-- 0135 made once already — a policy that names a function the caller
+-- cannot run fails with "permission denied for function", from a screen
+-- that gives no hint which function it meant.
+--
+-- Defined *before* the policy that names it, which is the other half of
+-- the same lesson. A policy body is parsed and its functions resolved
+-- when the policy is created, not when it is used, so a wrapper written
+-- below the policy exists too late: `function app.chat_visible_org(uuid,
+-- uuid) does not exist`, and the migration stops on statement seven.
+create or replace function app.chat_visible_org(p_mine uuid, p_theirs uuid)
+returns boolean language sql stable security definer
+set search_path = public, app, pg_temp as $$
+  select app.chat_orgs_linked(p_mine, p_theirs);
+$$;
+
+revoke all on function app.chat_visible_org(uuid, uuid) from public, anon;
+grant execute on function app.chat_visible_org(uuid, uuid) to authenticated;
+
 -- Presence is visible to people you could hold a conversation with —
 -- which is the same list the directory shows, and not one person more.
 -- Written only about yourself.
@@ -130,21 +151,6 @@ create policy chat_typing_write on public.chat_typing
   using (user_id = auth.uid() and app.is_chat_participant(conversation_id))
   with check (user_id = auth.uid()
               and app.is_chat_participant(conversation_id));
-
--- `app.chat_orgs_linked` stays closed to clients; the presence policy
--- needs the same answer, so it gets a callable wrapper rather than the
--- policy reaching for something it may not execute. This is the mistake
--- 0135 made once already — a policy that names a function the caller
--- cannot run fails with "permission denied for function", from a screen
--- that gives no hint which function it meant.
-create or replace function app.chat_visible_org(p_mine uuid, p_theirs uuid)
-returns boolean language sql stable security definer
-set search_path = public, app, pg_temp as $$
-  select app.chat_orgs_linked(p_mine, p_theirs);
-$$;
-
-revoke all on function app.chat_visible_org(uuid, uuid) from public, anon;
-grant execute on function app.chat_visible_org(uuid, uuid) to authenticated;
 
 grant select, insert, update, delete on public.chat_presence to authenticated;
 grant select, insert, update, delete on public.chat_typing to authenticated;
