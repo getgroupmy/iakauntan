@@ -166,13 +166,17 @@ class _ClaimTile extends ConsumerWidget {
       // Approval is not settlement. Promising payroll reimbursement for
       // a claim that is not going through payroll is how an approved
       // claim gets forgotten.
+      // Deliberately not "Approved". One press clears one stage, and
+      // the claim may still be sitting with three other people — saying
+      // otherwise is how somebody goes looking for a reimbursement that
+      // was never authorised. The chain on the claim says where it
+      // actually is.
       successMessage: !approve
           ? 'Rejected'
-          : claim.payWithPayroll
-              ? 'Approved — it will be reimbursed with the next payroll'
-              : 'Approved — post it to put the expense in the ledger',
+          : 'Your approval is recorded — open the claim to see who is next',
     );
     ref.invalidate(claimsProvider);
+    ref.invalidate(claimApprovalsProvider(claim.id));
   }
 
   Future<void> _post(BuildContext context, WidgetRef ref) async {
@@ -597,7 +601,10 @@ class _ClaimSheet extends ConsumerWidget {
             const SizedBox(height: Space.lg),
             Flexible(
               child: SingleChildScrollView(
-                child: AttachmentsCard(
+                child: Column(children: [
+                  _ApprovalChain(claimId: claim.id),
+                  const SizedBox(height: Space.md),
+                  AttachmentsCard(
                   table: 'expense_claims',
                   recordId: claim.id,
                   title: 'Receipts',
@@ -613,12 +620,143 @@ class _ClaimSheet extends ConsumerWidget {
                       ? 'This claim is in the ledger, so its paperwork is '
                           'now the accountant\'s record.'
                       : 'The evidence behind the claim.',
-                ),
+                  ),
+                ]),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Who has to see this claim, and who already has.
+///
+/// A claim goes to the manager who knows whether the trip happened, the
+/// unit head who owns the budget, HR who owns the policy and finance who
+/// owns the money — in that order, one at a time. Showing the whole
+/// chain rather than only the current step answers the question people
+/// actually ask, which is not "what is the status" but "who is it
+/// sitting with, and how much longer".
+class _ApprovalChain extends ConsumerWidget {
+  const _ApprovalChain({required this.claimId});
+
+  final String claimId;
+
+  static const _stageNames = {
+    'manager': 'Department manager',
+    'unit_head': 'Unit head',
+    'hr': 'Human resources',
+    'finance': 'Finance',
+  };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final steps = ref.watch(claimApprovalsProvider(claimId));
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionHeader('Approvals'),
+            AsyncView(
+              value: steps,
+              onRetry: () => ref.invalidate(claimApprovalsProvider(claimId)),
+              loading: const LinearProgressIndicator(),
+              builder: (list) {
+                if (list.isEmpty) {
+                  return Text(
+                    'No approval chain — this claim predates it, or it was '
+                    'not submitted for approval.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  );
+                }
+                // The first step still pending is the one it is waiting
+                // on; everything after that has not been asked yet.
+                final waitingOn = list.indexWhere(
+                    (s) => s['status']?.toString() == 'pending');
+                return Column(children: [
+                  for (var i = 0; i < list.length; i++)
+                    _Step(
+                      row: list[i],
+                      label: _stageNames[list[i]['stage']?.toString()] ??
+                          '${list[i]['stage']}',
+                      isNext: i == waitingOn,
+                    ),
+                ]);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Step extends StatelessWidget {
+  const _Step({required this.row, required this.label, required this.isNext});
+
+  final Map<String, dynamic> row;
+  final String label;
+  final bool isNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = row['status']?.toString() ?? 'pending';
+    final approver = row['approver'];
+    final name = approver is Map ? approver['full_name']?.toString() : null;
+    final note = row['note']?.toString();
+
+    final (icon, colour) = switch (status) {
+      'approved' => (Icons.check_circle, context.colors.success),
+      'rejected' => (Icons.cancel, context.colors.danger),
+      // Skipped is not a failure and should not be red. Nobody held the
+      // role, the chain went round it, and the claim is none the worse.
+      'skipped' => (Icons.remove_circle_outline, context.scheme.outline),
+      _ => (
+          isNext ? Icons.hourglass_top : Icons.circle_outlined,
+          isNext ? context.colors.warning : context.scheme.outline
+        ),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Space.sm),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, size: 18, color: colour),
+        const SizedBox(width: Space.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name == null ? label : '$label · $name',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: isNext ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+              if (isNext)
+                Text('Waiting on this',
+                    style: TextStyle(
+                        fontSize: 11, color: context.colors.warning)),
+              if (note != null && note.isNotEmpty)
+                Text(note,
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: context.scheme.onSurfaceVariant)),
+              if (row['decided_at'] != null)
+                Text(
+                  Fmt.dateTime(DateTime.tryParse('${row['decided_at']}')),
+                  style: TextStyle(
+                      fontSize: 11, color: context.scheme.onSurfaceVariant),
+                ),
+            ],
+          ),
+        ),
+      ]),
     );
   }
 }

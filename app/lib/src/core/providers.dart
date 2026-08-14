@@ -665,6 +665,12 @@ final claimsProvider =
   return requireRepo(ref).claims(status: status);
 });
 
+/// The approval chain on one claim.
+final claimApprovalsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, claimId) {
+  return requireRepo(ref).claimApprovals(claimId);
+});
+
 final claimTypesProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).claimTypes();

@@ -2281,6 +2281,20 @@ extension RepoHr on Repo {
         .toList();
   }
 
+  /// The approval chain on one claim, in order.
+  ///
+  /// Read rather than derived: the steps say who was asked, who has
+  /// answered, and which stages were skipped for want of anybody to
+  /// fill them — none of which can be worked out from the claim's own
+  /// status.
+  Future<List<Map<String, dynamic>>> claimApprovals(String claimId) async =>
+      Repo._rows(await client
+          .from('claim_approvals')
+          .select('*, approver:employees!claim_approvals_approver_employee_id_fkey'
+              '(full_name)')
+          .eq('claim_id', claimId)
+          .order('step_no'));
+
   Future<void> decideClaim(String id, bool approve,
           {String? note, double? approvedAmount}) =>
       client.rpc('decide_expense_claim', params: {
