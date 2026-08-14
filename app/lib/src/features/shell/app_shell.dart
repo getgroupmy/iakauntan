@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
+import '../../core/live_updates.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
@@ -151,6 +152,12 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Kept alive for as long as there is a shell around a signed-in
+    // user, which is the whole time anybody can see anything worth
+    // updating. It follows the organization by itself — switching
+    // company tears the subscription down and opens the right one.
+    ref.watch(liveUpdatesProvider);
+
     final dests = _visible(ref);
 
     // Both Material navigation widgets require at least two destinations,
