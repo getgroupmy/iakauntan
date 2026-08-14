@@ -28,11 +28,18 @@ class ClaimsScreen extends ConsumerStatefulWidget {
 }
 
 class _ClaimsScreenState extends ConsumerState<ClaimsScreen> {
-  String _status = 'submitted';
+  /// One of the claim statuses, or `mine` — which is not a status at
+  /// all but "the ones waiting on me". It shares this field because it
+  /// sits in the same segmented control and only one can be showing.
+  String _filter = 'mine';
+
+  bool get _mine => _filter == 'mine';
 
   @override
   Widget build(BuildContext context) {
-    final claims = ref.watch(claimsProvider(_status));
+    final claims = _mine
+        ? ref.watch(claimsAwaitingMeProvider)
+        : ref.watch(claimsProvider(_filter));
 
     return Scaffold(
       appBar: AppBar(
@@ -56,24 +63,39 @@ class _ClaimsScreenState extends ConsumerState<ClaimsScreen> {
             child: SegmentedButton<String>(
                 showSelectedIcon: false,
                 segments: const [
+                  // First, and the one the screen opens on. A chain of
+                  // four approvals makes "every submitted claim in the
+                  // company" the wrong thing to greet an approver with.
+                  ButtonSegment(
+                      value: 'mine',
+                      icon: Icon(Icons.how_to_reg_outlined, size: 18),
+                      label: Text('For me')),
                   ButtonSegment(value: 'submitted', label: Text('Awaiting')),
                   ButtonSegment(value: 'approved', label: Text('Approved')),
                   ButtonSegment(value: 'all', label: Text('All')),
                 ],
-                selected: {_status},
-                onSelectionChanged: (s) => setState(() => _status = s.first),
+                selected: {_filter},
+                onSelectionChanged: (s) => setState(() => _filter = s.first),
             ),
           ),
         ),
       ),
       body: AsyncView(
         value: claims,
-        onRetry: () => ref.invalidate(claimsProvider),
+        onRetry: () => _mine
+            ? ref.invalidate(claimsAwaitingMeProvider)
+            : ref.invalidate(claimsProvider),
         builder: (list) => list.isEmpty
-            ? const EmptyState(
-                icon: Icons.receipt_long_outlined,
-                title: 'No claims here',
-                message: 'Submitted claims appear here for approval.',
+            ? EmptyState(
+                icon: _mine
+                    ? Icons.done_all_outlined
+                    : Icons.receipt_long_outlined,
+                title: _mine ? 'Nothing waiting on you' : 'No claims here',
+                // Said separately because an empty "For me" is good news
+                // and an empty "Awaiting" is not the same thing at all.
+                message: _mine
+                    ? 'Claims appear here when the chain reaches you.'
+                    : 'Submitted claims appear here for approval.',
               )
             : ListView.separated(
                 itemCount: list.length,
@@ -176,6 +198,9 @@ class _ClaimTile extends ConsumerWidget {
           : 'Your approval is recorded — open the claim to see who is next',
     );
     ref.invalidate(claimsProvider);
+    // The queue is derived from the chain, so a decision
+    // changes it as surely as it changes the list.
+    ref.invalidate(claimsAwaitingMeProvider);
     ref.invalidate(claimApprovalsProvider(claim.id));
   }
 
@@ -200,6 +225,9 @@ class _ClaimTile extends ConsumerWidget {
       pendingMessage: 'Posting…',
     );
     ref.invalidate(claimsProvider);
+    // The queue is derived from the chain, so a decision
+    // changes it as surely as it changes the list.
+    ref.invalidate(claimsAwaitingMeProvider);
     refreshLedgerData(ref);
   }
 }
@@ -490,6 +518,9 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
     if (mounted) setState(() => _saving = false);
     if (ok && mounted) {
       ref.invalidate(claimsProvider);
+    // The queue is derived from the chain, so a decision
+    // changes it as surely as it changes the list.
+    ref.invalidate(claimsAwaitingMeProvider);
       Navigator.pop(context);
     }
   }

@@ -665,6 +665,12 @@ final claimsProvider =
   return requireRepo(ref).claims(status: status);
 });
 
+/// The claims this person is the one holding up.
+final claimsAwaitingMeProvider =
+    FutureProvider.autoDispose<List<ExpenseClaim>>((ref) {
+  return requireRepo(ref).claimsAwaitingMe();
+});
+
 /// The approval chain on one claim.
 final claimApprovalsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, claimId) {

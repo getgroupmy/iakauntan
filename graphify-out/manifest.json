@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786681318.3445563,
-    "ast_hash": "332430e63a28fc441cc24916948c1375",
+    "mtime": 1786683718.856699,
+    "ast_hash": "cc681f212aba273c585e8864449967f5",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786681310.264556,
-    "ast_hash": "3cec6acef595860405eb430c1d42ebda",
+    "mtime": 1786683714.0326989,
+    "ast_hash": "ff8a3be4e33a07ba590f1dec17795109",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -185,8 +185,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/claims_screen.dart": {
-    "mtime": 1786677933.4783812,
-    "ast_hash": "081521513f9e82df6db9f491cb3f5052",
+    "mtime": 1786683767.631084,
+    "ast_hash": "dd69e238128becba31218f01a710b1ae",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/employee_editor.dart": {
@@ -2040,13 +2040,13 @@
     "semantic_hash": ""
   },
   "supabase/tests/claim_approval_chain.sql": {
-    "mtime": 1786680435.244504,
-    "ast_hash": "d3904a249bd8cf3e5b19e28204fe14e8",
+    "mtime": 1786683676.2406964,
+    "ast_hash": "3a359818f8109673330097d1dfe793ae",
     "semantic_hash": ""
   },
   "supabase/tests/claim_attachments.sql": {
-    "mtime": 1786681712.73658,
-    "ast_hash": "66a9e9ae8ccd0a74b1a071b3456ed4ec",
+    "mtime": 1786682479.8726254,
+    "ast_hash": "3eb9a46e6c54d206f5be7b7ea5d31667",
     "semantic_hash": ""
   },
   "supabase/tests/contact_numbering.sql": {
@@ -2062,6 +2062,21 @@
   "app/web/pdfjs/PDFJS-LICENSE.txt": {
     "mtime": 1786643743.806297,
     "ast_hash": "2ee41112a44fe7014dce33e26468ba93",
+    "semantic_hash": ""
+  },
+  "app/test/claims_awaiting_me_test.dart": {
+    "mtime": 1786683874.5807083,
+    "ast_hash": "607a69638bcd5c0d4569afe7cfd8ab2e",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0122_attachments_are_reachable_from_the_api.sql": {
+    "mtime": 1786682934.2766523,
+    "ast_hash": "efe23db152b1d3e94f3c09aade2f36ce",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0123_claims_waiting_on_me.sql": {
+    "mtime": 1786683697.1286979,
+    "ast_hash": "9032e14ee65261d494175ccd22cba495",
     "semantic_hash": ""
   }
 }

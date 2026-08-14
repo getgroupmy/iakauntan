@@ -2281,6 +2281,31 @@ extension RepoHr on Repo {
         .toList();
   }
 
+  /// The claims waiting on the person asking, rather than every claim
+  /// in the company.
+  ///
+  /// Two round trips on purpose. The database answers "which ones",
+  /// because who may decide a step is already settled by
+  /// `app.may_decide_claim_step` and a second copy of that rule in Dart
+  /// would be a second copy to get wrong. The rows then come back
+  /// through the same select and the same embed as every other claim
+  /// list, so a claim looks identical whichever filter found it.
+  Future<List<ExpenseClaim>> claimsAwaitingMe() async {
+    final rows = Repo._rows(await client
+        .rpc('claims_awaiting_my_approval', params: {'p_org_id': orgId}));
+    final ids = rows.map((r) => r['claim_id'] as String).toList();
+    if (ids.isEmpty) return [];
+
+    return Repo._rows(await client
+            .from('expense_claims')
+            .select('*, employees(full_name)')
+            .inFilter('id', ids)
+            .order('claim_date', ascending: false)
+            .limit(200))
+        .map(ExpenseClaim.fromJson)
+        .toList();
+  }
+
   /// The approval chain on one claim, in order.
   ///
   /// Read rather than derived: the steps say who was asked, who has
