@@ -24,10 +24,12 @@ class EmailScreen extends ConsumerWidget {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Email'),
-          bottom: const TabBar(tabs: [
-            Tab(text: 'Settings'),
-            Tab(text: 'Outbox'),
-          ]),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Settings'),
+              Tab(text: 'Outbox'),
+            ],
+          ),
         ),
         body: const TabBarView(children: [_SettingsTab(), _OutboxTab()]),
       ),
@@ -74,8 +76,9 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
           _enabled = row?['is_enabled'] == true;
           _fromName.text = row?['from_name']?.toString() ?? '';
           _replyTo.text = row?['reply_to']?.toString() ?? '';
-          _minAmount.text =
-              Fmt.toDouble(row?['reminder_min_amount']).toStringAsFixed(2);
+          _minAmount.text = Fmt.toDouble(
+            row?['reminder_min_amount'],
+          ).toStringAsFixed(2);
           _days.text = ((row?['reminder_days'] as List?) ?? const [])
               .map((e) => e.toString())
               .join(', ');
@@ -93,14 +96,18 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const SectionHeader('Sending',
-                            subtitle: 'Off until you turn it on, so nothing '
-                                'reaches a customer by accident'),
+                        const SectionHeader(
+                          'Sending',
+                          subtitle:
+                              'Off until you turn it on, so nothing '
+                              'reaches a customer by accident',
+                        ),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
                           value: _enabled,
-                          onChanged:
-                              canAdmin ? (v) => setState(() => _enabled = v) : null,
+                          onChanged: canAdmin
+                              ? (v) => setState(() => _enabled = v)
+                              : null,
                           title: const Text('Send email from this company'),
                         ),
                         const SizedBox(height: Space.sm),
@@ -109,7 +116,8 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
                           enabled: canAdmin,
                           decoration: const InputDecoration(
                             labelText: 'From name',
-                            helperText: 'The address itself is set on the '
+                            helperText:
+                                'The address itself is set on the '
                                 'server, not here',
                           ),
                         ),
@@ -134,15 +142,18 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const SectionHeader('Chasing overdue invoices',
-                            subtitle: 'Sent by the nightly job, once each'),
+                        const SectionHeader(
+                          'Chasing overdue invoices',
+                          subtitle: 'Sent by the nightly job, once each',
+                        ),
                         TextField(
                           controller: _days,
                           enabled: canAdmin,
                           decoration: const InputDecoration(
                             labelText: 'Days after the due date',
                             hintText: '0, 7, 30',
-                            helperText: 'Zero is the due date itself; a '
+                            helperText:
+                                'Zero is the due date itself; a '
                                 'negative number is before it. Empty means '
                                 'never chase.',
                           ),
@@ -152,11 +163,13 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
                           controller: _minAmount,
                           enabled: canAdmin,
                           keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
+                            decimal: true,
+                          ),
                           decoration: const InputDecoration(
                             labelText: 'Only chase amounts above',
                             prefixText: 'RM ',
-                            helperText: 'Chasing somebody for eight ringgit '
+                            helperText:
+                                'Chasing somebody for eight ringgit '
                                 'costs more goodwill than it collects',
                           ),
                         ),
@@ -187,20 +200,23 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
   Future<void> _save() async {
     // "0, 7, 30" from a text field, with whatever somebody actually
     // typed thrown away rather than sent as a null in an int array.
-    final days = _days.text
-        .split(RegExp(r'[^\-0-9]+'))
-        .map((s) => int.tryParse(s.trim()))
-        .whereType<int>()
-        .toSet()
-        .toList()
-      ..sort();
+    final days =
+        _days.text
+            .split(RegExp(r'[^\-0-9]+'))
+            .map((s) => int.tryParse(s.trim()))
+            .whereType<int>()
+            .toSet()
+            .toList()
+          ..sort();
 
     setState(() => _saving = true);
     await runWithFeedback(
       context,
       action: () => ref.read(repoProvider)!.saveEmailSettings({
         'is_enabled': _enabled,
-        'from_name': _fromName.text.trim().isEmpty ? null : _fromName.text.trim(),
+        'from_name': _fromName.text.trim().isEmpty
+            ? null
+            : _fromName.text.trim(),
         'reply_to': _replyTo.text.trim().isEmpty ? null : _replyTo.text.trim(),
         'reminder_days': days,
         'reminder_min_amount': double.tryParse(_minAmount.text.trim()) ?? 0,
@@ -233,43 +249,46 @@ class _OutboxTabState extends ConsumerState<_OutboxTab> {
         icon: const Icon(Icons.send),
         label: const Text('Send queued'),
       ),
-      body: Column(children: [
-        FilterBar(
-          child: SegmentedButton<String>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: 'all', label: Text('All')),
-              ButtonSegment(value: 'queued', label: Text('Queued')),
-              ButtonSegment(value: 'failed', label: Text('Failed')),
-              ButtonSegment(value: 'sent', label: Text('Sent')),
-            ],
-            selected: {_status},
-            onSelectionChanged: (s) => setState(() => _status = s.first),
+      body: Column(
+        children: [
+          FilterBar(
+            child: SegmentedButton<String>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: 'all', label: Text('All')),
+                ButtonSegment(value: 'queued', label: Text('Queued')),
+                ButtonSegment(value: 'failed', label: Text('Failed')),
+                ButtonSegment(value: 'sent', label: Text('Sent')),
+              ],
+              selected: {_status},
+              onSelectionChanged: (s) => setState(() => _status = s.first),
+            ),
           ),
-        ),
-        Expanded(
-          child: AsyncView(
-            value: rows,
-            onRetry: () => ref.invalidate(emailOutboxProvider(_status)),
-            builder: (list) => list.isEmpty
-                ? const EmptyState(
-                    icon: Icons.outbox_outlined,
-                    title: 'Nothing here',
-                    message: 'Messages queued from a document or by the '
-                        'nightly reminder run appear here.',
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.only(bottom: 96),
-                    itemCount: list.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (_, i) => _MessageTile(
-                      row: list[i],
-                      onRetry: () => _send(list[i]['id'] as String),
+          Expanded(
+            child: AsyncView(
+              value: rows,
+              onRetry: () => ref.invalidate(emailOutboxProvider(_status)),
+              builder: (list) => list.isEmpty
+                  ? const EmptyState(
+                      icon: Icons.outbox_outlined,
+                      title: 'Nothing here',
+                      message:
+                          'Messages queued from a document or by the '
+                          'nightly reminder run appear here.',
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.only(bottom: 96),
+                      itemCount: list.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) => _MessageTile(
+                        row: list[i],
+                        onRetry: () => _send(list[i]['id'] as String),
+                      ),
                     ),
-                  ),
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 
@@ -278,10 +297,14 @@ class _OutboxTabState extends ConsumerState<_OutboxTab> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       final result = await ref.read(repoProvider)!.sendQueuedEmail(id: id);
-      messenger.showSnackBar(SnackBar(
-        content: Text('Sent ${result['sent'] ?? 0}, '
-            'failed ${result['failed'] ?? 0}'),
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Sent ${result['sent'] ?? 0}, '
+            'failed ${result['failed'] ?? 0}',
+          ),
+        ),
+      );
     } catch (err) {
       // The likeliest error by far is that nobody has set the provider
       // key yet, and the function says so in as many words.
@@ -305,17 +328,23 @@ class _MessageTile extends StatelessWidget {
     final error = row['last_error']?.toString();
 
     return ListTile(
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.xs),
-      title: Row(children: [
-        Flexible(
-          child: Text(row['subject']?.toString() ?? '',
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: Space.lg,
+        vertical: Space.xs,
+      ),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              row['subject']?.toString() ?? '',
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-        ),
-        const SizedBox(width: Space.sm),
-        StatusChip(status, compact: true),
-      ]),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(width: Space.sm),
+          StatusChip(status, compact: true),
+        ],
+      ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -330,10 +359,12 @@ class _MessageTile extends StatelessWidget {
             style: const TextStyle(fontSize: 12),
           ),
           if (error != null && error.isNotEmpty)
-            Text(error,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: context.colors.danger)),
+            Text(
+              error,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: context.colors.danger),
+            ),
         ],
       ),
       isThreeLine: error != null && error.isNotEmpty,

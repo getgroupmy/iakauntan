@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1786687406.119383,
-    "ast_hash": "2dadabcb6623786341eccf2b105b039f",
+    "mtime": 1786690222.0411856,
+    "ast_hash": "d32ec8445c9ae69e4ccee5aad763a539",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786688654.0426705,
-    "ast_hash": "a8c4d199d70e3afcb0263834f538cc54",
+    "mtime": 1786690421.3280115,
+    "ast_hash": "c941477e8fce2d4fe3c36ebb19ac1b6b",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1786688863.2172318,
-    "ast_hash": "4e31eef6de29431a254cc0abcdd3d98a",
+    "mtime": 1786690421.0600116,
+    "ast_hash": "2c35925c154e88b2442075d0c213bc11",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -1505,8 +1505,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/email_screen.dart": {
-    "mtime": 1786530967.5408998,
-    "ast_hash": "8f65fdea759ff3193a2597bed55caca1",
+    "mtime": 1786690420.8760116,
+    "ast_hash": "d8e4317ca45596af6a19c9b712947036",
     "semantic_hash": ""
   },
   "supabase/functions/send-email/index.ts": {
@@ -1925,8 +1925,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/claim_approval_card.dart": {
-    "mtime": 1786681559.1221507,
-    "ast_hash": "d2e47aa0d89fb9459bf78f32383608ce",
+    "mtime": 1786690420.6360116,
+    "ast_hash": "8e0f497ed42f69f48416e8e46e791800",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/scan_all_data.dart": {
@@ -2130,13 +2130,23 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/company_card.dart": {
-    "mtime": 1786688929.2586868,
-    "ast_hash": "2b0147da2434ac6a50afae44902e0086",
+    "mtime": 1786690420.8160114,
+    "ast_hash": "a80e51945eb647ae1dd3c616520fb714",
     "semantic_hash": ""
   },
   "app/test/company_details_test.dart": {
     "mtime": 1786688929.450687,
     "ast_hash": "a8c019ac8765c83350b6ea87fc638033",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/settings/warehouses_card.dart": {
+    "mtime": 1786690421.0800116,
+    "ast_hash": "635b607f5424abb2e36142da5b95c821",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0130_a_company_has_two_addresses.sql": {
+    "mtime": 1786690188.0719976,
+    "ast_hash": "8081f3ffe4efcb4b3825a4211da80202",
     "semantic_hash": ""
   }
 }

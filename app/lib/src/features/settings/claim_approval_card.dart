@@ -21,8 +21,11 @@ import '../../data/repository.dart';
 /// ringgit" — and because zero is a meaningful value on the same scale
 /// rather than a separate mode.
 class ClaimApprovalCard extends ConsumerStatefulWidget {
-  const ClaimApprovalCard(
-      {super.key, required this.org, required this.canAdmin});
+  const ClaimApprovalCard({
+    super.key,
+    required this.org,
+    required this.canAdmin,
+  });
 
   final Organization org;
   final bool canAdmin;
@@ -58,8 +61,7 @@ class ClaimApprovalCardState extends ConsumerState<ClaimApprovalCard> {
     setState(() => _saving = true);
     final ok = await runWithFeedback(
       context,
-      action: () =>
-          ref.read(repoProvider)!.setClaimApprovalThreshold(value),
+      action: () => ref.read(repoProvider)!.setClaimApprovalThreshold(value),
       successMessage: 'Approval threshold saved',
     );
     if (!mounted) return;
@@ -87,8 +89,8 @@ class ClaimApprovalCardState extends ConsumerState<ClaimApprovalCard> {
             ),
             threshold.when(
               loading: () => const LinearProgressIndicator(),
-              error: (e, _) => Text('$e',
-                  style: TextStyle(color: context.colors.warning)),
+              error: (e, _) =>
+                  Text('$e', style: TextStyle(color: context.colors.warning)),
               data: (value) {
                 // Fill the field the first time the amount arrives, and
                 // never again — re-filling on every rebuild would wipe
@@ -114,7 +116,8 @@ class ClaimApprovalCardState extends ConsumerState<ClaimApprovalCard> {
                             controller: _amount,
                             enabled: widget.canAdmin && !_saving,
                             keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
+                              decimal: true,
+                            ),
                             onChanged: (_) => setState(() {}),
                             decoration: InputDecoration(
                               labelText: 'Full chain from',

@@ -9,6 +9,11 @@ import 'models.dart';
 /// All data access for one organization. Every query is additionally
 /// filtered by org_id even though RLS already enforces it — belt and
 /// braces, and it keeps the generated SQL selective.
+/// Blank is not a value. An empty box in a form means "nothing here",
+/// and storing `''` would make "never filled in" and "deliberately
+/// cleared" indistinguishable to everything downstream.
+String? _orNull(String? v) => (v == null || v.trim().isEmpty) ? null : v.trim();
+
 class Repo {
   Repo(this.client, this.orgId);
 
@@ -19,17 +24,22 @@ class Repo {
   // Dashboard and reports
   // ------------------------------------------------------------------
   Future<DashboardSummary> dashboard({DateTime? from, DateTime? to}) async {
-    final data = await client.rpc('dashboard_summary', params: {
-      'p_org_id': orgId,
-      if (from != null) 'p_from': Fmt.iso(from),
-      if (to != null) 'p_to': Fmt.iso(to),
-    });
+    final data = await client.rpc(
+      'dashboard_summary',
+      params: {
+        'p_org_id': orgId,
+        if (from != null) 'p_from': Fmt.iso(from),
+        if (to != null) 'p_to': Fmt.iso(to),
+      },
+    );
     return DashboardSummary(Map<String, dynamic>.from(data as Map));
   }
 
   Future<List<Map<String, dynamic>>> revenueTrend({int months = 12}) async {
-    final data = await client.rpc('report_revenue_trend',
-        params: {'p_org_id': orgId, 'p_months': months});
+    final data = await client.rpc(
+      'report_revenue_trend',
+      params: {'p_org_id': orgId, 'p_months': months},
+    );
     return _rows(data);
   }
 
@@ -37,11 +47,14 @@ class Repo {
     DateTime? from,
     DateTime? to,
   }) async {
-    final data = await client.rpc('report_trial_balance', params: {
-      'p_org_id': orgId,
-      if (from != null) 'p_from': Fmt.iso(from),
-      'p_to': Fmt.iso(to ?? DateTime.now()),
-    });
+    final data = await client.rpc(
+      'report_trial_balance',
+      params: {
+        'p_org_id': orgId,
+        if (from != null) 'p_from': Fmt.iso(from),
+        'p_to': Fmt.iso(to ?? DateTime.now()),
+      },
+    );
     return _rows(data);
   }
 
@@ -49,11 +62,10 @@ class Repo {
     required DateTime from,
     required DateTime to,
   }) async {
-    final data = await client.rpc('report_profit_loss', params: {
-      'p_org_id': orgId,
-      'p_from': Fmt.iso(from),
-      'p_to': Fmt.iso(to),
-    });
+    final data = await client.rpc(
+      'report_profit_loss',
+      params: {'p_org_id': orgId, 'p_from': Fmt.iso(from), 'p_to': Fmt.iso(to)},
+    );
     return _rows(data);
   }
 
@@ -65,13 +77,16 @@ class Repo {
     String? projectCode,
     String? departmentCode,
   }) async {
-    final data = await client.rpc('report_profit_loss_by_dimension', params: {
-      'p_org_id': orgId,
-      'p_from': Fmt.iso(from),
-      'p_to': Fmt.iso(to),
-      if (projectCode != null) 'p_project_code': projectCode,
-      if (departmentCode != null) 'p_department_code': departmentCode,
-    });
+    final data = await client.rpc(
+      'report_profit_loss_by_dimension',
+      params: {
+        'p_org_id': orgId,
+        'p_from': Fmt.iso(from),
+        'p_to': Fmt.iso(to),
+        if (projectCode != null) 'p_project_code': projectCode,
+        if (departmentCode != null) 'p_department_code': departmentCode,
+      },
+    );
     return _rows(data);
   }
 
@@ -80,10 +95,10 @@ class Repo {
       _rows(await client.rpc('ledger_dimensions', params: {'p_org_id': orgId}));
 
   Future<List<Map<String, dynamic>>> balanceSheet({DateTime? asAt}) async {
-    final data = await client.rpc('report_balance_sheet', params: {
-      'p_org_id': orgId,
-      'p_as_at': Fmt.iso(asAt ?? DateTime.now()),
-    });
+    final data = await client.rpc(
+      'report_balance_sheet',
+      params: {'p_org_id': orgId, 'p_as_at': Fmt.iso(asAt ?? DateTime.now())},
+    );
     return _rows(data);
   }
 
@@ -91,11 +106,10 @@ class Repo {
     required DateTime from,
     required DateTime to,
   }) async {
-    final data = await client.rpc('report_sst_summary', params: {
-      'p_org_id': orgId,
-      'p_from': Fmt.iso(from),
-      'p_to': Fmt.iso(to),
-    });
+    final data = await client.rpc(
+      'report_sst_summary',
+      params: {'p_org_id': orgId, 'p_from': Fmt.iso(from), 'p_to': Fmt.iso(to)},
+    );
     return _rows(data);
   }
 
@@ -112,10 +126,7 @@ class Repo {
   }) async {
     final data = await client.rpc(
       receivable ? 'report_ar_aging' : 'report_ap_aging',
-      params: {
-        'p_org_id': orgId,
-        if (asAt != null) 'p_as_at': Fmt.iso(asAt),
-      },
+      params: {'p_org_id': orgId, if (asAt != null) 'p_as_at': Fmt.iso(asAt)},
     );
     return _rows(data);
   }
@@ -124,10 +135,11 @@ class Repo {
   // Contacts
   // ------------------------------------------------------------------
   Future<List<Contact>> contacts({String? type, String? search}) async {
-    var query = client.from('contacts').select().eq('org_id', orgId).isFilter(
-          'deleted_at',
-          null,
-        );
+    var query = client
+        .from('contacts')
+        .select()
+        .eq('org_id', orgId)
+        .isFilter('deleted_at', null);
 
     if (type != null && type != 'all') {
       query = query.inFilter('contact_type', [type, 'both']);
@@ -142,8 +154,7 @@ class Repo {
   }
 
   Future<Contact> contact(String id) async {
-    final data =
-        await client.from('contacts').select().eq('id', id).single();
+    final data = await client.from('contacts').select().eq('id', id).single();
     return Contact.fromJson(data);
   }
 
@@ -168,7 +179,7 @@ class Repo {
   /// supplier under a different number would be worse than the error.
   Future<Contact> createContactWithGeneratedCode(Contact contact) async {
     const attempts = 5;
-    for (var attempt = 1;; attempt++) {
+    for (var attempt = 1; ; attempt++) {
       String code;
       try {
         code = await nextDocumentNumber('contact');
@@ -181,7 +192,8 @@ class Repo {
       try {
         return await saveContact(contact.withCode(code));
       } on PostgrestException catch (e) {
-        final taken = e.code == '23505' &&
+        final taken =
+            e.code == '23505' &&
             (e.message.contains('contacts_org_id_code_key') ||
                 e.message.contains('code'));
         if (!taken || attempt >= attempts) rethrow;
@@ -194,11 +206,11 @@ class Repo {
     final data = id == null
         ? await client.from('contacts').insert(payload).select().single()
         : await client
-            .from('contacts')
-            .update(payload)
-            .eq('id', id)
-            .select()
-            .single();
+              .from('contacts')
+              .update(payload)
+              .eq('id', id)
+              .select()
+              .single();
     return Contact.fromJson(data);
   }
 
@@ -206,8 +218,11 @@ class Repo {
   // Items
   // ------------------------------------------------------------------
   Future<List<Item>> items({String? search, bool onlyLowStock = false}) async {
-    var query =
-        client.from('items').select().eq('org_id', orgId).isFilter('deleted_at', null);
+    var query = client
+        .from('items')
+        .select()
+        .eq('org_id', orgId)
+        .isFilter('deleted_at', null);
 
     if (search != null && search.trim().isNotEmpty) {
       final q = search.trim();
@@ -224,11 +239,11 @@ class Repo {
     final data = id == null
         ? await client.from('items').insert(payload).select().single()
         : await client
-            .from('items')
-            .update(payload)
-            .eq('id', id)
-            .select()
-            .single();
+              .from('items')
+              .update(payload)
+              .eq('id', id)
+              .select()
+              .single();
     return Item.fromJson(data);
   }
 
@@ -261,15 +276,14 @@ class Repo {
     required double rate,
     String taxTypeCode = '06',
     bool isExempt = false,
-  }) =>
-      client.from('tax_codes').insert({
-        'org_id': orgId,
-        'code': code,
-        'name': name,
-        'rate': rate,
-        'tax_type_code': taxTypeCode,
-        'is_exempt': isExempt,
-      });
+  }) => client.from('tax_codes').insert({
+    'org_id': orgId,
+    'code': code,
+    'name': name,
+    'rate': rate,
+    'tax_type_code': taxTypeCode,
+    'is_exempt': isExempt,
+  });
 
   Future<void> updateTaxCode(
     String id, {
@@ -278,14 +292,17 @@ class Repo {
     required double rate,
     required String taxTypeCode,
     required bool isExempt,
-  }) =>
-      client.from('tax_codes').update({
+  }) => client
+      .from('tax_codes')
+      .update({
         'code': code,
         'name': name,
         'rate': rate,
         'tax_type_code': taxTypeCode,
         'is_exempt': isExempt,
-      }).eq('id', id).eq('org_id', orgId);
+      })
+      .eq('id', id)
+      .eq('org_id', orgId);
 
   /// Exactly one default, so the two writes go together. Clearing first
   /// and setting second: the other order leaves two defaults if the
@@ -324,15 +341,18 @@ class Repo {
 
   /// Creates the year after the last one. Passing a start date is only
   /// for the first year, or for a company changing its year end.
-  Future<void> createFiscalYear({DateTime? startDate}) =>
-      client.rpc('create_fiscal_year', params: {
-        'p_org_id': orgId,
-        if (startDate != null) 'p_start_date': Fmt.iso(startDate),
-      });
+  Future<void> createFiscalYear({DateTime? startDate}) => client.rpc(
+    'create_fiscal_year',
+    params: {
+      'p_org_id': orgId,
+      if (startDate != null) 'p_start_date': Fmt.iso(startDate),
+    },
+  );
 
-  Future<void> setPeriodStatus(String periodId, String status) =>
-      client.rpc('set_fiscal_period_status',
-          params: {'p_period_id': periodId, 'p_status': status});
+  Future<void> setPeriodStatus(String periodId, String status) => client.rpc(
+    'set_fiscal_period_status',
+    params: {'p_period_id': periodId, 'p_status': status},
+  );
 
   /// The ledger itself. Everything in the system posts through
   /// create_gl_entry, so this is the one place an invoice, a payroll run
@@ -370,33 +390,43 @@ class Repo {
     String? reference,
     required List<Map<String, dynamic>> lines,
   }) async {
-    final data = await client.rpc('post_manual_journal', params: {
-      'p_org_id': orgId,
-      'p_entry_date': Fmt.iso(date),
-      'p_lines': lines,
-      'p_description': description,
-      if (reference != null && reference.trim().isNotEmpty)
-        'p_reference': reference.trim(),
-    });
+    final data = await client.rpc(
+      'post_manual_journal',
+      params: {
+        'p_org_id': orgId,
+        'p_entry_date': Fmt.iso(date),
+        'p_lines': lines,
+        'p_description': description,
+        if (reference != null && reference.trim().isNotEmpty)
+          'p_reference': reference.trim(),
+      },
+    );
     return data as String;
   }
 
   /// Puts an approved claim into the ledger. With a bank account it is
   /// reimbursed straight away; without one it sits in accruals until it
   /// is paid.
-  Future<String> postExpenseClaim(String claimId, {String? bankAccountId}) async {
-    final data = await client.rpc('post_expense_claim', params: {
-      'p_claim_id': claimId,
-      if (bankAccountId != null) 'p_bank_account_id': bankAccountId,
-    });
+  Future<String> postExpenseClaim(
+    String claimId, {
+    String? bankAccountId,
+  }) async {
+    final data = await client.rpc(
+      'post_expense_claim',
+      params: {
+        'p_claim_id': claimId,
+        if (bankAccountId != null) 'p_bank_account_id': bankAccountId,
+      },
+    );
     return data as String;
   }
 
   /// Posts the mirror image and voids the original. Nothing is deleted:
   /// a ledger you can erase is not a ledger.
-  Future<void> reverseJournal(String entryId, DateTime on) =>
-      client.rpc('reverse_gl_entry',
-          params: {'p_entry_id': entryId, 'p_date': Fmt.iso(on)});
+  Future<void> reverseJournal(String entryId, DateTime on) => client.rpc(
+    'reverse_gl_entry',
+    params: {'p_entry_id': entryId, 'p_date': Fmt.iso(on)},
+  );
 
   Future<List<Account>> accounts({bool postableOnly = false}) async {
     var query = client
@@ -465,11 +495,14 @@ class Repo {
   /// stops the save.
   Future<double?> exchangeRateFor(String currency, DateTime onDate) async {
     try {
-      final data = await client.rpc('exchange_rate_for', params: {
-        'p_org_id': orgId,
-        'p_currency': currency,
-        'p_on_date': Fmt.iso(onDate),
-      });
+      final data = await client.rpc(
+        'exchange_rate_for',
+        params: {
+          'p_org_id': orgId,
+          'p_currency': currency,
+          'p_on_date': Fmt.iso(onDate),
+        },
+      );
       return Fmt.toDouble(data);
     } on PostgrestException catch (e) {
       if (e.code == 'P0002') return null;
@@ -480,12 +513,13 @@ class Repo {
   // ------------------------------------------------------------------
   // Recurring journals
   // ------------------------------------------------------------------
-  Future<List<Map<String, dynamic>>> recurringJournals() async =>
-      _rows(await client
-          .from('recurring_journals')
-          .select()
-          .eq('org_id', orgId)
-          .order('name'));
+  Future<List<Map<String, dynamic>>> recurringJournals() async => _rows(
+    await client
+        .from('recurring_journals')
+        .select()
+        .eq('org_id', orgId)
+        .order('name'),
+  );
 
   Future<void> saveRecurringJournal({
     String? id,
@@ -524,23 +558,24 @@ class Repo {
   /// Runs anything due for this organization now, rather than waiting
   /// for the nightly job. Returns how many ran.
   Future<int> runRecurringJournals({DateTime? on}) async {
-    final data = await client.rpc('run_recurring_journals_for', params: {
-      'p_org_id': orgId,
-      if (on != null) 'p_on': Fmt.iso(on),
-    });
+    final data = await client.rpc(
+      'run_recurring_journals_for',
+      params: {'p_org_id': orgId, if (on != null) 'p_on': Fmt.iso(on)},
+    );
     return (data as num?)?.toInt() ?? 0;
   }
 
   // ------------------------------------------------------------------
   // Recurring invoices and bills
   // ------------------------------------------------------------------
-  Future<List<Map<String, dynamic>>> recurringDocuments() async =>
-      _rows(await client
-          .from('recurring_documents')
-          .select()
-          .eq('org_id', orgId)
-          .order('is_active', ascending: false)
-          .order('next_run_date'));
+  Future<List<Map<String, dynamic>>> recurringDocuments() async => _rows(
+    await client
+        .from('recurring_documents')
+        .select()
+        .eq('org_id', orgId)
+        .order('is_active', ascending: false)
+        .order('next_run_date'),
+  );
 
   /// Copies a posted invoice or bill into a schedule. The document is
   /// snapshotted, not pointed at: editing it afterwards does not change
@@ -556,17 +591,20 @@ class Repo {
     bool autoPost = false,
     bool autoEmail = false,
   }) async {
-    final data = await client.rpc('create_recurring_document', params: {
-      'p_document_id': documentId,
-      'p_name': name,
-      'p_frequency': frequency,
-      'p_start_date': Fmt.iso(startDate),
-      'p_interval_count': intervalCount,
-      if (endDate != null) 'p_end_date': Fmt.iso(endDate),
-      if (maxOccurrences != null) 'p_max_occurrences': maxOccurrences,
-      'p_auto_post': autoPost,
-      'p_auto_email': autoEmail,
-    });
+    final data = await client.rpc(
+      'create_recurring_document',
+      params: {
+        'p_document_id': documentId,
+        'p_name': name,
+        'p_frequency': frequency,
+        'p_start_date': Fmt.iso(startDate),
+        'p_interval_count': intervalCount,
+        if (endDate != null) 'p_end_date': Fmt.iso(endDate),
+        if (maxOccurrences != null) 'p_max_occurrences': maxOccurrences,
+        'p_auto_post': autoPost,
+        'p_auto_email': autoEmail,
+      },
+    );
     return data as String;
   }
 
@@ -576,12 +614,16 @@ class Repo {
     required String id,
     required String documentId,
   }) async {
-    await client.rpc('update_recurring_template',
-        params: {'p_id': id, 'p_document_id': documentId});
+    await client.rpc(
+      'update_recurring_template',
+      params: {'p_id': id, 'p_document_id': documentId},
+    );
   }
 
   Future<void> saveRecurringDocument(
-      String id, Map<String, dynamic> patch) async {
+    String id,
+    Map<String, dynamic> patch,
+  ) async {
     await client.from('recurring_documents').update(patch).eq('id', id);
   }
 
@@ -592,10 +634,10 @@ class Repo {
   /// Raises whatever is due now rather than waiting for the nightly
   /// job. Returns how many documents it made.
   Future<int> runRecurringDocuments({DateTime? on}) async {
-    final data = await client.rpc('run_recurring_documents_for', params: {
-      'p_org_id': orgId,
-      if (on != null) 'p_on': Fmt.iso(on),
-    });
+    final data = await client.rpc(
+      'run_recurring_documents_for',
+      params: {'p_org_id': orgId, if (on != null) 'p_on': Fmt.iso(on)},
+    );
     return (data as num?)?.toInt() ?? 0;
   }
 
@@ -622,13 +664,17 @@ class Repo {
   // ------------------------------------------------------------------
   // Moving money between the company's own accounts
   // ------------------------------------------------------------------
-  Future<List<Map<String, dynamic>>> bankTransfers() async => _rows(await client
-      .from('bank_transfers')
-      .select('*, from_account:bank_accounts!bank_transfers_from_account_id_fkey(name), '
-          'to_account:bank_accounts!bank_transfers_to_account_id_fkey(name)')
-      .eq('org_id', orgId)
-      .order('transfer_date', ascending: false)
-      .limit(200));
+  Future<List<Map<String, dynamic>>> bankTransfers() async => _rows(
+    await client
+        .from('bank_transfers')
+        .select(
+          '*, from_account:bank_accounts!bank_transfers_from_account_id_fkey(name), '
+          'to_account:bank_accounts!bank_transfers_to_account_id_fkey(name)',
+        )
+        .eq('org_id', orgId)
+        .order('transfer_date', ascending: false)
+        .limit(200),
+  );
 
   /// Records the transfer and posts it in one go. A draft transfer helps
   /// nobody: the money has either moved or it has not.
@@ -642,23 +688,30 @@ class Repo {
     String? reference,
     String? notes,
   }) async {
-    final id = await client.rpc('create_bank_transfer', params: {
-      'p_from_account_id': fromAccountId,
-      'p_to_account_id': toAccountId,
-      'p_amount_sent': amountSent,
-      'p_transfer_date': Fmt.iso(date),
-      if (amountReceived != null) 'p_amount_received': amountReceived,
-      'p_bank_charges': bankCharges,
-      if (reference != null) 'p_reference': reference,
-      if (notes != null) 'p_notes': notes,
-    }) as String;
+    final id =
+        await client.rpc(
+              'create_bank_transfer',
+              params: {
+                'p_from_account_id': fromAccountId,
+                'p_to_account_id': toAccountId,
+                'p_amount_sent': amountSent,
+                'p_transfer_date': Fmt.iso(date),
+                if (amountReceived != null) 'p_amount_received': amountReceived,
+                'p_bank_charges': bankCharges,
+                if (reference != null) 'p_reference': reference,
+                if (notes != null) 'p_notes': notes,
+              },
+            )
+            as String;
     await client.rpc('post_bank_transfer', params: {'p_id': id});
     return id;
   }
 
   Future<void> voidBankTransfer(String id, String reason) async {
-    await client
-        .rpc('void_bank_transfer', params: {'p_id': id, 'p_reason': reason});
+    await client.rpc(
+      'void_bank_transfer',
+      params: {'p_id': id, 'p_reason': reason},
+    );
   }
 
   // ------------------------------------------------------------------
@@ -668,11 +721,10 @@ class Repo {
     required DateTime from,
     required DateTime to,
   }) async {
-    final data = await client.rpc('report_cash_flow', params: {
-      'p_org_id': orgId,
-      'p_from': Fmt.iso(from),
-      'p_to': Fmt.iso(to),
-    });
+    final data = await client.rpc(
+      'report_cash_flow',
+      params: {'p_org_id': orgId, 'p_from': Fmt.iso(from), 'p_to': Fmt.iso(to)},
+    );
     return _rows(data);
   }
 
@@ -680,11 +732,10 @@ class Repo {
     required DateTime from,
     required DateTime to,
   }) async {
-    final data = await client.rpc('report_changes_in_equity', params: {
-      'p_org_id': orgId,
-      'p_from': Fmt.iso(from),
-      'p_to': Fmt.iso(to),
-    });
+    final data = await client.rpc(
+      'report_changes_in_equity',
+      params: {'p_org_id': orgId, 'p_from': Fmt.iso(from), 'p_to': Fmt.iso(to)},
+    );
     return _rows(data);
   }
 
@@ -692,11 +743,12 @@ class Repo {
   // Withholding tax
   // ------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> withholdingTypes() async => _rows(
-      await client
-          .from('ref_withholding_types')
-          .select()
-          .eq('is_active', true)
-          .order('sort_order'));
+    await client
+        .from('ref_withholding_types')
+        .select()
+        .eq('is_active', true)
+        .order('sort_order'),
+  );
 
   /// The CP37 listing: what was deducted, on which form, and by when it
   /// has to reach LHDN.
@@ -704,11 +756,14 @@ class Repo {
     DateTime? from,
     DateTime? to,
   }) async {
-    final data = await client.rpc('report_withholding', params: {
-      'p_org_id': orgId,
-      if (from != null) 'p_from': Fmt.iso(from),
-      if (to != null) 'p_to': Fmt.iso(to),
-    });
+    final data = await client.rpc(
+      'report_withholding',
+      params: {
+        'p_org_id': orgId,
+        if (from != null) 'p_from': Fmt.iso(from),
+        if (to != null) 'p_to': Fmt.iso(to),
+      },
+    );
     return _rows(data);
   }
 
@@ -719,13 +774,16 @@ class Repo {
     double? rate,
     DateTime? certDate,
   }) async {
-    final data = await client.rpc('create_withholding', params: {
-      'p_bill_id': billId,
-      'p_wht_code': whtCode,
-      if (grossAmount != null) 'p_gross_amount': grossAmount,
-      if (rate != null) 'p_rate': rate,
-      if (certDate != null) 'p_cert_date': Fmt.iso(certDate),
-    });
+    final data = await client.rpc(
+      'create_withholding',
+      params: {
+        'p_bill_id': billId,
+        'p_wht_code': whtCode,
+        if (grossAmount != null) 'p_gross_amount': grossAmount,
+        if (rate != null) 'p_rate': rate,
+        if (certDate != null) 'p_cert_date': Fmt.iso(certDate),
+      },
+    );
     return data as String;
   }
 
@@ -739,12 +797,15 @@ class Repo {
     String? bankAccountId,
     String? reference,
   }) async {
-    await client.rpc('remit_withholding', params: {
-      'p_id': id,
-      'p_paid_on': Fmt.iso(paidOn),
-      if (bankAccountId != null) 'p_bank_account_id': bankAccountId,
-      if (reference != null) 'p_reference': reference,
-    });
+    await client.rpc(
+      'remit_withholding',
+      params: {
+        'p_id': id,
+        'p_paid_on': Fmt.iso(paidOn),
+        if (bankAccountId != null) 'p_bank_account_id': bankAccountId,
+        if (reference != null) 'p_reference': reference,
+      },
+    );
   }
 
   /// What this customer pays for this item at this quantity: a price
@@ -754,62 +815,148 @@ class Repo {
     String? contactId,
     double quantity = 1,
   }) async {
-    final data = await client.rpc('item_price', params: {
-      'p_item_id': itemId,
-      if (contactId != null) 'p_contact_id': contactId,
-      'p_quantity': quantity,
-    });
+    final data = await client.rpc(
+      'item_price',
+      params: {
+        'p_item_id': itemId,
+        if (contactId != null) 'p_contact_id': contactId,
+        'p_quantity': quantity,
+      },
+    );
     return Fmt.toDouble(data);
   }
 
-  Future<List<Map<String, dynamic>>> priceLevels() async => _rows(await client
-      .from('price_levels')
-      .select()
-      .eq('org_id', orgId)
-      .eq('is_active', true)
-      .order('code'));
+  Future<List<Map<String, dynamic>>> priceLevels() async => _rows(
+    await client
+        .from('price_levels')
+        .select()
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('code'),
+  );
 
-  Future<List<Map<String, dynamic>>> projects() async => _rows(await client
-      .from('projects')
-      .select()
-      .eq('org_id', orgId)
-      .eq('is_active', true)
-      .order('code'));
+  Future<List<Map<String, dynamic>>> projects() async => _rows(
+    await client
+        .from('projects')
+        .select()
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('code'),
+  );
 
   // ------------------------------------------------------------------
   // Stock
   // ------------------------------------------------------------------
-  Future<List<Map<String, dynamic>>> warehouses() async => _rows(await client
+  Future<List<Map<String, dynamic>>> warehouses() async => _rows(
+    await client
+        .from('warehouses')
+        .select()
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('code'),
+  );
+
+  /// Somewhere else to keep stock.
+  ///
+  /// `ensure_default_warehouse` below has been making one silently since
+  /// 0059 because an adjustment needs somewhere to go, and that was the
+  /// only way a warehouse had ever come into existence: a company with
+  /// two shops could see "Main" and had no way to add the second.
+  Future<void> createWarehouse({
+    required String code,
+    required String name,
+    String? addressLine1,
+    String? city,
+    String? postcode,
+    String? stateCode,
+  }) => client.from('warehouses').insert({
+    'org_id': orgId,
+    'code': code,
+    'name': name,
+    'address_line1': _orNull(addressLine1),
+    'city': _orNull(city),
+    'postcode': _orNull(postcode),
+    'state_code': _orNull(stateCode),
+  });
+
+  Future<void> updateWarehouse(
+    String id, {
+    required String code,
+    required String name,
+    String? addressLine1,
+    String? city,
+    String? postcode,
+    String? stateCode,
+  }) => client
       .from('warehouses')
-      .select()
-      .eq('org_id', orgId)
-      .eq('is_active', true)
-      .order('code'));
+      .update({
+        'code': code,
+        'name': name,
+        'address_line1': _orNull(addressLine1),
+        'city': _orNull(city),
+        'postcode': _orNull(postcode),
+        'state_code': _orNull(stateCode),
+      })
+      .eq('id', id)
+      .eq('org_id', orgId);
+
+  /// Exactly one default, so both writes go together — same reasoning as
+  /// the tax codes: the other order leaves two defaults behind a failed
+  /// write, and whatever reads "the default" would take the first.
+  Future<void> setDefaultWarehouse(String id) async {
+    await client
+        .from('warehouses')
+        .update({'is_default': false})
+        .eq('org_id', orgId)
+        .neq('id', id);
+    await client
+        .from('warehouses')
+        .update({'is_default': true})
+        .eq('id', id)
+        .eq('org_id', orgId);
+  }
+
+  /// Closed rather than deleted. Stock movements point at it, and a
+  /// warehouse that shut last year still explains where things went.
+  Future<void> retireWarehouse(String id) => client
+      .from('warehouses')
+      .update({'is_active': false, 'is_default': false})
+      .eq('id', id)
+      .eq('org_id', orgId);
 
   /// The warehouse a new adjustment is filed against, created if the
   /// organization has none — `warehouses` being empty is not a state the
   /// client can do anything about on its own.
   Future<String> ensureDefaultWarehouse() async {
-    final data = await client
-        .rpc('ensure_default_warehouse', params: {'p_org_id': orgId});
+    final data = await client.rpc(
+      'ensure_default_warehouse',
+      params: {'p_org_id': orgId},
+    );
     return data as String;
   }
 
   /// What the books think is on the shelf, which is what a stock take
   /// sheet opens on.
   Future<List<Map<String, dynamic>>> stockOnHand({String? warehouseId}) async =>
-      _rows(await client.rpc('stock_on_hand', params: {
-        'p_org_id': orgId,
-        if (warehouseId != null) 'p_warehouse_id': warehouseId,
-      }));
+      _rows(
+        await client.rpc(
+          'stock_on_hand',
+          params: {
+            'p_org_id': orgId,
+            if (warehouseId != null) 'p_warehouse_id': warehouseId,
+          },
+        ),
+      );
 
   Future<List<Map<String, dynamic>>> stockAdjustments({int limit = 50}) async =>
-      _rows(await client
-          .from('stock_adjustments')
-          .select()
-          .eq('org_id', orgId)
-          .order('adjustment_date', ascending: false)
-          .limit(limit));
+      _rows(
+        await client
+            .from('stock_adjustments')
+            .select()
+            .eq('org_id', orgId)
+            .order('adjustment_date', ascending: false)
+            .limit(limit),
+      );
 
   /// Saves a counted sheet as a draft adjustment and returns its id.
   /// Lines whose count equals the system figure are left out: they are
@@ -846,15 +993,17 @@ class Repo {
             'item_id': changed[i].itemId,
             'system_quantity': changed[i].system,
             'counted_quantity': changed[i].counted,
-          }
+          },
       ]);
     }
     return id;
   }
 
   Future<String> postStockAdjustment(String id) async {
-    final data =
-        await client.rpc('post_stock_adjustment', params: {'p_id': id});
+    final data = await client.rpc(
+      'post_stock_adjustment',
+      params: {'p_id': id},
+    );
     return data as String;
   }
 
@@ -880,32 +1029,39 @@ class Repo {
     String bankAccountId,
     List<Map<String, dynamic>> rows,
   ) async {
-    final data = await client.rpc('import_bank_transactions', params: {
-      'p_bank_account_id': bankAccountId,
-      'p_rows': rows,
-    });
+    final data = await client.rpc(
+      'import_bank_transactions',
+      params: {'p_bank_account_id': bankAccountId, 'p_rows': rows},
+    );
     return Map<String, dynamic>.from(data as Map);
   }
 
   Future<List<Map<String, dynamic>>> suggestBankMatches(
-          String transactionId) async =>
-      _rows(await client.rpc('suggest_bank_matches',
-          params: {'p_transaction_id': transactionId}));
+    String transactionId,
+  ) async => _rows(
+    await client.rpc(
+      'suggest_bank_matches',
+      params: {'p_transaction_id': transactionId},
+    ),
+  );
 
   Future<void> matchBankTransaction({
     required String transactionId,
     required String sourceTable,
     required String sourceId,
-  }) =>
-      client.rpc('match_bank_transaction', params: {
-        'p_transaction_id': transactionId,
-        'p_source_table': sourceTable,
-        'p_source_id': sourceId,
-      });
+  }) => client.rpc(
+    'match_bank_transaction',
+    params: {
+      'p_transaction_id': transactionId,
+      'p_source_table': sourceTable,
+      'p_source_id': sourceId,
+    },
+  );
 
-  Future<void> unmatchBankTransaction(String transactionId) =>
-      client.rpc('unmatch_bank_transaction',
-          params: {'p_transaction_id': transactionId});
+  Future<void> unmatchBankTransaction(String transactionId) => client.rpc(
+    'unmatch_bank_transaction',
+    params: {'p_transaction_id': transactionId},
+  );
 
   /// Book balance, unpresented items, and what is left over.
   Future<Map<String, dynamic>> bankReconciliationStatus({
@@ -913,11 +1069,14 @@ class Repo {
     required DateTime asAt,
     required double statementBalance,
   }) async {
-    final data = await client.rpc('bank_reconciliation_status', params: {
-      'p_bank_account_id': bankAccountId,
-      'p_as_at': Fmt.iso(asAt),
-      'p_statement_balance': statementBalance,
-    });
+    final data = await client.rpc(
+      'bank_reconciliation_status',
+      params: {
+        'p_bank_account_id': bankAccountId,
+        'p_as_at': Fmt.iso(asAt),
+        'p_statement_balance': statementBalance,
+      },
+    );
     return Map<String, dynamic>.from(data as Map);
   }
 
@@ -926,11 +1085,14 @@ class Repo {
     required DateTime statementDate,
     required double statementBalance,
   }) async {
-    final data = await client.rpc('complete_bank_reconciliation', params: {
-      'p_bank_account_id': bankAccountId,
-      'p_statement_date': Fmt.iso(statementDate),
-      'p_statement_balance': statementBalance,
-    });
+    final data = await client.rpc(
+      'complete_bank_reconciliation',
+      params: {
+        'p_bank_account_id': bankAccountId,
+        'p_statement_date': Fmt.iso(statementDate),
+        'p_statement_balance': statementBalance,
+      },
+    );
     return data as String;
   }
 
@@ -953,30 +1115,30 @@ class Repo {
     final data = id == null
         ? await client.from('fixed_assets').insert(payload).select().single()
         : await client
-            .from('fixed_assets')
-            .update(payload)
-            .eq('id', id)
-            .select()
-            .single();
+              .from('fixed_assets')
+              .update(payload)
+              .eq('id', id)
+              .select()
+              .single();
     return FixedAsset.fromJson(data);
   }
 
   /// What a run would charge, per asset, before anything is posted.
   Future<List<DepreciationLine>> depreciationPreview(DateTime asAt) async {
-    final data = await client.rpc('depreciation_preview', params: {
-      'p_org_id': orgId,
-      'p_as_at': Fmt.iso(asAt),
-    });
+    final data = await client.rpc(
+      'depreciation_preview',
+      params: {'p_org_id': orgId, 'p_as_at': Fmt.iso(asAt)},
+    );
     return _rows(data).map(DepreciationLine.fromJson).toList();
   }
 
   /// Posts the charge. Null when every asset is already up to date —
   /// which is what running it twice looks like.
   Future<String?> runDepreciation(DateTime asAt) async {
-    final data = await client.rpc('run_depreciation', params: {
-      'p_org_id': orgId,
-      'p_as_at': Fmt.iso(asAt),
-    });
+    final data = await client.rpc(
+      'run_depreciation',
+      params: {'p_org_id': orgId, 'p_as_at': Fmt.iso(asAt)},
+    );
     return data as String?;
   }
 
@@ -988,12 +1150,15 @@ class Repo {
     double proceeds = 0,
     String? bankAccountId,
   }) async {
-    final data = await client.rpc('dispose_fixed_asset', params: {
-      'p_asset_id': assetId,
-      'p_date': Fmt.iso(on),
-      'p_proceeds': proceeds,
-      if (bankAccountId != null) 'p_bank_account_id': bankAccountId,
-    });
+    final data = await client.rpc(
+      'dispose_fixed_asset',
+      params: {
+        'p_asset_id': assetId,
+        'p_date': Fmt.iso(on),
+        'p_proceeds': proceeds,
+        if (bankAccountId != null) 'p_bank_account_id': bankAccountId,
+      },
+    );
     return data as String;
   }
 
@@ -1001,20 +1166,20 @@ class Repo {
   /// currency. Raises if a currency has no rate on file at that date,
   /// rather than reporting a confident zero for one it cannot price.
   Future<List<FxRevaluation>> fxRevaluationPreview(DateTime asAt) async {
-    final data = await client.rpc('fx_revaluation_preview', params: {
-      'p_org_id': orgId,
-      'p_as_at': Fmt.iso(asAt),
-    });
+    final data = await client.rpc(
+      'fx_revaluation_preview',
+      params: {'p_org_id': orgId, 'p_as_at': Fmt.iso(asAt)},
+    );
     return _rows(data).map(FxRevaluation.fromJson).toList();
   }
 
   /// Posts the restatement, returning the journal id — or null when
   /// there was nothing to restate.
   Future<String?> revalueForeignBalances(DateTime asAt) async {
-    final data = await client.rpc('revalue_foreign_balances', params: {
-      'p_org_id': orgId,
-      'p_as_at': Fmt.iso(asAt),
-    });
+    final data = await client.rpc(
+      'revalue_foreign_balances',
+      params: {'p_org_id': orgId, 'p_as_at': Fmt.iso(asAt)},
+    );
     return data as String?;
   }
 
@@ -1026,11 +1191,17 @@ class Repo {
   /// answering "why is this the rate?". A currency with nothing on file
   /// comes back with a null rate rather than being left out — that row
   /// is the one that will refuse to post.
-  Future<List<Map<String, dynamic>>> exchangeRateBoard([DateTime? onDate]) async =>
-      _rows(await client.rpc('exchange_rate_board', params: {
+  Future<List<Map<String, dynamic>>> exchangeRateBoard([
+    DateTime? onDate,
+  ]) async => _rows(
+    await client.rpc(
+      'exchange_rate_board',
+      params: {
         'p_org_id': orgId,
         'p_on_date': Fmt.iso(onDate ?? DateTime.now()),
-      }));
+      },
+    ),
+  );
 
   /// Records a rate so the next document does not have to be told again.
   ///
@@ -1046,15 +1217,14 @@ class Repo {
     required String to,
     required double rate,
     required DateTime date,
-  }) =>
-      client.from('exchange_rates').upsert({
-        'org_id': orgId,
-        'from_currency': from,
-        'to_currency': to,
-        'rate': rate,
-        'rate_date': Fmt.iso(date),
-        'source': 'manual',
-      }, onConflict: 'org_id,from_currency,to_currency,rate_date');
+  }) => client.from('exchange_rates').upsert({
+    'org_id': orgId,
+    'from_currency': from,
+    'to_currency': to,
+    'rate': rate,
+    'rate_date': Fmt.iso(date),
+    'source': 'manual',
+  }, onConflict: 'org_id,from_currency,to_currency,rate_date');
 
   // ------------------------------------------------------------------
   // Sales and purchase documents
@@ -1102,8 +1272,10 @@ class Repo {
   }
 
   Future<String> nextDocumentNumber(String docType) async {
-    final data = await client.rpc('next_document_number',
-        params: {'p_org_id': orgId, 'p_doc_type': docType});
+    final data = await client.rpc(
+      'next_document_number',
+      params: {'p_org_id': orgId, 'p_doc_type': docType},
+    );
     return data as String;
   }
 
@@ -1126,8 +1298,11 @@ class Repo {
         'doc_type': docType,
         'doc_no': header['doc_no'] ?? await nextDocumentNumber(docType),
       };
-      final row =
-          await client.from(kind.table).insert(payload).select().single();
+      final row = await client
+          .from(kind.table)
+          .insert(payload)
+          .select()
+          .single();
       documentId = row['id'] as String;
     } else {
       documentId = id;
@@ -1143,7 +1318,7 @@ class Repo {
             'org_id': orgId,
             'document_id': documentId,
             'line_no': i + 1,
-          }
+          },
       ]);
     }
 
@@ -1161,9 +1336,9 @@ class Repo {
 
   /// What is configured, per environment. Never returns a secret — only
   /// whether one is on file.
-  Future<List<Map<String, dynamic>>> einvoiceCredentialStatus() async =>
-      _rows(await client.rpc('einvoice_credential_status',
-          params: {'p_org_id': orgId}));
+  Future<List<Map<String, dynamic>>> einvoiceCredentialStatus() async => _rows(
+    await client.rpc('einvoice_credential_status', params: {'p_org_id': orgId}),
+  );
 
   /// Leave [clientSecret] null to keep the stored one, which is what
   /// makes correcting a typo in the client id safe.
@@ -1171,19 +1346,20 @@ class Repo {
     required String environment,
     required String clientId,
     String? clientSecret,
-  }) =>
-      client.rpc('set_einvoice_credentials', params: {
-        'p_org_id': orgId,
-        'p_environment': environment,
-        'p_client_id': clientId,
-        'p_client_secret': clientSecret,
-      });
+  }) => client.rpc(
+    'set_einvoice_credentials',
+    params: {
+      'p_org_id': orgId,
+      'p_environment': environment,
+      'p_client_id': clientId,
+      'p_client_secret': clientSecret,
+    },
+  );
 
-  Future<void> clearEinvoiceCredentials(String environment) =>
-      client.rpc('clear_einvoice_credentials', params: {
-        'p_org_id': orgId,
-        'p_environment': environment,
-      });
+  Future<void> clearEinvoiceCredentials(String environment) => client.rpc(
+    'clear_einvoice_credentials',
+    params: {'p_org_id': orgId, 'p_environment': environment},
+  );
 
   // ------------------------------------------------------------------
   // Batches and serial numbers
@@ -1201,12 +1377,13 @@ class Repo {
   Future<List<Map<String, dynamic>>> documentLineIds({
     required DocKind kind,
     required String documentId,
-  }) async =>
-      _rows(await client
-          .from(kind.lineTable)
-          .select('id, line_no')
-          .eq('document_id', documentId)
-          .order('line_no'));
+  }) async => _rows(
+    await client
+        .from(kind.lineTable)
+        .select('id, line_no')
+        .eq('document_id', documentId)
+        .order('line_no'),
+  );
 
   /// Every lot allocation on a document, keyed by line id.
   Future<Map<String, List<Map<String, dynamic>>>> lotsForDocument({
@@ -1215,11 +1392,13 @@ class Repo {
   }) async {
     if (lineIds.isEmpty) return {};
     final column = kind.isSales ? 'sales_line_id' : 'purchase_line_id';
-    final rows = _rows(await client
-        .from('document_line_lots')
-        .select()
-        .inFilter(column, lineIds)
-        .order('lot_ref'));
+    final rows = _rows(
+      await client
+          .from('document_line_lots')
+          .select()
+          .inFilter(column, lineIds)
+          .order('lot_ref'),
+    );
     final out = <String, List<Map<String, dynamic>>>{};
     for (final r in rows) {
       (out[r[column] as String] ??= []).add(r);
@@ -1237,33 +1416,37 @@ class Repo {
     required String lineId,
     required List<Map<String, dynamic>> lots,
   }) async {
-    final data = await client.rpc('set_line_lots', params: {
-      'p_line_table': lineTable,
-      'p_line_id': lineId,
-      'p_lots': lots,
-    });
+    final data = await client.rpc(
+      'set_line_lots',
+      params: {'p_line_table': lineTable, 'p_line_id': lineId, 'p_lots': lots},
+    );
     return (data as num?)?.toInt() ?? 0;
   }
 
   Future<List<Map<String, dynamic>>> lineLots({
     required String lineTable,
     required String lineId,
-  }) async =>
-      _rows(await client.rpc('line_lots', params: {
-        'p_line_table': lineTable,
-        'p_line_id': lineId,
-      }));
+  }) async => _rows(
+    await client.rpc(
+      'line_lots',
+      params: {'p_line_table': lineTable, 'p_line_id': lineId},
+    ),
+  );
 
   /// What still has to be named before this document can post. Empty
   /// means it is ready.
   Future<List<Map<String, dynamic>>> documentLotProblems({
     required String documentId,
     required bool sales,
-  }) async =>
-      _rows(await client.rpc('document_lot_problems', params: {
+  }) async => _rows(
+    await client.rpc(
+      'document_lot_problems',
+      params: {
         'p_document_id': documentId,
         'p_kind': sales ? 'sales' : 'purchase',
-      }));
+      },
+    ),
+  );
 
   /// First expired, first out. Advisory — a physical pick is a physical
   /// fact, and refusing the box in somebody's hand gets worked around.
@@ -1271,33 +1454,46 @@ class Repo {
     required String itemId,
     String? warehouseId,
     required double quantity,
-  }) async =>
-      _rows(await client.rpc('suggest_lots', params: {
+  }) async => _rows(
+    await client.rpc(
+      'suggest_lots',
+      params: {
         'p_item_id': itemId,
         'p_warehouse_id': warehouseId,
         'p_quantity': quantity,
-      }));
+      },
+    ),
+  );
 
   Future<List<Map<String, dynamic>>> lotBalances({String? itemId}) async =>
-      _rows(await client.rpc('report_lot_balances', params: {
-        'p_org_id': orgId,
-        'p_item_id': itemId,
-        'p_warehouse_id': null,
-      }));
+      _rows(
+        await client.rpc(
+          'report_lot_balances',
+          params: {
+            'p_org_id': orgId,
+            'p_item_id': itemId,
+            'p_warehouse_id': null,
+          },
+        ),
+      );
 
-  Future<List<Map<String, dynamic>>> expiringStock({int withinDays = 90}) async =>
-      _rows(await client.rpc('report_expiring_stock', params: {
-        'p_org_id': orgId,
-        'p_within_days': withinDays,
-      }));
+  Future<List<Map<String, dynamic>>> expiringStock({
+    int withinDays = 90,
+  }) async => _rows(
+    await client.rpc(
+      'report_expiring_stock',
+      params: {'p_org_id': orgId, 'p_within_days': withinDays},
+    ),
+  );
 
   /// Where a batch came from and everywhere it went — the recall
   /// question, and the only thing that justifies typing batch numbers.
-  Future<List<Map<String, dynamic>>> traceLot(String lotId) async =>
-      _rows(await client.rpc('trace_lot', params: {
-        'p_org_id': orgId,
-        'p_lot_id': lotId,
-      }));
+  Future<List<Map<String, dynamic>>> traceLot(String lotId) async => _rows(
+    await client.rpc(
+      'trace_lot',
+      params: {'p_org_id': orgId, 'p_lot_id': lotId},
+    ),
+  );
 
   // ------------------------------------------------------------------
   // Salespeople
@@ -1308,7 +1504,9 @@ class Repo {
   // so did not even keep one organization's documents from naming
   // another's people.
   // ------------------------------------------------------------------
-  Future<List<Map<String, dynamic>>> salespeople({bool activeOnly = false}) async {
+  Future<List<Map<String, dynamic>>> salespeople({
+    bool activeOnly = false,
+  }) async {
     var q = client.from('salespeople').select().eq('org_id', orgId);
     if (activeOnly) q = q.eq('is_active', true);
     return _rows(await q.order('name'));
@@ -1342,12 +1540,12 @@ class Repo {
   Future<List<Map<String, dynamic>>> salesByPerson({
     required DateTime from,
     required DateTime to,
-  }) async =>
-      _rows(await client.rpc('report_sales_by_person', params: {
-        'p_org_id': orgId,
-        'p_from': Fmt.iso(from),
-        'p_to': Fmt.iso(to),
-      }));
+  }) async => _rows(
+    await client.rpc(
+      'report_sales_by_person',
+      params: {'p_org_id': orgId, 'p_from': Fmt.iso(from), 'p_to': Fmt.iso(to)},
+    ),
+  );
 
   /// What is still available to take forward from this document into a
   /// [targetType], line by line.
@@ -1355,10 +1553,10 @@ class Repo {
     String documentId,
     String targetType,
   ) async {
-    final data = await client.rpc('transfer_outstanding', params: {
-      'p_source_id': documentId,
-      'p_target_type': targetType,
-    });
+    final data = await client.rpc(
+      'transfer_outstanding',
+      params: {'p_source_id': documentId, 'p_target_type': targetType},
+    );
     return _rows(data).map(TransferLine.fromJson).toList();
   }
 
@@ -1372,22 +1570,25 @@ class Repo {
     required String targetType,
     List<({String lineId, double quantity})>? lines,
   }) async {
-    final data = await client.rpc('transfer_document', params: {
-      'p_source_id': sourceId,
-      'p_target_type': targetType,
-      if (lines != null)
-        'p_lines': [
-          for (final l in lines)
-            {'line_id': l.lineId, 'quantity': l.quantity},
-        ],
-    });
+    final data = await client.rpc(
+      'transfer_document',
+      params: {
+        'p_source_id': sourceId,
+        'p_target_type': targetType,
+        if (lines != null)
+          'p_lines': [
+            for (final l in lines)
+              {'line_id': l.lineId, 'quantity': l.quantity},
+          ],
+      },
+    );
     return data as String;
   }
 
-  Future<void> deleteDocument(DocKind kind, String id) =>
-      client.from(kind.table).update({
-        'deleted_at': DateTime.now().toIso8601String(),
-      }).eq('id', id);
+  Future<void> deleteDocument(DocKind kind, String id) => client
+      .from(kind.table)
+      .update({'deleted_at': DateTime.now().toIso8601String()})
+      .eq('id', id);
 
   Future<String> postDocument(DocKind kind, String id) async {
     final data = await client.rpc(kind.postRpc, params: {'p_id': id});
@@ -1395,9 +1596,9 @@ class Repo {
   }
 
   Future<void> voidSalesDocument(String id, String reason) => client.rpc(
-        'void_sales_document',
-        params: {'p_id': id, 'p_reason': reason},
-      );
+    'void_sales_document',
+    params: {'p_id': id, 'p_reason': reason},
+  );
 
   // ------------------------------------------------------------------
   // Settlement
@@ -1455,10 +1656,16 @@ class Repo {
         for (final a in allocations)
           {
             'org_id': orgId,
-            if (isReceipt) 'receipt_id': settlementId else 'payment_id': settlementId,
-            if (isReceipt) 'invoice_id': a.documentId else 'bill_id': a.documentId,
+            if (isReceipt)
+              'receipt_id': settlementId
+            else
+              'payment_id': settlementId,
+            if (isReceipt)
+              'invoice_id': a.documentId
+            else
+              'bill_id': a.documentId,
             'amount': a.amount,
-          }
+          },
       ]);
     }
 
@@ -1582,11 +1789,10 @@ class Repo {
     String action,
     Map<String, dynamic> payload,
   ) async {
-    final res = await client.functions.invoke('myinvois', body: {
-      'action': action,
-      'org_id': orgId,
-      ...payload,
-    });
+    final res = await client.functions.invoke(
+      'myinvois',
+      body: {'action': action, 'org_id': orgId, ...payload},
+    );
 
     final data = res.data;
     if (data is Map && data['error'] != null) {
@@ -1598,11 +1804,10 @@ class Repo {
   Future<Map<String, dynamic>> submitEinvoice({
     String? salesDocumentId,
     List<String>? einvoiceIds,
-  }) =>
-      callMyInvois('submit', {
-        if (salesDocumentId != null) 'sales_document_id': salesDocumentId,
-        if (einvoiceIds != null) 'einvoice_ids': einvoiceIds,
-      });
+  }) => callMyInvois('submit', {
+    if (salesDocumentId != null) 'sales_document_id': salesDocumentId,
+    if (einvoiceIds != null) 'einvoice_ids': einvoiceIds,
+  });
 
   Future<Map<String, dynamic>> refreshEinvoiceStatus({List<String>? ids}) =>
       callMyInvois('status', {if (ids != null) 'einvoice_ids': ids});
@@ -1615,13 +1820,12 @@ class Repo {
     required String idType,
     required String idValue,
     String? contactId,
-  }) =>
-      callMyInvois('validate-tin', {
-        'tin': tin,
-        'id_type': idType,
-        'id_value': idValue,
-        if (contactId != null) 'contact_id': contactId,
-      });
+  }) => callMyInvois('validate-tin', {
+    'tin': tin,
+    'id_type': idType,
+    'id_value': idValue,
+    if (contactId != null) 'contact_id': contactId,
+  });
 
   // ------------------------------------------------------------------
   // CRM
@@ -1646,11 +1850,13 @@ class Repo {
     return _rows(data).map(Opportunity.fromJson).toList();
   }
 
-  Future<void> moveOpportunity(String id, String stageId) => client
-      .from('opportunities')
-      .update({'stage_id': stageId}).eq('id', id);
+  Future<void> moveOpportunity(String id, String stageId) =>
+      client.from('opportunities').update({'stage_id': stageId}).eq('id', id);
 
-  Future<void> saveOpportunity(Map<String, dynamic> values, {String? id}) async {
+  Future<void> saveOpportunity(
+    Map<String, dynamic> values, {
+    String? id,
+  }) async {
     final payload = {...values, 'org_id': orgId};
     if (id == null) {
       payload['opportunity_no'] = await nextDocumentNumber('opportunity');
@@ -1660,7 +1866,9 @@ class Repo {
     }
   }
 
-  Future<List<Map<String, dynamic>>> activities({bool onlyPending = true}) async {
+  Future<List<Map<String, dynamic>>> activities({
+    bool onlyPending = true,
+  }) async {
     var query = client
         .from('activities')
         .select('*, contacts(name), opportunities(name)')
@@ -1693,7 +1901,9 @@ extension RepoOrgLogo on Repo {
   String get _logoPath => '$orgId/logo';
 
   Future<String> uploadOrgLogo(Uint8List bytes, String contentType) async {
-    await client.storage.from('logos').uploadBinary(
+    await client.storage
+        .from('logos')
+        .uploadBinary(
           _logoPath,
           bytes,
           fileOptions: FileOptions(upsert: true, contentType: contentType),
@@ -1706,13 +1916,17 @@ extension RepoOrgLogo on Repo {
     final versioned = '$url?v=${DateTime.now().millisecondsSinceEpoch}';
     await client
         .from('organizations')
-        .update({'logo_url': versioned}).eq('id', orgId);
+        .update({'logo_url': versioned})
+        .eq('id', orgId);
     return versioned;
   }
 
   Future<void> removeOrgLogo() async {
     await client.storage.from('logos').remove([_logoPath]);
-    await client.from('organizations').update({'logo_url': null}).eq('id', orgId);
+    await client
+        .from('organizations')
+        .update({'logo_url': null})
+        .eq('id', orgId);
   }
 
   /// The raw bytes, for embedding in a PDF.
@@ -1731,8 +1945,10 @@ extension RepoOrgLogo on Repo {
   /// Where a customer stands against their credit limit, in base
   /// currency. Null limit means no limit was set.
   Future<Map<String, dynamic>> customerCreditStatus(String contactId) async {
-    final data = await client
-        .rpc('customer_credit_status', params: {'p_contact_id': contactId});
+    final data = await client.rpc(
+      'customer_credit_status',
+      params: {'p_contact_id': contactId},
+    );
     return Map<String, dynamic>.from(data as Map);
   }
 
@@ -1740,7 +1956,8 @@ extension RepoOrgLogo on Repo {
   /// customer past their limit.
   Future<void> setCreditControl(String mode) => client
       .from('organizations')
-      .update({'credit_control': mode}).eq('id', orgId);
+      .update({'credit_control': mode})
+      .eq('id', orgId);
 
   /// The company's own particulars.
   ///
@@ -1760,24 +1977,57 @@ extension RepoOrgLogo on Repo {
     String? msicCode,
     required bool isSstRegistered,
     String? sstRegistrationNo,
-  }) =>
-      client.from('organizations').update({
+    String? addressLine1,
+    String? addressLine2,
+    String? addressLine3,
+    String? postcode,
+    String? city,
+    String? stateCode,
+    String? email,
+    String? phone,
+    String? registeredAddressLine1,
+    String? registeredAddressLine2,
+    String? registeredAddressLine3,
+    String? registeredPostcode,
+    String? registeredCity,
+    String? registeredStateCode,
+  }) => client
+      .from('organizations')
+      .update({
         'name': name,
         'entity_type': entityType,
         'rounding_method': roundingMethod,
         'registration_no': _orNull(registrationNo),
         'tin': _orNull(tin),
         'msic_code': _orNull(msicCode),
+        // The business address, which is what goes on the invoice and
+        // what `app.prepare_einvoice` sends LHDN as the supplier.
+        'address_line1': _orNull(addressLine1),
+        'address_line2': _orNull(addressLine2),
+        'address_line3': _orNull(addressLine3),
+        'postcode': _orNull(postcode),
+        'city': _orNull(city),
+        'state_code': _orNull(stateCode),
+        'email': _orNull(email),
+        'phone': _orNull(phone),
+        // Null throughout means "the same as the business address", so
+        // clearing the checkbox genuinely clears it rather than leaving
+        // a stale registered office behind.
+        'registered_address_line1': _orNull(registeredAddressLine1),
+        'registered_address_line2': _orNull(registeredAddressLine2),
+        'registered_address_line3': _orNull(registeredAddressLine3),
+        'registered_postcode': _orNull(registeredPostcode),
+        'registered_city': _orNull(registeredCity),
+        'registered_state_code': _orNull(registeredStateCode),
         'is_sst_registered': isSstRegistered,
         // Unregistering keeps no number. A company that deregistered and
         // left the old number behind would put it on invoices that must
         // not carry one.
-        'sst_registration_no':
-            isSstRegistered ? _orNull(sstRegistrationNo) : null,
-      }).eq('id', orgId);
-
-  static String? _orNull(String? v) =>
-      (v == null || v.trim().isEmpty) ? null : v.trim();
+        'sst_registration_no': isSstRegistered
+            ? _orNull(sstRegistrationNo)
+            : null,
+      })
+      .eq('id', orgId);
 
   /// Whether anything has reached the ledger yet.
   ///
@@ -1787,24 +2037,24 @@ extension RepoOrgLogo on Repo {
   /// says which. Changing it does not convert anything — it silently
   /// re-labels every figure the company has ever recorded.
   Future<bool> hasPostings() async {
-    final rows = Repo._rows(await client
-        .from('gl_entries')
-        .select('id')
-        .eq('org_id', orgId)
-        .limit(1));
+    final rows = Repo._rows(
+      await client.from('gl_entries').select('id').eq('org_id', orgId).limit(1),
+    );
     return rows.isNotEmpty;
   }
 
   Future<void> setBaseCurrency(String code) => client
       .from('organizations')
-      .update({'base_currency': code}).eq('id', orgId);
+      .update({'base_currency': code})
+      .eq('id', orgId);
 
   /// Whether the generated PDFs should leave room for a header already
   /// printed on the paper. RLS lets only an administrator through, which
   /// is the same bar as replacing the logo.
   Future<void> setPreprintedLetterhead(bool value) => client
       .from('organizations')
-      .update({'uses_preprinted_letterhead': value}).eq('id', orgId);
+      .update({'uses_preprinted_letterhead': value})
+      .eq('id', orgId);
 }
 
 class MyInvoisException implements Exception {
@@ -1847,26 +2097,23 @@ class PlatformRepo {
     return Repo._rows(data).map(ModuleInfo.fromJson).toList();
   }
 
-  Future<void> setModule(String orgId, String code, bool enabled) =>
-      client.rpc('platform_set_module', params: {
-        'p_org_id': orgId,
-        'p_module_code': code,
-        'p_enabled': enabled,
-      });
+  Future<void> setModule(String orgId, String code, bool enabled) => client.rpc(
+    'platform_set_module',
+    params: {'p_org_id': orgId, 'p_module_code': code, 'p_enabled': enabled},
+  );
 
-  Future<void> setOrgStatus(String orgId, String status) =>
-      client.rpc('platform_set_org_status',
-          params: {'p_org_id': orgId, 'p_status': status});
+  Future<void> setOrgStatus(String orgId, String status) => client.rpc(
+    'platform_set_org_status',
+    params: {'p_org_id': orgId, 'p_status': status},
+  );
 
   Future<List<Map<String, dynamic>>> settings() async {
-    final data =
-        await client.from('platform_settings').select().order('key');
+    final data = await client.from('platform_settings').select().order('key');
     return Repo._rows(data);
   }
 
-  Future<void> updateSetting(String key, Map<String, dynamic> value) =>
-      client.rpc('platform_update_setting',
-          params: {'p_key': key, 'p_value': value});
+  Future<void> updateSetting(String key, Map<String, dynamic> value) => client
+      .rpc('platform_update_setting', params: {'p_key': key, 'p_value': value});
 
   // ------------------------------------------------------------------
   // Scanning credit
@@ -1887,11 +2134,10 @@ class PlatformRepo {
     double amount, {
     String? note,
   }) async {
-    final data = await client.rpc('platform_topup_credit', params: {
-      'p_org_id': orgId,
-      'p_amount': amount,
-      'p_note': note,
-    });
+    final data = await client.rpc(
+      'platform_topup_credit',
+      params: {'p_org_id': orgId, 'p_amount': amount, 'p_note': note},
+    );
     return Map<String, dynamic>.from(data as Map);
   }
 
@@ -1899,11 +2145,10 @@ class PlatformRepo {
   /// top-up — either way it writes the same ledger line everything else
   /// does, so it cannot be done invisibly.
   Future<void> adjustCredit(String orgId, double amount, String reason) =>
-      client.rpc('platform_adjust_credit', params: {
-        'p_org_id': orgId,
-        'p_amount': amount,
-        'p_reason': reason,
-      });
+      client.rpc(
+        'platform_adjust_credit',
+        params: {'p_org_id': orgId, 'p_amount': amount, 'p_reason': reason},
+      );
 
   Future<List<Map<String, dynamic>>> creditInvoices({String? orgId}) async {
     var query = client.from('platform_invoices').select();
@@ -1911,9 +2156,10 @@ class PlatformRepo {
     return Repo._rows(await query.order('issue_date', ascending: false));
   }
 
-  Future<void> markInvoicePaid(String invoiceId, {String? note}) =>
-      client.rpc('platform_mark_invoice_paid',
-          params: {'p_invoice_id': invoiceId, 'p_note': note});
+  Future<void> markInvoicePaid(String invoiceId, {String? note}) => client.rpc(
+    'platform_mark_invoice_paid',
+    params: {'p_invoice_id': invoiceId, 'p_note': note},
+  );
 }
 
 /// Tenant-scoped extras: team management, module entitlements and the
@@ -1964,14 +2210,14 @@ extension RepoExtras on Repo {
   // there. Enforced by the restrictive policies 0127 added — everything
   // here is the screen for it, not the rule.
   // ------------------------------------------------------------------
-  Future<List<AccessType>> accessTypes() async => Repo._rows(await client
-          .from('access_types')
-          .select('*, access_type_modules(module_code, access)')
-          .eq('org_id', orgId)
-          .eq('is_active', true)
-          .order('name'))
-      .map(AccessType.fromJson)
-      .toList();
+  Future<List<AccessType>> accessTypes() async => Repo._rows(
+    await client
+        .from('access_types')
+        .select('*, access_type_modules(module_code, access)')
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('name'),
+  ).map(AccessType.fromJson).toList();
 
   Future<String> createAccessType(String name, {String? description}) async {
     final row = await client
@@ -1987,12 +2233,15 @@ extension RepoExtras on Repo {
     return row['id'] as String;
   }
 
-  Future<void> renameAccessType(String id, String name,
-          {String? description}) =>
-      client.from('access_types').update({
-        'name': name,
-        'description': description,
-      }).eq('id', id).eq('org_id', orgId);
+  Future<void> renameAccessType(
+    String id,
+    String name, {
+    String? description,
+  }) => client
+      .from('access_types')
+      .update({'name': name, 'description': description})
+      .eq('id', id)
+      .eq('org_id', orgId);
 
   /// Retired rather than deleted, and the members holding it are handed
   /// back their unrestricted access first. Deleting the row alone would
@@ -2008,7 +2257,10 @@ extension RepoExtras on Repo {
   /// grants and only grants — and the absence of a row keeps meaning the
   /// same thing whether nobody ever set it or somebody set it back.
   Future<void> setModuleAccess(
-      String accessTypeId, String moduleCode, String access) async {
+    String accessTypeId,
+    String moduleCode,
+    String access,
+  ) async {
     if (access == 'none') {
       await client
           .from('access_type_modules')
@@ -2025,29 +2277,28 @@ extension RepoExtras on Repo {
   }
 
   Future<void> setMemberAccessType(String memberId, String? accessTypeId) =>
-      client.rpc('set_member_access_type', params: {
-        'p_member_id': memberId,
-        'p_access_type_id': accessTypeId,
-      });
+      client.rpc(
+        'set_member_access_type',
+        params: {'p_member_id': memberId, 'p_access_type_id': accessTypeId},
+      );
 
   /// What the person asking may do, module by module. The same
   /// `app.module_access` the policies use, so a screen cannot disagree
   /// with the database about what somebody may reach.
   Future<Map<String, String>> myModuleAccess() async {
     final rows = Repo._rows(
-        await client.rpc('my_module_access', params: {'p_org_id': orgId}));
+      await client.rpc('my_module_access', params: {'p_org_id': orgId}),
+    );
     return {
       for (final r in rows)
         r['module_code'].toString(): r['access']?.toString() ?? 'none',
     };
   }
 
-  Future<void> inviteMember(String email, String role) =>
-      client.rpc('invite_member', params: {
-        'p_org_id': orgId,
-        'p_email': email,
-        'p_role': role,
-      });
+  Future<void> inviteMember(String email, String role) => client.rpc(
+    'invite_member',
+    params: {'p_org_id': orgId, 'p_email': email, 'p_role': role},
+  );
 
   Future<void> changeMemberRole(String memberId, String role) =>
       client.from('org_members').update({'role': role}).eq('id', memberId);
@@ -2056,7 +2307,10 @@ extension RepoExtras on Repo {
       client.from('org_members').delete().eq('id', memberId);
 
   Future<String> acceptInvitation(String token) async {
-    final data = await client.rpc('accept_invitation', params: {'p_token': token});
+    final data = await client.rpc(
+      'accept_invitation',
+      params: {'p_token': token},
+    );
     return data as String;
   }
 
@@ -2084,8 +2338,10 @@ extension RepoExtras on Repo {
   }
 
   Future<List<MatterSummary>> matterSummary() async {
-    final data =
-        await client.rpc('report_matter_summary', params: {'p_org_id': orgId});
+    final data = await client.rpc(
+      'report_matter_summary',
+      params: {'p_org_id': orgId},
+    );
     return Repo._rows(data).map(MatterSummary.fromJson).toList();
   }
 
@@ -2134,7 +2390,8 @@ extension RepoExtras on Repo {
 
     if (bank == null) {
       throw Exception(
-          'No client account configured. Open Settings and run the legal setup first.');
+        'No client account configured. Open Settings and run the legal setup first.',
+      );
     }
 
     final row = await client
@@ -2176,18 +2433,17 @@ extension RepoExtras on Repo {
     required DateTime date,
     String? activityCode,
     bool billable = true,
-  }) =>
-      client.from('time_entries').insert({
-        'org_id': orgId,
-        'matter_id': matterId,
-        'user_id': client.auth.currentUser?.id,
-        'entry_date': Fmt.iso(date),
-        'description': description,
-        'activity_code': activityCode,
-        'minutes': minutes,
-        'hourly_rate': hourlyRate,
-        'is_billable': billable,
-      });
+  }) => client.from('time_entries').insert({
+    'org_id': orgId,
+    'matter_id': matterId,
+    'user_id': client.auth.currentUser?.id,
+    'entry_date': Fmt.iso(date),
+    'description': description,
+    'activity_code': activityCode,
+    'minutes': minutes,
+    'hourly_rate': hourlyRate,
+    'is_billable': billable,
+  });
 
   Future<List<Map<String, dynamic>>> disbursements(String matterId) async {
     final data = await client
@@ -2205,15 +2461,14 @@ extension RepoExtras on Repo {
     required double amount,
     required DateTime date,
     String paidFrom = 'office',
-  }) =>
-      client.from('disbursements').insert({
-        'org_id': orgId,
-        'matter_id': matterId,
-        'disbursement_date': Fmt.iso(date),
-        'description': description,
-        'amount': amount,
-        'paid_from': paidFrom,
-      });
+  }) => client.from('disbursements').insert({
+    'org_id': orgId,
+    'matter_id': matterId,
+    'disbursement_date': Fmt.iso(date),
+    'description': description,
+    'amount': amount,
+    'paid_from': paidFrom,
+  });
 }
 
 /// HRMS data access. Kept in its own extension so the HR surface can be
@@ -2226,7 +2481,10 @@ extension RepoHr on Repo {
   /// The whole company, name and role only. Backed by a function so the
   /// pay columns on the employee row never travel to the client.
   Future<List<Employee>> directory() async {
-    final data = await client.rpc('employee_directory', params: {'p_org_id': orgId});
+    final data = await client.rpc(
+      'employee_directory',
+      params: {'p_org_id': orgId},
+    );
     return Repo._rows(data).map(Employee.fromJson).toList();
   }
 
@@ -2241,14 +2499,19 @@ extension RepoHr on Repo {
         // so PostgREST sees two ways to join the two tables and refuses
         // the request rather than guessing. The JSON key stays
         // `departments`, so nothing downstream changes.
-        .select('*, departments!employees_department_id_fkey(name), positions(title)')
+        .select(
+          '*, departments!employees_department_id_fkey(name), positions(title)',
+        )
         .eq('org_id', orgId);
-    if (status != null && status != 'all') q = q.eq('employment_status', status);
+    if (status != null && status != 'all')
+      q = q.eq('employment_status', status);
     if (search != null && search.trim().isNotEmpty) {
       final s = '%${search.trim()}%';
       q = q.or('full_name.ilike.$s,employee_no.ilike.$s');
     }
-    return Repo._rows(await q.order('employee_no')).map(Employee.fromJson).toList();
+    return Repo._rows(
+      await q.order('employee_no'),
+    ).map(Employee.fromJson).toList();
   }
 
   Future<Employee?> employee(String id) async {
@@ -2259,10 +2522,14 @@ extension RepoHr on Repo {
         // so PostgREST sees two ways to join the two tables and refuses
         // the request rather than guessing. The JSON key stays
         // `departments`, so nothing downstream changes.
-        .select('*, departments!employees_department_id_fkey(name), positions(title)')
+        .select(
+          '*, departments!employees_department_id_fkey(name), positions(title)',
+        )
         .eq('id', id)
         .maybeSingle();
-    return row == null ? null : Employee.fromJson(Map<String, dynamic>.from(row));
+    return row == null
+        ? null
+        : Employee.fromJson(Map<String, dynamic>.from(row));
   }
 
   /// The caller's own employee record, or null when their login is not
@@ -2277,11 +2544,15 @@ extension RepoHr on Repo {
         // so PostgREST sees two ways to join the two tables and refuses
         // the request rather than guessing. The JSON key stays
         // `departments`, so nothing downstream changes.
-        .select('*, departments!employees_department_id_fkey(name), positions(title)')
+        .select(
+          '*, departments!employees_department_id_fkey(name), positions(title)',
+        )
         .eq('org_id', orgId)
         .eq('user_id', uid)
         .maybeSingle();
-    return row == null ? null : Employee.fromJson(Map<String, dynamic>.from(row));
+    return row == null
+        ? null
+        : Employee.fromJson(Map<String, dynamic>.from(row));
   }
 
   Future<String> saveEmployee(Map<String, dynamic> values, {String? id}) async {
@@ -2289,8 +2560,10 @@ extension RepoHr on Repo {
       await client.from('employees').update(values).eq('id', id);
       return id;
     }
-    final no = await client
-        .rpc('next_document_number', params: {'p_org_id': orgId, 'p_doc_type': 'employee'});
+    final no = await client.rpc(
+      'next_document_number',
+      params: {'p_org_id': orgId, 'p_doc_type': 'employee'},
+    );
     final row = await client
         .from('employees')
         .insert({...values, 'org_id': orgId, 'employee_no': no})
@@ -2332,15 +2605,16 @@ extension RepoHr on Repo {
       }, onConflict: 'employee_id,tax_year');
 
   Future<List<DeclaredRelief>> declaredReliefs(
-          String employeeId, int taxYear) async =>
-      Repo._rows(await client
-              .from('employee_tax_reliefs')
-              .select()
-              .eq('employee_id', employeeId)
-              .eq('tax_year', taxYear)
-              .order('relief_code'))
-          .map(DeclaredRelief.fromJson)
-          .toList();
+    String employeeId,
+    int taxYear,
+  ) async => Repo._rows(
+    await client
+        .from('employee_tax_reliefs')
+        .select()
+        .eq('employee_id', employeeId)
+        .eq('tax_year', taxYear)
+        .order('relief_code'),
+  ).map(DeclaredRelief.fromJson).toList();
 
   /// The reliefs an employee may declare — everything the company cannot
   /// work out for itself from the record it already holds.
@@ -2354,14 +2628,14 @@ extension RepoHr on Repo {
         .limit(1)
         .maybeSingle();
     if (schedule == null) return const [];
-    return Repo._rows(await client
-            .from('tax_reliefs')
-            .select('code, name, max_amount')
-            .eq('schedule_id', schedule['id'] as String)
-            .eq('applies_to', 'manual')
-            .order('sort_order'))
-        .map(ReliefType.fromJson)
-        .toList();
+    return Repo._rows(
+      await client
+          .from('tax_reliefs')
+          .select('code, name, max_amount')
+          .eq('schedule_id', schedule['id'] as String)
+          .eq('applies_to', 'manual')
+          .order('sort_order'),
+    ).map(ReliefType.fromJson).toList();
   }
 
   Future<void> saveDeclaredRelief(String employeeId, DeclaredRelief relief) =>
@@ -2378,10 +2652,12 @@ extension RepoHr on Repo {
       client.from('employee_tax_reliefs').delete().eq('id', id);
 
   Future<List<Map<String, dynamic>>> departments() async => Repo._rows(
-      await client.from('departments').select().eq('org_id', orgId).order('name'));
+    await client.from('departments').select().eq('org_id', orgId).order('name'),
+  );
 
   Future<List<Map<String, dynamic>>> positions() async => Repo._rows(
-      await client.from('positions').select().eq('org_id', orgId).order('title'));
+    await client.from('positions').select().eq('org_id', orgId).order('title'),
+  );
 
   // ------------------------------------------------------------------
   // Attendance
@@ -2398,61 +2674,70 @@ extension RepoHr on Repo {
     if (employeeId != null) q = q.eq('employee_id', employeeId);
     if (from != null) q = q.gte('work_date', Fmt.iso(from));
     if (to != null) q = q.lte('work_date', Fmt.iso(to));
-    return Repo._rows(await q.order('work_date', ascending: false).limit(200))
-        .map(AttendanceRecord.fromJson)
-        .toList();
+    return Repo._rows(
+      await q.order('work_date', ascending: false).limit(200),
+    ).map(AttendanceRecord.fromJson).toList();
   }
 
   Future<void> clockIn({double? lat, double? lng, String? address}) =>
-      client.rpc('clock_in', params: {
+      client.rpc(
+        'clock_in',
+        params: {
+          'p_org_id': orgId,
+          'p_method': lat == null ? 'web' : 'mobile_gps',
+          if (lat != null) 'p_lat': lat,
+          if (lng != null) 'p_lng': lng,
+          if (address != null) 'p_address': address,
+        },
+      );
+
+  Future<Map<String, dynamic>> clockOut({double? lat, double? lng}) async {
+    final data = await client.rpc(
+      'clock_out',
+      params: {
         'p_org_id': orgId,
         'p_method': lat == null ? 'web' : 'mobile_gps',
         if (lat != null) 'p_lat': lat,
         if (lng != null) 'p_lng': lng,
-        if (address != null) 'p_address': address,
-      });
-
-  Future<Map<String, dynamic>> clockOut({double? lat, double? lng}) async {
-    final data = await client.rpc('clock_out', params: {
-      'p_org_id': orgId,
-      'p_method': lat == null ? 'web' : 'mobile_gps',
-      if (lat != null) 'p_lat': lat,
-      if (lng != null) 'p_lng': lng,
-    });
+      },
+    );
     return Map<String, dynamic>.from(data as Map);
   }
 
   // ------------------------------------------------------------------
   // Leave
   // ------------------------------------------------------------------
-  Future<List<LeaveType>> leaveTypes() async => Repo._rows(await client
-          .from('leave_types')
-          .select()
-          .eq('org_id', orgId)
-          .eq('is_active', true)
-          .order('sort_order'))
-      .map(LeaveType.fromJson)
-      .toList();
+  Future<List<LeaveType>> leaveTypes() async => Repo._rows(
+    await client
+        .from('leave_types')
+        .select()
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('sort_order'),
+  ).map(LeaveType.fromJson).toList();
 
   Future<List<LeaveBalance>> leaveBalances(String employeeId, int year) async =>
-      Repo._rows(await client
-              .from('leave_balances')
-              .select('*, leave_types(name)')
-              .eq('employee_id', employeeId)
-              .eq('leave_year', year))
-          .map(LeaveBalance.fromJson)
-          .toList();
+      Repo._rows(
+        await client
+            .from('leave_balances')
+            .select('*, leave_types(name)')
+            .eq('employee_id', employeeId)
+            .eq('leave_year', year),
+      ).map(LeaveBalance.fromJson).toList();
 
-  Future<List<LeaveRequest>> leaveRequests({String? status, String? employeeId}) async {
+  Future<List<LeaveRequest>> leaveRequests({
+    String? status,
+    String? employeeId,
+  }) async {
     var q = client
         .from('leave_requests')
         .select('*, employees(full_name), leave_types(name)')
         .eq('org_id', orgId);
     if (status != null && status != 'all') q = q.eq('status', status);
     if (employeeId != null) q = q.eq('employee_id', employeeId);
-    return Repo._rows(await q.order('start_date', ascending: false).limit(200))
-        .map(LeaveRequest.fromJson)
-        .toList();
+    return Repo._rows(
+      await q.order('start_date', ascending: false).limit(200),
+    ).map(LeaveRequest.fromJson).toList();
   }
 
   Future<void> submitLeave({
@@ -2461,36 +2746,44 @@ extension RepoHr on Repo {
     required DateTime end,
     required double days,
     String? reason,
-  }) =>
-      client.rpc('submit_leave_request', params: {
-        'p_org_id': orgId,
-        'p_leave_type_id': leaveTypeId,
-        'p_start_date': Fmt.iso(start),
-        'p_end_date': Fmt.iso(end),
-        'p_total_days': days,
-        if (reason != null) 'p_reason': reason,
-      });
+  }) => client.rpc(
+    'submit_leave_request',
+    params: {
+      'p_org_id': orgId,
+      'p_leave_type_id': leaveTypeId,
+      'p_start_date': Fmt.iso(start),
+      'p_end_date': Fmt.iso(end),
+      'p_total_days': days,
+      if (reason != null) 'p_reason': reason,
+    },
+  );
 
   Future<void> decideLeave(String id, bool approve, {String? note}) =>
-      client.rpc('decide_leave_request', params: {
-        'p_request_id': id,
-        'p_approve': approve,
-        if (note != null) 'p_note': note,
-      });
+      client.rpc(
+        'decide_leave_request',
+        params: {
+          'p_request_id': id,
+          'p_approve': approve,
+          if (note != null) 'p_note': note,
+        },
+      );
 
   // ------------------------------------------------------------------
   // Claims
   // ------------------------------------------------------------------
-  Future<List<ExpenseClaim>> claims({String? status, String? employeeId}) async {
+  Future<List<ExpenseClaim>> claims({
+    String? status,
+    String? employeeId,
+  }) async {
     var q = client
         .from('expense_claims')
         .select('*, employees(full_name)')
         .eq('org_id', orgId);
     if (status != null && status != 'all') q = q.eq('status', status);
     if (employeeId != null) q = q.eq('employee_id', employeeId);
-    return Repo._rows(await q.order('claim_date', ascending: false).limit(200))
-        .map(ExpenseClaim.fromJson)
-        .toList();
+    return Repo._rows(
+      await q.order('claim_date', ascending: false).limit(200),
+    ).map(ExpenseClaim.fromJson).toList();
   }
 
   /// The claims waiting on the person asking, rather than every claim
@@ -2503,19 +2796,23 @@ extension RepoHr on Repo {
   /// through the same select and the same embed as every other claim
   /// list, so a claim looks identical whichever filter found it.
   Future<List<ExpenseClaim>> claimsAwaitingMe() async {
-    final rows = Repo._rows(await client
-        .rpc('claims_awaiting_my_approval', params: {'p_org_id': orgId}));
+    final rows = Repo._rows(
+      await client.rpc(
+        'claims_awaiting_my_approval',
+        params: {'p_org_id': orgId},
+      ),
+    );
     final ids = rows.map((r) => r['claim_id'] as String).toList();
     if (ids.isEmpty) return [];
 
-    return Repo._rows(await client
-            .from('expense_claims')
-            .select('*, employees(full_name)')
-            .inFilter('id', ids)
-            .order('claim_date', ascending: false)
-            .limit(200))
-        .map(ExpenseClaim.fromJson)
-        .toList();
+    return Repo._rows(
+      await client
+          .from('expense_claims')
+          .select('*, employees(full_name)')
+          .inFilter('id', ids)
+          .order('claim_date', ascending: false)
+          .limit(200),
+    ).map(ExpenseClaim.fromJson).toList();
   }
 
   /// The approval chain on one claim, in order.
@@ -2525,21 +2822,31 @@ extension RepoHr on Repo {
   /// fill them — none of which can be worked out from the claim's own
   /// status.
   Future<List<Map<String, dynamic>>> claimApprovals(String claimId) async =>
-      Repo._rows(await client
-          .from('claim_approvals')
-          .select('*, approver:employees!claim_approvals_approver_employee_id_fkey'
-              '(full_name)')
-          .eq('claim_id', claimId)
-          .order('step_no'));
+      Repo._rows(
+        await client
+            .from('claim_approvals')
+            .select(
+              '*, approver:employees!claim_approvals_approver_employee_id_fkey'
+              '(full_name)',
+            )
+            .eq('claim_id', claimId)
+            .order('step_no'),
+      );
 
-  Future<void> decideClaim(String id, bool approve,
-          {String? note, double? approvedAmount}) =>
-      client.rpc('decide_expense_claim', params: {
-        'p_claim_id': id,
-        'p_approve': approve,
-        if (note != null) 'p_note': note,
-        if (approvedAmount != null) 'p_approved_amount': approvedAmount,
-      });
+  Future<void> decideClaim(
+    String id,
+    bool approve, {
+    String? note,
+    double? approvedAmount,
+  }) => client.rpc(
+    'decide_expense_claim',
+    params: {
+      'p_claim_id': id,
+      'p_approve': approve,
+      if (note != null) 'p_note': note,
+      if (approvedAmount != null) 'p_approved_amount': approvedAmount,
+    },
+  );
 
   /// The amount at or above which a claim goes up the full chain.
   ///
@@ -2558,17 +2865,19 @@ extension RepoHr on Repo {
   /// Upsert rather than update: most companies have no row until the
   /// first time somebody opens this setting.
   Future<void> setClaimApprovalThreshold(double amount) =>
-      client.from('claim_approval_settings').upsert(
-        {'org_id': orgId, 'full_chain_from': amount},
-        onConflict: 'org_id',
-      );
+      client.from('claim_approval_settings').upsert({
+        'org_id': orgId,
+        'full_chain_from': amount,
+      }, onConflict: 'org_id');
 
-  Future<List<Map<String, dynamic>>> claimTypes() async => Repo._rows(await client
-      .from('claim_types')
-      .select()
-      .eq('org_id', orgId)
-      .eq('is_active', true)
-      .order('sort_order'));
+  Future<List<Map<String, dynamic>>> claimTypes() async => Repo._rows(
+    await client
+        .from('claim_types')
+        .select()
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('sort_order'),
+  );
 
   /// [payWithPayroll] decides which of two settlement routes the claim
   /// takes, and it cannot be changed afterwards from here: true and the
@@ -2582,10 +2891,14 @@ extension RepoHr on Repo {
     required List<Map<String, dynamic>> lines,
     bool payWithPayroll = true,
   }) async {
-    final no = await client.rpc('next_document_number',
-        params: {'p_org_id': orgId, 'p_doc_type': 'expense_claim'});
+    final no = await client.rpc(
+      'next_document_number',
+      params: {'p_org_id': orgId, 'p_doc_type': 'expense_claim'},
+    );
     final total = lines.fold<double>(
-        0, (sum, l) => sum + Fmt.toDouble(l['amount']));
+      0,
+      (sum, l) => sum + Fmt.toDouble(l['amount']),
+    );
     final row = await client
         .from('expense_claims')
         .insert({
@@ -2603,7 +2916,7 @@ extension RepoHr on Repo {
     final id = row['id'] as String;
     await client.from('expense_claim_lines').insert([
       for (var i = 0; i < lines.length; i++)
-        {...lines[i], 'org_id': orgId, 'claim_id': id, 'line_no': i + 1}
+        {...lines[i], 'org_id': orgId, 'claim_id': id, 'line_no': i + 1},
     ]);
     return id;
   }
@@ -2611,13 +2924,13 @@ extension RepoHr on Repo {
   // ------------------------------------------------------------------
   // Payroll
   // ------------------------------------------------------------------
-  Future<List<PayrollRun>> payrollRuns() async => Repo._rows(await client
-          .from('payroll_runs')
-          .select('*, pay_periods(code, pay_date)')
-          .eq('org_id', orgId)
-          .order('created_at', ascending: false))
-      .map(PayrollRun.fromJson)
-      .toList();
+  Future<List<PayrollRun>> payrollRuns() async => Repo._rows(
+    await client
+        .from('payroll_runs')
+        .select('*, pay_periods(code, pay_date)')
+        .eq('org_id', orgId)
+        .order('created_at', ascending: false),
+  ).map(PayrollRun.fromJson).toList();
 
   Future<List<Payslip>> payslips({String? runId, String? employeeId}) async {
     var q = client
@@ -2626,9 +2939,9 @@ extension RepoHr on Repo {
         .eq('org_id', orgId);
     if (runId != null) q = q.eq('run_id', runId);
     if (employeeId != null) q = q.eq('employee_id', employeeId);
-    return Repo._rows(await q.order('employee_no'))
-        .map(Payslip.fromJson)
-        .toList();
+    return Repo._rows(
+      await q.order('employee_no'),
+    ).map(Payslip.fromJson).toList();
   }
 
   Future<Payslip?> payslip(String id) async {
@@ -2637,18 +2950,25 @@ extension RepoHr on Repo {
         .select('*, payslip_lines(*), payroll_runs(run_no, pay_periods(code))')
         .eq('id', id)
         .maybeSingle();
-    return row == null ? null : Payslip.fromJson(Map<String, dynamic>.from(row));
+    return row == null
+        ? null
+        : Payslip.fromJson(Map<String, dynamic>.from(row));
   }
 
   /// Creates the period if it does not exist, then a run against it.
   Future<String> startPayrollRun(int year, int month) async {
-    final periodId = await client.rpc('ensure_pay_period',
-        params: {'p_org_id': orgId, 'p_year': year, 'p_month': month});
-    final runId = await client.rpc('create_payroll_run', params: {
-      'p_org_id': orgId,
-      'p_period_id': periodId,
-      'p_description': '${Fmt.monthName(month)} $year payroll',
-    });
+    final periodId = await client.rpc(
+      'ensure_pay_period',
+      params: {'p_org_id': orgId, 'p_year': year, 'p_month': month},
+    );
+    final runId = await client.rpc(
+      'create_payroll_run',
+      params: {
+        'p_org_id': orgId,
+        'p_period_id': periodId,
+        'p_description': '${Fmt.monthName(month)} $year payroll',
+      },
+    );
     return runId as String;
   }
 
@@ -2661,8 +2981,10 @@ extension RepoHr on Repo {
   /// The bank instruction for a posted run. Lines that cannot be paid
   /// come back flagged rather than missing.
   Future<List<PaymentLine>> paymentInstruction(String runId) async {
-    final data = await client
-        .rpc('payroll_payment_instruction', params: {'p_run_id': runId});
+    final data = await client.rpc(
+      'payroll_payment_instruction',
+      params: {'p_run_id': runId},
+    );
     return Repo._rows(data).map(PaymentLine.fromJson).toList();
   }
 
@@ -2674,13 +2996,13 @@ extension RepoHr on Repo {
   // ------------------------------------------------------------------
   // Talent
   // ------------------------------------------------------------------
-  Future<List<JobRequisition>> requisitions() async => Repo._rows(await client
-          .from('job_requisitions')
-          .select('*, departments(name), applicants(count)')
-          .eq('org_id', orgId)
-          .order('created_at', ascending: false))
-      .map(JobRequisition.fromJson)
-      .toList();
+  Future<List<JobRequisition>> requisitions() async => Repo._rows(
+    await client
+        .from('job_requisitions')
+        .select('*, departments(name), applicants(count)')
+        .eq('org_id', orgId)
+        .order('created_at', ascending: false),
+  ).map(JobRequisition.fromJson).toList();
 
   Future<List<Applicant>> applicants({String? requisitionId}) async {
     var q = client
@@ -2688,9 +3010,9 @@ extension RepoHr on Repo {
         .select('*, job_requisitions(title)')
         .eq('org_id', orgId);
     if (requisitionId != null) q = q.eq('requisition_id', requisitionId);
-    return Repo._rows(await q.order('applied_at', ascending: false))
-        .map(Applicant.fromJson)
-        .toList();
+    return Repo._rows(
+      await q.order('applied_at', ascending: false),
+    ).map(Applicant.fromJson).toList();
   }
 
   /// Moves an applicant along and keeps the move as history, so
@@ -2705,32 +3027,38 @@ extension RepoHr on Repo {
     });
   }
 
-  Future<List<Appraisal>> appraisals() async => Repo._rows(await client
-          .from('appraisals')
-          .select('*, employees!appraisals_employee_id_fkey(full_name), '
-              'appraisal_cycles(name)')
-          .eq('org_id', orgId)
-          .order('created_at', ascending: false))
-      .map(Appraisal.fromJson)
-      .toList();
+  Future<List<Appraisal>> appraisals() async => Repo._rows(
+    await client
+        .from('appraisals')
+        .select(
+          '*, employees!appraisals_employee_id_fkey(full_name), '
+          'appraisal_cycles(name)',
+        )
+        .eq('org_id', orgId)
+        .order('created_at', ascending: false),
+  ).map(Appraisal.fromJson).toList();
 }
 
 /// Auditor access to payslips: requested, approved by a company admin,
 /// and time-boxed so it lapses without anyone having to remember.
 extension RepoPayslipAccess on Repo {
   Future<bool> myPayslipAccess() async {
-    final data =
-        await client.rpc('my_payslip_access', params: {'p_org_id': orgId});
+    final data = await client.rpc(
+      'my_payslip_access',
+      params: {'p_org_id': orgId},
+    );
     return data == true;
   }
 
   Future<List<PayslipAccessRequest>> payslipAccessRequests() async {
     final rows = await client
         .from('payslip_access_requests')
-        .select('*, requester:profiles!payslip_access_requests_requested_by_fkey'
-            '(full_name, email), '
-            'decider:profiles!payslip_access_requests_decided_by_fkey'
-            '(full_name, email)')
+        .select(
+          '*, requester:profiles!payslip_access_requests_requested_by_fkey'
+          '(full_name, email), '
+          'decider:profiles!payslip_access_requests_decided_by_fkey'
+          '(full_name, email)',
+        )
         .eq('org_id', orgId)
         .order('requested_at', ascending: false);
     return Repo._rows(rows).map(PayslipAccessRequest.fromJson).toList();
@@ -2740,54 +3068,69 @@ extension RepoPayslipAccess on Repo {
     required String reason,
     DateTime? from,
     DateTime? to,
-  }) =>
-      client.rpc('request_payslip_access', params: {
-        'p_org_id': orgId,
-        'p_reason': reason,
-        if (from != null) 'p_period_from': Fmt.iso(from),
-        if (to != null) 'p_period_to': Fmt.iso(to),
-      });
+  }) => client.rpc(
+    'request_payslip_access',
+    params: {
+      'p_org_id': orgId,
+      'p_reason': reason,
+      if (from != null) 'p_period_from': Fmt.iso(from),
+      if (to != null) 'p_period_to': Fmt.iso(to),
+    },
+  );
 
-  Future<void> decidePayslipAccess(String id, bool approve,
-          {String? note, int days = 30}) =>
-      client.rpc('decide_payslip_access', params: {
-        'p_request_id': id,
-        'p_approve': approve,
-        if (note != null) 'p_note': note,
-        'p_days': days,
-      });
+  Future<void> decidePayslipAccess(
+    String id,
+    bool approve, {
+    String? note,
+    int days = 30,
+  }) => client.rpc(
+    'decide_payslip_access',
+    params: {
+      'p_request_id': id,
+      'p_approve': approve,
+      if (note != null) 'p_note': note,
+      'p_days': days,
+    },
+  );
 
-  Future<void> revokePayslipAccess(String id, {String? note}) =>
-      client.rpc('revoke_payslip_access',
-          params: {'p_request_id': id, if (note != null) 'p_note': note});
+  Future<void> revokePayslipAccess(String id, {String? note}) => client.rpc(
+    'revoke_payslip_access',
+    params: {'p_request_id': id, if (note != null) 'p_note': note},
+  );
 
   /// Payslips a granted reader may see. Goes through a function rather
   /// than the table because the function writes the read into the log —
   /// there is no unlogged way in.
   Future<List<Payslip>> auditPayslips({String? runId}) async {
-    final data = await client.rpc('audit_list_payslips', params: {
-      'p_org_id': orgId,
-      if (runId != null) 'p_run_id': runId,
-    });
+    final data = await client.rpc(
+      'audit_list_payslips',
+      params: {'p_org_id': orgId, if (runId != null) 'p_run_id': runId},
+    );
     return (data as List)
         .map((e) => Payslip.fromJson(Map<String, dynamic>.from(e)))
         .toList();
   }
 
   Future<Payslip?> auditPayslip(String id) async {
-    final data =
-        await client.rpc('audit_view_payslip', params: {'p_payslip_id': id});
+    final data = await client.rpc(
+      'audit_view_payslip',
+      params: {'p_payslip_id': id},
+    );
     return data == null
         ? null
         : Payslip.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
   /// Who has opened which payslip, and under whose grant.
-  Future<List<PayslipAccessLogEntry>> payslipAccessLog({int limit = 100}) async {
+  Future<List<PayslipAccessLogEntry>> payslipAccessLog({
+    int limit = 100,
+  }) async {
     final rows = await client
         .from('payslip_access_log')
-        .select('*, actor:profiles!payslip_access_log_actor_id_fkey'
-            '(full_name, email)')
+        .select(
+          '*, actor:profiles!payslip_access_log_actor_id_fkey'
+          '(full_name, email)',
+        )
         .eq('org_id', orgId)
         .order('viewed_at', ascending: false)
         .limit(limit);
@@ -2801,12 +3144,15 @@ extension RepoPayslipAccess on Repo {
     String? recordId,
     int limit = 100,
   }) async {
-    final rows = await client.rpc('audit_trail', params: {
-      'p_org_id': orgId,
-      'p_table': table,
-      'p_record_id': recordId,
-      'p_limit': limit,
-    });
+    final rows = await client.rpc(
+      'audit_trail',
+      params: {
+        'p_org_id': orgId,
+        'p_table': table,
+        'p_record_id': recordId,
+        'p_limit': limit,
+      },
+    );
     return Repo._rows(rows).map(AuditEntry.fromJson).toList();
   }
 }
@@ -2840,10 +3186,12 @@ extension RepoHrSetup on Repo {
     }
   }
 
-  Future<List<Map<String, dynamic>>> setupRows(String table,
-          {String orderBy = 'name'}) async =>
-      Repo._rows(
-          await client.from(table).select().eq('org_id', orgId).order(orderBy));
+  Future<List<Map<String, dynamic>>> setupRows(
+    String table, {
+    String orderBy = 'name',
+  }) async => Repo._rows(
+    await client.from(table).select().eq('org_id', orgId).order(orderBy),
+  );
 
   Future<void> deleteSetupRow(String table, String id) =>
       client.from(table).delete().eq('id', id);
@@ -2856,19 +3204,23 @@ extension RepoHrSetup on Repo {
   // it quietly makes every holiday an ordinary working day.
   // ------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> publicHolidays(int year) async =>
-      Repo._rows(await client
-          .from('public_holidays')
-          .select()
-          .eq('org_id', orgId)
-          .gte('holiday_date', '$year-01-01')
-          .lte('holiday_date', '$year-12-31')
-          .order('holiday_date'));
+      Repo._rows(
+        await client
+            .from('public_holidays')
+            .select()
+            .eq('org_id', orgId)
+            .gte('holiday_date', '$year-01-01')
+            .lte('holiday_date', '$year-12-31')
+            .order('holiday_date'),
+      );
 
   /// Fills in the four federal holidays that fall on a fixed date. The
   /// lunar ones are gazetted each year and are not guessed.
   Future<int> addFixedHolidays(int year) async {
-    final data = await client.rpc('add_fixed_public_holidays',
-        params: {'p_org_id': orgId, 'p_year': year});
+    final data = await client.rpc(
+      'add_fixed_public_holidays',
+      params: {'p_org_id': orgId, 'p_year': year},
+    );
     return Fmt.toInt(data);
   }
 
@@ -2879,11 +3231,13 @@ extension RepoHrSetup on Repo {
   // its leave type, and RLS reaches the organization through that.
   // ------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> leaveBands(String leaveTypeId) async =>
-      Repo._rows(await client
-          .from('leave_entitlement_bands')
-          .select()
-          .eq('leave_type_id', leaveTypeId)
-          .order('service_years_from'));
+      Repo._rows(
+        await client
+            .from('leave_entitlement_bands')
+            .select()
+            .eq('leave_type_id', leaveTypeId)
+            .order('service_years_from'),
+      );
 
   Future<void> saveLeaveBand(Map<String, dynamic> values, {String? id}) async {
     if (id != null) {
@@ -2896,9 +3250,14 @@ extension RepoHrSetup on Repo {
   /// Writes the Employment Act 1955 minimums — s.60E(1) for annual
   /// leave, s.60F(1) for sick — and turns on the flag that makes them
   /// count.
-  Future<int> applyStatutoryLeaveBands(String leaveTypeId, String preset) async {
-    final data = await client.rpc('apply_statutory_leave_bands',
-        params: {'p_leave_type_id': leaveTypeId, 'p_preset': preset});
+  Future<int> applyStatutoryLeaveBands(
+    String leaveTypeId,
+    String preset,
+  ) async {
+    final data = await client.rpc(
+      'apply_statutory_leave_bands',
+      params: {'p_leave_type_id': leaveTypeId, 'p_preset': preset},
+    );
     return Fmt.toInt(data);
   }
 
@@ -2910,12 +3269,13 @@ extension RepoHrSetup on Repo {
   // filing on verified figures?" answerable — and only a platform
   // administrator may change them.
   // ------------------------------------------------------------------
-  Future<List<Map<String, dynamic>>> statutorySchedules() async =>
-      Repo._rows(await client
-          .from('statutory_schedules')
-          .select('*, statutory_rates(*)')
-          .order('body')
-          .order('effective_from', ascending: false));
+  Future<List<Map<String, dynamic>>> statutorySchedules() async => Repo._rows(
+    await client
+        .from('statutory_schedules')
+        .select('*, statutory_rates(*)')
+        .order('body')
+        .order('effective_from', ascending: false),
+  );
 
   Future<String> publishStatutorySchedule({
     required String body,
@@ -2929,29 +3289,38 @@ extension RepoHrSetup on Repo {
     String resultRounding = 'nearest_cent',
     bool isVerified = false,
   }) async {
-    final data = await client.rpc('platform_publish_statutory_schedule', params: {
-      'p_body': body,
-      'p_name': name,
-      'p_method': method,
-      'p_effective_from': Fmt.iso(effectiveFrom),
-      'p_rates': rates,
-      if (source != null) 'p_source': source,
-      if (notes != null) 'p_notes': notes,
-      if (wageRoundUpTo != null) 'p_wage_round_up_to': wageRoundUpTo,
-      'p_result_rounding': resultRounding,
-      'p_is_verified': isVerified,
-    });
+    final data = await client.rpc(
+      'platform_publish_statutory_schedule',
+      params: {
+        'p_body': body,
+        'p_name': name,
+        'p_method': method,
+        'p_effective_from': Fmt.iso(effectiveFrom),
+        'p_rates': rates,
+        if (source != null) 'p_source': source,
+        if (notes != null) 'p_notes': notes,
+        if (wageRoundUpTo != null) 'p_wage_round_up_to': wageRoundUpTo,
+        'p_result_rounding': resultRounding,
+        'p_is_verified': isVerified,
+      },
+    );
     return data as String;
   }
 
-  Future<void> setScheduleVerified(String scheduleId, bool verified,
-          {String? source, String? notes}) =>
-      client.rpc('platform_set_schedule_verified', params: {
-        'p_schedule_id': scheduleId,
-        'p_verified': verified,
-        if (source != null) 'p_source': source,
-        if (notes != null) 'p_notes': notes,
-      });
+  Future<void> setScheduleVerified(
+    String scheduleId,
+    bool verified, {
+    String? source,
+    String? notes,
+  }) => client.rpc(
+    'platform_set_schedule_verified',
+    params: {
+      'p_schedule_id': scheduleId,
+      'p_verified': verified,
+      if (source != null) 'p_source': source,
+      if (notes != null) 'p_notes': notes,
+    },
+  );
 
   // ------------------------------------------------------------------
   // Item prices
@@ -2963,11 +3332,13 @@ extension RepoHrSetup on Repo {
   // catalogue.
   // ------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> itemPrices(String itemId) async =>
-      Repo._rows(await client
-          .from('item_prices')
-          .select('*, price_levels(code, name)')
-          .eq('item_id', itemId)
-          .order('min_quantity'));
+      Repo._rows(
+        await client
+            .from('item_prices')
+            .select('*, price_levels(code, name)')
+            .eq('item_id', itemId)
+            .order('min_quantity'),
+      );
 
   Future<void> saveItemPrice(Map<String, dynamic> values, {String? id}) async {
     if (id != null) {
@@ -2990,15 +3361,19 @@ extension RepoHrSetup on Repo {
   // them.
   // ------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> contactPersons(String contactId) async =>
-      Repo._rows(await client
-          .from('contact_persons')
-          .select()
-          .eq('contact_id', contactId)
-          .order('is_primary', ascending: false)
-          .order('name'));
+      Repo._rows(
+        await client
+            .from('contact_persons')
+            .select()
+            .eq('contact_id', contactId)
+            .order('is_primary', ascending: false)
+            .order('name'),
+      );
 
-  Future<void> saveContactPerson(Map<String, dynamic> values,
-      {String? id}) async {
+  Future<void> saveContactPerson(
+    Map<String, dynamic> values, {
+    String? id,
+  }) async {
     if (id != null) {
       await client.from('contact_persons').update(values).eq('id', id);
     } else {
@@ -3007,21 +3382,26 @@ extension RepoHrSetup on Repo {
   }
 
   Future<List<Map<String, dynamic>>> contactAddresses(String contactId) async =>
-      Repo._rows(await client
-          .from('contact_addresses')
-          .select()
-          .eq('contact_id', contactId)
-          .order('is_default', ascending: false)
-          .order('label'));
+      Repo._rows(
+        await client
+            .from('contact_addresses')
+            .select()
+            .eq('contact_id', contactId)
+            .order('is_default', ascending: false)
+            .order('label'),
+      );
 
-  Future<void> saveContactAddress(Map<String, dynamic> values,
-      {String? id}) async {
+  Future<void> saveContactAddress(
+    Map<String, dynamic> values, {
+    String? id,
+  }) async {
     if (id != null) {
       await client.from('contact_addresses').update(values).eq('id', id);
     } else {
-      await client
-          .from('contact_addresses')
-          .insert({...values, 'org_id': orgId});
+      await client.from('contact_addresses').insert({
+        ...values,
+        'org_id': orgId,
+      });
     }
   }
 
@@ -3056,8 +3436,7 @@ extension RepoHrSetup on Repo {
           ? q.not('status', 'in', '("converted","lost","unqualified")')
           : q.eq('status', status);
     }
-    return Repo._rows(
-        await q.order('created_at', ascending: false).limit(300));
+    return Repo._rows(await q.order('created_at', ascending: false).limit(300));
   }
 
   Future<void> saveLead(Map<String, dynamic> values, {String? id}) async {
@@ -3085,33 +3464,40 @@ extension RepoHrSetup on Repo {
     double? amount,
     DateTime? expectedClose,
   }) async {
-    final data = await client.rpc('convert_lead', params: {
-      'p_lead_id': leadId,
-      'p_create_opportunity': createOpportunity,
-      if (pipelineId != null) 'p_pipeline_id': pipelineId,
-      if (amount != null) 'p_amount': amount,
-      if (expectedClose != null)
-        'p_expected_close_date': Fmt.iso(expectedClose),
-    });
+    final data = await client.rpc(
+      'convert_lead',
+      params: {
+        'p_lead_id': leadId,
+        'p_create_opportunity': createOpportunity,
+        if (pipelineId != null) 'p_pipeline_id': pipelineId,
+        if (amount != null) 'p_amount': amount,
+        if (expectedClose != null)
+          'p_expected_close_date': Fmt.iso(expectedClose),
+      },
+    );
     return Map<String, dynamic>.from(data as Map);
   }
 
-  Future<List<Map<String, dynamic>>> pipelines() async => Repo._rows(await client
-      .from('pipelines')
-      .select()
-      .eq('org_id', orgId)
-      .eq('is_active', true)
-      .order('sort_order'));
+  Future<List<Map<String, dynamic>>> pipelines() async => Repo._rows(
+    await client
+        .from('pipelines')
+        .select()
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('sort_order'),
+  );
 
   // ------------------------------------------------------------------
   // Interviews
   // ------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> interviews(String applicantId) async =>
-      Repo._rows(await client
-          .from('interviews')
-          .select('*, employees:interviewer_id(full_name)')
-          .eq('applicant_id', applicantId)
-          .order('round_no'));
+      Repo._rows(
+        await client
+            .from('interviews')
+            .select('*, employees:interviewer_id(full_name)')
+            .eq('applicant_id', applicantId)
+            .order('round_no'),
+      );
 
   Future<void> saveInterview(Map<String, dynamic> values, {String? id}) async {
     if (id != null) {
@@ -3125,44 +3511,55 @@ extension RepoHrSetup on Repo {
   // Onboarding
   // ------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> onboardingTemplateItems(
-          String templateId) async =>
-      Repo._rows(await client
-          .from('onboarding_template_items')
-          .select()
-          .eq('template_id', templateId)
-          .order('sort_order'));
+    String templateId,
+  ) async => Repo._rows(
+    await client
+        .from('onboarding_template_items')
+        .select()
+        .eq('template_id', templateId)
+        .order('sort_order'),
+  );
 
-  Future<void> saveTemplateItem(Map<String, dynamic> values,
-      {String? id}) async {
+  Future<void> saveTemplateItem(
+    Map<String, dynamic> values, {
+    String? id,
+  }) async {
     if (id != null) {
       await client
           .from('onboarding_template_items')
           .update(values)
           .eq('id', id);
     } else {
-      await client
-          .from('onboarding_template_items')
-          .insert({...values, 'org_id': orgId});
+      await client.from('onboarding_template_items').insert({
+        ...values,
+        'org_id': orgId,
+      });
     }
   }
 
-  Future<List<Map<String, dynamic>>> onboardingChecklists(
-      {bool openOnly = true}) async {
+  Future<List<Map<String, dynamic>>> onboardingChecklists({
+    bool openOnly = true,
+  }) async {
     var q = client
         .from('onboarding_checklists')
-        .select('*, employees(full_name, employee_no), '
-            'onboarding_tasks(id, is_done, is_mandatory)')
+        .select(
+          '*, employees(full_name, employee_no), '
+          'onboarding_tasks(id, is_done, is_mandatory)',
+        )
         .eq('org_id', orgId);
     if (openOnly) q = q.isFilter('completed_at', null);
     return Repo._rows(await q.order('start_date', ascending: false).limit(200));
   }
 
-  Future<List<Map<String, dynamic>>> onboardingTasks(String checklistId) async =>
-      Repo._rows(await client
-          .from('onboarding_tasks')
-          .select('*, employees:owner_employee_id(full_name)')
-          .eq('checklist_id', checklistId)
-          .order('sort_order'));
+  Future<List<Map<String, dynamic>>> onboardingTasks(
+    String checklistId,
+  ) async => Repo._rows(
+    await client
+        .from('onboarding_tasks')
+        .select('*, employees:owner_employee_id(full_name)')
+        .eq('checklist_id', checklistId)
+        .order('sort_order'),
+  );
 
   /// Materialises the template's items as dated tasks. Copied rather
   /// than referenced, so editing the template later does not move the
@@ -3173,19 +3570,24 @@ extension RepoHrSetup on Repo {
     DateTime? startDate,
     String kind = 'onboarding',
   }) async {
-    final data = await client.rpc('start_onboarding', params: {
-      'p_employee_id': employeeId,
-      if (templateId != null) 'p_template_id': templateId,
-      if (startDate != null) 'p_start_date': Fmt.iso(startDate),
-      'p_kind': kind,
-    });
+    final data = await client.rpc(
+      'start_onboarding',
+      params: {
+        'p_employee_id': employeeId,
+        if (templateId != null) 'p_template_id': templateId,
+        if (startDate != null) 'p_start_date': Fmt.iso(startDate),
+        'p_kind': kind,
+      },
+    );
     return data as String;
   }
 
   /// Returns true when that tick finished the checklist.
   Future<bool> setOnboardingTaskDone(String taskId, bool done) async {
-    final data = await client.rpc('set_onboarding_task_done',
-        params: {'p_task_id': taskId, 'p_done': done});
+    final data = await client.rpc(
+      'set_onboarding_task_done',
+      params: {'p_task_id': taskId, 'p_done': done},
+    );
     return data == true;
   }
 
@@ -3193,16 +3595,23 @@ extension RepoHrSetup on Repo {
   // What an employee record hangs off: dependants, documents, shifts
   // ------------------------------------------------------------------
   Future<List<Map<String, dynamic>>> employeeRows(
-          String table, String employeeId,
-          {String select = '*', String orderBy = 'created_at'}) async =>
-      Repo._rows(await client
-          .from(table)
-          .select(select)
-          .eq('employee_id', employeeId)
-          .order(orderBy));
+    String table,
+    String employeeId, {
+    String select = '*',
+    String orderBy = 'created_at',
+  }) async => Repo._rows(
+    await client
+        .from(table)
+        .select(select)
+        .eq('employee_id', employeeId)
+        .order(orderBy),
+  );
 
   Future<void> saveEmployeeRow(
-      String table, Map<String, dynamic> values, {String? id}) async {
+    String table,
+    Map<String, dynamic> values, {
+    String? id,
+  }) async {
     if (id != null) {
       await client.from(table).update(values).eq('id', id);
     } else {
@@ -3217,29 +3626,39 @@ extension RepoHrSetup on Repo {
   // so a caller that loses it has to issue a new link rather than look
   // the old one up.
   // ------------------------------------------------------------------
-  Future<String> shareDocument(String documentId,
-      {int validDays = 30, String? email}) async {
-    final data = await client.rpc('share_document', params: {
-      'p_document_id': documentId,
-      'p_valid_days': validDays,
-      if (email != null && email.trim().isNotEmpty) 'p_email': email.trim(),
-    });
+  Future<String> shareDocument(
+    String documentId, {
+    int validDays = 30,
+    String? email,
+  }) async {
+    final data = await client.rpc(
+      'share_document',
+      params: {
+        'p_document_id': documentId,
+        'p_valid_days': validDays,
+        if (email != null && email.trim().isNotEmpty) 'p_email': email.trim(),
+      },
+    );
     return data as String;
   }
 
   Future<int> revokeDocumentShare(String documentId) async {
-    final data = await client
-        .rpc('revoke_document_share', params: {'p_document_id': documentId});
+    final data = await client.rpc(
+      'revoke_document_share',
+      params: {'p_document_id': documentId},
+    );
     return Fmt.toInt(data);
   }
 
   Future<List<Map<String, dynamic>>> documentShareLinks(
-          String documentId) async =>
-      Repo._rows(await client
-          .from('document_share_links')
-          .select()
-          .eq('document_id', documentId)
-          .order('created_at', ascending: false));
+    String documentId,
+  ) async => Repo._rows(
+    await client
+        .from('document_share_links')
+        .select()
+        .eq('document_id', documentId)
+        .order('created_at', ascending: false),
+  );
 
   // ------------------------------------------------------------------
   // Outbound email
@@ -3268,20 +3687,25 @@ extension RepoHrSetup on Repo {
   /// followed by [sendQueuedEmail] on the id it returns; if that second
   /// call fails the row is still queued and the schedule collects it,
   /// so send now degrades to send soon rather than to lost.
-  Future<String> emailDocument(String documentId,
-      {String? to,
-      String templateCode = 'document_new',
-      String dispatch = 'queued',
-      String? attachmentPath,
-      String? attachmentName}) async {
-    final data = await client.rpc('email_document', params: {
-      'p_document_id': documentId,
-      if (to != null && to.trim().isNotEmpty) 'p_to': to.trim(),
-      'p_template_code': templateCode,
-      'p_dispatch': dispatch,
-      if (attachmentPath != null) 'p_attachment_path': attachmentPath,
-      if (attachmentName != null) 'p_attachment_name': attachmentName,
-    });
+  Future<String> emailDocument(
+    String documentId, {
+    String? to,
+    String templateCode = 'document_new',
+    String dispatch = 'queued',
+    String? attachmentPath,
+    String? attachmentName,
+  }) async {
+    final data = await client.rpc(
+      'email_document',
+      params: {
+        'p_document_id': documentId,
+        if (to != null && to.trim().isNotEmpty) 'p_to': to.trim(),
+        'p_template_code': templateCode,
+        'p_dispatch': dispatch,
+        if (attachmentPath != null) 'p_attachment_path': attachmentPath,
+        if (attachmentName != null) 'p_attachment_name': attachmentName,
+      },
+    );
     return data as String;
   }
 
@@ -3296,13 +3720,20 @@ extension RepoHrSetup on Repo {
   /// `upsert` so sending the same invoice twice replaces the file rather
   /// than failing on the second attempt or accumulating copies.
   Future<String> uploadDocumentPdf(
-      String documentId, String fileName, Uint8List bytes) async {
+    String documentId,
+    String fileName,
+    Uint8List bytes,
+  ) async {
     final path = '$orgId/sales_documents/$documentId/$fileName';
-    await client.storage.from('attachments').uploadBinary(
+    await client.storage
+        .from('attachments')
+        .uploadBinary(
           path,
           bytes,
           fileOptions: const FileOptions(
-              contentType: 'application/pdf', upsert: true),
+            contentType: 'application/pdf',
+            upsert: true,
+          ),
         );
     return path;
   }
@@ -3314,17 +3745,21 @@ extension RepoHrSetup on Repo {
   /// to drain is deliberately not rethrown: the message is queued by
   /// then, and telling somebody their invoice was not sent when it is
   /// about to go out half an hour later would be wrong.
-  Future<Map<String, dynamic>> emailDocumentNow(String documentId,
-      {String? to,
-      String templateCode = 'document_new',
-      String? attachmentPath,
-      String? attachmentName}) async {
-    final id = await emailDocument(documentId,
-        to: to,
-        templateCode: templateCode,
-        dispatch: 'immediate',
-        attachmentPath: attachmentPath,
-        attachmentName: attachmentName);
+  Future<Map<String, dynamic>> emailDocumentNow(
+    String documentId, {
+    String? to,
+    String templateCode = 'document_new',
+    String? attachmentPath,
+    String? attachmentName,
+  }) async {
+    final id = await emailDocument(
+      documentId,
+      to: to,
+      templateCode: templateCode,
+      dispatch: 'immediate',
+      attachmentPath: attachmentPath,
+      attachmentName: attachmentName,
+    );
     try {
       await sendQueuedEmail(id: id);
     } catch (_) {
@@ -3341,30 +3776,41 @@ extension RepoHrSetup on Repo {
   /// Queues the customer's receipt. Attaches rather than links: see
   /// migration 0110 for why a receipt is the one message here that
   /// should not carry a share token.
-  Future<String> emailReceipt(String receiptId,
-      {String? to,
-      String dispatch = 'queued',
-      String? attachmentPath,
-      String? attachmentName}) async {
-    final data = await client.rpc('email_receipt', params: {
-      'p_receipt_id': receiptId,
-      if (to != null && to.trim().isNotEmpty) 'p_to': to.trim(),
-      'p_dispatch': dispatch,
-      if (attachmentPath != null) 'p_attachment_path': attachmentPath,
-      if (attachmentName != null) 'p_attachment_name': attachmentName,
-    });
+  Future<String> emailReceipt(
+    String receiptId, {
+    String? to,
+    String dispatch = 'queued',
+    String? attachmentPath,
+    String? attachmentName,
+  }) async {
+    final data = await client.rpc(
+      'email_receipt',
+      params: {
+        'p_receipt_id': receiptId,
+        if (to != null && to.trim().isNotEmpty) 'p_to': to.trim(),
+        'p_dispatch': dispatch,
+        if (attachmentPath != null) 'p_attachment_path': attachmentPath,
+        if (attachmentName != null) 'p_attachment_name': attachmentName,
+      },
+    );
     return data as String;
   }
 
   /// Queues the receipt and drains that row immediately, returning the
   /// row as it stands afterwards. Same contract as [emailDocumentNow].
-  Future<Map<String, dynamic>> emailReceiptNow(String receiptId,
-      {String? to, String? attachmentPath, String? attachmentName}) async {
-    final id = await emailReceipt(receiptId,
-        to: to,
-        dispatch: 'immediate',
-        attachmentPath: attachmentPath,
-        attachmentName: attachmentName);
+  Future<Map<String, dynamic>> emailReceiptNow(
+    String receiptId, {
+    String? to,
+    String? attachmentPath,
+    String? attachmentName,
+  }) async {
+    final id = await emailReceipt(
+      receiptId,
+      to: to,
+      dispatch: 'immediate',
+      attachmentPath: attachmentPath,
+      attachmentName: attachmentName,
+    );
     try {
       await sendQueuedEmail(id: id);
     } catch (_) {
@@ -3381,25 +3827,36 @@ extension RepoHrSetup on Repo {
   /// The receipt PDF, where a queued message can attach it. Same path
   /// convention and the same storage policies as a document's.
   Future<String> uploadReceiptPdf(
-      String receiptId, String fileName, Uint8List bytes) async {
+    String receiptId,
+    String fileName,
+    Uint8List bytes,
+  ) async {
     final path = '$orgId/receipts/$receiptId/$fileName';
-    await client.storage.from('attachments').uploadBinary(
+    await client.storage
+        .from('attachments')
+        .uploadBinary(
           path,
           bytes,
           fileOptions: const FileOptions(
-              contentType: 'application/pdf', upsert: true),
+            contentType: 'application/pdf',
+            upsert: true,
+          ),
         );
     return path;
   }
 
   /// What has been emailed for this receipt, newest first.
   Future<List<Map<String, dynamic>>> receiptEmails(String receiptId) async =>
-      Repo._rows(await client
-          .from('email_outbox')
-          .select('id, to_email, status, dispatch, queued_at, sent_at, '
-              'last_error, attachment_name')
-          .eq('receipt_id', receiptId)
-          .order('queued_at', ascending: false));
+      Repo._rows(
+        await client
+            .from('email_outbox')
+            .select(
+              'id, to_email, status, dispatch, queued_at, sent_at, '
+              'last_error, attachment_name',
+            )
+            .eq('receipt_id', receiptId)
+            .order('queued_at', ascending: false),
+      );
 
   /// Money received from customers, or paid to suppliers.
   ///
@@ -3419,8 +3876,7 @@ extension RepoHrSetup on Repo {
         .eq('org_id', orgId)
         .filter('deleted_at', 'is', null);
     if (contactId != null) q = q.eq('contact_id', contactId);
-    return Repo._rows(
-        await q.order(dateField, ascending: false).limit(limit));
+    return Repo._rows(await q.order(dateField, ascending: false).limit(limit));
   }
 
   /// One settlement with what it was set against.
@@ -3429,27 +3885,35 @@ extension RepoHrSetup on Repo {
   /// `payment_allocations` reaches `sales_documents` twice — once for the
   /// invoice being paid and once for a credit note being applied. Left
   /// ambiguous, PostgREST refuses the whole query.
-  Future<Map<String, dynamic>> settlement(String id,
-      {required bool isSales}) async {
+  Future<Map<String, dynamic>> settlement(
+    String id, {
+    required bool isSales,
+  }) async {
     final table = isSales ? 'receipts' : 'purchase_payments';
     final head = await client
         .from(table)
-        .select('*, contacts(name, code, email, address_line1, address_line2, '
-            'city, postcode, state_code), bank_accounts(name)')
+        .select(
+          '*, contacts(name, code, email, address_line1, address_line2, '
+          'city, postcode, state_code), bank_accounts(name)',
+        )
         .eq('id', id)
         .single();
 
-    final allocations = Repo._rows(await client
-        .from('payment_allocations')
-        .select(isSales
-            ? 'amount, discount_amount, '
-                'sales_documents!payment_allocations_invoice_id_fkey'
-                '(doc_no, doc_type, doc_date, total_amount)'
-            : 'amount, discount_amount, '
-                'purchase_documents!payment_allocations_bill_fk'
-                '(doc_no, doc_type, doc_date, total_amount)')
-        .eq(isSales ? 'receipt_id' : 'payment_id', id)
-        .order('created_at'));
+    final allocations = Repo._rows(
+      await client
+          .from('payment_allocations')
+          .select(
+            isSales
+                ? 'amount, discount_amount, '
+                      'sales_documents!payment_allocations_invoice_id_fkey'
+                      '(doc_no, doc_type, doc_date, total_amount)'
+                : 'amount, discount_amount, '
+                      'purchase_documents!payment_allocations_bill_fk'
+                      '(doc_no, doc_type, doc_date, total_amount)',
+          )
+          .eq(isSales ? 'receipt_id' : 'payment_id', id)
+          .order('created_at'),
+    );
 
     return {
       ...Map<String, dynamic>.from(head as Map),
@@ -3459,16 +3923,23 @@ extension RepoHrSetup on Repo {
 
   /// Everything that ever left the building for this document: messages,
   /// share links and PDF downloads, newest first.
-  Future<List<Map<String, dynamic>>> documentActivity(String documentId) async =>
-      Repo._rows(await client
-          .rpc('document_activity', params: {'p_document_id': documentId}));
+  Future<List<Map<String, dynamic>>> documentActivity(
+    String documentId,
+  ) async => Repo._rows(
+    await client.rpc(
+      'document_activity',
+      params: {'p_document_id': documentId},
+    ),
+  );
 
   /// Records that somebody took the PDF. The file is built in the
   /// browser, so this is a record of what the app did rather than an
   /// access log — see the migration for why that distinction matters.
   Future<void> logDocumentDownload(String documentId) async {
-    await client.rpc('log_document_download',
-        params: {'p_document_id': documentId});
+    await client.rpc(
+      'log_document_download',
+      params: {'p_document_id': documentId},
+    );
   }
 
   Future<List<Map<String, dynamic>>> emailOutbox({String? status}) async {
@@ -3484,20 +3955,26 @@ extension RepoHrSetup on Repo {
   /// for the schedule. Used from the outbox when somebody has just
   /// fixed whatever was wrong.
   Future<Map<String, dynamic>> sendQueuedEmail({String? id}) async {
-    final res = await client.functions
-        .invoke('send-email', body: {if (id != null) 'id': id});
+    final res = await client.functions.invoke(
+      'send-email',
+      body: {if (id != null) 'id': id},
+    );
     return Map<String, dynamic>.from(res.data as Map? ?? {});
   }
 
   Future<List<Map<String, dynamic>>> appraisalGoals(String appraisalId) async =>
-      Repo._rows(await client
-          .from('appraisal_goals')
-          .select()
-          .eq('appraisal_id', appraisalId)
-          .order('sort_order'));
+      Repo._rows(
+        await client
+            .from('appraisal_goals')
+            .select()
+            .eq('appraisal_id', appraisalId)
+            .order('sort_order'),
+      );
 
-  Future<void> saveAppraisalGoal(Map<String, dynamic> values,
-      {String? id}) async {
+  Future<void> saveAppraisalGoal(
+    Map<String, dynamic> values, {
+    String? id,
+  }) async {
     if (id != null) {
       await client.from('appraisal_goals').update(values).eq('id', id);
     } else {

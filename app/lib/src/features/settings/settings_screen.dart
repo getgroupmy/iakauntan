@@ -12,6 +12,7 @@ import '../../data/repository.dart';
 import '../auth/reset_password_screen.dart' show validatePassword;
 import 'claim_approval_card.dart';
 import 'company_card.dart';
+import 'warehouses_card.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -62,6 +63,10 @@ class SettingsScreen extends ConsumerWidget {
                   if (organization.baseCurrency.isNotEmpty)
                     _ForeignBalancesCard(org: organization, canPost: canPost),
                   const SizedBox(height: 16),
+                  if (moduleEnabled(ref, 'inventory')) ...[
+                    const WarehousesCard(),
+                    const SizedBox(height: 16),
+                  ],
                   const _ChartOfAccountsCard(),
                   const SizedBox(height: 16),
                   _TaxCodesCard(),
@@ -138,13 +143,17 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
           );
         }
 
-        await ref.read(supabaseProvider).from('organizations').update({
-          'einvoice_enabled': _enabled,
-          'einvoice_environment': _environment,
-          'einvoice_client_id': _clientId.text.trim().isEmpty
-              ? null
-              : _clientId.text.trim(),
-        }).eq('id', widget.org.id);
+        await ref
+            .read(supabaseProvider)
+            .from('organizations')
+            .update({
+              'einvoice_enabled': _enabled,
+              'einvoice_environment': _environment,
+              'einvoice_client_id': _clientId.text.trim().isEmpty
+                  ? null
+                  : _clientId.text.trim(),
+            })
+            .eq('id', widget.org.id);
       },
       successMessage: 'e-Invoice settings saved',
     );
@@ -296,8 +305,11 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
 
   Future<void> _write(Future<void> Function() action, String message) async {
     setState(() => _saving = true);
-    final ok = await runWithFeedback(context,
-        action: action, successMessage: message);
+    final ok = await runWithFeedback(
+      context,
+      action: action,
+      successMessage: message,
+    );
     if (mounted) setState(() => _saving = false);
     if (ok) ref.invalidate(ocrStatusProvider);
     return;
@@ -313,7 +325,9 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
     if (chosen == 'platform' || ocr.keys.contains(ocr.provider)) {
       setState(() => _pendingKeySource = null);
       _write(
-        () => ref.read(repoProvider)!.setOcrSettings(
+        () => ref
+            .read(repoProvider)!
+            .setOcrSettings(
               enabled: true,
               provider: ocr.provider,
               keySource: chosen,
@@ -329,29 +343,25 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
 
   /// Saves the key, then the choice that needed it — in that order,
   /// which is the order the database's own guard requires.
-  Future<void> _saveKey(OcrSettings ocr) => _write(
-        () async {
-          final repo = ref.read(repoProvider)!;
-          await repo.setOcrCredentials(
-            provider: ocr.provider,
-            apiKey: _apiKey.text.trim().isEmpty ? null : _apiKey.text.trim(),
-            projectId:
-                _project.text.trim().isEmpty ? null : _project.text.trim(),
-            location:
-                _location.text.trim().isEmpty ? null : _location.text.trim(),
-            processorId:
-                _processor.text.trim().isEmpty ? null : _processor.text.trim(),
-          );
-          await repo.setOcrSettings(
-            enabled: ocr.enabled,
-            provider: ocr.provider,
-            keySource: 'own',
-          );
-          _apiKey.clear();
-          if (mounted) setState(() => _pendingKeySource = null);
-        },
-        'Scanning is on your own key',
-      );
+  Future<void> _saveKey(OcrSettings ocr) => _write(() async {
+    final repo = ref.read(repoProvider)!;
+    await repo.setOcrCredentials(
+      provider: ocr.provider,
+      apiKey: _apiKey.text.trim().isEmpty ? null : _apiKey.text.trim(),
+      projectId: _project.text.trim().isEmpty ? null : _project.text.trim(),
+      location: _location.text.trim().isEmpty ? null : _location.text.trim(),
+      processorId: _processor.text.trim().isEmpty
+          ? null
+          : _processor.text.trim(),
+    );
+    await repo.setOcrSettings(
+      enabled: ocr.enabled,
+      provider: ocr.provider,
+      keySource: 'own',
+    );
+    _apiKey.clear();
+    if (mounted) setState(() => _pendingKeySource = null);
+  }, 'Scanning is on your own key');
 
   @override
   Widget build(BuildContext context) {
@@ -378,13 +388,15 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                 value: ocr.enabled,
                 onChanged: widget.canEdit && !_saving
                     ? (v) => _write(
-                          () => ref.read(repoProvider)!.setOcrSettings(
-                                enabled: v,
-                                provider: ocr.provider,
-                                keySource: ocr.keySource,
-                              ),
-                          v ? 'Scanning is on' : 'Scanning is off',
-                        )
+                        () => ref
+                            .read(repoProvider)!
+                            .setOcrSettings(
+                              enabled: v,
+                              provider: ocr.provider,
+                              keySource: ocr.keySource,
+                            ),
+                        v ? 'Scanning is on' : 'Scanning is off',
+                      )
                     : null,
                 title: const Text('Send documents to a reader'),
                 subtitle: const Text(
@@ -424,7 +436,9 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                           // nobody asked to set.
                           setState(() => _pendingKeySource = null);
                           _write(
-                            () => ref.read(repoProvider)!.setOcrSettings(
+                            () => ref
+                                .read(repoProvider)!
+                                .setOcrSettings(
                                   enabled: true,
                                   provider: code,
                                   // Switching to a reader you have no key
@@ -444,7 +458,8 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                   Text(
                     ocr.current!.blurb!,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: context.scheme.onSurfaceVariant),
+                      color: context.scheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
                 if (ocr.current?.takesKey ?? true) ...[
@@ -453,7 +468,9 @@ class _ScanningCardState extends ConsumerState<_ScanningCard> {
                     showSelectedIcon: false,
                     segments: const [
                       ButtonSegment(
-                          value: 'platform', label: Text('Buy credit')),
+                        value: 'platform',
+                        label: Text('Buy credit'),
+                      ),
                       ButtonSegment(value: 'own', label: Text('My own key')),
                     ],
                     selected: {_keySource(ocr)},
@@ -515,16 +532,18 @@ class _OnDeviceNotice extends StatelessWidget {
             color: context.colors.success.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Row(children: [
-            const Icon(Icons.phonelink_lock_outlined, size: 20),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text(
-                'Nothing to configure: no key to hold and no credit to buy.',
-                style: TextStyle(fontSize: 13),
+          child: Row(
+            children: [
+              const Icon(Icons.phonelink_lock_outlined, size: 20),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Nothing to configure: no key to hold and no credit to buy.',
+                  style: TextStyle(fontSize: 13),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
         Text(
@@ -533,10 +552,9 @@ class _OnDeviceNotice extends StatelessWidget {
           'the first time it reads something and caches it after that. '
           'Check what it fills in — it reads the printing rather than '
           'understanding the document, and it cannot open a PDF.',
-          style: Theme.of(context)
-              .textTheme
-              .bodySmall
-              ?.copyWith(color: context.scheme.onSurfaceVariant),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: context.scheme.onSurfaceVariant,
+          ),
         ),
       ],
     );
@@ -559,30 +577,34 @@ class _CreditBalance extends StatelessWidget {
             .withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(children: [
-        Icon(empty ? Icons.error_outline : Icons.account_balance_wallet_outlined,
-            size: 20),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${Fmt.money(ocr.balance)} of scanning credit',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              Text(
-                empty
-                    ? 'Not enough for another scan at '
-                        '${Fmt.money(ocr.price)} each. Ask us to top it up.'
-                    : '${Fmt.money(ocr.price)} a scan — about '
-                        '${ocr.scansLeft} more.',
-                style: const TextStyle(fontSize: 12),
-              ),
-            ],
+      child: Row(
+        children: [
+          Icon(
+            empty ? Icons.error_outline : Icons.account_balance_wallet_outlined,
+            size: 20,
           ),
-        ),
-      ]),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${Fmt.money(ocr.balance)} of scanning credit',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  empty
+                      ? 'Not enough for another scan at '
+                            '${Fmt.money(ocr.price)} each. Ask us to top it up.'
+                      : '${Fmt.money(ocr.price)} a scan — about '
+                            '${ocr.scansLeft} more.',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -629,22 +651,27 @@ class _OwnKeyFields extends StatelessWidget {
         if (ocr.hasOwnKey)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: Row(children: [
-              Icon(Icons.key_outlined,
-                  size: 18, color: context.colors.success),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'A key is on file. Scans run on your account with the '
-                  'provider and cost nothing here.',
-                  style: TextStyle(fontSize: 13),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.key_outlined,
+                  size: 18,
+                  color: context.colors.success,
                 ),
-              ),
-              TextButton(
-                onPressed: canEdit && !saving ? onClear : null,
-                child: const Text('Remove'),
-              ),
-            ]),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'A key is on file. Scans run on your account with the '
+                    'provider and cost nothing here.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                ),
+                TextButton(
+                  onPressed: canEdit && !saving ? onClear : null,
+                  child: const Text('Remove'),
+                ),
+              ],
+            ),
           )
         else if (pending)
           // Says which half is missing. Without this the screen looks
@@ -679,26 +706,29 @@ class _OwnKeyFields extends StatelessWidget {
         ),
         if (isGoogle) ...[
           const SizedBox(height: 12),
-          Row(children: [
-            Expanded(
-              child: TextField(
-                controller: project,
-                enabled: canEdit,
-                decoration:
-                    const InputDecoration(labelText: 'Project id'),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: project,
+                  enabled: canEdit,
+                  decoration: const InputDecoration(labelText: 'Project id'),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 120,
-              child: TextField(
-                controller: location,
-                enabled: canEdit,
-                decoration: const InputDecoration(
-                    labelText: 'Location', hintText: 'us'),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 120,
+                child: TextField(
+                  controller: location,
+                  enabled: canEdit,
+                  decoration: const InputDecoration(
+                    labelText: 'Location',
+                    hintText: 'us',
+                  ),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
           const SizedBox(height: 12),
           TextField(
             controller: processor,
@@ -778,10 +808,9 @@ class _ModulesCard extends ConsumerWidget {
                     const SizedBox(height: 8),
                     Text(
                       'Legal firm accounting',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w600),
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -865,17 +894,15 @@ class _CreditControlCard extends ConsumerWidget {
                   : null,
             ),
             const SizedBox(height: 8),
-            Text(
-              switch (org.creditControl) {
-                'off' => 'Limits are recorded and never checked.',
-                'block' =>
-                  'An invoice that would take a customer past their limit '
-                      'cannot be posted.',
-                _ => 'The invoice screen says when a customer is at or past '
+            Text(switch (org.creditControl) {
+              'off' => 'Limits are recorded and never checked.',
+              'block' =>
+                'An invoice that would take a customer past their limit '
+                    'cannot be posted.',
+              _ =>
+                'The invoice screen says when a customer is at or past '
                     'their limit. Posting still goes ahead.',
-              },
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            }, style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
       ),
@@ -931,8 +958,8 @@ class _ForeignBalancesCardState extends ConsumerState<_ForeignBalancesCard> {
               // this date, which the database refuses to price rather
               // than assuming par. Said plainly, because the fix is to
               // enter the rate, not to try again.
-              error: (e, _) => Text('$e',
-                  style: TextStyle(color: context.colors.warning)),
+              error: (e, _) =>
+                  Text('$e', style: TextStyle(color: context.colors.warning)),
               data: (rows) => rows.isEmpty
                   ? Text(
                       'Nothing open in a currency other than '
@@ -950,8 +977,10 @@ class _ForeignBalancesCardState extends ConsumerState<_ForeignBalancesCard> {
                             alignment: Alignment.centerRight,
                             child: FilledButton.icon(
                               onPressed: () => _post(rows),
-                              icon: const Icon(Icons.published_with_changes,
-                                  size: 18),
+                              icon: const Icon(
+                                Icons.published_with_changes,
+                                size: 18,
+                              ),
                               label: const Text('Post revaluation'),
                             ),
                           ),
@@ -981,13 +1010,13 @@ class _ForeignBalancesCardState extends ConsumerState<_ForeignBalancesCard> {
       title: 'Post the revaluation?',
       message: net >= 0
           ? 'This posts an unrealised gain of '
-              '${Fmt.money(net, currency: widget.org.baseCurrency)} '
-              'as at ${Fmt.date(_asAt)}, and reverses the previous '
-              'revaluation if there is one standing.'
+                '${Fmt.money(net, currency: widget.org.baseCurrency)} '
+                'as at ${Fmt.date(_asAt)}, and reverses the previous '
+                'revaluation if there is one standing.'
           : 'This posts an unrealised loss of '
-              '${Fmt.money(-net, currency: widget.org.baseCurrency)} '
-              'as at ${Fmt.date(_asAt)}, and reverses the previous '
-              'revaluation if there is one standing.',
+                '${Fmt.money(-net, currency: widget.org.baseCurrency)} '
+                'as at ${Fmt.date(_asAt)}, and reverses the previous '
+                'revaluation if there is one standing.',
       confirmLabel: 'Post',
     );
     if (!ok || !mounted) return;
@@ -1022,8 +1051,10 @@ class _CurrencyRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${row.currency} at ${Fmt.rate(row.closingRate)}',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  '${row.currency} at ${Fmt.rate(row.closingRate)}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
                 Text(
                   '${row.documents} open · carried at '
                   '${Fmt.money(row.booked, currency: base)}',
@@ -1123,14 +1154,12 @@ class _RunwayNotice extends StatelessWidget {
         .map((y) => y.endDate)
         .reduce((a, b) => a.isAfter(b) ? a : b);
     final now = DateTime.now();
-    final months =
-        (last.year - now.year) * 12 + (last.month - now.month);
+    final months = (last.year - now.year) * 12 + (last.month - now.month);
 
     if (months > 3) return const SizedBox.shrink();
 
     final expired = last.isBefore(now);
-    final colour =
-        expired ? context.colors.danger : context.colors.warning;
+    final colour = expired ? context.colors.danger : context.colors.warning;
 
     return Container(
       margin: const EdgeInsets.only(bottom: Space.md),
@@ -1143,16 +1172,19 @@ class _RunwayNotice extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(expired ? Icons.error_outline : Icons.warning_amber_rounded,
-              size: 18, color: colour),
+          Icon(
+            expired ? Icons.error_outline : Icons.warning_amber_rounded,
+            size: 18,
+            color: colour,
+          ),
           const SizedBox(width: Space.sm),
           Expanded(
             child: Text(
               expired
                   ? 'The last fiscal year ended on ${Fmt.date(last)}. Nothing '
-                      'can be posted until the next one is created.'
+                        'can be posted until the next one is created.'
                   : 'The last fiscal year ends on ${Fmt.date(last)}. Create '
-                      'the next one before then, or posting will stop.',
+                        'the next one before then, or posting will stop.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
@@ -1176,12 +1208,14 @@ class _YearTile extends ConsumerWidget {
       tilePadding: EdgeInsets.zero,
       childrenPadding: const EdgeInsets.only(bottom: Space.sm),
       initiallyExpanded: year.covers(DateTime.now()),
-      title: Row(children: [
-        Text(year.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(width: Space.sm),
-        if (year.covers(DateTime.now()))
-          const StatusChip('current', compact: true),
-      ]),
+      title: Row(
+        children: [
+          Text(year.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(width: Space.sm),
+          if (year.covers(DateTime.now()))
+            const StatusChip('current', compact: true),
+        ],
+      ),
       subtitle: Text(
         '${Fmt.date(year.startDate)} – ${Fmt.date(year.endDate)} · '
         '$open of ${year.periods.length} periods open',
@@ -1191,36 +1225,42 @@ class _YearTile extends ConsumerWidget {
         for (final p in year.periods)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(children: [
-              Expanded(flex: 3, child: Text(p.name)),
-              StatusChip(p.status, compact: true),
-              const SizedBox(width: Space.sm),
-              SizedBox(
-                width: 96,
-                child: canAdmin && !p.isLocked
-                    ? Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () => _toggle(context, ref, p),
-                          child: Text(p.isOpen ? 'Close' : 'Reopen'),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ]),
+            child: Row(
+              children: [
+                Expanded(flex: 3, child: Text(p.name)),
+                StatusChip(p.status, compact: true),
+                const SizedBox(width: Space.sm),
+                SizedBox(
+                  width: 96,
+                  child: canAdmin && !p.isLocked
+                      ? Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () => _toggle(context, ref, p),
+                            child: Text(p.isOpen ? 'Close' : 'Reopen'),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
           ),
       ],
     );
   }
 
   Future<void> _toggle(
-      BuildContext context, WidgetRef ref, FiscalPeriod period) async {
+    BuildContext context,
+    WidgetRef ref,
+    FiscalPeriod period,
+  ) async {
     final closing = period.isOpen;
     if (closing) {
       final ok = await confirm(
         context,
         title: 'Close ${period.name}?',
-        message: 'Nothing more can be posted into it. You can reopen it '
+        message:
+            'Nothing more can be posted into it. You can reopen it '
             'later — only a locked period is final.',
         confirmLabel: 'Close',
       );
@@ -1232,7 +1272,9 @@ class _YearTile extends ConsumerWidget {
       action: () => ref
           .read(repoProvider)!
           .setPeriodStatus(period.id, closing ? 'closed' : 'open'),
-      successMessage: closing ? '${period.name} closed' : '${period.name} reopened',
+      successMessage: closing
+          ? '${period.name} closed'
+          : '${period.name} reopened',
     );
     ref.invalidate(fiscalYearsProvider);
   }
@@ -1272,9 +1314,10 @@ class _ChartOfAccountsCard extends ConsumerWidget {
                         child: Row(
                           children: [
                             Expanded(child: Text(Fmt.label(e.key))),
-                            Text('${e.value} accounts',
-                                style:
-                                    Theme.of(context).textTheme.bodySmall),
+                            Text(
+                              '${e.value} accounts',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
                           ],
                         ),
                       ),
@@ -1348,7 +1391,8 @@ class _TaxCodesCard extends ConsumerWidget {
                               child: Text(
                                 t.code,
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.w600),
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                             Expanded(child: Text(t.name)),
@@ -1359,8 +1403,9 @@ class _TaxCodesCard extends ConsumerWidget {
                               ),
                             Text(
                               Fmt.percent(t.rate),
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                             if (canEdit) ...[
                               const SizedBox(width: 4),
@@ -1506,8 +1551,9 @@ class _TaxCodeDialogState extends ConsumerState<_TaxCodeDialog> {
                     key: const ValueKey('tax-code-rate'),
                     controller: _rate,
                     enabled: !_saving,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
                       labelText: 'Rate',
@@ -1519,18 +1565,24 @@ class _TaxCodeDialogState extends ConsumerState<_TaxCodeDialog> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     value: _taxType,
-                    decoration:
-                        const InputDecoration(labelText: 'LHDN tax type'),
+                    decoration: const InputDecoration(
+                      labelText: 'LHDN tax type',
+                    ),
                     items: const [
                       DropdownMenuItem(value: '01', child: Text('01 — Sales')),
                       DropdownMenuItem(
-                          value: '02', child: Text('02 — Service')),
+                        value: '02',
+                        child: Text('02 — Service'),
+                      ),
                       DropdownMenuItem(
-                          value: '06', child: Text('06 — Not applicable')),
+                        value: '06',
+                        child: Text('06 — Not applicable'),
+                      ),
                       DropdownMenuItem(value: 'E', child: Text('E — Exempt')),
                     ],
-                    onChanged:
-                        _saving ? null : (v) => setState(() => _taxType = v!),
+                    onChanged: _saving
+                        ? null
+                        : (v) => setState(() => _taxType = v!),
                   ),
                 ),
               ],
@@ -1555,8 +1607,10 @@ class _TaxCodeDialogState extends ConsumerState<_TaxCodeDialog> {
                   const Spacer(),
                   TextButton(
                     onPressed: _saving ? null : _retire,
-                    child: Text('Retire',
-                        style: TextStyle(color: context.colors.danger)),
+                    child: Text(
+                      'Retire',
+                      style: TextStyle(color: context.colors.danger),
+                    ),
                   ),
                 ],
               ),
@@ -1594,7 +1648,8 @@ class _TaxCodeDialogState extends ConsumerState<_TaxCodeDialog> {
     final sure = await confirm(
       context,
       title: 'Retire ${widget.existing!.code}?',
-      message: 'It stops being offered on new documents. Documents that '
+      message:
+          'It stops being offered on new documents. Documents that '
           'already use it keep it, and the figures they carry do not move.',
       confirmLabel: 'Retire',
       destructive: true,
@@ -1728,9 +1783,9 @@ class _ChangePasswordDialogState extends ConsumerState<_ChangePasswordDialog> {
       await auth.updateUser(UserAttributes(password: _next.text));
       if (mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Password changed.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Password changed.')));
       }
     } on AuthException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -1773,19 +1828,21 @@ class _ChangePasswordDialogState extends ConsumerState<_ChangePasswordDialog> {
               TextFormField(
                 controller: _confirm,
                 obscureText: true,
-                decoration:
-                    const InputDecoration(labelText: 'Confirm new password'),
-                validator: (v) => v == _next.text
-                    ? null
-                    : 'The two passwords do not match',
+                decoration: const InputDecoration(
+                  labelText: 'Confirm new password',
+                ),
+                validator: (v) =>
+                    v == _next.text ? null : 'The two passwords do not match',
                 onFieldSubmitted: (_) => _submit(),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: Text(_error!,
-                      style: TextStyle(color: context.colors.danger)),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(color: context.colors.danger),
+                  ),
                 ),
               ],
             ],
@@ -1803,11 +1860,11 @@ class _ChangePasswordDialogState extends ConsumerState<_ChangePasswordDialog> {
               ? const SizedBox(
                   height: 16,
                   width: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2))
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : const Text('Change password'),
         ),
       ],
     );
   }
 }
-

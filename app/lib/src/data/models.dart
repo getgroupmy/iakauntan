@@ -17,6 +17,13 @@ class Organization {
     this.businessActivity,
     this.addressLine1,
     this.addressLine2,
+    this.addressLine3,
+    this.registeredAddressLine1,
+    this.registeredAddressLine2,
+    this.registeredAddressLine3,
+    this.registeredPostcode,
+    this.registeredCity,
+    this.registeredStateCode,
     this.city,
     this.postcode,
     this.stateCode,
@@ -46,6 +53,23 @@ class Organization {
   final String? businessActivity;
   final String? addressLine1;
   final String? addressLine2;
+  final String? addressLine3;
+
+  /// The registered office as filed with SSM. Null throughout means the
+  /// same as the business address, which is the ordinary case — a
+  /// company that has never thought about the distinction is not asked
+  /// to.
+  final String? registeredAddressLine1;
+  final String? registeredAddressLine2;
+  final String? registeredAddressLine3;
+  final String? registeredPostcode;
+  final String? registeredCity;
+  final String? registeredStateCode;
+
+  /// True where the company has filed a registered office of its own.
+  bool get hasSeparateRegisteredAddress =>
+      (registeredAddressLine1 ?? '').trim().isNotEmpty;
+
   final String? city;
   final String? postcode;
   final String? stateCode;
@@ -82,6 +106,13 @@ class Organization {
         businessActivity: j['business_activity'] as String?,
         addressLine1: j['address_line1'] as String?,
         addressLine2: j['address_line2'] as String?,
+        addressLine3: j['address_line3'] as String?,
+        registeredAddressLine1: j['registered_address_line1'] as String?,
+        registeredAddressLine2: j['registered_address_line2'] as String?,
+        registeredAddressLine3: j['registered_address_line3'] as String?,
+        registeredPostcode: j['registered_postcode'] as String?,
+        registeredCity: j['registered_city'] as String?,
+        registeredStateCode: j['registered_state_code'] as String?,
         city: j['city'] as String?,
         postcode: j['postcode'] as String?,
         stateCode: j['state_code'] as String?,
@@ -119,6 +150,13 @@ class Contact {
     this.mobile,
     this.addressLine1,
     this.addressLine2,
+    this.addressLine3,
+    this.registeredAddressLine1,
+    this.registeredAddressLine2,
+    this.registeredAddressLine3,
+    this.registeredPostcode,
+    this.registeredCity,
+    this.registeredStateCode,
     this.city,
     this.postcode,
     this.stateCode,
@@ -147,6 +185,23 @@ class Contact {
   final String? mobile;
   final String? addressLine1;
   final String? addressLine2;
+  final String? addressLine3;
+
+  /// The registered office as filed with SSM. Null throughout means the
+  /// same as the business address, which is the ordinary case — a
+  /// company that has never thought about the distinction is not asked
+  /// to.
+  final String? registeredAddressLine1;
+  final String? registeredAddressLine2;
+  final String? registeredAddressLine3;
+  final String? registeredPostcode;
+  final String? registeredCity;
+  final String? registeredStateCode;
+
+  /// True where the company has filed a registered office of its own.
+  bool get hasSeparateRegisteredAddress =>
+      (registeredAddressLine1 ?? '').trim().isNotEmpty;
+
   final String? city;
   final String? postcode;
   final String? stateCode;

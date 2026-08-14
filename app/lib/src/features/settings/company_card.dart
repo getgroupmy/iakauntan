@@ -9,6 +9,16 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 
+bool _present(String? s) => s != null && s.trim().isNotEmpty;
+
+/// The parts of an address that exist, on one line. Empty is "Not set"
+/// rather than a run of commas, because a company with no address needs
+/// to be told so plainly — it is what LHDN will receive.
+String _oneLine(List<String?> parts) {
+  final kept = parts.where(_present).map((s) => s!.trim()).toList();
+  return kept.isEmpty ? 'Not set' : kept.join(', ');
+}
+
 class CompanyCard extends ConsumerWidget {
   const CompanyCard({super.key, required this.org});
 
@@ -62,6 +72,36 @@ class CompanyCard extends ConsumerWidget {
                   : 'Not registered',
             ),
             FieldRow(label: 'MSIC code', value: org.msicCode ?? 'Not set'),
+            // Shown rather than only editable. An address that goes to
+            // LHDN on every invoice is worth being able to check at a
+            // glance, and "Not set" is the state that matters.
+            FieldRow(
+              label: 'Business address',
+              value: _oneLine([
+                org.addressLine1,
+                org.addressLine2,
+                org.addressLine3,
+                [org.postcode, org.city].where(_present).join(' '),
+                org.stateCode,
+              ]),
+            ),
+            FieldRow(
+              label: 'Registered office',
+              value: org.hasSeparateRegisteredAddress
+                  ? _oneLine([
+                      org.registeredAddressLine1,
+                      org.registeredAddressLine2,
+                      org.registeredAddressLine3,
+                      [
+                        org.registeredPostcode,
+                        org.registeredCity,
+                      ].where(_present).join(' '),
+                      org.registeredStateCode,
+                    ])
+                  : 'Same as the business address',
+            ),
+            FieldRow(label: 'Email', value: org.email ?? 'Not set'),
+            FieldRow(label: 'Phone', value: org.phone ?? 'Not set'),
             FieldRow(label: 'Base currency', value: org.baseCurrency),
             FieldRow(label: 'Rounding', value: Fmt.label(org.roundingMethod)),
           ],
@@ -94,6 +134,25 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
   final _sstNo = TextEditingController();
   final _msic = TextEditingController();
   final _currency = TextEditingController();
+  final _line1 = TextEditingController();
+  final _line2 = TextEditingController();
+  final _line3 = TextEditingController();
+  final _postcode = TextEditingController();
+  final _city = TextEditingController();
+  final _state = TextEditingController();
+  final _email = TextEditingController();
+  final _phone = TextEditingController();
+  final _regLine1 = TextEditingController();
+  final _regLine2 = TextEditingController();
+  final _regLine3 = TextEditingController();
+  final _regPostcode = TextEditingController();
+  final _regCity = TextEditingController();
+  final _regState = TextEditingController();
+
+  /// Most companies file their trading address as their registered
+  /// office, so that is the state the form opens in unless the company
+  /// has said otherwise.
+  late bool _registeredSameAsBusiness;
 
   late String _entityType;
   late String _rounding;
@@ -136,6 +195,23 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
         ? o.roundingMethod
         : 'none';
     _sstRegistered = o.isSstRegistered;
+
+    _line1.text = o.addressLine1 ?? '';
+    _line2.text = o.addressLine2 ?? '';
+    _line3.text = o.addressLine3 ?? '';
+    _postcode.text = o.postcode ?? '';
+    _city.text = o.city ?? '';
+    _state.text = o.stateCode ?? '';
+    _email.text = o.email ?? '';
+    _phone.text = o.phone ?? '';
+
+    _registeredSameAsBusiness = !o.hasSeparateRegisteredAddress;
+    _regLine1.text = o.registeredAddressLine1 ?? '';
+    _regLine2.text = o.registeredAddressLine2 ?? '';
+    _regLine3.text = o.registeredAddressLine3 ?? '';
+    _regPostcode.text = o.registeredPostcode ?? '';
+    _regCity.text = o.registeredCity ?? '';
+    _regState.text = o.registeredStateCode ?? '';
   }
 
   @override
@@ -146,6 +222,24 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
     _sstNo.dispose();
     _msic.dispose();
     _currency.dispose();
+    for (final c in [
+      _line1,
+      _line2,
+      _line3,
+      _postcode,
+      _city,
+      _state,
+      _email,
+      _phone,
+      _regLine1,
+      _regLine2,
+      _regLine3,
+      _regPostcode,
+      _regCity,
+      _regState,
+    ]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -165,6 +259,32 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
           msicCode: _msic.text,
           isSstRegistered: _sstRegistered,
           sstRegistrationNo: _sstNo.text,
+          addressLine1: _line1.text,
+          addressLine2: _line2.text,
+          addressLine3: _line3.text,
+          postcode: _postcode.text,
+          city: _city.text,
+          stateCode: _state.text,
+          email: _email.text,
+          phone: _phone.text,
+          // Sending nulls when it is the same address is the whole
+          // point: one address in one place, rather than two that drift.
+          registeredAddressLine1: _registeredSameAsBusiness
+              ? null
+              : _regLine1.text,
+          registeredAddressLine2: _registeredSameAsBusiness
+              ? null
+              : _regLine2.text,
+          registeredAddressLine3: _registeredSameAsBusiness
+              ? null
+              : _regLine3.text,
+          registeredPostcode: _registeredSameAsBusiness
+              ? null
+              : _regPostcode.text,
+          registeredCity: _registeredSameAsBusiness ? null : _regCity.text,
+          registeredStateCode: _registeredSameAsBusiness
+              ? null
+              : _regState.text,
         );
 
         // Separately, and only when it actually changed, so a company
@@ -248,6 +368,168 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
                   hintText: '62010',
                 ),
               ),
+              const Divider(height: Space.xl),
+              Text(
+                'Business address',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const Text(
+                'What goes on the invoice, and what LHDN receives as the '
+                'supplier address when an e-Invoice is submitted.',
+                style: TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                key: const ValueKey('company-address1'),
+                controller: _line1,
+                enabled: !_saving,
+                decoration: const InputDecoration(labelText: 'Address line 1'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _line2,
+                enabled: !_saving,
+                decoration: const InputDecoration(labelText: 'Address line 2'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _line3,
+                enabled: !_saving,
+                decoration: const InputDecoration(labelText: 'Address line 3'),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 120,
+                    child: TextField(
+                      controller: _postcode,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(labelText: 'Postcode'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _city,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(labelText: 'City'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 110,
+                    child: TextField(
+                      controller: _state,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(
+                        labelText: 'State',
+                        hintText: '14',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _email,
+                      enabled: !_saving,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(labelText: 'Email'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _phone,
+                      enabled: !_saving,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(labelText: 'Phone'),
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: Space.xl),
+              Text(
+                'Registered office',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const Text(
+                'The address filed with SSM, which for many companies is '
+                'their secretary\'s office rather than anywhere they trade.',
+                style: TextStyle(fontSize: 12),
+              ),
+              CheckboxListTile(
+                key: const ValueKey('company-registered-same'),
+                contentPadding: EdgeInsets.zero,
+                value: _registeredSameAsBusiness,
+                onChanged: _saving
+                    ? null
+                    : (v) =>
+                          setState(() => _registeredSameAsBusiness = v ?? true),
+                title: const Text('Same as the business address'),
+              ),
+              if (!_registeredSameAsBusiness) ...[
+                TextField(
+                  key: const ValueKey('company-registered-address1'),
+                  controller: _regLine1,
+                  enabled: !_saving,
+                  decoration: const InputDecoration(
+                    labelText: 'Address line 1',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _regLine2,
+                  enabled: !_saving,
+                  decoration: const InputDecoration(
+                    labelText: 'Address line 2',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _regLine3,
+                  enabled: !_saving,
+                  decoration: const InputDecoration(
+                    labelText: 'Address line 3',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 120,
+                      child: TextField(
+                        controller: _regPostcode,
+                        enabled: !_saving,
+                        decoration: const InputDecoration(
+                          labelText: 'Postcode',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _regCity,
+                        enabled: !_saving,
+                        decoration: const InputDecoration(labelText: 'City'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 110,
+                      child: TextField(
+                        controller: _regState,
+                        enabled: !_saving,
+                        decoration: const InputDecoration(labelText: 'State'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const Divider(height: Space.xl),
               SwitchListTile(
                 key: const ValueKey('company-sst'),
