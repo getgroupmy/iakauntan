@@ -61,8 +61,15 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
             const Spacer(),
             if (canPost)
               FilledButton.icon(
-                onPressed: () => showSettlementDialog(context, ref,
-                    kind: _isSales ? DocKind.sales : DocKind.purchase),
+                // Awaited, and the list re-read afterwards. Fired and
+                // forgotten, a payment recorded here landed in the
+                // ledger and left this screen showing the list without
+                // it — which reads as the payment not having been taken.
+                onPressed: () async {
+                  await showSettlementDialog(context, ref,
+                      kind: _isSales ? DocKind.sales : DocKind.purchase);
+                  ref.invalidate(settlementsProvider(_isSales));
+                },
                 icon: const Icon(Icons.add, size: 18),
                 label: Text(_isSales ? 'Receive payment' : 'Pay supplier'),
               ),

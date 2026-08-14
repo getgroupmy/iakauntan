@@ -26,7 +26,7 @@ class SettingsScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Settings')),
       body: AsyncView(
         value: org,
-        onRetry: () => ref.invalidate(currentOrgProvider),
+        onRetry: () => refreshOrganization(ref),
         builder: (organization) {
           if (organization == null) {
             return const EmptyState(
@@ -191,7 +191,7 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
     if (ok) {
       _clientSecret.clear();
       ref.invalidate(organizationsProvider);
-      ref.invalidate(currentOrgProvider);
+      refreshOrganization(ref);
       ref.invalidate(einvoiceStatusProvider);
     }
   }
@@ -898,7 +898,7 @@ class _CreditControlCard extends ConsumerWidget {
                             ref.read(repoProvider)!.setCreditControl(s.first),
                         successMessage: 'Credit control updated',
                       );
-                      ref.invalidate(currentOrgProvider);
+                      refreshOrganization(ref);
                     }
                   : null,
             ),
@@ -1648,7 +1648,7 @@ class _LogoRowState extends ConsumerState<_LogoRow> {
     setState(() => _busy = true);
     try {
       await repo.uploadOrgLogo(bytes, file.mimeType ?? 'image/png');
-      ref.invalidate(currentOrgProvider);
+      refreshOrganization(ref);
       ref.invalidate(orgLogoProvider);
       if (mounted) _say('Logo updated');
     } catch (e) {
@@ -1664,7 +1664,7 @@ class _LogoRowState extends ConsumerState<_LogoRow> {
     setState(() => _busy = true);
     try {
       await repo.removeOrgLogo();
-      ref.invalidate(currentOrgProvider);
+      refreshOrganization(ref);
       ref.invalidate(orgLogoProvider);
       if (mounted) _say('Logo removed');
     } catch (e) {
@@ -1784,7 +1784,7 @@ class _StationeryRowState extends ConsumerState<_StationeryRow> {
     setState(() => _busy = true);
     try {
       await repo.setPreprintedLetterhead(value);
-      ref.invalidate(currentOrgProvider);
+      refreshOrganization(ref);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(value

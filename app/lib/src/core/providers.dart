@@ -100,6 +100,25 @@ class CurrentOrgNotifier extends Notifier<String?> {
 final currentOrgIdProvider =
     NotifierProvider<CurrentOrgNotifier, String?>(CurrentOrgNotifier.new);
 
+/// Re-reads the organization after something about it has changed.
+///
+/// **Always this, never `ref.invalidate(currentOrgProvider)`.**
+///
+/// `currentOrgProvider` does not fetch an organization. It *picks* one
+/// out of `organizationsProvider`, which holds the rows. Invalidating
+/// the picker alone re-runs the choice over the same cached rows and
+/// hands back the identical stale record — so the write succeeds, the
+/// snackbar says so, and the screen does not move. That is exactly what
+/// "I have to reload the page before my change shows" looks like, and it
+/// applied to every company setting: the logo, the letterhead switch,
+/// the name, the tax numbers.
+///
+/// Invalidating the source is enough on its own. Everything downstream
+/// watches it — `currentOrgProvider`, and `orgLogoProvider` behind that
+/// — so Riverpod recomputes the lot.
+void refreshOrganization(WidgetRef ref) =>
+    ref.invalidate(organizationsProvider);
+
 /// Resolves the active org, seeding the selection on first load.
 final currentOrgProvider = FutureProvider<Organization?>((ref) async {
   final orgs = await ref.watch(organizationsProvider.future);
