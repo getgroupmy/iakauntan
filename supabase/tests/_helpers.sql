@@ -63,6 +63,31 @@ begin
 end;
 $$;
 
+-- A *different* person each time, for tests about more than one.
+--
+-- `test_user()` above is idempotent by design — it returns the first row
+-- in `auth.users` and only creates one when the table is empty — which
+-- is right for hanging a fixture off and wrong whenever the point of the
+-- test is that these are two people. Asked for three users it hands back
+-- the same one three times, and every assertion about what a colleague
+-- cannot do quietly becomes an assertion about yourself, which passes
+-- for the wrong reason or fails for a reason that makes no sense.
+--
+-- The empty strings are load-bearing for the same reason they are above.
+create or replace function pg_temp.another_user(p_email text)
+returns uuid language plpgsql as $$
+declare v_id uuid := gen_random_uuid();
+begin
+  insert into auth.users (
+    id, email, confirmation_token, recovery_token,
+    email_change_token_new, email_change_token_current,
+    phone_change_token, reauthentication_token,
+    email_change, phone_change)
+  values (v_id, p_email, '', '', '', '', '', '', '', '');
+  return v_id;
+end;
+$$;
+
 -- Runs the rest of the transaction as that user, so the `can_*` guards
 -- inside the SECURITY DEFINER functions see somebody rather than nobody.
 create or replace function pg_temp.sign_in_as(p_user uuid)

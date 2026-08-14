@@ -49,8 +49,8 @@ do $$
 declare
   v_owner uuid := pg_temp.test_user();
   v_org uuid := pg_temp.test_org('Rantaian Sdn Bhd');
-  v_boss_user uuid := pg_temp.test_user();
-  v_staff_user uuid := pg_temp.test_user();
+  v_boss_user uuid := pg_temp.another_user('boss@rantaian.test');
+  v_staff_user uuid := pg_temp.another_user('staff@rantaian.test');
   v_boss uuid; v_staff uuid; v_dept uuid; v_claim uuid;
   v_refused boolean;
 begin
@@ -141,7 +141,7 @@ end $$;
 do $$
 declare
   v_org uuid := pg_temp.test_org('Baru Sdn Bhd');
-  v_user uuid := pg_temp.test_user();
+  v_user uuid := pg_temp.another_user('alone@baru.test');
   v_staff uuid; v_claim uuid;
 begin
   insert into public.org_members (org_id, user_id, role)
@@ -217,9 +217,19 @@ begin
     (select status = 'rejected' from public.expense_claims where id = v_claim));
   perform pg_temp.check_eq('and nothing is approved to pay',
     (select approved_amount from public.expense_claims where id = v_claim), 0);
+  -- Nobody further up is ever asked. Counting the steps left pending
+  -- would be the wrong test: this company's unit head is the manager, so
+  -- that step was skipped when the chain was built and there are two
+  -- pending steps, not three. What the rejection has to guarantee is
+  -- that no *decision* was taken anywhere else.
   perform pg_temp.check_true('the later stages are never asked',
-    (select count(*) = 3 from public.claim_approvals
-      where claim_id = v_claim and status = 'pending'));
+    (select count(*) = 0 from public.claim_approvals
+      where claim_id = v_claim and stage <> 'manager'
+        and decided_at is not null));
+  perform pg_temp.check_true('and the two role stages are still open',
+    (select count(*) = 2 from public.claim_approvals
+      where claim_id = v_claim and stage in ('hr', 'finance')
+        and status = 'pending'));
 end $$;
 
 rollback;

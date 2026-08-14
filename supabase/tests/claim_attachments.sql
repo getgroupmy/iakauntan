@@ -49,8 +49,8 @@ begin
   -- Two people who are members of the company but not staff: no
   -- `can_write`, which is the ordinary case for somebody who only ever
   -- files claims and looks at their own payslip.
-  v_staff_user := pg_temp.test_user();
-  v_other_user := pg_temp.test_user();
+  v_staff_user := pg_temp.another_user('aminah@resit.test');
+  v_other_user := pg_temp.another_user('rajesh@resit.test');
 
   insert into public.org_members (org_id, user_id, role)
   values (v_org, v_staff_user, 'employee'), (v_org, v_other_user, 'employee')
