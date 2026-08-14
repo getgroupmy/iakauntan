@@ -1,13 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'format.dart';
+import 'providers.dart';
 import 'theme.dart';
 
 /// Renders an AsyncValue with consistent loading and error treatment, so
 /// no screen has to reinvent it.
-class AsyncView<T> extends StatelessWidget {
+class AsyncView<T> extends StatefulWidget {
   const AsyncView({
     super.key,
     required this.value,
@@ -21,13 +24,98 @@ class AsyncView<T> extends StatelessWidget {
   final VoidCallback? onRetry;
   final Widget? loading;
 
+  /// How long a screen waits for the company to arrive before giving up
+  /// on it.
+  ///
+  /// Long enough to cover a cold load on a bad connection, short enough
+  /// that somebody staring at a spinner is not left there. Only
+  /// [OrgNotReady] gets this: a refusal or a broken connection is
+  /// something the person can act on, and holding it back for ten
+  /// seconds would be hiding the answer.
+  static const settlingTime = Duration(seconds: 10);
+
+  @override
+  State<AsyncView<T>> createState() => _AsyncViewState<T>();
+}
+
+class _AsyncViewState<T> extends State<AsyncView<T>> {
+  /// Whether the settling time has run out. False while waiting, and
+  /// false again once something other than "not ready" turns up.
+  bool _settled = false;
+
+  /// Counted in timers rather than against the clock. `DateTime.now()`
+  /// would read the wall clock, which a widget test does not advance and
+  /// a laptop waking from sleep advances by rather a lot.
+  Timer? _deadline;
+  Timer? _nudge;
+
+  bool get _waiting => _deadline != null && !_settled;
+
+  /// Starts the wait, and keeps nudging while it lasts.
+  ///
+  /// The providers do recover on their own — a screen reading through
+  /// `requireRepo` watches the repository and re-runs when one appears —
+  /// so the nudge is insurance rather than the mechanism. The deadline
+  /// is what turns a wait into an answer.
+  void _beginWaiting() {
+    if (_deadline != null) return;
+    _deadline = Timer(AsyncView.settlingTime, () {
+      _nudge?.cancel();
+      _nudge = null;
+      if (mounted) setState(() => _settled = true);
+    });
+    _nudge = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) widget.onRetry?.call();
+    });
+  }
+
+  void _stopWaiting() {
+    _deadline?.cancel();
+    _deadline = null;
+    _nudge?.cancel();
+    _nudge = null;
+    _settled = false;
+  }
+
+  @override
+  void dispose() {
+    _deadline?.cancel();
+    _nudge?.cancel();
+    super.dispose();
+  }
+
+  Widget get _loading =>
+      widget.loading ?? const Center(child: CircularProgressIndicator());
+
   @override
   Widget build(BuildContext context) {
-    return value.when(
-      data: builder,
-      loading: () =>
-          loading ?? const Center(child: CircularProgressIndicator()),
-      error: (err, _) => ErrorState(message: '$err', onRetry: onRetry),
+    return widget.value.when(
+      data: (data) {
+        _stopWaiting();
+        return widget.builder(data);
+      },
+      loading: () {
+        _stopWaiting();
+        return _loading;
+      },
+      error: (err, _) {
+        if (err is! OrgNotReady) {
+          _stopWaiting();
+          return ErrorState(message: '$err', onRetry: widget.onRetry);
+        }
+
+        // Still settling. Shown as the load it is.
+        _beginWaiting();
+        if (_waiting) return _loading;
+
+        return ErrorState(
+          message: '$err Check your connection and try again.',
+          onRetry: () {
+            _stopWaiting();
+            widget.onRetry?.call();
+          },
+        );
+      },
     );
   }
 }

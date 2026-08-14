@@ -153,9 +153,28 @@ final repoProvider = Provider<Repo?>((ref) {
 
 /// Convenience accessor that throws rather than returning null, for use
 /// inside screens that are only reachable once an org exists.
+/// Not an error. A not-yet.
+///
+/// Signing in resolves in stages — the session, then the list of
+/// organizations, then which one is current, then a repository bound to
+/// it — and a screen built before the last of those has nothing to read
+/// from. That is the ordinary first second of every cold load, and it
+/// used to reach the screen as `Bad state: No organization selected`
+/// under a red icon, which is a fair description of the code and a
+/// terrible one of the situation.
+///
+/// Given its own type so [AsyncView] can tell it apart from a failure
+/// and wait, rather than putting every error behind the same delay.
+class OrgNotReady implements Exception {
+  const OrgNotReady();
+
+  @override
+  String toString() => 'Your company has not finished loading.';
+}
+
 Repo requireRepo(Ref ref) {
   final repo = ref.watch(repoProvider);
-  if (repo == null) throw StateError('No organization selected');
+  if (repo == null) throw const OrgNotReady();
   return repo;
 }
 
