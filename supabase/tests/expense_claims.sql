@@ -23,6 +23,44 @@ begin;
 
 \i supabase/tests/_helpers.sql
 
+-- Approve a claim the way the company would, however many people the
+-- chain asks.
+--
+-- 0119 turned one decision into up to four, so a single call to
+-- `decide_expense_claim` now clears one step and leaves the claim
+-- `submitted` — which is correct, and which made every posting
+-- assertion in this file fail on the next line with "Only an approved
+-- claim can be posted". These tests are about what reaches the ledger,
+-- not about who signs, so they go through the real door and keep
+-- pressing until it is open. The fixture's employee is the owner, and an
+-- owner may act at any stage.
+--
+-- Bounded rather than `loop`: a chain that never clears is a bug worth
+-- failing on, not one worth hanging CI over. `p_amount` is passed on
+-- every call because only the one that clears the last step records it.
+-- The argument list is `decide_expense_claim`'s so the call sites below
+-- read as they always did.
+create or replace function pg_temp.approve_fully(
+  p_claim uuid, p_approve boolean,
+  p_note text default null, p_amount numeric default null)
+returns void language plpgsql as $$
+declare v_status text;
+begin
+  for i in 1..6 loop
+    select status into v_status from public.expense_claims where id = p_claim;
+    exit when v_status <> 'submitted';
+    perform public.decide_expense_claim(p_claim, p_approve, p_note, p_amount);
+  end loop;
+
+  select status into v_status from public.expense_claims where id = p_claim;
+  if v_status = 'submitted' then
+    raise exception 'FAIL the approval chain did not clear: chain is %',
+      (select string_agg(stage || '=' || status, ' | ' order by step_no)
+         from public.claim_approvals where claim_id = p_claim);
+  end if;
+end;
+$$;
+
 -- One employee, one claim type per named account, and a claim already
 -- submitted — the state a decision starts from.
 create or replace function pg_temp.claim_fixture(
@@ -98,7 +136,7 @@ begin
   v_claim := pg_temp.claim_fixture(v_org, 'EC-001',
     array[250.00]::numeric[], array[v_type]);
 
-  perform public.decide_expense_claim(v_claim, true);
+  perform pg_temp.approve_fully(v_claim, true);
   v_entry := public.post_expense_claim(v_claim);
 
   select * into v_row from public.expense_claims where id = v_claim;
@@ -139,7 +177,7 @@ begin
 
   v_claim := pg_temp.claim_fixture(v_org, 'EC-001',
     array[80.00]::numeric[], array[v_type]);
-  perform public.decide_expense_claim(v_claim, true);
+  perform pg_temp.approve_fully(v_claim, true);
   v_entry := public.post_expense_claim(v_claim, v_bank);
 
   select * into v_row from public.expense_claims where id = v_claim;
@@ -169,7 +207,7 @@ begin
   v_claim := pg_temp.claim_fixture(v_org, 'EC-001',
     array[300.00, 100.00]::numeric[], array[v_travel, v_meals]);
 
-  perform public.decide_expense_claim(v_claim, true, 'Cut the hotel', 200.00);
+  perform pg_temp.approve_fully(v_claim, true, 'Cut the hotel', 200.00);
   v_entry := public.post_expense_claim(v_claim);
 
   perform pg_temp.check_eq('travel takes three quarters',
@@ -207,7 +245,7 @@ begin
 
   v_claim := pg_temp.claim_fixture(v_org, 'EC-001',
     array[100.00, 100.00, 100.00]::numeric[], array[v_a, v_b, v_c]);
-  perform public.decide_expense_claim(v_claim, true, 'Goodwill', 100.00);
+  perform pg_temp.approve_fully(v_claim, true, 'Goodwill', 100.00);
 
   v_entry := public.post_expense_claim(v_claim);
 
@@ -248,7 +286,7 @@ begin
   end;
 
   -- Approved, then posted twice. The second must not double the expense.
-  perform public.decide_expense_claim(v_claim, true);
+  perform pg_temp.approve_fully(v_claim, true);
   perform public.post_expense_claim(v_claim);
   begin
     perform public.post_expense_claim(v_claim);
@@ -261,7 +299,7 @@ begin
   -- would recognise the expense twice.
   v_payroll := pg_temp.claim_fixture(v_org, 'EC-002',
     array[50.00]::numeric[], array[v_type], true);
-  perform public.decide_expense_claim(v_payroll, true);
+  perform pg_temp.approve_fully(v_payroll, true);
   begin
     perform public.post_expense_claim(v_payroll);
     raise exception 'FAIL: posted a claim payroll will also post';

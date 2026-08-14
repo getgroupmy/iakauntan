@@ -194,6 +194,49 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- Below the threshold, with nobody in the manager's chair
+--
+-- The short path is "the manager decides alone", which is not a path at
+-- all when there is no manager. Written naively it produced a claim
+-- whose only step was `skipped`: nothing pending, and
+-- `decide_claim_step` acts on the pending step in front, so the claim
+-- could not be approved by anyone, ever, with nothing on screen to say
+-- why. A threshold and one employee without a `manager_id` is all it
+-- took. It now goes up the full chain instead.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := (select id from public.organizations where name = 'Rantaian Sdn Bhd');
+  v_user uuid := pg_temp.another_user('orphan@rantaian.test');
+  v_owner uuid := pg_temp.test_user();
+  v_orphan uuid;
+  v_small uuid;
+begin
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_user, 'employee') on conflict do nothing;
+  insert into public.employees
+    (org_id, employee_no, full_name, user_id, hire_date)
+  values (v_org, 'E-ORPHAN', 'Nobody above them', v_user, current_date)
+  returning id into v_orphan;
+
+  -- Still below the 200 threshold set above.
+  v_small := pg_temp.claim(v_org, v_orphan, 12);
+
+  perform pg_temp.check_true('a small claim with no manager is not left stuck',
+    (select count(*) > 0 from public.claim_approvals
+      where claim_id = v_small and status = 'pending'));
+  perform pg_temp.check_true('it goes up the full chain instead',
+    (select count(*) = 4 from public.claim_approvals where claim_id = v_small));
+
+  -- And somebody can actually finish it.
+  perform pg_temp.sign_in_as(v_owner);
+  perform public.decide_claim_step(v_small, true, 'Within policy');
+  perform public.decide_claim_step(v_small, true, 'Funds available');
+  perform pg_temp.check_true('and the roles above can approve it',
+    (select status = 'approved' from public.expense_claims where id = v_small));
+end $$;
+
+-- ---------------------------------------------------------------------
 -- A rejection anywhere is a rejection
 -- ---------------------------------------------------------------------
 do $$
