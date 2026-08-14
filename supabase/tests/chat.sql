@@ -563,6 +563,144 @@ begin
       where conversation_id = v_grp), 3);
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- Calls, or the half of a call that is state
+--
+-- Nothing here places a call: the media needs a TURN server and, past
+-- about four people, a media server, and neither exists yet. This is
+-- what rings a phone and records what happened.
+--
+-- The assertion that earned its keep is the third one. A room of three,
+-- one person answers, and the other two phones must keep ringing —
+-- asking for calls whose *status* is still `ringing` is indistinguishable
+-- from correct in a pair and silently wrong in a group, because the
+-- status changes the moment anybody picks up.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_u1 uuid := pg_temp.another_user('c1@call.test');
+  v_u2 uuid := pg_temp.another_user('c2@call.test');
+  v_u3 uuid := pg_temp.another_user('c3@call.test');
+  v_out uuid := pg_temp.another_user('cx@call.test');
+  v_a uuid; v_grp uuid; v_call uuid; v_ok boolean; v_n int; v_role text;
+begin
+  v_a := pg_temp.chat_org('Call Co Sdn Bhd', v_u1);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_u2, 'accountant', 'active', now()),
+         (v_a, v_u3, 'accountant', 'active', now()),
+         (v_a, v_out, 'accountant', 'active', now());
+
+  perform pg_temp.sign_in_as(v_u1);
+  perform public.chat_set_access(v_a, v_u1, true);
+  perform public.chat_set_access(v_a, v_u2, true);
+  perform public.chat_set_access(v_a, v_u3, true);
+  perform public.chat_set_access(v_a, v_out, true);
+  v_grp := public.chat_create_group(v_a, 'Panggilan',
+    jsonb_build_array(jsonb_build_object('user_id', v_u2, 'org_id', v_a),
+                      jsonb_build_object('user_id', v_u3, 'org_id', v_a)));
+
+  v_call := public.chat_start_call(v_grp, 'video');
+  perform pg_temp.check_true('a new call is ringing',
+    (select status from public.chat_calls where id = v_call) = 'ringing');
+  perform pg_temp.check_eq('everybody in the room is rung',
+    (select count(*) from public.chat_call_participants
+      where call_id = v_call), 3);
+  perform pg_temp.check_true('and the caller is already in it',
+    (select state from public.chat_call_participants
+      where call_id = v_call and user_id = v_u1) = 'joined');
+  perform pg_temp.check_true('with a room name for the media server',
+    (select length(room_name) from public.chat_calls where id = v_call) = 32);
+
+  -- Two people pressing at the same moment is one call, not two.
+  perform pg_temp.sign_in_as(v_u2);
+  perform pg_temp.check_true('pressing call again joins the same one',
+    public.chat_start_call(v_grp, 'video') = v_call);
+  perform pg_temp.check_true('and answering makes it live',
+    (select status from public.chat_calls where id = v_call) = 'live');
+
+  -- The one that matters in a room.
+  perform pg_temp.sign_in_as(v_u3);
+  perform pg_temp.check_eq(
+    'a phone still rings after somebody else has answered',
+    (select count(*) from public.chat_incoming_calls()), 1);
+  perform pg_temp.sign_in_as(v_u2);
+  perform pg_temp.check_eq('while whoever answered is not rung again',
+    (select count(*) from public.chat_incoming_calls()), 0);
+
+  -- A call reaches no further than the conversation it came from.
+  perform pg_temp.sign_in_as(v_out);
+  begin
+    perform public.chat_join_call(v_call);
+    v_ok := true;
+  exception when sqlstate '42501' then v_ok := false;
+  end;
+  perform pg_temp.sign_in_as(v_out);
+  perform pg_temp.check_true('somebody outside the conversation cannot join',
+    not v_ok);
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    select count(*) into v_n from public.chat_calls where id = v_call;
+  end;
+  reset role;
+  perform pg_temp.check_true('the test ran under row level security',
+    v_role = 'authenticated');
+  perform pg_temp.check_eq('nor even see it', v_n, 0);
+
+  -- The control.
+  perform pg_temp.sign_in_as(v_u3);
+  begin
+    set local role authenticated;
+    select count(*) into v_n from public.chat_calls where id = v_call;
+  end;
+  reset role;
+  perform pg_temp.check_eq('while somebody in the room does', v_n, 1);
+
+  -- One refusal does not hang up on everybody else.
+  perform public.chat_decline_call(v_call);
+  perform pg_temp.check_true('one refusal does not end a group call',
+    (select status from public.chat_calls where id = v_call) = 'live');
+
+  -- Only whoever started it may end it for everybody.
+  perform pg_temp.sign_in_as(v_u2);
+  begin
+    perform public.chat_end_call(v_call);
+    v_ok := true;
+  exception when sqlstate '42501' then v_ok := false;
+  end;
+  perform pg_temp.sign_in_as(v_u2);
+  perform pg_temp.check_true('somebody else cannot end it for everybody',
+    not v_ok);
+
+  perform pg_temp.sign_in_as(v_u1);
+  perform public.chat_end_call(v_call);
+  perform pg_temp.check_true('the caller can', 
+    (select status from public.chat_calls where id = v_call) = 'ended');
+  perform pg_temp.check_eq('and nobody is left in it',
+    (select count(*) from public.chat_call_participants
+      where call_id = v_call and state in ('joined', 'ringing')), 0);
+  perform pg_temp.check_eq('so nothing is active in the thread',
+    (select count(*) from public.chat_active_call(v_grp)), 0);
+
+  -- The unique index only bites while a call is open.
+  v_call := public.chat_start_call(v_grp, 'voice');
+  perform pg_temp.check_true('a fresh call may start afterwards',
+    (select status from public.chat_calls where id = v_call) = 'ringing');
+
+  -- Nobody answers. The deadline decides, not a timer that may not run.
+  update public.chat_calls set ringing_until = now() - interval '1 second'
+   where id = v_call;
+  perform pg_temp.check_eq('a call past its deadline is not ringing',
+    (select count(*) from public.chat_active_call(v_grp)), 0);
+  perform pg_temp.sign_in_as(v_u3);
+  perform pg_temp.check_eq('and no phone is ringing',
+    (select count(*) from public.chat_incoming_calls()), 0);
+  perform public.chat_expire_calls();
+  perform pg_temp.check_true('the history says missed, not ringing',
+    (select status from public.chat_calls where id = v_call) = 'missed');
+end $$;
+
 -- ---------------------------------------------------------------------
 -- Reachability
 --
