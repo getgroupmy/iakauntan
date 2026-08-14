@@ -46,6 +46,8 @@ declare
   v_theirs uuid;
   v_refused boolean;
   v_allowed boolean;
+  v_why text;
+  v_role text;
 begin
   -- Two people who are members of the company but not staff: no
   -- `can_write`, which is the ordinary case for somebody who only ever
@@ -114,9 +116,15 @@ begin
   -- way on the employee's *own* claim, which is the opposite of what is
   -- being claimed. The handler is now narrowed to the one error that
   -- means "the policy said no".
+  -- The role is set inside each block, not once around both. A caught
+  -- exception in plpgsql is a rollback to an implicit savepoint, and
+  -- `SET LOCAL` is undone by exactly that — so a role set before the
+  -- first insert is already gone by the second, quietly back to the
+  -- superuser this connects as. That would not have failed; it would
+  -- have passed, with the control proving nothing.
   perform pg_temp.sign_in_as(v_staff_user);
-  set local role authenticated;
   begin
+    set local role authenticated;
     insert into public.attachments
       (org_id, entity_table, entity_id, file_name, storage_path)
     values (v_org, 'expense_claims', v_theirs, 'not-mine.jpg',
@@ -129,21 +137,37 @@ begin
   -- The positive control, and the reason the above means anything: the
   -- identical insert on their own claim goes through. Without this, a
   -- refusal for any reason at all reads as the policy working.
+  --
+  -- It keeps the error rather than a bare boolean. A control that fails
+  -- is saying the door is shut on the person it was opened for, and
+  -- "expected true" is the least useful possible way to be told that.
   begin
+    set local role authenticated;
+    v_role := current_user;
     insert into public.attachments
       (org_id, entity_table, entity_id, file_name, storage_path)
     values (v_org, 'expense_claims', v_mine, 'mine.jpg',
             v_org || '/expense_claims/' || v_mine || '/mine.jpg');
     v_allowed := true;
-  exception when insufficient_privilege then
+  exception when others then
     v_allowed := false;
+    v_why := sqlstate || ' ' || sqlerrm;
   end;
   reset role;
 
   perform pg_temp.check_true(
     'the policy refuses a receipt on somebody else''s claim', v_refused);
-  perform pg_temp.check_true(
-    'and accepts one on their own', v_allowed);
+
+  -- The control has to have run as the role the policy applies to. A
+  -- superuser bypasses row level security, so this insert would have
+  -- succeeded no matter what the policy said.
+  perform pg_temp.check_true('the control ran under row level security',
+    v_role = 'authenticated');
+  if not v_allowed then
+    raise exception
+      'FAIL an employee cannot attach to their own claim: %', v_why;
+  end if;
+  raise notice 'ok   and accepts one on their own';
 
   -- ------------------------------------------------------------------
   -- Once it is in the ledger it is the accountant's record
