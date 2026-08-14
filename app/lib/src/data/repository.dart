@@ -1863,6 +1863,130 @@ class Repo {
       .eq('org_id', orgId);
 
   // ------------------------------------------------------------------
+  // Chat
+  //
+  // Every read here goes through a function rather than a table, and
+  // that is the point rather than a style choice: a conversation can
+  // span two companies, so the rows behind it are not selectable by
+  // "my org_id = this org_id" the way everything else in this file is.
+  // The functions decide what crosses, and they return names and
+  // avatars — never another company's records.
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> chatConversations() async => _rows(
+    await client.rpc('chat_my_conversations', params: {'p_org_id': orgId}),
+  );
+
+  /// Who you may start a conversation with. Colleagues first, then
+  /// anyone in a company yours is linked to.
+  Future<List<Map<String, dynamic>>> chatDirectory() async => _rows(
+    await client.rpc('chat_directory', params: {'p_org_id': orgId}),
+  );
+
+  /// Newest first, which is the order a thread is read in and the order
+  /// a reversed list view wants.
+  Future<List<Map<String, dynamic>>> chatThread(
+    String conversationId, {
+    DateTime? before,
+    int limit = 50,
+  }) async => _rows(
+    await client.rpc(
+      'chat_thread',
+      params: {
+        'p_conversation_id': conversationId,
+        'p_before': before?.toIso8601String(),
+        'p_limit': limit,
+      },
+    ),
+  );
+
+  Future<String> chatStartDirect(String otherUserId, String otherOrgId) async {
+    final id = await client.rpc(
+      'chat_start_direct',
+      params: {
+        'p_my_org': orgId,
+        'p_other_user': otherUserId,
+        'p_other_org': otherOrgId,
+      },
+    );
+    return id as String;
+  }
+
+  Future<void> chatSend(String conversationId, String body,
+          {required String senderOrgId}) =>
+      client.from('chat_messages').insert({
+        'conversation_id': conversationId,
+        'sender_id': client.auth.currentUser?.id,
+        // The company you are in this conversation *as*, which the
+        // database checks against your participant row rather than
+        // taking on trust.
+        'sender_org_id': senderOrgId,
+        'body': body,
+      });
+
+  Future<void> chatMarkRead(String conversationId) => client
+      .rpc('chat_mark_read', params: {'p_conversation_id': conversationId});
+
+  Future<void> chatMarkDelivered(String conversationId) => client.rpc(
+    'chat_mark_delivered',
+    params: {'p_conversation_id': conversationId},
+  );
+
+  /// Throttled by the caller to roughly one every three seconds, never
+  /// per keystroke.
+  Future<void> chatTypingPing(String conversationId) => client
+      .rpc('chat_typing_ping', params: {'p_conversation_id': conversationId});
+
+  Future<void> chatTypingStop(String conversationId) => client
+      .rpc('chat_typing_stop', params: {'p_conversation_id': conversationId});
+
+  Future<List<Map<String, dynamic>>> chatWhoIsTyping(
+    String conversationId,
+  ) async => _rows(
+    await client.rpc(
+      'chat_who_is_typing',
+      params: {'p_conversation_id': conversationId},
+    ),
+  );
+
+  /// `idle` is the one thing the server cannot work out for itself:
+  /// whether the app that is still connected is being looked at.
+  Future<void> chatHeartbeat({bool idle = false}) =>
+      client.rpc('chat_heartbeat', params: {'p_idle': idle});
+
+  // --- administration ---------------------------------------------
+
+  Future<List<Map<String, dynamic>>> chatAccessList() async => _rows(
+    await client.rpc('chat_access_list', params: {'p_org_id': orgId}),
+  );
+
+  Future<void> chatSetAccess(String userId, bool enabled) => client.rpc(
+    'chat_set_access',
+    params: {'p_org_id': orgId, 'p_user_id': userId, 'p_enabled': enabled},
+  );
+
+  Future<List<Map<String, dynamic>>> chatLinks() async => _rows(
+    await client.rpc('chat_links_for', params: {'p_org_id': orgId}),
+  );
+
+  Future<void> chatRequestLink(String targetOrgId, {String? note}) =>
+      client.rpc(
+        'chat_request_link',
+        params: {
+          'p_my_org': orgId,
+          'p_target_org': targetOrgId,
+          'p_note': _orNull(note),
+        },
+      );
+
+  Future<void> chatDecideLink(String linkId, bool approve) => client.rpc(
+    'chat_decide_link',
+    params: {'p_link_id': linkId, 'p_approve': approve},
+  );
+
+  Future<void> chatRevokeLink(String linkId) =>
+      client.rpc('chat_revoke_link', params: {'p_link_id': linkId});
+
+  // ------------------------------------------------------------------
   // Salespeople
   //
   // Their own table rather than a pointer at a user, because the person

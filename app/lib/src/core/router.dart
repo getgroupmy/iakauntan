@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/reset_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
+import '../features/chat/chat_screen.dart';
 import '../features/contacts/contact_editor.dart';
 import '../features/contacts/contacts_screen.dart';
 import '../features/crm/leads_screen.dart';
@@ -276,6 +277,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/stock-take',
             builder: (_, __) => const StockTakeScreen(),
           ),
+          GoRoute(path: '/chat', builder: (_, __) => const ChatScreen()),
           GoRoute(
             path: '/manufacturing',
             builder: (_, __) => const ManufacturingScreen(),

@@ -75,6 +75,8 @@ const _destinations = <_Dest>[
       module: 'inventory'),
   _Dest('Batches', Icons.qr_code_2_outlined, Icons.qr_code_2, '/lots',
       module: 'inventory'),
+  _Dest('Chat', Icons.forum_outlined, Icons.forum, '/chat',
+      module: 'chat'),
   _Dest('Manufacturing', Icons.precision_manufacturing_outlined,
       Icons.precision_manufacturing, '/manufacturing',
       module: 'manufacturing'),

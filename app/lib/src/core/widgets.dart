@@ -624,7 +624,12 @@ class PageBody extends StatelessWidget {
 Future<bool> runWithFeedback(
   BuildContext context, {
   required Future<void> Function() action,
-  required String successMessage,
+  // Nullable so an action whose own result is the confirmation can stay
+  // quiet. Sending a chat message is the case that forced it: a snackbar
+  // saying "Sent" after every line, above a message that is visibly
+  // already there, is noise pretending to be feedback. Failures are
+  // still reported either way.
+  required String? successMessage,
   String? pendingMessage,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
@@ -658,11 +663,12 @@ Future<bool> runWithFeedback(
 
   try {
     await action();
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
+    messenger.hideCurrentSnackBar();
+    if (successMessage != null) {
+      messenger.showSnackBar(
         SnackBar(content: Text(successMessage), backgroundColor: success),
       );
+    }
     return true;
   } catch (err) {
     messenger

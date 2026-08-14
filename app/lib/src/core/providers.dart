@@ -572,6 +572,59 @@ final groupCompaniesProvider =
 });
 
 // ---------------------------------------------------------------------
+// Chat
+// ---------------------------------------------------------------------
+
+/// The conversation list, carrying unread counts, the other person's
+/// presence and how far they have read.
+final chatConversationsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).chatConversations();
+});
+
+/// Who you may start a conversation with.
+final chatDirectoryProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).chatDirectory();
+});
+
+final chatThreadProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, conversationId) {
+  return requireRepo(ref).chatThread(conversationId);
+});
+
+final chatTypingProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, conversationId) {
+  return requireRepo(ref).chatWhoIsTyping(conversationId);
+});
+
+/// Everybody in the company and whether the administrator has switched
+/// them on. Administrators only — the function refuses anybody else.
+final chatAccessListProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).chatAccessList();
+});
+
+/// Links to other companies, in both directions, pending ones first.
+final chatLinksProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).chatLinks();
+});
+
+/// How many messages are waiting, for the badge on the rail. Derived
+/// from the list rather than counted separately, so the two can never
+/// disagree.
+final chatUnreadProvider = Provider.autoDispose<int>((ref) {
+  return ref.watch(chatConversationsProvider).maybeWhen(
+        data: (rows) => rows.fold<int>(
+          0,
+          (sum, r) => sum + ((r['unread'] as num?)?.toInt() ?? 0),
+        ),
+        orElse: () => 0,
+      );
+});
+
+// ---------------------------------------------------------------------
 // Manufacturing
 // ---------------------------------------------------------------------
 

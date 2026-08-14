@@ -12,6 +12,7 @@ import '../../data/repository.dart';
 import '../auth/reset_password_screen.dart' show validatePassword;
 import 'claim_approval_card.dart';
 import 'branches_card.dart';
+import 'chat_card.dart';
 import 'company_card.dart';
 import 'company_group_card.dart';
 import 'warehouses_card.dart';
@@ -50,6 +51,10 @@ class SettingsScreen extends ConsumerWidget {
                   const SizedBox(height: 16),
                   // Beside the company they describe: a branch is part
                   // of this company, a group is the companies beside it.
+                  if (moduleEnabled(ref, 'chat')) ...[
+                    const ChatCard(),
+                    const SizedBox(height: Space.md),
+                  ],
                   if (moduleEnabled(ref, 'branches')) ...[
                     const BranchesCard(),
                     const SizedBox(height: 16),
