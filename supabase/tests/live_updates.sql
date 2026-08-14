@@ -45,6 +45,11 @@ begin
   foreach v_table in array array[
     'organizations', 'sales_documents', 'purchase_documents', 'receipts',
     'purchase_payments', 'contacts', 'items', 'expenses', 'gl_entries',
+    -- 0124. `claim_approvals` is the one that would be easy to leave
+    -- out and would matter most: clearing an intermediate step writes
+    -- there and nowhere else, so without it an approval queue would
+    -- update at the end of a claim's life and never in the middle.
+    'expense_claims', 'claim_approvals',
     'org_credits'
   ]
   loop
@@ -129,6 +134,80 @@ begin
     perform pg_temp.check_true(
       format('%s is not broadcast', v_table), not v_published);
   end loop;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A claim is one person's business, and publishing it does not change
+-- that
+--
+-- 0117 kept payslips out on the grounds that one employee's pay is not
+-- the office's, and a claim is the same kind of thing. 0124 publishes it
+-- anyway, which is only safe because Realtime decides who is sent a row
+-- by asking row level security, and `expense_claims_select` is already
+-- narrower than "a member of this company".
+--
+-- The check above — published tables have RLS on and at least one
+-- policy — would pass a policy of `using (true)`. This is the one that
+-- would not. It runs as `authenticated` because the connection is a
+-- superuser and a superuser bypasses row level security entirely, which
+-- would make the whole thing pass while proving nothing.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Sulit Sdn Bhd');
+  v_mine_user uuid := pg_temp.another_user('claimant@sulit.test');
+  v_nosy_user uuid := pg_temp.another_user('colleague@sulit.test');
+  v_mine uuid; v_nosy uuid; v_claim uuid;
+  v_colleague_sees int;
+  v_claimant_sees int;
+  v_role text;
+begin
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_mine_user, 'employee'), (v_org, v_nosy_user, 'employee')
+  on conflict do nothing;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, user_id, hire_date)
+  values (v_org, 'E-1', 'Claimant', v_mine_user, current_date)
+  returning id into v_mine;
+
+  -- Same company, no relationship: not their manager, no HR role, not
+  -- allowed to post. The ordinary colleague.
+  insert into public.employees
+    (org_id, employee_no, full_name, user_id, hire_date)
+  values (v_org, 'E-2', 'Colleague', v_nosy_user, current_date)
+  returning id into v_nosy;
+
+  insert into public.expense_claims
+    (org_id, claim_no, employee_id, claim_date, title, status, total_amount)
+  values (v_org, 'CLM-PRIVATE', v_mine, current_date, 'Clinic', 'submitted', 90)
+  returning id into v_claim;
+
+  perform pg_temp.sign_in_as(v_nosy_user);
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    select count(*) into v_colleague_sees
+      from public.expense_claims where id = v_claim;
+  end;
+  reset role;
+
+  perform pg_temp.sign_in_as(v_mine_user);
+  begin
+    set local role authenticated;
+    select count(*) into v_claimant_sees
+      from public.expense_claims where id = v_claim;
+  end;
+  reset role;
+
+  perform pg_temp.check_true('the claim test ran under row level security',
+    v_role = 'authenticated');
+  perform pg_temp.check_true(
+    'a colleague is not sent somebody else''s claim', v_colleague_sees = 0);
+  -- The control. Without it, a policy that hid the row from everybody
+  -- would read as a policy doing its job.
+  perform pg_temp.check_true(
+    'while the claimant still gets their own', v_claimant_sees = 1);
 end $$;
 
 rollback;

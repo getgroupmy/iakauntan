@@ -1920,8 +1920,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/live_updates.dart": {
-    "mtime": 1786673936.4394372,
-    "ast_hash": "a2fe07c418db2254935ce416aaee6107",
+    "mtime": 1786684485.3567445,
+    "ast_hash": "cddf5087632b8898ca65e97202549b84",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/claim_approval_card.dart": {
@@ -1950,8 +1950,8 @@
     "semantic_hash": ""
   },
   "app/test/live_updates_test.dart": {
-    "mtime": 1786673911.512153,
-    "ast_hash": "12942762e300b46dca3d542506a70b3a",
+    "mtime": 1786684495.6367452,
+    "ast_hash": "679d2cfa4a89522cb7f681954ee715f1",
     "semantic_hash": ""
   },
   "app/test/refresh_after_change_test.dart": {
@@ -2055,8 +2055,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/live_updates.sql": {
-    "mtime": 1786673872.9081504,
-    "ast_hash": "7f851562b859f750a464e19b5a5d9986",
+    "mtime": 1786684581.6047504,
+    "ast_hash": "21fc36d96fdf742e1bdab3c3075d2ad4",
     "semantic_hash": ""
   },
   "app/web/pdfjs/PDFJS-LICENSE.txt": {
@@ -2077,6 +2077,11 @@
   "supabase/migrations/0123_claims_waiting_on_me.sql": {
     "mtime": 1786683697.1286979,
     "ast_hash": "9032e14ee65261d494175ccd22cba495",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0124_a_claim_moves_while_you_watch.sql": {
+    "mtime": 1786684474.944744,
+    "ast_hash": "4b2b466e0a9a4cbedbcbaa672687cc0d",
     "semantic_hash": ""
   }
 }

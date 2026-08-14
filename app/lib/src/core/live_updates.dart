@@ -91,12 +91,28 @@ final Map<String, List<ProviderOrFamily>> _watchers = {
         dashboardProvider,
         activitiesProvider,
       ],
+  // A claim only reaches `expense_claims` at the ends of its life —
+  // submitted, then approved or rejected once the last stage clears.
+  'expense_claims': [
+    claimsProvider,
+    claimsAwaitingMeProvider,
+    claimApprovalsProvider,
+  ],
+  // Everything in between is here. A manager clearing stage one writes
+  // a step and nothing else, so this is the table that makes a claim
+  // leave one person's queue and arrive in the next person's.
+  'claim_approvals': [
+    claimsAwaitingMeProvider,
+    claimApprovalsProvider,
+    claimsProvider,
+  ],
   'org_credits': [ocrStatusProvider],
 };
 
-/// The tables listened to. Must match what `0117_live_updates.sql`
-/// publishes: a name that is in one and not the other subscribes to
-/// nothing, or is sent changes nobody reads, and neither says so.
+/// The tables listened to. Must match what `0117_live_updates.sql` and
+/// `0124_a_claim_moves_while_you_watch.sql` publish between them: a name
+/// that is in one and not the other subscribes to nothing, or is sent
+/// changes nobody reads, and neither says so.
 Iterable<String> get liveUpdateTables => _watchers.keys;
 
 /// What goes stale when [table] changes.

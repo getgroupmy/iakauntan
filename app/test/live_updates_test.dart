@@ -12,10 +12,10 @@ import 'package:iakauntan/src/core/providers.dart';
 /// shows up as an error. So the map is asserted rather than trusted.
 void main() {
   test('the tables subscribed to are the ones the database publishes', () {
-    // Kept in step with `supabase/migrations/0117_live_updates.sql` by
-    // hand, so it is written down twice on purpose: if they ever
-    // disagree, one side listens for something nobody sends and the
-    // feature quietly does nothing.
+    // Kept in step with `0117_live_updates.sql` and
+    // `0124_a_claim_moves_while_you_watch.sql` by hand, so it is written
+    // down twice on purpose: if they ever disagree, one side listens for
+    // something nobody sends and the feature quietly does nothing.
     expect(
       liveUpdateTables.toSet(),
       {
@@ -28,9 +28,29 @@ void main() {
         'items',
         'expenses',
         'gl_entries',
+        'expense_claims',
+        'claim_approvals',
         'org_credits',
       },
     );
+  });
+
+  test('a claim cleared by somebody else moves without a reload', () {
+    // The chain is the table that matters and the easy one to leave
+    // out. Clearing an intermediate step writes to `claim_approvals`
+    // and leaves `expense_claims` untouched — still `submitted`, same
+    // row — so subscribing to the claim alone would deliver the ending
+    // of a claim's life and none of the middle, which is precisely what
+    // the queue is made of.
+    expect(liveUpdateProviders('claim_approvals'),
+        contains(claimsAwaitingMeProvider));
+    expect(liveUpdateProviders('claim_approvals'),
+        contains(claimApprovalsProvider));
+
+    // And the ends of its life, which is what the claim row records.
+    expect(liveUpdateProviders('expense_claims'),
+        contains(claimsAwaitingMeProvider));
+    expect(liveUpdateProviders('expense_claims'), contains(claimsProvider));
   });
 
   test('the organization is filtered by its own key, not by org_id', () {
