@@ -79,6 +79,20 @@ interface Extraction {
     amount: number | null;
   }[];
   note: string | null;
+  /**
+   * The text of the page, where the reader gives it.
+   *
+   * Document AI returns it alongside the fields at no extra cost, so it
+   * is passed through: it is what the app's "All data" screen lists, so
+   * a field the parse missed can still be assigned by the person holding
+   * the paper.
+   *
+   * Deliberately *not* asked of the two LLM readers. It is not in their
+   * schema, so they answer with fields only — transcribing every
+   * document in full would multiply the output tokens of every scan to
+   * serve a screen most people never open.
+   */
+  raw_text: string | null;
 }
 
 interface BeginResult {
@@ -541,6 +555,9 @@ async function readGoogle(
     total_amount: toNumber(pick("total_amount")),
     lines,
     note: null,
+    raw_text: typeof body?.document?.text === "string"
+      ? body.document.text
+      : null,
   };
 }
 
@@ -562,6 +579,8 @@ function normalise(raw: Record<string, unknown>): Extraction {
     subtotal: toNumber(raw.subtotal),
     tax_amount: toNumber(raw.tax_amount),
     total_amount: toNumber(raw.total_amount),
+    // Null by design: see `raw_text` on Extraction.
+    raw_text: null,
     lines: rows.map((r) => {
       const row = (r ?? {}) as Record<string, unknown>;
       return {

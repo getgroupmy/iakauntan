@@ -206,6 +206,47 @@ OcrExtraction parseReceiptText(String text) {
     totalAmount: total,
     lines: _lineItems(lines),
     note: notes.isEmpty ? null : notes.join(' '),
+    // Kept whole. What the fields above make of the document is a
+    // reading; this is the document, and "All data" is where somebody
+    // puts right what the reading passed over.
+    rawText: text,
+  );
+}
+
+/// One date out of one line, exactly as the reader would have read it.
+///
+/// Public so the assignment screen agrees with the parser rather than
+/// having a second opinion about what `07/04/2026` means — day first,
+/// because this is Malaysia.
+DateTime? parseReceiptDate(String line) => _dateIn(line);
+
+/// A figure as printed or as typed: `RM 1,234.56`, `1234.56`, `(12.00)`.
+///
+/// Null for anything that is not one, which is what keeps an empty box
+/// meaning "not on the document" rather than zero.
+double? parseAmountText(String raw) {
+  final cleaned = raw
+      .replaceAll(RegExp(r'[^0-9.\-]'), '')
+      .replaceAll(RegExp(r'(?!^)-'), '');
+  if (cleaned.isEmpty || cleaned == '-' || cleaned == '.') return null;
+  return double.tryParse(cleaned);
+}
+
+/// One printed line, split into what it says and what it cost.
+///
+/// The same split `_lineItems` makes, exposed for the screen where
+/// somebody assigns a line by hand — a line added there should look like
+/// the ones that were found automatically.
+OcrLine parseReceiptLine(String text) {
+  final tidy = _tidy(text);
+  final money = _money.allMatches(tidy).toList();
+  if (money.isEmpty) return OcrLine(description: tidy.isEmpty ? null : tidy);
+
+  final at = money.last.start;
+  final description = _tidy(tidy.substring(0, at));
+  return OcrLine(
+    description: description.isEmpty ? null : description,
+    amount: _amountOn(tidy),
   );
 }
 

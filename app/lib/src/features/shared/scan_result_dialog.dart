@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../data/ocr_repository.dart';
+import 'scan_all_data.dart';
 
 /// What was read off a document, before anybody acts on it.
 ///
@@ -162,11 +163,48 @@ class _ScanResultDialogState extends State<_ScanResultDialog> {
         // through the figures: it described what the reader saw, and
         // what is on screen now is what somebody decided.
         note: _doesNotFoot,
+        // Carried through untouched. It is the document, not a reading
+        // of it, so nothing on this form can change what it says — and
+        // dropping it would empty the All data screen on the second
+        // visit.
+        rawText: read.rawText,
       );
 
   static String? _trimmed(TextEditingController c) {
     final text = c.text.trim();
     return text.isEmpty ? null : text;
+  }
+
+  /// Opens the whole document, and takes back whatever was assigned.
+  ///
+  /// The form is rebuilt from what comes back rather than merged field
+  /// by field: the other screen was handed this form's state, so what it
+  /// returns already contains every correction made here.
+  Future<void> _openAllData() async {
+    final assigned = await showAllData(context, _edited);
+    if (assigned == null || !mounted) return;
+
+    setState(() {
+      _supplier.text = assigned.supplierName ?? '';
+      _registrationNo.text = assigned.supplierRegistrationNo ?? '';
+      _taxId.text = assigned.supplierTaxId ?? '';
+      _email.text = assigned.supplierEmail ?? '';
+      _phone.text = assigned.supplierPhone ?? '';
+      _address.text = assigned.supplierAddress ?? '';
+      _documentNo.text = assigned.documentNo ?? '';
+      _currency.text = assigned.currency ?? '';
+      _subtotal.text = _money(assigned.subtotal);
+      _tax.text = _money(assigned.taxAmount);
+      _total.text = _money(assigned.totalAmount);
+      _date = assigned.documentDate;
+
+      for (final line in _lines) {
+        line.dispose();
+      }
+      _lines
+        ..clear()
+        ..addAll([for (final line in assigned.lines) _EditableLine.from(line)]);
+    });
   }
 
   Future<void> _pickDate() async {
@@ -355,6 +393,14 @@ class _ScanResultDialogState extends State<_ScanResultDialog> {
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text(widget.canApply ? 'Discard' : 'Close'),
+        ),
+        // The way out of "the reader missed this and it is plainly
+        // printed". Carries what is on this form in, so an assignment
+        // made there lands beside the corrections made here rather than
+        // on top of the original reading.
+        TextButton(
+          onPressed: _openAllData,
+          child: const Text('All data'),
         ),
         if (widget.canApply)
           FilledButton(

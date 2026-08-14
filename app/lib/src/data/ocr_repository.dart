@@ -170,6 +170,7 @@ class OcrExtraction {
     this.totalAmount,
     this.lines = const [],
     this.note,
+    this.rawText,
   });
 
   final String? supplierName;
@@ -205,6 +206,59 @@ class OcrExtraction {
   /// a total that does not foot.
   final String? note;
 
+  /// Everything the reader saw, in the order it was printed.
+  ///
+  /// The fields above are what the reading *made of* the document; this
+  /// is the document. It is what "All data" shows, so a figure the
+  /// parser passed over can still be put in the right box by the person
+  /// holding the paper.
+  ///
+  /// Null where the reader answers with fields and not with text — the
+  /// two LLM readers do, and being honest about that beats showing an
+  /// empty page that looks like a failure.
+  final String? rawText;
+
+  /// The same reading with some of it changed.
+  ///
+  /// Only ever sets; it cannot put a field back to null, which is what
+  /// the assignment screen needs and all it needs. Clearing a field is
+  /// done in the form, where the box can simply be emptied.
+  OcrExtraction copyWith({
+    String? supplierName,
+    String? supplierTaxId,
+    String? supplierRegistrationNo,
+    String? supplierEmail,
+    String? supplierPhone,
+    String? supplierAddress,
+    String? documentNo,
+    DateTime? documentDate,
+    String? currency,
+    double? subtotal,
+    double? taxAmount,
+    double? totalAmount,
+    List<OcrLine>? lines,
+    String? note,
+    String? rawText,
+  }) =>
+      OcrExtraction(
+        supplierName: supplierName ?? this.supplierName,
+        supplierTaxId: supplierTaxId ?? this.supplierTaxId,
+        supplierRegistrationNo:
+            supplierRegistrationNo ?? this.supplierRegistrationNo,
+        supplierEmail: supplierEmail ?? this.supplierEmail,
+        supplierPhone: supplierPhone ?? this.supplierPhone,
+        supplierAddress: supplierAddress ?? this.supplierAddress,
+        documentNo: documentNo ?? this.documentNo,
+        documentDate: documentDate ?? this.documentDate,
+        currency: currency ?? this.currency,
+        subtotal: subtotal ?? this.subtotal,
+        taxAmount: taxAmount ?? this.taxAmount,
+        totalAmount: totalAmount ?? this.totalAmount,
+        lines: lines ?? this.lines,
+        note: note ?? this.note,
+        rawText: rawText ?? this.rawText,
+      );
+
   /// The amount to put in an expense's Amount field.
   ///
   /// The net, because the tax goes in its own box and the form adds the
@@ -233,6 +287,7 @@ class OcrExtraction {
             .map((r) => OcrLine.fromJson(Map<String, dynamic>.from(r)))
             .toList(),
         note: _text(j['note']),
+        rawText: _text(j['raw_text']),
       );
 
   /// The same shape the server-side readers return, so a scan logged
@@ -264,6 +319,7 @@ class OcrExtraction {
             },
         ],
         'note': note,
+        'raw_text': rawText,
       };
 
   static String? _text(Object? v) {
