@@ -200,17 +200,23 @@ begin
   perform pg_temp.check_true(
     'and a taxed document cannot be backdated past it either', v_refused);
 
-  -- The same rule on the purchase side.
-  v_refused := false;
-  begin
-    insert into public.purchase_documents (org_id, doc_type, doc_no, contact_id,
-      doc_date, subtotal, tax_amount, total_amount, base_total_amount, status)
-    values (v_org, 'bill', 'PB-1', v_contact, date '2026-08-15',
-            1000, 80, 1080, 1080, 'draft');
-  exception when others then v_refused := true;
-  end;
-  perform pg_temp.check_true('a bill before the date is refused as well',
-    v_refused);
+  -- And explicitly *not* the same rule on the purchase side.
+  --
+  -- 0145 put the trigger on both tables and 0146 took it off this one.
+  -- A purchase document records tax a *supplier* charged, and a supplier
+  -- charges what their own registration says, not what ours does — an
+  -- unregistered company can be charged service tax any day of the week
+  -- and has to be able to record the bill. Asserted rather than merely
+  -- deleted, because "we stopped checking" and "we decided not to check"
+  -- look identical in a diff a year from now.
+  insert into public.purchase_documents (org_id, doc_type, doc_no, contact_id,
+    doc_date, subtotal, tax_amount, total_amount, base_total_amount, status)
+  values (v_org, 'bill', 'PB-1', v_contact, date '2026-08-15',
+          1000, 80, 1080, 1080, 'draft');
+  perform pg_temp.check_true(
+    'a bill carrying a supplier''s tax records whatever our own '
+    'registration date says',
+    exists (select 1 from public.purchase_documents where doc_no = 'PB-1'));
 
   -- ---------------------------------------------------------------
   -- Coming off the register
