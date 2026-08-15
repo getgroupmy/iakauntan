@@ -146,12 +146,25 @@ warning naming both figures, and does not block the import: the
 difference is what 3900 is then left holding, and
 `report_opening_balance_suspense` says so.
 
-Still missing: opening stock quantities. The inventory balance can be
-brought in as a figure and the import warns that nothing is behind it —
-until quantities are entered, the stock valuation report will not agree
-with the balance sheet and cost of sales takes an average of nothing.
-That needs item codes, warehouses and lots, and is its own piece of
-work.
+Opening stock is built, in 0152 — `import_opening_stock`, the last of
+the six on that screen. Quantities and a cost per unit, per warehouse
+and per batch or serial where an item is tracked that way. It writes
+stock movements, which is what gives every item a quantity on hand and a
+weighted average cost, and it posts **no journal at all** — the
+inventory figure came in with the trial balance and posting it again
+would double it, the same reasoning the control accounts follow above.
+What it does instead is compare its own value against the inventory
+accounts and report the difference, adjusting neither: writing off stock
+nobody has looked at is not a thing an import should do on its own.
+
+One thing had to change underneath it. `app.materialise_movement_lots`
+reads lots off a document line, and an opening balance has no document,
+so the trigger now stands aside for `source_table = 'opening_stock'` and
+the importer names the batches itself. Everything else that trigger
+refuses, it still refuses.
+
+So the opening position is complete: contacts, items, open invoices,
+open bills, the trial balance, and stock.
 
 ## 8. Withholding and compound tax
 
@@ -278,8 +291,8 @@ workflow, and it is the difference between a bookkeeping tool and a
 business system. Both are built, and so is the aging, and so are
 recurring invoices and bills, and so is withholding, and so are the two
 statutory statements, and so is bank transfer, and so is importing the
-master files — and so, now, is the whole opening position bar one piece:
-the open invoices and bills, and the trial balance that squares them
-off, which together make moving onto this system mid-year possible at
-all. What is left: compound tax, granular permissions, taking payment,
-and opening stock quantities.
+master files — and so, now, is the whole opening position: the open
+invoices and bills, the trial balance that squares them off, and the
+stock behind the inventory figure. Together they are what makes moving
+onto this system mid-year possible at all. What is left: compound tax,
+granular permissions, and taking payment.

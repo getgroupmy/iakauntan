@@ -261,4 +261,55 @@ void main() {
       expect(find.byKey(const ValueKey('import-as-at')), findsOneWidget);
     });
   });
+
+  group('opening stock', () {
+    test('it sets the cost every later sale is charged at, so it asks for '
+        'posting rights too', () {
+      expect(importNeedsPosting(ImportKind.openingStock), isTrue);
+    });
+
+    test('a quantity and a cost per unit, not a total value', () {
+      // A total divided back out by a quantity somebody typed is one
+      // rounding away from a margin that drifts, so `unit_cost` is the
+      // field and 'value' is deliberately not an alias for it.
+      final table = parseCsvTable(
+        'Item,Qty,Average Cost\nWIDGET,100,10.00',
+        headerMapper(openingStockColumns),
+      );
+      expect(table.problems, isEmpty);
+      final row = table.rows.single;
+      expect(row['item_code'], 'WIDGET');
+      expect(row['quantity'], '100');
+      expect(row['unit_cost'], '10.00');
+    });
+
+    test('a batch or a serial arrives under either name', () {
+      for (final heading in ['Batch No', 'Serial No']) {
+        final row = parseCsvTable(
+          'Item,Qty,Cost,$heading\nBATCHY,40,25,B-1',
+          headerMapper(openingStockColumns),
+        ).rows.single;
+        expect(row['lot_no'], 'B-1', reason: '$heading maps to lot_no');
+      }
+    });
+
+    testWidgets('the screen says no journal is posted, and why', (
+      tester,
+    ) async {
+      await tester.pumpWidget(harness());
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Opening stock'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Opening stock'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('No journal is posted'), findsOneWidget);
+      expect(find.textContaining('would double it'), findsOneWidget);
+      expect(find.text('item_code'), findsOneWidget);
+      expect(find.text('unit_cost'), findsOneWidget);
+      // Not the trial balance's copy, and not the open items'.
+      expect(find.textContaining('comes to zero'), findsNothing);
+      expect(find.textContaining('what is still owed'), findsNothing);
+    });
+  });
 }

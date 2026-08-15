@@ -118,8 +118,30 @@ const openingBalanceColumns = <String, List<String>>{
   'description': ['account name', 'particulars', 'narration'],
 };
 
+/// Opening stock.
+///
+/// `unit_cost` and not `value`: the cost per unit is what every sale
+/// after the changeover takes its cost of sales from, and a total value
+/// divided back out by a quantity somebody typed is one rounding away
+/// from a margin that drifts.
+const openingStockColumns = <String, List<String>>{
+  'item_code': ['item', 'product code', 'sku', 'code'],
+  'warehouse_code': ['warehouse', 'location', 'store'],
+  'quantity': ['qty', 'on hand', 'quantity on hand'],
+  'unit_cost': ['cost', 'average cost', 'unit price'],
+  'lot_no': ['batch', 'batch no', 'lot', 'serial', 'serial no'],
+  'expiry_date': ['expiry', 'expires', 'best before'],
+};
+
 /// Which file is being brought across.
-enum ImportKind { contacts, items, openInvoices, openBills, openingBalances }
+enum ImportKind {
+  contacts,
+  items,
+  openInvoices,
+  openBills,
+  openingBalances,
+  openingStock,
+}
 
 /// Whether this kind writes to the ledger.
 ///
@@ -133,7 +155,8 @@ enum ImportKind { contacts, items, openInvoices, openBills, openingBalances }
 bool importNeedsPosting(ImportKind kind) =>
     kind == ImportKind.openInvoices ||
     kind == ImportKind.openBills ||
-    kind == ImportKind.openingBalances;
+    kind == ImportKind.openingBalances ||
+    kind == ImportKind.openingStock;
 
 /// How many rows would stop the file.
 ///
@@ -174,6 +197,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     ImportKind.openInvoices => openInvoiceColumns,
     ImportKind.openBills => openBillColumns,
     ImportKind.openingBalances => openingBalanceColumns,
+    ImportKind.openingStock => openingStockColumns,
   };
 
   List<String> get _required => switch (_kind) {
@@ -185,6 +209,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       'outstanding_amount',
     ],
     ImportKind.openingBalances => const ['account_code'],
+    ImportKind.openingStock => const ['item_code', 'quantity', 'unit_cost'],
   };
 
   int get _errorCount => importBlockingErrors(_verdict ?? const []);
@@ -219,6 +244,11 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           asAt: _asAt,
           commit: commit,
         ),
+        ImportKind.openingStock => await repo.importOpeningStock(
+          rows: table.rows,
+          asAt: _asAt,
+          commit: commit,
+        ),
       };
       setState(() => _verdict = rows);
       if (commit) {
@@ -245,6 +275,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     ImportKind.openInvoices => 'open invoices',
     ImportKind.openBills => 'open bills',
     ImportKind.openingBalances => 'opening balances',
+    ImportKind.openingStock => 'opening stock lines',
   };
 
   @override
@@ -286,6 +317,10 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                     value: ImportKind.openingBalances,
                     label: Text('Opening balances'),
                   ),
+                  ButtonSegment(
+                    value: ImportKind.openingStock,
+                    label: Text('Opening stock'),
+                  ),
                 ],
                 selected: {_kind},
                 onSelectionChanged: (s) => setState(() {
@@ -319,6 +354,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                           ImportKind.openBills => 'Bills still unpaid',
                           ImportKind.openingBalances =>
                             'The opening trial balance',
+                          ImportKind.openingStock => 'Stock on hand',
                         },
                         subtitle:
                             'Paste the file with its header row. '
@@ -334,28 +370,42 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                         ),
                         const SizedBox(height: Space.sm),
                         Text(
-                          _kind == ImportKind.openingBalances
-                              ? 'Paste the trial balance as the old system '
-                                    'gives it, receivables and payables '
-                                    'included. Those two are not posted again '
-                                    '— the open invoices and bills already '
-                                    'did — but they are compared against what '
-                                    'came across, which is the most useful '
-                                    'check in a migration. Everything else is '
-                                    'posted, and the difference goes to '
-                                    'Opening Balance Equity, which comes to '
-                                    'zero when the two halves agree.'
-                              : 'What goes in the amount column is what is '
-                                    'still owed, not the original total — '
-                                    'anything already received stays in the '
-                                    'old system, which is where anybody '
-                                    'asking will look. Each document keeps '
-                                    'the date it was raised so the ageing is '
-                                    'right; the ledger takes the whole lot on '
-                                    'the changeover date above. No tax is '
-                                    'posted: it was declared under the old '
-                                    'system, and declaring it twice is the '
-                                    'mistake this avoids.',
+                          switch (_kind) {
+                            ImportKind.openingBalances =>
+                              'Paste the trial balance as the old system '
+                                  'gives it, receivables and payables '
+                                  'included. Those two are not posted again '
+                                  '— the open invoices and bills already did '
+                                  '— but they are compared against what came '
+                                  'across, which is the most useful check in '
+                                  'a migration. Everything else is posted, '
+                                  'and the difference goes to Opening '
+                                  'Balance Equity, which comes to zero when '
+                                  'the two halves agree.',
+                            ImportKind.openingStock =>
+                              'Quantities and the cost per unit, which is '
+                                  'what cost of sales will be charged at '
+                                  'until the next purchase. No journal is '
+                                  'posted — the inventory figure came in '
+                                  'with the trial balance, and posting it '
+                                  'again would double it — but the value of '
+                                  'this file is compared against what the '
+                                  'inventory accounts already say, and any '
+                                  'difference is reported rather than '
+                                  'adjusted away.',
+                            _ =>
+                              'What goes in the amount column is what is '
+                                  'still owed, not the original total — '
+                                  'anything already received stays in the '
+                                  'old system, which is where anybody asking '
+                                  'will look. Each document keeps the date '
+                                  'it was raised so the ageing is right; the '
+                                  'ledger takes the whole lot on the '
+                                  'changeover date above. No tax is posted: '
+                                  'it was declared under the old system, and '
+                                  'declaring it twice is the mistake this '
+                                  'avoids.',
+                          },
                           style: TextStyle(
                             fontSize: 11,
                             color: Theme.of(
@@ -398,6 +448,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                               'account_code,debit,credit\n'
                                   '1110,5000.00,\n'
                                   '3100,,5000.00',
+                            ImportKind.openingStock =>
+                              'item_code,quantity,unit_cost\n'
+                                  'WIDGET-1,100,10.00',
                           },
                         ),
                       ),

@@ -800,6 +800,27 @@ class Repo {
     ),
   );
 
+  /// Opening stock quantities and costs.
+  ///
+  /// Writes movements and average costs and no journal at all — the
+  /// inventory balance came in with the trial balance, and posting it
+  /// again would double it. The last row of the answer compares the two.
+  Future<List<Map<String, dynamic>>> importOpeningStock({
+    required List<Map<String, String>> rows,
+    required DateTime asAt,
+    required bool commit,
+  }) async => _rows(
+    await client.rpc(
+      'import_opening_stock',
+      params: {
+        'p_org_id': orgId,
+        'p_rows': rows,
+        'p_as_at': Fmt.iso(asAt),
+        'p_commit': commit,
+      },
+    ),
+  );
+
   /// What is left in `3900 Opening Balance Equity`, which is a
   /// migration's own arithmetic rather than a report anybody asks for.
   Future<Map<String, dynamic>?> openingBalanceSuspense() async {
