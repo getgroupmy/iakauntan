@@ -3,6 +3,27 @@ name: CI
 on:
   push:
     branches: ['**']
+    # `graphify-out/` is a generated code graph, committed for the
+    # benefit of tooling and incapable of changing what gets built. A
+    # run for it is not merely wasted — it is actively harmful, because
+    # the deploy job cancels whatever deploy is in flight and GitHub
+    # cancels by arrival, not by commit order.
+    #
+    # That already happened: a graph commit pushed seconds after a code
+    # commit reached the deploy gate first (its database job finished
+    # thirty seconds sooner), started deploying, and was then cancelled
+    # by the older commit's deploy arriving behind it. Harmless that
+    # time, because the graph commit contained no application code. The
+    # other way round it would leave the *older* bundle live under a
+    # green tick on the newer commit, which is the exact failure this
+    # workflow was consolidated to prevent.
+    #
+    # A push touching only these paths now runs nothing at all. A push
+    # touching them *and* anything else runs in full, which is what
+    # `paths-ignore` means.
+    paths-ignore:
+      - 'graphify-out/**'
+      - 'app/graphify-out/**'
   pull_request:
   workflow_dispatch:
 
