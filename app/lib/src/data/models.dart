@@ -33,6 +33,7 @@ class Organization {
     this.logoUrl,
     this.baseCurrency = 'MYR',
     this.isSstRegistered = false,
+    this.sstRegisteredFrom,
     this.usesPreprintedLetterhead = false,
     this.creditControl = 'warn',
     this.einvoiceEnabled = false,
@@ -80,6 +81,10 @@ class Organization {
   final String baseCurrency;
   final bool isSstRegistered;
 
+  /// The date registration took effect. Once it is set, a document dated
+  /// before it may not carry tax — see 0145.
+  final DateTime? sstRegisteredFrom;
+
   /// The company prints onto its own letterhead paper, so the generated
   /// PDFs leave room for a header rather than drawing one.
   final bool usesPreprintedLetterhead;
@@ -95,41 +100,43 @@ class Organization {
   final int fiscalYearEndMonth;
 
   factory Organization.fromJson(Map<String, dynamic> j) => Organization(
-        id: j['id'] as String,
-        name: j['name'] as String,
-        slug: j['slug']?.toString() ?? '',
-        legalName: j['legal_name'] as String?,
-        registrationNo: j['registration_no'] as String?,
-        tin: j['tin'] as String?,
-        sstRegistrationNo: j['sst_registration_no'] as String?,
-        msicCode: j['msic_code'] as String?,
-        businessActivity: j['business_activity'] as String?,
-        addressLine1: j['address_line1'] as String?,
-        addressLine2: j['address_line2'] as String?,
-        addressLine3: j['address_line3'] as String?,
-        registeredAddressLine1: j['registered_address_line1'] as String?,
-        registeredAddressLine2: j['registered_address_line2'] as String?,
-        registeredAddressLine3: j['registered_address_line3'] as String?,
-        registeredPostcode: j['registered_postcode'] as String?,
-        registeredCity: j['registered_city'] as String?,
-        registeredStateCode: j['registered_state_code'] as String?,
-        city: j['city'] as String?,
-        postcode: j['postcode'] as String?,
-        stateCode: j['state_code'] as String?,
-        countryCode: j['country_code']?.toString() ?? 'MYS',
-        email: j['email'] as String?,
-        phone: j['phone'] as String?,
-        logoUrl: j['logo_url'] as String?,
-        baseCurrency: j['base_currency']?.toString() ?? 'MYR',
-        isSstRegistered: j['is_sst_registered'] == true,
-        usesPreprintedLetterhead:
-            j['uses_preprinted_letterhead'] == true,
-        einvoiceEnabled: j['einvoice_enabled'] == true,
-        einvoiceEnvironment: j['einvoice_environment']?.toString() ?? 'sandbox',
-        entityType: j['entity_type']?.toString() ?? 'sdn_bhd',
-        roundingMethod: j['rounding_method']?.toString() ?? 'nearest_5cent',
-        fiscalYearEndMonth: Fmt.toInt(j['fiscal_year_end_month']),
-      );
+    id: j['id'] as String,
+    name: j['name'] as String,
+    slug: j['slug']?.toString() ?? '',
+    legalName: j['legal_name'] as String?,
+    registrationNo: j['registration_no'] as String?,
+    tin: j['tin'] as String?,
+    sstRegistrationNo: j['sst_registration_no'] as String?,
+    msicCode: j['msic_code'] as String?,
+    businessActivity: j['business_activity'] as String?,
+    addressLine1: j['address_line1'] as String?,
+    addressLine2: j['address_line2'] as String?,
+    addressLine3: j['address_line3'] as String?,
+    registeredAddressLine1: j['registered_address_line1'] as String?,
+    registeredAddressLine2: j['registered_address_line2'] as String?,
+    registeredAddressLine3: j['registered_address_line3'] as String?,
+    registeredPostcode: j['registered_postcode'] as String?,
+    registeredCity: j['registered_city'] as String?,
+    registeredStateCode: j['registered_state_code'] as String?,
+    city: j['city'] as String?,
+    postcode: j['postcode'] as String?,
+    stateCode: j['state_code'] as String?,
+    countryCode: j['country_code']?.toString() ?? 'MYS',
+    email: j['email'] as String?,
+    phone: j['phone'] as String?,
+    logoUrl: j['logo_url'] as String?,
+    baseCurrency: j['base_currency']?.toString() ?? 'MYR',
+    isSstRegistered: j['is_sst_registered'] == true,
+    sstRegisteredFrom: j['sst_registered_from'] == null
+        ? null
+        : DateTime.tryParse(j['sst_registered_from'].toString()),
+    usesPreprintedLetterhead: j['uses_preprinted_letterhead'] == true,
+    einvoiceEnabled: j['einvoice_enabled'] == true,
+    einvoiceEnvironment: j['einvoice_environment']?.toString() ?? 'sandbox',
+    entityType: j['entity_type']?.toString() ?? 'sdn_bhd',
+    roundingMethod: j['rounding_method']?.toString() ?? 'nearest_5cent',
+    fiscalYearEndMonth: Fmt.toInt(j['fiscal_year_end_month']),
+  );
 }
 
 class Contact {
@@ -220,94 +227,95 @@ class Contact {
   bool get isSupplier => contactType == 'supplier' || contactType == 'both';
 
   /// LHDN requires a buyer TIN on every B2B e-Invoice.
-  bool get readyForEinvoice => (tin ?? '').isNotEmpty && (idValue ?? '').isNotEmpty;
+  bool get readyForEinvoice =>
+      (tin ?? '').isNotEmpty && (idValue ?? '').isNotEmpty;
 
   factory Contact.fromJson(Map<String, dynamic> j) => Contact(
-        id: j['id'] as String,
-        code: j['code']?.toString() ?? '',
-        name: j['name'] as String,
-        contactType: j['contact_type']?.toString() ?? 'customer',
-        legalName: j['legal_name'] as String?,
-        tin: j['tin'] as String?,
-        registrationNo: j['registration_no'] as String?,
-        idType: j['id_type'] as String?,
-        idValue: j['id_value'] as String?,
-        sstRegistrationNo: j['sst_registration_no'] as String?,
-        isTinVerified: j['is_tin_verified'] == true,
-        email: j['email'] as String?,
-        phone: j['phone'] as String?,
-        mobile: j['mobile'] as String?,
-        addressLine1: j['address_line1'] as String?,
-        addressLine2: j['address_line2'] as String?,
-        city: j['city'] as String?,
-        postcode: j['postcode'] as String?,
-        stateCode: j['state_code'] as String?,
-        countryCode: j['country_code']?.toString() ?? 'MYS',
-        currency: j['currency']?.toString() ?? 'MYR',
-        creditLimit: Fmt.toDouble(j['credit_limit']),
-        paymentTermId: j['payment_term_id'] as String?,
-        priceLevelId: j['price_level_id'] as String?,
-        isActive: j['is_active'] != false,
-        entityType: j['entity_type']?.toString() ?? 'sdn_bhd',
-      );
+    id: j['id'] as String,
+    code: j['code']?.toString() ?? '',
+    name: j['name'] as String,
+    contactType: j['contact_type']?.toString() ?? 'customer',
+    legalName: j['legal_name'] as String?,
+    tin: j['tin'] as String?,
+    registrationNo: j['registration_no'] as String?,
+    idType: j['id_type'] as String?,
+    idValue: j['id_value'] as String?,
+    sstRegistrationNo: j['sst_registration_no'] as String?,
+    isTinVerified: j['is_tin_verified'] == true,
+    email: j['email'] as String?,
+    phone: j['phone'] as String?,
+    mobile: j['mobile'] as String?,
+    addressLine1: j['address_line1'] as String?,
+    addressLine2: j['address_line2'] as String?,
+    city: j['city'] as String?,
+    postcode: j['postcode'] as String?,
+    stateCode: j['state_code'] as String?,
+    countryCode: j['country_code']?.toString() ?? 'MYS',
+    currency: j['currency']?.toString() ?? 'MYR',
+    creditLimit: Fmt.toDouble(j['credit_limit']),
+    paymentTermId: j['payment_term_id'] as String?,
+    priceLevelId: j['price_level_id'] as String?,
+    isActive: j['is_active'] != false,
+    entityType: j['entity_type']?.toString() ?? 'sdn_bhd',
+  );
 
   /// The same contact under a different code, for the one caller that
   /// has to try more than one — see
   /// [Repo.createContactWithGeneratedCode].
   Contact withCode(String value) => Contact(
-        id: id,
-        code: value,
-        name: name,
-        contactType: contactType,
-        legalName: legalName,
-        tin: tin,
-        registrationNo: registrationNo,
-        idType: idType,
-        idValue: idValue,
-        sstRegistrationNo: sstRegistrationNo,
-        isTinVerified: isTinVerified,
-        email: email,
-        phone: phone,
-        mobile: mobile,
-        addressLine1: addressLine1,
-        addressLine2: addressLine2,
-        city: city,
-        postcode: postcode,
-        stateCode: stateCode,
-        countryCode: countryCode,
-        currency: currency,
-        creditLimit: creditLimit,
-        paymentTermId: paymentTermId,
-        priceLevelId: priceLevelId,
-        isActive: isActive,
-        entityType: entityType,
-      );
+    id: id,
+    code: value,
+    name: name,
+    contactType: contactType,
+    legalName: legalName,
+    tin: tin,
+    registrationNo: registrationNo,
+    idType: idType,
+    idValue: idValue,
+    sstRegistrationNo: sstRegistrationNo,
+    isTinVerified: isTinVerified,
+    email: email,
+    phone: phone,
+    mobile: mobile,
+    addressLine1: addressLine1,
+    addressLine2: addressLine2,
+    city: city,
+    postcode: postcode,
+    stateCode: stateCode,
+    countryCode: countryCode,
+    currency: currency,
+    creditLimit: creditLimit,
+    paymentTermId: paymentTermId,
+    priceLevelId: priceLevelId,
+    isActive: isActive,
+    entityType: entityType,
+  );
 
   Map<String, dynamic> toJson() => {
-        'code': code,
-        'name': name,
-        'contact_type': contactType,
-        'legal_name': legalName,
-        'tin': tin,
-        'registration_no': registrationNo,
-        'id_type': idType,
-        'id_value': idValue,
-        'sst_registration_no': sstRegistrationNo,
-        'email': email,
-        'phone': phone,
-        'mobile': mobile,
-        'address_line1': addressLine1,
-        'address_line2': addressLine2,
-        'city': city,
-        'postcode': postcode,
-        'state_code': stateCode,
-        'country_code': countryCode,
-        'currency': currency,
-        'credit_limit': creditLimit,
-        'price_level_id': priceLevelId,
-        'is_active': isActive,
-        'entity_type': entityType,
-      };
+    'code': code,
+    'name': name,
+    'contact_type': contactType,
+    'legal_name': legalName,
+    'tin': tin,
+    'registration_no': registrationNo,
+    'id_type': idType,
+    'id_value': idValue,
+    'sst_registration_no': sstRegistrationNo,
+    'email': email,
+    'phone': phone,
+    'mobile': mobile,
+    'address_line1': addressLine1,
+    'address_line2': addressLine2,
+    'city': city,
+    'postcode': postcode,
+    'state_code': stateCode,
+    'country_code': countryCode,
+    'currency': currency,
+    'credit_limit': creditLimit,
+    'price_level_id': priceLevelId,
+    'is_active': isActive,
+    'entity_type': entityType,
+  };
 }
 
 /// A row of `ref_currencies`. Shared across every tenant, so it is read
@@ -333,11 +341,11 @@ class Currency {
   String get label => '$code — $name';
 
   factory Currency.fromJson(Map<String, dynamic> j) => Currency(
-        code: j['code']?.toString() ?? '',
-        name: j['name']?.toString() ?? '',
-        symbol: j['symbol'] as String?,
-        decimalPlaces: (j['decimal_places'] as num?)?.toInt() ?? 2,
-      );
+    code: j['code']?.toString() ?? '',
+    name: j['name']?.toString() ?? '',
+    symbol: j['symbol'] as String?,
+    decimalPlaces: (j['decimal_places'] as num?)?.toInt() ?? 2,
+  );
 }
 
 /// One currency's worth of open foreign balances, as at a date: what the
@@ -366,13 +374,13 @@ class FxRevaluation {
   final double difference;
 
   factory FxRevaluation.fromJson(Map<String, dynamic> j) => FxRevaluation(
-        currency: j['currency']?.toString().trim() ?? '',
-        closingRate: Fmt.toDouble(j['closing_rate']),
-        documents: (j['documents'] as num?)?.toInt() ?? 0,
-        booked: Fmt.toDouble(j['booked']),
-        restated: Fmt.toDouble(j['restated']),
-        difference: Fmt.toDouble(j['difference']),
-      );
+    currency: j['currency']?.toString().trim() ?? '',
+    closingRate: Fmt.toDouble(j['closing_rate']),
+    documents: (j['documents'] as num?)?.toInt() ?? 0,
+    booked: Fmt.toDouble(j['booked']),
+    restated: Fmt.toDouble(j['restated']),
+    difference: Fmt.toDouble(j['difference']),
+  );
 }
 
 /// One line of the fixed asset register.
@@ -434,55 +442,56 @@ class FixedAsset {
   String get basis => method == 'reducing_balance'
       ? '${Fmt.rate(ratePercent ?? 0)}% reducing'
       : usefulLifeMonths == null
-          ? 'Straight line'
-          : usefulLifeMonths! % 12 == 0
-              ? '${usefulLifeMonths! ~/ 12} year straight line'
-              : '$usefulLifeMonths month straight line';
+      ? 'Straight line'
+      : usefulLifeMonths! % 12 == 0
+      ? '${usefulLifeMonths! ~/ 12} year straight line'
+      : '$usefulLifeMonths month straight line';
 
   factory FixedAsset.fromJson(Map<String, dynamic> j) => FixedAsset(
-        id: j['id'] as String,
-        assetNo: j['asset_no']?.toString() ?? '',
-        name: j['name']?.toString() ?? '',
-        description: j['description'] as String?,
-        category: j['category'] as String?,
-        acquisitionDate: Fmt.parseDate(j['acquisition_date']) ?? DateTime.now(),
-        cost: Fmt.toDouble(j['cost']),
-        residualValue: Fmt.toDouble(j['residual_value']),
-        method: j['method']?.toString() ?? 'straight_line',
-        usefulLifeMonths: (j['useful_life_months'] as num?)?.toInt(),
-        ratePercent:
-            j['rate_percent'] == null ? null : Fmt.toDouble(j['rate_percent']),
-        accumulatedDepreciation: Fmt.toDouble(j['accumulated_depreciation']),
-        depreciatedTo: Fmt.parseDate(j['depreciated_to']),
-        serialNo: j['serial_no'] as String?,
-        location: j['location'] as String?,
-        status: j['status']?.toString() ?? 'active',
-        disposalDate: Fmt.parseDate(j['disposal_date']),
-        disposalProceeds: j['disposal_proceeds'] == null
-            ? null
-            : Fmt.toDouble(j['disposal_proceeds']),
-        notes: j['notes'] as String?,
-      );
+    id: j['id'] as String,
+    assetNo: j['asset_no']?.toString() ?? '',
+    name: j['name']?.toString() ?? '',
+    description: j['description'] as String?,
+    category: j['category'] as String?,
+    acquisitionDate: Fmt.parseDate(j['acquisition_date']) ?? DateTime.now(),
+    cost: Fmt.toDouble(j['cost']),
+    residualValue: Fmt.toDouble(j['residual_value']),
+    method: j['method']?.toString() ?? 'straight_line',
+    usefulLifeMonths: (j['useful_life_months'] as num?)?.toInt(),
+    ratePercent: j['rate_percent'] == null
+        ? null
+        : Fmt.toDouble(j['rate_percent']),
+    accumulatedDepreciation: Fmt.toDouble(j['accumulated_depreciation']),
+    depreciatedTo: Fmt.parseDate(j['depreciated_to']),
+    serialNo: j['serial_no'] as String?,
+    location: j['location'] as String?,
+    status: j['status']?.toString() ?? 'active',
+    disposalDate: Fmt.parseDate(j['disposal_date']),
+    disposalProceeds: j['disposal_proceeds'] == null
+        ? null
+        : Fmt.toDouble(j['disposal_proceeds']),
+    notes: j['notes'] as String?,
+  );
 
   Map<String, dynamic> toJson() => {
-        'asset_no': assetNo,
-        'name': name,
-        'description': description,
-        'category': category,
-        'acquisition_date': Fmt.iso(acquisitionDate),
-        'cost': cost,
-        'residual_value': residualValue,
-        'method': method,
-        // Only the figure this method needs is sent. The table refuses a
-        // straight-line asset with no life and a reducing-balance one
-        // with no rate, and sending both would let a stale value from
-        // the other method sit there looking authoritative.
-        'useful_life_months': method == 'straight_line' ? usefulLifeMonths : null,
-        'rate_percent': method == 'reducing_balance' ? ratePercent : null,
-        'serial_no': serialNo,
-        'location': location,
-        'notes': notes,
-      };
+    'asset_no': assetNo,
+    'name': name,
+    'description': description,
+    'category': category,
+    'acquisition_date': Fmt.iso(acquisitionDate),
+    'cost': cost,
+    'residual_value': residualValue,
+    'method': method,
+    // Only the figure this method needs is sent. The table refuses a
+    // straight-line asset with no life and a reducing-balance one
+    // with no rate, and sending both would let a stale value from
+    // the other method sit there looking authoritative.
+    'useful_life_months': method == 'straight_line' ? usefulLifeMonths : null,
+    'rate_percent': method == 'reducing_balance' ? ratePercent : null,
+    'serial_no': serialNo,
+    'location': location,
+    'notes': notes,
+  };
 }
 
 /// What a depreciation run would charge against one asset.
@@ -506,14 +515,14 @@ class DepreciationLine {
   final double netBookValue;
 
   factory DepreciationLine.fromJson(Map<String, dynamic> j) => DepreciationLine(
-        assetId: j['asset_id'] as String,
-        assetNo: j['asset_no']?.toString() ?? '',
-        name: j['name']?.toString() ?? '',
-        cost: Fmt.toDouble(j['cost']),
-        accumulated: Fmt.toDouble(j['accumulated']),
-        charge: Fmt.toDouble(j['charge']),
-        netBookValue: Fmt.toDouble(j['net_book_value']),
-      );
+    assetId: j['asset_id'] as String,
+    assetNo: j['asset_no']?.toString() ?? '',
+    name: j['name']?.toString() ?? '',
+    cost: Fmt.toDouble(j['cost']),
+    accumulated: Fmt.toDouble(j['accumulated']),
+    charge: Fmt.toDouble(j['charge']),
+    netBookValue: Fmt.toDouble(j['net_book_value']),
+  );
 }
 
 class Item {
@@ -567,45 +576,45 @@ class Item {
       trackInventory && reorderLevel > 0 && quantityOnHand <= reorderLevel;
 
   factory Item.fromJson(Map<String, dynamic> j) => Item(
-        id: j['id'] as String,
-        code: j['code']?.toString() ?? '',
-        name: j['name'] as String,
-        itemType: j['item_type']?.toString() ?? 'stock',
-        description: j['description'] as String?,
-        uomCode: j['uom_code']?.toString() ?? 'C62',
-        classificationCode: j['classification_code']?.toString() ?? '022',
-        unitPrice: Fmt.toDouble(j['unit_price']),
-        costPrice: Fmt.toDouble(j['cost_price']),
-        quantityOnHand: Fmt.toDouble(j['quantity_on_hand']),
-        averageCost: Fmt.toDouble(j['average_cost']),
-        reorderLevel: Fmt.toDouble(j['reorder_level']),
-        trackInventory: j['track_inventory'] != false,
-        tracking: j['tracking']?.toString() ?? 'none',
-        isActive: j['is_active'] != false,
-        salesTaxCodeId: j['sales_tax_code_id'] as String?,
-        purchaseTaxCodeId: j['purchase_tax_code_id'] as String?,
-        categoryId: j['category_id'] as String?,
-        barcode: j['barcode'] as String?,
-      );
+    id: j['id'] as String,
+    code: j['code']?.toString() ?? '',
+    name: j['name'] as String,
+    itemType: j['item_type']?.toString() ?? 'stock',
+    description: j['description'] as String?,
+    uomCode: j['uom_code']?.toString() ?? 'C62',
+    classificationCode: j['classification_code']?.toString() ?? '022',
+    unitPrice: Fmt.toDouble(j['unit_price']),
+    costPrice: Fmt.toDouble(j['cost_price']),
+    quantityOnHand: Fmt.toDouble(j['quantity_on_hand']),
+    averageCost: Fmt.toDouble(j['average_cost']),
+    reorderLevel: Fmt.toDouble(j['reorder_level']),
+    trackInventory: j['track_inventory'] != false,
+    tracking: j['tracking']?.toString() ?? 'none',
+    isActive: j['is_active'] != false,
+    salesTaxCodeId: j['sales_tax_code_id'] as String?,
+    purchaseTaxCodeId: j['purchase_tax_code_id'] as String?,
+    categoryId: j['category_id'] as String?,
+    barcode: j['barcode'] as String?,
+  );
 
   Map<String, dynamic> toJson() => {
-        'code': code,
-        'name': name,
-        'item_type': itemType,
-        'description': description,
-        'uom_code': uomCode,
-        'classification_code': classificationCode,
-        'unit_price': unitPrice,
-        'cost_price': costPrice,
-        'reorder_level': reorderLevel,
-        'track_inventory': trackInventory,
-        'tracking': trackInventory ? tracking : 'none',
-        'is_active': isActive,
-        'sales_tax_code_id': salesTaxCodeId,
-        'purchase_tax_code_id': purchaseTaxCodeId,
-        'category_id': categoryId,
-        'barcode': barcode,
-      };
+    'code': code,
+    'name': name,
+    'item_type': itemType,
+    'description': description,
+    'uom_code': uomCode,
+    'classification_code': classificationCode,
+    'unit_price': unitPrice,
+    'cost_price': costPrice,
+    'reorder_level': reorderLevel,
+    'track_inventory': trackInventory,
+    'tracking': trackInventory ? tracking : 'none',
+    'is_active': isActive,
+    'sales_tax_code_id': salesTaxCodeId,
+    'purchase_tax_code_id': purchaseTaxCodeId,
+    'category_id': categoryId,
+    'barcode': barcode,
+  };
 }
 
 /// A fiscal year and the twelve periods under it.
@@ -633,16 +642,16 @@ class FiscalYear {
       !day.isBefore(startDate) && !day.isAfter(endDate);
 
   factory FiscalYear.fromJson(Map<String, dynamic> j) => FiscalYear(
-        id: j['id'] as String,
-        name: j['name']?.toString() ?? '',
-        startDate: Fmt.parseDate(j['start_date'])!,
-        endDate: Fmt.parseDate(j['end_date'])!,
-        status: j['status']?.toString() ?? 'open',
-        periods: [
-          for (final p in (j['fiscal_periods'] as List? ?? const []))
-            FiscalPeriod.fromJson(Map<String, dynamic>.from(p as Map))
-        ]..sort((a, b) => a.periodNo.compareTo(b.periodNo)),
-      );
+    id: j['id'] as String,
+    name: j['name']?.toString() ?? '',
+    startDate: Fmt.parseDate(j['start_date'])!,
+    endDate: Fmt.parseDate(j['end_date'])!,
+    status: j['status']?.toString() ?? 'open',
+    periods: [
+      for (final p in (j['fiscal_periods'] as List? ?? const []))
+        FiscalPeriod.fromJson(Map<String, dynamic>.from(p as Map)),
+    ]..sort((a, b) => a.periodNo.compareTo(b.periodNo)),
+  );
 }
 
 class FiscalPeriod {
@@ -669,13 +678,13 @@ class FiscalPeriod {
   bool get isLocked => status == 'locked';
 
   factory FiscalPeriod.fromJson(Map<String, dynamic> j) => FiscalPeriod(
-        id: j['id'] as String,
-        periodNo: Fmt.toInt(j['period_no']),
-        name: j['name']?.toString() ?? '',
-        startDate: Fmt.parseDate(j['start_date'])!,
-        endDate: Fmt.parseDate(j['end_date'])!,
-        status: j['status']?.toString() ?? 'open',
-      );
+    id: j['id'] as String,
+    periodNo: Fmt.toInt(j['period_no']),
+    name: j['name']?.toString() ?? '',
+    startDate: Fmt.parseDate(j['start_date'])!,
+    endDate: Fmt.parseDate(j['end_date'])!,
+    status: j['status']?.toString() ?? 'open',
+  );
 }
 
 class TaxCode {
@@ -698,14 +707,14 @@ class TaxCode {
   final bool isExempt;
 
   factory TaxCode.fromJson(Map<String, dynamic> j) => TaxCode(
-        id: j['id'] as String,
-        code: j['code']?.toString() ?? '',
-        name: j['name']?.toString() ?? '',
-        rate: Fmt.toDouble(j['rate']),
-        taxTypeCode: j['tax_type_code']?.toString() ?? '06',
-        isDefault: j['is_default'] == true,
-        isExempt: j['is_exempt'] == true,
-      );
+    id: j['id'] as String,
+    code: j['code']?.toString() ?? '',
+    name: j['name']?.toString() ?? '',
+    rate: Fmt.toDouble(j['rate']),
+    taxTypeCode: j['tax_type_code']?.toString() ?? '06',
+    isDefault: j['is_default'] == true,
+    isExempt: j['is_exempt'] == true,
+  );
 }
 
 class Account {
@@ -730,15 +739,15 @@ class Account {
   final bool isActive;
 
   factory Account.fromJson(Map<String, dynamic> j) => Account(
-        id: j['id'] as String,
-        code: j['code']?.toString() ?? '',
-        name: j['name']?.toString() ?? '',
-        accountType: j['account_type']?.toString() ?? 'asset',
-        accountSubtype: j['account_subtype']?.toString() ?? 'current_asset',
-        isGroup: j['is_group'] == true,
-        currentBalance: Fmt.toDouble(j['current_balance']),
-        isActive: j['is_active'] != false,
-      );
+    id: j['id'] as String,
+    code: j['code']?.toString() ?? '',
+    name: j['name']?.toString() ?? '',
+    accountType: j['account_type']?.toString() ?? 'asset',
+    accountSubtype: j['account_subtype']?.toString() ?? 'current_asset',
+    isGroup: j['is_group'] == true,
+    currentBalance: Fmt.toDouble(j['current_balance']),
+    isActive: j['is_active'] != false,
+  );
 }
 
 /// Which side of the ledger a document belongs to. The sales and purchase
@@ -853,8 +862,8 @@ class BusinessDocument {
   factory BusinessDocument.fromJson(Map<String, dynamic> j) {
     final contact = j['contacts'];
     // The embedded line list is named after whichever table it came from.
-    final rawLines = (j['sales_document_lines'] ?? j['purchase_document_lines'])
-        as List?;
+    final rawLines =
+        (j['sales_document_lines'] ?? j['purchase_document_lines']) as List?;
     return BusinessDocument(
       id: j['id'] as String,
       docType: j['doc_type']?.toString() ?? 'invoice',
@@ -886,10 +895,11 @@ class BusinessDocument {
       termsConditions: j['terms_conditions'] as String?,
       paymentTermId: j['payment_term_id'] as String?,
       salespersonId: j['salesperson_id'] as String?,
-      lines: (rawLines ?? const [])
-          .map((e) => DocumentLine.fromJson(e as Map<String, dynamic>))
-          .toList()
-        ..sort((a, b) => a.lineNo.compareTo(b.lineNo)),
+      lines:
+          (rawLines ?? const [])
+              .map((e) => DocumentLine.fromJson(e as Map<String, dynamic>))
+              .toList()
+            ..sort((a, b) => a.lineNo.compareTo(b.lineNo)),
     );
   }
 }
@@ -943,26 +953,26 @@ class DocumentLine {
   final String? projectCode;
 
   factory DocumentLine.fromJson(Map<String, dynamic> j) => DocumentLine(
-        id: j['id'] as String?,
-        lineNo: Fmt.toInt(j['line_no']),
-        itemId: j['item_id'] as String?,
-        description: j['description']?.toString() ?? '',
-        quantity: Fmt.toDouble(j['quantity']),
-        unitPrice: Fmt.toDouble(j['unit_price']),
-        discountPercent: Fmt.toDouble(j['discount_percent']),
-        discountAmount: Fmt.toDouble(j['discount_amount']),
-        taxCodeId: j['tax_code_id'] as String?,
-        taxRate: Fmt.toDouble(j['tax_rate']),
-        taxAmount: Fmt.toDouble(j['tax_amount']),
-        lineSubtotal: Fmt.toDouble(j['line_subtotal']),
-        lineTotal: Fmt.toDouble(j['line_total']),
-        uomCode: j['uom_code'] as String?,
-        classificationCode: j['classification_code'] as String?,
-        isTaxInclusive: j['is_tax_inclusive'] == true,
-        warehouseId: j['warehouse_id'] as String?,
-        sourceLineId: j['source_line_id'] as String?,
-        projectCode: j['project_code'] as String?,
-      );
+    id: j['id'] as String?,
+    lineNo: Fmt.toInt(j['line_no']),
+    itemId: j['item_id'] as String?,
+    description: j['description']?.toString() ?? '',
+    quantity: Fmt.toDouble(j['quantity']),
+    unitPrice: Fmt.toDouble(j['unit_price']),
+    discountPercent: Fmt.toDouble(j['discount_percent']),
+    discountAmount: Fmt.toDouble(j['discount_amount']),
+    taxCodeId: j['tax_code_id'] as String?,
+    taxRate: Fmt.toDouble(j['tax_rate']),
+    taxAmount: Fmt.toDouble(j['tax_amount']),
+    lineSubtotal: Fmt.toDouble(j['line_subtotal']),
+    lineTotal: Fmt.toDouble(j['line_total']),
+    uomCode: j['uom_code'] as String?,
+    classificationCode: j['classification_code'] as String?,
+    isTaxInclusive: j['is_tax_inclusive'] == true,
+    warehouseId: j['warehouse_id'] as String?,
+    sourceLineId: j['source_line_id'] as String?,
+    projectCode: j['project_code'] as String?,
+  );
 }
 
 class EinvoiceDocument {
@@ -1004,25 +1014,24 @@ class EinvoiceDocument {
       cancelDeadline != null &&
       cancelDeadline!.isAfter(DateTime.now());
 
-  Duration? get cancelWindowLeft =>
-      cancelDeadline?.difference(DateTime.now());
+  Duration? get cancelWindowLeft => cancelDeadline?.difference(DateTime.now());
 
   factory EinvoiceDocument.fromJson(Map<String, dynamic> j) => EinvoiceDocument(
-        id: j['id'] as String,
-        internalDocNo: j['internal_doc_no']?.toString() ?? '',
-        status: j['status']?.toString() ?? 'draft',
-        typeCode: j['einvoice_type_code']?.toString() ?? '01',
-        issueDate: Fmt.parseDate(j['issue_date']) ?? DateTime.now(),
-        buyerName: j['buyer_name'] as String?,
-        payableAmount: Fmt.toDouble(j['payable_amount']),
-        myinvoisUuid: j['myinvois_uuid'] as String?,
-        validationLink: j['validation_link'] as String?,
-        errorMessage: j['error_message'] as String?,
-        validationErrors: (j['validation_errors'] as List?) ?? const [],
-        validatedAt: Fmt.parseDate(j['validated_at']),
-        cancelDeadline: Fmt.parseDate(j['cancel_deadline']),
-        currency: j['currency']?.toString() ?? 'MYR',
-      );
+    id: j['id'] as String,
+    internalDocNo: j['internal_doc_no']?.toString() ?? '',
+    status: j['status']?.toString() ?? 'draft',
+    typeCode: j['einvoice_type_code']?.toString() ?? '01',
+    issueDate: Fmt.parseDate(j['issue_date']) ?? DateTime.now(),
+    buyerName: j['buyer_name'] as String?,
+    payableAmount: Fmt.toDouble(j['payable_amount']),
+    myinvoisUuid: j['myinvois_uuid'] as String?,
+    validationLink: j['validation_link'] as String?,
+    errorMessage: j['error_message'] as String?,
+    validationErrors: (j['validation_errors'] as List?) ?? const [],
+    validatedAt: Fmt.parseDate(j['validated_at']),
+    cancelDeadline: Fmt.parseDate(j['cancel_deadline']),
+    currency: j['currency']?.toString() ?? 'MYR',
+  );
 }
 
 class Opportunity {
@@ -1096,14 +1105,14 @@ class PipelineStage {
   final String? color;
 
   factory PipelineStage.fromJson(Map<String, dynamic> j) => PipelineStage(
-        id: j['id'] as String,
-        pipelineId: j['pipeline_id']?.toString() ?? '',
-        name: j['name']?.toString() ?? '',
-        probability: Fmt.toDouble(j['probability']),
-        stageType: j['stage_type']?.toString() ?? 'open',
-        sortOrder: Fmt.toInt(j['sort_order']),
-        color: j['color'] as String?,
-      );
+    id: j['id'] as String,
+    pipelineId: j['pipeline_id']?.toString() ?? '',
+    name: j['name']?.toString() ?? '',
+    probability: Fmt.toDouble(j['probability']),
+    stageType: j['stage_type']?.toString() ?? 'open',
+    sortOrder: Fmt.toInt(j['sort_order']),
+    color: j['color'] as String?,
+  );
 }
 
 class DashboardSummary {
@@ -1136,27 +1145,31 @@ class DashboardSummary {
 const memberRoles = <String, ({String label, String description})>{
   'owner': (
     label: 'Owner',
-    description: 'Full control including billing and closing the company'
+    description: 'Full control including billing and closing the company',
   ),
   'admin': (
     label: 'Company Admin',
-    description: 'Everything except ownership transfer'
+    description: 'Everything except ownership transfer',
   ),
   'accountant': (
     label: 'Accountant',
-    description: 'Prepares and posts to the ledger, closes periods'
+    description: 'Prepares and posts to the ledger, closes periods',
   ),
   'accounts_clerk': (
     label: 'Accounts Clerk',
-    description: 'Prepares documents but cannot post to the ledger'
+    description: 'Prepares documents but cannot post to the ledger',
   ),
   'auditor': (
     label: 'Auditor',
-    description: 'Reads everything including the ledger and audit trail; changes nothing'
+    description:
+        'Reads everything including the ledger and audit trail; changes nothing',
   ),
   'sales': (label: 'Sales', description: 'CRM and sales documents'),
   'purchaser': (label: 'Purchasing', description: 'Purchase documents'),
-  'viewer': (label: 'View Only', description: 'Read-only access to day-to-day records'),
+  'viewer': (
+    label: 'View Only',
+    description: 'Read-only access to day-to-day records',
+  ),
 };
 
 String roleLabel(String? role) => memberRoles[role]?.label ?? Fmt.label(role);
@@ -1192,16 +1205,16 @@ class TeamMember {
       (fullName ?? '').trim().isNotEmpty ? fullName! : (email ?? 'Unknown');
 
   factory TeamMember.fromJson(Map<String, dynamic> j) => TeamMember(
-        memberId: j['member_id'] as String,
-        userId: j['user_id'] as String?,
-        email: j['email'] as String?,
-        fullName: j['full_name'] as String?,
-        role: j['role']?.toString() ?? 'viewer',
-        status: j['status']?.toString() ?? 'active',
-        joinedAt: Fmt.parseDate(j['joined_at']),
-        accessTypeId: j['access_type_id'] as String?,
-        accessTypeName: j['access_type_name'] as String?,
-      );
+    memberId: j['member_id'] as String,
+    userId: j['user_id'] as String?,
+    email: j['email'] as String?,
+    fullName: j['full_name'] as String?,
+    role: j['role']?.toString() ?? 'viewer',
+    status: j['status']?.toString() ?? 'active',
+    joinedAt: Fmt.parseDate(j['joined_at']),
+    accessTypeId: j['access_type_id'] as String?,
+    accessTypeName: j['access_type_name'] as String?,
+  );
 }
 
 /// A named set of module permissions a company defines for itself.
@@ -1236,16 +1249,15 @@ class AccessType {
       modules.values.where((a) => a == 'read' || a == 'write').length;
 
   factory AccessType.fromJson(Map<String, dynamic> j) => AccessType(
-        id: j['id'] as String,
-        name: j['name']?.toString() ?? '',
-        description: j['description'] as String?,
-        isActive: j['is_active'] != false,
-        modules: {
-          for (final m in (j['access_type_modules'] as List? ?? const []))
-            (m as Map)['module_code'].toString():
-                m['access']?.toString() ?? 'none',
-        },
-      );
+    id: j['id'] as String,
+    name: j['name']?.toString() ?? '',
+    description: j['description'] as String?,
+    isActive: j['is_active'] != false,
+    modules: {
+      for (final m in (j['access_type_modules'] as List? ?? const []))
+        (m as Map)['module_code'].toString(): m['access']?.toString() ?? 'none',
+    },
+  );
 }
 
 // =====================================================================
@@ -1268,12 +1280,12 @@ class ModuleInfo {
   final double monthlyPrice;
 
   factory ModuleInfo.fromJson(Map<String, dynamic> j) => ModuleInfo(
-        code: j['code'] as String,
-        name: j['name'] as String,
-        description: j['description'] as String?,
-        isCore: j['is_core'] == true,
-        monthlyPrice: Fmt.toDouble(j['monthly_price']),
-      );
+    code: j['code'] as String,
+    name: j['name'] as String,
+    description: j['description'] as String?,
+    isCore: j['is_core'] == true,
+    monthlyPrice: Fmt.toDouble(j['monthly_price']),
+  );
 }
 
 class PlatformOrg {
@@ -1304,20 +1316,20 @@ class PlatformOrg {
   final DateTime? createdAt;
 
   factory PlatformOrg.fromJson(Map<String, dynamic> j) => PlatformOrg(
-        id: j['id'] as String,
-        name: j['name'] as String,
-        status: j['status']?.toString() ?? 'active',
-        registrationNo: j['registration_no'] as String?,
-        tin: j['tin'] as String?,
-        einvoiceEnabled: j['einvoice_enabled'] == true,
-        memberCount: Fmt.toInt(j['member_count']),
-        invoiceCount: Fmt.toInt(j['invoice_count']),
-        invoicedValue: Fmt.toDouble(j['invoiced_value']),
-        modules: ((j['modules'] as List?) ?? const [])
-            .map((e) => e.toString())
-            .toList(),
-        createdAt: Fmt.parseDate(j['created_at']),
-      );
+    id: j['id'] as String,
+    name: j['name'] as String,
+    status: j['status']?.toString() ?? 'active',
+    registrationNo: j['registration_no'] as String?,
+    tin: j['tin'] as String?,
+    einvoiceEnabled: j['einvoice_enabled'] == true,
+    memberCount: Fmt.toInt(j['member_count']),
+    invoiceCount: Fmt.toInt(j['invoice_count']),
+    invoicedValue: Fmt.toDouble(j['invoiced_value']),
+    modules: ((j['modules'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .toList(),
+    createdAt: Fmt.parseDate(j['created_at']),
+  );
 }
 
 // =====================================================================
@@ -1406,17 +1418,17 @@ class MatterSummary {
   double get workInProgress => unbilledTime + unbilledDisbursements;
 
   factory MatterSummary.fromJson(Map<String, dynamic> j) => MatterSummary(
-        matterId: j['matter_id'] as String,
-        matterNo: j['matter_no']?.toString() ?? '',
-        matterName: j['matter_name']?.toString() ?? '',
-        clientName: j['client_name']?.toString() ?? '',
-        status: j['status']?.toString() ?? 'open',
-        clientFunds: Fmt.toDouble(j['client_funds']),
-        unbilledTime: Fmt.toDouble(j['unbilled_time']),
-        unbilledDisbursements: Fmt.toDouble(j['unbilled_disbursements']),
-        billed: Fmt.toDouble(j['billed']),
-        outstanding: Fmt.toDouble(j['outstanding']),
-      );
+    matterId: j['matter_id'] as String,
+    matterNo: j['matter_no']?.toString() ?? '',
+    matterName: j['matter_name']?.toString() ?? '',
+    clientName: j['client_name']?.toString() ?? '',
+    status: j['status']?.toString() ?? 'open',
+    clientFunds: Fmt.toDouble(j['client_funds']),
+    unbilledTime: Fmt.toDouble(j['unbilled_time']),
+    unbilledDisbursements: Fmt.toDouble(j['unbilled_disbursements']),
+    billed: Fmt.toDouble(j['billed']),
+    outstanding: Fmt.toDouble(j['outstanding']),
+  );
 }
 
 class ClientTransaction {
@@ -1444,7 +1456,8 @@ class ClientTransaction {
 
   bool get isMoneyIn => amount >= 0;
 
-  factory ClientTransaction.fromJson(Map<String, dynamic> j) => ClientTransaction(
+  factory ClientTransaction.fromJson(Map<String, dynamic> j) =>
+      ClientTransaction(
         id: j['id'] as String,
         transactionNo: j['transaction_no']?.toString() ?? '',
         transactionDate: Fmt.parseDate(j['transaction_date']) ?? DateTime.now(),
@@ -1487,16 +1500,16 @@ class TimeEntry {
   }
 
   factory TimeEntry.fromJson(Map<String, dynamic> j) => TimeEntry(
-        id: j['id'] as String,
-        entryDate: Fmt.parseDate(j['entry_date']) ?? DateTime.now(),
-        description: j['description']?.toString() ?? '',
-        minutes: Fmt.toInt(j['minutes']),
-        hourlyRate: Fmt.toDouble(j['hourly_rate']),
-        amount: Fmt.toDouble(j['amount']),
-        isBillable: j['is_billable'] != false,
-        isBilled: j['is_billed'] == true,
-        activityCode: j['activity_code'] as String?,
-      );
+    id: j['id'] as String,
+    entryDate: Fmt.parseDate(j['entry_date']) ?? DateTime.now(),
+    description: j['description']?.toString() ?? '',
+    minutes: Fmt.toInt(j['minutes']),
+    hourlyRate: Fmt.toDouble(j['hourly_rate']),
+    amount: Fmt.toDouble(j['amount']),
+    isBillable: j['is_billable'] != false,
+    isBilled: j['is_billed'] == true,
+    activityCode: j['activity_code'] as String?,
+  );
 }
 
 // =====================================================================
@@ -1568,9 +1581,11 @@ class Employee {
       email: j['email']?.toString(),
       phone: j['phone']?.toString(),
       photoUrl: j['photo_url']?.toString(),
-      departmentName: j['department_name']?.toString() ??
+      departmentName:
+          j['department_name']?.toString() ??
           (dept is Map ? dept['name'] as String? : null),
-      positionTitle: j['position_title']?.toString() ??
+      positionTitle:
+          j['position_title']?.toString() ??
           (pos is Map ? pos['title'] as String? : null),
       managerName: j['manager_name']?.toString(),
       employmentStatus: j['employment_status']?.toString() ?? 'active',
@@ -1629,7 +1644,8 @@ class AttendanceRecord {
       clockOut: Fmt.parseDate(j['clock_out']),
       workedMinutes: Fmt.toInt(j['worked_minutes']),
       lateMinutes: Fmt.toInt(j['late_minutes']),
-      otMinutes: Fmt.toInt(j['ot_normal_minutes']) +
+      otMinutes:
+          Fmt.toInt(j['ot_normal_minutes']) +
           Fmt.toInt(j['ot_restday_minutes']) +
           Fmt.toInt(j['ot_holiday_minutes']),
       clockInMethod: j['clock_in_method']?.toString(),
@@ -1654,12 +1670,12 @@ class LeaveType {
   final double defaultDays;
 
   factory LeaveType.fromJson(Map<String, dynamic> j) => LeaveType(
-        id: j['id'] as String,
-        code: j['code']?.toString() ?? '',
-        name: j['name']?.toString() ?? '',
-        isPaid: j['is_paid'] == true,
-        defaultDays: Fmt.toDouble(j['default_days']),
-      );
+    id: j['id'] as String,
+    code: j['code']?.toString() ?? '',
+    name: j['name']?.toString() ?? '',
+    isPaid: j['is_paid'] == true,
+    defaultDays: Fmt.toDouble(j['default_days']),
+  );
 }
 
 class LeaveBalance {
@@ -1905,22 +1921,22 @@ class JournalEntry {
   bool get canReverse => status == 'posted';
 
   factory JournalEntry.fromJson(Map<String, dynamic> j) => JournalEntry(
-        id: j['id'] as String,
-        entryNo: j['entry_no']?.toString() ?? '',
-        entryDate: Fmt.parseDate(j['entry_date']) ?? DateTime.now(),
-        source: j['source']?.toString() ?? 'manual',
-        status: j['status']?.toString() ?? 'posted',
-        description: j['description']?.toString(),
-        reference: j['reference']?.toString(),
-        totalDebit: Fmt.toDouble(j['total_debit']),
-        totalCredit: Fmt.toDouble(j['total_credit']),
-        isReversal: j['is_reversal'] == true,
-        reversedEntryId: j['reversed_entry_id'] as String?,
-        lines: [
-          for (final l in (j['gl_lines'] as List? ?? const []))
-            JournalLine.fromJson(Map<String, dynamic>.from(l as Map))
-        ]..sort((a, b) => a.lineNo.compareTo(b.lineNo)),
-      );
+    id: j['id'] as String,
+    entryNo: j['entry_no']?.toString() ?? '',
+    entryDate: Fmt.parseDate(j['entry_date']) ?? DateTime.now(),
+    source: j['source']?.toString() ?? 'manual',
+    status: j['status']?.toString() ?? 'posted',
+    description: j['description']?.toString(),
+    reference: j['reference']?.toString(),
+    totalDebit: Fmt.toDouble(j['total_debit']),
+    totalCredit: Fmt.toDouble(j['total_credit']),
+    isReversal: j['is_reversal'] == true,
+    reversedEntryId: j['reversed_entry_id'] as String?,
+    lines: [
+      for (final l in (j['gl_lines'] as List? ?? const []))
+        JournalLine.fromJson(Map<String, dynamic>.from(l as Map)),
+    ]..sort((a, b) => a.lineNo.compareTo(b.lineNo)),
+  );
 }
 
 class JournalLine {
@@ -1981,8 +1997,7 @@ class AuditEntry {
 
   /// The fields that moved, in a stable order so the list does not
   /// reshuffle itself between reads.
-  List<String> get fields =>
-      ({...before.keys, ...after.keys}.toList()..sort());
+  List<String> get fields => ({...before.keys, ...after.keys}.toList()..sort());
 
   factory AuditEntry.fromJson(Map<String, dynamic> j) {
     final changes = j['changes'];
@@ -2041,15 +2056,15 @@ class YtdOpening {
       benefitsInKind == 0;
 
   factory YtdOpening.fromJson(Map<String, dynamic> j) => YtdOpening(
-        id: j['id'] as String?,
-        taxYear: Fmt.toInt(j['tax_year']),
-        grossPay: Fmt.toDouble(j['gross_pay']),
-        epfEmployee: Fmt.toDouble(j['epf_employee']),
-        pcbPaid: Fmt.toDouble(j['pcb_paid']),
-        zakatPaid: Fmt.toDouble(j['zakat_paid']),
-        benefitsInKind: Fmt.toDouble(j['benefits_in_kind']),
-        notes: j['notes']?.toString(),
-      );
+    id: j['id'] as String?,
+    taxYear: Fmt.toInt(j['tax_year']),
+    grossPay: Fmt.toDouble(j['gross_pay']),
+    epfEmployee: Fmt.toDouble(j['epf_employee']),
+    pcbPaid: Fmt.toDouble(j['pcb_paid']),
+    zakatPaid: Fmt.toDouble(j['zakat_paid']),
+    benefitsInKind: Fmt.toDouble(j['benefits_in_kind']),
+    notes: j['notes']?.toString(),
+  );
 }
 
 /// A relief the employee has declared — the TP1 form. Reliefs the
@@ -2076,33 +2091,27 @@ class DeclaredRelief {
   final String? notes;
 
   factory DeclaredRelief.fromJson(Map<String, dynamic> j) => DeclaredRelief(
-        id: j['id'] as String?,
-        reliefCode: j['relief_code']?.toString() ?? '',
-        amount: Fmt.toDouble(j['amount']),
-        taxYear: Fmt.toInt(j['tax_year']),
-        notes: j['notes']?.toString(),
-      );
+    id: j['id'] as String?,
+    reliefCode: j['relief_code']?.toString() ?? '',
+    amount: Fmt.toDouble(j['amount']),
+    taxYear: Fmt.toInt(j['tax_year']),
+    notes: j['notes']?.toString(),
+  );
 }
 
 /// A relief the statutory schedule offers, for the picker.
 class ReliefType {
-  ReliefType({
-    required this.code,
-    required this.name,
-    this.maxAmount,
-  });
+  ReliefType({required this.code, required this.name, this.maxAmount});
 
   final String code;
   final String name;
   final double? maxAmount;
 
   factory ReliefType.fromJson(Map<String, dynamic> j) => ReliefType(
-        code: j['code']?.toString() ?? '',
-        name: j['name']?.toString() ?? '',
-        maxAmount: j['max_amount'] == null
-            ? null
-            : Fmt.toDouble(j['max_amount']),
-      );
+    code: j['code']?.toString() ?? '',
+    name: j['name']?.toString() ?? '',
+    maxAmount: j['max_amount'] == null ? null : Fmt.toDouble(j['max_amount']),
+  );
 }
 
 /// One line of a bank payment instruction.
@@ -2133,14 +2142,14 @@ class PaymentLine {
   bool get isPayable => problem == null;
 
   factory PaymentLine.fromJson(Map<String, dynamic> j) => PaymentLine(
-        employeeNo: j['employee_no']?.toString() ?? '',
-        employeeName: j['employee_name']?.toString() ?? '',
-        amount: Fmt.toDouble(j['amount']),
-        reference: j['reference']?.toString() ?? '',
-        bankName: j['bank_name']?.toString(),
-        bankAccountNo: j['bank_account_no']?.toString(),
-        problem: j['problem']?.toString(),
-      );
+    employeeNo: j['employee_no']?.toString() ?? '',
+    employeeName: j['employee_name']?.toString() ?? '',
+    amount: Fmt.toDouble(j['amount']),
+    reference: j['reference']?.toString() ?? '',
+    bankName: j['bank_name']?.toString(),
+    bankAccountNo: j['bank_account_no']?.toString(),
+    problem: j['problem']?.toString(),
+  );
 }
 
 class Payslip {
@@ -2232,8 +2241,8 @@ class Payslip {
       schedulesVerified: j['schedules_verified'] == true,
       lines: raw is List
           ? raw
-              .map((e) => PayslipLine.fromJson(Map<String, dynamic>.from(e)))
-              .toList()
+                .map((e) => PayslipLine.fromJson(Map<String, dynamic>.from(e)))
+                .toList()
           : const [],
     );
   }
@@ -2257,13 +2266,13 @@ class PayslipLine {
   final double? rate;
 
   factory PayslipLine.fromJson(Map<String, dynamic> j) => PayslipLine(
-        kind: j['kind']?.toString() ?? 'earning',
-        code: j['code']?.toString() ?? '',
-        description: j['description']?.toString() ?? '',
-        amount: Fmt.toDouble(j['amount']),
-        quantity: j['quantity'] == null ? null : Fmt.toDouble(j['quantity']),
-        rate: j['rate'] == null ? null : Fmt.toDouble(j['rate']),
-      );
+    kind: j['kind']?.toString() ?? 'earning',
+    code: j['code']?.toString() ?? '',
+    description: j['description']?.toString() ?? '',
+    amount: Fmt.toDouble(j['amount']),
+    quantity: j['quantity'] == null ? null : Fmt.toDouble(j['quantity']),
+    rate: j['rate'] == null ? null : Fmt.toDouble(j['rate']),
+  );
 }
 
 class JobRequisition {
@@ -2347,8 +2356,9 @@ class Applicant {
       email: j['email']?.toString(),
       phone: j['phone']?.toString(),
       currentPosition: j['current_position']?.toString(),
-      expectedSalary:
-          j['expected_salary'] == null ? null : Fmt.toDouble(j['expected_salary']),
+      expectedSalary: j['expected_salary'] == null
+          ? null
+          : Fmt.toDouble(j['expected_salary']),
       source: j['source']?.toString(),
       rating: j['rating'] == null ? null : Fmt.toInt(j['rating']),
       requisitionTitle: req is Map ? req['title'] as String? : null,
@@ -2388,11 +2398,15 @@ class Appraisal {
       status: j['status']?.toString() ?? 'draft',
       employeeName: emp is Map ? emp['full_name'] as String? : null,
       cycleName: cyc is Map ? cyc['name'] as String? : null,
-      selfRating: j['self_rating'] == null ? null : Fmt.toDouble(j['self_rating']),
-      managerRating:
-          j['manager_rating'] == null ? null : Fmt.toDouble(j['manager_rating']),
-      finalRating:
-          j['final_rating'] == null ? null : Fmt.toDouble(j['final_rating']),
+      selfRating: j['self_rating'] == null
+          ? null
+          : Fmt.toDouble(j['self_rating']),
+      managerRating: j['manager_rating'] == null
+          ? null
+          : Fmt.toDouble(j['manager_rating']),
+      finalRating: j['final_rating'] == null
+          ? null
+          : Fmt.toDouble(j['final_rating']),
       recommendedIncrement: j['recommended_increment_percent'] == null
           ? null
           : Fmt.toDouble(j['recommended_increment_percent']),
@@ -2495,7 +2509,6 @@ class PayslipAccessLogEntry {
 
   bool get isView => action == 'view';
 
-
   /// What was actually looked at, in words.
   String get summary => isView
       ? '${employeeName ?? 'A payslip'}${periodCode == null ? '' : ' · $periodCode'}'
@@ -2512,8 +2525,9 @@ class PayslipAccessLogEntry {
           : null,
       employeeName: j['employee_name']?.toString(),
       periodCode: j['period_code']?.toString(),
-      payslipCount:
-          j['payslip_count'] == null ? null : Fmt.toInt(j['payslip_count']),
+      payslipCount: j['payslip_count'] == null
+          ? null
+          : Fmt.toInt(j['payslip_count']),
       ipAddress: j['ip_address']?.toString(),
     );
   }

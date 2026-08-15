@@ -68,7 +68,11 @@ class CompanyCard extends ConsumerWidget {
             FieldRow(
               label: 'SST',
               value: org.isSstRegistered
-                  ? (org.sstRegistrationNo ?? 'Registered')
+                  ? [
+                      org.sstRegistrationNo ?? 'Registered',
+                      if (org.sstRegisteredFrom != null)
+                        'from ${Fmt.date(org.sstRegisteredFrom!)}',
+                    ].join(' · ')
                   : 'Not registered',
             ),
             FieldRow(label: 'MSIC code', value: org.msicCode ?? 'Not set'),
@@ -131,7 +135,6 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
   final _name = TextEditingController();
   final _registrationNo = TextEditingController();
   final _tin = TextEditingController();
-  final _sstNo = TextEditingController();
   final _msic = TextEditingController();
   final _currency = TextEditingController();
   final _line1 = TextEditingController();
@@ -156,7 +159,6 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
 
   late String _entityType;
   late String _rounding;
-  late bool _sstRegistered;
   bool _saving = false;
 
   static const _entityTypes = {
@@ -185,7 +187,6 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
     _name.text = o.name;
     _registrationNo.text = o.registrationNo ?? '';
     _tin.text = o.tin ?? '';
-    _sstNo.text = o.sstRegistrationNo ?? '';
     _msic.text = o.msicCode ?? '';
     _currency.text = o.baseCurrency;
     _entityType = _entityTypes.containsKey(o.entityType)
@@ -194,7 +195,6 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
     _rounding = _roundings.containsKey(o.roundingMethod)
         ? o.roundingMethod
         : 'none';
-    _sstRegistered = o.isSstRegistered;
 
     _line1.text = o.addressLine1 ?? '';
     _line2.text = o.addressLine2 ?? '';
@@ -219,7 +219,6 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
     _name.dispose();
     _registrationNo.dispose();
     _tin.dispose();
-    _sstNo.dispose();
     _msic.dispose();
     _currency.dispose();
     for (final c in [
@@ -257,8 +256,6 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
           registrationNo: _registrationNo.text,
           tin: _tin.text,
           msicCode: _msic.text,
-          isSstRegistered: _sstRegistered,
-          sstRegistrationNo: _sstNo.text,
           addressLine1: _line1.text,
           addressLine2: _line2.text,
           addressLine3: _line3.text,
@@ -530,24 +527,10 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
                   ],
                 ),
               ],
-              const Divider(height: Space.xl),
-              SwitchListTile(
-                key: const ValueKey('company-sst'),
-                contentPadding: EdgeInsets.zero,
-                value: _sstRegistered,
-                onChanged: _saving
-                    ? null
-                    : (v) => setState(() => _sstRegistered = v),
-                title: const Text('Registered for SST'),
-              ),
-              if (_sstRegistered)
-                TextField(
-                  controller: _sstNo,
-                  enabled: !_saving,
-                  decoration: const InputDecoration(
-                    labelText: 'SST registration number',
-                  ),
-                ),
+              // SST is not edited here. It is four facts that have to
+              // move together and it has its own card below, because a
+              // registration saved halfway is a company charging tax it
+              // is not registered for, or not charging tax it owes.
               const Divider(height: Space.xl),
               DropdownButtonFormField<String>(
                 isExpanded: true,

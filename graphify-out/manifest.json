@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1786693905.559149,
-    "ast_hash": "d32ec8445c9ae69e4ccee5aad763a539",
+    "mtime": 1786780318.6477575,
+    "ast_hash": "494de30718fd206cb73e8671a559caeb",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786778711.494197,
-    "ast_hash": "892c232cd47379362463ba1f407101f5",
+    "mtime": 1786780119.3132713,
+    "ast_hash": "f3d32109c3c43422783752fd2544ff7c",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1786775045.2690747,
-    "ast_hash": "0a5461d4cfe42ea67f0c0f6d2ba52fc1",
+    "mtime": 1786780182.5057716,
+    "ast_hash": "d44c8277a022439bffc9e6e396e28163",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786776162.201068,
-    "ast_hash": "60f8035cdbd6fde6c04be24f2da8128d",
+    "mtime": 1786780070.735759,
+    "ast_hash": "e735288de2f48efc8029d6f5694af610",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -2130,8 +2130,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/company_card.dart": {
-    "mtime": 1786690420.8160114,
-    "ast_hash": "a80e51945eb647ae1dd3c616520fb714",
+    "mtime": 1786780137.1299038,
+    "ast_hash": "2f9cb057ab3b7974b917a743d4ee619d",
     "semantic_hash": ""
   },
   "app/test/company_details_test.dart": {
@@ -2492,6 +2492,26 @@
   "supabase/migrations/0144_chat_edit_and_delete.sql": {
     "mtime": 1786778294.8741994,
     "ast_hash": "9b9839f4b68a2513484147b8b41fd18e",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/settings/sst_card.dart": {
+    "mtime": 1786780318.7037575,
+    "ast_hash": "b32a0ba389abfd10b146b9c6da990d9e",
+    "semantic_hash": ""
+  },
+  "app/test/sst_card_test.dart": {
+    "mtime": 1786780318.9637575,
+    "ast_hash": "33f2fc97373f43549bf6a7352ec8f15b",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0145_sst_registration.sql": {
+    "mtime": 1786779929.9317598,
+    "ast_hash": "d46d554ddb8f7ddc2cc381822fd36d52",
+    "semantic_hash": ""
+  },
+  "supabase/tests/sst_registration.sql": {
+    "mtime": 1786780064.3597589,
+    "ast_hash": "ca9b5f7cac0bcffecc81b361113f24cd",
     "semantic_hash": ""
   }
 }

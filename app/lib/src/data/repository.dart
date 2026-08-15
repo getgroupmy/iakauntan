@@ -2834,8 +2834,6 @@ extension RepoOrgLogo on Repo {
     String? registrationNo,
     String? tin,
     String? msicCode,
-    required bool isSstRegistered,
-    String? sstRegistrationNo,
     String? addressLine1,
     String? addressLine2,
     String? addressLine3,
@@ -2878,15 +2876,40 @@ extension RepoOrgLogo on Repo {
         'registered_postcode': _orNull(registeredPostcode),
         'registered_city': _orNull(registeredCity),
         'registered_state_code': _orNull(registeredStateCode),
-        'is_sst_registered': isSstRegistered,
-        // Unregistering keeps no number. A company that deregistered and
-        // left the old number behind would put it on invoices that must
-        // not carry one.
-        'sst_registration_no': isSstRegistered
-            ? _orNull(sstRegistrationNo)
-            : null,
+        // SST is deliberately not here any more. Registering is four
+        // facts that have to move together — the flag, the number, the
+        // date it took effect and the tax code new lines default to —
+        // and `set_sst_registration` is the only thing that knows how.
+        // Writing the flag from this form would undo it every time
+        // somebody corrected the address.
       })
       .eq('id', orgId);
+
+  /// Register the company for SST, or take it off the register.
+  ///
+  /// Everything at once, in the database, because any part of it on its
+  /// own is a company that believes it is charging tax and is not: 0145
+  /// found one in this very database, registered since onboarding, with
+  /// every invoice line still defaulting to 0%.
+  ///
+  /// [taxCode] is the code new lines should default to — ST8 or ST6 for
+  /// service tax, SL10 or SL5 for sales tax. Which registration it is
+  /// is not something software should guess.
+  Future<void> setSstRegistration({
+    required bool registered,
+    DateTime? from,
+    String? registrationNo,
+    String? taxCode,
+  }) => client.rpc(
+    'set_sst_registration',
+    params: {
+      'p_org_id': orgId,
+      'p_registered': registered,
+      'p_from': from == null ? null : Fmt.iso(from),
+      'p_registration_no': registrationNo,
+      'p_tax_code': taxCode,
+    },
+  );
 
   /// Whether anything has reached the ledger yet.
   ///

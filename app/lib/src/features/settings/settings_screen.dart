@@ -15,6 +15,7 @@ import 'branches_card.dart';
 import 'chat_card.dart';
 import 'company_card.dart';
 import 'company_group_card.dart';
+import 'sst_card.dart';
 import 'notifications_card.dart';
 import 'warehouses_card.dart';
 
@@ -49,6 +50,11 @@ class SettingsScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   CompanyCard(org: organization),
+                  const SizedBox(height: 16),
+                  // Directly under the company it describes: it is a
+                  // fact about this company, and it decides what every
+                  // invoice line is taxed at.
+                  const SstCard(),
                   const SizedBox(height: 16),
                   // Beside the company they describe: a branch is part
                   // of this company, a group is the companies beside it.
