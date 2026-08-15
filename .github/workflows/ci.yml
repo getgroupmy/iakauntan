@@ -479,6 +479,16 @@ jobs:
           # on, which is right while this deployment is the demo — see
           # the README before it carries anybody's real ledger.
           DEMO_MODE: ${{ vars.DEMO_MODE }}
+          # A repository *variable*, not a secret: this is the public
+          # half of the VAPID pair and it is handed to every push service
+          # on every send. The private half is an edge function secret
+          # and must never be given to a build.
+          #
+          # It has to be here as well as in the function secrets, because
+          # the browser subscribes with it and the function signs with
+          # it, and a browser subscribed under one key cannot be pushed
+          # to under another.
+          WEB_PUSH_PUBLIC_KEY: ${{ vars.WEB_PUSH_PUBLIC_KEY }}
         run: |
           flutter pub get
 
@@ -491,6 +501,28 @@ jobs:
           fi
           if [ -n "$DEMO_MODE" ]; then
             defines+=("--dart-define=DEMO_MODE=$DEMO_MODE")
+          fi
+          if [ -n "$WEB_PUSH_PUBLIC_KEY" ]; then
+            defines+=("--dart-define=WEB_PUSH_PUBLIC_KEY=$WEB_PUSH_PUBLIC_KEY")
+          else
+            # Said on the summary because this is the half-configured
+            # case that explains itself to nobody: somebody sets the two
+            # function secrets, the sender is ready, and no browser ever
+            # subscribes — so Settings reports push as not configured and
+            # the reason is a variable on a page they are not looking at.
+            {
+              echo "### Web push is off in this build"
+              echo
+              echo "\`WEB_PUSH_PUBLIC_KEY\` is not set, so browsers cannot"
+              echo "subscribe and Settings → Notifications will say push is"
+              echo "not configured."
+              echo
+              echo "Generate the pair with"
+              echo "\`deno run supabase/functions/_shared/web_push_keygen.ts\`,"
+              echo "put the private half in **Edge Functions → Secrets**, and"
+              echo "the public half in **Settings → Secrets and variables →"
+              echo "Actions → Variables** as \`WEB_PUSH_PUBLIC_KEY\`."
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # --no-web-resources-cdn is load-bearing: without it the bundle
