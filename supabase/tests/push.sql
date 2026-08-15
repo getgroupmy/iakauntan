@@ -501,4 +501,72 @@ begin
       where t.user_id = v_ani), 0);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The nightly run actually runs the tidy-ups (0147)
+--
+-- `chat_expire_calls` and `prune_device_tokens` were written in 0140 and
+-- 0141 and scheduled by nothing for three migrations. Asserting that
+-- they *work* was never the gap — this asserts that something calls
+-- them, which is the part that was missing.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_ali  uuid := pg_temp.another_user('ali@nightly.test');
+  v_siti uuid := pg_temp.another_user('siti@nightly.test');
+  v_org uuid; v_conv uuid; v_call uuid;
+  v_status text; v_reason text; v_n int;
+begin
+  v_org := pg_temp.push_org('Nightly Sdn Bhd', v_ali);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_siti, 'accountant', 'active', now());
+
+  perform pg_temp.sign_in_as(v_ali);
+  perform public.chat_set_access(v_org, v_ali, true);
+  perform public.chat_set_access(v_org, v_siti, true);
+
+  v_conv := public.chat_start_direct(v_org, v_siti, v_org);
+  v_call := public.chat_start_call(v_conv, 'voice');
+
+  -- A call nobody answered, as it would be by one in the morning.
+  update public.chat_calls set ringing_until = now() - interval '2 hours'
+   where id = v_call;
+
+  select status::text into v_status from public.chat_calls where id = v_call;
+  perform pg_temp.check_true(
+    'before the nightly run the history still says ringing',
+    v_status = 'ringing');
+
+  -- And no phone is ringing, which is why this is a label fix rather
+  -- than a ringing fix: the reads already filter on the deadline.
+  perform pg_temp.sign_in_as(v_siti);
+  select count(*) into v_n from public.chat_incoming_calls();
+  perform pg_temp.check_eq('while nothing is actually ringing', v_n, 0);
+  perform pg_temp.sign_in_as(v_ali);
+
+  insert into public.device_tokens (user_id, token, platform, last_seen_at)
+  values (v_siti, 'token-ancient', 'android', now() - interval '400 days');
+  -- The control. Without it, "the old one went" would pass for a prune
+  -- that emptied the table.
+  insert into public.device_tokens (user_id, token, platform, last_seen_at)
+  values (v_siti, 'token-fresh', 'android', now());
+
+  perform app.run_daily_jobs(current_date);
+
+  select status::text, end_reason into v_status, v_reason
+    from public.chat_calls where id = v_call;
+  perform pg_temp.check_true(
+    'the nightly run leaves it missed rather than ringing since Tuesday',
+    v_status = 'missed');
+  perform pg_temp.check_true('and says why', v_reason = 'nobody answered');
+  perform pg_temp.check_eq('with nobody left ringing on it',
+    (select count(*) from public.chat_call_participants
+      where call_id = v_call and state = 'ringing'), 0);
+
+  perform pg_temp.check_true(
+    'and a handset nobody has presented in a year is off the register',
+    not exists (select 1 from public.device_tokens where token = 'token-ancient'));
+  perform pg_temp.check_true('while one in daily use is not',
+    exists (select 1 from public.device_tokens where token = 'token-fresh'));
+end $$;
+
 rollback;
