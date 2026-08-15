@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786724256.774593,
-    "ast_hash": "bd786075845356143e98b33547f458f7",
+    "mtime": 1786756983.837486,
+    "ast_hash": "9b3fcf9ea62ec662d535abb623f5b6b3",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -2190,8 +2190,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/chat/call_engine.dart": {
-    "mtime": 1786730860.957353,
-    "ast_hash": "0433577355d9dd68a69ed7eb8019ddd8",
+    "mtime": 1786757111.255099,
+    "ast_hash": "9d3006fb818449feaaabc1c5dd1306ec",
     "semantic_hash": ""
   },
   "app/lib/src/features/chat/call_incoming.dart": {
@@ -2200,8 +2200,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/chat/call_screen.dart": {
-    "mtime": 1786730524.7858117,
-    "ast_hash": "0aff5085df239f74e4acac215dc28d18",
+    "mtime": 1786757111.2831132,
+    "ast_hash": "ad9fc5cf8a409007bc632b57326a2d4b",
     "semantic_hash": ""
   },
   "app/lib/src/features/chat/chat_attachments.dart": {
@@ -2250,8 +2250,8 @@
     "semantic_hash": ""
   },
   "app/test/call_screen_test.dart": {
-    "mtime": 1786730201.955194,
-    "ast_hash": "408770acc6379d91fb419efa8271af3f",
+    "mtime": 1786757129.9108748,
+    "ast_hash": "835c5cb091acc7827fb6f563b7369285",
     "semantic_hash": ""
   },
   "app/test/manufacturing_order_test.dart": {
@@ -2315,8 +2315,73 @@
     "semantic_hash": ""
   },
   "docs/call-signalling.md": {
-    "mtime": 1786730991.099176,
-    "ast_hash": "917e7b99f38b39dc1b6e001732d71e8a",
+    "mtime": 1786757001.6841094,
+    "ast_hash": "369264445d98ad1b2664ca894270fd99",
+    "semantic_hash": ""
+  },
+  "server/sfu/package.json": {
+    "mtime": 1786756624.5276887,
+    "ast_hash": "901f06424a6f44e6d5de4ffc3e29076b",
+    "semantic_hash": ""
+  },
+  "server/sfu/src/config.js": {
+    "mtime": 1786756278.4228945,
+    "ast_hash": "9e3c4ba14964bf8a85cbc52206f35fdf",
+    "semantic_hash": ""
+  },
+  "server/sfu/src/index.js": {
+    "mtime": 1786756464.30289,
+    "ast_hash": "817317b40e3d7c9f83a866e3446a1836",
+    "semantic_hash": ""
+  },
+  "server/sfu/src/protocol.js": {
+    "mtime": 1786756425.006891,
+    "ast_hash": "0d540d1b4b0636e1d0edeb778a0483dd",
+    "semantic_hash": ""
+  },
+  "server/sfu/src/room.js": {
+    "mtime": 1786757024.8130026,
+    "ast_hash": "81abcb24390bb31b710f0faf32e8fa09",
+    "semantic_hash": ""
+  },
+  "server/sfu/src/rooms.js": {
+    "mtime": 1786756392.1068919,
+    "ast_hash": "29f3fdd0d54264382512fdad0fb660db",
+    "semantic_hash": ""
+  },
+  "server/sfu/src/server.js": {
+    "mtime": 1786757051.0583613,
+    "ast_hash": "0cac9878d5c35dfdc5ab4210b227c385",
+    "semantic_hash": ""
+  },
+  "server/sfu/src/token.js": {
+    "mtime": 1786756300.226894,
+    "ast_hash": "bad107faedc5bec6707c64fb02288369",
+    "semantic_hash": ""
+  },
+  "server/sfu/test/helpers.js": {
+    "mtime": 1786756539.1148884,
+    "ast_hash": "f793063e63d9aa4e85a0fc04bf83ffc5",
+    "semantic_hash": ""
+  },
+  "server/sfu/test/protocol.test.js": {
+    "mtime": 1786757024.8132455,
+    "ast_hash": "388d3692b748194cf878f6acb72244f5",
+    "semantic_hash": ""
+  },
+  "server/sfu/test/token.test.js": {
+    "mtime": 1786756488.2868896,
+    "ast_hash": "076335fdec15775c4a47e8725257d62e",
+    "semantic_hash": ""
+  },
+  "server/sfu/README.md": {
+    "mtime": 1786756946.7428792,
+    "ast_hash": "800f7a62a0047aaeaf31efed8d859fca",
+    "semantic_hash": ""
+  },
+  "server/sfu/docker-compose.yml": {
+    "mtime": 1786756888.0868804,
+    "ast_hash": "93aa6ba7c7e462ea618e0e72dbe609c9",
     "semantic_hash": ""
   }
 }
