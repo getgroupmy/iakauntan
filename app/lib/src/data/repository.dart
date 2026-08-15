@@ -1975,6 +1975,44 @@ class Repo {
     unawaited(notifyPush(conversationId: conversationId));
   }
 
+  /// How long a message stays editable. Kept in step with
+  /// `app.chat_edit_window()` by hand, which is a duplication worth
+  /// having: the alternative is a round trip on every message drawn, and
+  /// the only cost of drift is a menu item that offers an edit the
+  /// database then refuses with a sentence saying why.
+  static const chatEditWindow = Duration(minutes: 15);
+
+  /// Correct a message. Refused past the window, and by the database
+  /// rather than by the screen.
+  Future<void> chatEditMessage(String messageId, String body) => client.rpc(
+    'chat_edit_message',
+    params: {'p_message_id': messageId, 'p_body': body},
+  );
+
+  /// Take a message back.
+  ///
+  /// The row keeps its place and says it was deleted; the text and the
+  /// attachment rows go. Storage is a second system with its own
+  /// permissions, so the object is removed here — best effort, because
+  /// the database is the authority and a file with no row is already
+  /// unreachable through the app: every URL is minted from the row.
+  Future<void> chatDeleteMessage(
+    String messageId, {
+    List<String> storagePaths = const [],
+  }) async {
+    await client.rpc(
+      'chat_delete_message',
+      params: {'p_message_id': messageId},
+    );
+    if (storagePaths.isEmpty) return;
+    try {
+      await client.storage.from('chat').remove(storagePaths);
+    } catch (_) {
+      // See above. Reporting this as a failed delete would be a lie —
+      // the message is deleted.
+    }
+  }
+
   /// A file or a voice note, which is a message rather than a decoration
   /// on one — so the row goes in first and the attachment hangs off it.
   ///

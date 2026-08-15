@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786775629.369213,
-    "ast_hash": "2e085c9166c942139ff7fa34c2872864",
+    "mtime": 1786778711.494197,
+    "ast_hash": "892c232cd47379362463ba1f407101f5",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786775324.025073,
-    "ast_hash": "2013428d1bfdfe4016f816bcc7d9b7d6",
+    "mtime": 1786776162.201068,
+    "ast_hash": "60f8035cdbd6fde6c04be24f2da8128d",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -2220,8 +2220,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/chat/chat_screen.dart": {
-    "mtime": 1786731213.284106,
-    "ast_hash": "cc4ba9bfc65779fdf714542a2e063a06",
+    "mtime": 1786778514.710198,
+    "ast_hash": "404a55c10ebfb32bb0ba712989b3f35d",
     "semantic_hash": ""
   },
   "app/lib/src/features/manufacturing/bom_dialog.dart": {
@@ -2305,8 +2305,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/chat.sql": {
-    "mtime": 1786728637.5591023,
-    "ast_hash": "0e0b21e78718008e011438dc86904580",
+    "mtime": 1786778397.2261987,
+    "ast_hash": "6bb3e0265ca476b7bb26c66d1d1f15cb",
     "semantic_hash": ""
   },
   "supabase/tests/manufacturing.sql": {
@@ -2415,8 +2415,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/push.sql": {
-    "mtime": 1786774605.2330773,
-    "ast_hash": "cfc9b1c8a66ebde0856a15a9de01c979",
+    "mtime": 1786777061.3180938,
+    "ast_hash": "e2a0b9ee6bd76c78cf08a8beeb2da0f1",
     "semantic_hash": ""
   },
   "docs/push-notifications.md": {
@@ -2482,6 +2482,16 @@
   "supabase/migrations/0143_web_push.sql": {
     "mtime": 1786774558.2410777,
     "ast_hash": "d51542705453eab66d77fd30b9fb1323",
+    "semantic_hash": ""
+  },
+  "app/test/chat_edit_delete_test.dart": {
+    "mtime": 1786778711.6901968,
+    "ast_hash": "29942bf404982b556ffd129a4de1edca",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0144_chat_edit_and_delete.sql": {
+    "mtime": 1786778294.8741994,
+    "ast_hash": "9b9839f4b68a2513484147b8b41fd18e",
     "semantic_hash": ""
   }
 }

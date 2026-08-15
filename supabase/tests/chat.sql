@@ -762,4 +762,153 @@ begin
   raise notice 'ok   no trigger function is callable from the API';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Editing and deleting a message (0144)
+--
+-- The assertion this file exists for is the first one: until 0144 a
+-- client could rewrite the text of their own message through the
+-- ordinary REST API, at any age, without setting `edited_at` — so the
+-- reader saw new words with no mark on them. It is checked as
+-- `authenticated` and checks that it was, because the connection here is
+-- a superuser and a superuser is refused by nothing.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_ana uuid := pg_temp.another_user('ana@edit.test');
+  v_ben uuid := pg_temp.another_user('ben@edit.test');
+  v_org uuid; v_conv uuid; v_msg uuid; v_other uuid; v_att uuid;
+  v_refused boolean; v_body text; v_edited timestamptz; v_deleted boolean;
+  v_role text; v_n int;
+begin
+  v_org := pg_temp.chat_org('Edit Test Sdn Bhd', v_ana);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_ben, 'accountant', 'active', now());
+
+  perform pg_temp.sign_in_as(v_ana);
+  perform public.chat_set_access(v_org, v_ana, true);
+  perform public.chat_set_access(v_org, v_ben, true);
+  v_conv := public.chat_start_direct(v_org, v_ben, v_org);
+
+  insert into public.chat_messages
+    (conversation_id, sender_id, sender_org_id, body)
+  values (v_conv, v_ana, v_org, 'the transfer is approved') returning id into v_msg;
+  insert into public.chat_messages
+    (conversation_id, sender_id, sender_org_id, body)
+  values (v_conv, v_ben, v_org, 'noted') returning id into v_other;
+
+  v_refused := false;
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    update public.chat_messages set body = 'the transfer is cancelled'
+     where id = v_msg;
+  exception when insufficient_privilege then v_refused := true;
+  end;
+  reset role;
+  perform pg_temp.sign_in_as(v_ana);
+
+  perform pg_temp.check_true('the raw update ran as a client, not as a superuser',
+    v_role = 'authenticated');
+  perform pg_temp.check_true(
+    'a client cannot rewrite a message through the table — the whole '
+    'reason this migration exists', v_refused);
+  select body into v_body from public.chat_messages where id = v_msg;
+  perform pg_temp.check_true('and the record still says what was said',
+    v_body = 'the transfer is approved');
+
+  -- The control for that refusal. Without it the assertion above would
+  -- pass for a database in which nothing can be written at all.
+  perform public.chat_edit_message(v_msg, '  the transfer is approved today  ');
+  select body, edited_at into v_body, v_edited
+    from public.chat_messages where id = v_msg;
+  perform pg_temp.check_true('editing through the function works',
+    v_body = 'the transfer is approved today');
+  perform pg_temp.check_true(
+    'and stamps the mark itself, rather than trusting the caller to',
+    v_edited is not null);
+
+  v_refused := false;
+  begin
+    perform public.chat_edit_message(v_other, 'not noted');
+  exception when others then v_refused := true;
+  end;
+  perform pg_temp.sign_in_as(v_ana);
+  perform pg_temp.check_true(
+    'nobody edits words another person is recorded as having said',
+    v_refused);
+
+  update public.chat_messages set created_at = now() - interval '20 minutes'
+   where id = v_msg;
+  v_refused := false;
+  begin
+    perform public.chat_edit_message(v_msg, 'rewritten much later');
+  exception when others then v_refused := true;
+  end;
+  perform pg_temp.sign_in_as(v_ana);
+  perform pg_temp.check_true(
+    'and a message past the window is not editable — by then it has been '
+    'read and acted on, and the honest correction is another message',
+    v_refused);
+  select body into v_body from public.chat_messages where id = v_msg;
+  perform pg_temp.check_true('so it still reads as it did',
+    v_body = 'the transfer is approved today');
+
+  -- ---------------------------------------------------------------
+  -- Deleting: any age, keeps the row, takes the text and the file
+  -- ---------------------------------------------------------------
+  insert into public.chat_attachments (message_id, conversation_id, file_name,
+    storage_path, mime_type, file_size)
+  values (v_msg, v_conv, 'payslip.pdf', v_conv || '/payslip.pdf',
+          'application/pdf', 10)
+  returning id into v_att;
+
+  perform public.chat_delete_message(v_msg);
+  select body, deleted_at is not null into v_body, v_deleted
+    from public.chat_messages where id = v_msg;
+  perform pg_temp.check_true('the row stays, so the thread keeps its shape',
+    v_body is not null);
+  perform pg_temp.check_true('marked deleted', v_deleted);
+  perform pg_temp.check_true(
+    'and the text is gone rather than hidden — every participant may read '
+    'this table directly, so hiding it would leave it there to be read',
+    v_body = '');
+  perform pg_temp.check_true(
+    'the attachment row goes with it, so no signed URL can be minted',
+    not exists (select 1 from public.chat_attachments where id = v_att));
+
+  -- A double tap on a slow connection is not an error.
+  perform public.chat_delete_message(v_msg);
+
+  perform pg_temp.sign_in_as(v_ben);
+  select count(*) into v_n from public.chat_thread(v_conv) t;
+  perform pg_temp.check_eq(
+    'both messages are still in the thread, because a message vanishing '
+    'out of the middle of a conversation is what 0135 set out to avoid',
+    v_n, 2);
+  select t.deleted, t.body into v_deleted, v_body
+    from public.chat_thread(v_conv) t where t.id = v_msg;
+  perform pg_temp.check_true('the deleted one says so', v_deleted);
+  perform pg_temp.check_true('and carries no words', v_body is null);
+
+  select t.deleted into v_deleted
+    from public.chat_thread(v_conv) t where t.id = v_other;
+  perform pg_temp.check_true('while the other is untouched — the control',
+    not v_deleted);
+
+  v_refused := false;
+  begin
+    perform public.chat_delete_message(v_msg);
+  exception when others then v_refused := true;
+  end;
+  perform pg_temp.sign_in_as(v_ben);
+  perform pg_temp.check_true(
+    'and one person cannot take another''s message out of the record',
+    v_refused);
+
+  perform public.chat_delete_message(v_other);
+  perform pg_temp.check_true('while his own deletes, which is the control '
+    'for that refusal',
+    (select deleted_at is not null from public.chat_messages where id = v_other));
+end $$;
+
 rollback;

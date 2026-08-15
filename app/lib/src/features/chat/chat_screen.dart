@@ -7,6 +7,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/repository.dart';
 import 'call_incoming.dart';
 import 'chat_attachments.dart';
 import 'chat_group.dart';
@@ -479,7 +480,10 @@ class _ThreadState extends ConsumerState<_Thread> {
                     reverse: true,
                     padding: const EdgeInsets.all(Space.lg),
                     itemCount: rows.length,
-                    itemBuilder: (context, i) => _Bubble(message: rows[i]),
+                    itemBuilder: (context, i) => _Bubble(
+                      message: rows[i],
+                      conversationId: widget.conversationId,
+                    ),
                   ),
           ),
         ),
@@ -551,68 +555,226 @@ class _ThreadState extends ConsumerState<_Thread> {
   }
 }
 
-class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message});
+class _Bubble extends ConsumerWidget {
+  const _Bubble({required this.message, required this.conversationId});
 
   final Map<String, dynamic> message;
+  final String conversationId;
+
+  bool get _deleted => message['deleted'] == true;
+
+  /// Whether the database would still accept an edit.
+  ///
+  /// Asked here so the menu does not offer something that is refused a
+  /// moment later. The database asks it again and is the one that
+  /// decides — this is a courtesy, not the rule.
+  bool get _editable {
+    if (_deleted) return false;
+    final at = DateTime.tryParse(message['created_at']?.toString() ?? '');
+    if (at == null) return false;
+    return DateTime.now().difference(at.toLocal()) < Repo.chatEditWindow;
+  }
+
+  Future<void> _edit(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController(
+      text: message['body']?.toString() ?? '',
+    );
+    final body = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit message'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: null,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('chat-edit-save'),
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (body == null || body.isEmpty || !context.mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref
+          .read(repoProvider)!
+          .chatEditMessage(message['id'].toString(), body),
+      successMessage: null,
+    );
+    if (ok) {
+      ref.invalidate(chatThreadProvider(conversationId));
+      ref.invalidate(chatConversationsProvider);
+    }
+  }
+
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete message?'),
+        // Said plainly, because it is not undoable and the other person
+        // has probably already read it.
+        content: const Text(
+          'It stays in the conversation as a deleted message, so nobody '
+          'is left wondering what was there. The words go.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('chat-delete-confirm'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final paths = [
+      for (final a in (message['attachments'] as List? ?? const []))
+        (a as Map)['storage_path'].toString(),
+    ];
+
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref
+          .read(repoProvider)!
+          .chatDeleteMessage(message['id'].toString(), storagePaths: paths),
+      successMessage: null,
+    );
+    if (ok) {
+      ref.invalidate(chatThreadProvider(conversationId));
+      ref.invalidate(chatConversationsProvider);
+    }
+  }
+
+  /// The menu, on long press and on right click.
+  ///
+  /// No button drawn on the bubble: one per message is a row of dots
+  /// down the whole thread, and both gestures are what people already
+  /// try on a message they want to take back.
+  Future<void> _menu(BuildContext context, WidgetRef ref, Offset at) async {
+    if (message['is_mine'] != true || _deleted) return;
+
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        at & const Size(1, 1),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        if (_editable)
+          const PopupMenuItem(value: 'edit', child: Text('Edit'))
+        else
+          const PopupMenuItem(
+            enabled: false,
+            child: Text('Too old to edit', style: TextStyle(fontSize: 12)),
+          ),
+        const PopupMenuItem(value: 'delete', child: Text('Delete')),
+      ],
+    );
+    if (!context.mounted) return;
+    if (choice == 'edit') {
+      await _edit(context, ref);
+    } else if (choice == 'delete') {
+      await _delete(context, ref);
+    }
+  }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final mine = message['is_mine'] == true;
     final scheme = Theme.of(context).colorScheme;
     final at = DateTime.parse(message['created_at'].toString()).toLocal();
 
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 460),
-        margin: const EdgeInsets.symmetric(vertical: 3),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: mine
-              ? scheme.primaryContainer
-              : scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: mine
-              ? CrossAxisAlignment.end
-              : CrossAxisAlignment.start,
-          children: [
-            if (!mine)
-              Text(
-                message['sender_name']?.toString() ?? '',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            for (final a in (message['attachments'] as List? ?? const []))
-              ChatAttachmentView(
-                attachment: Map<String, dynamic>.from(a as Map),
-              ),
-            // A file or a voice note may arrive with nothing said about
-            // it, and an empty line under it reads as a rendering fault.
-            if ((message['body']?.toString() ?? '').trim().isNotEmpty)
-              Text(message['body'].toString()),
-            const SizedBox(height: 2),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+      child: GestureDetector(
+        onLongPressStart: (d) => _menu(context, ref, d.globalPosition),
+        onSecondaryTapDown: (d) => _menu(context, ref, d.globalPosition),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 460),
+          margin: const EdgeInsets.symmetric(vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: mine
+                ? scheme.primaryContainer
+                : scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: mine
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
+            children: [
+              if (!mine)
                 Text(
-                  '${at.hour.toString().padLeft(2, '0')}:'
-                  '${at.minute.toString().padLeft(2, '0')}',
-                  style: const TextStyle(fontSize: 10),
+                  message['sender_name']?.toString() ?? '',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                if (message['edited_at'] != null)
-                  const Text(' · edited', style: TextStyle(fontSize: 10)),
-                if (mine) ...[
-                  const SizedBox(width: 4),
-                  _Receipt(state: message['state']?.toString()),
-                ],
+              // A deleted message keeps its place and its author and says
+              // what happened. Nothing else: no attachment, no words. The
+              // alternative — removing the row from the list — is a
+              // conversation that changes shape behind somebody who has
+              // already read it.
+              if (_deleted)
+                Text(
+                  'Message deleted',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                )
+              else ...[
+                for (final a in (message['attachments'] as List? ?? const []))
+                  ChatAttachmentView(
+                    attachment: Map<String, dynamic>.from(a as Map),
+                  ),
+                // A file or a voice note may arrive with nothing said about
+                // it, and an empty line under it reads as a rendering fault.
+                if ((message['body']?.toString() ?? '').trim().isNotEmpty)
+                  Text(message['body'].toString()),
               ],
-            ),
-          ],
+              const SizedBox(height: 2),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${at.hour.toString().padLeft(2, '0')}:'
+                    '${at.minute.toString().padLeft(2, '0')}',
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                  if (message['edited_at'] != null && !_deleted)
+                    const Text(' · edited', style: TextStyle(fontSize: 10)),
+                  if (mine) ...[
+                    const SizedBox(width: 4),
+                    _Receipt(state: message['state']?.toString()),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
