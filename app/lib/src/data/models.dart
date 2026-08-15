@@ -34,6 +34,8 @@ class Organization {
     this.baseCurrency = 'MYR',
     this.isSstRegistered = false,
     this.sstRegisteredFrom,
+    this.parentOrgId,
+    this.ownedPercent,
     this.usesPreprintedLetterhead = false,
     this.creditControl = 'warn',
     this.einvoiceEnabled = false,
@@ -84,6 +86,14 @@ class Organization {
   /// The date registration took effect. Once it is set, a document dated
   /// before it may not carry tax — see 0145.
   final DateTime? sstRegisteredFrom;
+
+  /// The company in the same group that owns this one, and how much of
+  /// it. Both null until somebody records it — and until they do, the
+  /// consolidated report refuses, because whether the whole of a
+  /// subsidiary belongs to the group is the question minority interest
+  /// turns on. See 0148.
+  final String? parentOrgId;
+  final double? ownedPercent;
 
   /// The company prints onto its own letterhead paper, so the generated
   /// PDFs leave room for a header rather than drawing one.

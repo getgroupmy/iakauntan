@@ -276,4 +276,75 @@ begin
        from public.organizations where id = v_b));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- What the screen is shown
+--
+-- 0149 widened `my_group_companies` so the Settings card can say who
+-- owns each company and put the button only on the rows where pressing
+-- it would work. That last part is the one worth asserting: the rule in
+-- `set_group_ownership` is administrator of the company being *owned*,
+-- so a person who merely belongs to a company must be told no — and a
+-- card that read one group-wide `can_admin` would offer a button that
+-- collects a refusal.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_boss  uuid := pg_temp.another_user('boss3@cons.test');
+  v_other uuid := pg_temp.another_user('other3@cons.test');
+  v_clerk uuid := pg_temp.another_user('clerk3@cons.test');
+  v_group uuid; v_a uuid; v_b uuid; v_hidden uuid;
+  v_row record; v_role text; v_refused boolean;
+begin
+  insert into public.company_groups (name, created_by)
+  values ('Kumpulan Cons Tiga', v_boss) returning id into v_group;
+  v_a      := pg_temp.cons_org('Show A Sdn Bhd', v_boss, v_group);
+  v_b      := pg_temp.cons_org('Show B Sdn Bhd', v_boss, v_group);
+  v_hidden := pg_temp.cons_org('Show Hidden Sdn Bhd', v_other, v_group);
+
+  perform pg_temp.sign_in_as(v_boss);
+  perform public.set_group_ownership(v_b, v_a, 60);
+
+  -- The owner of both sees both, and the one he does not belong to is
+  -- still not listed. That exclusion is what makes the widened function
+  -- safe to hand ownership through.
+  perform pg_temp.check_eq('a group company you are not in stays off the list',
+    (select count(*) from public.my_group_companies(v_a)
+      where org_id = v_hidden), 0);
+
+  select * into v_row from public.my_group_companies(v_a) where org_id = v_b;
+  perform pg_temp.check_true('the recorded parent comes back by name',
+    v_row.parent_name = 'Show A Sdn Bhd');
+  perform pg_temp.check_eq('with the share held',
+    v_row.owned_percent, 60);
+  perform pg_temp.check_true('and an administrator is offered the button',
+    v_row.can_admin);
+
+  -- Somebody who belongs to Show B but does not run it.
+  insert into public.org_members (org_id, user_id, role)
+  values (v_b, v_clerk, 'accountant');
+  perform pg_temp.sign_in_as(v_clerk);
+
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    select * into v_row from public.my_group_companies(v_b) where org_id = v_b;
+  end;
+  reset role;
+
+  perform pg_temp.check_true('the test ran under row level security',
+    v_role = 'authenticated');
+  perform pg_temp.check_true('an accountant is not offered it',
+    v_row.can_admin is false);
+
+  -- The positive control, and the reason the flag exists: the database
+  -- would have refused him anyway.
+  v_refused := false;
+  begin perform public.set_group_ownership(v_b, v_a, 100);
+  exception when others then v_refused := true; end;
+  perform pg_temp.sign_in_as(v_clerk);
+  perform pg_temp.check_true(
+    'and the database refuses him, which is what the flag is reporting',
+    v_refused);
+end $$;
+
 rollback;
