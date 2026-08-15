@@ -778,6 +778,28 @@ class Repo {
     return _rows(data);
   }
 
+  /// The opening trial balance from the old system.
+  ///
+  /// The control accounts are compared against the open items already
+  /// imported rather than posted a second time, and the difference lands
+  /// in 3900 — which comes to zero when the two agree. 0151 says why at
+  /// length.
+  Future<List<Map<String, dynamic>>> importOpeningBalances({
+    required List<Map<String, String>> rows,
+    required DateTime asAt,
+    required bool commit,
+  }) async => _rows(
+    await client.rpc(
+      'import_opening_balances',
+      params: {
+        'p_org_id': orgId,
+        'p_rows': rows,
+        'p_as_at': Fmt.iso(asAt),
+        'p_commit': commit,
+      },
+    ),
+  );
+
   /// What is left in `3900 Opening Balance Equity`, which is a
   /// migration's own arithmetic rather than a report anybody asks for.
   Future<Map<String, dynamic>?> openingBalanceSuspense() async {

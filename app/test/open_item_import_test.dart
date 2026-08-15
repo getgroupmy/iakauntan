@@ -41,6 +41,19 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// The last segment does not fit an 800-pixel test surface, so it sits
+  /// off the end of the row's horizontal scroll and a tap lands on
+  /// nothing — silently, which is why both assertions that used it came
+  /// back "found 0 widgets" rather than an error about the tap.
+  Future<void> openBalances(WidgetTester tester) async {
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Opening balances'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Opening balances'));
+    await tester.pumpAndSettle();
+  }
+
   group('which permission the screen asks for', () {
     test('a master file needs write access and an open item needs posting', () {
       expect(importNeedsPosting(ImportKind.contacts), isFalse);
@@ -179,5 +192,73 @@ void main() {
 
     expect(find.textContaining('could not be read'), findsNothing);
     expect(find.byKey(const ValueKey('import-as-at')), findsNothing);
+  });
+
+  group('the opening trial balance', () {
+    test('it posts, so it asks for posting rights like the open items do', () {
+      expect(importNeedsPosting(ImportKind.openingBalances), isTrue);
+    });
+
+    test('a warning does not stop the file and an error does', () {
+      // The rule that makes the control-account comparison usable. A
+      // receivables total that disagrees with the invoices brought
+      // across is a warning: the difference is exactly what Opening
+      // Balance Equity is then left holding, and refusing the file would
+      // make the most informative case the one nobody can import.
+      expect(
+        importBlockingErrors([
+          {'status': 'ok'},
+          {'status': 'warning'},
+          {'status': 'imported'},
+        ]),
+        0,
+      );
+      expect(
+        importBlockingErrors([
+          {'status': 'warning'},
+          {'status': 'error'},
+        ]),
+        1,
+      );
+    });
+
+    test('debit and credit stay two columns, under the names a trial '
+        'balance uses', () {
+      // Collapsing them into one signed amount is asking somebody to get
+      // a sign wrong, and no trial balance anybody exports is shaped
+      // that way.
+      final table = parseCsvTable(
+        'Account,Dr,Cr\n1110,5000.00,\n3100,,5000.00',
+        headerMapper(openingBalanceColumns),
+      );
+      expect(table.problems, isEmpty);
+      expect(table.rows.first['account_code'], '1110');
+      expect(table.rows.first['debit'], '5000.00');
+      expect(table.rows.last['credit'], '5000.00');
+    });
+
+    testWidgets('the screen says the control accounts are compared rather '
+        'than posted again', (tester) async {
+      await openBalances(tester);
+
+      expect(find.textContaining('not posted again'), findsOneWidget);
+      expect(find.textContaining('comes to zero'), findsOneWidget);
+      // And not the open-item copy, which is about a different file and
+      // would be actively misleading here.
+      expect(find.textContaining('what is still owed'), findsNothing);
+    });
+
+    testWidgets('it asks for the account code, not a document number', (
+      tester,
+    ) async {
+      await openBalances(tester);
+
+      expect(find.text('account_code'), findsOneWidget);
+      expect(find.text('debit'), findsOneWidget);
+      expect(find.text('credit'), findsOneWidget);
+      expect(find.text('outstanding_amount'), findsNothing);
+      // It still posts, so the changeover date is still asked for.
+      expect(find.byKey(const ValueKey('import-as-at')), findsOneWidget);
+    });
   });
 }

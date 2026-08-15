@@ -133,10 +133,25 @@ What is imported is the *outstanding* amount, not the original total.
 Anything already collected stays in the old system, which is where
 anybody asking about it will look.
 
-Still missing: opening stock quantities and the opening trial balance
-itself. Both leave a balance in 3900 until they are brought across,
-which is exactly what that account is for and what the suspense report
-reports.
+The opening trial balance is built too, in 0151 —
+`import_opening_balances`, on the same screen. Its one real decision is
+what to do about the control accounts: an old system's trial balance
+lists Accounts Receivable as a single figure, and the open invoices have
+already posted it customer by customer. Posting it again doubles the
+receivables; leaving it out of the file throws away the most useful
+number in a migration. So it stays in the file, is **not** posted, and is
+**compared** — and the residual then goes to 3900, which lands on zero
+exactly when the two halves agree. A disagreement is reported as a
+warning naming both figures, and does not block the import: the
+difference is what 3900 is then left holding, and
+`report_opening_balance_suspense` says so.
+
+Still missing: opening stock quantities. The inventory balance can be
+brought in as a figure and the import warns that nothing is behind it —
+until quantities are entered, the stock valuation report will not agree
+with the balance sheet and cost of sales takes an average of nothing.
+That needs item codes, warehouses and lots, and is its own piece of
+work.
 
 ## 8. Withholding and compound tax
 
@@ -263,7 +278,8 @@ workflow, and it is the difference between a bookkeeping tool and a
 business system. Both are built, and so is the aging, and so are
 recurring invoices and bills, and so is withholding, and so are the two
 statutory statements, and so is bank transfer, and so is importing the
-master files — and so, now, are the open invoices and bills that make
-moving onto this system mid-year possible at all. What is left: compound
-tax, granular permissions, taking payment, and the rest of the opening
-position (stock quantities and the opening trial balance).
+master files — and so, now, is the whole opening position bar one piece:
+the open invoices and bills, and the trial balance that squares them
+off, which together make moving onto this system mid-year possible at
+all. What is left: compound tax, granular permissions, taking payment,
+and opening stock quantities.

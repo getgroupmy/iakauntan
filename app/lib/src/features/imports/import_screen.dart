@@ -105,8 +105,21 @@ const openBillColumns = <String, List<String>>{
   'description': ['particulars', 'remarks'],
 };
 
+/// The opening trial balance.
+///
+/// `debit` and `credit` as separate columns rather than one signed
+/// amount, because that is how every trial balance any accountant has
+/// ever exported is shaped, and asking somebody to collapse two columns
+/// into one signed one is asking them to get a sign wrong.
+const openingBalanceColumns = <String, List<String>>{
+  'account_code': ['account', 'code', 'gl code', 'account no'],
+  'debit': ['dr', 'debit amount'],
+  'credit': ['cr', 'credit amount'],
+  'description': ['account name', 'particulars', 'narration'],
+};
+
 /// Which file is being brought across.
-enum ImportKind { contacts, items, openInvoices, openBills }
+enum ImportKind { contacts, items, openInvoices, openBills, openingBalances }
 
 /// Whether this kind writes to the ledger.
 ///
@@ -118,7 +131,21 @@ enum ImportKind { contacts, items, openInvoices, openBills }
 /// that asked for write access throughout would offer an enabled button
 /// to an accounts clerk and collect a refusal.
 bool importNeedsPosting(ImportKind kind) =>
-    kind == ImportKind.openInvoices || kind == ImportKind.openBills;
+    kind == ImportKind.openInvoices ||
+    kind == ImportKind.openBills ||
+    kind == ImportKind.openingBalances;
+
+/// How many rows would stop the file.
+///
+/// Only `error` does. `warning` is what the opening trial balance
+/// answers when the old system's receivables figure and the invoices
+/// actually brought across disagree — a real problem, and not one to
+/// block a migration over, because the difference is exactly what
+/// Opening Balance Equity is then left holding and the report says so.
+/// Counting warnings here would make the most informative file in a
+/// migration the one that cannot be imported.
+int importBlockingErrors(List<Map<String, dynamic>> verdict) =>
+    verdict.where((r) => r['status'] == 'error').length;
 
 class _ImportScreenState extends ConsumerState<ImportScreen> {
   final _text = TextEditingController();
@@ -146,14 +173,21 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     ImportKind.items => _itemAliases,
     ImportKind.openInvoices => openInvoiceColumns,
     ImportKind.openBills => openBillColumns,
+    ImportKind.openingBalances => openingBalanceColumns,
   };
 
-  List<String> get _required => _openItems
-      ? const ['doc_no', 'contact_code', 'doc_date', 'outstanding_amount']
-      : const ['code', 'name'];
+  List<String> get _required => switch (_kind) {
+    ImportKind.contacts || ImportKind.items => const ['code', 'name'],
+    ImportKind.openInvoices || ImportKind.openBills => const [
+      'doc_no',
+      'contact_code',
+      'doc_date',
+      'outstanding_amount',
+    ],
+    ImportKind.openingBalances => const ['account_code'],
+  };
 
-  int get _errorCount =>
-      (_verdict ?? const []).where((r) => r['status'] == 'error').length;
+  int get _errorCount => importBlockingErrors(_verdict ?? const []);
 
   Future<void> _run({required bool commit}) async {
     final table = parseCsvTable(_text.text, headerMapper(_aliases));
@@ -167,18 +201,25 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     setState(() => _busy = true);
     final repo = ref.read(repoProvider)!;
     try {
-      final rows = _openItems
-          ? await repo.importOpenItems(
-              invoices: _kind == ImportKind.openInvoices,
-              rows: table.rows,
-              asAt: _asAt,
-              commit: commit,
-            )
-          : await repo.importRows(
-              contacts: _kind == ImportKind.contacts,
-              rows: table.rows,
-              commit: commit,
-            );
+      final rows = switch (_kind) {
+        ImportKind.contacts || ImportKind.items => await repo.importRows(
+          contacts: _kind == ImportKind.contacts,
+          rows: table.rows,
+          commit: commit,
+        ),
+        ImportKind.openInvoices ||
+        ImportKind.openBills => await repo.importOpenItems(
+          invoices: _kind == ImportKind.openInvoices,
+          rows: table.rows,
+          asAt: _asAt,
+          commit: commit,
+        ),
+        ImportKind.openingBalances => await repo.importOpeningBalances(
+          rows: table.rows,
+          asAt: _asAt,
+          commit: commit,
+        ),
+      };
       setState(() => _verdict = rows);
       if (commit) {
         ref.invalidate(contactsProvider);
@@ -203,6 +244,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     ImportKind.items => 'items',
     ImportKind.openInvoices => 'open invoices',
     ImportKind.openBills => 'open bills',
+    ImportKind.openingBalances => 'opening balances',
   };
 
   @override
@@ -240,6 +282,10 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                     value: ImportKind.openBills,
                     label: Text('Open bills'),
                   ),
+                  ButtonSegment(
+                    value: ImportKind.openingBalances,
+                    label: Text('Opening balances'),
+                  ),
                 ],
                 selected: {_kind},
                 onSelectionChanged: (s) => setState(() {
@@ -271,6 +317,8 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                           ImportKind.items => 'Items',
                           ImportKind.openInvoices => 'Invoices still unpaid',
                           ImportKind.openBills => 'Bills still unpaid',
+                          ImportKind.openingBalances =>
+                            'The opening trial balance',
                         },
                         subtitle:
                             'Paste the file with its header row. '
@@ -286,15 +334,28 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                         ),
                         const SizedBox(height: Space.sm),
                         Text(
-                          'What goes in the amount column is what is still '
-                          'owed, not the original total — anything already '
-                          'received stays in the old system, which is where '
-                          'anybody asking will look. Each document keeps the '
-                          'date it was raised so the ageing is right; the '
-                          'ledger takes the whole lot on the changeover date '
-                          'above. No tax is posted: it was declared under '
-                          'the old system, and declaring it twice is the '
-                          'mistake this avoids.',
+                          _kind == ImportKind.openingBalances
+                              ? 'Paste the trial balance as the old system '
+                                    'gives it, receivables and payables '
+                                    'included. Those two are not posted again '
+                                    '— the open invoices and bills already '
+                                    'did — but they are compared against what '
+                                    'came across, which is the most useful '
+                                    'check in a migration. Everything else is '
+                                    'posted, and the difference goes to '
+                                    'Opening Balance Equity, which comes to '
+                                    'zero when the two halves agree.'
+                              : 'What goes in the amount column is what is '
+                                    'still owed, not the original total — '
+                                    'anything already received stays in the '
+                                    'old system, which is where anybody '
+                                    'asking will look. Each document keeps '
+                                    'the date it was raised so the ageing is '
+                                    'right; the ledger takes the whole lot on '
+                                    'the changeover date above. No tax is '
+                                    'posted: it was declared under the old '
+                                    'system, and declaring it twice is the '
+                                    'mistake this avoids.',
                           style: TextStyle(
                             fontSize: 11,
                             color: Theme.of(
@@ -333,6 +394,10 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                               'doc_no,supplier_doc_no,contact_code,doc_date,'
                                   'outstanding_amount\n'
                                   'BILL-77,ST-2026-4411,S-001,2026-05-02,800',
+                            ImportKind.openingBalances =>
+                              'account_code,debit,credit\n'
+                                  '1110,5000.00,\n'
+                                  '3100,,5000.00',
                           },
                         ),
                       ),
@@ -529,6 +594,12 @@ class _Verdict extends StatelessWidget {
   Widget build(BuildContext context) {
     final imported = rows.where((r) => r['status'] == 'imported').length;
     final bad = rows.where((r) => r['status'] == 'error').toList();
+    // Not errors — they do not stop the file — but the reason the
+    // control accounts are in it at all. A row saying the old system's
+    // receivables and the invoices actually brought across disagree is
+    // the single most useful line on this screen, and hiding it because
+    // it is not fatal would waste it.
+    final warned = rows.where((r) => r['status'] == 'warning').toList();
 
     return Card(
       child: Padding(
@@ -548,26 +619,28 @@ class _Verdict extends StatelessWidget {
                   ? 'Nothing has been written yet. Import writes them.'
                   : 'Nothing will be written until these are fixed.',
             ),
-            if (bad.isNotEmpty)
-              ...bad.map(
-                (r) => ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    Icons.error_outline,
-                    size: 18,
-                    color: context.colors.danger,
-                  ),
-                  title: Text(
-                    // The master-file importers answer with `code` and
-                    // the open-item ones with `doc_no`. Whichever is
-                    // there, because the row number alone is not what
-                    // somebody looks for in a spreadsheet.
-                    'Row ${r['row_no']}${_label(r)}',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: Text(r['message']?.toString() ?? ''),
+            for (final r in [...bad, ...warned])
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  r['status'] == 'error'
+                      ? Icons.error_outline
+                      : Icons.info_outline,
+                  size: 18,
+                  color: r['status'] == 'error'
+                      ? context.colors.danger
+                      : context.colors.warning,
                 ),
+                title: Text(
+                  // The master-file importers answer with `code` and
+                  // the open-item ones with `doc_no`. Whichever is
+                  // there, because the row number alone is not what
+                  // somebody looks for in a spreadsheet.
+                  'Row ${r['row_no']}${_label(r)}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(r['message']?.toString() ?? ''),
               ),
           ],
         ),
