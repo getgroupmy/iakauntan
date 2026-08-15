@@ -890,6 +890,17 @@ rest, including the drift it was written to end, and
 [docs/schedulers.md](docs/schedulers.md) covers the two timers and the
 credential they share.
 
+`migrate` sits between the two, on the default branch only and before
+either deploys, because a function or a screen that expects a column the
+database does not have yet is the failure that ordering prevents. It
+reports what is applied and what is pending once
+`SUPABASE_DB_PASSWORD` is set, and applies it once the repository
+variable `MIGRATIONS_AUTOPUSH` is `true` as well —
+[docs/migrations.md](docs/migrations.md) explains why those are two
+separate switches, and records the reconciliation of the hosted
+project's migration history that had to happen before any of this could
+be turned on.
+
 That second job had been failing, unnoticed, since the suite grew a
 second fixture organization. `app.seed_chart_of_accounts` creates a temp
 table `on commit drop`, which only drops at COMMIT — and the whole suite
