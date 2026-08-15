@@ -204,7 +204,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
           runSpacing: Space.lg,
           alignment: WrapAlignment.center,
           children: [
-            for (final peer in peers) _Face(name: peer.displayName),
+            for (final peer in peers)
+              _Face(name: peer.displayName, muted: peer.micMuted),
             if (peers.isEmpty)
               const _Face(name: 'Waiting for somebody to answer'),
           ],
@@ -237,13 +238,27 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                   alignment: Alignment.bottomLeft,
                   child: Padding(
                     padding: const EdgeInsets.all(Space.sm),
-                    child: Text(
-                      peer.displayName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        shadows: [Shadow(blurRadius: 4)],
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (peer.micMuted) ...[
+                          const Icon(
+                            Icons.mic_off,
+                            size: 14,
+                            color: Colors.white,
+                            shadows: [Shadow(blurRadius: 4)],
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(
+                          peer.displayName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            shadows: [Shadow(blurRadius: 4)],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -307,9 +322,10 @@ class _Banner extends StatelessWidget {
 }
 
 class _Face extends StatelessWidget {
-  const _Face({required this.name});
+  const _Face({required this.name, this.muted = false});
 
   final String name;
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
@@ -327,10 +343,22 @@ class _Face extends StatelessWidget {
         const SizedBox(height: Space.sm),
         SizedBox(
           width: 140,
-          child: Text(
-            name,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (muted) ...[
+                const Icon(Icons.mic_off, size: 12, color: Colors.white70),
+                const SizedBox(width: 4),
+              ],
+              Flexible(
+                child: Text(
+                  name,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+            ],
           ),
         ),
       ],

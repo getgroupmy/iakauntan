@@ -9,10 +9,14 @@ same.
 
 So the app had to pick one, and it picked the shape the official
 mediasoup demo uses, because that is the closest thing to a convention
-the ecosystem has and because `mediasoup_client_flutter` is written
-against it. **The server has to implement what is written here.** Nothing
-in this repository can check that it does — the app is one end of a
-socket and the other end does not exist yet.
+the ecosystem has and because the Flutter client library is written
+against it.
+
+**Both ends of this contract are in this repository.** The server is
+[`server/sfu`](../server/sfu/README.md), and its tests drive every
+method and notification below against real mediasoup workers. If a
+method appears here and not there, or the other way round, one of them
+is wrong — that is what the document is for.
 
 Where it lives in the codebase:
 
@@ -22,6 +26,7 @@ Where it lives in the codebase:
 | Room credentials | `supabase/functions/call-token/index.ts` |
 | Client transport | `app/lib/src/features/chat/call_engine.dart` |
 | Call UI | `app/lib/src/features/chat/call_screen.dart` |
+| The server | `server/sfu/` |
 
 ## Before the socket
 
@@ -165,12 +170,19 @@ it — it holds no Supabase credentials and should not. Two consequences:
   room the first time somebody presents a valid token for it, and
   destroys it when the last peer leaves.
 
-## What has not been exercised
+## What has and has not been exercised
 
-Everything on the media side. There is no SFU to point at, so nothing in
-CI or in this repository has ever opened this socket. The signalling half
-— rows, ringing, joining, declining, expiry, and who is permitted — is
-covered by `supabase/tests/chat.sql` and does run.
+| Half | Covered by | Runs in CI |
+| --- | --- | --- |
+| Signalling state — ringing, joining, declining, expiry, who is permitted | `supabase/tests/chat.sql` | yes |
+| This protocol, against real routers and transports | `server/sfu/test/` | yes |
+| Media actually arriving | nothing | **no** |
+
+The gap is the third row, and it is not one more test away. Nothing in a
+test process performs a DTLS handshake or sends an RTP packet, so no
+suite here can tell you whether two people can hear each other — that
+takes two devices on two networks. Place one real call before trusting
+this with anybody's meeting.
 
 ### A note on the client library
 

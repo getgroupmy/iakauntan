@@ -147,6 +147,28 @@ void main() {
     expect(find.text('2 on the call'), findsOneWidget);
   });
 
+  testWidgets('somebody else muting is visible, not just silent', (
+    tester,
+  ) async {
+    final muted = CallPeer(id: 'a', displayName: 'Ahmad')..micMuted = true;
+    await open(
+      tester,
+      FakeCallEngine(
+        peers: [
+          muted,
+          CallPeer(id: 'b', displayName: 'Mei Ling'),
+        ],
+      ),
+    );
+
+    // The server sends `consumerPaused` when somebody mutes. The engine
+    // used to drop it, which made muting indistinguishable from having
+    // stopped talking.
+    expect(find.byIcon(Icons.mic_off), findsOneWidget);
+    expect(find.text('Ahmad'), findsOneWidget);
+    expect(find.text('Mei Ling'), findsOneWidget);
+  });
+
   testWidgets('mute reaches the engine and changes the button', (tester) async {
     final engine = FakeCallEngine();
     await open(tester, engine);

@@ -74,7 +74,14 @@ class CallPeer {
   String? cameraConsumerId;
   String? micConsumerId;
 
-  bool get hasVideo => camera != null;
+  /// Whether they have muted themselves, and whether their camera is
+  /// off. Tracked from `consumerPaused` / `consumerResumed`, which the
+  /// server sends and this used to ignore — so somebody muting looked
+  /// exactly like somebody who had stopped talking.
+  bool micMuted = false;
+  bool cameraOff = false;
+
+  bool get hasVideo => camera != null && !cameraOff;
 }
 
 enum CallPhase { connecting, connected, failed, closed }
@@ -110,11 +117,13 @@ abstract class CallEngine implements Listenable {
 /// is a library, not a server, and defines no client protocol at all.
 /// Whatever the server implements, this is what the app sends.
 ///
-/// Nothing in this file has ever been run against a server. There is no
-/// SFU to point it at, and a widget test cannot open a microphone. The
-/// signalling *state* — who is called, who answered, who may join — is
-/// covered by `supabase/tests/chat.sql` and does run; this is the other
-/// half, and it is unexercised.
+/// The server end is `server/sfu`, in this repository, and its tests
+/// drive every method and notification below against real mediasoup
+/// routers and transports. What no test anywhere covers is media
+/// actually arriving: nothing in a test process performs a DTLS
+/// handshake or opens a microphone, so a green suite says the two ends
+/// agree on the protocol and says nothing about whether anybody can hear
+/// anything. That takes two devices.
 class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
   WebSocketChannel? _socket;
   StreamSubscription<dynamic>? _frames;
@@ -128,6 +137,7 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
 
   final _peers = <String, CallPeer>{};
   final _consumers = <String, Consumer>{};
+  final _arrivedPaused = <String, bool>{};
   final _pending = <int, Completer<Map<String, dynamic>>>{};
   var _nextId = 1;
 
@@ -444,6 +454,10 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
         _consume(data);
       case 'consumerClosed':
         _dropConsumer(data['consumerId'] as String?);
+      case 'consumerPaused':
+        _setPaused(data['consumerId'] as String?, true);
+      case 'consumerResumed':
+        _setPaused(data['consumerId'] as String?, false);
       case 'peerJoined':
         final id = data['peerId'] as String?;
         if (id == null) return;
@@ -467,6 +481,10 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
   void _consume(Map<String, dynamic> data) {
     final recv = _recv;
     if (recv == null) return;
+    // Somebody who muted before you joined arrives already paused.
+    // Starting from `false` would show them as talking until they next
+    // touched the button.
+    _arrivedPaused[data['id'] as String] = data['producerPaused'] == true;
     try {
       recv.consume(
         id: data['id'] as String,
@@ -512,14 +530,17 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
     renderer.srcObject = consumer.stream;
 
     _consumers[consumer.id] = consumer;
+    final paused = _arrivedPaused.remove(consumer.id) ?? false;
     if (consumer.kind == 'video') {
       await peer.camera?.dispose();
       peer.camera = renderer;
       peer.cameraConsumerId = consumer.id;
+      peer.cameraOff = paused;
     } else {
       await peer.mic?.dispose();
       peer.mic = renderer;
       peer.micConsumerId = consumer.id;
+      peer.micMuted = paused;
     }
     notifyListeners();
 
@@ -529,6 +550,23 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
     await _request('resumeConsumer', {
       'consumerId': consumer.id,
     }).catchError((_) => <String, dynamic>{});
+  }
+
+  /// Somebody on the other side muted, or turned their camera off.
+  void _setPaused(String? consumerId, bool paused) {
+    if (consumerId == null) return;
+    for (final peer in _peers.values) {
+      if (peer.micConsumerId == consumerId) {
+        peer.micMuted = paused;
+        notifyListeners();
+        return;
+      }
+      if (peer.cameraConsumerId == consumerId) {
+        peer.cameraOff = paused;
+        notifyListeners();
+        return;
+      }
+    }
   }
 
   void _dropConsumer(String? consumerId) {

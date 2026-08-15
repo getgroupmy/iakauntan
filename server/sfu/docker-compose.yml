@@ -1,0 +1,60 @@
+# The two processes a call needs, on one machine.
+#
+# `network_mode: host` for both, and that is not laziness. WebRTC media
+# is a thousand UDP ports; publishing that range through Docker's proxy
+# takes minutes to start, costs a userspace hop per packet, and puts a
+# NAT in front of a process whose whole job is to tell the far side which
+# address to send to. Host networking is what every mediasoup and coturn
+# deployment ends up at.
+#
+# Consequences worth knowing before running this: both containers see the
+# host's interfaces, `ports:` is ignored, and this file will not work on
+# Docker Desktop for Mac or Windows, where there is no host network to
+# share. Deploy it on a Linux VM.
+#
+# Secrets come from a `.env` file beside this one, which is git-ignored:
+#
+#   CALL_SFU_SECRET=...        the same value as the Supabase function secret
+#   CALL_TURN_SECRET=...       the same value as the Supabase function secret
+#   MEDIASOUP_ANNOUNCED_IP=... this machine's public address
+#   TURN_REALM=call.example.my
+services:
+  sfu:
+    build: .
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      NODE_ENV: production
+      PORT: 4443
+      CALL_SFU_SECRET: ${CALL_SFU_SECRET:?set CALL_SFU_SECRET in .env}
+      MEDIASOUP_ANNOUNCED_IP: ${MEDIASOUP_ANNOUNCED_IP:?set MEDIASOUP_ANNOUNCED_IP in .env}
+      MEDIASOUP_MIN_PORT: 40000
+      MEDIASOUP_MAX_PORT: 40999
+      MEDIASOUP_LOG_LEVEL: warn
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4443/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 3s
+
+  # Roughly one connection in five cannot go peer to peer, and on a
+  # corporate network it is most of them. This is what those fall back
+  # to — and what `call-token` mints credentials for, without ever
+  # creating an account here: coturn recomputes the password from the
+  # shared secret on each request.
+  turn:
+    image: coturn/coturn:4.6
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ./coturn/certs:/etc/coturn/certs:ro
+    command:
+      - -c
+      - /etc/coturn/turnserver.conf
+      - --static-auth-secret=${CALL_TURN_SECRET:?set CALL_TURN_SECRET in .env}
+      - --realm=${TURN_REALM:?set TURN_REALM in .env}
+      - --external-ip=${MEDIASOUP_ANNOUNCED_IP}

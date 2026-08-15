@@ -179,6 +179,40 @@ jobs:
           deno check "${entries[@]}"
 
   # -------------------------------------------------------------------
+  # The call server
+  #
+  # `server/sfu` is the media server behind in-app calling, and unlike
+  # the edge functions it can be genuinely exercised: these tests start
+  # real mediasoup workers and drive the whole protocol over real
+  # WebSockets. They have already caught one bug that would only ever
+  # have appeared under load — a request sent the instant a socket opens
+  # being dropped while the router was still being created.
+  #
+  # What they do not cover is media. No DTLS handshake happens in a test
+  # process and no RTP packet is sent, so a green run here is not a
+  # promise that anybody can hear anything — that still takes two
+  # devices. `server/sfu/README.md` says so in the same words.
+  # -------------------------------------------------------------------
+  sfu:
+    name: Call server
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server/sfu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: server/sfu/package-lock.json
+      # `ci`, not `install`: the lockfile is the point. mediasoup ships a
+      # native worker binary, and a silently different version of it is
+      # not something to discover in a call.
+      - run: npm ci
+      - run: npm test
+
+  # -------------------------------------------------------------------
   # The edge functions
   #
   # These are the parts of the system that are not in the database and
@@ -209,7 +243,7 @@ jobs:
   functions:
     name: Deploy the edge functions
     runs-on: ubuntu-latest
-    needs: [flutter, database, edge]
+    needs: [flutter, database, edge, sfu]
     if: >-
       github.event_name != 'pull_request' &&
       github.ref_name == github.event.repository.default_branch

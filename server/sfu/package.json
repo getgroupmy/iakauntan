@@ -1,0 +1,19 @@
+{
+  "name": "iakauntan-call-sfu",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The media server behind iAkauntan's in-app calls. Speaks the protocol in docs/call-signalling.md.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "mediasoup": "^3.24.2",
+    "ws": "^8.18.0"
+  }
+}
