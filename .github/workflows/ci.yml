@@ -123,7 +123,8 @@ jobs:
                    supabase/tests/access_types.sql \
                    supabase/tests/branches_and_groups.sql \
                    supabase/tests/manufacturing.sql \
-                   supabase/tests/chat.sql; do
+                   supabase/tests/chat.sql \
+                   supabase/tests/push.sql; do
             echo "== $f"
             psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done

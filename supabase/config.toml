@@ -48,6 +48,9 @@ enable_confirmations = false
 #                asking. It reads the call under the caller's own token
 #                and refuses anybody whose participant row has not
 #                joined.
+#   send-push    makes other people's phones ring, so it has to
+#                establish that the caller is in that conversation
+#                before it will.
 [functions.myinvois]
 verify_jwt = true
 
@@ -61,4 +64,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.call-token]
+verify_jwt = true
+
+[functions.send-push]
 verify_jwt = true

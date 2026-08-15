@@ -11,6 +11,7 @@ must reach neither:
 | `fetch-rates` | Bank Negara Malaysia | the exchange-rate scheduler |
 | `ocr` | whichever reader the company has chosen | the app, when a receipt is scanned |
 | `call-token` | nobody — it signs | the app, once somebody has joined a call |
+| `send-push` | Firebase Cloud Messaging | the sender's app, right after a message or a call |
 
 They live in `supabase/functions/`. `_shared/` is not a function — it is
 what they import, and the underscore is what tells both the CLI and the
@@ -109,6 +110,14 @@ would let anybody mint their own entry to any room, which is the whole
 reason this is a function and not a SQL function.
 [call-signalling.md](call-signalling.md) is the protocol the server on
 the other end has to implement.
+
+### Notifying
+
+`send-push` needs one secret, `FCM_SERVICE_ACCOUNT` — the whole Firebase
+service account JSON. Until it is set the function returns 503 and says
+so, rather than accepting requests and silently sending nothing.
+[push-notifications.md](push-notifications.md) covers what else Firebase
+needs and what is not built yet.
 
 ## Deploying one by hand
 
