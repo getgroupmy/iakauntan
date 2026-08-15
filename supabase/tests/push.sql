@@ -122,7 +122,11 @@ begin
   begin
     set local role authenticated;
     v_role := current_user;
-    perform public.register_device('token-ali-laptop', 'web', 'Chrome');
+    -- A browser, so it carries the keys its payload is encrypted to.
+    -- 0143 refuses a web registration without them.
+    perform public.register_device('token-ali-laptop', 'web', 'Chrome',
+      'BF9r0MNfkTnnOIyDD7OPllJoaJ1pPH3TeznR5L1Ip7u5CxzG7mdpNqmDPRdTZxaec_QQtYxae_qqF8hket0IfxQ',
+      'fsR_NIlY2ogaxU0mczQmdw');
     select count(*) into v_mine
       from public.device_tokens where user_id = v_ali;
     select count(*) into v_theirs
