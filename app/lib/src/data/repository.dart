@@ -2885,6 +2885,28 @@ extension RepoOrgLogo on Repo {
       })
       .eq('id', orgId);
 
+  /// Invoices from other companies in the group addressed to this one.
+  ///
+  /// Not everything the group has raised — only documents whose customer
+  /// contact points at this company, which is how one company addresses
+  /// a document to another. See 0146.
+  Future<List<Map<String, dynamic>>> intercompanyInbox() async => Repo._rows(
+    await client.rpc('intercompany_inbox', params: {'p_org_id': orgId}),
+  );
+
+  /// Turn one of them into a draft bill here.
+  ///
+  /// A draft, because two things cannot be carried across a company
+  /// boundary and have to be decided on this side: which expense account
+  /// each line belongs to, and which of our items it is.
+  Future<String> acceptIntercompanyBill(String salesDocumentId) async {
+    final id = await client.rpc(
+      'accept_intercompany_bill',
+      params: {'p_sales_document_id': salesDocumentId, 'p_org_id': orgId},
+    );
+    return id as String;
+  }
+
   /// Register the company for SST, or take it off the register.
   ///
   /// Everything at once, in the database, because any part of it on its

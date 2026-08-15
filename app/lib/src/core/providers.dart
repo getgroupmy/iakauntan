@@ -631,6 +631,12 @@ final groupCompaniesProvider =
       return requireRepo(ref).groupCompanies();
     });
 
+/// Invoices from group companies waiting to be turned into bills here.
+final intercompanyInboxProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).intercompanyInbox();
+    });
+
 // ---------------------------------------------------------------------
 // Push notifications
 // ---------------------------------------------------------------------

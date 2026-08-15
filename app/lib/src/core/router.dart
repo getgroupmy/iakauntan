@@ -17,6 +17,7 @@ import '../features/stock/stock_take_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/documents/document_editor.dart';
 import '../features/documents/exchange_rates_screen.dart';
+import '../features/documents/intercompany_screen.dart';
 import '../features/documents/receipts_screen.dart';
 import '../features/documents/salespeople_screen.dart';
 import '../features/documents/document_list_screen.dart';
@@ -269,6 +270,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/salespeople',
             builder: (_, __) => const SalespeopleScreen(),
+          ),
+          GoRoute(
+            path: '/intercompany',
+            builder: (_, __) => const IntercompanyScreen(),
           ),
           GoRoute(
             path: '/receipts',

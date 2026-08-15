@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786775116.9130743,
-    "ast_hash": "f8d74d72c1db12eddd983221b0027803",
+    "mtime": 1786782036.89137,
+    "ast_hash": "c3607b18e56a028e320140b4e5da9b64",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786768705.9237666,
-    "ast_hash": "313b11244dede3fa48c881aad030cae0",
+    "mtime": 1786782074.020403,
+    "ast_hash": "7619f0ddd2c851ec7fdc041afd9d4f45",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786780119.3132713,
-    "ast_hash": "f3d32109c3c43422783752fd2544ff7c",
+    "mtime": 1786782036.8907897,
+    "ast_hash": "4c9f252cde7e3fe3753bfb43c73520f2",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -155,8 +155,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
-    "mtime": 1786693905.567149,
-    "ast_hash": "8a2f5470f4c9ce760e21f1e5da7aa887",
+    "mtime": 1786782158.537793,
+    "ast_hash": "b4388754de7d96d9ab8e8ec3ebc78701",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/line_draft.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786780070.735759,
-    "ast_hash": "e735288de2f48efc8029d6f5694af610",
+    "mtime": 1786782006.8015451,
+    "ast_hash": "2b897aa4bed1ce933660657ef413896c",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -2512,6 +2512,26 @@
   "supabase/tests/sst_registration.sql": {
     "mtime": 1786780064.3597589,
     "ast_hash": "ca9b5f7cac0bcffecc81b361113f24cd",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/intercompany_screen.dart": {
+    "mtime": 1786782158.465793,
+    "ast_hash": "1e58a8672ec2709d0a1a167503532392",
+    "semantic_hash": ""
+  },
+  "app/test/intercompany_test.dart": {
+    "mtime": 1786782158.557793,
+    "ast_hash": "a3185afa6a2c4393e5359edebeedd44d",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0146_intercompany_billing.sql": {
+    "mtime": 1786781833.4602787,
+    "ast_hash": "1ab13704993071a0bf57653a858454dc",
+    "semantic_hash": ""
+  },
+  "supabase/tests/intercompany_billing.sql": {
+    "mtime": 1786782000.553794,
+    "ast_hash": "7353c37ed55c1a7b5078498fb6801091",
     "semantic_hash": ""
   }
 }
