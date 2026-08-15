@@ -84,6 +84,58 @@ class Repo {
 
   /// The balances and turnover between companies in the group — what a
   /// consolidation would have to eliminate.
+  /// The combined trial balance with inter-company trading taken out.
+  ///
+  /// Refused by 0148 unless every subsidiary is recorded as wholly
+  /// owned, because anything less needs minority interest and this does
+  /// not compute one. The refusal names the company, and `AsyncView`
+  /// shows the sentence.
+  Future<List<Map<String, dynamic>>> groupConsolidated({
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final data = await client.rpc(
+      'report_group_consolidated_trial_balance',
+      params: {
+        'p_org_id': orgId,
+        if (from != null) 'p_from': Fmt.iso(from),
+        'p_to': Fmt.iso(to ?? DateTime.now()),
+      },
+    );
+    return _rows(data);
+  }
+
+  /// Which pairs reconcile and which do not. Nothing is eliminated for a
+  /// pair that disagrees, so this is the list of what has to be sorted
+  /// out before the consolidation means anything.
+  Future<List<Map<String, dynamic>>> groupEliminationCheck({
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final data = await client.rpc(
+      'report_group_elimination_check',
+      params: {
+        'p_org_id': orgId,
+        if (from != null) 'p_from': Fmt.iso(from),
+        'p_to': Fmt.iso(to ?? DateTime.now()),
+      },
+    );
+    return _rows(data);
+  }
+
+  Future<void> setGroupOwnership({
+    required String orgId,
+    String? parentOrgId,
+    double? percent,
+  }) => client.rpc(
+    'set_group_ownership',
+    params: {
+      'p_org_id': orgId,
+      'p_parent_org_id': parentOrgId,
+      'p_percent': percent,
+    },
+  );
+
   Future<List<Map<String, dynamic>>> groupIntercompany({
     DateTime? from,
     DateTime? to,

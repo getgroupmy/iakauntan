@@ -679,3 +679,76 @@ ReportSpec intercompanySpec(
     ],
   );
 }
+
+/// The combined trial balance with inter-company trading taken out.
+///
+/// Three money columns rather than one, because the interesting thing is
+/// not the consolidated figure on its own — it is the pair. An
+/// accountant reading a consolidation wants to see what was there and
+/// what came off, and a single column would hide the second.
+ReportSpec consolidatedSpec(
+  List<Map<String, dynamic>> rows,
+  DateTimeRange range, {
+  required int companies,
+  required int unreconciled,
+}) {
+  final active = rows
+      .where(
+        (r) =>
+            Fmt.toDouble(r['combined_balance']) != 0 ||
+            Fmt.toDouble(r['elimination']) != 0,
+      )
+      .toList();
+
+  final eliminated = active.fold<double>(
+    0,
+    (s, r) => s + Fmt.toDouble(r['elimination']).abs(),
+  );
+
+  return ReportSpec(
+    title: 'Consolidated Trial Balance',
+    subtitle:
+        '$companies ${companies == 1 ? 'company' : 'companies'} · '
+        '${Fmt.date(range.start)} – ${Fmt.date(range.end)}',
+    note: unreconciled == 0
+        ? 'Inter-company balances and trading have been eliminated. Still '
+              'not adjusted: unrealised profit in stock bought from another '
+              'company in the group, which needs lineage this system does '
+              'not record.'
+        : '$unreconciled inter-company ${unreconciled == 1 ? 'pair does' : 'pairs do'} '
+              'not agree, and nothing has been eliminated for '
+              '${unreconciled == 1 ? 'it' : 'them'}. Eliminating the smaller '
+              'side would balance and would bury the difference inside these '
+              'figures. Reconcile them first — the Inter-company tab lists '
+              'which.',
+    blocks: [
+      ReportGrid(
+        title: null,
+        headers: const [
+          'Code',
+          'Account',
+          'Combined',
+          'Eliminated',
+          'Consolidated',
+        ],
+        rows: [
+          for (final r in active)
+            [
+              TextCell(r['code']?.toString() ?? ''),
+              TextCell(r['name']?.toString() ?? ''),
+              MoneyCell(Fmt.toDouble(r['combined_balance']), signed: true),
+              MoneyCell(Fmt.toDouble(r['elimination']), signed: true),
+              MoneyCell(Fmt.toDouble(r['consolidated_balance']), signed: true),
+            ],
+        ],
+        total: [
+          const TextCell(''),
+          TextCell('Eliminated ${Fmt.money(eliminated / 2)} in total'),
+          const TextCell(''),
+          const TextCell(''),
+          const TextCell(''),
+        ],
+      ),
+    ],
+  );
+}

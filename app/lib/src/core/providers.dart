@@ -492,6 +492,24 @@ final groupTrialBalanceProvider = FutureProvider.autoDispose
     });
 
 /// What a consolidation would have to eliminate.
+final groupConsolidatedProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({DateTime from, DateTime to})>((
+      ref,
+      range,
+    ) {
+      return requireRepo(ref).groupConsolidated(from: range.from, to: range.to);
+    });
+
+final groupEliminationCheckProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({DateTime from, DateTime to})>((
+      ref,
+      range,
+    ) {
+      return requireRepo(
+        ref,
+      ).groupEliminationCheck(from: range.from, to: range.to);
+    });
+
 final groupIntercompanyProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, ({DateTime from, DateTime to})>((
       ref,

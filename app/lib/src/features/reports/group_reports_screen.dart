@@ -41,7 +41,7 @@ class _GroupReportsScreenState extends ConsumerState<GroupReportsScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
+    _tabs = TabController(length: 3, vsync: this);
     _tabs.addListener(() => setState(() {}));
   }
 
@@ -60,15 +60,35 @@ class _GroupReportsScreenState extends ConsumerState<GroupReportsScreen>
   /// The spec for the tab on screen, or null while it is still loading.
   /// Null disables the download: a PDF of a half-loaded report is worse
   /// than no PDF.
+  /// How many inter-company pairs do not agree. Nothing is eliminated
+  /// for those, so the consolidation has to say how many are outstanding
+  /// rather than quietly presenting a figure that ignores them.
+  int get _unreconciled =>
+      (ref.watch(groupEliminationCheckProvider(_key)).valueOrNull ?? const [])
+          .where((r) => r['eliminated'] != true)
+          .length;
+
   ReportSpec? get _visibleSpec {
-    if (_tabs.index == 0) {
-      final rows = ref.watch(groupTrialBalanceProvider(_key)).valueOrNull;
-      return rows == null
-          ? null
-          : groupTrialBalanceSpec(rows, _range, companies: _companyCount);
+    switch (_tabs.index) {
+      case 0:
+        final rows = ref.watch(groupTrialBalanceProvider(_key)).valueOrNull;
+        return rows == null
+            ? null
+            : groupTrialBalanceSpec(rows, _range, companies: _companyCount);
+      case 1:
+        final rows = ref.watch(groupConsolidatedProvider(_key)).valueOrNull;
+        return rows == null
+            ? null
+            : consolidatedSpec(
+                rows,
+                _range,
+                companies: _companyCount,
+                unreconciled: _unreconciled,
+              );
+      default:
+        final rows = ref.watch(groupIntercompanyProvider(_key)).valueOrNull;
+        return rows == null ? null : intercompanySpec(rows, _range);
     }
-    final rows = ref.watch(groupIntercompanyProvider(_key)).valueOrNull;
-    return rows == null ? null : intercompanySpec(rows, _range);
   }
 
   Future<void> _download(ReportSpec spec) async {
@@ -145,15 +165,21 @@ class _GroupReportsScreenState extends ConsumerState<GroupReportsScreen>
         ],
         bottom: TabBar(
           controller: _tabs,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           tabs: const [
-            Tab(text: 'Combined Trial Balance'),
+            Tab(text: 'Combined'),
+            Tab(text: 'Consolidated'),
             Tab(text: 'Inter-company'),
           ],
         ),
       ),
       body: Column(
         children: [
-          const _CombinationNotice(),
+          // Only over the combined tab. Saying "nothing has been
+          // eliminated" above a consolidation that has just eliminated
+          // it would be worse than saying nothing.
+          if (_tabs.index == 0) const _CombinationNotice(),
           Expanded(
             child: TabBarView(
               controller: _tabs,
@@ -171,6 +197,22 @@ class _GroupReportsScreenState extends ConsumerState<GroupReportsScreen>
                     message:
                         'Post documents in any company in the group and '
                         'they add up here.',
+                  ),
+                ),
+                _GroupReport(
+                  provider: groupConsolidatedProvider(_key),
+                  spec: (rows) => consolidatedSpec(
+                    rows,
+                    _range,
+                    companies: _companyCount,
+                    unreconciled: _unreconciled,
+                  ),
+                  empty: const EmptyState(
+                    icon: Icons.account_balance_outlined,
+                    title: 'Nothing to consolidate',
+                    message:
+                        'Post documents in the companies of the group '
+                        'and the consolidated position appears here.',
                   ),
                 ),
                 _GroupReport(
