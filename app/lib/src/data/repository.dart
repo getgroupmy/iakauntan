@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -1954,15 +1955,25 @@ class Repo {
     String conversationId,
     String body, {
     required String senderOrgId,
-  }) => client.from('chat_messages').insert({
-    'conversation_id': conversationId,
-    'sender_id': client.auth.currentUser?.id,
-    // The company you are in this conversation *as*, which the
-    // database checks against your participant row rather than
-    // taking on trust.
-    'sender_org_id': senderOrgId,
-    'body': body,
-  });
+  }) async {
+    await client.from('chat_messages').insert({
+      'conversation_id': conversationId,
+      'sender_id': client.auth.currentUser?.id,
+      // The company you are in this conversation *as*, which the
+      // database checks against your participant row rather than
+      // taking on trust.
+      'sender_org_id': senderOrgId,
+      'body': body,
+    });
+    // After the insert, never before: a notification for a message that
+    // failed to send is worse than a message that arrives unannounced.
+    //
+    // Not awaited. The message is committed and the composer should
+    // clear now; making somebody watch a spinner through a round trip to
+    // a notification service would be paying for other people's phones
+    // with their own typing. `notifyPush` swallows its own failures.
+    unawaited(notifyPush(conversationId: conversationId));
+  }
 
   /// A file or a voice note, which is a message rather than a decoration
   /// on one — so the row goes in first and the attachment hangs off it.
@@ -2016,6 +2027,8 @@ class Repo {
       'file_size': bytes.length,
       'duration_ms': durationMs,
     });
+
+    unawaited(notifyPush(conversationId: conversationId));
   }
 
   /// Short-lived, because the object is private and the policy that
@@ -2105,14 +2118,28 @@ class Repo {
     String conversationId, {
     bool video = false,
   }) async {
-    final id = await client.rpc(
-      'chat_start_call',
-      params: {
-        'p_conversation_id': conversationId,
-        'p_kind': video ? 'video' : 'voice',
-      },
+    final id =
+        await client.rpc(
+              'chat_start_call',
+              params: {
+                'p_conversation_id': conversationId,
+                'p_kind': video ? 'video' : 'voice',
+              },
+            )
+            as String;
+    // The one notification that is genuinely time critical: it has
+    // forty-five seconds to be useful, matching `ringing_until`. Still
+    // not awaited — the caller's own call screen should open now, and
+    // the ring is on its way while it does.
+    unawaited(
+      notifyPush(
+        conversationId: conversationId,
+        kind: 'call',
+        callId: id,
+        video: video,
+      ),
     );
-    return id as String;
+    return id;
   }
 
   Future<void> chatJoinCall(String callId) =>
@@ -2141,6 +2168,69 @@ class Repo {
   /// Every phone that should be ringing for this person, anywhere.
   Future<List<Map<String, dynamic>>> chatIncomingCalls() async =>
       _rows(await client.rpc('chat_incoming_calls'));
+
+  // ------------------------------------------------------------------
+  // Push notifications
+  // ------------------------------------------------------------------
+
+  /// Put this device on the register, or move it here.
+  ///
+  /// `p256dh` and `auth` are a browser's encryption keys and belong only
+  /// to a web registration; 0143 refuses a web row without them and a
+  /// Firebase token with them.
+  Future<void> registerDevice({
+    required String token,
+    required String platform,
+    String? label,
+    String? p256dh,
+    String? auth,
+  }) => client.rpc(
+    'register_device',
+    params: {
+      'p_token': token,
+      'p_platform': platform,
+      if (label != null) 'p_label': label,
+      if (p256dh != null) 'p_p256dh': p256dh,
+      if (auth != null) 'p_auth': auth,
+    },
+  );
+
+  Future<void> unregisterDevice(String token) =>
+      client.rpc('unregister_device', params: {'p_token': token});
+
+  /// Ask for everybody else's devices to be notified.
+  ///
+  /// Called by the sender's own app immediately after the message or the
+  /// call is committed, rather than by a database trigger — a trigger
+  /// would be more robust and would mean putting a service key inside
+  /// the database, which is the one thing every other decision here is
+  /// arranged to avoid. See docs/push-notifications.md.
+  ///
+  /// Deliberately swallows everything. A notification that did not go
+  /// out is not a message that did not send: the row is committed, the
+  /// other person sees it the moment they open the app, and turning that
+  /// into an error on the sender's screen would report a failure that
+  /// did not happen.
+  Future<void> notifyPush({
+    required String conversationId,
+    String kind = 'message',
+    String? callId,
+    bool video = false,
+  }) async {
+    try {
+      await client.functions.invoke(
+        'send-push',
+        body: {
+          'conversation_id': conversationId,
+          'kind': kind,
+          if (callId != null) 'call_id': callId,
+          if (video) 'video': true,
+        },
+      );
+    } catch (_) {
+      // See above.
+    }
+  }
 
   /// Where the media server is and what this person may do there.
   ///

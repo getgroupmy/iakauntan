@@ -360,4 +360,141 @@ begin
     v_bad is null);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A browser subscription (0143)
+--
+-- A web registration is three values, not one, and the failure this
+-- guards against is silent: a row that registers without the keys the
+-- payload is encrypted to leaves somebody believing they have
+-- notifications while the sender skips them forever.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_ani  uuid := pg_temp.another_user('ani@webpush.test');
+  v_bala uuid := pg_temp.another_user('bala@webpush.test');
+  v_org uuid;
+  v_conv uuid;
+  v_role text;
+  v_refused boolean;
+  v_p256dh text;
+  v_auth text;
+  v_n int;
+begin
+  v_org := pg_temp.push_org('Web Push Sdn Bhd', v_ani);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_bala, 'accountant', 'active', now());
+
+  perform pg_temp.sign_in_as(v_ani);
+  perform public.chat_set_access(v_org, v_ani, true);
+  perform public.chat_set_access(v_org, v_bala, true);
+
+  -- A browser registers with its endpoint as the token.
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    perform public.register_device(
+      'https://fcm.googleapis.com/fcm/send/ani-laptop', 'web', 'Chrome',
+      'BF9r0MNfkTnnOIyDD7OPllJoaJ1pPH3TeznR5L1Ip7u5CxzG7mdpNqmDPRdTZxaec_QQtYxae_qqF8hket0IfxQ',
+      'fsR_NIlY2ogaxU0mczQmdw');
+  end;
+  reset role;
+
+  perform pg_temp.check_true('a browser registers under row level security',
+    v_role = 'authenticated');
+
+  select p256dh, auth into v_p256dh, v_auth
+    from public.device_tokens
+   where token = 'https://fcm.googleapis.com/fcm/send/ani-laptop';
+  perform pg_temp.check_true(
+    'and its keys are kept, or there is nothing to encrypt to',
+    v_p256dh is not null and v_auth is not null);
+
+  -- Re-subscribing replaces the keys rather than keeping the first pair.
+  -- A browser that re-subscribes throws its old key away, and encrypting
+  -- to the one we remember produces a notification it cannot open.
+  perform pg_temp.sign_in_as(v_ani);
+  begin
+    set local role authenticated;
+    perform public.register_device(
+      'https://fcm.googleapis.com/fcm/send/ani-laptop', 'web', 'Chrome',
+      'BIT2RZmnQde3aKnW2ZCRZrdYknoWNyFCC36Cou9W3-YdsK38OTVv_fxNozYEG6z-M2b2muiM2b-QsHiz8a82ZtM',
+      'W5Z_08z5XS9RsOOJqV5HTQ');
+  end;
+  reset role;
+
+  select p256dh into v_p256dh from public.device_tokens
+   where token = 'https://fcm.googleapis.com/fcm/send/ani-laptop';
+  perform pg_temp.check_true('re-subscribing replaces the keys',
+    v_p256dh like 'BIT2RZ%');
+  perform pg_temp.check_eq('and does not leave a second row',
+    (select count(*) from public.device_tokens
+      where token = 'https://fcm.googleapis.com/fcm/send/ani-laptop'), 1);
+
+  -- ---------------------------------------------------------------
+  -- The refusals, each against the thing that must still work
+  -- ---------------------------------------------------------------
+  perform pg_temp.sign_in_as(v_ani);
+  v_refused := false;
+  begin
+    perform public.register_device(
+      'https://fcm.googleapis.com/fcm/send/no-keys', 'web', 'Chrome');
+  exception when others then v_refused := true;
+  end;
+  perform pg_temp.sign_in_as(v_ani);
+  perform pg_temp.check_true(
+    'a browser cannot register without its keys — the row would look '
+    'like a notification that works and reach nobody',
+    v_refused);
+
+  v_refused := false;
+  begin
+    perform public.register_device(
+      'token-android-with-keys', 'android', 'Pixel', 'BF9r0M', 'fsR_NI');
+  exception when others then v_refused := true;
+  end;
+  perform pg_temp.sign_in_as(v_ani);
+  perform pg_temp.check_true(
+    'and a Firebase token does not carry browser keys', v_refused);
+
+  -- The control for both. Without it the two refusals above would pass
+  -- for a function that refuses every registration.
+  begin
+    set local role authenticated;
+    perform public.register_device('token-ani-phone', 'android', 'Pixel 8');
+  end;
+  reset role;
+  perform pg_temp.check_true(
+    'while an ordinary Firebase registration still works',
+    exists (select 1 from public.device_tokens
+             where token = 'token-ani-phone' and p256dh is null));
+
+  -- ---------------------------------------------------------------
+  -- The fan-out carries the keys
+  -- ---------------------------------------------------------------
+  perform pg_temp.sign_in_as(v_bala);
+  begin
+    set local role authenticated;
+    perform public.register_device(
+      'https://updates.push.services.mozilla.com/wpush/v2/bala', 'web',
+      'Firefox',
+      'BF9r0MNfkTnnOIyDD7OPllJoaJ1pPH3TeznR5L1Ip7u5CxzG7mdpNqmDPRdTZxaec_QQtYxae_qqF8hket0IfxQ',
+      'fsR_NIlY2ogaxU0mczQmdw');
+  end;
+  reset role;
+
+  perform pg_temp.sign_in_as(v_ani);
+  v_conv := public.chat_start_direct(v_org, v_bala, v_org);
+
+  select count(*) into v_n
+    from public.push_targets(v_conv, v_ani) t
+   where t.platform = 'web' and t.p256dh is not null and t.auth is not null;
+  perform pg_temp.check_eq(
+    'the fan-out hands the sender the keys to encrypt to', v_n, 1);
+
+  -- And still excludes the sender, whose own laptop is also registered.
+  perform pg_temp.check_eq('and still leaves the sender out',
+    (select count(*) from public.push_targets(v_conv, v_ani) t
+      where t.user_id = v_ani), 0);
+end $$;
+
 rollback;

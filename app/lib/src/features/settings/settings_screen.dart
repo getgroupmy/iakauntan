@@ -15,6 +15,7 @@ import 'branches_card.dart';
 import 'chat_card.dart';
 import 'company_card.dart';
 import 'company_group_card.dart';
+import 'notifications_card.dart';
 import 'warehouses_card.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -53,6 +54,11 @@ class SettingsScreen extends ConsumerWidget {
                   // of this company, a group is the companies beside it.
                   if (moduleEnabled(ref, 'chat')) ...[
                     const ChatCard(),
+                    const SizedBox(height: Space.md),
+                    // Beside chat, because chat is the only thing that
+                    // notifies anybody — and unlike everything else on
+                    // this screen it is per browser, not per company.
+                    const NotificationsCard(),
                     const SizedBox(height: Space.md),
                   ],
                   if (moduleEnabled(ref, 'branches')) ...[

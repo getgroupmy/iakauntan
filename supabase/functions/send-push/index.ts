@@ -40,12 +40,30 @@
  * most chat applications use. Relaxing it means adding the body here and
  * nothing else — but it should be a decision somebody makes on purpose.
  *
+ * ---------------------------------------------------------------------
+ * Two transports, configured independently
+ *
+ * A browser is not reached through Firebase. `pushManager.subscribe`
+ * hands back an endpoint and two keys, and anybody with a VAPID key
+ * pair can post to it — no Google project, no third party. So web push
+ * goes straight out from `_shared/web_push.ts`, encrypted under RFC 8291
+ * to keys only that browser holds, and Firebase carries the phones.
+ *
+ * Neither is required. A deployment with only the key pair reaches every
+ * browser and reports the phones as skipped, and the response says which
+ * — a half-configured system that looks like it worked is the failure
+ * this whole function is arranged to avoid.
+ *
  * Secrets, which live only in Edge Functions → Secrets:
+ *   WEB_PUSH_PUBLIC_KEY   VAPID public key, base64url  (browsers)
+ *   WEB_PUSH_PRIVATE_KEY  VAPID private key, base64url (browsers)
+ *   WEB_PUSH_SUBJECT      mailto: or https: contact    (optional)
  *   FCM_SERVICE_ACCOUNT   the Firebase service account JSON, whole
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders, fail, json } from "../_shared/cors.ts";
 import { googleAccessToken, ServiceAccount } from "../_shared/google_auth.ts";
+import { sendWebPush, vapidFromEnv } from "../_shared/web_push.ts";
 
 const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 
@@ -53,10 +71,16 @@ interface Target {
   user_id: string;
   token: string;
   platform: "android" | "ios" | "web";
+  /** Browsers only: what the payload is encrypted to. See 0143. */
+  p256dh: string | null;
+  auth: string | null;
 }
 
 /**
- * One message, shaped per platform.
+ * One Firebase message, shaped per platform.
+ *
+ * Android and iOS only. A browser never comes through here — it is
+ * encrypted and posted directly, further down.
  *
  * A call and a message are not the same kind of interruption and must
  * not be delivered the same way:
@@ -139,16 +163,6 @@ function buildMessage(
             },
       },
     },
-    webpush: {
-      headers: { Urgency: "high" },
-      notification: {
-        title: body.title,
-        body: isCall
-          ? `${body.sender_name} is calling`
-          : `${body.sender_name} sent a message`,
-        icon: "/icons/Icon-192.png",
-      },
-    },
   };
 
   return message;
@@ -172,30 +186,29 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return fail("Missing Authorization header", 401);
 
-    const raw = Deno.env.get("FCM_SERVICE_ACCOUNT");
-    if (!raw) {
-      // Said plainly and with a 503, because the alternative is silence:
-      // messages arrive, notifications do not, and nothing anywhere says
-      // why.
-      return fail(
-        "Push is not configured. Set FCM_SERVICE_ACCOUNT in the project's " +
-          "function secrets — see docs/push-notifications.md.",
-        503,
-      );
-    }
+    // The two transports are configured independently, and a deployment
+    // that has only one of them is the normal case rather than a broken
+    // one: web push needs nothing but a key pair generated locally,
+    // while Firebase needs a Google project. So neither is required
+    // here — what is refused, further down, is having nobody reachable
+    // by anything.
+    const vapid = vapidFromEnv();
 
-    let account: ServiceAccount & { project_id?: string };
-    try {
-      account = JSON.parse(raw);
-    } catch {
-      return fail("FCM_SERVICE_ACCOUNT is not valid JSON", 500);
-    }
-    if (!account.project_id) {
-      return fail(
-        "FCM_SERVICE_ACCOUNT has no project_id: it is not a Firebase " +
-          "service account JSON.",
-        500,
-      );
+    const raw = Deno.env.get("FCM_SERVICE_ACCOUNT");
+    let account: (ServiceAccount & { project_id?: string }) | null = null;
+    if (raw) {
+      try {
+        account = JSON.parse(raw);
+      } catch {
+        return fail("FCM_SERVICE_ACCOUNT is not valid JSON", 500);
+      }
+      if (!account?.project_id) {
+        return fail(
+          "FCM_SERVICE_ACCOUNT has no project_id: it is not a Firebase " +
+            "service account JSON.",
+          500,
+        );
+      }
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -260,9 +273,35 @@ Deno.serve(async (req: Request) => {
       .eq("id", conversationId)
       .maybeSingle();
 
-    const accessToken = await googleAccessToken(account, FCM_SCOPE);
-    const endpoint =
-      `https://fcm.googleapis.com/v1/projects/${account.project_id}/messages:send`;
+    // A browser subscription is encrypted to its own keys and posted to
+    // its own push service; a phone goes to Firebase. 0143's constraint
+    // means a web row always has both keys, so a web target without them
+    // cannot exist — but this is the code that would encrypt to nothing
+    // if it ever did, so it checks.
+    const web = list.filter(
+      (t) => t.platform === "web" && t.p256dh && t.auth,
+    );
+    const mobile = list.filter((t) => t.platform !== "web");
+
+    if ((web.length === 0 || !vapid) && (mobile.length === 0 || !account)) {
+      // Said plainly and with a 503, because the alternative is silence:
+      // messages arrive, notifications do not, and nothing anywhere says
+      // why. Which secret is missing depends on who was in the room.
+      const missing = [
+        web.length > 0 && !vapid
+          ? "WEB_PUSH_PUBLIC_KEY and WEB_PUSH_PRIVATE_KEY (browsers)"
+          : null,
+        mobile.length > 0 && !account
+          ? "FCM_SERVICE_ACCOUNT (Android and iOS)"
+          : null,
+      ].filter(Boolean).join(", ");
+
+      return fail(
+        `Push is not configured for the devices in this conversation. Set ${missing} ` +
+          "in the project's function secrets — see docs/push-notifications.md.",
+        503,
+      );
+    }
 
     const payload = {
       kind,
@@ -280,50 +319,113 @@ Deno.serve(async (req: Request) => {
     let sent = 0;
     let failed = 0;
     let forgotten = 0;
+    // Devices whose transport nobody has configured. Reported rather
+    // than counted as sent, so a half-configured deployment is visible
+    // in the response instead of looking like it worked.
+    let skipped = 0;
+
+    const isCall = kind === "call";
+
+    /** Firebase, for phones. */
+    const toMobile = async (target: Target, accessToken: string) => {
+      const endpoint =
+        `https://fcm.googleapis.com/v1/projects/${account!.project_id}/messages:send`;
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message: buildMessage(target, payload) }),
+      });
+
+      if (res.ok) {
+        sent += 1;
+        return;
+      }
+
+      const problem = await res.json().catch(() => null);
+      if (isDeadToken(res.status, problem)) {
+        // An app that was uninstalled, or a token Google has rotated.
+        // Left on the register it is retried on every message forever.
+        await admin.rpc("forget_device_token", { p_token: target.token });
+        forgotten += 1;
+        return;
+      }
+      failed += 1;
+      console.error(
+        JSON.stringify({
+          event: "push.refused",
+          status: res.status,
+          platform: target.platform,
+          problem,
+        }),
+      );
+    };
+
+    /** Straight to the browser's push service, encrypted to its keys. */
+    const toBrowser = async (target: Target) => {
+      const result = await sendWebPush(
+        {
+          endpoint: target.token,
+          p256dh: target.p256dh!,
+          auth: target.auth!,
+        },
+        // The same payload the phones get, and the same omission: the
+        // message text is not in it. The service worker composes what
+        // the notification says from these fields alone.
+        JSON.stringify(payload),
+        vapid!,
+        isCall
+          // Forty-five seconds, matching `chat_calls.ringing_until`. A
+          // call notification arriving after that is worse than none.
+          ? { ttl: 45, urgency: "high" }
+          : { ttl: 86400, urgency: "normal" },
+      );
+
+      if (result.ok) {
+        sent += 1;
+        return;
+      }
+      if (result.gone) {
+        await admin.rpc("forget_device_token", { p_token: target.token });
+        forgotten += 1;
+        return;
+      }
+      failed += 1;
+      console.error(
+        JSON.stringify({
+          event: "push.refused",
+          status: result.status,
+          platform: "web",
+          problem: result.detail,
+        }),
+      );
+    };
+
+    // One access token for every phone in the room rather than one each.
+    const accessToken = (account && mobile.length > 0)
+      ? await googleAccessToken(account, FCM_SCOPE)
+      : null;
 
     // In parallel: a room of a dozen, one round trip each, and a call
     // that rings on the last phone a second after the first is a call
     // somebody has already missed.
     await Promise.all(
       list.map(async (target) => {
+        const browser = target.platform === "web";
+        if (browser ? !vapid || !target.p256dh : !accessToken) {
+          skipped += 1;
+          return;
+        }
         try {
-          const res = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ message: buildMessage(target, payload) }),
-          });
-
-          if (res.ok) {
-            sent += 1;
-            return;
-          }
-
-          const problem = await res.json().catch(() => null);
-          if (isDeadToken(res.status, problem)) {
-            // An app that was uninstalled, or a token Google has
-            // rotated. Left on the register it is retried on every
-            // message forever.
-            await admin.rpc("forget_device_token", { p_token: target.token });
-            forgotten += 1;
-            return;
-          }
-          failed += 1;
-          console.error(
-            JSON.stringify({
-              event: "push.refused",
-              status: res.status,
-              platform: target.platform,
-              problem,
-            }),
-          );
+          await (browser ? toBrowser(target) : toMobile(target, accessToken!));
         } catch (error) {
           failed += 1;
           console.error(
             JSON.stringify({
               event: "push.failed",
+              platform: target.platform,
               error: (error as Error).message,
             }),
           );
@@ -331,7 +433,7 @@ Deno.serve(async (req: Request) => {
       }),
     );
 
-    return json({ sent, failed, forgotten, targets: list.length });
+    return json({ sent, failed, forgotten, skipped, targets: list.length });
   } catch (error) {
     return fail((error as Error).message ?? "Unexpected error", 500);
   }

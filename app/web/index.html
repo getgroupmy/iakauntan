@@ -58,6 +58,13 @@
     visitor pays nothing, and the sessionStorage guard means it cannot
     turn into a reload loop if a browser reports registrations it will
     not let go of.
+
+    One exception, added with web push: the worker at the /push/ scope is
+    ours and current. It serves no assets and caches nothing, so it
+    cannot cause the problem this rescue exists for — and unregistering
+    it would silently cancel the browser's push subscription, which is
+    the sort of bug that looks like "notifications just stopped working
+    on Chrome" and has no visible cause anywhere.
   -->
   <script>
     (function () {
@@ -70,7 +77,12 @@
         });
       }
 
-      navigator.serviceWorker.getRegistrations().then(function (regs) {
+      function isPushWorker(reg) {
+        return reg.scope.indexOf('/push/') === reg.scope.length - 6;
+      }
+
+      navigator.serviceWorker.getRegistrations().then(function (all) {
+        var regs = all.filter(function (r) { return !isPushWorker(r); });
         var had = regs.length > 0;
         return Promise.all(regs.map(function (r) { return r.unregister(); }))
           // Unconditional, because the pass that unregisters cannot also

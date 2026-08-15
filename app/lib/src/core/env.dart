@@ -19,6 +19,19 @@ class Env {
     defaultValue: 'sb_publishable_QcTtzLYCECOYRVOt4erFtg_k-YaQWHA',
   );
 
+  /// The VAPID public key browsers subscribe to push with.
+  ///
+  /// Public by design — it is handed to every push service on every
+  /// send, and it is what lets them tell our notifications from
+  /// somebody else's. The private half is a function secret and appears
+  /// nowhere in this bundle.
+  ///
+  /// Empty by default, because a wrong key is worse than none: a
+  /// browser that subscribes with one key and is pushed to with another
+  /// silently drops every message. Empty means the app says push is not
+  /// configured, which is true.
+  static const webPushPublicKey = String.fromEnvironment('WEB_PUSH_PUBLIC_KEY');
+
   static const appName = 'iAkauntan';
   static const supportEmail = 'support@iakauntan.my';
 }

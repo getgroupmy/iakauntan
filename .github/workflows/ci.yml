@@ -174,6 +174,17 @@ jobs:
       # and if it ever needs to, that is worth noticing.
       - run: deno test supabase/functions/_shared/scheduler_test.ts
 
+      # Web push, checked against the reference implementation.
+      #
+      # This one gets --allow-read, and only that: the vector it asserts
+      # against is a file beside it, produced by `http_ece` and
+      # `web-push`. The failure it exists to catch is silent — a push
+      # service answers 201 Created for a payload the browser cannot
+      # decrypt, so a mistake in the key derivation looks exactly like a
+      # working notification system that delivers nothing.
+      - run: deno check supabase/functions/_shared/web_push_test.ts
+      - run: deno test --allow-read supabase/functions/_shared/web_push_test.ts
+
       # The functions themselves, type-checked but not run. They cannot
       # be unit tested here — every one of them exists to call somebody
       # else — but a typo in a field name is caught by the compiler, and

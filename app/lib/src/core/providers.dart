@@ -8,6 +8,8 @@ import '../data/corp_repository.dart';
 import '../data/models.dart';
 import '../data/ocr_repository.dart';
 import '../data/repository.dart';
+import 'env.dart';
+import 'push.dart';
 
 final supabaseProvider = Provider<SupabaseClient>(
   (_) => Supabase.instance.client,
@@ -628,6 +630,72 @@ final groupCompaniesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
       return requireRepo(ref).groupCompanies();
     });
+
+// ---------------------------------------------------------------------
+// Push notifications
+// ---------------------------------------------------------------------
+
+/// Whether this device can be reached when the app is closed, and
+/// whether it currently is.
+final pushStatusProvider = FutureProvider.autoDispose<PushStatus>((ref) {
+  // Permission belongs to the browser and the registration belongs to
+  // the person, so signing in as somebody else has to re-ask.
+  ref.watch(currentUserProvider);
+  return pushStatus(Env.webPushPublicKey);
+});
+
+/// Subscribe this browser and put it on the register.
+///
+/// `ask` decides whether the permission prompt may appear. Safari
+/// requires that prompt to come from a user gesture and a browser that
+/// has refused once will not be asked again, so the app only ever asks
+/// from a button — see `keepPushRegistered` for what happens on start.
+/// Takes the repository rather than a ref, because `Ref` and `WidgetRef`
+/// have no common supertype and this is called from both a provider and
+/// a button. Whoever calls it refreshes [pushStatusProvider].
+Future<PushStatus> enablePush(Repo? repo, {bool ask = true}) async {
+  if (repo == null) return PushStatus.unsupported;
+
+  final subscription = await subscribeToPush(Env.webPushPublicKey, ask: ask);
+  if (subscription == null) return pushStatus(Env.webPushPublicKey);
+
+  await repo.registerDevice(
+    token: subscription.endpoint,
+    platform: 'web',
+    label: 'This browser',
+    p256dh: subscription.p256dh,
+    auth: subscription.auth,
+  );
+  return PushStatus.on;
+}
+
+/// Re-register on every start, without ever prompting.
+///
+/// The endpoint is not stable: a browser may rotate it at any time, and
+/// the register would then hold one nobody can send to while the person
+/// sees notifications as switched on. Re-registering is cheap — 0143
+/// keys on the token, so an unchanged endpoint updates one row — and it
+/// is the only thing that catches a rotation.
+///
+/// Silent by construction: `ask: false` means a browser that has never
+/// been asked stays unasked, and one that refused is not nagged.
+final pushRegistrarProvider = FutureProvider<void>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return;
+  if (await pushStatus(Env.webPushPublicKey) != PushStatus.on) return;
+  await enablePush(ref.read(repoProvider), ask: false);
+});
+
+/// Take this browser off the register, on the way out.
+///
+/// Best effort by nature — an app that is force-quit never gets here —
+/// which is why the sender also drops endpoints the push service
+/// rejects.
+Future<void> disablePush(Repo? repo) async {
+  final endpoint = await currentPushEndpoint();
+  if (endpoint != null) await repo?.unregisterDevice(endpoint);
+  await unsubscribeFromPush();
+}
 
 // ---------------------------------------------------------------------
 // Chat

@@ -12,8 +12,15 @@ import '../chat/chat_live.dart';
 
 /// Navigation destination shared by the rail (wide) and bottom bar (narrow).
 class _Dest {
-  const _Dest(this.label, this.icon, this.selectedIcon, this.path,
-      {this.primary = false, this.module, this.platformOnly = false});
+  const _Dest(
+    this.label,
+    this.icon,
+    this.selectedIcon,
+    this.path, {
+    this.primary = false,
+    this.module,
+    this.platformOnly = false,
+  });
 
   final String label;
   final IconData icon;
@@ -34,78 +41,191 @@ class _Dest {
 }
 
 const _destinations = <_Dest>[
-  _Dest('Dashboard', Icons.dashboard_outlined, Icons.dashboard, '/',
-      primary: true),
-  _Dest('Sales', Icons.receipt_long_outlined, Icons.receipt_long,
-      '/sales/invoice',
-      primary: true),
-  _Dest('Purchases', Icons.shopping_bag_outlined, Icons.shopping_bag,
-      '/purchases/bill',
-      module: 'purchases'),
+  _Dest(
+    'Dashboard',
+    Icons.dashboard_outlined,
+    Icons.dashboard,
+    '/',
+    primary: true,
+  ),
+  _Dest(
+    'Sales',
+    Icons.receipt_long_outlined,
+    Icons.receipt_long,
+    '/sales/invoice',
+    primary: true,
+  ),
+  _Dest(
+    'Purchases',
+    Icons.shopping_bag_outlined,
+    Icons.shopping_bag,
+    '/purchases/bill',
+    module: 'purchases',
+  ),
   _Dest('Expenses', Icons.receipt_outlined, Icons.receipt, '/expenses'),
-  _Dest('Matters', Icons.gavel_outlined, Icons.gavel, '/legal',
-      module: 'legal'),
-  _Dest('Contacts', Icons.people_outline, Icons.people, '/contacts',
-      primary: true),
-  _Dest('Items', Icons.inventory_2_outlined, Icons.inventory_2, '/items',
-      module: 'inventory'),
-  _Dest('CRM', Icons.trending_up_outlined, Icons.trending_up, '/crm',
-      primary: true, module: 'crm'),
-  _Dest('Leads', Icons.filter_alt_outlined, Icons.filter_alt, '/crm/leads',
-      module: 'crm'),
-  _Dest('e-Invoice', Icons.verified_outlined, Icons.verified, '/einvoice',
-      module: 'einvoice'),
+  _Dest(
+    'Matters',
+    Icons.gavel_outlined,
+    Icons.gavel,
+    '/legal',
+    module: 'legal',
+  ),
+  _Dest(
+    'Contacts',
+    Icons.people_outline,
+    Icons.people,
+    '/contacts',
+    primary: true,
+  ),
+  _Dest(
+    'Items',
+    Icons.inventory_2_outlined,
+    Icons.inventory_2,
+    '/items',
+    module: 'inventory',
+  ),
+  _Dest(
+    'CRM',
+    Icons.trending_up_outlined,
+    Icons.trending_up,
+    '/crm',
+    primary: true,
+    module: 'crm',
+  ),
+  _Dest(
+    'Leads',
+    Icons.filter_alt_outlined,
+    Icons.filter_alt,
+    '/crm/leads',
+    module: 'crm',
+  ),
+  _Dest(
+    'e-Invoice',
+    Icons.verified_outlined,
+    Icons.verified,
+    '/einvoice',
+    module: 'einvoice',
+  ),
   _Dest('My HR', Icons.badge_outlined, Icons.badge, '/hr/me', module: 'hr'),
-  _Dest('People', Icons.groups_outlined, Icons.groups, '/hr/people',
-      module: 'hr'),
-  _Dest('Leave', Icons.event_available_outlined, Icons.event_available,
-      '/hr/leave',
-      module: 'hr'),
-  _Dest('Claims', Icons.request_quote_outlined, Icons.request_quote,
-      '/hr/claims',
-      module: 'hr'),
-  _Dest('Payroll', Icons.payments_outlined, Icons.payments, '/hr/payroll',
-      module: 'payroll'),
+  _Dest(
+    'People',
+    Icons.groups_outlined,
+    Icons.groups,
+    '/hr/people',
+    module: 'hr',
+  ),
+  _Dest(
+    'Leave',
+    Icons.event_available_outlined,
+    Icons.event_available,
+    '/hr/leave',
+    module: 'hr',
+  ),
+  _Dest(
+    'Claims',
+    Icons.request_quote_outlined,
+    Icons.request_quote,
+    '/hr/claims',
+    module: 'hr',
+  ),
+  _Dest(
+    'Payroll',
+    Icons.payments_outlined,
+    Icons.payments,
+    '/hr/payroll',
+    module: 'payroll',
+  ),
   _Dest('Talent', Icons.work_outline, Icons.work, '/hr/talent', module: 'hr'),
-  _Dest('Onboarding', Icons.checklist_rtl_outlined, Icons.checklist_rtl,
-      '/hr/onboarding',
-      module: 'hr'),
+  _Dest(
+    'Onboarding',
+    Icons.checklist_rtl_outlined,
+    Icons.checklist_rtl,
+    '/hr/onboarding',
+    module: 'hr',
+  ),
   _Dest('HR setup', Icons.tune_outlined, Icons.tune, '/hr/setup', module: 'hr'),
-  _Dest('Secretarial', Icons.domain_outlined, Icons.domain, '/secretarial',
-      module: 'secretarial'),
-  _Dest('Stock take', Icons.checklist_outlined, Icons.checklist, '/stock-take',
-      module: 'inventory'),
-  _Dest('Batches', Icons.qr_code_2_outlined, Icons.qr_code_2, '/lots',
-      module: 'inventory'),
-  _Dest('Chat', Icons.forum_outlined, Icons.forum, '/chat',
-      module: 'chat'),
-  _Dest('Manufacturing', Icons.precision_manufacturing_outlined,
-      Icons.precision_manufacturing, '/manufacturing',
-      module: 'manufacturing'),
+  _Dest(
+    'Secretarial',
+    Icons.domain_outlined,
+    Icons.domain,
+    '/secretarial',
+    module: 'secretarial',
+  ),
+  _Dest(
+    'Stock take',
+    Icons.checklist_outlined,
+    Icons.checklist,
+    '/stock-take',
+    module: 'inventory',
+  ),
+  _Dest(
+    'Batches',
+    Icons.qr_code_2_outlined,
+    Icons.qr_code_2,
+    '/lots',
+    module: 'inventory',
+  ),
+  _Dest('Chat', Icons.forum_outlined, Icons.forum, '/chat', module: 'chat'),
+  _Dest(
+    'Manufacturing',
+    Icons.precision_manufacturing_outlined,
+    Icons.precision_manufacturing,
+    '/manufacturing',
+    module: 'manufacturing',
+  ),
   // Directly after the documents it settles, because "has this been
   // paid?" is asked in the same breath as "did we invoice them?".
-  _Dest('Receipts & payments', Icons.payments_outlined, Icons.payments,
-      '/receipts'),
-  _Dest('Reconcile', Icons.account_balance_outlined, Icons.account_balance,
-      '/reconcile'),
-  _Dest('Fixed assets', Icons.inventory_2_outlined, Icons.inventory_2,
-      '/assets'),
+  _Dest(
+    'Receipts & payments',
+    Icons.payments_outlined,
+    Icons.payments,
+    '/receipts',
+  ),
+  _Dest(
+    'Reconcile',
+    Icons.account_balance_outlined,
+    Icons.account_balance,
+    '/reconcile',
+  ),
+  _Dest(
+    'Fixed assets',
+    Icons.inventory_2_outlined,
+    Icons.inventory_2,
+    '/assets',
+  ),
   _Dest('Journals', Icons.menu_book_outlined, Icons.menu_book, '/journals'),
   _Dest('Recurring journals', Icons.repeat, Icons.repeat_on, '/recurring'),
-  _Dest('Recurring invoices', Icons.event_repeat_outlined,
-      Icons.event_repeat, '/recurring-documents'),
-  _Dest('Withholding tax', Icons.account_balance_outlined,
-      Icons.account_balance, '/withholding'),
+  _Dest(
+    'Recurring invoices',
+    Icons.event_repeat_outlined,
+    Icons.event_repeat,
+    '/recurring-documents',
+  ),
+  _Dest(
+    'Withholding tax',
+    Icons.account_balance_outlined,
+    Icons.account_balance,
+    '/withholding',
+  ),
   _Dest('Salespeople', Icons.badge_outlined, Icons.badge, '/salespeople'),
-  _Dest('Exchange rates', Icons.currency_exchange_outlined,
-      Icons.currency_exchange, '/exchange-rates'),
+  _Dest(
+    'Exchange rates',
+    Icons.currency_exchange_outlined,
+    Icons.currency_exchange,
+    '/exchange-rates',
+  ),
   _Dest('Import', Icons.upload_file_outlined, Icons.upload_file, '/import'),
   _Dest('Reports', Icons.bar_chart_outlined, Icons.bar_chart, '/reports'),
   _Dest('Team', Icons.manage_accounts_outlined, Icons.manage_accounts, '/team'),
   _Dest('Email', Icons.mail_outline, Icons.mail, '/email'),
   _Dest('Settings', Icons.settings_outlined, Icons.settings, '/settings'),
-  _Dest('Platform', Icons.shield_outlined, Icons.shield, '/admin',
-      platformOnly: true),
+  _Dest(
+    'Platform',
+    Icons.shield_outlined,
+    Icons.shield,
+    '/admin',
+    platformOnly: true,
+  ),
 ];
 
 class AppShell extends ConsumerWidget {
@@ -124,8 +244,7 @@ class AppShell extends ConsumerWidget {
   /// Destinations this user can actually reach: add-ons the tenant is
   /// entitled to, plus the platform console for staff.
   List<_Dest> _visible(WidgetRef ref) {
-    final isPlatformAdmin =
-        ref.watch(isPlatformAdminProvider).value ?? false;
+    final isPlatformAdmin = ref.watch(isPlatformAdminProvider).value ?? false;
 
     // Every destination but the console reads from an organization, so
     // with none selected they are doors onto an empty room. A platform
@@ -203,6 +322,10 @@ class AppShell extends ConsumerWidget {
     if (!moduleEnabled(ref, 'chat')) return child;
 
     ref.watch(chatLiveProvider);
+    // Catches an endpoint the browser has rotated since last time. Never
+    // prompts: a browser that has not been asked stays unasked until
+    // somebody presses the button in Settings.
+    ref.watch(pushRegistrarProvider);
     return IncomingCallWatcher(child: child);
   }
 
@@ -269,8 +392,9 @@ class AppShell extends ConsumerWidget {
                   child: LayoutBuilder(
                     builder: (context, constraints) => SingleChildScrollView(
                       child: ConstrainedBox(
-                        constraints:
-                            BoxConstraints(minHeight: constraints.maxHeight),
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight,
+                        ),
                         child: IntrinsicHeight(
                           child: NavigationRail(
                             extended: extended,
@@ -439,7 +563,8 @@ class _OrgSwitcher extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final orgs = ref.watch(organizationsProvider).value ?? const <Organization>[];
+    final orgs =
+        ref.watch(organizationsProvider).value ?? const <Organization>[];
 
     return Card(
       child: InkWell(
@@ -447,28 +572,30 @@ class _OrgSwitcher extends ConsumerWidget {
         onTap: orgs.length < 2
             ? null
             : () => showDialog<void>(
-                  context: context,
-                  builder: (ctx) => SimpleDialog(
-                    title: const Text('Switch organization'),
-                    children: [
-                      for (final o in orgs)
-                        ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: scheme.primaryContainer,
-                            child: Text(Fmt.initials(o.name),
-                                style: const TextStyle(fontSize: 12)),
+                context: context,
+                builder: (ctx) => SimpleDialog(
+                  title: const Text('Switch organization'),
+                  children: [
+                    for (final o in orgs)
+                      ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: scheme.primaryContainer,
+                          child: Text(
+                            Fmt.initials(o.name),
+                            style: const TextStyle(fontSize: 12),
                           ),
-                          title: Text(o.name),
-                          subtitle: Text(o.registrationNo ?? o.slug),
-                          selected: o.id == org?.id,
-                          onTap: () {
-                            ref.read(currentOrgIdProvider.notifier).select(o.id);
-                            Navigator.pop(ctx);
-                          },
                         ),
-                    ],
-                  ),
+                        title: Text(o.name),
+                        subtitle: Text(o.registrationNo ?? o.slug),
+                        selected: o.id == org?.id,
+                        onTap: () {
+                          ref.read(currentOrgIdProvider.notifier).select(o.id);
+                          Navigator.pop(ctx);
+                        },
+                      ),
+                  ],
                 ),
+              ),
         child: Padding(
           padding: const EdgeInsets.all(Space.md),
           child: Row(
@@ -500,7 +627,9 @@ class _OrgSwitcher extends ConsumerWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 13),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
                     ),
                     Text(
                       org?.einvoiceEnabled == true
@@ -516,8 +645,7 @@ class _OrgSwitcher extends ConsumerWidget {
                   ],
                 ),
               ),
-              if (orgs.length > 1)
-                const Icon(Icons.unfold_more, size: 16),
+              if (orgs.length > 1) const Icon(Icons.unfold_more, size: 16),
             ],
           ),
         ),
@@ -548,11 +676,12 @@ class _AccountButton extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(user?.email ?? '',
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text(
+                user?.email ?? '',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
               if (role.isNotEmpty)
-                Text(Fmt.label(role),
-                    style: Theme.of(ctx).textTheme.bodySmall),
+                Text(Fmt.label(role), style: Theme.of(ctx).textTheme.bodySmall),
             ],
           ),
         ),
