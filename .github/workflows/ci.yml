@@ -124,7 +124,8 @@ jobs:
                    supabase/tests/branches_and_groups.sql \
                    supabase/tests/manufacturing.sql \
                    supabase/tests/chat.sql \
-                   supabase/tests/push.sql; do
+                   supabase/tests/push.sql \
+                   supabase/tests/group_reporting.sql; do
             echo "== $f"
             psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done
