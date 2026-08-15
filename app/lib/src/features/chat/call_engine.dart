@@ -66,6 +66,7 @@ class CallPeer {
   String displayName;
   RTCVideoRenderer? camera;
   RTCVideoRenderer? mic;
+  RTCVideoRenderer? screen;
 
   /// Which consumer each renderer is showing, so `consumerClosed` can
   /// find it. The renderer holds a `MediaStream`, whose id is the
@@ -73,6 +74,7 @@ class CallPeer {
   /// never match and leave a frozen last frame on screen forever.
   String? cameraConsumerId;
   String? micConsumerId;
+  String? screenConsumerId;
 
   /// Whether they have muted themselves, and whether their camera is
   /// off. Tracked from `consumerPaused` / `consumerResumed`, which the
@@ -82,6 +84,7 @@ class CallPeer {
   bool cameraOff = false;
 
   bool get hasVideo => camera != null && !cameraOff;
+  bool get isSharing => screen != null;
 }
 
 enum CallPhase { connecting, connected, failed, closed }
@@ -103,10 +106,21 @@ abstract class CallEngine implements Listenable {
   bool get micOn;
   bool get cameraOn;
 
+  /// Whether this person is sharing, and whether this device could.
+  bool get sharingScreen;
+  bool get canShareScreen;
+
+  /// What everybody is looking at, if anybody is sharing. Null when
+  /// nobody is — including when the sharer is this person, because
+  /// showing somebody their own screen inside their own screen is a
+  /// hall of mirrors and a wasted decode.
+  CallPeer? get screenSharer;
+
   Future<void> connect(CallCredentials credentials, {required bool video});
   Future<void> setMic(bool on);
   Future<void> setCamera(bool on);
   Future<void> switchCamera();
+  Future<void> setScreenShare(bool on);
   Future<void> close();
 }
 
@@ -133,6 +147,8 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
   MediaStream? _local;
   Producer? _micProducer;
   Producer? _camProducer;
+  Producer? _screenProducer;
+  MediaStream? _screen;
   RTCVideoRenderer? _localVideo;
 
   final _peers = <String, CallPeer>{};
@@ -145,6 +161,7 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
   String? _failure;
   bool _micOn = true;
   bool _cameraOn = false;
+  bool _sharingScreen = false;
   List<RTCIceServer> _ice = const [];
 
   /// Long enough for a phone waking a radio, short enough that a dead
@@ -163,6 +180,41 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
   bool get micOn => _micOn;
   @override
   bool get cameraOn => _cameraOn;
+  @override
+  bool get sharingScreen => _sharingScreen;
+
+  /// Where the app can capture a screen at all.
+  ///
+  /// The browser and the desktop builds can, through `getDisplayMedia`,
+  /// with no extra permission and no platform code. Android and iOS
+  /// cannot, and the reason is not laziness in this file:
+  ///
+  ///   * Android needs a foreground service of type `mediaProjection`
+  ///     running for the whole capture, or the system kills it after a
+  ///     few seconds. That is a service class, a notification, and a
+  ///     dependency, none of which can be tested from here.
+  ///   * iOS needs a Broadcast Upload Extension — a second target in
+  ///     the Xcode project, sharing an App Group with the app. It
+  ///     cannot be added from the Dart side at all.
+  ///
+  /// Both are real work rather than impossible, and until they are done
+  /// this returns false so the button is simply absent. A button that
+  /// starts a capture the operating system stops three seconds later is
+  /// worse than no button.
+  @override
+  bool get canShareScreen =>
+      kIsWeb ||
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.linux;
+
+  @override
+  CallPeer? get screenSharer {
+    for (final peer in _peers.values) {
+      if (peer.isSharing) return peer;
+    }
+    return null;
+  }
 
   // -------------------------------------------------------------------
   // Getting in
@@ -288,6 +340,14 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
           (data['callback'] as Function)(res['id']);
         } catch (error) {
           (data['errback'] as Function)(error);
+          // The server refuses a second screen share, naming whoever
+          // has it. Without this the button stays lit and the capture
+          // keeps running against a room that is not receiving it.
+          final appData = data['appData'];
+          if (appData is Map && appData['source'] == 'screen') {
+            _failure = _readable(error);
+            unawaited(_stopScreenShare());
+          }
         }
       });
     }
@@ -407,6 +467,100 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
   }
 
   @override
+  Future<void> setScreenShare(bool on) async {
+    if (on == _sharingScreen) return;
+    if (!on) {
+      await _stopScreenShare();
+      return;
+    }
+    if (!canShareScreen) {
+      _failure = 'This device cannot share a screen.';
+      notifyListeners();
+      return;
+    }
+
+    try {
+      // The picker is the browser's, not ours: which window or tab gets
+      // shared is a decision the operating system owns, and an app that
+      // could choose for you would be a keylogger with extra steps.
+      final stream = await navigator.mediaDevices.getDisplayMedia({
+        'video': {
+          // A spreadsheet is text. Frame rate matters less than not
+          // making 8-point figures unreadable, so resolution is left
+          // alone and the frame rate is capped instead.
+          'frameRate': {'ideal': 8, 'max': 15},
+        },
+        // Not asking for the system's audio. On the platforms that offer
+        // it at all it is a separate track with its own consent, and
+        // sharing a spreadsheet should not quietly also share whatever
+        // else is playing.
+        'audio': false,
+      });
+
+      final tracks = stream.getVideoTracks();
+      if (tracks.isEmpty) {
+        await stream.dispose();
+        return;
+      }
+      final track = tracks.first;
+
+      // The browser puts its own "Stop sharing" bar on screen, and it is
+      // the one people actually press. Without this the app goes on
+      // believing it is sharing and the far side sees a frozen frame.
+      track.onEnded = () => unawaited(_stopScreenShare());
+
+      _screen = stream;
+      _sharingScreen = true;
+      notifyListeners();
+
+      _send!.produce(
+        track: track,
+        stream: stream,
+        source: 'screen',
+        appData: const {'source': 'screen'},
+      );
+    } catch (error) {
+      // Cancelling the picker is the ordinary case, not a failure, and
+      // it arrives as an exception like everything else. Saying "Screen
+      // sharing failed" to somebody who pressed Cancel is worse than
+      // saying nothing.
+      await _stopScreenShare();
+      final text = error.toString();
+      if (!text.contains('NotAllowed') &&
+          !text.contains('Permission') &&
+          !text.contains('AbortError')) {
+        _failure = _readable(error);
+      }
+      notifyListeners();
+    }
+  }
+
+  Future<void> _stopScreenShare() async {
+    if (!_sharingScreen && _screenProducer == null && _screen == null) return;
+    _sharingScreen = false;
+
+    final producer = _screenProducer;
+    _screenProducer = null;
+    if (producer != null) {
+      producer.close();
+      // Telling the server as well, because closing the producer locally
+      // stops the packets and leaves the room believing somebody is
+      // still sharing — which is the state that refuses the next person
+      // who tries.
+      await _request('closeProducer', {
+        'producerId': producer.id,
+      }).catchError((_) => <String, dynamic>{});
+    }
+
+    for (final track in _screen?.getTracks() ?? const <MediaStreamTrack>[]) {
+      await track.stop();
+    }
+    await _screen?.dispose();
+    _screen = null;
+    notifyListeners();
+  }
+
+  @override
   Future<void> switchCamera() async {
     final producer = _camProducer;
     if (producer == null) return;
@@ -471,8 +625,10 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
         if (peer != null) {
           _consumers.remove(peer.cameraConsumerId)?.close();
           _consumers.remove(peer.micConsumerId)?.close();
+          _consumers.remove(peer.screenConsumerId)?.close();
           peer.camera?.dispose();
           peer.mic?.dispose();
+          peer.screen?.dispose();
         }
         notifyListeners();
     }
@@ -500,7 +656,13 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
   }
 
   void _onProducer(Producer producer) {
-    if (producer.source == 'cam') {
+    if (producer.source == 'screen') {
+      _screenProducer = producer;
+      // The server has the last word on who may share, and it refuses a
+      // second one. If the produce was refused this never fires and
+      // `_sharingScreen` has to come back down — handled where the
+      // request fails, in the transport's `produce` listener.
+    } else if (producer.source == 'cam') {
       _camProducer = producer;
     } else {
       _micProducer = producer;
@@ -531,7 +693,16 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
 
     _consumers[consumer.id] = consumer;
     final paused = _arrivedPaused.remove(consumer.id) ?? false;
-    if (consumer.kind == 'video') {
+    // A screen and a camera are both `kind: 'video'`. Only the label
+    // separates them, which is why the server puts one on every
+    // producer and why guessing from `kind` would put somebody's
+    // spreadsheet in the little round avatar.
+    final isScreen = consumer.appData['source'] == 'screen';
+    if (isScreen) {
+      await peer.screen?.dispose();
+      peer.screen = renderer;
+      peer.screenConsumerId = consumer.id;
+    } else if (consumer.kind == 'video') {
       await peer.camera?.dispose();
       peer.camera = renderer;
       peer.cameraConsumerId = consumer.id;
@@ -582,6 +753,11 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
         peer.mic?.dispose();
         peer.mic = null;
         peer.micConsumerId = null;
+      }
+      if (peer.screenConsumerId == consumerId) {
+        peer.screen?.dispose();
+        peer.screen = null;
+        peer.screenConsumerId = null;
       }
     }
     notifyListeners();
@@ -655,6 +831,14 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
 
     _micProducer?.close();
     _camProducer?.close();
+    _screenProducer?.close();
+    _screenProducer = null;
+    _sharingScreen = false;
+    for (final track in _screen?.getTracks() ?? const <MediaStreamTrack>[]) {
+      await track.stop();
+    }
+    await _screen?.dispose();
+    _screen = null;
     for (final consumer in _consumers.values) {
       consumer.close();
     }
@@ -673,6 +857,7 @@ class MediasoupCallEngine extends ChangeNotifier implements CallEngine {
     for (final peer in _peers.values) {
       await peer.camera?.dispose();
       await peer.mic?.dispose();
+      await peer.screen?.dispose();
     }
     _peers.clear();
 

@@ -195,6 +195,16 @@ export class Room {
     return { peers: others.map((p) => p.summary()) };
   }
 
+  /** Whoever is sharing their screen, if anybody. */
+  screenSharer() {
+    for (const peer of this.peers.values()) {
+      for (const producer of peer.producers.values()) {
+        if (producer.appData.source === 'screen') return peer;
+      }
+    }
+    return null;
+  }
+
   async produce(peer, { transportId, kind, rtpParameters, appData }) {
     const transport = peer.transports.get(transportId);
     if (!transport) throw new Error('No such transport');
@@ -202,14 +212,34 @@ export class Room {
       throw new Error('That transport does not send');
     }
 
+    const source = appData?.source ?? kind;
+
+    // One screen at a time. Not a technical limit — mediasoup would
+    // carry four — but a screen share takes over the far side's window,
+    // and two of them at once means two people fighting over everybody
+    // else's display with no way to choose. Refused here rather than in
+    // the app, because "the app will not let you" is not a rule.
+    if (source === 'screen') {
+      const sharer = this.screenSharer();
+      if (sharer && sharer !== peer) {
+        throw new Error(`${sharer.displayName} is already sharing a screen`);
+      }
+      if (sharer === peer) {
+        throw new Error('You are already sharing a screen');
+      }
+    }
+
     const producer = await transport.produce({
       kind,
       rtpParameters,
       // `source` is what tells a camera track from a microphone one on
-      // the far side. Taken from the client because only the client
-      // knows, and harmless if it lies — it is a label on a stream that
-      // peer is already entitled to send.
-      appData: { peerId: peer.id, source: appData?.source ?? kind },
+      // the far side — and now a screen from a camera, both of which
+      // are `kind: 'video'`. Taken from the client because only the
+      // client knows, and harmless if it lies about mic versus cam: it
+      // is a label on a stream that peer is already entitled to send.
+      // `screen` is the exception, because it claims a shared resource,
+      // which is why the check above is here and not in the app.
+      appData: { peerId: peer.id, source },
     });
 
     peer.producers.set(producer.id, producer);

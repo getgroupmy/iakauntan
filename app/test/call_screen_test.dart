@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_webrtc/flutter_webrtc.dart' show RTCVideoRenderer;
+import 'package:flutter_webrtc/flutter_webrtc.dart'
+    show RTCVideoRenderer, RTCVideoView;
 
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
@@ -38,10 +39,31 @@ class FakeCallEngine extends ChangeNotifier implements CallEngine {
   @override
   bool cameraOn = false;
 
+  @override
+  bool sharingScreen = false;
+  @override
+  bool canShareScreen = true;
+
+  @override
+  CallPeer? get screenSharer {
+    for (final peer in peers) {
+      if (peer.isSharing) return peer;
+    }
+    return null;
+  }
+
   bool closed = false;
   final micCalls = <bool>[];
   final cameraCalls = <bool>[];
+  final screenCalls = <bool>[];
   int flips = 0;
+
+  @override
+  Future<void> setScreenShare(bool on) async {
+    screenCalls.add(on);
+    sharingScreen = on;
+    notifyListeners();
+  }
 
   @override
   Future<void> connect(CallCredentials credentials, {required bool video}) =>
@@ -200,6 +222,64 @@ void main() {
     expect(find.byKey(const ValueKey('call-flip')), findsOneWidget);
   });
 
+  testWidgets('sharing a screen reaches the engine and says so on screen', (
+    tester,
+  ) async {
+    final engine = FakeCallEngine();
+    await open(tester, engine);
+
+    await tester.tap(find.byKey(const ValueKey('call-share')));
+    await tester.pumpAndSettle();
+
+    expect(engine.screenCalls, [true]);
+    // "Am I still sharing?" is the question people actually have, and
+    // the answer is otherwise visible to everybody except them.
+    expect(find.text('You are sharing your screen'), findsOneWidget);
+    expect(find.byIcon(Icons.stop_screen_share_outlined), findsOneWidget);
+  });
+
+  testWidgets('a device that cannot share is not offered the button', (
+    tester,
+  ) async {
+    // Android and iOS, for now. Absent rather than greyed out: a
+    // disabled button invites somebody to work out what would enable
+    // it, and nothing they can do will.
+    await open(tester, FakeCallEngine()..canShareScreen = false);
+
+    expect(find.byKey(const ValueKey('call-share')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('call-hang-up')),
+      findsOneWidget,
+      reason: 'the other controls are still there',
+    );
+  });
+
+  testWidgets('somebody else sharing takes the stage, and is named', (
+    tester,
+  ) async {
+    final sharer = CallPeer(id: 'a', displayName: 'Ahmad')
+      ..screen = _StubRenderer();
+    await open(
+      tester,
+      FakeCallEngine(
+        peers: [
+          sharer,
+          CallPeer(id: 'b', displayName: 'Mei Ling'),
+        ],
+      ),
+    );
+
+    expect(find.text('Ahmad is sharing'), findsOneWidget);
+    // The screen gets the whole stage rather than a quarter of a grid —
+    // a trial balance in a corner is a trial balance nobody can read.
+    expect(find.byType(RTCVideoView), findsOneWidget);
+    expect(
+      find.text('Mei Ling'),
+      findsNothing,
+      reason: 'faces do not compete with the thing everybody is reading',
+    );
+  });
+
   testWidgets('hanging up closes the engine and leaves the screen', (
     tester,
   ) async {
@@ -244,3 +324,11 @@ void main() {
     expect(find.text('open'), findsOneWidget);
   });
 }
+
+/// A renderer that has never been initialised and never will be.
+///
+/// `RTCVideoView` only reads `textureId`, `srcObject` and `renderVideo`
+/// to decide what to lay out, and with no texture it draws nothing —
+/// which is all a layout test needs. Initialising a real one would need
+/// the platform channel that a widget test does not have.
+class _StubRenderer extends RTCVideoRenderer {}

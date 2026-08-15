@@ -132,7 +132,7 @@ or the UDP range, in that order, and never the signalling.
 npm install && npm test
 ```
 
-Thirty assertions, run in CI on every push. They start real mediasoup
+Thirty-three assertions, run in CI on every push. They start real mediasoup
 workers, open real WebSockets, and create real routers, transports,
 producers and consumers — the token checks, the room rules, and the whole
 protocol surface.

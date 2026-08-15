@@ -153,6 +153,11 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                   phase: _engine.phase,
                   failure: _engine.failure,
                   others: peers.length,
+                  sharing: _engine.sharingScreen
+                      ? 'You are sharing your screen'
+                      : _engine.screenSharer == null
+                      ? null
+                      : '${_engine.screenSharer!.displayName} is sharing',
                 ),
               ),
 
@@ -178,9 +183,13 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                 child: _Controls(
                   micOn: _engine.micOn,
                   cameraOn: _engine.cameraOn,
+                  sharingScreen: _engine.sharingScreen,
                   onMic: () => _engine.setMic(!_engine.micOn),
                   onCamera: () => _engine.setCamera(!_engine.cameraOn),
                   onFlip: _engine.cameraOn ? _engine.switchCamera : null,
+                  onShare: _engine.canShareScreen
+                      ? () => _engine.setScreenShare(!_engine.sharingScreen)
+                      : null,
                   onHangUp: _leave,
                 ),
               ),
@@ -192,6 +201,32 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   }
 
   Widget _stage(BuildContext context, List<CallPeer> peers) {
+    // A shared screen wins the stage. When somebody puts a trial balance
+    // up, nobody is looking at faces, and a grid that gives the
+    // spreadsheet a quarter of the window makes it unreadable — which is
+    // the entire point of having shared it.
+    final sharer = _engine.screenSharer;
+    if (sharer != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(
+          Space.sm,
+          72,
+          Space.sm,
+          Space.xl * 3,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: RTCVideoView(
+            sharer.screen!,
+            // `contain`, not `cover`. Cropping a camera loses some
+            // background; cropping a spreadsheet loses the figures down
+            // the right-hand side, and nobody notices they are missing.
+            objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+          ),
+        ),
+      );
+    }
+
     final withVideo = peers.where((p) => p.hasVideo).toList();
 
     if (withVideo.isEmpty) {
@@ -276,12 +311,18 @@ class _Banner extends StatelessWidget {
     required this.phase,
     required this.failure,
     required this.others,
+    this.sharing,
   });
 
   final String title;
   final CallPhase phase;
   final String? failure;
   final int others;
+
+  /// Who is sharing a screen, in words. Shown above everything else,
+  /// because "am I still sharing?" is the question people actually have
+  /// and the answer is otherwise only visible to everybody except them.
+  final String? sharing;
 
   @override
   Widget build(BuildContext context) {
@@ -297,6 +338,34 @@ class _Banner extends StatelessWidget {
       padding: const EdgeInsets.all(Space.lg),
       child: Column(
         children: [
+          if (sharing != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: Space.md,
+                vertical: 4,
+              ),
+              decoration: BoxDecoration(
+                color: context.colors.info,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.screen_share_outlined,
+                    size: 14,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    sharing!,
+                    style: const TextStyle(color: Colors.white, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: Space.sm),
+          ],
           Text(
             title,
             style: const TextStyle(
@@ -370,17 +439,26 @@ class _Controls extends StatelessWidget {
   const _Controls({
     required this.micOn,
     required this.cameraOn,
+    required this.sharingScreen,
     required this.onMic,
     required this.onCamera,
     required this.onFlip,
+    required this.onShare,
     required this.onHangUp,
   });
 
   final bool micOn;
   final bool cameraOn;
+  final bool sharingScreen;
   final VoidCallback onMic;
   final VoidCallback onCamera;
   final VoidCallback? onFlip;
+
+  /// Null where the device cannot capture a screen at all — Android and
+  /// iOS, for now, for the reasons in `call_engine.dart`. Absent rather
+  /// than greyed out: a disabled button invites people to work out what
+  /// would enable it, and nothing they can do will.
+  final VoidCallback? onShare;
   final VoidCallback onHangUp;
 
   @override
@@ -413,6 +491,18 @@ class _Controls extends StatelessWidget {
               tooltip: 'Switch camera',
               active: true,
               onPressed: onFlip!,
+            ),
+          ],
+          if (onShare != null) ...[
+            const SizedBox(width: Space.lg),
+            _Round(
+              key: const ValueKey('call-share'),
+              icon: sharingScreen
+                  ? Icons.stop_screen_share_outlined
+                  : Icons.screen_share_outlined,
+              tooltip: sharingScreen ? 'Stop sharing' : 'Share your screen',
+              active: sharingScreen,
+              onPressed: onShare!,
             ),
           ],
           const SizedBox(width: Space.lg),

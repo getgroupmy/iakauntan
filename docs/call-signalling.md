@@ -151,9 +151,30 @@ receiver for it. The client sends `resumeConsumer` as soon as it has one.
 A server that creates them unpaused will mostly work and will
 occasionally show a black rectangle for several seconds.
 
-`appData` carries `{ "source": "mic" | "cam" }`, which is how the UI
-tells a camera track from a microphone one without guessing from `kind`
-(screen sharing, later, would be a third value with `kind: "video"`).
+`appData` carries `{ "source": "mic" | "cam" | "screen" }`, which is how
+the UI tells one track from another. It is not decoration: a camera and
+a shared screen are both `kind: "video"`, so without the label a
+spreadsheet ends up in the little round avatar.
+
+### Sharing a screen
+
+A screen is an ordinary video producer with `appData.source = "screen"`,
+and it stops with `closeProducer` like any other. Two rules are the
+server's rather than the app's:
+
+- **One screen per room.** `produce` with `source: "screen"` is refused
+  while somebody else is sharing, and the refusal names them —
+  `"Ahmad is already sharing a screen"` — because "no" with no reason
+  sends people to look for a bug. Two screens at once is technically
+  fine and is a room where two people fight over everybody else's
+  window with no way to choose.
+- **The refusal has to be handled.** The client rolls its own state back
+  when it comes: a share button left lit over a capture nobody is
+  receiving is worse than the refusal.
+
+Rules the app cannot be trusted with are enforced where they cannot be
+skipped, which is the same reason `mic` and `cam` are *not* checked —
+those only label a stream that peer may already send.
 
 ## What the server must also do
 
@@ -176,7 +197,20 @@ it — it holds no Supabase credentials and should not. Two consequences:
 | --- | --- | --- |
 | Signalling state — ringing, joining, declining, expiry, who is permitted | `supabase/tests/chat.sql` | yes |
 | This protocol, against real routers and transports | `server/sfu/test/` | yes |
+| The call UI, against a fake engine | `app/test/call_screen_test.dart` | yes |
 | Media actually arriving | nothing | **no** |
+
+### Where screen sharing works
+
+`getDisplayMedia` is a browser and desktop call. Android and iOS both
+need platform work the Dart side cannot do, so the button is absent
+there rather than present and broken:
+
+| | |
+| --- | --- |
+| Web, macOS, Windows, Linux | works, no extra permission |
+| Android | needs a foreground service of type `mediaProjection`, or the system stops the capture after a few seconds |
+| iOS | needs a Broadcast Upload Extension: a second Xcode target sharing an App Group with the app |
 
 The gap is the third row, and it is not one more test away. Nothing in a
 test process performs a DTLS handshake or sends an RTP packet, so no

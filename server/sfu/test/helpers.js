@@ -187,6 +187,37 @@ export async function joinRoom(client, { displayName } = {}) {
   return { caps, send, recv, joined };
 }
 
+let mid = 0;
+const nextMid = () => `M${++mid}`;
+
+/**
+ * RTP parameters for a VP8 track — a camera or a screen, which differ
+ * only by the `source` label on them.
+ */
+export function vp8Parameters(caps, { ssrc = 55555555 } = {}) {
+  const vp8 = caps.codecs.find((c) => c.mimeType.toLowerCase() === 'video/vp8');
+  if (!vp8) throw new Error('The router offers no VP8');
+  return {
+    // A `mid` per producer, not per kind. Two producers on one transport
+    // sharing a mid is refused by mediasoup with "MID already exists in
+    // RTP listener" — which reads exactly like the server rejecting the
+    // second share, and is in fact this helper being wrong.
+    mid: nextMid(),
+    codecs: [
+      {
+        mimeType: vp8.mimeType,
+        payloadType: vp8.preferredPayloadType,
+        clockRate: vp8.clockRate,
+        parameters: {},
+        rtcpFeedback: vp8.rtcpFeedback ?? [],
+      },
+    ],
+    headerExtensions: [],
+    encodings: [{ ssrc }],
+    rtcp: { cname: 'test', reducedSize: true },
+  };
+}
+
 /**
  * RTP parameters for an Opus track, built from what the router actually
  * offers rather than from a remembered payload type — mediasoup assigns
@@ -196,7 +227,7 @@ export function opusParameters(caps, { ssrc = 22222222 } = {}) {
   const opus = caps.codecs.find((c) => c.mimeType.toLowerCase() === 'audio/opus');
   if (!opus) throw new Error('The router offers no Opus');
   return {
-    mid: 'AUDIO',
+    mid: nextMid(),
     codecs: [
       {
         mimeType: opus.mimeType,

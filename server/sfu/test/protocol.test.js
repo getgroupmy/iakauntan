@@ -15,6 +15,7 @@ import {
   mintToken,
   opusParameters,
   startServer,
+  vp8Parameters,
 } from './helpers.js';
 
 let server;
@@ -325,6 +326,104 @@ describe('media', () => {
       closed.data.consumerId,
       consumer.id,
       'otherwise the far side shows a frozen last frame forever',
+    );
+
+    await a.close();
+    await b.close();
+  });
+
+  test('a screen reaches the room labelled as a screen', async () => {
+    const room = uniqueRoom('shares-a-screen');
+    const a = await connect(server.url, mintToken({ sub: other('a'), room }));
+    const b = await connect(server.url, mintToken({ sub: other('b'), room }));
+    const { caps, send } = await joinRoom(a, { displayName: 'Ahmad' });
+    await joinRoom(b);
+
+    const { id: producerId } = await a.call('produce', {
+      transportId: send.id,
+      kind: 'video',
+      rtpParameters: vp8Parameters(caps),
+      appData: { source: 'screen' },
+    });
+
+    const arrived = await b.waitFor('newConsumer');
+    assert.equal(arrived.data.producerId, producerId);
+    assert.equal(arrived.data.kind, 'video');
+    // A screen and a camera are both `kind: 'video'`, so the label is
+    // the only thing that tells the far side which window to put it in.
+    assert.equal(arrived.data.appData.source, 'screen');
+
+    await a.close();
+    await b.close();
+  });
+
+  test('two people cannot share a screen at once, and one after the other can', async () => {
+    const room = uniqueRoom('one-screen');
+    const a = await connect(server.url, mintToken({ sub: other('a'), room }));
+    const b = await connect(server.url, mintToken({ sub: other('b'), room }));
+    const first = await joinRoom(a, { displayName: 'Ahmad' });
+    const second = await joinRoom(b, { displayName: 'Mei Ling' });
+
+    const { id: screenId } = await a.call('produce', {
+      transportId: first.send.id,
+      kind: 'video',
+      rtpParameters: vp8Parameters(first.caps),
+      appData: { source: 'screen' },
+    });
+
+    const refused = await b.request('produce', {
+      transportId: second.send.id,
+      kind: 'video',
+      rtpParameters: vp8Parameters(second.caps),
+      appData: { source: 'screen' },
+    });
+    assert.equal(refused.ok, false);
+    assert.match(refused.error, /Ahmad/, 'say who has it, not just "no"');
+
+    // A camera is not a screen, and must not be caught by the rule.
+    const camera = await b.request('produce', {
+      transportId: second.send.id,
+      kind: 'video',
+      rtpParameters: vp8Parameters(second.caps, { ssrc: 33333333 }),
+      appData: { source: 'cam' },
+    });
+    assert.equal(camera.ok, true);
+
+    // And once Ahmad stops, Mei Ling can share. Without this the
+    // refusal above would pass for a server that never allows a second
+    // share at all.
+    await a.call('closeProducer', { producerId: screenId });
+    const now = await b.request('produce', {
+      transportId: second.send.id,
+      kind: 'video',
+      rtpParameters: vp8Parameters(second.caps, { ssrc: 44444444 }),
+      appData: { source: 'screen' },
+    });
+    assert.equal(now.ok, true);
+
+    await a.close();
+    await b.close();
+  });
+
+  test('somebody joining mid-share is shown the screen', async () => {
+    const room = uniqueRoom('joins-mid-share');
+    const a = await connect(server.url, mintToken({ sub: other('a'), room }));
+    const { caps, send } = await joinRoom(a);
+    await a.call('produce', {
+      transportId: send.id,
+      kind: 'video',
+      rtpParameters: vp8Parameters(caps),
+      appData: { source: 'screen' },
+    });
+
+    const b = await connect(server.url, mintToken({ sub: other('b'), room }));
+    await joinRoom(b);
+
+    const arrived = await b.waitFor('newConsumer');
+    assert.equal(
+      arrived.data.appData.source,
+      'screen',
+      'otherwise a late arrival sees a blank stage until the sharer stops and starts again',
     );
 
     await a.close();
