@@ -112,11 +112,31 @@ another system does not have to be renamed first. Nothing is written
 unless every row is good, and the same call previews and imports, so the
 preview cannot promise something the import then refuses.
 
-Still missing: invoices and bills. Bringing open items across mid-year
-is the other half of a migration and it posts to the ledger, which is a
-different problem from writing a master file — numbering, tax codes, an
-opening balance to sit against, and a decision about what the other side
-of the entry is. It wants to be its own piece of work.
+Open invoices and bills are built too, in 0150 — `import_open_invoices`
+and `import_open_bills`, on the same screen and under the same rule that
+nothing is written unless every row is good. The four decisions this was
+waiting on were settled as:
+
+- **numbering** — the old system's, kept exactly, because that is the
+  number a customer quotes when they pay;
+- **tax** — none, because the SST was declared under the old system and
+  putting it in the tax account again would put it in this system's
+  return again;
+- **the other side of the entry** — `3900 Opening Balance Equity`,
+  created on demand, whose remaining balance is the migration's own
+  error check (`report_opening_balance_suspense`);
+- **the date** — two of them. The document keeps the day it was raised
+  so the ageing is right; the ledger entry is dated at the changeover so
+  the trial balance moves once.
+
+What is imported is the *outstanding* amount, not the original total.
+Anything already collected stays in the old system, which is where
+anybody asking about it will look.
+
+Still missing: opening stock quantities and the opening trial balance
+itself. Both leave a balance in 3900 until they are brought across,
+which is exactly what that account is for and what the suspense report
+reports.
 
 ## 8. Withholding and compound tax
 
@@ -243,5 +263,7 @@ workflow, and it is the difference between a bookkeeping tool and a
 business system. Both are built, and so is the aging, and so are
 recurring invoices and bills, and so is withholding, and so are the two
 statutory statements, and so is bank transfer, and so is importing the
-master files. What is left: importing open invoices and bills, compound
-tax, granular permissions, and taking payment.
+master files — and so, now, are the open invoices and bills that make
+moving onto this system mid-year possible at all. What is left: compound
+tax, granular permissions, taking payment, and the rest of the opening
+position (stock quantities and the opening trial balance).

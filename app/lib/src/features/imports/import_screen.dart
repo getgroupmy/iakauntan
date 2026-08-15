@@ -2,18 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/csv.dart';
+import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
-/// Bringing the customer and item lists across from whatever was in use
-/// before.
+/// Bringing a company's books across from whatever was in use before.
 ///
 /// The preview is not a courtesy. Nothing is written unless every row is
 /// good, so a file with one bad line imports nothing at all — and the
 /// only humane way to run something with that rule is to be able to see
 /// what it will say first. Both buttons call the same database function;
 /// the preview one just tells it not to write.
+///
+/// The master files and the open items are on the same screen because
+/// they are one job done in an order: the invoices name customers by
+/// code, so the customer list has to be here first, and the screen says
+/// so when a code does not resolve.
 class ImportScreen extends ConsumerStatefulWidget {
   const ImportScreen({super.key});
 
@@ -66,14 +71,67 @@ const _itemAliases = <String, List<String>>{
   'reorder_quantity': ['reorder qty'],
 };
 
+/// Open items, and the one heading that is worth arguing about.
+///
+/// `outstanding_amount` rather than `total` or `amount`, because a
+/// column called total is filled in with the invoice total by everybody
+/// who has ever prepared one of these files — and what belongs here is
+/// what is still owed. The aliases below deliberately do not include
+/// 'total' or 'amount' for the same reason: a heading that maps to the
+/// wrong number silently overstates the receivables by everything
+/// already collected.
+const openInvoiceColumns = <String, List<String>>{
+  'doc_no': ['invoice no', 'invoice number', 'document no', 'no'],
+  'contact_code': ['customer code', 'customer', 'account code'],
+  'doc_date': ['invoice date', 'date'],
+  'due_date': ['due', 'payment due'],
+  'outstanding_amount': ['outstanding', 'balance', 'balance due', 'unpaid'],
+  'currency': ['ccy'],
+  'exchange_rate': ['rate', 'fx rate'],
+  'reference': ['your ref', 'po no', 'order no'],
+  'description': ['particulars', 'remarks'],
+};
+
+const openBillColumns = <String, List<String>>{
+  'doc_no': ['bill no', 'our ref', 'document no', 'no'],
+  'supplier_doc_no': ['supplier invoice no', 'their ref', 'invoice no'],
+  'contact_code': ['supplier code', 'supplier', 'account code'],
+  'doc_date': ['bill date', 'invoice date', 'date'],
+  'due_date': ['due', 'payment due'],
+  'outstanding_amount': ['outstanding', 'balance', 'balance due', 'unpaid'],
+  'currency': ['ccy'],
+  'exchange_rate': ['rate', 'fx rate'],
+  'reference': ['po no', 'order no'],
+  'description': ['particulars', 'remarks'],
+};
+
+/// Which file is being brought across.
+enum ImportKind { contacts, items, openInvoices, openBills }
+
+/// Whether this kind writes to the ledger.
+///
+/// A top-level function rather than a getter on the state, because it is
+/// the rule that decides which permission the screen asks for and it is
+/// worth being able to assert on its own. A contact list is master data
+/// and needs write access; an open invoice is a posting, and the
+/// database refuses anybody who may prepare but not post — so a screen
+/// that asked for write access throughout would offer an enabled button
+/// to an accounts clerk and collect a refusal.
+bool importNeedsPosting(ImportKind kind) =>
+    kind == ImportKind.openInvoices || kind == ImportKind.openBills;
+
 class _ImportScreenState extends ConsumerState<ImportScreen> {
   final _text = TextEditingController();
 
-  bool _contacts = true;
+  ImportKind _kind = ImportKind.contacts;
   bool _busy = false;
   CsvTable? _table;
   List<Map<String, dynamic>>? _verdict;
   String? _failure;
+
+  /// The day the ledger takes the opening balances on. Today by default,
+  /// which is what somebody sitting down to migrate usually means.
+  DateTime _asAt = DateTime.now();
 
   @override
   void dispose() {
@@ -81,8 +139,18 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     super.dispose();
   }
 
-  Map<String, List<String>> get _aliases =>
-      _contacts ? _contactAliases : _itemAliases;
+  bool get _openItems => importNeedsPosting(_kind);
+
+  Map<String, List<String>> get _aliases => switch (_kind) {
+    ImportKind.contacts => _contactAliases,
+    ImportKind.items => _itemAliases,
+    ImportKind.openInvoices => openInvoiceColumns,
+    ImportKind.openBills => openBillColumns,
+  };
+
+  List<String> get _required => _openItems
+      ? const ['doc_no', 'contact_code', 'doc_date', 'outstanding_amount']
+      : const ['code', 'name'];
 
   int get _errorCount =>
       (_verdict ?? const []).where((r) => r['status'] == 'error').length;
@@ -99,20 +167,26 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     setState(() => _busy = true);
     final repo = ref.read(repoProvider)!;
     try {
-      final rows = await repo.importRows(
-        contacts: _contacts,
-        rows: table.rows,
-        commit: commit,
-      );
+      final rows = _openItems
+          ? await repo.importOpenItems(
+              invoices: _kind == ImportKind.openInvoices,
+              rows: table.rows,
+              asAt: _asAt,
+              commit: commit,
+            )
+          : await repo.importRows(
+              contacts: _kind == ImportKind.contacts,
+              rows: table.rows,
+              commit: commit,
+            );
       setState(() => _verdict = rows);
       if (commit) {
         ref.invalidate(contactsProvider);
         ref.invalidate(itemsProvider);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Imported ${rows.length} '
-                '${_contacts ? 'contacts' : 'items'}'),
-          ));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Imported ${rows.length} ${_noun()}')),
+          );
         }
       }
     } catch (err) {
@@ -124,10 +198,22 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     if (mounted) setState(() => _busy = false);
   }
 
+  String _noun() => switch (_kind) {
+    ImportKind.contacts => 'contacts',
+    ImportKind.items => 'items',
+    ImportKind.openInvoices => 'open invoices',
+    ImportKind.openBills => 'open bills',
+  };
+
   @override
   Widget build(BuildContext context) {
     final table = _table;
-    final canWrite = ref.watch(canWriteProvider);
+    // Master files need only write access. Open items post to the
+    // ledger, and the database asks for the same thing an accounts clerk
+    // does not have.
+    final allowed = _openItems
+        ? ref.watch(canPostProvider)
+        : ref.watch(canWriteProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -136,17 +222,28 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           preferredSize: const Size.fromHeight(52),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.sm),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: SegmentedButton<bool>(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SegmentedButton<ImportKind>(
                 showSelectedIcon: false,
                 segments: const [
-                  ButtonSegment(value: true, label: Text('Contacts')),
-                  ButtonSegment(value: false, label: Text('Items')),
+                  ButtonSegment(
+                    value: ImportKind.contacts,
+                    label: Text('Contacts'),
+                  ),
+                  ButtonSegment(value: ImportKind.items, label: Text('Items')),
+                  ButtonSegment(
+                    value: ImportKind.openInvoices,
+                    label: Text('Open invoices'),
+                  ),
+                  ButtonSegment(
+                    value: ImportKind.openBills,
+                    label: Text('Open bills'),
+                  ),
                 ],
-                selected: {_contacts},
+                selected: {_kind},
                 onSelectionChanged: (s) => setState(() {
-                  _contacts = s.first;
+                  _kind = s.first;
                   _table = null;
                   _verdict = null;
                   _failure = null;
@@ -169,56 +266,112 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       SectionHeader(
-                        _contacts ? 'Customers and suppliers' : 'Items',
-                        subtitle: 'Paste the file with its header row. '
+                        switch (_kind) {
+                          ImportKind.contacts => 'Customers and suppliers',
+                          ImportKind.items => 'Items',
+                          ImportKind.openInvoices => 'Invoices still unpaid',
+                          ImportKind.openBills => 'Bills still unpaid',
+                        },
+                        subtitle:
+                            'Paste the file with its header row. '
                             'Nothing is written until every row is good.',
                       ),
+                      if (_openItems) ...[
+                        const SizedBox(height: Space.sm),
+                        _ChangeoverField(
+                          value: _asAt,
+                          onPick: _busy
+                              ? null
+                              : (d) => setState(() => _asAt = d),
+                        ),
+                        const SizedBox(height: Space.sm),
+                        Text(
+                          'What goes in the amount column is what is still '
+                          'owed, not the original total — anything already '
+                          'received stays in the old system, which is where '
+                          'anybody asking will look. Each document keeps the '
+                          'date it was raised so the ageing is right; the '
+                          'ledger takes the whole lot on the changeover date '
+                          'above. No tax is posted: it was declared under '
+                          'the old system, and declaring it twice is the '
+                          'mistake this avoids.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: Space.sm),
-                      _Columns(aliases: _aliases, required: const ['code', 'name']),
+                      _Columns(aliases: _aliases, required: _required),
                       const SizedBox(height: Space.md),
                       TextField(
                         controller: _text,
                         maxLines: 10,
                         minLines: 6,
-                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
                         decoration: InputDecoration(
                           border: const OutlineInputBorder(),
-                          hintText: _contacts
-                              ? 'code,name,contact_type,email\n'
-                                  'C-001,Alpha Trading Sdn Bhd,customer,ap@alpha.com'
-                              : 'code,name,unit_price,uom_code\n'
+                          hintText: switch (_kind) {
+                            ImportKind.contacts =>
+                              'code,name,contact_type,email\n'
+                                  'C-001,Alpha Trading Sdn Bhd,customer,'
+                                  'ap@alpha.com',
+                            ImportKind.items =>
+                              'code,name,unit_price,uom_code\n'
                                   'ITEM-1,Widget,12.50,C62',
+                            ImportKind.openInvoices =>
+                              'doc_no,contact_code,doc_date,due_date,'
+                                  'outstanding_amount\n'
+                                  'INV-2025-0912,C-001,2025-11-03,'
+                                  '2025-12-03,3000.00',
+                            ImportKind.openBills =>
+                              'doc_no,supplier_doc_no,contact_code,doc_date,'
+                                  'outstanding_amount\n'
+                                  'BILL-77,ST-2026-4411,S-001,2026-05-02,800',
+                          },
                         ),
                       ),
                       const SizedBox(height: Space.md),
-                      Row(children: [
-                        OutlinedButton.icon(
-                          onPressed: _busy ? null : () => _run(commit: false),
-                          icon: const Icon(Icons.fact_check_outlined, size: 18),
-                          label: const Text('Check it'),
-                        ),
-                        const SizedBox(width: Space.md),
-                        FilledButton.icon(
-                          // Only once it has been checked and come back
-                          // clean: the import would refuse it anyway,
-                          // and refusing it here says why sooner.
-                          onPressed: _busy ||
-                                  !canWrite ||
-                                  _verdict == null ||
-                                  _errorCount > 0
-                              ? null
-                              : () => _run(commit: true),
-                          icon: const Icon(Icons.upload, size: 18),
-                          label: const Text('Import'),
-                        ),
-                        const Spacer(),
-                        if (_busy)
-                          const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                      Row(
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: _busy ? null : () => _run(commit: false),
+                            icon: const Icon(
+                              Icons.fact_check_outlined,
+                              size: 18,
+                            ),
+                            label: const Text('Check it'),
                           ),
-                      ]),
+                          const SizedBox(width: Space.md),
+                          FilledButton.icon(
+                            // Only once it has been checked and come back
+                            // clean: the import would refuse it anyway,
+                            // and refusing it here says why sooner.
+                            key: const ValueKey('import-commit'),
+                            onPressed:
+                                _busy ||
+                                    !allowed ||
+                                    _verdict == null ||
+                                    _errorCount > 0
+                                ? null
+                                : () => _run(commit: true),
+                            icon: const Icon(Icons.upload, size: 18),
+                            label: const Text('Import'),
+                          ),
+                          const Spacer(),
+                          if (_busy)
+                            const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -233,8 +386,11 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
               ],
               if (_failure != null) ...[
                 const SizedBox(height: Space.lg),
-                _Panel(danger: true, title: 'Nothing was imported',
-                    lines: [_failure!]),
+                _Panel(
+                  danger: true,
+                  title: 'Nothing was imported',
+                  lines: [_failure!],
+                ),
               ],
               if (_verdict != null) ...[
                 const SizedBox(height: Space.lg),
@@ -244,6 +400,49 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The day the books change hands.
+///
+/// Its own field rather than a column in the file, because it is one
+/// fact about the whole migration and not about any invoice in it —
+/// repeated per row it would be something to get inconsistently wrong.
+class _ChangeoverField extends StatelessWidget {
+  const _ChangeoverField({required this.value, required this.onPick});
+
+  final DateTime value;
+  final ValueChanged<DateTime>? onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      decoration: const InputDecoration(
+        labelText: 'Changeover date',
+        helperText: 'Every ledger entry in this file carries it',
+        isDense: true,
+      ),
+      child: Row(
+        children: [
+          Expanded(child: Text(Fmt.date(value))),
+          TextButton(
+            key: const ValueKey('import-as-at'),
+            onPressed: onPick == null
+                ? null
+                : () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: value,
+                      firstDate: DateTime(2015),
+                      lastDate: DateTime(2100),
+                    );
+                    if (picked != null) onPick!(picked);
+                  },
+            child: const Text('Pick'),
+          ),
+        ],
       ),
     );
   }
@@ -266,13 +465,15 @@ class _Columns extends StatelessWidget {
         for (final field in aliases.keys)
           Chip(
             visualDensity: VisualDensity.compact,
-            label: Text(field,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: required.contains(field)
-                      ? FontWeight.w700
-                      : FontWeight.w400,
-                )),
+            label: Text(
+              field,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: required.contains(field)
+                    ? FontWeight.w700
+                    : FontWeight.w400,
+              ),
+            ),
             side: required.contains(field)
                 ? BorderSide(color: context.colors.success)
                 : null,
@@ -311,6 +512,11 @@ class _Panel extends StatelessWidget {
   }
 }
 
+String _label(Map<String, dynamic> row) {
+  final v = (row['code'] ?? row['doc_no'])?.toString() ?? '';
+  return v.isEmpty ? '' : ' · $v';
+}
+
 /// The per-row answer. Errors first, because with a hundred rows and two
 /// mistakes the two are what somebody came for.
 class _Verdict extends StatelessWidget {
@@ -334,27 +540,35 @@ class _Verdict extends StatelessWidget {
               imported > 0
                   ? 'Imported $imported rows'
                   : errors == 0
-                      ? '${rows.length} rows, all of them fine'
-                      : '$errors of ${rows.length} rows need fixing',
+                  ? '${rows.length} rows, all of them fine'
+                  : '$errors of ${rows.length} rows need fixing',
               subtitle: imported > 0
                   ? null
                   : errors == 0
-                      ? 'Nothing has been written yet. Import writes them.'
-                      : 'Nothing will be written until these are fixed.',
+                  ? 'Nothing has been written yet. Import writes them.'
+                  : 'Nothing will be written until these are fixed.',
             ),
             if (bad.isNotEmpty)
-              ...bad.map((r) => ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.error_outline,
-                        size: 18, color: context.colors.danger),
-                    title: Text(
-                      'Row ${r['row_no']}'
-                      '${(r['code'] as String?)?.isNotEmpty == true ? ' · ${r['code']}' : ''}',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text(r['message']?.toString() ?? ''),
-                  )),
+              ...bad.map(
+                (r) => ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.error_outline,
+                    size: 18,
+                    color: context.colors.danger,
+                  ),
+                  title: Text(
+                    // The master-file importers answer with `code` and
+                    // the open-item ones with `doc_no`. Whichever is
+                    // there, because the row number alone is not what
+                    // somebody looks for in a spreadsheet.
+                    'Row ${r['row_no']}${_label(r)}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(r['message']?.toString() ?? ''),
+                ),
+              ),
           ],
         ),
       ),

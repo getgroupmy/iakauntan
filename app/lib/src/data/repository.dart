@@ -754,6 +754,42 @@ class Repo {
     return _rows(data);
   }
 
+  /// The open invoices and bills a company arrives with.
+  ///
+  /// `asAt` is the changeover — the day the ledger takes these balances
+  /// on. Every entry in the run carries it, while each document keeps
+  /// the date it was actually raised so the ageing is right. 0150 says
+  /// why at length.
+  Future<List<Map<String, dynamic>>> importOpenItems({
+    required bool invoices,
+    required List<Map<String, String>> rows,
+    required DateTime asAt,
+    required bool commit,
+  }) async {
+    final data = await client.rpc(
+      invoices ? 'import_open_invoices' : 'import_open_bills',
+      params: {
+        'p_org_id': orgId,
+        'p_rows': rows,
+        'p_as_at': Fmt.iso(asAt),
+        'p_commit': commit,
+      },
+    );
+    return _rows(data);
+  }
+
+  /// What is left in `3900 Opening Balance Equity`, which is a
+  /// migration's own arithmetic rather than a report anybody asks for.
+  Future<Map<String, dynamic>?> openingBalanceSuspense() async {
+    final rows = _rows(
+      await client.rpc(
+        'report_opening_balance_suspense',
+        params: {'p_org_id': orgId},
+      ),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
   // ------------------------------------------------------------------
   // Moving money between the company's own accounts
   // ------------------------------------------------------------------
