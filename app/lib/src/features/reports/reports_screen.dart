@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/download.dart';
 import '../../core/format.dart';
@@ -72,6 +73,12 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
     );
   }
 
+  /// Whether there is a second company to add this one to. One company
+  /// in a group is still a group — it just has nothing to combine, so
+  /// there is nothing to offer.
+  bool get _inAGroup =>
+      (ref.watch(groupCompaniesProvider).valueOrNull ?? const []).length > 1;
+
   /// The spec for the tab currently showing, or null while its data is
   /// still loading or failed. Null is what disables the download button:
   /// a PDF of a half-loaded report is worse than no PDF.
@@ -132,13 +139,23 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
 
     // Named for the report and the date it covers, because a folder of
     // files called "profit-loss.pdf" is a folder of one usable file.
-    final stem = spec.title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
+    final stem = spec.title
+        .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')
+        .toLowerCase();
     final saved = await saveBytesFile(
-        '$stem-${Fmt.iso(_range.end)}.pdf', 'application/pdf', bytes);
-    messenger.showSnackBar(SnackBar(
-      content: Text(
-          saved ? 'Downloaded' : 'PDF download is only available in the browser'),
-    ));
+      '$stem-${Fmt.iso(_range.end)}.pdf',
+      'application/pdf',
+      bytes,
+    );
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          saved
+              ? 'Downloaded'
+              : 'PDF download is only available in the browser',
+        ),
+      ),
+    );
   }
 
   @override
@@ -149,6 +166,20 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
       appBar: AppBar(
         title: const Text('Reports'),
         actions: [
+          // Only for somebody who is in more than one company of a
+          // group. For everybody else the group reports would be this
+          // company's figures under a heading claiming otherwise, which
+          // is worse than not offering them.
+          if (_inAGroup)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: TextButton.icon(
+                key: const ValueKey('open-group-reports'),
+                onPressed: () => context.push('/reports/group'),
+                icon: const Icon(Icons.account_tree_outlined, size: 18),
+                label: const Text('Group'),
+              ),
+            ),
           IconButton(
             tooltip: 'Download PDF',
             icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
@@ -236,7 +267,8 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
           ),
           _Report(
             provider: _agedProvider(_aged(false)),
-            spec: (rows) => agedBalanceSpec(rows, _range.end, receivable: false),
+            spec: (rows) =>
+                agedBalanceSpec(rows, _range.end, receivable: false),
             wide: true,
             empty: const EmptyState(
               icon: Icons.hourglass_bottom_outlined,
@@ -260,7 +292,8 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
             empty: const EmptyState(
               icon: Icons.pie_chart_outline,
               title: 'No equity yet',
-              message: 'Share capital and retained earnings appear here as '
+              message:
+                  'Share capital and retained earnings appear here as '
                   'they are posted.',
             ),
           ),
@@ -308,11 +341,13 @@ class _Report extends ConsumerWidget {
 
         // Every block empty means the rows came back but nothing in them
         // was worth printing — an account list that nets to zero.
-        final hasContent = s.blocks.any((b) => switch (b) {
-              ReportSection x => x.lines.isNotEmpty,
-              ReportGrid x => x.rows.isNotEmpty,
-              ReportHighlight _ => false,
-            });
+        final hasContent = s.blocks.any(
+          (b) => switch (b) {
+            ReportSection x => x.lines.isNotEmpty,
+            ReportGrid x => x.rows.isNotEmpty,
+            ReportHighlight _ => false,
+          },
+        );
         if (!hasContent) return empty;
 
         return SingleChildScrollView(
@@ -351,8 +386,10 @@ class ReportView extends StatelessWidget {
             if (spec.note != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
-                child: Text(spec.note!,
-                    style: Theme.of(context).textTheme.bodySmall),
+                child: Text(
+                  spec.note!,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
           ],
         ),
@@ -368,11 +405,11 @@ class _Block extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => switch (block) {
-        ReportSection s when s.lines.isEmpty => const SizedBox.shrink(),
-        ReportSection s => _Section(section: s),
-        ReportGrid g => _Grid(grid: g),
-        ReportHighlight h => _Highlight(highlight: h),
-      };
+    ReportSection s when s.lines.isEmpty => const SizedBox.shrink(),
+    ReportSection s => _Section(section: s),
+    ReportGrid g => _Grid(grid: g),
+    ReportHighlight h => _Highlight(highlight: h),
+  };
 }
 
 /// A named list of accounts with its subtotal.
@@ -391,9 +428,9 @@ class _Section extends StatelessWidget {
           child: Text(
             section.title.toUpperCase(),
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                ),
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
           ),
         ),
         for (final line in section.lines)
@@ -403,8 +440,10 @@ class _Section extends StatelessWidget {
               children: [
                 SizedBox(
                   width: 72,
-                  child: Text(line.code,
-                      style: Theme.of(context).textTheme.bodySmall),
+                  child: Text(
+                    line.code,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ),
                 Expanded(child: Text(line.name)),
                 Money(line.amount),
@@ -435,10 +474,10 @@ class _Grid extends StatelessWidget {
   final ReportGrid grid;
 
   Widget _cell(Cell c) => switch (c) {
-        TextCell t => Text(t.text),
-        MoneyCell m when !m.signed && m.value == 0 => const Text(''),
-        MoneyCell m => Money(m.value, colorNegative: m.signed),
-      };
+    TextCell t => Text(t.text),
+    MoneyCell m when !m.signed && m.value == 0 => const Text(''),
+    MoneyCell m => Money(m.value, colorNegative: m.signed),
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -448,8 +487,10 @@ class _Grid extends StatelessWidget {
         if (grid.title != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(0, 20, 0, 8),
-            child: Text(grid.title!,
-                style: const TextStyle(fontWeight: FontWeight.w700)),
+            child: Text(
+              grid.title!,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         if (grid.rows.isEmpty)
           Text('None', style: Theme.of(context).textTheme.bodySmall)
@@ -465,8 +506,9 @@ class _Grid extends StatelessWidget {
                 columns: [
                   for (var i = 0; i < grid.headers.length; i++)
                     DataColumn(
-                        label: Text(grid.headers[i]),
-                        numeric: grid.isNumeric(i)),
+                      label: Text(grid.headers[i]),
+                      numeric: grid.isNumeric(i),
+                    ),
                 ],
                 rows: [
                   for (final row in grid.rows)
@@ -479,9 +521,12 @@ class _Grid extends StatelessWidget {
                       cells: [
                         for (final c in grid.total!)
                           DataCell(switch (c) {
-                            TextCell t => Text(t.text,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700)),
+                            TextCell t => Text(
+                              t.text,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                             MoneyCell m => Money(m.value, bold: true),
                           }),
                       ],
@@ -545,29 +590,31 @@ class _Highlight extends StatelessWidget {
 /// null it returns exactly what the plain report does, and one code path
 /// cannot drift from the other.
 final _profitLossProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, ({DateTimeRange range, String? project})>(
-        (ref, args) {
-  return requireRepo(ref).profitLossByDimension(
-    from: args.range.start,
-    to: args.range.end,
-    projectCode: args.project,
-  );
-});
+    .family<
+      List<Map<String, dynamic>>,
+      ({DateTimeRange range, String? project})
+    >((ref, args) {
+      return requireRepo(ref).profitLossByDimension(
+        from: args.range.start,
+        to: args.range.end,
+        projectCode: args.project,
+      );
+    });
 
 final _dimensionsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).ledgerDimensions();
-});
+      return requireRepo(ref).ledgerDimensions();
+    });
 
 final _balanceSheetProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTime>((ref, asAt) {
-  return requireRepo(ref).balanceSheet(asAt: asAt);
-});
+      return requireRepo(ref).balanceSheet(asAt: asAt);
+    });
 
 final _sstProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTimeRange>((ref, range) {
-  return requireRepo(ref).sstSummary(from: range.start, to: range.end);
-});
+      return requireRepo(ref).sstSummary(from: range.start, to: range.end);
+    });
 
 /// The shared aged-balance provider, so the tab body and the download
 /// button read one request rather than two.
@@ -575,10 +622,10 @@ final _agedProvider = agedBalancesProvider;
 
 final _cashFlowProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTimeRange>((ref, range) {
-  return requireRepo(ref).cashFlow(from: range.start, to: range.end);
-});
+      return requireRepo(ref).cashFlow(from: range.start, to: range.end);
+    });
 
 final _equityProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTimeRange>((ref, range) {
-  return requireRepo(ref).changesInEquity(from: range.start, to: range.end);
-});
+      return requireRepo(ref).changesInEquity(from: range.start, to: range.end);
+    });

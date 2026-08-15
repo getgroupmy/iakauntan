@@ -476,6 +476,28 @@ final trialBalanceProvider =
       return requireRepo(ref).trialBalance();
     });
 
+/// The combined trial balance across the group, for a period.
+///
+/// Family by range rather than a single provider: the group screen has
+/// its own date picker and a report for the wrong dates is worse than a
+/// spinner.
+final groupTrialBalanceProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({DateTime from, DateTime to})>((
+      ref,
+      range,
+    ) {
+      return requireRepo(ref).groupTrialBalance(from: range.from, to: range.to);
+    });
+
+/// What a consolidation would have to eliminate.
+final groupIntercompanyProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({DateTime from, DateTime to})>((
+      ref,
+      range,
+    ) {
+      return requireRepo(ref).groupIntercompany(from: range.from, to: range.to);
+    });
+
 final activitiesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
       return requireRepo(ref).activities();
@@ -630,15 +652,15 @@ final chatDirectoryProvider =
 /// The call happening in a conversation right now, if any.
 final chatActiveCallProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>?, String>((ref, conversationId) {
-  return requireRepo(ref).chatActiveCall(conversationId);
-});
+      return requireRepo(ref).chatActiveCall(conversationId);
+    });
 
 /// Every phone that should be ringing for this person. Watched by the
 /// shell so a call arrives wherever they are in the app.
 final chatIncomingCallsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return requireRepo(ref).chatIncomingCalls();
-});
+      return requireRepo(ref).chatIncomingCalls();
+    });
 
 final chatMembersProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, conversationId) {

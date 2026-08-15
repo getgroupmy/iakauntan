@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786729350.6993282,
-    "ast_hash": "b3404c4d4f5576d4cec8e4f202993815",
+    "mtime": 1786768706.2797668,
+    "ast_hash": "cb1df54c01c7536f427044a3fc898175",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786722397.6644542,
-    "ast_hash": "08b896bca3c4c3abab8b79d28bcf9417",
+    "mtime": 1786768705.9237666,
+    "ast_hash": "313b11244dede3fa48c881aad030cae0",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786729350.6987164,
-    "ast_hash": "227471c4ed69f5c05ff37aecca527141",
+    "mtime": 1786768706.5237668,
+    "ast_hash": "0cbb67838f5b89963281241acfc20cda",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -265,8 +265,8 @@
     "semantic_hash": "76366d000addf0bd77f8a44839f730c2"
   },
   "app/lib/src/features/reports/reports_screen.dart": {
-    "mtime": 1786693905.579149,
-    "ast_hash": "02b4dd849c342df5e33078c396487f47",
+    "mtime": 1786768706.0877666,
+    "ast_hash": "07b466f3a5fd99d7767916009bebf6a5",
     "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/entity_editor.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786756983.837486,
-    "ast_hash": "9b3fcf9ea62ec662d535abb623f5b6b3",
+    "mtime": 1786766245.9346888,
+    "ast_hash": "9a293512258e201014a4f83d09403741",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1075,8 +1075,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/report_spec.dart": {
-    "mtime": 1786693905.579149,
-    "ast_hash": "e88108a2c594d89cb66bbb931637e405",
+    "mtime": 1786768706.1797667,
+    "ast_hash": "b39a89cb9423c0026f08da4484b73bd7",
     "semantic_hash": ""
   },
   "app/test/report_pdf_test.dart": {
@@ -1820,8 +1820,8 @@
     "semantic_hash": ""
   },
   "docs/edge-functions.md": {
-    "mtime": 1786731145.8005524,
-    "ast_hash": "f67e40c071cb68290d102d79e64b3882",
+    "mtime": 1786764280.1985352,
+    "ast_hash": "c64c1c4d26681c6fc97e7bb13808dced",
     "semantic_hash": ""
   },
   "docs/schedulers.md": {
@@ -2382,6 +2382,46 @@
   "server/sfu/docker-compose.yml": {
     "mtime": 1786756888.0868804,
     "ast_hash": "93aa6ba7c7e462ea618e0e72dbe609c9",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/reports/group_reports_screen.dart": {
+    "mtime": 1786768706.1157668,
+    "ast_hash": "0cfe69728fc5531a64b9983ad9472296",
+    "semantic_hash": ""
+  },
+  "app/test/group_reports_test.dart": {
+    "mtime": 1786768706.5517666,
+    "ast_hash": "ad056815f576cd189b1e2910fd67ec44",
+    "semantic_hash": ""
+  },
+  "supabase/functions/send-push/index.ts": {
+    "mtime": 1786764229.5333662,
+    "ast_hash": "baed0265e97071e5a2ddcb3c5a21887c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0141_push_notifications.sql": {
+    "mtime": 1786763838.0653603,
+    "ast_hash": "b2c06f298eb33a5b6ccf0bfceb2962f0",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0142_group_reporting.sql": {
+    "mtime": 1786766084.3685398,
+    "ast_hash": "c954652f69714c9a37e6768fcad25d4c",
+    "semantic_hash": ""
+  },
+  "supabase/tests/group_reporting.sql": {
+    "mtime": 1786766218.839554,
+    "ast_hash": "ea8b6cbef71dba67e8226e4c639fb99c",
+    "semantic_hash": ""
+  },
+  "supabase/tests/push.sql": {
+    "mtime": 1786764099.6075573,
+    "ast_hash": "3e3e969f349aa33769c1a1ce845ff065",
+    "semantic_hash": ""
+  },
+  "docs/push-notifications.md": {
+    "mtime": 1786764270.6802192,
+    "ast_hash": "4d90305772afe5e92decb2dad08e80a4",
     "semantic_hash": ""
   }
 }

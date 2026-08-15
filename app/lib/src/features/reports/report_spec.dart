@@ -46,7 +46,11 @@ final class ReportSection extends ReportBlock {
 }
 
 class ReportLine {
-  const ReportLine({required this.code, required this.name, required this.amount});
+  const ReportLine({
+    required this.code,
+    required this.name,
+    required this.amount,
+  });
 
   final String code;
   final String name;
@@ -105,8 +109,11 @@ final class MoneyCell extends Cell {
 /// A figure that is the answer rather than a component: gross profit,
 /// net profit, tax payable.
 final class ReportHighlight extends ReportBlock {
-  const ReportHighlight(
-      {required this.label, required this.value, this.emphasise = false});
+  const ReportHighlight({
+    required this.label,
+    required this.value,
+    this.emphasise = false,
+  });
 
   final String label;
   final double value;
@@ -117,20 +124,26 @@ final class ReportHighlight extends ReportBlock {
 // The four reports, derived from the rows the database returns.
 // ---------------------------------------------------------------------
 
-ReportSpec profitLossSpec(List<Map<String, dynamic>> rows, DateTimeRange range) {
+ReportSpec profitLossSpec(
+  List<Map<String, dynamic>> rows,
+  DateTimeRange range,
+) {
   List<ReportLine> lines(bool Function(Map<String, dynamic>) where) => [
-        for (final r in rows.where(where))
-          ReportLine(
-            code: r['code']?.toString() ?? '',
-            name: r['name']?.toString() ?? '',
-            amount: Fmt.toDouble(r['amount']),
-          ),
-      ];
+    for (final r in rows.where(where))
+      ReportLine(
+        code: r['code']?.toString() ?? '',
+        name: r['name']?.toString() ?? '',
+        amount: Fmt.toDouble(r['amount']),
+      ),
+  ];
 
   final revenue = lines((r) => r['account_type'] == 'revenue');
   final cogs = lines((r) => r['account_subtype'] == 'cost_of_sales');
-  final expenses = lines((r) =>
-      r['account_type'] == 'expense' && r['account_subtype'] != 'cost_of_sales');
+  final expenses = lines(
+    (r) =>
+        r['account_type'] == 'expense' &&
+        r['account_subtype'] != 'cost_of_sales',
+  );
 
   double sum(List<ReportLine> l) => l.fold(0, (s, x) => s + x.amount);
   final grossProfit = sum(revenue) - sum(cogs);
@@ -144,23 +157,25 @@ ReportSpec profitLossSpec(List<Map<String, dynamic>> rows, DateTimeRange range) 
       ReportHighlight(label: 'Gross profit', value: grossProfit),
       ReportSection(title: 'Expenses', lines: expenses),
       ReportHighlight(
-          label: 'Net profit',
-          value: grossProfit - sum(expenses),
-          emphasise: true),
+        label: 'Net profit',
+        value: grossProfit - sum(expenses),
+        emphasise: true,
+      ),
     ],
   );
 }
 
 ReportSpec balanceSheetSpec(List<Map<String, dynamic>> rows, DateTime asAt) {
   List<ReportLine> lines(String type) => [
-        for (final r in rows.where((r) =>
-            r['account_type'] == type && Fmt.toDouble(r['balance']) != 0))
-          ReportLine(
-            code: r['code']?.toString() ?? '',
-            name: r['name']?.toString() ?? '',
-            amount: Fmt.toDouble(r['balance']),
-          ),
-      ];
+    for (final r in rows.where(
+      (r) => r['account_type'] == type && Fmt.toDouble(r['balance']) != 0,
+    ))
+      ReportLine(
+        code: r['code']?.toString() ?? '',
+        name: r['name']?.toString() ?? '',
+        amount: Fmt.toDouble(r['balance']),
+      ),
+  ];
 
   final assets = lines('asset');
   final liabilities = lines('liability');
@@ -180,7 +195,8 @@ ReportSpec balanceSheetSpec(List<Map<String, dynamic>> rows, DateTime asAt) {
         emphasise: true,
       ),
     ],
-    note: 'This should be zero once the year-end profit is transferred to '
+    note:
+        'This should be zero once the year-end profit is transferred to '
         'retained earnings.',
   );
 }
@@ -189,16 +205,22 @@ ReportSpec trialBalanceSpec(List<Map<String, dynamic>> rows) {
   // Accounts that never moved and hold nothing are noise on a printed
   // page, so they are left out here rather than in the caller.
   final active = rows
-      .where((r) =>
-          Fmt.toDouble(r['debit']) != 0 ||
-          Fmt.toDouble(r['credit']) != 0 ||
-          Fmt.toDouble(r['closing_balance']) != 0)
+      .where(
+        (r) =>
+            Fmt.toDouble(r['debit']) != 0 ||
+            Fmt.toDouble(r['credit']) != 0 ||
+            Fmt.toDouble(r['closing_balance']) != 0,
+      )
       .toList();
 
-  final totalDebit =
-      active.fold<double>(0, (s, r) => s + Fmt.toDouble(r['debit']));
-  final totalCredit =
-      active.fold<double>(0, (s, r) => s + Fmt.toDouble(r['credit']));
+  final totalDebit = active.fold<double>(
+    0,
+    (s, r) => s + Fmt.toDouble(r['debit']),
+  );
+  final totalCredit = active.fold<double>(
+    0,
+    (s, r) => s + Fmt.toDouble(r['credit']),
+  );
 
   return ReportSpec(
     title: 'Trial Balance',
@@ -243,16 +265,20 @@ ReportSpec trialBalanceSpec(List<Map<String, dynamic>> rows) {
 /// will believe it.
 ReportSpec cashFlowSpec(List<Map<String, dynamic>> rows, DateTimeRange range) {
   List<ReportLine> linesOf(String section) => [
-        for (final r in rows.where((r) => r['section'] == section))
-          ReportLine(
-            code: '',
-            name: r['label']?.toString() ?? '',
-            amount: Fmt.toDouble(r['amount']),
-          ),
-      ];
+    for (final r in rows.where((r) => r['section'] == section))
+      ReportLine(
+        code: '',
+        name: r['label']?.toString() ?? '',
+        amount: Fmt.toDouble(r['amount']),
+      ),
+  ];
 
-  double reconciliation(String label) => Fmt.toDouble(rows
-      .firstWhere((r) => r['label'] == label, orElse: () => const {})['amount']);
+  double reconciliation(String label) => Fmt.toDouble(
+    rows.firstWhere(
+      (r) => r['label'] == label,
+      orElse: () => const {},
+    )['amount'],
+  );
 
   return ReportSpec(
     title: 'Statement of Cash Flows',
@@ -278,7 +304,8 @@ ReportSpec cashFlowSpec(List<Map<String, dynamic>> rows, DateTimeRange range) {
         ],
       ),
     ],
-    note: 'Prepared by the indirect method. Depreciation is added back in '
+    note:
+        'Prepared by the indirect method. Depreciation is added back in '
         'operating activities, so the charge and the accumulated '
         'depreciation it credits cancel.',
   );
@@ -290,7 +317,9 @@ ReportSpec cashFlowSpec(List<Map<String, dynamic>> rows, DateTimeRange range) {
 /// them the transpose reads the same and fits a phone, which the
 /// conventional four-column layout does not.
 ReportSpec changesInEquitySpec(
-    List<Map<String, dynamic>> rows, DateTimeRange range) {
+  List<Map<String, dynamic>> rows,
+  DateTimeRange range,
+) {
   double column(String key) =>
       rows.fold<double>(0, (s, r) => s + Fmt.toDouble(r[key]));
 
@@ -320,7 +349,8 @@ ReportSpec changesInEquitySpec(
         ],
       ),
     ],
-    note: 'The result for the period is shown on its own line until the '
+    note:
+        'The result for the period is shown on its own line until the '
         'year is closed, because that is where it is: in the profit and '
         'loss, not yet in retained earnings. Closing equity equals net '
         'assets on the balance sheet either way.',
@@ -339,14 +369,14 @@ const _agingBuckets = <String, String>{
 /// What a line is, when it is not simply an invoice or a bill. Left
 /// blank for those two so the common row stays uncluttered.
 String _agedKind(String kind) => switch (kind) {
-      'invoice' || 'bill' => '',
-      'credit_note' || 'purchase_credit_note' => 'credit note',
-      'debit_note' || 'purchase_debit_note' => 'debit note',
-      'refund_note' => 'refund note',
-      'receipt' => 'receipt',
-      'payment' => 'payment',
-      _ => kind.replaceAll('_', ' '),
-    };
+  'invoice' || 'bill' => '',
+  'credit_note' || 'purchase_credit_note' => 'credit note',
+  'debit_note' || 'purchase_debit_note' => 'debit note',
+  'refund_note' => 'refund note',
+  'receipt' => 'receipt',
+  'payment' => 'payment',
+  _ => kind.replaceAll('_', ' '),
+};
 
 /// An aged trial balance: who owes what, and for how long.
 ///
@@ -413,19 +443,25 @@ ReportSpec agedBalanceSpec(
       for (final r in rows)
         [
           TextCell(r['contact_name']?.toString() ?? '—'),
-          TextCell([
-            r['doc_no']?.toString() ?? '',
-            _agedKind(r['doc_kind']?.toString() ?? ''),
-          ].where((s) => s.isNotEmpty).join(' · ')),
+          TextCell(
+            [
+              r['doc_no']?.toString() ?? '',
+              _agedKind(r['doc_kind']?.toString() ?? ''),
+            ].where((s) => s.isNotEmpty).join(' · '),
+          ),
           TextCell(Fmt.date(Fmt.parseDate(r['doc_date']))),
           // Cash on account and credit notes have no due date, and an
           // invented one would age them against a deadline nobody set.
-          TextCell(r['due_date'] == null
-              ? '—'
-              : Fmt.date(Fmt.parseDate(r['due_date']))),
-          TextCell(Fmt.toInt(r['days_overdue']) == 0
-              ? '—'
-              : '${Fmt.toInt(r['days_overdue'])}'),
+          TextCell(
+            r['due_date'] == null
+                ? '—'
+                : Fmt.date(Fmt.parseDate(r['due_date'])),
+          ),
+          TextCell(
+            Fmt.toInt(r['days_overdue']) == 0
+                ? '—'
+                : '${Fmt.toInt(r['days_overdue'])}',
+          ),
           MoneyCell(Fmt.toDouble(r['base_outstanding']), signed: true),
         ],
     ],
@@ -437,18 +473,20 @@ ReportSpec agedBalanceSpec(
     blocks: [summary, detail],
     note: receivable
         ? 'Includes credit notes and receipts not yet applied, shown as '
-            'negatives, so the total agrees with the receivables control '
-            'account at this date. Amounts are in the base currency at the '
-            'rate each document was posted at.'
+              'negatives, so the total agrees with the receivables control '
+              'account at this date. Amounts are in the base currency at the '
+              'rate each document was posted at.'
         : 'Includes credit notes and payments not yet applied, shown as '
-            'negatives, so the total agrees with the payables control '
-            'account at this date. Amounts are in the base currency at the '
-            'rate each document was posted at.',
+              'negatives, so the total agrees with the payables control '
+              'account at this date. Amounts are in the base currency at the '
+              'rate each document was posted at.',
   );
 }
 
 ReportSpec sstSummarySpec(
-    List<Map<String, dynamic>> rows, DateTimeRange range) {
+  List<Map<String, dynamic>> rows,
+  DateTimeRange range,
+) {
   ReportGrid grid(String title, String direction) {
     final of = rows.where((r) => r['direction'] == direction).toList();
     return ReportGrid(
@@ -473,7 +511,8 @@ ReportSpec sstSummarySpec(
 
   return ReportSpec(
     title: 'SST Summary',
-    subtitle: 'Supporting figures for the SST-02 return · '
+    subtitle:
+        'Supporting figures for the SST-02 return · '
         '${Fmt.longDate(range.start)} to ${Fmt.longDate(range.end)}',
     blocks: [
       grid('Output tax (sales)', 'output'),
@@ -485,7 +524,158 @@ ReportSpec sstSummarySpec(
       ),
     ],
     // The figures are a starting point for the return, not the return.
-    note: 'Prepared from posted documents. Check it against your tax code '
+    note:
+        'Prepared from posted documents. Check it against your tax code '
         'mapping before filing the SST-02.',
+  );
+}
+
+// =====================================================================
+// Across a company group
+// =====================================================================
+
+/// The combined trial balance, and the sentence that keeps it honest.
+///
+/// The note is not decoration. This adds several companies together
+/// without eliminating anything between them, so an inter-company
+/// invoice is counted as revenue in one and as a cost in another, and
+/// the same debt appears as a receivable in one and a payable in the
+/// other. Somebody reading a total headed "group" will assume it is a
+/// consolidation unless told otherwise, and on a printed page there is
+/// nobody to ask.
+ReportSpec groupTrialBalanceSpec(
+  List<Map<String, dynamic>> rows,
+  DateTimeRange range, {
+  required int companies,
+}) {
+  final active = rows
+      .where(
+        (r) =>
+            Fmt.toDouble(r['debit']) != 0 ||
+            Fmt.toDouble(r['credit']) != 0 ||
+            Fmt.toDouble(r['closing_balance']) != 0,
+      )
+      .toList();
+
+  final totalDebit = active.fold<double>(
+    0,
+    (s, r) => s + Fmt.toDouble(r['debit']),
+  );
+  final totalCredit = active.fold<double>(
+    0,
+    (s, r) => s + Fmt.toDouble(r['credit']),
+  );
+
+  return ReportSpec(
+    title: 'Combined Trial Balance',
+    subtitle:
+        '$companies ${companies == 1 ? 'company' : 'companies'} · '
+        '${Fmt.date(range.start)} – ${Fmt.date(range.end)}'
+        '${totalDebit == totalCredit ? ' · In balance' : ' · Out of balance by '
+                  '${Fmt.money(totalDebit - totalCredit)}'}',
+    note:
+        'Combined, not consolidated. Nothing between the companies has '
+        'been eliminated: an invoice from one to another is counted as '
+        'revenue in the first and as a cost in the second, and the same '
+        'debt appears on both sides. The Inter-company report shows what '
+        'a consolidation would remove.',
+    blocks: [
+      ReportGrid(
+        title: null,
+        // "In" is how many of the companies hold that account at all,
+        // which is the first thing to look at when a figure surprises
+        // somebody — a balance carried by one company out of four reads
+        // very differently from one carried by all four.
+        headers: const ['Code', 'Account', 'In', 'Debit', 'Credit', 'Balance'],
+        rows: [
+          for (final r in active)
+            [
+              TextCell(r['code']?.toString() ?? ''),
+              TextCell(r['name']?.toString() ?? ''),
+              TextCell('${r['companies'] ?? ''}'),
+              MoneyCell(Fmt.toDouble(r['debit'])),
+              MoneyCell(Fmt.toDouble(r['credit'])),
+              MoneyCell(Fmt.toDouble(r['closing_balance']), signed: true),
+            ],
+        ],
+        total: [
+          const TextCell(''),
+          const TextCell('Total'),
+          const TextCell(''),
+          MoneyCell(totalDebit),
+          MoneyCell(totalCredit),
+          const TextCell(''),
+        ],
+      ),
+    ],
+  );
+}
+
+/// What a consolidation would have to eliminate.
+///
+/// Both sides are listed rather than netted. When they disagree — and
+/// they routinely do, because one company has posted the invoice and
+/// the other has not yet received it — the difference is the thing
+/// worth looking at, and netting hides it.
+ReportSpec intercompanySpec(
+  List<Map<String, dynamic>> rows,
+  DateTimeRange range,
+) {
+  final receivable = rows.fold<double>(
+    0,
+    (s, r) => s + Fmt.toDouble(r['receivable']),
+  );
+  final payable = rows.fold<double>(
+    0,
+    (s, r) => s + Fmt.toDouble(r['payable']),
+  );
+  final revenue = rows.fold<double>(
+    0,
+    (s, r) => s + Fmt.toDouble(r['revenue']),
+  );
+
+  return ReportSpec(
+    title: 'Inter-company',
+    subtitle: '${Fmt.date(range.start)} – ${Fmt.date(range.end)}',
+    note: receivable == payable
+        ? null
+        : 'The two sides do not agree by ${Fmt.money(receivable - payable)}. '
+              'That is usually a document posted in one company and not yet '
+              'in the other, and it has to be resolved before these figures '
+              'can be eliminated.',
+    blocks: [
+      ReportGrid(
+        title: null,
+        headers: const [
+          'Company',
+          'Counterparty',
+          'Receivable',
+          'Payable',
+          'Revenue',
+          'Cost',
+        ],
+        rows: [
+          for (final r in rows)
+            [
+              TextCell(r['from_org']?.toString() ?? ''),
+              TextCell(r['to_org']?.toString() ?? ''),
+              MoneyCell(Fmt.toDouble(r['receivable'])),
+              MoneyCell(Fmt.toDouble(r['payable'])),
+              MoneyCell(Fmt.toDouble(r['revenue'])),
+              MoneyCell(Fmt.toDouble(r['expense'])),
+            ],
+        ],
+        total: [
+          const TextCell(''),
+          const TextCell('Total'),
+          MoneyCell(receivable),
+          MoneyCell(payable),
+          MoneyCell(revenue),
+          MoneyCell(
+            rows.fold<double>(0, (s, r) => s + Fmt.toDouble(r['expense'])),
+          ),
+        ],
+      ),
+    ],
   );
 }

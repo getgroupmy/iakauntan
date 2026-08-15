@@ -33,6 +33,7 @@ import '../features/documents/recurring_documents_screen.dart';
 import '../features/documents/withholding_screen.dart';
 import '../features/imports/import_screen.dart';
 import '../features/ledger/recurring_screen.dart';
+import '../features/reports/group_reports_screen.dart';
 import '../features/reports/reports_screen.dart';
 import '../features/secretarial/entity_editor.dart';
 import '../features/documents/shared_document_page.dart';
@@ -118,14 +119,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(
-        path: '/signin',
-        builder: (_, __) => const SignInScreen(),
-      ),
-      GoRoute(
-        path: '/onboarding',
-        builder: (_, __) => const CreateOrgScreen(),
-      ),
+      GoRoute(path: '/signin', builder: (_, __) => const SignInScreen()),
+      GoRoute(path: '/onboarding', builder: (_, __) => const CreateOrgScreen()),
       // Reachable two ways on purpose: the router forces it after a
       // recovery event, and the reset e-mail links straight here. If the
       // event is missed the link still lands somewhere useful.
@@ -159,7 +154,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           ..._documentRoutes('/sales', 'invoice'),
           ..._documentRoutes('/purchases', 'bill'),
 
-          GoRoute(path: '/expenses', builder: (_, __) => const ExpensesScreen()),
+          GoRoute(
+            path: '/expenses',
+            builder: (_, __) => const ExpensesScreen(),
+          ),
           GoRoute(
             path: '/contacts',
             builder: (_, __) => const ContactsScreen(),
@@ -187,9 +185,8 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: ':id',
                 parentNavigatorKey: _rootKey,
-                builder: (_, state) => MatterDetailScreen(
-                  matterId: state.pathParameters['id']!,
-                ),
+                builder: (_, state) =>
+                    MatterDetailScreen(matterId: state.pathParameters['id']!),
               ),
             ],
           ),
@@ -243,8 +240,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/hr/onboarding',
             builder: (_, __) => const OnboardingScreen(),
           ),
-          GoRoute(path: '/einvoice', builder: (_, __) => const EinvoiceScreen()),
-          GoRoute(path: '/journals', builder: (_, __) => const JournalsScreen()),
+          GoRoute(
+            path: '/einvoice',
+            builder: (_, __) => const EinvoiceScreen(),
+          ),
+          GoRoute(
+            path: '/journals',
+            builder: (_, __) => const JournalsScreen(),
+          ),
           GoRoute(path: '/email', builder: (_, __) => const EmailScreen()),
           GoRoute(
             path: '/recurring',
@@ -318,8 +321,24 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),
-          GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+          GoRoute(
+            path: '/reports',
+            builder: (_, __) => const ReportsScreen(),
+            routes: [
+              // On the root navigator, so it arrives with a back arrow to
+              // the company it was opened from. The group is a place you
+              // visit from a company, not a place in the sidebar.
+              GoRoute(
+                path: 'group',
+                parentNavigatorKey: _rootKey,
+                builder: (_, __) => const GroupReportsScreen(),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: '/settings',
+            builder: (_, __) => const SettingsScreen(),
+          ),
         ],
       ),
     ],
@@ -346,30 +365,30 @@ final routerProvider = Provider<GoRouter>((ref) {
 /// List plus editor routes for one document cycle. Editors open on the
 /// root navigator so they cover the shell rather than nesting inside it.
 List<RouteBase> _documentRoutes(String prefix, String fallbackType) => [
+  GoRoute(
+    path: '$prefix/:docType',
+    builder: (_, state) => DocumentListScreen(
+      docType: state.pathParameters['docType'] ?? fallbackType,
+    ),
+    routes: [
       GoRoute(
-        path: '$prefix/:docType',
-        builder: (_, state) => DocumentListScreen(
+        path: 'new',
+        parentNavigatorKey: _rootKey,
+        builder: (_, state) => DocumentEditor(
           docType: state.pathParameters['docType'] ?? fallbackType,
         ),
-        routes: [
-          GoRoute(
-            path: 'new',
-            parentNavigatorKey: _rootKey,
-            builder: (_, state) => DocumentEditor(
-              docType: state.pathParameters['docType'] ?? fallbackType,
-            ),
-          ),
-          GoRoute(
-            path: ':id',
-            parentNavigatorKey: _rootKey,
-            builder: (_, state) => DocumentEditor(
-              docType: state.pathParameters['docType'] ?? fallbackType,
-              documentId: state.pathParameters['id'],
-            ),
-          ),
-        ],
       ),
-    ];
+      GoRoute(
+        path: ':id',
+        parentNavigatorKey: _rootKey,
+        builder: (_, state) => DocumentEditor(
+          docType: state.pathParameters['docType'] ?? fallbackType,
+          documentId: state.pathParameters['id'],
+        ),
+      ),
+    ],
+  ),
+];
 
 /// Bridges Riverpod auth/org state into go_router's Listenable API.
 class _AuthRefresh extends ChangeNotifier {

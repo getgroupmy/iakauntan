@@ -59,6 +59,45 @@ class Repo {
     return _rows(data);
   }
 
+  // ------------------------------------------------------------------
+  // Across a company group
+  //
+  // Combined, not consolidated. `0142_group_reporting.sql` says at
+  // length what that means and what is missing; the screen says it in
+  // one sentence to the person reading the numbers.
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> groupTrialBalance({
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final data = await client.rpc(
+      'report_group_trial_balance',
+      params: {
+        'p_org_id': orgId,
+        if (from != null) 'p_from': Fmt.iso(from),
+        'p_to': Fmt.iso(to ?? DateTime.now()),
+      },
+    );
+    return _rows(data);
+  }
+
+  /// The balances and turnover between companies in the group — what a
+  /// consolidation would have to eliminate.
+  Future<List<Map<String, dynamic>>> groupIntercompany({
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final data = await client.rpc(
+      'report_group_intercompany',
+      params: {
+        'p_org_id': orgId,
+        if (from != null) 'p_from': Fmt.iso(from),
+        'p_to': Fmt.iso(to ?? DateTime.now()),
+      },
+    );
+    return _rows(data);
+  }
+
   Future<List<Map<String, dynamic>>> profitLoss({
     required DateTime from,
     required DateTime to,
@@ -2062,7 +2101,10 @@ class Repo {
   // none of them carries a byte of audio. The media goes over WebRTC to
   // the SFU named by `room_name`.
   // ------------------------------------------------------------------
-  Future<String> chatStartCall(String conversationId, {bool video = false}) async {
+  Future<String> chatStartCall(
+    String conversationId, {
+    bool video = false,
+  }) async {
     final id = await client.rpc(
       'chat_start_call',
       params: {
@@ -2087,10 +2129,12 @@ class Repo {
 
   /// The call happening in this conversation right now, if any.
   Future<Map<String, dynamic>?> chatActiveCall(String conversationId) async {
-    final rows = _rows(await client.rpc(
-      'chat_active_call',
-      params: {'p_conversation_id': conversationId},
-    ));
+    final rows = _rows(
+      await client.rpc(
+        'chat_active_call',
+        params: {'p_conversation_id': conversationId},
+      ),
+    );
     return rows.isEmpty ? null : rows.first;
   }
 
