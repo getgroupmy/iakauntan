@@ -156,10 +156,27 @@ jobs:
       # else — but a typo in a field name is caught by the compiler, and
       # the alternative is finding it in the deploy job's log or, worse,
       # in an invoice that did not send.
-      - run: deno check supabase/functions/send-email/index.ts
-                        supabase/functions/fetch-rates/index.ts
-                        supabase/functions/myinvois/index.ts
-                        supabase/functions/ocr/index.ts
+      #
+      # Read from the directory rather than a list written out here, for
+      # the same reason the deploy job below does: a hand-kept list goes
+      # stale silently. It already had — `call-token` was added, was
+      # deployed by the job below because that one reads the directory,
+      # and was never once type-checked because this one did not.
+      - name: Type-check every function
+        run: |
+          set -euo pipefail
+          entries=()
+          for dir in supabase/functions/*/; do
+            case "$(basename "$dir")" in _*) continue ;; esac
+            [ -f "$dir/index.ts" ] || continue
+            entries+=("$dir/index.ts")
+          done
+          if [ "${#entries[@]}" -eq 0 ]; then
+            echo "::error::No edge functions found under supabase/functions."
+            exit 1
+          fi
+          printf 'checking %s\n' "${entries[@]}"
+          deno check "${entries[@]}"
 
   # -------------------------------------------------------------------
   # The edge functions
