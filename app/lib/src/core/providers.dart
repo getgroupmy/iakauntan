@@ -655,6 +655,13 @@ final intercompanyInboxProvider =
       return requireRepo(ref).intercompanyInbox();
     });
 
+/// How far the move onto this system has got — six imports in the order
+/// they have to be done, and the balance of 3900 as the verdict.
+final migrationProgressProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).migrationProgress();
+    });
+
 // ---------------------------------------------------------------------
 // Push notifications
 // ---------------------------------------------------------------------

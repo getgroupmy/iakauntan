@@ -821,6 +821,13 @@ class Repo {
     ),
   );
 
+  /// How far a migration has got: the six imports in the order they
+  /// have to be done, and the balance of 3900, which is the only one of
+  /// the seven that can say it is finished.
+  Future<List<Map<String, dynamic>>> migrationProgress() async => _rows(
+    await client.rpc('report_migration_progress', params: {'p_org_id': orgId}),
+  );
+
   /// What is left in `3900 Opening Balance Equity`, which is a
   /// migration's own arithmetic rather than a report anybody asks for.
   Future<Map<String, dynamic>?> openingBalanceSuspense() async {

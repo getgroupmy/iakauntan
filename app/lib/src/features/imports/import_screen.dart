@@ -254,6 +254,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       if (commit) {
         ref.invalidate(contactsProvider);
         ref.invalidate(itemsProvider);
+        ref.invalidate(migrationProgressProvider);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Imported ${rows.length} ${_noun()}')),
@@ -340,6 +341,8 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              const _Progress(),
+              const SizedBox(height: Space.lg),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(Space.lg),
@@ -519,6 +522,150 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Where the migration has got to.
+///
+/// Six importers on one screen are a job rather than six features, and
+/// done out of order they refuse each other one message at a time. This
+/// is the order, with what is there for each — and the last line, which
+/// is the only one that can say the job is finished.
+///
+/// Counts rather than ticks, because for four of the six there is no
+/// honest "done": a firm with no stock and no items has finished those
+/// steps by having nothing to bring across, and a tick would be either a
+/// lie or a nag. 0153 has the reasoning.
+class _Progress extends ConsumerWidget {
+  const _Progress();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+
+    return Card(
+      // Keyed because several of the step names are also headings on the
+      // cards below — 'Customers and suppliers' is both step one and the
+      // title of the importer for it — so a test asking what this card
+      // says has to be able to say *this card*.
+      key: const ValueKey('migration-progress'),
+      child: Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SectionHeader(
+              'Moving onto this system',
+              subtitle: 'The order these have to be done in',
+            ),
+            AsyncView(
+              value: ref.watch(migrationProgressProvider),
+              onRetry: () => ref.invalidate(migrationProgressProvider),
+              loading: const LinearProgressIndicator(),
+              builder: (rows) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final r in rows)
+                    if (r['step_no'] != 7)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 26,
+                              child: Text(
+                                '${r['step_no']}.',
+                                style: TextStyle(fontSize: 12, color: muted),
+                              ),
+                            ),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    r['step']?.toString() ?? '',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  Text(
+                                    r['detail']?.toString() ?? '',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: muted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              Fmt.qty(Fmt.toDouble(r['quantity'])),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  const Divider(height: Space.lg),
+                  for (final r in rows)
+                    if (r['step_no'] == 7) _MigrationVerdict(row: r),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The suspense account, which is the only line here that is a verdict
+/// rather than a count.
+class _MigrationVerdict extends StatelessWidget {
+  const _MigrationVerdict({required this.row});
+
+  final Map<String, dynamic> row;
+
+  @override
+  Widget build(BuildContext context) {
+    final amount = Fmt.toDouble(row['quantity']);
+    final detail = row['detail']?.toString() ?? '';
+    // Nil reads as finished only when something has been brought across,
+    // and the sentence from the database is what tells the two apart —
+    // so the tick follows the sentence rather than the number.
+    final done = detail.contains('everything from the old books is here');
+
+    return Row(
+      key: const ValueKey('migration-verdict'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          done ? Icons.check_circle_outline : Icons.pending_outlined,
+          size: 18,
+          color: done ? context.colors.success : context.colors.warning,
+        ),
+        const SizedBox(width: Space.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${row['step']} · ${Fmt.money(amount)}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              Text(detail, style: const TextStyle(fontSize: 11)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

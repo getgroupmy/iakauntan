@@ -131,7 +131,8 @@ jobs:
                    supabase/tests/group_consolidation.sql \
                    supabase/tests/open_item_import.sql \
                    supabase/tests/opening_trial_balance.sql \
-                   supabase/tests/opening_stock.sql; do
+                   supabase/tests/opening_stock.sql \
+                   supabase/tests/migration_progress.sql; do
             echo "== $f"
             psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done

@@ -166,6 +166,13 @@ refuses, it still refuses.
 So the opening position is complete: contacts, items, open invoices,
 open bills, the trial balance, and stock.
 
+0153 adds the thing six importers on one screen needed and did not have
+— `report_migration_progress`, the order they must be done in with what
+is there for each, and the balance of 3900 as the only line that can say
+the job is finished. Counts rather than ticks: for four of the six there
+is no honest "done", because a firm with no stock has finished that step
+by having nothing to bring across.
+
 ## 8. Withholding and compound tax
 
 Akaunting's tax types are normal, inclusive, compound, fixed and

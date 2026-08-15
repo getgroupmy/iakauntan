@@ -25,14 +25,29 @@ import 'package:iakauntan/src/features/imports/import_screen.dart';
 /// posting, so a screen that asked for write access throughout would
 /// hand an accounts clerk an enabled button and a refusal.
 void main() {
-  Widget harness({bool canWrite = true, bool canPost = true}) => ProviderScope(
+  /// The progress card reads the database, so every harness needs an
+  /// answer for it. Empty by default: these tests are about the
+  /// importers, and the card has its own group at the bottom.
+  Widget harness({
+    bool canWrite = true,
+    bool canPost = true,
+    List<Map<String, dynamic>> progress = const [],
+  }) => ProviderScope(
     overrides: [
       repoProvider.overrideWithValue(null),
       canWriteProvider.overrideWithValue(canWrite),
       canPostProvider.overrideWithValue(canPost),
+      migrationProgressProvider.overrideWith((ref) async => progress),
     ],
     child: MaterialApp(theme: AppTheme.light(), home: const ImportScreen()),
   );
+
+  Map<String, dynamic> step(int no, String name, num qty, String detail) => {
+    'step_no': no,
+    'step': name,
+    'quantity': qty,
+    'detail': detail,
+  };
 
   Future<void> openInvoices(WidgetTester tester) async {
     await tester.pumpWidget(harness());
@@ -310,6 +325,103 @@ void main() {
       // Not the trial balance's copy, and not the open items'.
       expect(find.textContaining('comes to zero'), findsNothing);
       expect(find.textContaining('what is still owed'), findsNothing);
+    });
+  });
+
+  group('where the migration has got to', () {
+    List<Map<String, dynamic>> upTo(String verdict, {num suspense = 0}) => [
+      step(1, 'Customers and suppliers', 12, 'Everything else names them.'),
+      step(2, 'Items', 0, 'Only needed if you sell stock.'),
+      step(3, 'Open invoices', 40, 'What customers still owed.'),
+      step(4, 'Open bills', 7, 'What was still owed to suppliers.'),
+      step(5, 'Opening trial balance', 0, 'Brought in once.'),
+      step(6, 'Opening stock', 0, 'Posts no journal.'),
+      step(7, 'Opening Balance Equity', suspense, verdict),
+    ];
+
+    testWidgets('the six steps are listed in the order they have to be done', (
+      tester,
+    ) async {
+      await tester.pumpWidget(harness(progress: upTo('still to come')));
+      await tester.pumpAndSettle();
+
+      // Scoped to the card: several step names are also headings or
+      // segment labels elsewhere on the screen, so an unscoped finder
+      // would be asking a different question.
+      Finder inCard(String text) => find.descendant(
+        of: find.byKey(const ValueKey('migration-progress')),
+        matching: find.text(text),
+      );
+
+      for (final name in [
+        'Customers and suppliers',
+        'Items',
+        'Open invoices',
+        'Open bills',
+        'Opening trial balance',
+        'Opening stock',
+      ]) {
+        expect(inCard(name), findsOneWidget, reason: '$name is a step');
+      }
+      // Counts, not ticks: nothing on this card claims a step with
+      // nothing in it is unfinished, because for a services firm it is
+      // not.
+      expect(inCard('12'), findsOneWidget);
+      expect(inCard('40'), findsOneWidget);
+      expect(inCard('0'), findsNWidgets(3));
+    });
+
+    testWidgets('an unfinished migration is not ticked, even at nil', (
+      tester,
+    ) async {
+      // The case a naive card gets wrong: a company that has brought
+      // nothing across also reads nil, and congratulating them would be
+      // the worst possible answer.
+      await tester.pumpWidget(
+        harness(progress: upTo('Nothing has been brought across yet.')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.pending_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle_outline), findsNothing);
+      expect(
+        find.textContaining('Nothing has been brought across yet'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and a finished one is', (tester) async {
+      await tester.pumpWidget(
+        harness(
+          progress: upTo(
+            'Nil, which means everything from the old books is here.',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+      expect(find.byIcon(Icons.pending_outlined), findsNothing);
+    });
+
+    testWidgets('the amount left is shown as money, not as a count', (
+      tester,
+    ) async {
+      // It is a balance, and the six lines above it are quantities. The
+      // same formatting for both would read as 3,400 invoices.
+      await tester.pumpWidget(
+        harness(
+          progress: upTo(
+            'A credit balance: the trial balance is still to '
+            'come.',
+            suspense: 3400.5,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('migration-verdict')), findsOneWidget);
+      expect(find.textContaining('3,400.50'), findsOneWidget);
     });
   });
 }
