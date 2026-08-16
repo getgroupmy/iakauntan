@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/safe_link.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -75,24 +75,23 @@ class _EinvoiceScreenState extends ConsumerState<EinvoiceScreen> {
           preferredSize: const Size.fromHeight(56),
           child: FilterBar(
             child: SegmentedButton<String>(
-                showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(value: 'all', label: Text('All')),
-                  ButtonSegment(value: 'queued', label: Text('Queued')),
-                  ButtonSegment(value: 'submitted', label: Text('Submitted')),
-                  ButtonSegment(value: 'valid', label: Text('Valid')),
-                  ButtonSegment(value: 'attention', label: Text('Needs fixing')),
-                ],
-                selected: {_filter},
-                onSelectionChanged: (s) => setState(() => _filter = s.first),
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: 'all', label: Text('All')),
+                ButtonSegment(value: 'queued', label: Text('Queued')),
+                ButtonSegment(value: 'submitted', label: Text('Submitted')),
+                ButtonSegment(value: 'valid', label: Text('Valid')),
+                ButtonSegment(value: 'attention', label: Text('Needs fixing')),
+              ],
+              selected: {_filter},
+              onSelectionChanged: (s) => setState(() => _filter = s.first),
             ),
           ),
         ),
       ),
       body: Column(
         children: [
-          if (org != null && !org.einvoiceEnabled)
-            const _SetupBanner(),
+          if (org != null && !org.einvoiceEnabled) const _SetupBanner(),
           Expanded(
             child: AsyncView(
               value: docs,
@@ -169,8 +168,10 @@ class _EinvoiceTile extends ConsumerWidget {
       tilePadding: const EdgeInsets.symmetric(horizontal: Space.lg),
       title: Row(
         children: [
-          Text(doc.internalDocNo,
-              style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(
+            doc.internalDocNo,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(width: 10),
           StatusChip(doc.status, compact: true),
         ],
@@ -212,7 +213,9 @@ class _EinvoiceTile extends ConsumerWidget {
                   if (doc.validationLink != null)
                     OutlinedButton.icon(
                       onPressed: () =>
-                          launchUrl(Uri.parse(doc.validationLink!)),
+                          // Through the guard: this URL is whatever
+                          // MyInvois returned, not one we built.
+                          launchExternal(doc.validationLink),
                       icon: const Icon(Icons.open_in_new, size: 16),
                       label: const Text('View on MyInvois'),
                     ),
@@ -220,11 +223,10 @@ class _EinvoiceTile extends ConsumerWidget {
                     OutlinedButton.icon(
                       onPressed: () => _cancel(context, ref),
                       icon: const Icon(Icons.cancel_outlined, size: 16),
-                      label: Text(
-                        'Cancel (${_hoursLeft(doc)}h left)',
-                      ),
+                      label: Text('Cancel (${_hoursLeft(doc)}h left)'),
                       style: OutlinedButton.styleFrom(
-                          foregroundColor: context.colors.danger),
+                        foregroundColor: context.colors.danger,
+                      ),
                     ),
                   if (doc.status == 'invalid' || doc.status == 'failed')
                     FilledButton.icon(
@@ -272,7 +274,9 @@ class _EinvoiceTile extends ConsumerWidget {
             child: const Text('Keep'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: context.colors.danger),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.colors.danger,
+            ),
             onPressed: () => Navigator.pop(ctx, reasonController.text.trim()),
             child: const Text('Cancel e-Invoice'),
           ),
@@ -390,7 +394,9 @@ class _ErrorDetails extends StatelessWidget {
           Text(
             doc.errorMessage ?? 'Rejected by LHDN',
             style: TextStyle(
-                fontWeight: FontWeight.w600, color: context.colors.danger),
+              fontWeight: FontWeight.w600,
+              color: context.colors.danger,
+            ),
           ),
           if (doc.validationErrors.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -414,13 +420,17 @@ class _ErrorDetails extends StatelessWidget {
     if (err is Map) {
       final inner = err['error'];
       if (inner is Map) {
-        return [inner['code'], inner['message']]
-            .where((e) => e != null)
-            .join(': ');
+        return [
+          inner['code'],
+          inner['message'],
+        ].where((e) => e != null).join(': ');
       }
-      return [err['code'], err['message'], err['status'], err['name']]
-          .where((e) => e != null)
-          .join(' · ');
+      return [
+        err['code'],
+        err['message'],
+        err['status'],
+        err['name'],
+      ].where((e) => e != null).join(' · ');
     }
     return err.toString();
   }
@@ -441,8 +451,7 @@ class _KeyValue extends StatelessWidget {
         children: [
           SizedBox(
             width: 150,
-            child: Text(label,
-                style: Theme.of(context).textTheme.bodySmall),
+            child: Text(label, style: Theme.of(context).textTheme.bodySmall),
           ),
           Expanded(
             child: SelectableText(value, style: const TextStyle(fontSize: 12)),

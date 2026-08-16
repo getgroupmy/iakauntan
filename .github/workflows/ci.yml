@@ -95,6 +95,7 @@ jobs:
                    supabase/tests/bank_reconciliation.sql \
                    supabase/tests/close_my_account.sql \
                    supabase/tests/search_path.sql \
+                   supabase/tests/tenant_foreign_keys.sql \
                    supabase/tests/credit_control.sql \
                    supabase/tests/stock_adjustments.sql \
                    supabase/tests/stock_card.sql \
