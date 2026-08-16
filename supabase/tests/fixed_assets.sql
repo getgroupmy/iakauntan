@@ -163,10 +163,18 @@ begin
   -- for RM 58,000, so a gain of RM 4,000.
   v_entry := public.dispose_fixed_asset(v_asset, date '2026-06-30', 58000);
 
+  -- 4930, not 4920. 0156 gave disposals their own accounts: 4920 is
+  -- Foreign Exchange Gain in the seeded chart, and a van sold at a
+  -- profit was landing there — overstating the foreign exchange
+  -- disclosure and hiding the disposal result inside it.
   perform pg_temp.check_eq('gain on disposal',
     (select coalesce(sum(l.credit), 0) from public.gl_lines l
        join public.accounts ac on ac.id = l.account_id
-      where l.entry_id = v_entry and ac.code = '4920'), 4000);
+      where l.entry_id = v_entry and ac.code = '4930'), 4000);
+  perform pg_temp.check_eq('and none of it reached foreign exchange',
+    (select count(*) from public.gl_lines l
+       join public.accounts ac on ac.id = l.account_id
+      where l.entry_id = v_entry and ac.code in ('4920', '6500')), 0);
   perform pg_temp.check_eq('the asset comes off at cost',
     (select coalesce(sum(l.credit), 0) from public.gl_lines l
        join public.accounts ac on ac.id = l.account_id
@@ -183,10 +191,23 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
--- Disposal catches the depreciation up first
+-- Disposal catches the depreciation up, and charges what it caught
 --
 -- Selling in June an asset last depreciated in December would otherwise
 -- report six months of unrecognised charge as a gain on sale.
+--
+-- That much this file always asserted. What it did not assert, and what
+-- 0156 fixes, is where the caught-up charge *went*. It was relieved from
+-- accumulated depreciation without ever being charged to the profit and
+-- loss: 1590 was debited 6,000 having been credited nothing, and the
+-- 6,000 of depreciation never reached the expense account. Profit was
+-- overstated by exactly the amount stranded on the balance sheet.
+--
+-- The assertions below are the pair that catches it. Measuring the loss
+-- after catching up is necessary and was never sufficient — the loss
+-- comes out right either way, because it was always computed from the
+-- caught-up figure. What tells the two apart is the expense account and
+-- the net of 1590.
 -- ---------------------------------------------------------------------
 do $$
 declare
@@ -206,11 +227,75 @@ begin
   perform pg_temp.check_eq('the loss is measured after catching up',
     (select coalesce(sum(l.debit), 0) from public.gl_lines l
        join public.accounts ac on ac.id = l.account_id
-      where l.entry_id = v_entry and ac.code = '6500'), 4000);
+      where l.entry_id = v_entry and ac.code = '6510'), 4000);
   perform pg_temp.check_eq('and the accumulated charge comes off',
     (select coalesce(sum(l.debit), 0) from public.gl_lines l
        join public.accounts ac on ac.id = l.account_id
       where l.entry_id = v_entry and ac.code = '1590'), 6000);
+
+  -- The six months are charged, not merely relieved.
+  perform pg_temp.check_eq('the catch-up reaches depreciation expense',
+    (select coalesce(sum(l.debit) - sum(l.credit), 0) from public.gl_lines l
+       join public.accounts ac on ac.id = l.account_id
+      where l.entry_id = v_entry and ac.code = '6400'), 6000);
+  -- Nothing is left behind: accumulated depreciation was credited what
+  -- it was debited, so the account is nil once the asset has gone.
+  perform pg_temp.check_eq('and accumulated depreciation clears',
+    (select coalesce(sum(l.debit) - sum(l.credit), 0)
+       from public.gl_lines l
+       join public.accounts ac on ac.id = l.account_id
+       join public.gl_entries e on e.id = l.entry_id
+      where e.org_id = v_org and ac.code = '1590'), 0);
+
+  -- Which is the whole cost of owning it: RM 60,000 in, RM 50,000 back.
+  perform pg_temp.check_eq('profit bears the whole cost of ownership',
+    (select coalesce(sum(l.debit) - sum(l.credit), 0)
+       from public.gl_lines l
+       join public.accounts ac on ac.id = l.account_id
+       join public.gl_entries e on e.id = l.entry_id
+      where e.org_id = v_org and ac.code in ('6400', '6510')), 10000);
+
+  -- And it is on the asset's record, where the schedule reads it from.
+  perform pg_temp.check_eq('the catch-up is recorded as a charge',
+    (select coalesce(sum(amount), 0) from public.depreciation_entries
+      where org_id = v_org and asset_id = v_asset), 6000);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Disposal on a run date charges nothing extra
+--
+-- The other side of the case above: when there is nothing to catch up,
+-- nothing is invented. A stray run of nil would put an empty line in
+-- every asset's history.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.fa_org('Disposal On Time Sdn Bhd');
+  v_asset uuid; v_entry uuid;
+begin
+  insert into public.fixed_assets
+    (org_id, asset_no, name, acquisition_date, cost, method, useful_life_months)
+  values (v_org, 'FA-001', 'Van', date '2026-01-01', 60000, 'straight_line', 60)
+  returning id into v_asset;
+
+  perform public.run_depreciation(v_org, date '2026-06-30');
+  v_entry := public.dispose_fixed_asset(v_asset, date '2026-06-30', 54000);
+
+  perform pg_temp.check_eq('one run, not two',
+    (select count(*) from public.depreciation_runs where org_id = v_org), 1);
+  perform pg_temp.check_eq('and one charge against the asset',
+    (select count(*) from public.depreciation_entries
+      where org_id = v_org and asset_id = v_asset), 1);
+  perform pg_temp.check_eq('sold at book value, so neither gain nor loss',
+    (select count(*) from public.gl_lines l
+       join public.accounts ac on ac.id = l.account_id
+      where l.entry_id = v_entry and ac.code in ('4930', '6510')), 0);
+  perform pg_temp.check_eq('accumulated depreciation still clears',
+    (select coalesce(sum(l.debit) - sum(l.credit), 0)
+       from public.gl_lines l
+       join public.accounts ac on ac.id = l.account_id
+       join public.gl_entries e on e.id = l.entry_id
+      where e.org_id = v_org and ac.code = '1590'), 0);
 end $$;
 
 -- ---------------------------------------------------------------------

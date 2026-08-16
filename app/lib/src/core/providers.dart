@@ -440,6 +440,22 @@ final depreciationPreviewProvider = FutureProvider.autoDispose
       return requireRepo(ref).depreciationPreview(asAt);
     });
 
+/// One asset's charges, in the order they were posted.
+final depreciationHistoryProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, assetId) {
+      return requireRepo(ref).depreciationHistory(assetId);
+    });
+
+/// The fixed asset note. Both dates are nullable: no start date means
+/// since the company began, which is the position rather than a period.
+final assetMovementsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({DateTime? from, DateTime? to})>((
+      ref,
+      args,
+    ) {
+      return requireRepo(ref).assetMovements(from: args.from, to: args.to);
+    });
+
 /// What revaluing the open foreign balances at [asAt] would do. Kept
 /// autoDispose because the answer moves with every rate and every
 /// settlement.

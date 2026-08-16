@@ -1491,6 +1491,34 @@ class Repo {
     return data as String;
   }
 
+  /// Every charge against one asset in order — what the auditor asks
+  /// for when a net book value has to be explained.
+  Future<List<Map<String, dynamic>>> depreciationHistory(
+    String assetId,
+  ) async => _rows(
+    await client.rpc(
+      'report_depreciation_history',
+      params: {'p_org_id': orgId, 'p_asset_id': assetId},
+    ),
+  );
+
+  /// The fixed asset note: cost and accumulated depreciation brought
+  /// forward, what came in and out, the charge, and the carrying amount,
+  /// by category.
+  Future<List<Map<String, dynamic>>> assetMovements({
+    DateTime? from,
+    DateTime? to,
+  }) async => _rows(
+    await client.rpc(
+      'report_asset_movements',
+      params: {
+        'p_org_id': orgId,
+        if (from != null) 'p_from': Fmt.iso(from),
+        if (to != null) 'p_to': Fmt.iso(to),
+      },
+    ),
+  );
+
   /// What the open foreign balances would be restated to, one row per
   /// currency. Raises if a currency has no rate on file at that date,
   /// rather than reporting a confident zero for one it cannot price.

@@ -113,6 +113,38 @@ was exactly that case.
   meaningless, and a warning that fires on every filtered card is a
   warning nobody reads.
 
+- **The depreciation schedule.** `report_depreciation_history` and
+  `report_asset_movements` in `0156`, reached from the fixed asset
+  register: a schedule action in the app bar, and a history action on
+  every asset including disposed ones. `depreciation_runs` and
+  `depreciation_entries` were written by the run and never read, so the
+  note an auditor asks for by name could not be produced — which `0084`'s
+  own header had said on the day it landed.
+
+  Going to build it is what found the reason it mattered.
+  `dispose_fixed_asset` brings an asset's depreciation up to the date it
+  leaves, and then relieved accumulated depreciation of the whole of it
+  without ever charging the catch-up to expense. A van costing 12,000
+  depreciated to March and sold in June left a 600 debit stranded in
+  1590, charged six months of ownership as three, and overstated profit
+  by exactly the stranded amount. Every disposal that did not happen to
+  fall on a run date did this. The catch-up is now charged and recorded
+  as an entry of its own against the disposal's journal, so the asset's
+  history is whole and the note's charge ties to the entries behind it.
+
+  The same function posted gains to 4920 and losses to 6500, which in
+  the seeded chart are Foreign Exchange Gain and Foreign Exchange Loss.
+  Disposals now have 4930 and 6510, created on demand the way `0150`
+  creates 3900. No organization had a fixed asset yet, so there was
+  nothing to repair.
+
+  The note asserts two movement identities — cost and accumulated
+  depreciation each carried forward from brought forward, additions and
+  disposals — with the closing figures derived independently of the
+  movements meant to reconcile to them. The accumulated identity only
+  holds because the disposal now records what it relieves; it is the
+  test that would have caught the bug, written after the fact.
+
 ## Correct: the database owns these
 
 Not gaps. Written by triggers or SECURITY DEFINER functions, or read
@@ -132,9 +164,6 @@ via the `corp_*` RPCs), `einvoice_lines`, `einvoice_logs`,
 - **`item_categories`** — no editor.
 - **Reconciliation history.** `bank_reconciliations` rows are written and
   never listed.
-- **Depreciation schedule.** `depreciation_runs` and
-  `depreciation_entries` are written by the run and never read, so the
-  per-asset history the auditor asks for is not printable.
 - **`corp_resolutions`** — the register itself, as opposed to the
   generated documents.
 - **`corp_issued_capital`, `resync_bank_balance`** — RPCs with no caller.

@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'asset_editor.dart';
+import 'asset_schedule_dialog.dart';
 import 'depreciation_dialog.dart';
 import 'disposal_dialog.dart';
 
@@ -30,12 +31,22 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
     final assets = ref.watch(fixedAssetsProvider(_includeDisposed));
     final canWrite = ref.watch(canWriteProvider);
     final canPost = ref.watch(canPostProvider);
+    final canReadLedger = ref.watch(canReadLedgerProvider);
     final narrow = MediaQuery.sizeOf(context).width < 640;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Fixed assets'),
         actions: [
+          // The note itself, which until 0156 could not be produced from
+          // the movements behind it.
+          if (canReadLedger)
+            IconButton(
+              key: const ValueKey('asset-schedule'),
+              tooltip: 'Fixed asset schedule',
+              icon: const Icon(Icons.table_chart_outlined),
+              onPressed: () => showAssetSchedule(context),
+            ),
           if (canPost)
             IconButton(
               tooltip: 'Run depreciation',
@@ -92,6 +103,12 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
                               onDispose: canPost && !list[i].isDisposed
                                   ? () => _dispose(context, list[i])
                                   : null,
+                              onHistory: canReadLedger
+                                  ? () => showDepreciationHistory(
+                                      context,
+                                      list[i],
+                                    )
+                                  : null,
                             ),
                     ),
             ),
@@ -124,11 +141,17 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
 }
 
 class _AssetTile extends StatelessWidget {
-  const _AssetTile({required this.asset, this.onTap, this.onDispose});
+  const _AssetTile({
+    required this.asset,
+    this.onTap,
+    this.onDispose,
+    this.onHistory,
+  });
 
   final FixedAsset asset;
   final VoidCallback? onTap;
   final VoidCallback? onDispose;
+  final VoidCallback? onHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -160,6 +183,15 @@ class _AssetTile extends StatelessWidget {
               ),
             ],
           ),
+          // Offered on a disposed asset too: what it was charged over
+          // its life is exactly what somebody asks about afterwards.
+          if (onHistory != null)
+            IconButton(
+              key: ValueKey('asset-history-${asset.id}'),
+              tooltip: 'Depreciation history',
+              icon: const Icon(Icons.history, size: 20),
+              onPressed: onHistory,
+            ),
           if (onDispose != null)
             IconButton(
               tooltip: 'Dispose',
