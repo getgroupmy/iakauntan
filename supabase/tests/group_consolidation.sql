@@ -347,4 +347,81 @@ begin
     v_refused);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Which company may consolidate
+--
+-- 0148 refused a consolidation from a subsidiary with the wrong reason:
+-- it reported the group's parent as having nobody who owns it, which is
+-- true, is not a problem, and is not something anybody can fix — and a
+-- reader who took the instruction seriously and recorded an owner would
+-- have been refused again by the chain-of-holdings rule. 0154 answers
+-- the real question instead.
+--
+-- The controls matter more than the new message: the old one has to
+-- still fire where it was right, and the two reports the new one sends
+-- somebody to have to actually work from where they are standing.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_boss uuid := pg_temp.another_user('boss4@cons.test');
+  v_group uuid; v_top uuid; v_sub uuid; v_other uuid;
+  v_refused boolean; v_msg text;
+begin
+  insert into public.company_groups (name, created_by)
+  values ('Kumpulan Cons Empat', v_boss) returning id into v_group;
+  v_top   := pg_temp.cons_org('Which Top Sdn Bhd', v_boss, v_group);
+  v_sub   := pg_temp.cons_org('Which Sub Sdn Bhd', v_boss, v_group);
+  v_other := pg_temp.cons_org('Which Other Sdn Bhd', v_boss, v_group);
+  perform pg_temp.sign_in_as(v_boss);
+
+  -- The control for the change: with ownership unrecorded, the message
+  -- 0148 wrote is still the right one and still fires.
+  v_refused := false;
+  begin perform 1 from public.report_group_consolidated_trial_balance(v_top) limit 1;
+  exception when others then v_refused := true; v_msg := sqlerrm; end;
+  perform pg_temp.sign_in_as(v_boss);
+  perform pg_temp.check_true('unrecorded ownership is still reported as such',
+    v_refused and v_msg like '%Nobody has recorded who owns%');
+
+  perform public.set_group_ownership(v_sub, v_top, 100);
+  perform public.set_group_ownership(v_other, v_top, 100);
+
+  -- From the parent it works. Without this the rest passes for a
+  -- function that refuses everything.
+  perform pg_temp.check_true('the parent can consolidate',
+    (select count(*) >= 0
+       from public.report_group_consolidated_trial_balance(v_top)));
+
+  -- From a subsidiary it is refused, and for the right reason.
+  v_refused := false;
+  begin perform 1 from public.report_group_consolidated_trial_balance(v_sub) limit 1;
+  exception when others then v_refused := true; v_msg := sqlerrm; end;
+  perform pg_temp.sign_in_as(v_boss);
+  perform pg_temp.check_true('a subsidiary cannot consolidate upward',
+    v_refused);
+  perform pg_temp.check_true(
+    'and is told to switch to the parent, by name, rather than to record '
+    'an owner for a company that has none',
+    v_msg like '%prepared by the parent%'
+      and v_msg like '%Which Top Sdn Bhd%');
+  perform pg_temp.check_true('the old message is not what it says',
+    v_msg not like '%Nobody has recorded who owns%');
+
+  -- The message promises these two work from here, so they had better.
+  perform pg_temp.check_true('the combined trial balance works from a '
+    'subsidiary, as the refusal says it does',
+    (select count(*) >= 0 from public.report_group_trial_balance(v_sub)));
+  perform pg_temp.check_true('and so does the inter-company check',
+    (select count(*) >= 0 from public.report_group_elimination_check(v_sub)));
+
+  -- And a partial holding is still refused ahead of everything else.
+  perform public.set_group_ownership(v_other, v_top, 60);
+  v_refused := false;
+  begin perform 1 from public.report_group_consolidated_trial_balance(v_top) limit 1;
+  exception when others then v_refused := true; v_msg := sqlerrm; end;
+  perform pg_temp.sign_in_as(v_boss);
+  perform pg_temp.check_true('a partial holding is still refused by name',
+    v_refused and v_msg like '%not wholly owned: Which Other Sdn Bhd (60%');
+end $$;
+
 rollback;
