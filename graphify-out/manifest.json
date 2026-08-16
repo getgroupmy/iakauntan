@@ -35,9 +35,9 @@
     "semantic_hash": "a225a382d14d7b16b6f602a5c1d49331"
   },
   "app/lib/main.dart": {
-    "mtime": 1786785756.610488,
-    "ast_hash": "a5bce87f0653e17571656b2d7a4111fa",
-    "semantic_hash": "a5bce87f0653e17571656b2d7a4111fa"
+    "mtime": 1786900650.6408522,
+    "ast_hash": "e3454a48029b0fb2df60dae2326a667d",
+    "semantic_hash": ""
   },
   "app/lib/src/app.dart": {
     "mtime": 1786260429.802975,
@@ -60,8 +60,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/env.dart": {
-    "mtime": 1786774930.7890754,
-    "ast_hash": "365b2c87a9784d723cd7d68e900f818c",
+    "mtime": 1786900101.5248196,
+    "ast_hash": "c267ff92f5dfa10114954a86aab635f6",
     "semantic_hash": ""
   },
   "app/lib/src/core/format.dart": {
@@ -330,47 +330,47 @@
     "semantic_hash": ""
   },
   "supabase/functions/_shared/context.ts": {
-    "mtime": 1786607190.0760443,
-    "ast_hash": "93b06044412c607c7959e7bcf3e7c15a",
+    "mtime": 1786900067.6354651,
+    "ast_hash": "334b061d3b25167daa5eeb96b0f0bc59",
     "semantic_hash": ""
   },
   "supabase/functions/_shared/cors.ts": {
-    "mtime": 1786258939.4023101,
-    "ast_hash": "2b405794ab32df54d909e867fe7f2fde",
-    "semantic_hash": "2b405794ab32df54d909e867fe7f2fde"
+    "mtime": 1786899893.7728074,
+    "ast_hash": "f87f708ac2bca5a8424003cc69d3ea20",
+    "semantic_hash": ""
   },
   "supabase/functions/_shared/myinvois.ts": {
-    "mtime": 1786258967.3303092,
+    "mtime": 1786899936.0648098,
     "ast_hash": "9912d7b89608731b0a0bfd21ebce7360",
     "semantic_hash": "9912d7b89608731b0a0bfd21ebce7360"
   },
   "supabase/functions/_shared/ubl.ts": {
-    "mtime": 1786259012.3703077,
+    "mtime": 1786899936.0688097,
     "ast_hash": "a747aa4224e1d12e9fea41b573ce867d",
     "semantic_hash": "a747aa4224e1d12e9fea41b573ce867d"
   },
   "supabase/functions/myinvois/cancel.ts": {
-    "mtime": 1786259206.8383005,
+    "mtime": 1786899936.0688097,
     "ast_hash": "aff6c294ed48bbd6b7ce923018bb7b7f",
     "semantic_hash": "aff6c294ed48bbd6b7ce923018bb7b7f"
   },
   "supabase/functions/myinvois/index.ts": {
-    "mtime": 1786897959.4503145,
-    "ast_hash": "c1f564c9a64034d75de5c0c129790583",
+    "mtime": 1786899972.3488119,
+    "ast_hash": "0a2370f061360f07afe4f4fbc8b2d475",
     "semantic_hash": ""
   },
   "supabase/functions/myinvois/status.ts": {
-    "mtime": 1786259194.4223008,
+    "mtime": 1786899936.0688097,
     "ast_hash": "7a4fe992daae55a2677ec8813ac4c0ba",
     "semantic_hash": "7a4fe992daae55a2677ec8813ac4c0ba"
   },
   "supabase/functions/myinvois/submit.ts": {
-    "mtime": 1786259184.4823012,
+    "mtime": 1786899936.0688097,
     "ast_hash": "0cf618e8d845289b59ecd769cfe182bf",
     "semantic_hash": "0cf618e8d845289b59ecd769cfe182bf"
   },
   "supabase/functions/myinvois/tin.ts": {
-    "mtime": 1786259216.4783,
+    "mtime": 1786899936.0688097,
     "ast_hash": "ee70dcb0950a775335cefcb3c1ad5112",
     "semantic_hash": "ee70dcb0950a775335cefcb3c1ad5112"
   },
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786898228.4055629,
-    "ast_hash": "19de63d45d3d9207c48a515255a79a9e",
+    "mtime": 1786900384.3528364,
+    "ast_hash": "183e2b95c7d8bff77e6a0cc9e06edf8e",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786897261.8079133,
-    "ast_hash": "7ae1c4dfa1f27445f37d590485d95aa2",
+    "mtime": 1786900644.880852,
+    "ast_hash": "a7bcd7d1a078131b306a492756b00588",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -1125,8 +1125,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/demo_accounts.dart": {
-    "mtime": 1786785756.610488,
-    "ast_hash": "6f3dd42674787db38ec289290c1aa97f",
+    "mtime": 1786900650.7528522,
+    "ast_hash": "537bec556db9825d7c7680092ccc8b02",
     "semantic_hash": ""
   },
   "app/test/demo_accounts_test.dart": {
@@ -1510,8 +1510,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/send-email/index.ts": {
-    "mtime": 1786607205.5360453,
-    "ast_hash": "110f59c407cebdeb069cfc39e4f6b1d5",
+    "mtime": 1786899964.1394315,
+    "ast_hash": "126744620e745ec16318a4fc6285a2fd",
     "semantic_hash": ""
   },
   "supabase/migrations/0095_outbound_email.sql": {
@@ -1650,8 +1650,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/fetch-rates/index.ts": {
-    "mtime": 1786593906.2377563,
-    "ast_hash": "77c27992eb865fe7b9bea54049a0710a",
+    "mtime": 1786899964.1393137,
+    "ast_hash": "101bdecff8eb58f18c0559a45fa294eb",
     "semantic_hash": ""
   },
   "supabase/migrations/0104_live_exchange_rates.sql": {
@@ -1790,8 +1790,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/ocr/index.ts": {
-    "mtime": 1786670299.0494938,
-    "ast_hash": "968ba1dbe4ab0a265eb170b2b1586aea",
+    "mtime": 1786899980.5848124,
+    "ast_hash": "1e200319441ff2d80149c2f182d54ab0",
     "semantic_hash": ""
   },
   "supabase/migrations/0108_email_send_now.sql": {
@@ -2260,8 +2260,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/call-token/index.ts": {
-    "mtime": 1786729694.6112056,
-    "ast_hash": "59fa33f25b08d608655e7153a13c7679",
+    "mtime": 1786900067.6355858,
+    "ast_hash": "14ad2e53befc1034c11743875e2f8833",
     "semantic_hash": ""
   },
   "supabase/migrations/0133_manufacturing.sql": {
@@ -2395,8 +2395,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/send-push/index.ts": {
-    "mtime": 1786774768.6370764,
-    "ast_hash": "5fb8506af587ac37aef267d72994f985",
+    "mtime": 1786900067.6357195,
+    "ast_hash": "afd7af8ce985ffd14ce70d4fdf53035f",
     "semantic_hash": ""
   },
   "supabase/migrations/0141_push_notifications.sql": {
@@ -2460,7 +2460,7 @@
     "semantic_hash": ""
   },
   "supabase/functions/_shared/web_push.ts": {
-    "mtime": 1786774517.217078,
+    "mtime": 1786899936.0688097,
     "ast_hash": "48ff40820124aeb85eb6eb1651efbe94",
     "semantic_hash": ""
   },
@@ -2470,12 +2470,12 @@
     "semantic_hash": ""
   },
   "supabase/functions/_shared/web_push_test.ts": {
-    "mtime": 1786774482.8450801,
+    "mtime": 1786899936.0688097,
     "ast_hash": "f7973f810ad45fcaeb95e93039e6829f",
     "semantic_hash": ""
   },
   "supabase/functions/_shared/web_push_vector.js": {
-    "mtime": 1786897276.6716976,
+    "mtime": 1786899936.0688097,
     "ast_hash": "65f8a5a590d63435cf43ecb4e6bcd2c3",
     "semantic_hash": ""
   },
@@ -2675,8 +2675,8 @@
     "semantic_hash": ""
   },
   "app/test/close_account_test.dart": {
-    "mtime": 1786898331.0504122,
-    "ast_hash": "6f8c928f458fa059f72ddfde92ad1159",
+    "mtime": 1786898905.5324457,
+    "ast_hash": "3b901b47b59111143b66f2f3cd66d2bf",
     "semantic_hash": ""
   },
   "supabase/migrations/0158_close_my_account.sql": {
@@ -2692,6 +2692,26 @@
   "docs/personal-data.md": {
     "mtime": 1786898420.8824177,
     "ast_hash": "effbc09c14bd1ee481c05e665ed78a67",
+    "semantic_hash": ""
+  },
+  "supabase/functions/_shared/env.ts": {
+    "mtime": 1786900053.4408169,
+    "ast_hash": "c64ab7ae828e6e6bfaf57efc19fca7ce",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0159_pin_every_search_path.sql": {
+    "mtime": 1786900352.9208345,
+    "ast_hash": "084f55db4aa51a9a6fd3b2c6263b440e",
+    "semantic_hash": ""
+  },
+  "supabase/tests/search_path.sql": {
+    "mtime": 1786900366.6568353,
+    "ast_hash": "b1ef50785c8d4bb25504f0c6ab974728",
+    "semantic_hash": ""
+  },
+  "docs/pre-deployment.md": {
+    "mtime": 1786900597.9328492,
+    "ast_hash": "2f6896f956f9fc9323a33bdd0e298b21",
     "semantic_hash": ""
   }
 }
