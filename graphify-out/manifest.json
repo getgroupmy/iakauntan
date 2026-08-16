@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786851440.9101763,
-    "ast_hash": "b8fda5ba2a7bb10456aa6562605ce75e",
+    "mtime": 1786852729.3307567,
+    "ast_hash": "3c56420dd607e22ad8f0c429fa21a17d",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786851660.7301843,
-    "ast_hash": "a1e0b8497a67267b984fc33b675e0199",
+    "mtime": 1786852725.2427566,
+    "ast_hash": "1e2f6a959cf3d2210807c52a6d76bffb",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -1275,8 +1275,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/banking/reconciliation_screen.dart": {
-    "mtime": 1786785756.610488,
-    "ast_hash": "eba0d3a9c1e5a6e9805cb6654e11bdc9",
+    "mtime": 1786852776.7962282,
+    "ast_hash": "40390bc2c2e06ff1e9ae7008ba082504",
     "semantic_hash": ""
   },
   "app/lib/src/features/banking/statement_import.dart": {
@@ -1295,8 +1295,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/bank_reconciliation.sql": {
-    "mtime": 1786521819.227411,
-    "ast_hash": "12d5a19a8f518dac36a2d24860a1a4a2",
+    "mtime": 1786852616.0107524,
+    "ast_hash": "cc1bf7d579c374b31a73bbfec3ddecca",
     "semantic_hash": ""
   },
   "app/test/no_dead_interpolation_test.dart": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1786851653.806184,
-    "ast_hash": "099abe24f1c3ffb428721c9ffcc273f7",
+    "mtime": 1786852888.7643611,
+    "ast_hash": "8c37f39f49d3ac83135f08a1e422ad37",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -2657,6 +2657,21 @@
   "supabase/tests/depreciation_schedule.sql": {
     "mtime": 1786851173.6541665,
     "ast_hash": "bfbb72131ea4efcd9add6d9f6ffc2c32",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/banking/reconciliation_history_dialog.dart": {
+    "mtime": 1786852895.0067627,
+    "ast_hash": "5cc32965c04d4f268222103b0f9a4131",
+    "semantic_hash": ""
+  },
+  "app/test/reconciliation_history_test.dart": {
+    "mtime": 1786852866.447499,
+    "ast_hash": "561afc065b5d0069ba6012844595a5a2",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0157_reconciliations_march_forward.sql": {
+    "mtime": 1786852534.2707496,
+    "ast_hash": "de92a0c356840bcbd20acbb7a97f2597",
     "semantic_hash": ""
   }
 }

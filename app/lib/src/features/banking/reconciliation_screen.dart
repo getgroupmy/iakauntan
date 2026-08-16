@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'reconciliation_history_dialog.dart';
 import 'statement_import.dart';
 import 'transfer_dialog.dart';
 
@@ -102,6 +103,22 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
               tooltip: 'Import statement',
               icon: const Icon(Icons.upload_file_outlined),
               onPressed: _bankAccountId == null ? null : _import,
+            ),
+          // The register, which until 0157 was written and never read.
+          if (ref.watch(canReadLedgerProvider))
+            IconButton(
+              key: const ValueKey('reconciliation-history'),
+              tooltip: 'Reconciliation history',
+              icon: const Icon(Icons.history),
+              onPressed: _bankAccountId == null
+                  ? null
+                  : () async {
+                      final changed = await showReconciliationHistory(
+                        context,
+                        bankAccountId: _bankAccountId!,
+                      );
+                      if (changed == true) await _refresh();
+                    },
             ),
           IconButton(
             tooltip: 'Refresh',

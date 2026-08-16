@@ -145,6 +145,39 @@ was exactly that case.
   holds because the disposal now records what it relieves; it is the
   test that would have caught the bug, written after the fact.
 
+- **The reconciliation register.** `report_bank_reconciliations` in
+  `0157`, reached from a history action on the reconciliation screen.
+  `bank_reconciliations` rows were written and never listed.
+
+  Listing them showed why that mattered. `complete_bank_reconciliation`
+  refused a difference — 0085 was careful about that — but nothing
+  stopped it running twice, or running at a date behind one already
+  closed. One statement line, matched once, produced three completed
+  reconciliations, two of which stamped no lines at all: the stamping is
+  `where reconciliation_id is null`, so a repeat finds nothing left to
+  claim, and the difference check passes trivially because everything was
+  already reconciled. A register reading as three months of diligence and
+  being one is worse than no register, because an auditor ticking against
+  a phantom row is being misled by the system rather than by a person.
+
+  A reconciliation now has to carry on from the last one, and
+  `reopen_bank_reconciliation` is what makes refusing safe: without a way
+  back, one wrong date closes an account permanently. It accepts only the
+  most recent one on its account, releases the lines it closed over
+  without unmatching them, and deletes the row — 0085's own comment says
+  a completed reconciliation that can still be edited underneath is not a
+  record of anything, and a reopened one is exactly that.
+
+  The register reports how many lines each reconciliation closed over,
+  which is what tells a real one from a phantom, and the screen names any
+  it finds — a database written before 0157 may hold some.
+
+- **`corp_issued_capital` and `resync_bank_balance`** were listed here as
+  RPCs with no caller. They have both had one for some time:
+  `corp_issued_capital` from the document generator in `0065`, and
+  `resync_bank_balance` from the opening-balance import in `0151`. The
+  entry was stale rather than the code.
+
 ## Correct: the database owns these
 
 Not gaps. Written by triggers or SECURITY DEFINER functions, or read
@@ -162,11 +195,8 @@ via the `corp_*` RPCs), `einvoice_lines`, `einvoice_logs`,
 ### 1. Smaller, but real
 
 - **`item_categories`** — no editor.
-- **Reconciliation history.** `bank_reconciliations` rows are written and
-  never listed.
 - **`corp_resolutions`** — the register itself, as opposed to the
   generated documents.
-- **`corp_issued_capital`, `resync_bank_balance`** — RPCs with no caller.
 - **Reference pickers**: `ref_countries`, `ref_msic_codes`,
   `ref_tax_types`, `ref_einvoice_types`, `ref_exemption_reasons` are
   typed by hand where they are used at all.

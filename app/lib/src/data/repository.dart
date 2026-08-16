@@ -1425,6 +1425,28 @@ class Repo {
     return data as String;
   }
 
+  /// Every reconciliation closed on an account, newest first, with the
+  /// number of statement lines each one closed over — which is what
+  /// tells a real reconciliation from one that agreed nothing.
+  Future<List<Map<String, dynamic>>> bankReconciliations({
+    String? bankAccountId,
+  }) async => _rows(
+    await client.rpc(
+      'report_bank_reconciliations',
+      params: {
+        'p_org_id': orgId,
+        if (bankAccountId != null) 'p_bank_account_id': bankAccountId,
+      },
+    ),
+  );
+
+  /// Undoes the most recent reconciliation on its account: the lines go
+  /// back to matched-but-unclosed and the record goes, because a
+  /// reconciliation that was reopened did not happen.
+  Future<void> reopenBankReconciliation(String id) async {
+    await client.rpc('reopen_bank_reconciliation', params: {'p_id': id});
+  }
+
   // ------------------------------------------------------------------
   // Fixed assets
   // ------------------------------------------------------------------

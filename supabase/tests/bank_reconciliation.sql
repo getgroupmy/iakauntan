@@ -166,6 +166,145 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- A reconciliation carries on from the last one
+--
+-- 0085 refused a difference and stopped there, which let the same period
+-- be closed twice and let a date behind a closed one be closed again.
+-- Both passed the difference test for the wrong reason: every line up to
+-- that date was already reconciled, so there was nothing left to be out
+-- by. Each wrote a completed reconciliation that stamped no lines at
+-- all — a register reading as three months of diligence and being one.
+--
+-- The line count is what tells a real reconciliation from a phantom, so
+-- it is asserted rather than the row count alone.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.br_org('Rec Forward Sdn Bhd');
+  v_bank uuid; v_rcp uuid; v_line uuid; v_first uuid; v_second uuid;
+  r jsonb;
+begin
+  select bank_id, receipt_id into v_bank, v_rcp
+    from pg_temp.bank_with_receipt(v_org, 1000);
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date', '2026-03-06',
+                       'description', 'Transfer in',
+                       'reference', 'RCP-1', 'amount', 1000)));
+  select id into v_line from public.bank_transactions
+   where bank_account_id = v_bank;
+  perform public.match_bank_transaction(v_line, 'receipts', v_rcp);
+
+  v_first := public.complete_bank_reconciliation(v_bank, date '2026-03-31', 1000);
+  perform pg_temp.check_eq('the reconciliation closed over its line',
+    (select h.lines from public.report_bank_reconciliations(v_org) h), 1);
+
+  begin
+    perform public.complete_bank_reconciliation(v_bank, date '2026-03-31', 1000);
+    raise exception 'FAIL: the same period was closed twice';
+  exception when sqlstate '23514' then
+    raise notice 'ok   the same statement date cannot be closed twice';
+  end;
+
+  begin
+    perform public.complete_bank_reconciliation(v_bank, date '2026-03-10', 1000);
+    raise exception 'FAIL: a period behind a closed one was closed';
+  exception when sqlstate '23514' then
+    raise notice 'ok   nor can one behind it';
+  end;
+
+  -- The refusals are only worth having if the register stayed clean.
+  perform pg_temp.check_eq('and the register holds one reconciliation',
+    (select count(*) from public.report_bank_reconciliations(v_org)), 1);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Reopening, which is what makes refusing safe
+--
+-- Without a way back, one wrong date closes the account past where
+-- anybody wanted it, permanently. The redo afterwards is the assertion
+-- that matters: a reopen that leaves the account unable to be
+-- reconciled again has not undone anything.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.br_org('Rec Reopen Sdn Bhd');
+  v_bank uuid; v_rcp uuid; v_line uuid; v_first uuid; v_later uuid;
+  r jsonb;
+begin
+  select bank_id, receipt_id into v_bank, v_rcp
+    from pg_temp.bank_with_receipt(v_org, 1000);
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date', '2026-03-06',
+                       'description', 'Transfer in',
+                       'reference', 'RCP-1', 'amount', 1000)));
+  select id into v_line from public.bank_transactions
+   where bank_account_id = v_bank;
+  perform public.match_bank_transaction(v_line, 'receipts', v_rcp);
+  v_first := public.complete_bank_reconciliation(v_bank, date '2026-03-31', 1000);
+
+  perform public.reopen_bank_reconciliation(v_first);
+  perform pg_temp.check_eq('reopening takes it out of the register',
+    (select count(*) from public.report_bank_reconciliations(v_org)), 0);
+  perform pg_temp.check_true('and releases the line it closed over',
+    (select reconciliation_id is null from public.bank_transactions
+      where id = v_line));
+  -- Released, not unmatched: reopening undoes the closing, not the work.
+  perform pg_temp.check_true('while leaving it matched',
+    (select is_reconciled from public.bank_transactions where id = v_line));
+
+  v_first := public.complete_bank_reconciliation(v_bank, date '2026-03-31', 1000);
+  perform pg_temp.check_eq('so the period can be closed again',
+    (select h.lines from public.report_bank_reconciliations(v_org) h), 1);
+
+  -- Once something later exists, the earlier one is out of reach: the
+  -- later reconciliation was closed over lines this would release.
+  v_later := public.complete_bank_reconciliation(v_bank, date '2026-04-30', 1000);
+  begin
+    perform public.reopen_bank_reconciliation(v_first);
+    raise exception 'FAIL: an earlier reconciliation was reopened';
+  exception when sqlstate '23514' then
+    raise notice 'ok   an earlier reconciliation cannot be reopened';
+  end;
+
+  perform pg_temp.check_true('and the register says which one may be',
+    (select h.can_reopen from public.report_bank_reconciliations(v_org) h
+      where h.statement_date = date '2026-04-30'));
+  perform pg_temp.check_true('and which may not',
+    (select not h.can_reopen from public.report_bank_reconciliations(v_org) h
+      where h.statement_date = date '2026-03-31'));
+  perform pg_temp.check_eq('with both on file',
+    (select count(*) from public.report_bank_reconciliations(v_org)), 2);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Who may read the register
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.br_org('Rec Access Sdn Bhd');
+  v_owner uuid := (select user_id from public.org_members
+                    where org_id = v_org and role = 'owner' limit 1);
+  v_buyer uuid := pg_temp.another_user('purchaser@bankrec.test');
+  v_msg text;
+begin
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_buyer, 'purchaser');
+  perform pg_temp.sign_in_as(v_buyer);
+  begin
+    perform * from public.report_bank_reconciliations(v_org);
+    v_msg := null;
+  exception when others then
+    v_msg := sqlerrm;
+  end;
+  -- A caught exception unwinds the sign-in with it.
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('a purchaser cannot read the register',
+    v_msg = 'Insufficient privileges to read the ledger');
+  perform pg_temp.check_eq('and the owner can, on an empty one',
+    (select count(*) from public.report_bank_reconciliations(v_org)), 0);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Reachability
 -- ---------------------------------------------------------------------
 do $$
@@ -176,6 +315,12 @@ begin
   perform pg_temp.check_true('and completing is too',
     not has_function_privilege('anon',
       'public.complete_bank_reconciliation(uuid, date, numeric)', 'execute'));
+  perform pg_temp.check_true('and reopening',
+    not has_function_privilege('anon',
+      'public.reopen_bank_reconciliation(uuid)', 'execute'));
+  perform pg_temp.check_true('while the register is open to authenticated',
+    has_function_privilege('authenticated',
+      'public.report_bank_reconciliations(uuid, uuid)', 'execute'));
 end $$;
 
 rollback;

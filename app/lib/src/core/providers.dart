@@ -430,6 +430,12 @@ final stockAdjustmentsProvider =
       return requireRepo(ref).stockAdjustments();
     });
 
+/// The reconciliation register for one account, or all of them.
+final bankReconciliationsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>((ref, bankAccountId) {
+      return requireRepo(ref).bankReconciliations(bankAccountId: bankAccountId);
+    });
+
 final fixedAssetsProvider = FutureProvider.autoDispose
     .family<List<FixedAsset>, bool>((ref, includeDisposed) {
       return requireRepo(ref).fixedAssets(includeDisposed: includeDisposed);
