@@ -9,6 +9,20 @@ import 'src/core/theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Refuse to start on a build that was configured with nothing.
+  //
+  // `Env` carries defaults, so this cannot fire on a build that simply
+  // omitted `--dart-define`. It fires on the case that used to be
+  // silent: a pipeline that passes `--dart-define=SUPABASE_URL=` with an
+  // unset variable behind it, or a URL that is not one. Without this the
+  // bundle starts, every query fails somewhere else, and the reason
+  // looks like a network problem for as long as anyone cares to look.
+  final misconfigured = Env.misconfiguration();
+  if (misconfigured != null) {
+    runApp(_StartupFailure(error: misconfigured, configuration: true));
+    return;
+  }
+
   try {
     await Supabase.initialize(
       url: Env.supabaseUrl,
@@ -30,9 +44,15 @@ Future<void> main() async {
 /// Shown when the backend could not be reached at start-up — an offline
 /// device, a blocked network, or a misconfigured Supabase URL.
 class _StartupFailure extends StatelessWidget {
-  const _StartupFailure({required this.error});
+  const _StartupFailure({required this.error, this.configuration = false});
 
   final Object error;
+
+  /// Whether this is a build that was never configured, rather than a
+  /// network that is down. The two look identical from a blank page and
+  /// have nothing in common as problems: one is fixed by reconnecting,
+  /// the other only by rebuilding.
+  final bool configuration;
 
   @override
   Widget build(BuildContext context) {
@@ -49,20 +69,29 @@ class _StartupFailure extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.cloud_off,
-                      size: 44, color: context.colors.danger),
+                  Icon(
+                    configuration ? Icons.settings_ethernet : Icons.cloud_off,
+                    size: 44,
+                    color: context.colors.danger,
+                  ),
                   const SizedBox(height: 20),
                   Text(
-                    'Cannot reach iAkauntan',
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.w700),
+                    configuration
+                        ? 'iAkauntan is not configured'
+                        : 'Cannot reach iAkauntan',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'The app started but could not connect to the server. '
-                    'Check your internet connection and try again.',
+                    configuration
+                        ? 'This build was made without the settings it needs, '
+                              'so it has not started. Rebuilding with them is '
+                              'the only fix; reloading will not help.'
+                        : 'The app started but could not connect to the '
+                              'server. Check your internet connection and try '
+                              'again.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
@@ -71,7 +100,9 @@ class _StartupFailure extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(Space.md),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: SelectableText(

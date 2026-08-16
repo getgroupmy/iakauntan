@@ -94,6 +94,7 @@ jobs:
                    supabase/tests/depreciation_schedule.sql \
                    supabase/tests/bank_reconciliation.sql \
                    supabase/tests/close_my_account.sql \
+                   supabase/tests/search_path.sql \
                    supabase/tests/credit_control.sql \
                    supabase/tests/stock_adjustments.sql \
                    supabase/tests/stock_card.sql \
@@ -731,10 +732,11 @@ jobs:
           # the service role key must never reach a client bundle.
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
-          # Set the repository variable DEMO_MODE to false to drop the
-          # one-tap demo logins from the sign-in page. Unset leaves them
-          # on, which is right while this deployment is the demo — see
-          # the README before it carries anybody's real ledger.
+          # Set the repository variable DEMO_MODE to `true` to put the
+          # one-tap demo logins on the sign-in page. Unset means off,
+          # which is the safe way round: a build that forgets the flag
+          # ships a closed door rather than a working login to a seeded
+          # owner account. The demo deployment has to ask for them.
           DEMO_MODE: ${{ vars.DEMO_MODE }}
           # A repository *variable*, not a secret: this is the public
           # half of the VAPID pair and it is handed to every push service

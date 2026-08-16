@@ -831,6 +831,14 @@ deployments to come back to that preview instead of production.
 
 ## Security
 
+`docs/pre-deployment.md` is the checklist run before this went live —
+environment variables, debug code, what an error is allowed to say,
+security headers, rate limiting, CORS and the database — with what each
+check found, what was changed, and the four things that can only be done
+from a dashboard. `docs/personal-data.md` is the companion map of where
+personal data is collected, where it goes and what closing an account
+does.
+
 ### Where secrets live, and what is public
 
 `.env.example` lists every value the system reads from its environment
@@ -878,9 +886,9 @@ All the same, before this deployment carries real books:
 
 - **Rotate the demo password and delete the demo users.** It is
   `Demo!Akaun2026` in the history and in every built bundle.
-- **Build with `--dart-define=DEMO_MODE=false`.** It defaults to `true`,
-  so a build that forgets it ships a working one-tap login to a seeded
-  owner account.
+- **Do not set `DEMO_MODE`.** It now defaults to off, so a build that
+  forgets the flag ships a closed door; `--dart-define=DEMO_MODE=true` is
+  what puts the one-tap logins back on the sign-in page.
 - **Rotate any secret you believe may have been pasted anywhere** — a
   chat window, a ticket, a screenshot. Rotation is cheap; the assumption
   that it never leaked is not.

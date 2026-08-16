@@ -12,17 +12,14 @@
  *   action = "cancel"      -> cancel a validated document within 72h
  *   action = "validate-tin"-> confirm a TIN matches an identifier
  */
-import { corsHeaders, fail, json } from "../_shared/cors.ts";
+import { fail, failUnexpected, json, serveFunction } from "../_shared/cors.ts";
 import { buildContext, HttpError } from "../_shared/context.ts";
 import { submit } from "./submit.ts";
 import { checkStatus } from "./status.ts";
 import { cancel } from "./cancel.ts";
 import { validateTin } from "./tin.ts";
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+serveFunction("myinvois.failed", async (req: Request) => {
   if (req.method !== "POST") {
     return fail("Use POST", 405);
   }
@@ -54,24 +51,18 @@ Deno.serve(async (req) => {
     if (err instanceof HttpError) {
       return fail(err.message, err.status, err.details);
     }
-    // The message and the type, not the error object. An error thrown
-    // anywhere in this function may be carrying a MyInvois request or
-    // response on it, and those hold the buyer's name, TIN, address,
-    // email and every line of the invoice. Logs are read by people who
-    // have no business seeing a particular company's customers, and a
-    // stack trace is not a good enough reason to show them.
+    // Not the error object, and not its message to the caller either. An
+    // error thrown anywhere in this function may be carrying a MyInvois
+    // request or response on it, and those hold the buyer's name, TIN,
+    // address, email and every line of the invoice. Logs are read by
+    // people who have no business seeing a particular company's
+    // customers, and a stack trace is not a good enough reason to show
+    // them; nor is a response body, which is one screenshot away from
+    // anywhere.
     //
     // The full exchange is not lost: `persistLogs` writes it to
     // `einvoice_logs`, which is org-scoped and access-controlled, and
     // which LHDN requires to be kept for seven years anyway.
-    console.error(
-      JSON.stringify({
-        event: "myinvois.failed",
-        action,
-        kind: err instanceof Error ? err.name : typeof err,
-        message: err instanceof Error ? err.message : "Unexpected error",
-      }),
-    );
-    return fail(err instanceof Error ? err.message : "Unexpected error", 500);
+    return failUnexpected(err, "myinvois.failed", req, { action });
   }
 });

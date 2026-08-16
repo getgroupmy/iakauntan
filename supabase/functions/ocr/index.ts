@@ -50,7 +50,7 @@
  * as a fallback for Claude.
  */
 import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { corsHeaders, fail, json } from "../_shared/cors.ts";
+import { fail, json, logFailure, serveFunction } from "../_shared/cors.ts";
 import { googleAccessToken, ServiceAccount } from "../_shared/google_auth.ts";
 
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -651,10 +651,7 @@ async function credentialFor(
   };
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+serveFunction("ocr.failed", async (req: Request) => {
   if (req.method !== "POST") return fail("Use POST", 405);
 
   const url = Deno.env.get("SUPABASE_URL");
@@ -792,9 +789,19 @@ Deno.serve(async (req) => {
     if (error) {
       console.error("scan failed and was not refunded", begin.scan_id, error);
     }
-    return fail(message, 502, {
-      scan_id: begin.scan_id,
-      refunded: begin.charged > 0 && !error,
-    });
+    // The provider's message goes to the log and to `ocr_scans.error`,
+    // which is the organization's own row behind RLS. It does not go in
+    // the response: a Document AI failure quotes the project, the
+    // processor and sometimes the page it choked on.
+    const ref = logFailure(e, "ocr.failed", { scan_id: begin.scan_id });
+    return fail(
+      "The document could not be read. Quote this reference if you get in touch.",
+      502,
+      {
+        ref,
+        scan_id: begin.scan_id,
+        refunded: begin.charged > 0 && !error,
+      },
+    );
   }
 });

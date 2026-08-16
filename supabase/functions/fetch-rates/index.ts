@@ -25,7 +25,7 @@
  * Called on a schedule. See docs/exchange-rate-feed.md.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { corsHeaders, fail, json } from "../_shared/cors.ts";
+import { fail, json, logFailure, serveFunction } from "../_shared/cors.ts";
 import { isSchedulerCall } from "../_shared/scheduler.ts";
 
 const BNM_ENDPOINT = "https://api.bnm.gov.my/public/exchange-rate";
@@ -89,10 +89,7 @@ function quoteOf(row: BnmRow): Quote | null {
   };
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+serveFunction("fetch-rates.failed", async (req: Request) => {
   if (req.method !== "POST") return fail("Use POST", 405);
 
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -171,7 +168,8 @@ Deno.serve(async (req) => {
     // Reached rather than swallowed. A feed that is quietly not running
     // looks exactly like a feed with nothing to report, and the symptom
     // turns up a month later as a revaluation that will not post.
-    return fail(`Could not reach Bank Negara: ${err}`, 502);
+    const ref = logFailure(err, "fetch-rates.unreachable", { session });
+    return fail("Could not reach Bank Negara.", 502, { ref });
   }
 
   const rows = Array.isArray(payload.data) ? payload.data : [];
@@ -199,7 +197,10 @@ Deno.serve(async (req) => {
     p_source: "bnm",
     p_quote: "MYR",
   });
-  if (error) return fail(`Could not store the rates: ${error.message}`, 500);
+  if (error) {
+    const ref = logFailure(error, "fetch-rates.store-failed", { session });
+    return fail("Could not store the rates.", 500, { ref });
+  }
 
   const verdicts = (data ?? []) as Array<{ status: string }>;
   const count = (s: string) => verdicts.filter((v) => v.status === s).length;

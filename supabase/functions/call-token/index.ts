@@ -35,7 +35,8 @@
  * that document is the contract rather than a description of one.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { corsHeaders, fail, json } from "../_shared/cors.ts";
+import { fail, failUnexpected, json, serveFunction } from "../_shared/cors.ts";
+import { requireEnv } from "../_shared/env.ts";
 
 /**
  * How long the credentials are good for.
@@ -112,11 +113,7 @@ function list(name: string): string[] {
     .filter((s) => s.length > 0);
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
+serveFunction("call-token.failed", async (req: Request) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return fail("Missing Authorization header", 401);
@@ -142,8 +139,8 @@ Deno.serve(async (req: Request) => {
     // level security decides what they can see. A forged call_id gets
     // nothing back and is refused two lines later.
     const userClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
+      requireEnv("SUPABASE_URL"),
+      requireEnv("SUPABASE_ANON_KEY"),
       { global: { headers: { Authorization: authHeader } } },
     );
 
@@ -229,6 +226,6 @@ Deno.serve(async (req: Request) => {
       expires_at: new Date(expiresAt * 1000).toISOString(),
     });
   } catch (error) {
-    return fail((error as Error).message ?? "Unexpected error", 500);
+    return failUnexpected(error, "call-token.failed", req);
   }
 });

@@ -5,6 +5,7 @@
  * (for credentials the client must never see).
  */
 import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { requireEnv } from "./env.ts";
 import { ApiCall, MyInvoisEnv } from "./myinvois.ts";
 
 export interface Ctx {
@@ -28,9 +29,9 @@ export async function buildContext(req: Request): Promise<Ctx> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) throw new HttpError(401, "Missing Authorization header");
 
-  const url = Deno.env.get("SUPABASE_URL")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const url = requireEnv("SUPABASE_URL");
+  const anonKey = requireEnv("SUPABASE_ANON_KEY");
+  const serviceKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
 
   const userClient = createClient(url, anonKey, {
     global: { headers: { Authorization: authHeader } },

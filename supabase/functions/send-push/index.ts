@@ -61,7 +61,14 @@
  *   FCM_SERVICE_ACCOUNT   the Firebase service account JSON, whole
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { corsHeaders, fail, json } from "../_shared/cors.ts";
+import {
+  fail,
+  failUnexpected,
+  json,
+  logFailure,
+  serveFunction,
+} from "../_shared/cors.ts";
+import { requireEnv } from "../_shared/env.ts";
 import { googleAccessToken, ServiceAccount } from "../_shared/google_auth.ts";
 import { sendWebPush, vapidFromEnv } from "../_shared/web_push.ts";
 
@@ -177,11 +184,7 @@ function isDeadToken(status: number, payload: unknown): boolean {
   return code === "UNREGISTERED" || code === "INVALID_ARGUMENT";
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
+serveFunction("send-push.failed", async (req: Request) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return fail("Missing Authorization header", 401);
@@ -219,8 +222,8 @@ Deno.serve(async (req: Request) => {
       return fail(`Unknown kind: ${kind}`);
     }
 
-    const url = Deno.env.get("SUPABASE_URL")!;
-    const userClient = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, {
+    const url = requireEnv("SUPABASE_URL");
+    const userClient = createClient(url, requireEnv("SUPABASE_ANON_KEY"), {
       global: { headers: { Authorization: authHeader } },
     });
 
@@ -243,14 +246,17 @@ Deno.serve(async (req: Request) => {
 
     const admin = createClient(
       url,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
     );
 
     const { data: targets, error: targetsError } = await admin.rpc(
       "push_targets",
       { p_conversation_id: conversationId, p_exclude_user: senderId },
     );
-    if (targetsError) return fail(targetsError.message, 500);
+    if (targetsError) {
+      const ref = logFailure(targetsError, "send-push.targets-failed");
+      return fail("Could not work out who to notify.", 500, { ref });
+    }
 
     const list = (targets ?? []) as Target[];
     if (list.length === 0) {
@@ -435,6 +441,6 @@ Deno.serve(async (req: Request) => {
 
     return json({ sent, failed, forgotten, skipped, targets: list.length });
   } catch (error) {
-    return fail((error as Error).message ?? "Unexpected error", 500);
+    return failUnexpected(error, "send-push.failed", req);
   }
 });

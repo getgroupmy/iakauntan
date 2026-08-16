@@ -28,7 +28,7 @@
  *   SCHEDULER_SECRET any random string, shared with the workflow
  */
 import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { corsHeaders, fail, json } from "../_shared/cors.ts";
+import { fail, json, logFailure, serveFunction } from "../_shared/cors.ts";
 import { isSchedulerCall } from "../_shared/scheduler.ts";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
@@ -98,10 +98,7 @@ async function loadAttachment(
   };
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+serveFunction("send-email.failed", async (req: Request) => {
   if (req.method !== "POST") return fail("Use POST", 405);
 
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -175,7 +172,10 @@ Deno.serve(async (req) => {
   if (one) query = query.eq("id", one);
 
   const { data, error } = await query;
-  if (error) return fail(`Could not read the outbox: ${error.message}`, 500);
+  if (error) {
+    const ref = logFailure(error, "send-email.outbox-unreadable");
+    return fail("Could not read the outbox.", 500, { ref });
+  }
 
   // Through `unknown`: the client types a failed select's `data` as
   // GenericStringError[], which does not overlap with OutboxRow, so the

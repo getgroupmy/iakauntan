@@ -11,15 +11,20 @@ import '../../core/theme.dart';
 ///
 /// It stops being fine the moment this project carries somebody's real
 /// ledger, because these are ordinary auth users with ordinary roles, and
-/// the owner account can see the whole company. So:
+/// the owner account can see the whole company. So the panel is off
+/// unless a build asks for it:
 ///
-///   flutter build web --dart-define=DEMO_MODE=false
+///   flutter build web --dart-define=DEMO_MODE=true
 ///
-/// turns the panel off, and the demo users should be deleted at the same
-/// time (README, "Before real books"). The switch is compile-time rather
-/// than a setting because a door that can be reopened by editing a row is
-/// not closed.
-const demoModeEnabled = bool.fromEnvironment('DEMO_MODE', defaultValue: true);
+/// turns it on, and the demo users should be deleted before real books
+/// arrive either way (README, "Before real books"). The switch is
+/// compile-time rather than a setting because a door that can be
+/// reopened by editing a row is not closed.
+///
+/// It used to default to `true`, which meant a build that simply forgot
+/// the flag shipped a one-tap login to a seeded owner account. A default
+/// that is safe only when somebody remembers is not a default.
+const demoModeEnabled = bool.fromEnvironment('DEMO_MODE');
 
 /// Overridable so a fork can seed its own demo data without editing code.
 const demoPassword = String.fromEnvironment(
@@ -115,23 +120,29 @@ class DemoAccountPicker extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(children: [
-          Expanded(child: Divider(color: scheme.outlineVariant)),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text('or look around a demo',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: scheme.onSurfaceVariant)),
-          ),
-          Expanded(child: Divider(color: scheme.outlineVariant)),
-        ]),
+        Row(
+          children: [
+            Expanded(child: Divider(color: scheme.outlineVariant)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                'or look around a demo',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Expanded(child: Divider(color: scheme.outlineVariant)),
+          ],
+        ),
         const SizedBox(height: 8),
         Text(
           'Signs in immediately. The figures are invented and everyone '
           'shares the same demo company, so anything you change is there '
           'for the next visitor.',
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: scheme.onSurfaceVariant),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 12),
         for (final account in accounts)
@@ -186,13 +197,16 @@ class _AccountTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(account.role,
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text(
+                      account.role,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       account.sees,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: scheme.onSurfaceVariant),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
