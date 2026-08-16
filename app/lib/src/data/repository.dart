@@ -1425,6 +1425,25 @@ class Repo {
     return data as String;
   }
 
+  /// What stands in the way of closing this account, if anything. Read
+  /// this before offering the button: the database refuses a sole owner,
+  /// and a button that always fails is worse than no button.
+  Future<List<Map<String, dynamic>>> accountDeletionBlockers() async =>
+      _rows(await client.rpc('my_account_deletion_blockers'));
+
+  /// Closes the signed-in account: the identity is scrubbed from
+  /// `profiles` and `auth.users`, membership and push tokens go, and
+  /// every session is killed.
+  ///
+  /// Anonymised rather than deleted, because roughly a hundred audit
+  /// columns — who posted this journal, who approved that payroll —
+  /// reference the user row, and a ledger that cannot say who posted an
+  /// entry is not evidence of anything.
+  Future<Map<String, dynamic>> deleteMyAccount() async {
+    final data = await client.rpc('delete_my_account');
+    return Map<String, dynamic>.from(data as Map);
+  }
+
   /// Every reconciliation closed on an account, newest first, with the
   /// number of statement lines each one closed over — which is what
   /// tells a real reconciliation from one that agreed nothing.

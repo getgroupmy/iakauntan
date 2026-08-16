@@ -1750,10 +1750,110 @@ class _AboutCard extends ConsumerWidget {
               icon: const Icon(Icons.logout, size: 18),
               label: const Text('Sign out'),
             ),
+            // Not offered on the shared demo logins: closing one would
+            // take the panel away from everybody.
+            if (!ref.watch(isDemoAccountProvider)) ...[
+              const SizedBox(height: Space.lg),
+              const Divider(),
+              const SizedBox(height: Space.sm),
+              const _CloseAccount(),
+            ],
           ],
         ),
       ),
     );
+  }
+}
+
+/// Closing your own account.
+///
+/// What this does is anonymise rather than delete, and the dialog says
+/// so in those words. Roughly a hundred columns record who posted a
+/// journal, approved a payroll or signed a resolution, and a set of
+/// books that cannot answer that is not one anybody can rely on — so the
+/// identity goes and the trail stays. Saying "deleted" here and meaning
+/// something else would be the kind of promise that gets found out.
+class _CloseAccount extends ConsumerWidget {
+  const _CloseAccount();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final blockers = ref.watch(accountDeletionBlockersProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Close this account',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: Space.xs),
+        Text(
+          'Your name, email address, phone number and picture are removed '
+          'from this system, every device stops receiving notifications, '
+          'and you are signed out of everywhere. Entries you posted keep '
+          'a record that somebody posted them, without saying who — the '
+          'law requires those books to be kept for seven years.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: Space.sm),
+        blockers.when(
+          loading: () => const SizedBox.shrink(),
+          error: (_, _) => const SizedBox.shrink(),
+          data: (rows) => rows.isEmpty
+              ? OutlinedButton.icon(
+                  key: const ValueKey('close-account'),
+                  onPressed: () => _close(context, ref),
+                  icon: const Icon(Icons.person_remove_outlined, size: 18),
+                  label: const Text('Close my account'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: context.colors.danger,
+                  ),
+                )
+              // Said before the button rather than after pressing it:
+              // the database refuses this, and an action that always
+              // fails is worse than one that is not offered.
+              : Container(
+                  key: const ValueKey('close-account-blocked'),
+                  padding: const EdgeInsets.all(Space.md),
+                  decoration: BoxDecoration(
+                    color: context.colors.warning.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(Radii.md),
+                  ),
+                  child: Text(
+                    'You are the only owner of '
+                    '${rows.map((r) => r['organization']).join(', ')}. '
+                    'Make somebody else an owner first, or the company is '
+                    'left with nobody who can administer it.',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _close(BuildContext context, WidgetRef ref) async {
+    final ok = await confirm(
+      context,
+      title: 'Close this account?',
+      message:
+          'This cannot be undone. Your name and contact details are '
+          'removed, you lose access to every company you belong to, and '
+          'you cannot sign in again with this address.',
+      confirmLabel: 'Close my account',
+    );
+    if (!ok || !context.mounted) return;
+
+    final done = await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.deleteMyAccount(),
+      successMessage: 'Your account has been closed',
+    );
+    if (!done || !context.mounted) return;
+
+    await ref.read(supabaseProvider).auth.signOut();
+    ref.read(currentOrgIdProvider.notifier).clear();
   }
 }
 

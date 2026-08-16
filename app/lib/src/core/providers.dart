@@ -430,6 +430,12 @@ final stockAdjustmentsProvider =
       return requireRepo(ref).stockAdjustments();
     });
 
+/// Why this account cannot be closed yet, if it cannot.
+final accountDeletionBlockersProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).accountDeletionBlockers();
+    });
+
 /// The reconciliation register for one account, or all of them.
 final bankReconciliationsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String?>((ref, bankAccountId) {

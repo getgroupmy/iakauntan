@@ -27,9 +27,13 @@ Deno.serve(async (req) => {
     return fail("Use POST", 405);
   }
 
+  // Hoisted so the failure log below can name it. Everything else about
+  // the request stays inside the try.
+  let action = "";
+
   try {
     const ctx = await buildContext(req);
-    const action = String(ctx.body.action ?? "").toLowerCase();
+    action = String(ctx.body.action ?? "").toLowerCase();
 
     switch (action) {
       case "submit":
@@ -50,7 +54,24 @@ Deno.serve(async (req) => {
     if (err instanceof HttpError) {
       return fail(err.message, err.status, err.details);
     }
-    console.error("myinvois function failed", err);
+    // The message and the type, not the error object. An error thrown
+    // anywhere in this function may be carrying a MyInvois request or
+    // response on it, and those hold the buyer's name, TIN, address,
+    // email and every line of the invoice. Logs are read by people who
+    // have no business seeing a particular company's customers, and a
+    // stack trace is not a good enough reason to show them.
+    //
+    // The full exchange is not lost: `persistLogs` writes it to
+    // `einvoice_logs`, which is org-scoped and access-controlled, and
+    // which LHDN requires to be kept for seven years anyway.
+    console.error(
+      JSON.stringify({
+        event: "myinvois.failed",
+        action,
+        kind: err instanceof Error ? err.name : typeof err,
+        message: err instanceof Error ? err.message : "Unexpected error",
+      }),
+    );
     return fail(err instanceof Error ? err.message : "Unexpected error", 500);
   }
 });
