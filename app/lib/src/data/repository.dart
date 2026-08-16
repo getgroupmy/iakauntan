@@ -1254,6 +1254,29 @@ class Repo {
         ),
       );
 
+  /// Every movement of one item in order, with a running quantity and
+  /// value — the answer to "the shelf says 44 and the screen says 47".
+  ///
+  /// Membership is the only bar: a storekeeper who cannot read the
+  /// general ledger still has to be able to account for stock.
+  Future<List<Map<String, dynamic>>> stockCard({
+    required String itemId,
+    DateTime? from,
+    DateTime? to,
+    String? warehouseId,
+  }) async => _rows(
+    await client.rpc(
+      'report_stock_card',
+      params: {
+        'p_org_id': orgId,
+        'p_item_id': itemId,
+        if (from != null) 'p_from': Fmt.iso(from),
+        if (to != null) 'p_to': Fmt.iso(to),
+        if (warehouseId != null) 'p_warehouse_id': warehouseId,
+      },
+    ),
+  );
+
   Future<List<Map<String, dynamic>>> stockAdjustments({int limit = 50}) async =>
       _rows(
         await client

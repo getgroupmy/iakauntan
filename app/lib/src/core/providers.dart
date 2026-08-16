@@ -408,6 +408,23 @@ final stockOnHandProvider = FutureProvider.autoDispose
       return requireRepo(ref).stockOnHand(warehouseId: warehouseId);
     });
 
+/// One item's movements, optionally narrowed to a period or a single
+/// warehouse. The dates are nullable on purpose: a card with no start
+/// date opens on the first movement rather than on a brought-forward
+/// line, and that is the common way to read one.
+final stockCardProvider = FutureProvider.autoDispose
+    .family<
+      List<Map<String, dynamic>>,
+      ({String itemId, DateTime? from, DateTime? to, String? warehouseId})
+    >((ref, args) {
+      return requireRepo(ref).stockCard(
+        itemId: args.itemId,
+        from: args.from,
+        to: args.to,
+        warehouseId: args.warehouseId,
+      );
+    });
+
 final stockAdjustmentsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
       return requireRepo(ref).stockAdjustments();

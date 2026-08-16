@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'item_prices_dialog.dart';
+import 'stock_card_dialog.dart';
 
 class ItemsScreen extends ConsumerStatefulWidget {
   const ItemsScreen({super.key});
@@ -112,6 +113,17 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                 ),
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                   Money(item.unitPrice, bold: true),
+                  // Not gated on canWrite: the card changes nothing, and
+                  // the person who has to answer for what is on the shelf
+                  // is often not the person who may edit prices.
+                  if (item.trackInventory) ...[
+                    const SizedBox(width: Space.sm),
+                    TextButton(
+                      key: ValueKey('stock-card-${item.id}'),
+                      onPressed: () => showStockCard(context, item),
+                      child: const Text('Stock card'),
+                    ),
+                  ],
                   if (canWrite) ...[
                     const SizedBox(width: Space.sm),
                     TextButton(

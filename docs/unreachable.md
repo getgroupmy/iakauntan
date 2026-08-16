@@ -84,6 +84,35 @@ was exactly that case.
   dependant carries a tax relief claim, so PCB was understated for
   anybody who had one and no way to say so.
 
+- **The stock card.** `report_stock_card` in `0155`, reached from a Stock
+  card action on every stock-tracked item. `stock_movements` could be
+  written and never read, so "the shelf says 44 and the screen says 47"
+  had no answer anywhere in the app; 0152 had made it sharper by adding
+  opening balances, so a company's stock now began with a movement
+  nobody could look at.
+
+  The running balance is computed with a window rather than read from
+  `stock_movements.balance_quantity`, which the trigger already
+  maintains — those columns are per *warehouse*, so a card spanning all
+  of them would show a balance that jumps between locations and belongs
+  to none. Two implementations of the same arithmetic is only safe if
+  they are held against each other, so `supabase/tests/stock_card.sql`
+  asserts they agree at every movement for a single warehouse, and that
+  they differ across two.
+
+  Getting that assertion to pass found the real thing: the trigger's
+  order is `movement_no`, not `created_at`. A bill that receives stock
+  and a delivery that ships it inside one transaction carry the same
+  timestamp to the microsecond, and production already holds such a
+  pair — ordered by `created_at` the card disagreed with the stored
+  balance on two of four movements.
+
+  The screen also compares its own closing quantity against
+  `items.quantity_on_hand` and says so when they differ, but only on an
+  unnarrowed card: filtered by date or warehouse the comparison is
+  meaningless, and a warning that fires on every filtered card is a
+  warning nobody reads.
+
 ## Correct: the database owns these
 
 Not gaps. Written by triggers or SECURITY DEFINER functions, or read
@@ -101,8 +130,6 @@ via the `corp_*` RPCs), `einvoice_lines`, `einvoice_logs`,
 ### 1. Smaller, but real
 
 - **`item_categories`** — no editor.
-- **Stock card.** `stock_movements` cannot be inspected per item, so
-  "why is this figure what it is" has no answer in the app.
 - **Reconciliation history.** `bank_reconciliations` rows are written and
   never listed.
 - **Depreciation schedule.** `depreciation_runs` and
