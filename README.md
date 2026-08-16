@@ -831,6 +831,66 @@ deployments to come back to that preview instead of production.
 
 ## Security
 
+### Where secrets live, and what is public
+
+`.env.example` lists every value the system reads from its environment
+and names the one place each really lives. The short version:
+
+| Class | Home | May it be in the repo or the bundle? |
+|---|---|---|
+| Publishable (anon) key, project URL, VAPID **public** key | `--dart-define`, defaults in `lib/src/core/env.dart` | Yes — public by design |
+| Service role key, `SCHEDULER_SECRET`, `RESEND_API_KEY`, `WEB_PUSH_PRIVATE_KEY`, `FCM_SERVICE_ACCOUNT`, `CALL_SFU_SECRET`, `CALL_TURN_SECRET`, OCR provider keys | Supabase → **Edge Functions → Secrets** | Never |
+| A company's own LHDN and OCR credentials | `einvoice_credentials`, `org_ocr_credentials` | Never — those tables are service-role-only |
+| Deploy credentials, `SUPABASE_DB_PASSWORD` | GitHub → Actions **Secrets** | Never |
+
+The publishable key being in the bundle is the design and not an
+oversight: **row level security is the boundary, that key is not.** It is
+safe for exactly as long as two things hold, and both are worth
+re-checking after any schema change —
+
+1. Every table in `public` has RLS enabled. All 177 do.
+2. No SECURITY DEFINER function is granted to `anon` without a token
+   check of its own. Three are: `open_shared_document`,
+   `corp_open_signing_link` and `corp_sign_with_link`, each of which
+   takes an unguessable token and is the whole point of the share and
+   signing-link features.
+
+`einvoice_credentials` and `org_ocr_credentials` carry RLS with **no
+policies at all**, which denies everyone. Only the service role reaches
+them, and it does so by bypassing RLS. That is deliberate: a company's
+LHDN client secret should not be readable by that company's own owner
+through the API.
+
+### Rotate anything that was ever hardcoded
+
+Git history keeps what the working tree has dropped. Removing a value
+from a file does not remove it from the repository — anyone with a clone
+still has every version of it.
+
+At the time of writing, the values that have been committed to this
+repository are the Supabase **publishable/anon** key (in
+`lib/src/core/env.dart`, and formerly as a fallback in two workflow
+files) and the **demo account password**. Both are public by design, so
+neither is an incident. Nothing else — no service role key, no API key,
+no connection string, no `.env` file — has ever been committed.
+
+All the same, before this deployment carries real books:
+
+- **Rotate the demo password and delete the demo users.** It is
+  `Demo!Akaun2026` in the history and in every built bundle.
+- **Build with `--dart-define=DEMO_MODE=false`.** It defaults to `true`,
+  so a build that forgets it ships a working one-tap login to a seeded
+  owner account.
+- **Rotate any secret you believe may have been pasted anywhere** — a
+  chat window, a ticket, a screenshot. Rotation is cheap; the assumption
+  that it never leaked is not.
+
+If a real secret is ever committed by accident, rotating it is the fix.
+Rewriting history is not: the old object survives in every clone and
+fork that already pulled.
+
+### Row level security
+
 Multi-tenant by `org_id` with row level security on every table. Policies
 are generated in `0010_rls.sql` in tiers:
 

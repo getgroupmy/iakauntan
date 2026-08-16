@@ -1,5 +1,11 @@
 // Produce a Web Push test vector with the reference implementation.
 //
+// Every key pair here is generated fresh and thrown away into the
+// fixture. None of it is, or has ever been, a deployed key: the real
+// VAPID private half is a function secret and appears nowhere in this
+// repository. The fixture carries private keys because a test that
+// cannot decrypt what it encrypted is not checking anything.
+//
 // http_ece is what web-push uses, which is what most of the world's web
 // push traffic is encrypted by. Fixing the salt and both key pairs makes
 // its output deterministic, so it can be checked into the repository and

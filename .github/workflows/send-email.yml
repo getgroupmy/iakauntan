@@ -69,7 +69,14 @@ jobs:
       # is not the security boundary; the scheduler secret is. Override
       # with a repository variable if the legacy anon key is ever
       # disabled, using the publishable key instead.
-      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3d2NndG5uaXdxbmRyenVra3NtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMzk0MzUsImV4cCI6MjEwMTgxNTQzNX0.PaBEcFIim8Jjn3zoLpw3uBEnaGGJFAPKO-E856sklWs' }}
+      # Not defaulted to a literal. The same key ships in the web bundle
+      # and is public by design, so this was never an exposure — but a
+      # key pinned in a workflow is one that keeps being sent after it
+      # has been rotated or disabled, and a scheduler authenticating
+      # with a dead key fails in exactly the way a scheduler with
+      # nothing to do looks. Set the repository variable, or the secret
+      # if you would rather it not be world-readable.
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
     steps:
       - name: Call send-email
         run: |
@@ -77,13 +84,13 @@ jobs:
           # docs/schedulers.md.
           auth=""
           headers=()
-          if [ -n "$SCHEDULER_SECRET" ]; then
+          if [ -n "$SCHEDULER_SECRET" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
             auth="$SUPABASE_ANON_KEY"
             headers=(-H "X-Scheduler-Secret: $SCHEDULER_SECRET")
           elif [ -n "$SUPABASE_SERVICE_ROLE_KEY" ]; then
             auth="$SUPABASE_SERVICE_ROLE_KEY"
           else
-            echo "::warning::Nothing was sent. Set the repository secret SCHEDULER_SECRET."
+            echo "::warning::Nothing was sent. Set the repository secret SCHEDULER_SECRET and the variable SUPABASE_ANON_KEY."
             {
               echo "### Nothing was sent"
               echo
