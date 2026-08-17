@@ -17,6 +17,7 @@ class LineDraft {
     this.warehouseId,
     this.sourceLineId,
     this.projectCode,
+    this.departmentCode,
     this.lots = const [],
   });
 
@@ -49,47 +50,55 @@ class LineDraft {
   /// every line its own picker.
   String? projectCode;
 
+  /// The part of the business this line belongs to, set from the
+  /// document for the same reason as the project above. Written per line
+  /// because that is where `gl_lines.department_code` reads it from, and
+  /// that column is the entire input to the by-department P&L.
+  String? departmentCode;
+
   ({double net, double tax, double total}) get totals => computeLine(
-        quantity: quantity,
-        unitPrice: unitPrice,
-        discountPercent: discountPercent,
-        discountAmount: 0,
-        taxRate: taxRate,
-        taxInclusive: isTaxInclusive,
-      );
+    quantity: quantity,
+    unitPrice: unitPrice,
+    discountPercent: discountPercent,
+    discountAmount: 0,
+    taxRate: taxRate,
+    taxInclusive: isTaxInclusive,
+  );
 
   Map<String, dynamic> toJson() => {
-        'line_type': 'item',
-        'item_id': itemId,
-        'description': description,
-        'quantity': quantity,
-        'unit_price': unitPrice,
-        'discount_percent': discountPercent,
-        'tax_code_id': taxCodeId,
-        'tax_rate': taxRate,
-        'is_tax_inclusive': isTaxInclusive,
-        'uom_code': uomCode,
-        'classification_code': classificationCode,
-        'warehouse_id': warehouseId,
-        'source_line_id': sourceLineId,
-        'project_code': projectCode,
-      };
+    'line_type': 'item',
+    'item_id': itemId,
+    'description': description,
+    'quantity': quantity,
+    'unit_price': unitPrice,
+    'discount_percent': discountPercent,
+    'tax_code_id': taxCodeId,
+    'tax_rate': taxRate,
+    'is_tax_inclusive': isTaxInclusive,
+    'uom_code': uomCode,
+    'classification_code': classificationCode,
+    'warehouse_id': warehouseId,
+    'source_line_id': sourceLineId,
+    'project_code': projectCode,
+    'department_code': departmentCode,
+  };
 
   factory LineDraft.fromLine(DocumentLine l) => LineDraft(
-        itemId: l.itemId,
-        description: l.description,
-        quantity: l.quantity,
-        unitPrice: l.unitPrice,
-        discountPercent: l.discountPercent,
-        taxCodeId: l.taxCodeId,
-        taxRate: l.taxRate,
-        uomCode: l.uomCode,
-        classificationCode: l.classificationCode,
-        isTaxInclusive: l.isTaxInclusive,
-        warehouseId: l.warehouseId,
-        sourceLineId: l.sourceLineId,
-        projectCode: l.projectCode,
-      );
+    itemId: l.itemId,
+    description: l.description,
+    quantity: l.quantity,
+    unitPrice: l.unitPrice,
+    discountPercent: l.discountPercent,
+    taxCodeId: l.taxCodeId,
+    taxRate: l.taxRate,
+    uomCode: l.uomCode,
+    classificationCode: l.classificationCode,
+    isTaxInclusive: l.isTaxInclusive,
+    warehouseId: l.warehouseId,
+    sourceLineId: l.sourceLineId,
+    projectCode: l.projectCode,
+    departmentCode: l.departmentCode,
+  );
 }
 
 /// Fills a line from the item master: price, unit, classification and the
@@ -107,7 +116,8 @@ void applyItemToLine(LineDraft line, Item item, List<TaxCode> taxCodes) {
     ..uomCode = item.uomCode
     ..classificationCode = item.classificationCode;
 
-  final tax = taxCodes.where((t) => t.id == item.salesTaxCodeId).firstOrNull ??
+  final tax =
+      taxCodes.where((t) => t.id == item.salesTaxCodeId).firstOrNull ??
       taxCodes.where((t) => t.isDefault).firstOrNull;
   if (tax != null) {
     line
@@ -127,8 +137,9 @@ void applyItemToLine(LineDraft line, Item item, List<TaxCode> taxCodes) {
   required bool taxInclusive,
 }) {
   final gross = quantity * unitPrice;
-  final discount =
-      discountPercent > 0 ? _r(gross * discountPercent / 100) : discountAmount;
+  final discount = discountPercent > 0
+      ? _r(gross * discountPercent / 100)
+      : discountAmount;
 
   if (taxInclusive && taxRate > 0) {
     // unit_price already contains tax: strip it back out.

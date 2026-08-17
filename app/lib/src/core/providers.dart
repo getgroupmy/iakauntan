@@ -1514,3 +1514,29 @@ final collectionHistoryProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, contactId) {
       return requireRepo(ref).collectionHistory(contactId);
     });
+
+// ---------------------------------------------------------------------
+// Approvals
+// ---------------------------------------------------------------------
+
+/// What is waiting on this person's signature. Deliberately not
+/// autoDispose: the shell reads it for the badge on every screen, and a
+/// provider that disposes between navigations would refetch the inbox
+/// each time somebody moves.
+final myApprovalsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).myApprovals();
+});
+
+final approvalRulesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).approvalRules();
+    });
+
+/// Where one document stands. Keyed on both halves because a sales and a
+/// purchase document can share an id only by accident, but the kind is
+/// what the function switches on and a cache keyed on the id alone would
+/// eventually answer the wrong question.
+final approvalStateProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, ({String kind, String id})>((ref, args) {
+      return requireRepo(ref).approvalState(args.kind, args.id);
+    });

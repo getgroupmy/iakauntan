@@ -180,6 +180,9 @@ const _destinations = <_Dest>[
     Icons.phone_forwarded,
     '/collections',
   ),
+  // Nor here. Approvals are not a product a company buys; they are how
+  // a company that already has the ledger decides who may reach it.
+  _Dest('Approvals', Icons.how_to_reg_outlined, Icons.how_to_reg, '/approvals'),
   // Legal firms already record time; everyone else who sells hours now
   // can too, which is why this answers to either module.
   _Dest(

@@ -935,6 +935,7 @@ class DocumentLine {
     this.warehouseId,
     this.sourceLineId,
     this.projectCode,
+    this.departmentCode,
   });
 
   final String? id;
@@ -962,6 +963,12 @@ class DocumentLine {
   final String? sourceLineId;
   final String? projectCode;
 
+  /// The part of the business this line belongs to. Carried for the same
+  /// reason as the project: `gl_lines.department_code` is what the
+  /// by-dimension P&L reads, and it can only hold what the document line
+  /// put there.
+  final String? departmentCode;
+
   factory DocumentLine.fromJson(Map<String, dynamic> j) => DocumentLine(
     id: j['id'] as String?,
     lineNo: Fmt.toInt(j['line_no']),
@@ -982,6 +989,7 @@ class DocumentLine {
     warehouseId: j['warehouse_id'] as String?,
     sourceLineId: j['source_line_id'] as String?,
     projectCode: j['project_code'] as String?,
+    departmentCode: j['department_code'] as String?,
   );
 }
 
@@ -1183,6 +1191,22 @@ const memberRoles = <String, ({String label, String description})>{
 };
 
 String roleLabel(String? role) => memberRoles[role]?.label ?? Fmt.label(role);
+
+/// What an approval rule covers, in words. A null `docType` means every
+/// document of that kind, which is what the column's null means.
+///
+/// Deliberately not built from `docTypes` in the documents feature: a
+/// journal is not a document type at all, and the three-way switch here
+/// is the same three-way switch `app.approval_entity` has.
+String approvalEntityLabel(String? entityKind, Object? docType) {
+  final scope = docType == null ? null : Fmt.label(docType.toString());
+  return switch (entityKind) {
+    'sales_document' => scope == null ? 'Every sales document' : '${scope}s',
+    'purchase_document' =>
+      scope == null ? 'Every purchase document' : '${scope}s',
+    _ => 'Manual journals',
+  };
+}
 
 class TeamMember {
   TeamMember({

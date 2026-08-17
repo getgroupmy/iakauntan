@@ -5570,3 +5570,101 @@ extension RepoCollections on Repo {
     'created_by': client.auth.currentUser?.id,
   });
 }
+
+/// Approvals, for anything that reaches the ledger.
+///
+/// The gate is a trigger on the table, not a check in here — posting a
+/// document the chain has not cleared fails wherever it is attempted,
+/// including from paths this class does not know about. What these
+/// methods add is the part a trigger cannot do: telling somebody *why*
+/// before they try, and giving them somewhere to send it.
+extension RepoApprovals on Repo {
+  /// What is on this person's desk, in this company. Never their own
+  /// documents: `my_approvals` excludes them for the same reason
+  /// `decide_approval` refuses them.
+  Future<List<Map<String, dynamic>>> myApprovals() async =>
+      Repo._rows(await client.rpc('my_approvals', params: {'p_org_id': orgId}));
+
+  /// Whether this document needs approving, whether it has been, and
+  /// whose signature it is waiting on. One round trip, because the
+  /// editor asks on every load.
+  Future<Map<String, dynamic>?> approvalState(
+    String entityKind,
+    String entityId,
+  ) async {
+    final rows = Repo._rows(
+      await client.rpc(
+        'approval_state',
+        params: {'p_kind': entityKind, 'p_entity_id': entityId},
+      ),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<String> submitForApproval(String entityKind, String entityId) async =>
+      await client.rpc(
+            'submit_for_approval',
+            params: {'p_kind': entityKind, 'p_entity_id': entityId},
+          )
+          as String;
+
+  /// Returns where the *request* stands afterwards — `pending` when
+  /// there are steps still to come, not the fate of the step just
+  /// decided.
+  Future<String> decideApproval(
+    String requestId, {
+    required bool approve,
+    String? note,
+  }) async =>
+      await client.rpc(
+            'decide_approval',
+            params: {
+              'p_request_id': requestId,
+              'p_approve': approve,
+              'p_note': note,
+            },
+          )
+          as String;
+
+  Future<List<Map<String, dynamic>>> approvalRules() async => Repo._rows(
+    await client
+        .from('approval_rules')
+        .select()
+        .eq('org_id', orgId)
+        .order('entity_kind')
+        .order('step_no'),
+  );
+
+  Future<void> saveApprovalRule({
+    String? id,
+    required String entityKind,
+    String? docType,
+    required num minAmount,
+    required int stepNo,
+    String? approverRole,
+    String? approverUserId,
+    bool isActive = true,
+  }) async {
+    final row = {
+      'org_id': orgId,
+      'entity_kind': entityKind,
+      'doc_type': docType,
+      'min_amount': minAmount,
+      'step_no': stepNo,
+      // Exactly one of the two, which is what the table's check
+      // constraint says. Sending both nulls it out rather than tripping
+      // the constraint with a confusing message.
+      'approver_role': approverUserId == null ? approverRole : null,
+      'approver_user_id': approverRole == null ? approverUserId : null,
+      'is_active': isActive,
+    };
+    if (id == null) {
+      await client.from('approval_rules').insert(row);
+    } else {
+      await client.from('approval_rules').update(row).eq('id', id);
+    }
+  }
+
+  Future<void> deleteApprovalRule(String id) =>
+      client.from('approval_rules').delete().eq('id', id);
+}

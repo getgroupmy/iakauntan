@@ -72,6 +72,17 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// needs the analysis there; the choice is per document because that
   /// is how the work actually arrives.
   String? _projectCode;
+
+  /// The part of the business this document belongs to, stamped onto
+  /// every line at save time exactly as the project is.
+  ///
+  /// `report_profit_loss_by_dimension` has been able to split the P&L by
+  /// department since the dimensions work, and on this deployment it has
+  /// never had anything to split: `gl_lines.department_code` is carried
+  /// faithfully by both posting routines and no screen ever wrote it. A
+  /// report reading a column nothing fills is a report that says every
+  /// department earned nothing.
+  String? _departmentCode;
   String? _salespersonId;
   String _status = 'draft';
 
@@ -145,6 +156,9 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _projectCode = doc.lines
             .map((l) => l.projectCode)
             .firstWhere((c) => c != null, orElse: () => null);
+        _departmentCode = doc.lines
+            .map((l) => l.departmentCode)
+            .firstWhere((c) => c != null, orElse: () => null);
         _salespersonId = doc.salespersonId;
         _reference.text = doc.reference ?? '';
         _supplierDocNo.text = doc.supplierDocNo ?? '';
@@ -161,11 +175,10 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         // written out.
         final ids = [
           for (final l in doc.lines)
-            if (l.id != null) l.id!
+            if (l.id != null) l.id!,
         ];
         if (ids.isNotEmpty) {
-          final byLine =
-              await repo.lotsForDocument(kind: _kind, lineIds: ids);
+          final byLine = await repo.lotsForDocument(kind: _kind, lineIds: ids);
           if (byLine.isNotEmpty) {
             for (var i = 0; i < doc.lines.length && i < _lines.length; i++) {
               final id = doc.lines[i].id;
@@ -188,8 +201,9 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Could not load: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not load: $e')));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -230,29 +244,35 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       // Only into an empty document. Somebody who has already keyed the
       // lines and is scanning to attach the paper should not lose them.
       final blank = _lines.every(
-          (l) => l.description.trim().isEmpty && l.itemId == null);
+        (l) => l.description.trim().isEmpty && l.itemId == null,
+      );
       if (!blank) return;
 
       final lines = read.lines
           .where((l) => (l.description ?? '').trim().isNotEmpty)
-          .map((l) => LineDraft(
-                description: l.description!.trim(),
-                quantity: l.quantity ?? 1,
-                unitPrice: l.unitPrice ??
-                    (l.amount != null && (l.quantity ?? 1) != 0
-                        ? l.amount! / (l.quantity ?? 1)
-                        : 0),
-              ))
+          .map(
+            (l) => LineDraft(
+              description: l.description!.trim(),
+              quantity: l.quantity ?? 1,
+              unitPrice:
+                  l.unitPrice ??
+                  (l.amount != null && (l.quantity ?? 1) != 0
+                      ? l.amount! / (l.quantity ?? 1)
+                      : 0),
+            ),
+          )
           .toList();
 
       // A receipt that prints one total and no breakdown still has to
       // become a line, or there is nothing to post.
       final net = read.netAmount;
       if (lines.isEmpty && net != null) {
-        lines.add(LineDraft(
-          description: read.supplierName ?? 'Per the attached document',
-          unitPrice: net,
-        ));
+        lines.add(
+          LineDraft(
+            description: read.supplierName ?? 'Per the attached document',
+            unitPrice: net,
+          ),
+        );
       }
       if (lines.isEmpty) return;
 
@@ -343,13 +363,16 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
 
     final ok = await runWithFeedback(
       context,
-      action: () => ref.read(repoProvider)!.saveExchangeRate(
+      action: () => ref
+          .read(repoProvider)!
+          .saveExchangeRate(
             from: _currency,
             to: _base,
             rate: rate,
             date: _docDate,
           ),
-      successMessage: '${rateCaption(currency: _currency, baseCurrency: _base, rate: rate)} '
+      successMessage:
+          '${rateCaption(currency: _currency, baseCurrency: _base, rate: rate)} '
           'saved for ${Fmt.date(_docDate)}',
       pendingMessage: 'Saving rate…',
     );
@@ -361,8 +384,9 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       _toast('Choose a ${_kind.contactLabel.toLowerCase()} first.');
       return null;
     }
-    final validLines =
-        _lines.where((l) => l.description.trim().isNotEmpty || l.itemId != null);
+    final validLines = _lines.where(
+      (l) => l.description.trim().isNotEmpty || l.itemId != null,
+    );
     if (validLines.isEmpty) {
       _toast('Add at least one line.');
       return null;
@@ -372,9 +396,14 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     // the ledger by the whole currency movement without a single check
     // objecting — see migration 0078.
     if (!rateIsUsable(
-        currency: _currency, baseCurrency: _base, rate: _exchangeRate)) {
-      _toast('Enter the exchange rate for $_currency on '
-          '${Fmt.date(_docDate)} before saving.');
+      currency: _currency,
+      baseCurrency: _base,
+      rate: _exchangeRate,
+    )) {
+      _toast(
+        'Enter the exchange rate for $_currency on '
+        '${Fmt.date(_docDate)} before saving.',
+      );
       return null;
     }
 
@@ -382,29 +411,30 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     try {
       final repo = ref.read(repoProvider)!;
       final id = await repo.saveDocument(
-            kind: _kind,
-            id: widget.documentId,
-            docType: widget.docType,
-            header: {
-              'doc_no': _docNo,
-              'doc_date': Fmt.iso(_docDate),
-              'due_date': _dueDate == null ? null : Fmt.iso(_dueDate!),
-              'contact_id': _contactId,
-              'reference': _nullIfBlank(_reference.text),
-              if (!_kind.isSales)
-                'supplier_doc_no': _nullIfBlank(_supplierDocNo.text),
-              'notes': _nullIfBlank(_notes.text),
-              'currency': _currency,
-              'exchange_rate': _exchangeRate ?? 1,
-              // Sales only. The column is on `sales_documents` alone,
-              // and a bill has no salesperson by definition.
-              if (_kind.isSales) 'salesperson_id': _salespersonId,
-            },
-            lines: validLines.map((l) {
-              l.projectCode = _projectCode;
-              return l.toJson();
-            }).toList(),
-          );
+        kind: _kind,
+        id: widget.documentId,
+        docType: widget.docType,
+        header: {
+          'doc_no': _docNo,
+          'doc_date': Fmt.iso(_docDate),
+          'due_date': _dueDate == null ? null : Fmt.iso(_dueDate!),
+          'contact_id': _contactId,
+          'reference': _nullIfBlank(_reference.text),
+          if (!_kind.isSales)
+            'supplier_doc_no': _nullIfBlank(_supplierDocNo.text),
+          'notes': _nullIfBlank(_notes.text),
+          'currency': _currency,
+          'exchange_rate': _exchangeRate ?? 1,
+          // Sales only. The column is on `sales_documents` alone,
+          // and a bill has no salesperson by definition.
+          if (_kind.isSales) 'salesperson_id': _salespersonId,
+        },
+        lines: validLines.map((l) {
+          l.projectCode = _projectCode;
+          l.departmentCode = _departmentCode;
+          return l.toJson();
+        }).toList(),
+      );
 
       // Only now, because until `saveDocument` returned the lines did
       // not exist under ids anything could point at. Matched by order,
@@ -499,10 +529,10 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
 
     try {
       final bytes = await _renderPdf();
-      final stem =
-          _docNo.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
-      final saved =
-          await saveBytesFile('$stem.pdf', 'application/pdf', bytes);
+      final stem = _docNo
+          .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')
+          .toLowerCase();
+      final saved = await saveBytesFile('$stem.pdf', 'application/pdf', bytes);
 
       // Recorded only when a file actually reached the user, and only
       // for sales documents — the activity trail is about what the
@@ -518,11 +548,15 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         }
       }
 
-      messenger.showSnackBar(SnackBar(
-        content: Text(saved
-            ? 'Downloaded'
-            : 'PDF download is only available in the browser'),
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            saved
+                ? 'Downloaded'
+                : 'PDF download is only available in the browser',
+          ),
+        ),
+      );
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('$e')));
     }
@@ -535,7 +569,8 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     final ok = await confirm(
       context,
       title: 'Post to ledger?',
-      message: 'This writes a balanced journal entry and locks the document '
+      message:
+          'This writes a balanced journal entry and locks the document '
           'for editing. Stock will move for inventory items.',
       confirmLabel: 'Post',
     );
@@ -555,6 +590,48 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     }
   }
 
+  /// Where this document stands with the approval chain, or null on a
+  /// document that has not been saved yet — there is nothing to approve
+  /// until there is a row to approve.
+  ///
+  /// Watched rather than read, so signing it off in another tab or on a
+  /// phone updates the button here without a reload.
+  Map<String, dynamic>? get _approval {
+    final id = widget.documentId;
+    if (id == null) return null;
+    return ref
+        .watch(
+          approvalStateProvider((
+            kind: _kind.isSales ? 'sales_document' : 'purchase_document',
+            id: id,
+          )),
+        )
+        .valueOrNull;
+  }
+
+  Future<void> _submitForApproval() async {
+    final id = await _save(silent: true);
+    if (id == null || !mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref
+          .read(repoProvider)!
+          .submitForApproval(
+            _kind.isSales ? 'sales_document' : 'purchase_document',
+            id,
+          ),
+      successMessage: 'Sent for approval',
+      pendingMessage: 'Sending…',
+    );
+
+    if (ok && mounted) {
+      ref.invalidate(approvalStateProvider);
+      // The person who has to sign it may be looking at their inbox.
+      ref.invalidate(myApprovalsProvider);
+    }
+  }
+
   Future<void> _submitEinvoice() async {
     if (widget.documentId == null) return;
     final org = ref.read(currentOrgProvider).value;
@@ -569,7 +646,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       title: 'Submit to MyInvois?',
       message: org?.einvoiceEnvironment == 'production'
           ? 'This sends the document to LHDN production. Once validated it '
-              'can only be cancelled within 72 hours.'
+                'can only be cancelled within 72 hours.'
           : 'This sends the document to the LHDN sandbox for testing.',
       confirmLabel: 'Submit',
     );
@@ -579,8 +656,9 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       context,
       action: () async {
         final repo = ref.read(repoProvider)!;
-        final result =
-            await repo.submitEinvoice(salesDocumentId: widget.documentId);
+        final result = await repo.submitEinvoice(
+          salesDocumentId: widget.documentId,
+        );
         if ((result['rejected'] as int? ?? 0) > 0) {
           throw Exception('LHDN rejected the document: ${result['errors']}');
         }
@@ -601,11 +679,14 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
 
   void _toast(String message, {bool success = false, bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message),
-      backgroundColor:
-          success ? context.colors.success : (error ? context.colors.danger : null),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: success
+            ? context.colors.success
+            : (error ? context.colors.danger : null),
+      ),
+    );
   }
 
   static String? _nullIfBlank(String v) => v.trim().isEmpty ? null : v.trim();
@@ -660,10 +741,12 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// Which action is primary follows the hierarchy the wide layout
   /// already had, rather than inventing a new one: the filled button
   /// stays filled.
-  List<Widget> _actions(BuildContext context,
-      {required bool editable,
-      required bool canPost,
-      required bool canWrite}) {
+  List<Widget> _actions(
+    BuildContext context, {
+    required bool editable,
+    required bool canPost,
+    required bool canWrite,
+  }) {
     final narrow = MediaQuery.sizeOf(context).width < 640;
     final einvoiceValid = _einvoiceStatus == 'valid';
 
@@ -678,17 +761,17 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
 
     final primary = switch (null) {
       _ when editable && canPost && _meta.posts => (
-          label: 'Post',
-          short: 'Post',
-          icon: null,
-          onTap: _saving ? null : _post,
-        ),
+        label: 'Post',
+        short: 'Post',
+        icon: null,
+        onTap: _saving ? null : _post,
+      ),
       _ when _isPosted && _meta.einvoice && einvoiceOn => (
-          label: einvoiceValid ? 'e-Invoice valid' : 'Submit e-Invoice',
-          short: einvoiceValid ? 'Valid' : 'Submit',
-          icon: einvoiceValid ? Icons.verified : Icons.cloud_upload_outlined,
-          onTap: einvoiceValid ? null : _submitEinvoice,
-        ),
+        label: einvoiceValid ? 'e-Invoice valid' : 'Submit e-Invoice',
+        short: einvoiceValid ? 'Valid' : 'Submit',
+        icon: einvoiceValid ? Icons.verified : Icons.cloud_upload_outlined,
+        onTap: einvoiceValid ? null : _submitEinvoice,
+      ),
       _ => null,
     };
 
@@ -697,7 +780,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         (
           label: 'Save',
           icon: Icons.save_outlined,
-          onTap: _saving ? null : () => _save()
+          onTap: _saving ? null : () => _save(),
         ),
       // Only on a document that exists and has somewhere to go. A
       // quotation with nothing left outstanding still offers this — the
@@ -713,6 +796,22 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
             icon: Icons.arrow_forward,
             onTap: _saving ? null : () => _transfer(target),
           ),
+      // Only when a rule actually covers this document and nothing has
+      // been sent round yet. The gate is a trigger and will refuse the
+      // posting whatever the screen offers, but being told after
+      // pressing Post is a worse way to learn a signature is needed than
+      // being given the button that gets one.
+      if (!_isNew &&
+          !_isPosted &&
+          canWrite &&
+          _approval?['is_required'] == true &&
+          _approval?['is_approved'] != true &&
+          _approval?['request_id'] == null)
+        (
+          label: 'Send for approval',
+          icon: Icons.how_to_reg_outlined,
+          onTap: _saving ? null : _submitForApproval,
+        ),
       if (_isPosted && _meta.settles && _grandTotal - _paidAmount > 0)
         (
           label: _kind.isSales ? 'Receive payment' : 'Pay',
@@ -739,12 +838,20 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     return [
       // The chip repeats what the posted banner already says, so it is
       // the first thing to go when space is short.
-      if (!_isNew && !narrow) ...[StatusChip(_status), const SizedBox(width: 12)],
+      if (!_isNew && !narrow) ...[
+        StatusChip(_status),
+        const SizedBox(width: 12),
+      ],
 
       // Only once something has been taken: on a fresh quotation
       // "Pending" would be noise beside every other document in the app.
-      if (!_isNew && !narrow && _fulfilment != 'pending' && canTransfer(widget.docType))
-        ...[StatusChip(_fulfilment), const SizedBox(width: 12)],
+      if (!_isNew &&
+          !narrow &&
+          _fulfilment != 'pending' &&
+          canTransfer(widget.docType)) ...[
+        StatusChip(_fulfilment),
+        const SizedBox(width: 12),
+      ],
 
       // Only once it exists: there is nothing to print from a form that
       // has not been saved, and a PDF of a half-typed invoice is a
@@ -791,8 +898,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           icon: const Icon(Icons.history, size: 20),
           onPressed: _saving
               ? null
-              : () => showActivityDialog(
-                  context, widget.documentId!, _docNo),
+              : () => showActivityDialog(context, widget.documentId!, _docNo),
         ),
 
       // Withholding comes off a posted bill: the certificate debits the
@@ -808,7 +914,10 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
               ? null
               : () async {
                   final done = await showWithholdingDialog(
-                      context, widget.documentId!, _grandTotal);
+                    context,
+                    widget.documentId!,
+                    _grandTotal,
+                  );
                   if (done == true && mounted) _load();
                 },
         ),
@@ -846,11 +955,13 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
               PopupMenuItem(
                 value: i,
                 enabled: secondary[i].onTap != null,
-                child: Row(children: [
-                  Icon(secondary[i].icon, size: 18),
-                  const SizedBox(width: 12),
-                  Text(secondary[i].label),
-                ]),
+                child: Row(
+                  children: [
+                    Icon(secondary[i].icon, size: 18),
+                    const SizedBox(width: 12),
+                    Text(secondary[i].label),
+                  ],
+                ),
               ),
           ],
         ),
@@ -886,8 +997,12 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(_isNew ? 'New ${_meta.singular}' : _docNo),
-          actions: _actions(context,
-              editable: editable, canPost: canPost, canWrite: canWrite),
+          actions: _actions(
+            context,
+            editable: editable,
+            canPost: canPost,
+            canWrite: canWrite,
+          ),
         ),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
@@ -902,6 +1017,11 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         _CreditBanner(contactId: _contactId!),
                       if (transferred && !_isPosted)
                         _TransferredBanner(status: _fulfilment),
+                      // Only where a rule covers it. On a deployment
+                      // where nobody has written one this never appears,
+                      // which is the whole design of `0167`.
+                      if (!_isPosted && _approval?['is_required'] == true)
+                        _ApprovalBanner(state: _approval!),
                       if (_isPosted)
                         _PostedBanner(
                           einvoiceStatus: _einvoiceStatus,
@@ -924,8 +1044,11 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         // going to LHDN. With submission off it is a
                         // complaint about a rejection that will never
                         // happen.
-                        requiresEinvoice: _meta.einvoice &&
-                            ref.watch(currentOrgProvider).value
+                        requiresEinvoice:
+                            _meta.einvoice &&
+                            ref
+                                    .watch(currentOrgProvider)
+                                    .value
                                     ?.einvoiceEnabled ==
                                 true,
                         currency: _currency,
@@ -940,6 +1063,11 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                           _markDirty();
                         },
                         projectCode: _projectCode,
+                        departmentCode: _departmentCode,
+                        onDepartmentChanged: (code) {
+                          setState(() => _departmentCode = code);
+                          _markDirty();
+                        },
                         onProjectChanged: (code) {
                           setState(() => _projectCode = code);
                           _markDirty();
@@ -980,12 +1108,12 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         // customer, not what a supplier charges us.
                         priceFor: _kind.isSales && _contactId != null
                             ? (itemId, quantity) => ref
-                                .read(repoProvider)!
-                                .itemPrice(
-                                  itemId: itemId,
-                                  contactId: _contactId,
-                                  quantity: quantity,
-                                )
+                                  .read(repoProvider)!
+                                  .itemPrice(
+                                    itemId: itemId,
+                                    contactId: _contactId,
+                                    quantity: quantity,
+                                  )
                             : null,
                         onChanged: _markDirty,
                         onAdd: () {
@@ -1025,7 +1153,8 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                           table: 'purchase_documents',
                           recordId: widget.documentId!,
                           title: 'Supplier paperwork',
-                          subtitle: 'The bill, delivery order or quotation '
+                          subtitle:
+                              'The bill, delivery order or quotation '
                               'this was raised from.',
                           // Reading it fills the number, the date and the
                           // lines — which is the whole reason the paper
@@ -1083,8 +1212,11 @@ class _CreditBanner extends ConsumerWidget {
           padding: const EdgeInsets.all(Space.lg),
           child: Row(
             children: [
-              Icon(over ? Icons.credit_card_off : Icons.credit_card,
-                  size: 20, color: colour),
+              Icon(
+                over ? Icons.credit_card_off : Icons.credit_card,
+                size: 20,
+                color: colour,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -1093,9 +1225,12 @@ class _CreditBanner extends ConsumerWidget {
                     Text(
                       over
                           ? 'Over their credit limit by '
-                              '${Fmt.money(-available)}'
+                                '${Fmt.money(-available)}'
                           : '${Fmt.money(available)} of credit left',
-                      style: TextStyle(fontWeight: FontWeight.w600, color: colour),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: colour,
+                      ),
                     ),
                     Text(
                       'Owes ${Fmt.money(Fmt.toDouble(status['outstanding']))} '
@@ -1159,6 +1294,85 @@ class _TransferredBanner extends StatelessWidget {
   }
 }
 
+/// Where a document stands with the people who have to sign it.
+///
+/// Four states, and they are four different things to do next: nobody
+/// has sent it, somebody else is holding it, *you* are holding it, or it
+/// is cleared and waiting to be posted. Rendering the middle two the
+/// same is how a document sits for a week on the desk of the one person
+/// who could have released it in a second.
+class _ApprovalBanner extends StatelessWidget {
+  const _ApprovalBanner({required this.state});
+
+  final Map<String, dynamic> state;
+
+  @override
+  Widget build(BuildContext context) {
+    final approved = state['is_approved'] == true;
+    final pending = state['request_id'] != null;
+    final mine = state['awaiting_me'] == true;
+    final who = state['awaiting_who']?.toString();
+
+    final (title, body, colour, icon) = switch (null) {
+      _ when approved => (
+        'Approved',
+        'The chain is complete. This can be posted.',
+        context.colors.success,
+        Icons.verified_outlined,
+      ),
+      _ when mine => (
+        'Waiting for you',
+        'You hold the next signature on this. Approve it from the '
+            'Approvals screen.',
+        context.colors.warning,
+        Icons.pending_actions_outlined,
+      ),
+      _ when pending => (
+        'Waiting for approval',
+        who == null
+            ? 'Sent for approval. It cannot be posted until it is signed.'
+            : 'With $who. It cannot be posted until it is signed.',
+        context.colors.info,
+        Icons.hourglass_empty,
+      ),
+      _ => (
+        'Needs approving',
+        'A rule covers this document, so posting it will be refused '
+            'until it has been signed. Send it for approval.',
+        context.colors.warning,
+        Icons.how_to_reg_outlined,
+      ),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(Space.lg),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: colour),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    Text(body, style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PostedBanner extends StatelessWidget {
   const _PostedBanner({
     required this.einvoiceStatus,
@@ -1190,21 +1404,24 @@ class _PostedBanner extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Posted to the ledger',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    const Text(
+                      'Posted to the ledger',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
                     Text(
                       !settles
                           ? 'Journal written'
                           : outstanding > 0
-                              ? '${Fmt.money(outstanding)} '
-                                  '${kind.isSales ? 'outstanding' : 'still to pay'}'
-                              : 'Fully settled',
+                          ? '${Fmt.money(outstanding)} '
+                                '${kind.isSales ? 'outstanding' : 'still to pay'}'
+                          : 'Fully settled',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
               ),
-              if (einvoiceStatus != 'not_applicable') StatusChip(einvoiceStatus),
+              if (einvoiceStatus != 'not_applicable')
+                StatusChip(einvoiceStatus),
             ],
           ),
         ),
@@ -1231,9 +1448,11 @@ class _HeaderCard extends ConsumerWidget {
     required this.resolvingRate,
     required this.exchangeRate,
     required this.projectCode,
+    required this.departmentCode,
     required this.salespersonId,
     required this.onSalespersonChanged,
     required this.onProjectChanged,
+    required this.onDepartmentChanged,
     required this.onCurrencyChanged,
     required this.onRateChanged,
     required this.onStoreRate,
@@ -1259,9 +1478,11 @@ class _HeaderCard extends ConsumerWidget {
   final bool resolvingRate;
   final double? exchangeRate;
   final String? projectCode;
+  final String? departmentCode;
   final String? salespersonId;
   final ValueChanged<String?> onSalespersonChanged;
   final ValueChanged<String?> onProjectChanged;
+  final ValueChanged<String?> onDepartmentChanged;
   final ValueChanged<String> onCurrencyChanged;
   final ValueChanged<String> onRateChanged;
   final VoidCallback onStoreRate;
@@ -1272,8 +1493,9 @@ class _HeaderCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final contacts =
-        ref.watch(contactsProvider((type: kind.contactType, search: '')));
+    final contacts = ref.watch(
+      contactsProvider((type: kind.contactType, search: '')),
+    );
     final narrow = MediaQuery.sizeOf(context).width < 700;
 
     final contactField = contacts.when(
@@ -1295,8 +1517,10 @@ class _HeaderCard extends ConsumerWidget {
             for (final c in list)
               DropdownMenuItem(
                 value: c.id,
-                child: Text('${c.name} (${c.code})',
-                    overflow: TextOverflow.ellipsis),
+                child: Text(
+                  '${c.name} (${c.code})',
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
           ],
           onChanged: editable
@@ -1322,7 +1546,7 @@ class _HeaderCard extends ConsumerWidget {
           enabled: editable,
           onChanged: onDocDate,
         ),
-        flex: 1
+        flex: 1,
       ),
       (
         child: _DateField(
@@ -1331,7 +1555,7 @@ class _HeaderCard extends ConsumerWidget {
           enabled: editable,
           onChanged: onDueDate,
         ),
-        flex: 1
+        flex: 1,
       ),
       (
         child: _CurrencyField(
@@ -1340,7 +1564,7 @@ class _HeaderCard extends ConsumerWidget {
           enabled: editable,
           onChanged: onCurrencyChanged,
         ),
-        flex: 1
+        flex: 1,
       ),
       if (isForeign)
         (
@@ -1356,7 +1580,7 @@ class _HeaderCard extends ConsumerWidget {
             onChanged: onRateChanged,
             onStore: onStoreRate,
           ),
-          flex: 1
+          flex: 1,
         ),
       // Same rule as the project dropdown below: shown only once there
       // is somebody to pick. A business that does not attribute sales
@@ -1373,13 +1597,15 @@ class _HeaderCard extends ConsumerWidget {
               for (final s in ref.watch(salespeopleProvider).value ?? const [])
                 DropdownMenuItem(
                   value: s['id'] as String,
-                  child: Text(s['name']?.toString() ?? '',
-                      overflow: TextOverflow.ellipsis),
+                  child: Text(
+                    s['name']?.toString() ?? '',
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
             ],
             onChanged: editable ? onSalespersonChanged : null,
           ),
-          flex: 1
+          flex: 1,
         ),
       // Only once projects exist. A dropdown with nothing in it on every
       // invoice is a control that teaches people to ignore controls.
@@ -1394,13 +1620,41 @@ class _HeaderCard extends ConsumerWidget {
               for (final p in ref.watch(projectsProvider).value ?? const [])
                 DropdownMenuItem(
                   value: p['code'] as String,
-                  child: Text('${p['code']} · ${p['name']}',
-                      overflow: TextOverflow.ellipsis),
+                  child: Text(
+                    '${p['code']} · ${p['name']}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
             ],
             onChanged: editable ? onProjectChanged : null,
           ),
-          flex: 1
+          flex: 1,
+        ),
+      // Same rule as the project above, and for a stronger reason: the
+      // by-department P&L reads `gl_lines.department_code`, and until
+      // something writes it the report is a page of zeroes. Hidden until
+      // a company has defined departments, because a picker with nothing
+      // in it is how people learn to skip pickers.
+      if (ref.watch(departmentsProvider).valueOrNull?.isNotEmpty ?? false)
+        (
+          child: DropdownButtonFormField<String?>(
+            value: departmentCode,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Department'),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('None')),
+              for (final d in ref.watch(departmentsProvider).value ?? const [])
+                DropdownMenuItem(
+                  value: d['code'] as String,
+                  child: Text(
+                    '${d['code']} · ${d['name']}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: editable ? onDepartmentChanged : null,
+          ),
+          flex: 1,
         ),
       (
         child: TextFormField(
@@ -1413,7 +1667,7 @@ class _HeaderCard extends ConsumerWidget {
                 : 'Internal reference',
           ),
         ),
-        flex: 2
+        flex: 2,
       ),
       if (!kind.isSales)
         (
@@ -1426,7 +1680,7 @@ class _HeaderCard extends ConsumerWidget {
               helperText: 'Their document number, needed for SST records',
             ),
           ),
-          flex: 1
+          flex: 1,
         ),
     ];
 
@@ -1456,8 +1710,7 @@ class _HeaderCard extends ConsumerWidget {
                     children: [
                       for (final i in row) ...[
                         if (i != row.first) const SizedBox(width: 14),
-                        Expanded(
-                            flex: fields[i].flex, child: fields[i].child),
+                        Expanded(flex: fields[i].flex, child: fields[i].child),
                       ],
                     ],
                   ),
@@ -1558,7 +1811,10 @@ class _RateField extends StatelessWidget {
       _ when rate == null =>
         'No rate on file for ${Fmt.date(date)} — enter one',
       _ => rateCaption(
-          currency: currency, baseCurrency: baseCurrency, rate: rate!),
+        currency: currency,
+        baseCurrency: baseCurrency,
+        rate: rate!,
+      ),
     };
 
     return TextFormField(
@@ -1579,8 +1835,10 @@ class _RateField extends StatelessWidget {
             ? null
             : IconButton(
                 tooltip: 'Save as the rate for ${Fmt.date(date)}',
-                icon: Icon(missing ? Icons.bookmark_add_outlined : Icons.save_outlined,
-                    size: 18),
+                icon: Icon(
+                  missing ? Icons.bookmark_add_outlined : Icons.save_outlined,
+                  size: 18,
+                ),
                 onPressed: onStore,
               ),
       ),
@@ -1723,7 +1981,8 @@ class _TotalsAndNotes extends StatelessWidget {
 
     if (narrow) {
       return Column(
-          children: [totalsCard, const SizedBox(height: 16), notesCard]);
+        children: [totalsCard, const SizedBox(height: 16), notesCard],
+      );
     }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

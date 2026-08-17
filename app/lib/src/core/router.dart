@@ -27,6 +27,7 @@ import '../features/items/items_screen.dart';
 import '../features/legal/matter_detail_screen.dart';
 import '../features/legal/matters_screen.dart';
 import '../features/manufacturing/manufacturing_screen.dart';
+import '../features/approvals/approvals_screen.dart';
 import '../features/collections/collections_screen.dart';
 import '../features/timesheets/timesheet_screen.dart';
 import '../features/property/property_screen.dart';
@@ -293,6 +294,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/collections',
             builder: (_, __) => const CollectionsScreen(),
+          ),
+          GoRoute(
+            path: '/approvals',
+            builder: (_, __) => const ApprovalsScreen(),
           ),
           GoRoute(
             path: '/timesheets',

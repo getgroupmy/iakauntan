@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786939004.1784947,
-    "ast_hash": "763cec188f671f7d72df54f2e11b1e9a",
+    "mtime": 1786940194.2945654,
+    "ast_hash": "3bf1c96841915394cd3468e37a67a817",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786939067.4153686,
-    "ast_hash": "c4b90ab8e82ec3c513b5eec0e8bfdbe5",
+    "mtime": 1786940424.2326584,
+    "ast_hash": "ebc1a91256ecdfd5799c5763f2c71b5d",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1786785068.135328,
-    "ast_hash": "da0e61ce6341b951f1b51ef2c52ff1c3",
+    "mtime": 1786940830.4866033,
+    "ast_hash": "70142d869fe47c887607e6a2e21b9db8",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786939130.8905022,
-    "ast_hash": "6dc06664c17c77a655e5ac49d0b361e7",
+    "mtime": 1786940830.7306032,
+    "ast_hash": "1552ab936eb6b9ef0e40c449042604d5",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -145,13 +145,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/doc_types.dart": {
-    "mtime": 1786275883.8588781,
-    "ast_hash": "88f373b2bbe85ad1d830bbd9c2bf8c6c",
-    "semantic_hash": "88f373b2bbe85ad1d830bbd9c2bf8c6c"
+    "mtime": 1786940319.6705728,
+    "ast_hash": "e74fa263a916083920a9b24f82929124",
+    "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1786785756.6144881,
-    "ast_hash": "f34a492dcbc6dfb110f457616c1be883",
+    "mtime": 1786940830.0466032,
+    "ast_hash": "26fff03054d5ed762342a3e2289825b1",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -160,8 +160,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/line_draft.dart": {
-    "mtime": 1786785756.6144881,
-    "ast_hash": "816f901e19c0c1764e0dbbf2726c016a",
+    "mtime": 1786940830.0666032,
+    "ast_hash": "f5ff758b6e6e6835b85c6c1b63a204d2",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/line_editor.dart": {
@@ -265,8 +265,8 @@
     "semantic_hash": "76366d000addf0bd77f8a44839f730c2"
   },
   "app/lib/src/features/reports/reports_screen.dart": {
-    "mtime": 1786768706.0877666,
-    "ast_hash": "07b466f3a5fd99d7767916009bebf6a5",
+    "mtime": 1786940559.0713377,
+    "ast_hash": "e25d560a11375d8edc8baac66eb99857",
     "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/entity_editor.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1786939067.416046,
-    "ast_hash": "d8b1d4c4a85268f72ff33d0acdb75972",
+    "mtime": 1786940830.2106032,
+    "ast_hash": "e2bf76b678996ee07290c9cd219ed6ac",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786939067.4165077,
-    "ast_hash": "5ce30ff86dcd8f624abfad36600daef0",
+    "mtime": 1786939972.9825523,
+    "ast_hash": "59f39da942106052370e5693e4611673",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786936442.3279684,
-    "ast_hash": "93a44efe50666c9e33a18ef5493773ee",
+    "mtime": 1786940929.074609,
+    "ast_hash": "74aa60291337199a21b6a07dcba2266c",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -2832,6 +2832,51 @@
   "docs/collections.md": {
     "mtime": 1786939238.0945086,
     "ast_hash": "b1ad1325d1f716aeac2d19c7c3bdebc5",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/approvals/approvals_screen.dart": {
+    "mtime": 1786940829.702603,
+    "ast_hash": "1c6e74515cf10e1ad1d57686b73e09ce",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/approvals/rule_editor.dart": {
+    "mtime": 1786940829.798603,
+    "ast_hash": "2de9d42cb89bab2fb433610547d638a8",
+    "semantic_hash": ""
+  },
+  "app/test/approvals_test.dart": {
+    "mtime": 1786940830.7546031,
+    "ast_hash": "fa650ee28edfd9c4dda1d506cb013e62",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0167_approval_workflow.sql": {
+    "mtime": 1786939550.7586186,
+    "ast_hash": "bdadb1ea7d475a12c5fbe7bf13a5b240",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0168_fixed_assets_module.sql": {
+    "mtime": 1786939612.218531,
+    "ast_hash": "e3cad32fc801bf204c9b1d4d59733124",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0169_approval_state.sql": {
+    "mtime": 1786940339.626574,
+    "ast_hash": "f71be75c729448eb3efd2ebd292b2c67",
+    "semantic_hash": ""
+  },
+  "supabase/tests/approvals.sql": {
+    "mtime": 1786939966.4065518,
+    "ast_hash": "923532933b11ab8565a62708e6e2ad1d",
+    "semantic_hash": ""
+  },
+  "docs/approvals.md": {
+    "mtime": 1786940716.4345965,
+    "ast_hash": "fef55d06adba0175508480947e249d0d",
+    "semantic_hash": ""
+  },
+  "docs/departmental-accounting.md": {
+    "mtime": 1786940734.0865974,
+    "ast_hash": "144c1988fc98a1a105b492f8fe8e9efe",
     "semantic_hash": ""
   }
 }

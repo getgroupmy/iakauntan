@@ -78,6 +78,21 @@ const docTypes = <String, DocTypeMeta>{
   ),
 
   // Purchase cycle
+  //
+  // The requisition is where it starts: somebody asks for something
+  // before anybody commits to buying it. The type has been in
+  // `purchase_doc_type` and the transfer chain has known
+  // `purchase_request → purchase_order` all along; what it never had was
+  // a row here, which is the only reason it could not be reached. It
+  // posts nothing — a request is not a liability — which is exactly why
+  // it needs an approval rule rather than a posting gate to mean
+  // anything.
+  'purchase_request': DocTypeMeta(
+    plural: 'Purchase Requisitions',
+    singular: 'Purchase Requisition',
+    icon: Icons.playlist_add_check_outlined,
+    kind: DocKind.purchase,
+  ),
   'purchase_order': DocTypeMeta(
     plural: 'Purchase Orders',
     singular: 'Purchase Order',

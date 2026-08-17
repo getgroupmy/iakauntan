@@ -1512,8 +1512,10 @@ that four capabilities exist in the database with **zero references in
   `_currency`, reads it from a saved document and writes it back, but no
   widget ever changes it — so no foreign-currency document can be raised,
   and there is no revaluation function to restate balances if one could be
-- **Project and department dimensions.** `gl_lines.project_code` and
-  `gl_lines.department_code`, with nothing writing them and no report
-  reading them
+- ~~**Project and department dimensions.**~~ Both are now written from
+  the document header and read by the P&L's dimension filter. See
+  `docs/departmental-accounting.md`, which also names what is still not
+  covered: expenses and manual journals offer no department, so costs
+  arriving by those two routes are under-reported by department
 - **Price levels.** `price_levels` and `item_prices`, unused by the line
   editor

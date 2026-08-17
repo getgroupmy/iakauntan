@@ -32,6 +32,12 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
   /// different report, not this one with a filter.
   String? _project;
 
+  /// And the department, which until now had a report and no filter.
+  /// `report_profit_loss_by_dimension` has always taken both; the screen
+  /// only ever offered one, so the department half of it was
+  /// unreachable.
+  String? _department;
+
   @override
   void initState() {
     super.initState();
@@ -47,28 +53,35 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
     super.dispose();
   }
 
-  /// The project chooser, built from the codes the ledger actually
-  /// holds rather than from every project ever created.
-  Widget _projectFilter() {
+  /// The dimension choosers, built from the codes the ledger actually
+  /// holds rather than from every project or department ever created. A
+  /// department that has never had a penny posted against it is not a
+  /// filter anybody wants; it is a row that would come back empty.
+  Widget _dimensionFilter({
+    required String kind,
+    required String allLabel,
+    required String? selected,
+    required ValueChanged<String?> onChanged,
+  }) {
     final dimensions = ref.watch(_dimensionsProvider).valueOrNull ?? const [];
-    final projects = [
+    final codes = [
       for (final d in dimensions)
-        if (d['kind'] == 'project') d['code'] as String,
+        if (d['kind'] == kind) d['code'] as String,
     ];
-    if (projects.isEmpty) return const SizedBox.shrink();
+    if (codes.isEmpty) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(left: 4),
       child: DropdownButton<String?>(
-        value: _project,
-        hint: const Text('All projects'),
+        value: selected,
+        hint: Text(allLabel),
         underline: const SizedBox.shrink(),
         items: [
-          const DropdownMenuItem(value: null, child: Text('All projects')),
-          for (final code in projects)
+          DropdownMenuItem(value: null, child: Text(allLabel)),
+          for (final code in codes)
             DropdownMenuItem(value: code, child: Text(code)),
         ],
-        onChanged: (v) => setState(() => _project = v),
+        onChanged: onChanged,
       ),
     );
   }
@@ -86,7 +99,13 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
     switch (_tabs.index) {
       case 0:
         final rows = ref
-            .watch(_profitLossProvider((range: _range, project: _project)))
+            .watch(
+              _profitLossProvider((
+                range: _range,
+                project: _project,
+                department: _department,
+              )),
+            )
             .valueOrNull;
         return rows == null ? null : profitLossSpec(rows, _range);
       case 1:
@@ -188,7 +207,20 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
           // Only on the P&L, and only once something in the ledger
           // actually carries a project code — an empty dropdown on every
           // report is a control that teaches people to ignore it.
-          if (_tabs.index == 0) _projectFilter(),
+          if (_tabs.index == 0) ...[
+            _dimensionFilter(
+              kind: 'project',
+              allLabel: 'All projects',
+              selected: _project,
+              onChanged: (v) => setState(() => _project = v),
+            ),
+            _dimensionFilter(
+              kind: 'department',
+              allLabel: 'All departments',
+              selected: _department,
+              onChanged: (v) => setState(() => _department = v),
+            ),
+          ],
           Padding(
             padding: const EdgeInsets.only(right: 12, left: 4),
             child: OutlinedButton.icon(
@@ -228,7 +260,11 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
         controller: _tabs,
         children: [
           _Report(
-            provider: _profitLossProvider((range: _range, project: _project)),
+            provider: _profitLossProvider((
+              range: _range,
+              project: _project,
+              department: _department,
+            )),
             spec: (rows) => profitLossSpec(rows, _range),
             empty: const EmptyState(
               icon: Icons.summarize_outlined,
@@ -583,21 +619,23 @@ class _Highlight extends StatelessWidget {
   }
 }
 
-/// Keyed by period *and* project, so switching job restates the report
-/// rather than showing the last one until it reloads.
+/// Keyed by period, project *and* department, so switching any of the
+/// three restates the report rather than showing the last one until it
+/// reloads.
 ///
-/// Always the by-dimension function, even with no project chosen: with
-/// null it returns exactly what the plain report does, and one code path
-/// cannot drift from the other.
+/// Always the by-dimension function, even with nothing chosen: with
+/// nulls it returns exactly what the plain report does, and one code
+/// path cannot drift from the other.
 final _profitLossProvider = FutureProvider.autoDispose
     .family<
       List<Map<String, dynamic>>,
-      ({DateTimeRange range, String? project})
+      ({DateTimeRange range, String? project, String? department})
     >((ref, args) {
       return requireRepo(ref).profitLossByDimension(
         from: args.range.start,
         to: args.range.end,
         projectCode: args.project,
+        departmentCode: args.department,
       );
     });
 
