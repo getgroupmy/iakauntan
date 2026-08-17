@@ -28,14 +28,17 @@ void main() {
 
   group('the account list', () {
     test('matches the seeded logins, exactly', () {
-      // Checked against auth.users on the hosted project: these five
-      // exist, are confirmed, and carry the demo password. An entry here
-      // with no user behind it is a button that fails on tap.
+      // These are the logins `app.demo_rebuild()` creates, in the order
+      // the picker offers them. An entry here with no user behind it is
+      // a button that fails on tap, so the list and the seed have to
+      // move together — and the seed goes first. `property@` was added
+      // to both in the same change that built the property tenant.
       expect(demoAccounts.map((a) => a.email).toList(), [
         'demo@iakauntan.my',
         'clerk@iakauntan.my',
         'auditor@iakauntan.my',
         'secretary@iakauntan.my',
+        'property@iakauntan.my',
       ]);
     });
 
