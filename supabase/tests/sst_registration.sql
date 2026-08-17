@@ -247,4 +247,102 @@ begin
     exists (select 1 from public.sales_documents where doc_no = 'OLD-1'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The door is the only door (0181)
+--
+-- 0145 built one careful way in and nothing stopped anyone walking past
+-- it. `authenticated` holds table-level UPDATE on organizations and the
+-- update policy admits the company's own people, so a PATCH setting
+-- `is_sst_registered` on its own was accepted — leaving the flag true,
+-- the effective date null, and the default still at nought per cent.
+-- A tenant on the hosted project was found in exactly that state.
+--
+-- Every refusal below is paired with an update that must still succeed.
+-- Without that pair the whole group would pass just as well if the row
+-- were simply not updatable by this user at all, which is a different
+-- fact and not the one under test.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid := pg_temp.another_user('guard@sst.test');
+  v_org   uuid;
+  v_ok    boolean;
+  v_msg   text;
+  v_flag  boolean;
+  v_from  date;
+  v_phone text;
+begin
+  v_org := pg_temp.sst_org('Guard Test Sdn Bhd', v_owner);
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- The positive control, first. If this fails the rest proves nothing.
+  update public.organizations set phone = '03-1234 5678' where id = v_org;
+  select phone into v_phone from public.organizations where id = v_org;
+  perform pg_temp.check_true(
+    'an unrelated column is still editable directly',
+    v_phone = '03-1234 5678');
+
+  -- The exact shape found in production: the flag alone.
+  v_ok := false;
+  begin
+    update public.organizations set is_sst_registered = true where id = v_org;
+  exception when others then v_ok := true; v_msg := sqlerrm;
+  end;
+  perform pg_temp.check_true(
+    'setting the flag directly is refused', v_ok);
+  perform pg_temp.check_true(
+    'and says which function to use instead',
+    coalesce(v_msg, '') like '%set_sst_registration%');
+
+  select is_sst_registered, sst_registered_from
+    into v_flag, v_from from public.organizations where id = v_org;
+  perform pg_temp.check_true(
+    'and the company is still unregistered afterwards', not v_flag);
+
+  -- The other two guarded columns, each on its own.
+  v_ok := false;
+  begin
+    update public.organizations set sst_registered_from = date '2026-01-01'
+     where id = v_org;
+  exception when others then v_ok := true;
+  end;
+  perform pg_temp.check_true('the effective date cannot be set directly', v_ok);
+
+  v_ok := false;
+  begin
+    update public.organizations set sst_registration_no = 'W10-9999-99999999'
+     where id = v_org;
+  exception when others then v_ok := true;
+  end;
+  perform pg_temp.check_true(
+    'nor the registration number, which prints on every tax invoice', v_ok);
+
+  -- The door itself still opens.
+  perform public.set_sst_registration(
+    v_org, true, date '2026-03-01', 'W10-1808-31000999', 'ST8');
+  select is_sst_registered, sst_registered_from
+    into v_flag, v_from from public.organizations where id = v_org;
+  perform pg_temp.check_true('the function still registers the company', v_flag);
+  perform pg_temp.check_true(
+    'with the effective date it was given', v_from = date '2026-03-01');
+
+  -- And the flag it raises does not stay raised. `set_config` here is
+  -- transaction-local and this whole file is one transaction, so if the
+  -- function leaked it every later write in the session would sail
+  -- through — which is the failure this pair exists to catch.
+  v_ok := false;
+  begin
+    update public.organizations set is_sst_registered = false where id = v_org;
+  exception when others then v_ok := true;
+  end;
+  perform pg_temp.check_true(
+    'and the permission it granted itself did not outlive the call', v_ok);
+
+  -- Deregistering through the front door still works after all that.
+  perform public.set_sst_registration(v_org, false);
+  select is_sst_registered into v_flag
+    from public.organizations where id = v_org;
+  perform pg_temp.check_true('deregistering through the function works', not v_flag);
+end $$;
+
 rollback;
