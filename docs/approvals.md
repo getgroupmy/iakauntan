@@ -1,9 +1,36 @@
 # Approvals
 
-Not a module. Deciding who may reach the ledger is not a product a
-company buys; it is how a company that already has the ledger governs it,
-so this rides on whatever the tenant already pays for and needs no
-separate entitlement.
+A paid module, `approvals`, RM29 — added in `0170`. It shipped ungated in
+`0167` on the reasoning that governing the ledger is not a product a
+company buys; charging for it is a pricing decision, and pricing
+decisions are not architecture.
+
+**Every existing tenant keeps it.** Nothing on the deployment had an
+approval rule when the module row was added, so no chain changed either
+way.
+
+## The entitlement fails open, and that is the whole design
+
+Every other module here fails *closed*: switch off inventory and new
+stock movements are refused. Approvals must fail **open**, because of the
+gate. `refuse_unapproved` stops a document posting until its chain is
+complete — so a lapsed entitlement that left the gate biting while taking
+away the screen that clears it would leave a company whose card expired
+with every invoice above its own threshold permanently unpostable and no
+way in the product to release them. That is not a degraded module; it is
+a ledger held hostage to a billing failure.
+
+So `app.approval_required` — the question every gate asks first — answers
+false when the module is off, and the workflow returns to exactly the
+state `0167` shipped in: inert. **Rules are kept, not deleted**, so
+switching it back on restores the chain that was configured rather than
+an empty screen. `decide_approval` and `my_approvals` are deliberately
+*not* gated either, so a request already in flight when the entitlement
+lapsed can still be cleared and nobody is left with an inbox they cannot
+empty.
+
+The test asserts the whole cycle: on → refused, off → rules kept and the
+document posts, back on → refused again.
 
 ## Nothing changes until somebody writes a rule
 

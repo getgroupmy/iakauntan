@@ -29,13 +29,31 @@ begin;
 
 \i supabase/tests/_helpers.sql
 
+-- A company with the add-on switched on.
+--
+-- `0170` made approvals a paid module, and `app.approval_required`
+-- answers false without it. A fixture built on the bare `test_org`
+-- would therefore assert that nothing needs approving and pass for
+-- entirely the wrong reason — which is what happened to this file the
+-- moment the module row landed.
+create or replace function pg_temp.approvals_org(p_name text)
+returns uuid language plpgsql as $$
+declare v_org uuid;
+begin
+  v_org := pg_temp.test_org(p_name);
+  insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+  values (v_org, 'approvals', true, now())
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  return v_org;
+end $$;
+
 do $$
 declare
   v_org uuid; v_owner uuid; v_boss uuid; v_clerk uuid;
   v_c uuid; v_ac uuid; v_small uuid; v_big uuid; v_pr uuid; v_req uuid;
   v_state app.approval_status; v_inbox integer; v_steps integer;
 begin
-  v_org := pg_temp.test_org('Probe Approvals');
+  v_org := pg_temp.approvals_org('Probe Approvals');
   v_owner := pg_temp.test_user();
   v_boss := pg_temp.another_user('boss@iakauntan.test');
   v_clerk := pg_temp.another_user('clerk@iakauntan.test');
@@ -218,6 +236,80 @@ begin
       where entity_id = v_pr and status = 'pending'), 1);
 
   raise notice 'approvals: gate holds, order holds, nobody signs their own';
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The entitlement fails open
+--
+-- `0170` sells this as an add-on, which makes the lapse case a real one
+-- and an unusual one. Every other module fails closed: switch off
+-- inventory and new stock movements are refused. This must fail *open*,
+-- because the gate stops documents posting. A lapsed entitlement that
+-- left the gate biting while taking away the screen that clears it
+-- would leave a company whose card expired with every large invoice
+-- permanently unpostable and no way in the product to release them.
+--
+-- So: on, refused. Off, posts. Back on, refused again — and the rules
+-- survive all three, or renewing would hand back an empty screen.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_c uuid; v_ac uuid; v_big uuid;
+begin
+  -- Deliberately the bare `test_org`: this block switches the
+  -- entitlement on and off itself.
+  v_org := pg_temp.test_org('Probe Approvals Entitlement');
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  select id into v_ac from public.accounts
+   where org_id = v_org and account_type = 'revenue' and not is_group limit 1;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CU', 'A customer', 'customer') returning id into v_c;
+
+  insert into public.approval_rules
+    (org_id, entity_kind, doc_type, min_amount, step_no, approver_role)
+  values (v_org, 'sales_document', 'invoice', 5000, 1, 'admin');
+
+  insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+  values (v_org, 'approvals', true, now())
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  perform pg_temp.check_true('with the module on, the rule bites',
+    app.approval_required(v_org, 'sales_document', 'invoice', 9000));
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', app.next_document_number_internal(v_org, 'invoice'),
+          date '2026-02-01', date '2026-03-01', v_c, 'MYR', 1, 'draft')
+  returning id into v_big;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, account_id, tax_rate)
+  values (v_org, v_big, 1, 'item', 'Big', 1, 9000, v_ac, 0);
+
+  begin
+    perform app.post_sales_document_internal(v_big);
+    raise exception 'the gate did not bite while the module was on';
+  exception when insufficient_privilege then
+    raise notice 'ok   and the document is held';
+  end;
+
+  update public.org_modules set is_enabled = false
+   where org_id = v_org and module_code = 'approvals';
+
+  perform pg_temp.check_true('the entitlement lapses and the gate releases',
+    not app.approval_required(v_org, 'sales_document', 'invoice', 9000));
+  perform pg_temp.check_eq('but the rules are kept, not deleted',
+    (select count(*) from public.approval_rules where org_id = v_org), 1);
+
+  -- The assertion the whole block exists for.
+  perform app.post_sales_document_internal(v_big);
+  raise notice 'ok   and the held document posts rather than being stranded';
+
+  update public.org_modules set is_enabled = true
+   where org_id = v_org and module_code = 'approvals';
+  perform pg_temp.check_true('renewing restores the chain that was configured',
+    app.approval_required(v_org, 'sales_document', 'invoice', 9000));
 end $$;
 
 rollback;

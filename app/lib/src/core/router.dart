@@ -29,6 +29,8 @@ import '../features/legal/matters_screen.dart';
 import '../features/manufacturing/manufacturing_screen.dart';
 import '../features/approvals/approvals_screen.dart';
 import '../features/collections/collections_screen.dart';
+import '../features/financials/filing_screen.dart';
+import '../features/financials/filings_screen.dart';
 import '../features/timesheets/timesheet_screen.dart';
 import '../features/property/property_screen.dart';
 import '../features/property/site_screen.dart';
@@ -298,6 +300,18 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/approvals',
             builder: (_, __) => const ApprovalsScreen(),
+          ),
+          GoRoute(
+            path: '/financial-statements',
+            builder: (_, __) => const FilingsScreen(),
+            routes: [
+              GoRoute(
+                path: ':id',
+                parentNavigatorKey: _rootKey,
+                builder: (_, state) =>
+                    FilingScreen(filingId: state.pathParameters['id']!),
+              ),
+            ],
           ),
           GoRoute(
             path: '/timesheets',

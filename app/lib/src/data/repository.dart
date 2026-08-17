@@ -5668,3 +5668,140 @@ extension RepoApprovals on Repo {
   Future<void> deleteApprovalRule(String id) =>
       client.from('approval_rules').delete().eq('id', id);
 }
+
+/// Audited financial statements, and the data MBRS wants.
+///
+/// Nothing here talks to SSM. MBRS has no public API for third-party
+/// lodgement: the figures go into mTool, mTool generates the XBRL, and a
+/// person uploads that through mPortal. What these methods produce is
+/// the dataset for mTool and a record of the reference that came back.
+extension RepoFinancialStatements on Repo {
+  Future<List<Map<String, dynamic>>> fsFilings() async => Repo._rows(
+    await client
+        .from('fs_filings')
+        .select()
+        .eq('org_id', orgId)
+        .order('fy_end', ascending: false),
+  );
+
+  Future<Map<String, dynamic>?> fsFiling(String id) async {
+    final rows = Repo._rows(
+      await client.from('fs_filings').select().eq('id', id).limit(1),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<String> createFsFiling({
+    required DateTime fyStart,
+    required DateTime fyEnd,
+    String framework = 'mpers',
+    String auditStatus = 'audited',
+    int? employeeCount,
+  }) async {
+    final row = await client
+        .from('fs_filings')
+        .insert({
+          'org_id': orgId,
+          'fy_start': Fmt.iso(fyStart),
+          'fy_end': Fmt.iso(fyEnd),
+          'framework': framework,
+          'audit_status': auditStatus,
+          if (employeeCount != null) 'employee_count': employeeCount,
+        })
+        .select('id')
+        .single();
+    return row['id'] as String;
+  }
+
+  Future<void> updateFsFiling(String id, Map<String, dynamic> patch) =>
+      client.from('fs_filings').update(patch).eq('id', id);
+
+  /// The statements as the ledger has them now. Moves when the ledger
+  /// moves — which is exactly why freezing exists.
+  Future<List<Map<String, dynamic>>> fsPrepare(String filingId) async =>
+      Repo._rows(
+        await client.rpc('fs_prepare', params: {'p_filing_id': filingId}),
+      );
+
+  Future<Map<String, dynamic>?> fsBalanceCheck(String filingId) async {
+    final rows = Repo._rows(
+      await client.rpc('fs_balance_check', params: {'p_filing_id': filingId}),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<int> fsFreeze(String filingId) async =>
+      await client.rpc('fs_freeze', params: {'p_filing_id': filingId}) as int;
+
+  Future<void> fsUnfreeze(String filingId) =>
+      client.rpc('fs_unfreeze', params: {'p_filing_id': filingId});
+
+  Future<void> fsLodge(
+    String filingId, {
+    required String reference,
+    DateTime? lodgedOn,
+  }) => client.rpc(
+    'fs_lodge',
+    params: {
+      'p_filing_id': filingId,
+      'p_reference': reference,
+      'p_lodged_on': Fmt.iso(lodgedOn ?? DateTime.now()),
+    },
+  );
+
+  /// The rows that go into mTool. Frozen figures once frozen, live
+  /// before that, and the `is_frozen` flag says which — a preparer
+  /// looking at a draft export needs to know it is still moving.
+  Future<List<Map<String, dynamic>>> fsExport(String filingId) async =>
+      Repo._rows(
+        await client.rpc('fs_export', params: {'p_filing_id': filingId}),
+      );
+
+  Future<Map<String, dynamic>?> fsDeadlines(String filingId) async {
+    final rows = Repo._rows(
+      await client.rpc('fs_deadlines', params: {'p_filing_id': filingId}),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> fsAuditExemption(String filingId) async =>
+      Repo._rows(
+        await client.rpc(
+          'fs_audit_exemption',
+          params: {'p_filing_id': filingId},
+        ),
+      );
+
+  Future<List<Map<String, dynamic>>> mbrsElements() async => Repo._rows(
+    await client
+        .from('mbrs_elements')
+        .select()
+        .eq('is_active', true)
+        .order('sort_order'),
+  );
+
+  /// The deviations from the default mapping, and only those. An empty
+  /// list means a standard chart mapped the standard way, not an
+  /// unmapped one.
+  Future<List<Map<String, dynamic>>> fsAccountMap() async => Repo._rows(
+    await client.from('fs_account_map').select().eq('org_id', orgId),
+  );
+
+  Future<void> setFsAccountMap(String accountId, String? elementCode) async {
+    if (elementCode == null) {
+      // Deleting the override restores the default, which is a real
+      // choice and not the same as mapping it to nothing.
+      await client
+          .from('fs_account_map')
+          .delete()
+          .eq('org_id', orgId)
+          .eq('account_id', accountId);
+      return;
+    }
+    await client.from('fs_account_map').upsert({
+      'org_id': orgId,
+      'account_id': accountId,
+      'element_code': elementCode,
+    }, onConflict: 'org_id,account_id');
+  }
+}

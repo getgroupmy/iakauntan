@@ -1540,3 +1540,47 @@ final approvalStateProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>?, ({String kind, String id})>((ref, args) {
       return requireRepo(ref).approvalState(args.kind, args.id);
     });
+
+// ---------------------------------------------------------------------
+// Financial statements and MBRS
+// ---------------------------------------------------------------------
+
+final fsFilingsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).fsFilings();
+    });
+
+final fsFilingProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, id) {
+      return requireRepo(ref).fsFiling(id);
+    });
+
+/// The statements as they stand. Read live on a draft and off the frozen
+/// figures once frozen — `fs_export` decides which, so the screen cannot
+/// show one and export the other.
+final fsExportProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, filingId) {
+      return requireRepo(ref).fsExport(filingId);
+    });
+
+final fsBalanceCheckProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, filingId) {
+      return requireRepo(ref).fsBalanceCheck(filingId);
+    });
+
+final fsDeadlinesProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, filingId) {
+      return requireRepo(ref).fsDeadlines(filingId);
+    });
+
+/// All three grounds, whether they apply or not. The screen shows the
+/// ones that do not alongside why, because "why am I not exempt" is the
+/// question an accountant actually asks.
+final fsExemptionProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, filingId) {
+      return requireRepo(ref).fsAuditExemption(filingId);
+    });
+
+final mbrsElementsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).mbrsElements();
+});
