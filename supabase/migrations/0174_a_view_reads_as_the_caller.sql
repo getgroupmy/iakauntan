@@ -1,0 +1,37 @@
+-- `v_stock_valuation` reads as whoever asks, not as whoever owns it.
+--
+-- A view without `security_invoker` runs its query with the *owner's*
+-- rights. Row level security on the tables underneath is evaluated
+-- against the owner, not the caller — so every policy keeping one
+-- company's stock away from another's is simply not consulted, and any
+-- signed-in user selecting from the view gets every tenant's quantities,
+-- average costs and valuations.
+--
+-- The hosted project has `security_invoker='on'` and always has. No
+-- migration sets it. `0014_reports.sql` says, in a comment above the
+-- view:
+--
+--     -- Ageing and stock views (security_invoker set in 0010a hardening)
+--
+-- **There is no 0010a.** The highest numbered migration in that range is
+-- `0010_rls.sql`, and it does not mention the view. Whatever set the
+-- option on the hosted project was applied by hand and never written
+-- down, which is why the file and the live database disagreed for
+-- something like a hundred and sixty migrations without anybody
+-- noticing.
+--
+-- Nobody noticed because nothing looked. This is the first finding of
+-- `scripts/schema_drift.py`, on its first live run, and it is the exact
+-- shape of failure that check exists for: production is correct, the
+-- repository is not, and the gap only shows on a deployment built from
+-- the files. A second Supabase project stood up from this repository —
+-- a staging environment, a self-hosted install, a disaster-recovery
+-- rebuild — would have served every tenant's stock to every other.
+--
+-- `alter view` rather than `create or replace view`: the definition is
+-- fine and only the option is missing, and restating a view body that
+-- has been edited since `0014` would be a chance to get it wrong. On the
+-- hosted project this is a no-op, which is the point — it is the
+-- repository being brought up to what production already does.
+
+alter view public.v_stock_valuation set (security_invoker = on);
