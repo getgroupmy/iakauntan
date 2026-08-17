@@ -161,6 +161,17 @@ begin
   values ('DEMO-TD-1', v_demo_org, current_date, 'MYR', 'iAkauntan',
           'Proper Demo Sdn Bhd', 'Subscription', 100, 0, 0, 100, 'issued');
 
+  -- 0183 stops the audit trigger writing a row for a tenant's own
+  -- deletion, because that row references the company that is going and
+  -- the insert fails. The guard has to be exactly that and no wider, so
+  -- prove an ordinary update is still audited before relying on it.
+  update public.organizations set phone = '03-9999 0000' where id = v_demo_org;
+  perform pg_temp.check_true(
+    'an update to a company is still written to the audit trail',
+    exists (select 1 from public.audit_logs
+             where org_id = v_demo_org and table_name = 'organizations'
+               and action = 'update'));
+
   v_report := app.demo_teardown();
   raise notice 'teardown said: %', v_report;
 
