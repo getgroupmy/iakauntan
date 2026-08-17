@@ -817,7 +817,19 @@ jobs:
   deploy:
     name: Build and deploy to Vercel
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # 45, and the first number here was wrong for an instructive reason.
+    # It was set to 25 from an observed 2m18s — but that run had changed
+    # nothing the bundle cared about, so Vercel deduplicated the upload
+    # and finished in five seconds. Sizing a budget from a no-op is
+    # sizing it from the cheapest case. The first deploy afterwards that
+    # actually carried new content uploaded 6.2MB, spent twenty-three
+    # minutes in `Building…`, and was killed by the very timeout meant to
+    # protect it — turning a slow deploy into no deploy at all.
+    #
+    # A timeout on a job that reaches a third-party build service has to
+    # be sized on that service's bad day, not on the run where it had
+    # nothing to do.
+    timeout-minutes: 45
     needs: [flutter, database, migrate]
     # A pull request is somebody else's commit by definition; it gets the
     # checks and not the deploy credentials.
