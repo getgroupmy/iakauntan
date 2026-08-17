@@ -126,7 +126,7 @@ jobs:
           # the outbox as `anon`, matches no organization and drains
           # nothing, so it shows up as a permanent `considered: 0`.
           if [ "$code" = "401" ]; then
-            echo "::error::The platform rejected the bearer token. If the legacy anon key was disabled, set the repository variable SUPABASE_ANON_KEY to the publishable key."
+            echo "::error::The platform rejected the bearer token. These functions are verify_jwt = true, so the token has to be a JWT signed by this project: the anon key, or the service role key. A sb_publishable_... key is not a JWT and will not do. Check that SUPABASE_ANON_KEY holds the project's *current* anon key, and that SCHEDULER_SECRET is set — without it this workflow falls back to SUPABASE_SERVICE_ROLE_KEY, so a stale value there fails the same way."
             exit 1
           fi
 
