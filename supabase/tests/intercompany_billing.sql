@@ -192,8 +192,15 @@ begin
   -- this and should not have.
   -- ---------------------------------------------------------------
   perform pg_temp.sign_in_as(v_bob);
-  update public.organizations set sst_registered_from = current_date + 30
-   where id = v_b;
+  -- Through the function, because since 0181 there is no other way in:
+  -- a direct write to sst_registered_from is refused by
+  -- app.guard_sst_registration(). The assertion below is unchanged by
+  -- that — app.reject_tax_before_registration() keys off
+  -- `sst_registered_from` alone and never reads `is_sst_registered`, so
+  -- registering B properly from a date thirty days out sets up the same
+  -- "dated before its own registration" case the direct update did.
+  perform public.set_sst_registration(
+    v_b, true, current_date + 30, 'W10-1808-31000002', 'ST8');
 
   insert into public.purchase_documents (org_id, doc_type, doc_no, doc_date,
     contact_id, subtotal, tax_amount, total_amount, base_total_amount, status)
