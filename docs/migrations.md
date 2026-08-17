@@ -133,6 +133,51 @@ essentially every object. The property that matters — every policy
 having the privilege it needs to run — is asserted directly by
 `supabase/tests/table_grants.sql`, which is what caught `0168`.
 
+### The comparison lags a migration push by one run
+
+The level gate has a consequence worth knowing before you go looking for
+a run that never comes. A push that adds a migration cannot compare:
+the gate sees it pending and skips, then `Apply the migrations` applies
+it at the end of the same run. The comparison happens on the *next* run.
+
+If you want it the same day, re-run the workflow by hand
+(`workflow_dispatch`) once the applying run is green. Nothing is pending
+by then, so the gate opens. A push touching only `graphify-out/**` will
+not do it — that path is ignored and starts no run at all.
+
+### What the first reconciliation found
+
+Six findings, closed by `0174`–`0179`. Worth reading as a set, because
+the moral is not the one the first few suggest.
+
+| | Finding | Which side was stale |
+|---|---|---|
+| `0174` | `v_stock_valuation` had no `security_invoker` | repository |
+| `0175` | `post_expense` never adjusted the cached bank balance; `resync_bank_balance` existed in no file | repository |
+| `0176` | `create_organization` carried an `update` made dead by the seed fifty lines above it | repository |
+| `0177` | `import_opening_balances` left two subqueries unaliased against its own `returns table` columns | repository |
+| `0178` | `transfer_document` wrapped a subquery in `coalesce(x, null)` | repository |
+| `0179` | a function comment present only on the project; a column comment truncated mid-sentence on the project | **one each way** |
+
+Five in a row resolving in production's favour looked like a rule, and
+it is not one. It was a pattern with a single cause — changes applied to
+the hosted project by hand and never written into a file — and that
+cause leaves whichever side was not touched stale. `0179` is where it
+runs the other way: `0145`'s comment on
+`organizations.default_sales_tax_code_id` is five lines in the file and
+two on the project, the hosted text being an exact prefix of the file's.
+`git log` shows `0145` was never edited, so the two diverged the day it
+was applied.
+
+`0174` is the one to remember. A view without `security_invoker` runs as
+its owner, so every RLS policy underneath it is skipped — a second
+project stood up from these files would have served every tenant's stock
+to every other. Nothing was wrong with production. Nothing was wrong
+with the policies. The gap existed only in the deployment nobody had
+built yet, which is precisely the class of fault no amount of using the
+application will surface. `supabase/tests/view_security.sql` now asserts
+it for every view in `public`, including ones added later.
+
 ## Adding a migration
 
 1. `supabase/migrations/0151_what_it_does.sql`. The number is the next
