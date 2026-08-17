@@ -5010,7 +5010,14 @@ extension RepoHrSetup on Repo {
     final dateField = isSales ? 'receipt_date' : 'payment_date';
     var q = client
         .from(table)
-        .select('*, contacts(name, code), bank_accounts(name)')
+        // `bank_accounts` is reachable twice from both tables — the plain
+        // key and a composite (org_id, bank_account_id) same-org guard —
+        // so the embed has to name which. The constraint is per table,
+        // hence the interpolation.
+        .select(
+          '*, contacts(name, code), '
+          'bank_accounts!${table}_bank_account_id_fkey(name)',
+        )
         .eq('org_id', orgId)
         .filter('deleted_at', 'is', null);
     if (contactId != null) q = q.eq('contact_id', contactId);
@@ -5032,7 +5039,8 @@ extension RepoHrSetup on Repo {
         .from(table)
         .select(
           '*, contacts(name, code, email, address_line1, address_line2, '
-          'city, postcode, state_code), bank_accounts(name)',
+          'city, postcode, state_code), '
+          'bank_accounts!${table}_bank_account_id_fkey(name)',
         )
         .eq('id', id)
         .single();

@@ -172,6 +172,21 @@ begin
              where org_id = v_demo_org and table_name = 'organizations'
                and action = 'update'));
 
+  -- 0184's guard must not be wider than the problem: an ordinary delete
+  -- inside a company that still exists has to go on being audited.
+  -- tax_codes rather than contacts, because contacts carries no
+  -- audit_changes trigger at all and a control measuring nothing passes
+  -- for the wrong reason.
+  insert into public.tax_codes (org_id, code, name, tax_type_code, rate,
+    applies_to, is_exempt, is_default)
+  values (v_demo_org, 'TDX', 'Teardown Probe', '06', 0, 'both', false, false);
+  delete from public.tax_codes where org_id = v_demo_org and code = 'TDX';
+  perform pg_temp.check_true(
+    'an ordinary delete in a living company is still audited',
+    exists (select 1 from public.audit_logs
+             where org_id = v_demo_org and table_name = 'tax_codes'
+               and action = 'delete'));
+
   v_report := app.demo_teardown();
   raise notice 'teardown said: %', v_report;
 

@@ -33,6 +33,7 @@ import '../features/financials/filing_screen.dart';
 import '../features/financials/filings_screen.dart';
 import '../features/timesheets/timesheet_screen.dart';
 import '../features/property/property_screen.dart';
+import '../features/property/site_editor.dart';
 import '../features/property/site_screen.dart';
 import '../features/manufacturing/order_screen.dart';
 import '../features/onboarding/create_org_screen.dart';
@@ -321,11 +322,24 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/property',
             builder: (_, __) => const PropertyScreen(),
             routes: [
+              // Before `:id`, or `/property/new` matches it and the
+              // viewer is handed the literal string `new` as a uuid.
+              GoRoute(
+                path: 'new',
+                parentNavigatorKey: _rootKey,
+                builder: (_, __) => const PropertySiteEditor(),
+              ),
               GoRoute(
                 path: ':id',
                 parentNavigatorKey: _rootKey,
                 builder: (_, state) =>
                     PropertySiteScreen(siteId: state.pathParameters['id']!),
+              ),
+              GoRoute(
+                path: ':id/edit',
+                parentNavigatorKey: _rootKey,
+                builder: (_, state) =>
+                    PropertySiteEditor(siteId: state.pathParameters['id']),
               ),
             ],
           ),
