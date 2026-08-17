@@ -35,6 +35,11 @@ declare
   v_modules integer;
   v_role    text;
   v_sinar   uuid;
+  v_amanah  uuid;
+  v_harta   uuid;
+  v_entities integer;
+  v_units   integer;
+  v_bad     integer;
   v_missing text;
 begin
   v_report := app.demo_rebuild();
@@ -132,6 +137,136 @@ begin
          join public.accounts a on a.id = l.account_id
         where e.org_id = v_sinar and e.status = 'posted'
           and a.code in ('4100', '2130')));
+
+  -- --------------------------------------------------------------
+  -- Amanah: the client register, which is the module's whole point
+  --
+  -- A corporate secretarial practice with client companies that have no
+  -- officers and no share events is three empty screens. The register of
+  -- members is *computed* from `corp_share_events`, so an entity without
+  -- one shows a company that nobody owns.
+  --
+  -- Each assertion counts what it compared as well as what failed. An
+  -- assertion that only counts failures passes when there is nothing
+  -- there at all.
+  -- --------------------------------------------------------------
+  select id into v_amanah from public.organizations
+   where name = 'Amanah Setiausaha Sdn Bhd';
+  perform pg_temp.check_true('Amanah exists', v_amanah is not null);
+
+  select count(*) into v_entities
+    from public.corp_entities where org_id = v_amanah;
+  perform pg_temp.check_true(
+    format('Amanah acts for client companies (%s of them)', v_entities),
+    v_entities >= 3);
+
+  select count(*) into v_bad from public.corp_entities e
+   where e.org_id = v_amanah
+     and (not exists (select 1 from public.corp_officers o
+                       where o.entity_id = e.id and o.role = 'director')
+       or not exists (select 1 from public.corp_officers o
+                       where o.entity_id = e.id and o.role = 'secretary')
+       or not exists (select 1 from public.corp_share_events s
+                       where s.entity_id = e.id and s.event_type = 'allotment'));
+  perform pg_temp.check_eq(
+    format('every one of those %s entities has a director, a secretary and '
+           'shares in issue', v_entities), v_bad, 0);
+
+  perform pg_temp.check_eq('Amanah''s trial balance is zero',
+    (select coalesce(sum(l.debit - l.credit), 0)
+       from public.gl_lines l join public.gl_entries e on e.id = l.entry_id
+      where e.org_id = v_amanah and e.status = 'posted'), 0);
+
+  -- Not SST registered, so receivables are the fee and nothing else. The
+  -- identity is the same one Sinar's checks; here it holds with no tax
+  -- rather than with tax, which is the case a hardcoded 8% would break.
+  perform pg_temp.check_true(
+    'Amanah billed fees, and receivables equal them exactly — it is under '
+    'the SST threshold, so there is no tax to add',
+    (select coalesce(sum(l.debit - l.credit), 0) from public.gl_lines l
+       join public.gl_entries e on e.id = l.entry_id
+       join public.accounts a on a.id = l.account_id
+      where e.org_id = v_amanah and e.status = 'posted' and a.code = '1210')
+    = (select coalesce(sum(l.credit - l.debit), 0) from public.gl_lines l
+         join public.gl_entries e on e.id = l.entry_id
+         join public.accounts a on a.id = l.account_id
+        where e.org_id = v_amanah and e.status = 'posted' and a.code = '4100')
+    and (select coalesce(sum(l.credit - l.debit), 0) from public.gl_lines l
+           join public.gl_entries e on e.id = l.entry_id
+           join public.accounts a on a.id = l.account_id
+          where e.org_id = v_amanah and e.status = 'posted'
+            and a.code = '4100') > 0);
+
+  -- --------------------------------------------------------------
+  -- Harta Prima: both halves of the property module
+  --
+  -- `tenure` splits property in two, and a demo carrying only one half
+  -- leaves the other half unseen. Two things beyond that are load-bearing
+  -- and neither announces itself when wrong:
+  --
+  --   * a maintenance charge is apportioned by share unit over the
+  --     scheme's declared total, so parcels that do not add up to it
+  --     apportion against the wrong denominator and every charge is
+  --     quietly out;
+  --   * a parcel with no owner cannot be charged, so a register that
+  --     looks complete bills nobody.
+  -- --------------------------------------------------------------
+  select id into v_harta from public.organizations
+   where name = 'Harta Prima Management Sdn Bhd';
+  perform pg_temp.check_true('Harta Prima exists', v_harta is not null);
+
+  select string_agg(t, ', ') into v_missing from (
+    select 'strata' as t where not exists (
+      select 1 from public.property_sites
+       where org_id = v_harta and tenure = 'strata')
+    union all select 'non_strata' where not exists (
+      select 1 from public.property_sites
+       where org_id = v_harta and tenure = 'non_strata')
+  ) s;
+  perform pg_temp.check_true(
+    'the property tenant shows both tenures, not just one: ' ||
+    coalesce(v_missing, 'both present'), v_missing is null);
+
+  select count(*) into v_units
+    from public.property_units u join public.property_sites s on s.id = u.site_id
+   where u.org_id = v_harta and s.tenure = 'strata';
+  perform pg_temp.check_true(
+    format('the scheme has parcels (%s)', v_units), v_units > 0);
+
+  perform pg_temp.check_eq(
+    format('and all %s of them have an owner to charge', v_units),
+    (select count(*) from public.property_units u
+       join public.property_sites s on s.id = u.site_id
+      where u.org_id = v_harta and s.tenure = 'strata'
+        and u.owner_contact_id is null), 0);
+
+  perform pg_temp.check_eq(
+    'the parcels'' share units add up to the scheme''s declared total, '
+    'which is the denominator every maintenance charge is apportioned over',
+    (select coalesce(sum(u.share_units), 0) from public.property_units u
+      where u.org_id = v_harta
+        and u.site_id = (select site_id from public.strata_schemes
+                          where org_id = v_harta limit 1)),
+    (select total_share_units from public.strata_schemes
+      where org_id = v_harta limit 1));
+
+  select count(*) into v_units from public.tenancies
+   where org_id = v_harta and status = 'active';
+  perform pg_temp.check_true(
+    format('the commercial block is let (%s active tenancies)', v_units),
+    v_units > 0);
+
+  perform pg_temp.check_eq('Harta Prima''s trial balance is zero',
+    (select coalesce(sum(l.debit - l.credit), 0)
+       from public.gl_lines l join public.gl_entries e on e.id = l.entry_id
+      where e.org_id = v_harta and e.status = 'posted'), 0);
+
+  perform pg_temp.check_true(
+    'and it invoiced rent',
+    (select coalesce(sum(l.credit - l.debit), 0) from public.gl_lines l
+       join public.gl_entries e on e.id = l.entry_id
+       join public.accounts a on a.id = l.account_id
+      where e.org_id = v_harta and e.status = 'posted' and a.code = '4100') > 0);
 
   -- --------------------------------------------------------------
   -- Every module in the catalogue has somewhere to be seen
