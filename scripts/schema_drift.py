@@ -31,7 +31,8 @@ categories, and each exclusion is a decision worth being able to defend:
     `postgres`; the local stack's belong to whoever the CLI ran as.
     Never meaningful, always different.
 
-  * **`GRANT` and `REVOKE`.** The one exclusion that costs something, so
+  * **`GRANT`, `REVOKE` and `ALTER DEFAULT PRIVILEGES`.** The one
+    exclusion that costs something, so
     it is the one worth explaining. Supabase's hosted projects ship
     `alter default privileges ... grant all ... to anon, authenticated`,
     which a stack built from these migrations alone does not have — so
@@ -43,6 +44,11 @@ categories, and each exclusion is a decision worth being able to defend:
     That test is what caught `0168` handing the API write policies on the
     depreciation tables; it is a better instrument for grants than a diff
     would be.
+
+    `ALTER DEFAULT PRIVILEGES` belongs with them and was missed on the
+    first pass — it does not begin with the word `GRANT`, so the anchor
+    let it through and the first live run opened with seventeen findings
+    that were all Supabase's own defaults.
 
   * **Statement order.** `pg_dump` emits in dependency order, and two
     databases whose objects were created in a different sequence get
@@ -95,6 +101,7 @@ _IGNORED = re.compile(
         SET\s
       | SELECT\s+pg_catalog\.set_config
       | ALTER\s+.*\sOWNER\s+TO\s
+      | ALTER\s+DEFAULT\s+PRIVILEGES\s
       | GRANT\s
       | REVOKE\s
       | COMMENT\s+ON\s+EXTENSION\s
@@ -223,6 +230,7 @@ SET statement_timeout = 0;
 SELECT pg_catalog.set_config('search_path', '', false);
 ALTER TABLE public.invoices OWNER TO postgres;
 GRANT SELECT ON TABLE public.invoices TO anon;
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
 REVOKE ALL ON FUNCTION public.f() FROM PUBLIC;
 
 CREATE TABLE public.invoices (
