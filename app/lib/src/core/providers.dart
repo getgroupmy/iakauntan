@@ -1400,3 +1400,63 @@ final platformInvoicesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
       return ref.watch(platformRepoProvider).creditInvoices();
     });
+
+// ---------------------------------------------------------------------
+// Property
+//
+// The spine is shared, so `propertySitesProvider` takes the tenure it
+// wants rather than there being two of it. Passing null asks for the
+// whole portfolio, which is what a managing agent holding both modules
+// is looking at.
+// ---------------------------------------------------------------------
+
+final propertySitesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>((ref, tenure) {
+      return requireRepo(ref).propertySites(tenure: tenure);
+    });
+
+final propertySiteProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, String>((ref, id) {
+      return requireRepo(ref).propertySite(id);
+    });
+
+final propertyUnitsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, siteId) {
+      return requireRepo(ref).propertyUnits(siteId);
+    });
+
+/// Null where the site has no scheme record yet — a strata site can be
+/// entered before anybody has filled in who runs it.
+final strataSchemeProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, siteId) {
+      return requireRepo(ref).strataScheme(siteId);
+    });
+
+final strataChargeRunsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, schemeId) {
+      return requireRepo(ref).strataChargeRuns(schemeId);
+    });
+
+/// What is owed and the late payment charge that has accrued on it.
+final strataArrearsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, schemeId) {
+      return requireRepo(ref).strataArrears(schemeId);
+    });
+
+final tenanciesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>((ref, siteId) {
+      return requireRepo(ref).tenancies(siteId: siteId);
+    });
+
+/// Quit rent and assessment falling due, across every site. The dashboard
+/// question, not a per-site one: a managing agent loses a bill by not
+/// looking at a site, so this never asks which site to look at.
+final propertyStatutoryDueProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).propertyStatutoryDue();
+    });
+
+final propertyStatutoryChargesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, siteId) {
+      return requireRepo(ref).propertyStatutoryCharges(siteId);
+    });

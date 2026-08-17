@@ -19,6 +19,7 @@ class _Dest {
     this.path, {
     this.primary = false,
     this.module,
+    this.altModule,
     this.platformOnly = false,
   });
 
@@ -35,6 +36,11 @@ class _Dest {
   /// entitled to it. The database blocks the writes regardless — this
   /// just avoids showing doors that will not open.
   final String? module;
+
+  /// A second add-on that also opens this destination. Property is sold
+  /// as strata and non-strata, and either one is a reason to show the
+  /// portfolio — a company managing only shoplots still has a portfolio.
+  final String? altModule;
 
   /// Only visible to platform staff.
   final bool platformOnly;
@@ -166,6 +172,17 @@ const _destinations = <_Dest>[
     module: 'inventory',
   ),
   _Dest('Chat', Icons.forum_outlined, Icons.forum, '/chat', module: 'chat'),
+  // Two modules, one destination. Which half of it a site belongs to is
+  // a fact about the site, not a choice in the navigation, and an agent
+  // holding both has one portfolio rather than two lists.
+  _Dest(
+    'Property',
+    Icons.apartment_outlined,
+    Icons.apartment,
+    '/property',
+    module: 'property_strata',
+    altModule: 'property_nonstrata',
+  ),
   _Dest(
     'Manufacturing',
     Icons.precision_manufacturing_outlined,
@@ -257,7 +274,8 @@ class AppShell extends ConsumerWidget {
       if (d.platformOnly) return isPlatformAdmin;
       if (!hasOrg) return false;
       if (d.module == null) return true;
-      return moduleEnabled(ref, d.module!);
+      if (moduleEnabled(ref, d.module!)) return true;
+      return d.altModule != null && moduleEnabled(ref, d.altModule!);
     }).toList();
   }
 

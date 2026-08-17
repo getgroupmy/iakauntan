@@ -3855,7 +3855,7 @@ extension RepoHr on Repo {
       Repo._rows(
         await client
             .from('leave_balances')
-            .select('*, leave_types(name)')
+            .select('*, leave_types!leave_balances_leave_type_id_fkey(name)')
             .eq('employee_id', employeeId)
             .eq('leave_year', year),
       ).map(LeaveBalance.fromJson).toList();
@@ -3866,7 +3866,10 @@ extension RepoHr on Repo {
   }) async {
     var q = client
         .from('leave_requests')
-        .select('*, employees(full_name), leave_types(name)')
+        .select(
+          '*, employees(full_name), '
+          'leave_types!leave_requests_leave_type_id_fkey(name)',
+        )
         .eq('org_id', orgId);
     if (status != null && status != 'all') q = q.eq('status', status);
     if (employeeId != null) q = q.eq('employee_id', employeeId);
@@ -5126,5 +5129,285 @@ extension RepoHrSetup on Repo {
         .from('contact_persons')
         .update({'is_primary': true})
         .eq('id', personId);
+  }
+}
+
+/// Property: two modules over one spine.
+///
+/// A site is strata or it is not, and that decides which half of this
+/// applies to it; nothing here chooses, it only asks.
+///
+/// Every figure comes back from the database. The preview an owner is
+/// shown and the invoice an owner receives are the same function called
+/// twice, so there is nowhere for the two to disagree.
+extension RepoProperty on Repo {
+  Future<List<Map<String, dynamic>>> propertySites({String? tenure}) async {
+    var q = client
+        .from('property_sites')
+        .select('*, property_units!property_units_site_id_fkey(count)')
+        .eq('org_id', orgId)
+        .eq('is_active', true);
+    if (tenure != null) q = q.eq('tenure', tenure);
+    return Repo._rows(await q.order('name'));
+  }
+
+  Future<Map<String, dynamic>> propertySite(String id) async =>
+      Map<String, dynamic>.from(
+        await client
+            .from('property_sites')
+            .select('*, strata_schemes!strata_schemes_site_id_fkey(*)')
+            .eq('id', id)
+            .eq('org_id', orgId)
+            .single(),
+      );
+
+  Future<String> savePropertySite(
+    Map<String, dynamic> values, {
+    String? id,
+  }) async {
+    if (id == null) {
+      final row = await client
+          .from('property_sites')
+          .insert({...values, 'org_id': orgId})
+          .select('id')
+          .single();
+      return row['id'] as String;
+    }
+    await client
+        .from('property_sites')
+        .update(values)
+        .eq('id', id)
+        .eq('org_id', orgId);
+    return id;
+  }
+
+  Future<List<Map<String, dynamic>>> propertyUnits(String siteId) async =>
+      Repo._rows(
+        await client
+            .from('property_units')
+            .select('*, contacts:owner_contact_id(code, name)')
+            .eq('site_id', siteId)
+            .eq('org_id', orgId)
+            .eq('is_active', true)
+            .order('unit_no'),
+      );
+
+  Future<void> savePropertyUnit(
+    Map<String, dynamic> values, {
+    String? id,
+  }) async {
+    if (id == null) {
+      await client.from('property_units').insert({...values, 'org_id': orgId});
+    } else {
+      await client
+          .from('property_units')
+          .update(values)
+          .eq('id', id)
+          .eq('org_id', orgId);
+    }
+  }
+
+  // --- Strata ---------------------------------------------------------
+
+  Future<Map<String, dynamic>?> strataScheme(String siteId) async {
+    final rows = Repo._rows(
+      await client
+          .from('strata_schemes')
+          .select(
+            '*, strata_charge_rates!strata_charge_rates_scheme_id_fkey(*)',
+          )
+          .eq('site_id', siteId)
+          .eq('org_id', orgId),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<String> saveStrataScheme(
+    Map<String, dynamic> values, {
+    String? id,
+  }) async {
+    if (id == null) {
+      final row = await client
+          .from('strata_schemes')
+          .insert({...values, 'org_id': orgId})
+          .select('id')
+          .single();
+      return row['id'] as String;
+    }
+    await client
+        .from('strata_schemes')
+        .update(values)
+        .eq('id', id)
+        .eq('org_id', orgId);
+    return id;
+  }
+
+  /// A rate is what an AGM resolved, so it is added and never edited: the
+  /// charge raised for January stays raised at January's rate.
+  Future<void> addStrataChargeRate(
+    String schemeId,
+    Map<String, dynamic> values,
+  ) => client.from('strata_charge_rates').insert({
+    ...values,
+    'org_id': orgId,
+    'scheme_id': schemeId,
+  });
+
+  /// What each parcel would be charged, before anything is written.
+  Future<List<Map<String, dynamic>>> strataChargePreview(
+    String schemeId,
+    DateTime from,
+    DateTime to,
+  ) async => Repo._rows(
+    await client.rpc(
+      'strata_charge_preview',
+      params: {
+        'p_scheme_id': schemeId,
+        'p_period_from': Fmt.iso(from),
+        'p_period_to': Fmt.iso(to),
+      },
+    ),
+  );
+
+  Future<String> raiseStrataCharges(
+    String schemeId,
+    DateTime from,
+    DateTime to, {
+    DateTime? dueDate,
+  }) async =>
+      await client.rpc(
+            'raise_strata_charges',
+            params: {
+              'p_scheme_id': schemeId,
+              'p_period_from': Fmt.iso(from),
+              'p_period_to': Fmt.iso(to),
+              'p_due_date': dueDate == null ? null : Fmt.iso(dueDate),
+            },
+          )
+          as String;
+
+  Future<List<Map<String, dynamic>>> strataChargeRuns(String schemeId) async =>
+      Repo._rows(
+        await client
+            .from('strata_charge_runs')
+            .select('*')
+            .eq('scheme_id', schemeId)
+            .eq('org_id', orgId)
+            .order('period_from', ascending: false),
+      );
+
+  Future<List<Map<String, dynamic>>> strataArrears(
+    String schemeId, {
+    DateTime? asAt,
+  }) async => Repo._rows(
+    await client.rpc(
+      'strata_arrears',
+      params: {
+        'p_scheme_id': schemeId,
+        'p_as_at': Fmt.iso(asAt ?? DateTime.now()),
+      },
+    ),
+  );
+
+  // --- Non-strata -----------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> tenancies({
+    String? siteId,
+    bool activeOnly = false,
+  }) async {
+    var q = client
+        .from('tenancies')
+        .select(
+          '*, property_units!tenancies_unit_id_fkey!inner(unit_no, site_id), '
+          'contacts:tenant_contact_id(code, name)',
+        )
+        .eq('org_id', orgId);
+    if (siteId != null) q = q.eq('property_units.site_id', siteId);
+    if (activeOnly) q = q.eq('status', 'active');
+    return Repo._rows(await q.order('tenancy_no'));
+  }
+
+  Future<void> saveTenancy(Map<String, dynamic> values, {String? id}) async {
+    if (id == null) {
+      await client.from('tenancies').insert({...values, 'org_id': orgId});
+    } else {
+      await client
+          .from('tenancies')
+          .update(values)
+          .eq('id', id)
+          .eq('org_id', orgId);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> rentPreview(
+    String siteId,
+    DateTime from,
+    DateTime to,
+  ) async => Repo._rows(
+    await client.rpc(
+      'rent_preview',
+      params: {
+        'p_site_id': siteId,
+        'p_period_from': Fmt.iso(from),
+        'p_period_to': Fmt.iso(to),
+      },
+    ),
+  );
+
+  Future<String> raiseRentInvoices(
+    String siteId,
+    DateTime from,
+    DateTime to, {
+    DateTime? dueDate,
+  }) async =>
+      await client.rpc(
+            'raise_rent_invoices',
+            params: {
+              'p_site_id': siteId,
+              'p_period_from': Fmt.iso(from),
+              'p_period_to': Fmt.iso(to),
+              'p_due_date': dueDate == null ? null : Fmt.iso(dueDate),
+            },
+          )
+          as String;
+
+  // --- Quit rent and assessment ---------------------------------------
+
+  Future<List<Map<String, dynamic>>> propertyStatutoryDue({
+    int withinDays = 60,
+  }) async => Repo._rows(
+    await client.rpc(
+      'property_statutory_due',
+      params: {'p_org_id': orgId, 'p_within_days': withinDays},
+    ),
+  );
+
+  Future<List<Map<String, dynamic>>> propertyStatutoryCharges(
+    String siteId,
+  ) async => Repo._rows(
+    await client
+        .from('property_statutory_charges')
+        .select('*')
+        .eq('site_id', siteId)
+        .eq('org_id', orgId)
+        .order('due_date', ascending: false),
+  );
+
+  Future<void> savePropertyStatutoryCharge(
+    Map<String, dynamic> values, {
+    String? id,
+  }) async {
+    if (id == null) {
+      await client.from('property_statutory_charges').insert({
+        ...values,
+        'org_id': orgId,
+      });
+    } else {
+      await client
+          .from('property_statutory_charges')
+          .update(values)
+          .eq('id', id)
+          .eq('org_id', orgId);
+    }
   }
 }

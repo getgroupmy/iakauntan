@@ -794,6 +794,12 @@ the entitlement is checked **in the RLS write policies** — not merely
 hidden in the UI. Reads stay open, so switching an add-on off stops new
 records without hiding a tenant's own history.
 
+Property is sold as two: `property_strata` and `property_nonstrata`. A
+building either has strata titles or it does not, and the Strata
+Management Act 2013 governs only the first — share units, a sinking
+fund, a management corporation. The two modules share the site and unit
+tables and nothing else. See `docs/property.md`.
+
 ### Registration and invitations
 
 Anyone can register and create a company. An admin invites colleagues by

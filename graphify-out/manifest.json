@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786898253.5563903,
-    "ast_hash": "14986d2bc7be24c04a6a2754a5f7a5c8",
+    "mtime": 1786935775.6959288,
+    "ast_hash": "ce1fcbd504cbf9888b200180ceef0b86",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786782074.020403,
-    "ast_hash": "7619f0ddd2c851ec7fdc041afd9d4f45",
+    "mtime": 1786935909.7216418,
+    "ast_hash": "75c89d9b47f6405fce8bbf55feba87eb",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786898253.5548596,
-    "ast_hash": "abb49989ddf565c429d9226805401dbb",
+    "mtime": 1786936355.3399632,
+    "ast_hash": "7d8421c502895a56c8aeb3830a7c66c0",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -175,8 +175,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/einvoice/einvoice_screen.dart": {
-    "mtime": 1786785756.618488,
-    "ast_hash": "ecf0b4578eddcbe0dddc48ba49c66312",
+    "mtime": 1786901998.9143977,
+    "ast_hash": "950d37dcf666803f6c883d5d0fb0afac",
     "semantic_hash": ""
   },
   "app/lib/src/features/expenses/expenses_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1786775372.5610728,
-    "ast_hash": "3daf166d107d27306d92e9803af8b0ae",
+    "mtime": 1786935924.958066,
+    "ast_hash": "11f1c1308e7f0c3d0f0fae2b1690da8d",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786900384.3528364,
-    "ast_hash": "183e2b95c7d8bff77e6a0cc9e06edf8e",
+    "mtime": 1786936109.6189728,
+    "ast_hash": "b3ac4675537b1fe389cae0f6f8e2aefc",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786900644.880852,
-    "ast_hash": "a7bcd7d1a078131b306a492756b00588",
+    "mtime": 1786936442.3279684,
+    "ast_hash": "93a44efe50666c9e33a18ef5493773ee",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -2712,6 +2712,66 @@
   "docs/pre-deployment.md": {
     "mtime": 1786900597.9328492,
     "ast_hash": "2f6896f956f9fc9323a33bdd0e298b21",
+    "semantic_hash": ""
+  },
+  "app/lib/src/core/safe_link.dart": {
+    "mtime": 1786901956.2423952,
+    "ast_hash": "4f5c1d743465176a18059d78f944d01a",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/property/charge_run_sheet.dart": {
+    "mtime": 1786936112.1319487,
+    "ast_hash": "b7877d98a264e7ba92edcaf631b2f972",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/property/property_screen.dart": {
+    "mtime": 1786935801.9279304,
+    "ast_hash": "c8aa8bd3a3c036302765a6ac01022272",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/property/site_screen.dart": {
+    "mtime": 1786936315.7079608,
+    "ast_hash": "c3dd4086cbb0c5f4849cad6dd98934b1",
+    "semantic_hash": ""
+  },
+  "app/test/property_test.dart": {
+    "mtime": 1786936112.9239488,
+    "ast_hash": "4db5167bb4dc42dbc50d0cbe32534488",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0160_a_bank_account_belongs_to_one_company.sql": {
+    "mtime": 1786901747.7623827,
+    "ast_hash": "1d6c0f2b496774b557deecd66b532771",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0161_a_logo_is_an_image.sql": {
+    "mtime": 1786901936.298394,
+    "ast_hash": "56ee72df56880c13f9723a3d465bfc99",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0162_property_management.sql": {
+    "mtime": 1786935084.3398876,
+    "ast_hash": "2dc8960d219a43119dd6fba7d73deb3c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0163_property_charges_and_rls.sql": {
+    "mtime": 1786935266.303482,
+    "ast_hash": "1dac5f91bbb58b42702d143d1e743750",
+    "semantic_hash": ""
+  },
+  "supabase/tests/property.sql": {
+    "mtime": 1786935592.737566,
+    "ast_hash": "3d67c44315de901fbea493aa54d109f5",
+    "semantic_hash": ""
+  },
+  "supabase/tests/tenant_foreign_keys.sql": {
+    "mtime": 1786901841.4823883,
+    "ast_hash": "a0c4eb19f58bc7d8be7f72ed886dc2f6",
+    "semantic_hash": ""
+  },
+  "docs/property.md": {
+    "mtime": 1786936347.4199626,
+    "ast_hash": "713147bf686d0c5901ec1c6908c079a3",
     "semantic_hash": ""
   }
 }

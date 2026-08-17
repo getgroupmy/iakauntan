@@ -27,6 +27,8 @@ import '../features/items/items_screen.dart';
 import '../features/legal/matter_detail_screen.dart';
 import '../features/legal/matters_screen.dart';
 import '../features/manufacturing/manufacturing_screen.dart';
+import '../features/property/property_screen.dart';
+import '../features/property/site_screen.dart';
 import '../features/manufacturing/order_screen.dart';
 import '../features/onboarding/create_org_screen.dart';
 import '../features/ledger/journals_screen.dart';
@@ -286,6 +288,18 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const StockTakeScreen(),
           ),
           GoRoute(path: '/chat', builder: (_, __) => const ChatScreen()),
+          GoRoute(
+            path: '/property',
+            builder: (_, __) => const PropertyScreen(),
+            routes: [
+              GoRoute(
+                path: ':id',
+                parentNavigatorKey: _rootKey,
+                builder: (_, state) =>
+                    PropertySiteScreen(siteId: state.pathParameters['id']!),
+              ),
+            ],
+          ),
           GoRoute(
             path: '/manufacturing',
             builder: (_, __) => const ManufacturingScreen(),
