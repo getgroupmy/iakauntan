@@ -76,6 +76,12 @@ const demoAccounts = <DemoAccount>[
     sees: 'A practice and the client companies it files for',
     icon: Icons.domain_outlined,
   ),
+  DemoAccount(
+    email: 'property@iakauntan.my',
+    role: 'Property manager',
+    sees: 'A strata scheme and a commercial block, with their charges',
+    icon: Icons.apartment_outlined,
+  ),
 ];
 
 /// Not offered: `superadmin@iakauntan.my`, the platform operator.

@@ -90,6 +90,7 @@ jobs:
                    supabase/tests/secretarial.sql supabase/tests/attendance.sql \
                    supabase/tests/demo_accounts.sql \
                    supabase/tests/demo_teardown.sql \
+                   supabase/tests/demo_rebuild.sql \
                    supabase/tests/multicurrency.sql \
                    supabase/tests/transfer.sql \
                    supabase/tests/fx_revaluation.sql \

@@ -274,10 +274,14 @@ class _PropertySiteEditorState extends ConsumerState<PropertySiteEditor> {
                               controller: _ctl('state_code'),
                               decoration: const InputDecoration(
                                 labelText: 'State',
-                                helperText: 'e.g. SGR',
+                                // LHDN's numeric state codes, which is
+                                // what ref_states holds and what the
+                                // foreign key checks — not the postal
+                                // abbreviations. 10 is Selangor, 14 is
+                                // Kuala Lumpur.
+                                helperText: 'LHDN code, e.g. 10',
                               ),
-                              textCapitalization:
-                                  TextCapitalization.characters,
+                              keyboardType: TextInputType.number,
                             ),
                           ),
                         ],
