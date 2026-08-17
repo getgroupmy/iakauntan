@@ -31,6 +31,7 @@ jobs:
   flutter:
     name: Analyze and test the app
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: app
@@ -53,6 +54,7 @@ jobs:
   database:
     name: Statutory engine and ledger rules
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -215,19 +217,61 @@ jobs:
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
+      # `--linked` is a round trip to the hosted project and is the slow
+      # half by a wide margin: measured on the first run where this step
+      # actually executed rather than skipping, the local dump took 8
+      # seconds and the linked one 2m40s. Eight minutes is a little over
+      # twice that, so a normal run is nowhere near it and a wedged
+      # connection does not sit here indefinitely.
+      #
+      # A budget at all because nothing in this workflow had one, which
+      # means GitHub's default applied — **six hours** — to every job in
+      # it. See the `timeout-minutes` on the jobs themselves.
+      #
+      # `continue-on-error` is not leniency: it exists so the next step
+      # runs and can say *why* there is no comparison. It then fails the
+      # build itself. The distinction worth preserving is that **could
+      # not look is not the same as looked and found nothing** — a check
+      # that reports the first as the second is worse than no check,
+      # because it is reassuring while blind.
       - name: Dump both schemas
+        id: dump
         if: steps.level.outputs.ready == 'true'
+        continue-on-error: true
+        timeout-minutes: 8
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -euo pipefail
-          supabase db dump --local -f /tmp/schema-local.sql
-          supabase db dump --linked -f /tmp/schema-hosted.sql
+          # Timed separately, because when this is slow it matters which
+          # half is slow: one is a container on this runner, the other is
+          # the network.
+          time supabase db dump --local -f /tmp/schema-local.sql
+          time supabase db dump --linked -f /tmp/schema-hosted.sql
           wc -l /tmp/schema-local.sql /tmp/schema-hosted.sql
 
+      # Red, deliberately. Softening this to a warning would mean a drift
+      # check that quietly stops checking, which is the exact failure the
+      # whole exercise exists to prevent. If it ever proves flaky in
+      # practice, soften it then, on the evidence — the way the two-tier
+      # comparison was designed on measurement rather than expectation.
+      - name: The schemas could not be read
+        if: steps.level.outputs.ready == 'true' && steps.dump.outcome != 'success'
+        run: |
+          {
+            echo "### Schema drift"
+            echo
+            echo "**Not checked.** The hosted project is level, so a comparison"
+            echo "was due, but dumping the two schemas failed or exceeded its"
+            echo "eight-minute budget. This is inconclusive, not clean —"
+            echo "nothing here says the schemas agree."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::Schema drift was not checked: the dump failed or timed out."
+          exit 1
+
       - name: Compare them
-        if: steps.level.outputs.ready == 'true'
+        if: steps.level.outputs.ready == 'true' && steps.dump.outcome == 'success'
         run: |
           set -euo pipefail
           # The normaliser's own control, before it is trusted to say
@@ -288,6 +332,7 @@ jobs:
   edge:
     name: Edge function assertions
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: denoland/setup-deno@v2
@@ -354,6 +399,7 @@ jobs:
   sfu:
     name: Call server
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: server/sfu
@@ -407,6 +453,7 @@ jobs:
   migrate:
     name: Apply the migrations
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [flutter, database, edge, sfu]
     if: github.event_name != 'pull_request'
     concurrency:
@@ -648,6 +695,7 @@ jobs:
   functions:
     name: Deploy the edge functions
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [flutter, database, edge, sfu, migrate]
     if: >-
       github.event_name != 'pull_request' &&
@@ -768,6 +816,7 @@ jobs:
   deploy:
     name: Build and deploy to Vercel
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     needs: [flutter, database, migrate]
     # A pull request is somebody else's commit by definition; it gets the
     # checks and not the deploy credentials.

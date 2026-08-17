@@ -1,0 +1,50 @@
+-- `einvoice_documents.cancel_deadline` has no comment on the hosted
+-- project, and `0007_einvoice.sql` says it should.
+--
+-- Found by the drift check on the first run where it actually compared
+-- rather than skipping — which is worth saying plainly, because I did
+-- not know about this one. `0174` through `0179` each closed a finding I
+-- had already seen by reading. This is the first that the check found on
+-- its own, and it is the entire argument for having built it.
+--
+-- ## What is missing
+--
+-- Only the comment. `0007` creates the column, the index, the trigger
+-- `set_cancel_deadline` and the function `app.set_einvoice_cancel_deadline()`
+-- behind it — all four are present on the hosted project and correct.
+-- The `comment on column` two lines below the index is not:
+--
+--     LHDN permits supplier cancellation only within 72 hours of
+--     validation.
+--
+-- Same cause as the rest: `0007` was applied by hand from something that
+-- was not quite this file.
+--
+-- ## Why a comment is worth a migration
+--
+-- Because of what this particular one says. `cancel_deadline` is a bare
+-- `timestamptz` on a table full of them, and nothing in the column name
+-- carries the rule — that the 72 hours runs from *validation* rather
+-- than from issue, and that it is LHDN's limit rather than one this
+-- application chose and could therefore relax. Somebody reading the
+-- table to answer "can this invoice still be cancelled" needs both
+-- facts, and on the hosted project the column tells them neither.
+--
+-- ## The pattern, now that there are three of them
+--
+-- Every finding in this reconciliation that is not a function body has
+-- been a `COMMENT`, and all three went the same way: a migration file
+-- carrying explanatory text that the hosted project does not have, or
+-- has only part of. Comments are the first thing lost when a migration
+-- is pasted into a console rather than pushed — they are at the bottom
+-- of the file, they change nothing when omitted, and nothing ever
+-- notices. Which is why the drift check compares them, and why the two
+-- tiers are drawn where they are: a comment *inside* a function body is
+-- cosmetic and ignored, because it survives or not with the body it sits
+-- in, but a `COMMENT ON` is a schema object in its own right and its
+-- absence is a real difference.
+--
+-- No-op on a stack built from these files, where `0007` already set it.
+
+comment on column public.einvoice_documents.cancel_deadline is
+  'LHDN permits supplier cancellation only within 72 hours of validation.';

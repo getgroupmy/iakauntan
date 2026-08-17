@@ -147,7 +147,7 @@ not do it — that path is ignored and starts no run at all.
 
 ### What the first reconciliation found
 
-Six findings, closed by `0174`–`0179`. Worth reading as a set, because
+Seven findings, closed by `0174`–`0180`. Worth reading as a set, because
 the moral is not the one the first few suggest.
 
 | | Finding | Which side was stale |
@@ -158,6 +158,7 @@ the moral is not the one the first few suggest.
 | `0177` | `import_opening_balances` left two subqueries unaliased against its own `returns table` columns | repository |
 | `0178` | `transfer_document` wrapped a subquery in `coalesce(x, null)` | repository |
 | `0179` | a function comment present only on the project; a column comment truncated mid-sentence on the project | **one each way** |
+| `0180` | `einvoice_documents.cancel_deadline` had no comment on the project | project |
 
 Five in a row resolving in production's favour looked like a rule, and
 it is not one. It was a pattern with a single cause — changes applied to
@@ -168,6 +169,23 @@ runs the other way: `0145`'s comment on
 two on the project, the hosted text being an exact prefix of the file's.
 `git log` shows `0145` was never edited, so the two diverged the day it
 was applied.
+
+**`0180` is the one that justifies the check.** `0174`–`0179` all closed
+findings that had already been spotted by reading. `0180` is the first
+the check found on its own — a `comment on column` in `0007` that never
+reached the project, on a column whose name carries none of the rule it
+states. On the run that found it: 166 statements differed cosmetically
+and four differed in code, the four being three distinct comment
+findings. Nothing else in the entire schema differed.
+
+Note what that says about the tiers. A comment *inside* a function body
+is cosmetic and ignored — it lives or dies with the body it sits in. A
+`COMMENT ON` is a schema object in its own right, and its absence is a
+real difference. All three non-function findings were of the second
+kind, which is not a coincidence: comments are the first thing lost when
+a migration is pasted into a console instead of pushed. They sit at the
+bottom of the file, they change nothing when omitted, and until this
+check existed nothing ever noticed.
 
 `0174` is the one to remember. A view without `security_invoker` runs as
 its owner, so every RLS policy underneath it is skipped — a second
