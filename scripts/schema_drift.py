@@ -106,6 +106,14 @@ _IGNORED = re.compile(
       | REVOKE\s
       | COMMENT\s+ON\s+EXTENSION\s
       | CREATE\s+EXTENSION\s
+      # Supabase's own automatic row-level-security toggle, created by
+      # the platform rather than by any migration here. Reproducing it
+      # would mean maintaining a fork of somebody else's function
+      # forever; the repository has its own `ensure_rls` for the same
+      # job. Matched on the name so a *different* function is still
+      # compared.
+      | CREATE\s+OR\s+REPLACE\s+FUNCTION\s+"?public"?\."?rls_auto_enable"?
+      | COMMENT\s+ON\s+FUNCTION\s+"?public"?\."?rls_auto_enable"?
     )""",
     re.IGNORECASE | re.VERBOSE,
 )
