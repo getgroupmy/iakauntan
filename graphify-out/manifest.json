@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786942462.3827493,
-    "ast_hash": "1117a171aecc6758e259682bac156237",
+    "mtime": 1786948692.3555079,
+    "ast_hash": "0ca4f9698ac9187204ebcfe0e8ceb22a",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -2635,8 +2635,8 @@
     "semantic_hash": ""
   },
   "docs/migrations.md": {
-    "mtime": 1786789862.6022704,
-    "ast_hash": "637b23eff9043f14858bba39f6a4c7a5",
+    "mtime": 1786947581.3773904,
+    "ast_hash": "54397c84fcfa3412bb921d85efbc3ed4",
     "semantic_hash": ""
   },
   "app/lib/src/features/assets/asset_schedule_dialog.dart": {
@@ -2922,6 +2922,46 @@
   "docs/mbrs.md": {
     "mtime": 1786942505.3827028,
     "ast_hash": "d4c1e261339b7de583f08a85f8fa4695",
+    "semantic_hash": ""
+  },
+  "scripts/schema_drift.py": {
+    "mtime": 1786948866.2783792,
+    "ast_hash": "9038fabca33ab4cb0cb683f4d199994f",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0173_depreciation_is_not_hand_written.sql": {
+    "mtime": 1786943482.3931468,
+    "ast_hash": "c7defe4432795589e997a92f864cdc88",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0174_a_view_reads_as_the_caller.sql": {
+    "mtime": 1786948649.5454538,
+    "ast_hash": "4327c768d78ba36c1bbefba9962b4e19",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0175_write_down_what_production_already_does.sql": {
+    "mtime": 1786948854.5654662,
+    "ast_hash": "04025ca4b5fa4d5766bc25676ee384d4",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0176_create_organization_drops_a_dead_update.sql": {
+    "mtime": 1786950170.6775444,
+    "ast_hash": "9a8cb4e6f3abcdba7fbc4bf4ed103e56",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0177_import_opening_balances_aliases_two_more.sql": {
+    "mtime": 1786950178.34862,
+    "ast_hash": "a4eec8974438aca4a9d6cf465e14aae0",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0178_transfer_document_drops_a_no_op_coalesce.sql": {
+    "mtime": 1786950164.9815176,
+    "ast_hash": "15e8e52e28f01a9b569f16abb6d75670",
+    "semantic_hash": ""
+  },
+  "supabase/tests/view_security.sql": {
+    "mtime": 1786948668.573455,
+    "ast_hash": "27f81031aae2c51cbfa72418f757669c",
     "semantic_hash": ""
   }
 }
