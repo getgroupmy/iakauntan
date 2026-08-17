@@ -287,6 +287,30 @@ begin
            -- `supabase/tests/document_share.sql` asserts both absences.
            'open_shared_document')));
 
+  -- The other half of that allowlist, and it is not decoration.
+  --
+  -- `0165` added an event trigger that strips PUBLIC and anon from every
+  -- new function in `public` and `app`, because Postgres grants the
+  -- first and Supabase's default privileges grant the second, and
+  -- sixteen functions went in relying on neither being true. The trigger
+  -- fires on `create or replace` as well as on `create` — so re-issuing
+  -- any of these three without re-granting anon afterwards would take
+  -- the share and signing links offline. The check above cannot see
+  -- that: it asks what is exposed, and losing an exposure passes it.
+  --
+  -- So assert the exposure. A share link that has silently stopped
+  -- working is found by a customer, not by us.
+  perform pg_temp.check_eq('and the three that need anon still have it',
+    (select count(*)
+       from pg_proc p
+       join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.prosecdef
+        and has_function_privilege('anon', p.oid, 'execute')
+        and p.proname in ('corp_open_signing_link', 'corp_sign_with_link',
+                          'open_shared_document')),
+    3);
+
   perform pg_temp.check_true('and the link tables stay shut to anon',
     not exists (
       select 1 from information_schema.role_table_grants
