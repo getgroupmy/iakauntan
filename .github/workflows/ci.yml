@@ -157,6 +157,112 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_embeds.py "$DB"
 
+      # -----------------------------------------------------------------
+      # And does the hosted project match the migrations that built it?
+      #
+      # Everything above proves the *files* are good: the stack was built
+      # from them a few steps ago and the whole suite ran against it.
+      # None of it says the hosted project looks like that stack.
+      #
+      # The two part company when a migration is applied by hand. It
+      # records itself as applied, `db push` skips it forever after, and
+      # what the console actually ran is what production has — while the
+      # file is what everyone reads. 0159 to 0173 were applied that way.
+      #
+      # Checked here rather than in a job of its own because this is the
+      # only place a stack built from the migrations already exists, and
+      # `supabase start` has already pulled the Postgres image the dump
+      # needs.
+      # -----------------------------------------------------------------
+      - name: Is the hosted project level with this commit?
+        id: level
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF || vars.SUPABASE_PROJECT_REF || 'ewwcgtnniwqndrzukksm' }}
+        run: |
+          set -uo pipefail
+          if [ -z "${SUPABASE_DB_PASSWORD:-}" ] || [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Drift was not checked: no credentials." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          supabase link --project-ref "$SUPABASE_PROJECT_REF"
+          supabase migration list --linked | tee /tmp/level.txt
+
+          # The gate that stops this crying wolf. This job runs *before*
+          # `migrate`, so on any commit that adds a migration the hosted
+          # project is legitimately one behind and every object that
+          # migration creates would read as drift — going red on exactly
+          # the commits that matter most. A schema behind by a known
+          # migration is not drift; it is a queue. Compare only when
+          # there is nothing in it.
+          pending="$(sed 's/│/|/g' /tmp/level.txt \
+                     | awk -F'|' 'NF>=3 && $1 ~ /[0-9]/ && $2 !~ /[0-9]/ {print $1}' \
+                     | tr -d ' ' | tr '\n' ' ')"
+          if [ -n "$pending" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Schema drift"
+              echo
+              echo "Not compared — the hosted project is behind this commit"
+              echo "(pending: \`$pending\`). It is compared on the next run,"
+              echo "once those are applied."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Dump both schemas
+        if: steps.level.outputs.ready == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          supabase db dump --local -f /tmp/schema-local.sql
+          supabase db dump --linked -f /tmp/schema-hosted.sql
+          wc -l /tmp/schema-local.sql /tmp/schema-hosted.sql
+
+      - name: Compare them
+        if: steps.level.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          # The normaliser's own control, before it is trusted to say
+          # two schemas agree. A filter this aggressive can drop
+          # everything and report a clean comparison, which looks exactly
+          # like agreement.
+          python3 scripts/schema_drift.py --self-test
+
+          set +e
+          python3 scripts/schema_drift.py \
+            /tmp/schema-local.sql /tmp/schema-hosted.sql | tee /tmp/drift.txt
+          status=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "### Schema drift"
+            echo
+            echo '```'
+            cat /tmp/drift.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      # Both dumps, whatever the verdict — when they differ these are
+      # what the reconciling migration gets written from, and a failure
+      # that hands you nothing to work with is half a failure.
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.level.outputs.ready == 'true'
+        with:
+          name: schema-drift-${{ github.sha }}
+          path: |
+            /tmp/schema-local.sql
+            /tmp/schema-hosted.sql
+            /tmp/drift.txt
+          retention-days: 30
+          if-no-files-found: warn
+
       # Tearing down a container that is about to be deleted anyway, so
       # this must never be what fails a run. When the CLI itself failed
       # to install, this step used to exit 127 with `supabase: command

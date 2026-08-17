@@ -90,6 +90,49 @@ loudly, because a green run that applied nothing looks exactly like a
 green run that applied everything. That is the same reasoning the
 Vercel and edge-function jobs already use.
 
+## The drift check
+
+Applying the pending ones is not the same as the hosted project matching
+the files. A migration applied by hand records itself as applied, and
+`db push` skips it from then on — so whatever the console ran is what
+production has, permanently, while the file is what everyone reads.
+0159–0173 were applied that way.
+
+So the `database` job dumps both schemas and compares them with
+`scripts/schema_drift.py`. It runs there rather than in a job of its own
+because that is the only place a stack built from the migrations already
+exists.
+
+**It only compares when the hosted project is level.** The `database`
+job runs *before* `Apply the migrations`, so on any commit adding a
+migration the hosted schema is legitimately one behind, and every object
+that migration creates would read as drift — going red on exactly the
+commits that matter most. A schema behind by a known migration is a
+queue, not drift.
+
+### Cosmetic against behavioural
+
+The comparison has two tiers, and the reason is measured rather than
+assumed. When it was first written, all 47 functions defined by
+0159–0173 were compared against the hosted project: **35 differed
+textually and none differed in behaviour.** Pasting a migration into a
+console drops its explanatory comments, and SQL's adjacent-literal
+continuation means the same string can be written two ways.
+
+So every statement is matched on its *code* — comments removed, string
+continuation resolved, whitespace discarded. A difference there is drift
+and fails the build. A difference in text alone is counted and reported,
+because a check that fails on a missing comment is a check somebody
+switches off within a fortnight. A rising cosmetic count is still worth
+looking at: it means more is being applied by hand.
+
+`GRANT` and `REVOKE` are excluded, which costs something and is the one
+exclusion worth defending: hosted Supabase projects carry default
+privileges that a migrations-only stack does not, so grants differ on
+essentially every object. The property that matters — every policy
+having the privilege it needs to run — is asserted directly by
+`supabase/tests/table_grants.sql`, which is what caught `0168`.
+
 ## Adding a migration
 
 1. `supabase/migrations/0151_what_it_does.sql`. The number is the next
