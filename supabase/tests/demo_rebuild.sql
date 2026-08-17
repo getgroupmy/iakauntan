@@ -99,6 +99,41 @@ begin
                  where t.org_id = v_sinar and t.is_default and t.rate > 0));
 
   -- --------------------------------------------------------------
+  -- The books balance, and carry the tax they should
+  --
+  -- A demo whose trial balance does not sum to zero is worse than an
+  -- empty one: every report is wrong and nobody can tell which. And an
+  -- SST-registered company with no output tax is an invoice that
+  -- understates what was charged — the first draft of the seed produced
+  -- exactly that, because `tax_rate` is stored on the line and naming
+  -- the code alone is not enough.
+  -- --------------------------------------------------------------
+  perform pg_temp.check_eq('Sinar''s trial balance is zero',
+    (select coalesce(sum(l.debit - l.credit), 0)
+       from public.gl_lines l join public.gl_entries e on e.id = l.entry_id
+      where e.org_id = v_sinar and e.status = 'posted'), 0);
+
+  perform pg_temp.check_true(
+    'and it posted output SST, being registered',
+    (select coalesce(sum(l.credit - l.debit), 0)
+       from public.gl_lines l join public.gl_entries e on e.id = l.entry_id
+       join public.accounts a on a.id = l.account_id
+      where e.org_id = v_sinar and e.status = 'posted' and a.code = '2130') > 0);
+
+  perform pg_temp.check_true(
+    'receivables equal revenue plus that tax, which is the identity a '
+    'missing tax_rate silently breaks',
+    (select coalesce(sum(l.debit - l.credit), 0) from public.gl_lines l
+       join public.gl_entries e on e.id = l.entry_id
+       join public.accounts a on a.id = l.account_id
+      where e.org_id = v_sinar and e.status = 'posted' and a.code = '1210')
+    = (select coalesce(sum(l.credit - l.debit), 0) from public.gl_lines l
+         join public.gl_entries e on e.id = l.entry_id
+         join public.accounts a on a.id = l.account_id
+        where e.org_id = v_sinar and e.status = 'posted'
+          and a.code in ('4100', '2130')));
+
+  -- --------------------------------------------------------------
   -- Every module in the catalogue has somewhere to be seen
   -- --------------------------------------------------------------
   select count(*) into v_modules
