@@ -98,6 +98,7 @@ jobs:
                    supabase/tests/tenant_foreign_keys.sql \
                    supabase/tests/property.sql \
                    supabase/tests/timesheets.sql \
+                   supabase/tests/collections.sql \
                    supabase/tests/credit_control.sql \
                    supabase/tests/stock_adjustments.sql \
                    supabase/tests/stock_card.sql \

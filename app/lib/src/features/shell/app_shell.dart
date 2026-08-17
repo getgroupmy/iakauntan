@@ -172,6 +172,14 @@ const _destinations = <_Dest>[
     module: 'inventory',
   ),
   _Dest('Chat', Icons.forum_outlined, Icons.forum, '/chat', module: 'chat'),
+  // No module gate. Chasing an unpaid invoice is what the sales ledger
+  // is for when a customer does not pay, and sales is core.
+  _Dest(
+    'Collections',
+    Icons.phone_forwarded_outlined,
+    Icons.phone_forwarded,
+    '/collections',
+  ),
   // Legal firms already record time; everyone else who sells hours now
   // can too, which is why this answers to either module.
   _Dest(

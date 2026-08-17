@@ -1496,3 +1496,21 @@ final billingRatesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
       return requireRepo(ref).billingRates();
     });
+
+// ---------------------------------------------------------------------
+// Debt collection
+// ---------------------------------------------------------------------
+
+/// Who owes what, and where the chasing got to. Already ordered by the
+/// database — broken promises, then never chased, then oldest — so the
+/// screen does not re-sort it and cannot disagree with the report.
+final collectionsWorklistProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).collectionsWorklist();
+    });
+
+/// Everything ever said to one customer, newest first.
+final collectionHistoryProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, contactId) {
+      return requireRepo(ref).collectionHistory(contactId);
+    });

@@ -5519,3 +5519,54 @@ extension RepoTimesheets on Repo {
     ),
   );
 }
+
+/// Chasing overdue invoices, and remembering that you did.
+///
+/// `report_collections` reads through `report_ar_aging` rather than
+/// counting `sales_documents` a second time, so what this screen shows
+/// as owed is the same figure the aged receivables show. Two definitions
+/// of "outstanding" eventually disagree, and the collections screen is
+/// the worst place to find that out.
+extension RepoCollections on Repo {
+  Future<List<Map<String, dynamic>>> collectionsWorklist({
+    DateTime? asAt,
+  }) async => Repo._rows(
+    await client.rpc(
+      'report_collections',
+      params: {'p_org_id': orgId, 'p_as_at': Fmt.iso(asAt ?? DateTime.now())},
+    ),
+  );
+
+  Future<List<Map<String, dynamic>>> collectionHistory(
+    String contactId,
+  ) async => Repo._rows(
+    await client.rpc('collection_history', params: {'p_contact_id': contactId}),
+  );
+
+  /// The rate is not the only thing the database fills in: `created_by`
+  /// and `attempted_on` have defaults, so recording a call is the three
+  /// fields somebody actually knows.
+  Future<void> logCollectionAttempt({
+    required String contactId,
+    required String channel,
+    required String outcome,
+    String? documentId,
+    DateTime? attemptedOn,
+    DateTime? promiseDate,
+    num? promiseAmount,
+    String? assignedTo,
+    String? notes,
+  }) => client.from('collection_attempts').insert({
+    'org_id': orgId,
+    'contact_id': contactId,
+    'channel': channel,
+    'outcome': outcome,
+    if (documentId != null) 'document_id': documentId,
+    if (attemptedOn != null) 'attempted_on': Fmt.iso(attemptedOn),
+    if (promiseDate != null) 'promise_date': Fmt.iso(promiseDate),
+    if (promiseAmount != null) 'promise_amount': promiseAmount,
+    if (assignedTo != null) 'assigned_to': assignedTo,
+    if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    'created_by': client.auth.currentUser?.id,
+  });
+}

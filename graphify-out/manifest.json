@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786937168.9920115,
-    "ast_hash": "5bd5715ccf55185dc436a16e5a160a2f",
+    "mtime": 1786939004.1784947,
+    "ast_hash": "763cec188f671f7d72df54f2e11b1e9a",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786937055.1441832,
-    "ast_hash": "965bdd500dc13056c520f35502a7234d",
+    "mtime": 1786939067.4153686,
+    "ast_hash": "c4b90ab8e82ec3c513b5eec0e8bfdbe5",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786937168.8640115,
-    "ast_hash": "c1373d14fd5836c0cefd66b8bd26ecce",
+    "mtime": 1786939130.8905022,
+    "ast_hash": "6dc06664c17c77a655e5ac49d0b361e7",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1786937055.144471,
-    "ast_hash": "177196c8ae4277f1a7ce0e0b269b8b67",
+    "mtime": 1786939067.416046,
+    "ast_hash": "d8b1d4c4a85268f72ff33d0acdb75972",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -740,8 +740,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory.sql": {
-    "mtime": 1786530768.552908,
-    "ast_hash": "414de014d4b42c8375c1f681c83f7f7f",
+    "mtime": 1786937720.2920444,
+    "ast_hash": "5a770ba717f6328289dd9ec321bc011a",
     "semantic_hash": ""
   },
   ".claude/CLAUDE.md": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786937055.1447911,
-    "ast_hash": "c8accf40384d7eb6f40098b6e4a19389",
+    "mtime": 1786939067.4165077,
+    "ast_hash": "5ce30ff86dcd8f624abfad36600daef0",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -2797,6 +2797,41 @@
   "docs/timesheets.md": {
     "mtime": 1786937292.044019,
     "ast_hash": "5b241a58c853551782bb314ee38e6218",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/collections/collections_screen.dart": {
+    "mtime": 1786939130.2065022,
+    "ast_hash": "f84148ec90168eb16f8d07c3001ae263",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/collections/log_attempt_sheet.dart": {
+    "mtime": 1786939130.3145022,
+    "ast_hash": "967ab63a8fbf104209445d2ea77aeb05",
+    "semantic_hash": ""
+  },
+  "app/test/collections_test.dart": {
+    "mtime": 1786939131.0985022,
+    "ast_hash": "2feb78668d61ae8ac17b499eff6f9dde",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0165_new_functions_are_not_public.sql": {
+    "mtime": 1786937706.3711874,
+    "ast_hash": "75c2044627f7e08e250e1fa916faaed5",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0166_debt_collection.sql": {
+    "mtime": 1786938949.9322505,
+    "ast_hash": "db2ea7770cf464eb0dae1ea53fecd5f2",
+    "semantic_hash": ""
+  },
+  "supabase/tests/collections.sql": {
+    "mtime": 1786938871.3664868,
+    "ast_hash": "d38ae3cafd14020a7217797d12643234",
+    "semantic_hash": ""
+  },
+  "docs/collections.md": {
+    "mtime": 1786939238.0945086,
+    "ast_hash": "b1ad1325d1f716aeac2d19c7c3bdebc5",
     "semantic_hash": ""
   }
 }
