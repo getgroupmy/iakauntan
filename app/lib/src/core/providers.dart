@@ -1460,3 +1460,39 @@ final propertyStatutoryChargesProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, siteId) {
       return requireRepo(ref).propertyStatutoryCharges(siteId);
     });
+
+// ---------------------------------------------------------------------
+// Timesheets
+// ---------------------------------------------------------------------
+
+/// A person's own week, which is what the screen opens on. Everyone
+/// else's is a report, not a list to scroll.
+final myTimeEntriesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({DateTime from, DateTime to})>((
+      ref,
+      period,
+    ) {
+      return requireRepo(
+        ref,
+      ).timeLog(from: period.from, to: period.to, mine: true);
+    });
+
+/// What has been recorded against a project and not yet invoiced — the
+/// list the person about to press "bill" is looking at.
+final unbilledTimeProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, projectId) {
+      return requireRepo(ref).timeLog(projectId: projectId, unbilledOnly: true);
+    });
+
+final timesheetReportProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({DateTime from, DateTime to})>((
+      ref,
+      period,
+    ) {
+      return requireRepo(ref).timesheetReport(period.from, period.to);
+    });
+
+final billingRatesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).billingRates();
+    });

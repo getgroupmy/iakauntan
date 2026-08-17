@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786935775.6959288,
-    "ast_hash": "ce1fcbd504cbf9888b200180ceef0b86",
+    "mtime": 1786937168.9920115,
+    "ast_hash": "5bd5715ccf55185dc436a16e5a160a2f",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786935909.7216418,
-    "ast_hash": "75c89d9b47f6405fce8bbf55feba87eb",
+    "mtime": 1786937055.1441832,
+    "ast_hash": "965bdd500dc13056c520f35502a7234d",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786936355.3399632,
-    "ast_hash": "7d8421c502895a56c8aeb3830a7c66c0",
+    "mtime": 1786937168.8640115,
+    "ast_hash": "c1373d14fd5836c0cefd66b8bd26ecce",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1786935924.958066,
-    "ast_hash": "11f1c1308e7f0c3d0f0fae2b1690da8d",
+    "mtime": 1786937055.144471,
+    "ast_hash": "177196c8ae4277f1a7ce0e0b269b8b67",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1786936109.6189728,
-    "ast_hash": "b3ac4675537b1fe389cae0f6f8e2aefc",
+    "mtime": 1786937055.1447911,
+    "ast_hash": "c8accf40384d7eb6f40098b6e4a19389",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -2772,6 +2772,31 @@
   "docs/property.md": {
     "mtime": 1786936347.4199626,
     "ast_hash": "713147bf686d0c5901ec1c6908c079a3",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/timesheets/timesheet_screen.dart": {
+    "mtime": 1786937168.3800116,
+    "ast_hash": "9595969f9c8440ec3385f000f7174189",
+    "semantic_hash": ""
+  },
+  "app/test/timesheet_test.dart": {
+    "mtime": 1786937161.476011,
+    "ast_hash": "65bb535266384bb01a2a1c1568ad97e0",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0164_timesheets.sql": {
+    "mtime": 1786936787.447989,
+    "ast_hash": "758b0946978ffb7d0342e63e88456539",
+    "semantic_hash": ""
+  },
+  "supabase/tests/timesheets.sql": {
+    "mtime": 1786936942.965101,
+    "ast_hash": "04c88f804b1dd752f3a5afb6705f1051",
+    "semantic_hash": ""
+  },
+  "docs/timesheets.md": {
+    "mtime": 1786937292.044019,
+    "ast_hash": "5b241a58c853551782bb314ee38e6218",
     "semantic_hash": ""
   }
 }

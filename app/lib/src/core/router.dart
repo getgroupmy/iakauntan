@@ -27,6 +27,7 @@ import '../features/items/items_screen.dart';
 import '../features/legal/matter_detail_screen.dart';
 import '../features/legal/matters_screen.dart';
 import '../features/manufacturing/manufacturing_screen.dart';
+import '../features/timesheets/timesheet_screen.dart';
 import '../features/property/property_screen.dart';
 import '../features/property/site_screen.dart';
 import '../features/manufacturing/order_screen.dart';
@@ -288,6 +289,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const StockTakeScreen(),
           ),
           GoRoute(path: '/chat', builder: (_, __) => const ChatScreen()),
+          GoRoute(
+            path: '/timesheets',
+            builder: (_, __) => const TimesheetScreen(),
+          ),
           GoRoute(
             path: '/property',
             builder: (_, __) => const PropertyScreen(),

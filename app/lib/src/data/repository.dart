@@ -5411,3 +5411,111 @@ extension RepoProperty on Repo {
     }
   }
 }
+
+/// Timesheets: hours in, invoice out.
+///
+/// The billing step is the one that did not exist. `is_billed` and
+/// `invoice_id` had been on `time_entries` since the legal module
+/// shipped with nothing in the database ever setting them, so recorded
+/// time could not become money. `bill_project_time` and
+/// `bill_matter_time` are that path, and both refuse to bill the same
+/// hour twice.
+extension RepoTimesheets on Repo {
+  /// [mine] is the ordinary case — somebody filling in their own week.
+  Future<List<Map<String, dynamic>>> timeLog({
+    DateTime? from,
+    DateTime? to,
+    String? projectId,
+    bool mine = false,
+    bool unbilledOnly = false,
+  }) async {
+    var q = client
+        .from('time_entries')
+        .select(
+          '*, projects!time_entries_project_id_fkey(code, name), '
+          'matters!time_entries_matter_id_fkey(matter_no, name)',
+        )
+        .eq('org_id', orgId);
+    if (from != null) q = q.gte('entry_date', Fmt.iso(from));
+    if (to != null) q = q.lte('entry_date', Fmt.iso(to));
+    if (projectId != null) q = q.eq('project_id', projectId);
+    if (mine) q = q.eq('user_id', client.auth.currentUser!.id);
+    if (unbilledOnly) q = q.eq('is_billed', false).eq('is_billable', true);
+    return Repo._rows(await q.order('entry_date', ascending: false));
+  }
+
+  /// The rate is left out on purpose: a trigger resolves it from the
+  /// billing rates, so somebody logging two hours does not have to know
+  /// what they are charged out at.
+  Future<void> saveTimeEntry(Map<String, dynamic> values, {String? id}) async {
+    if (id == null) {
+      await client.from('time_entries').insert({
+        ...values,
+        'org_id': orgId,
+        'user_id': values['user_id'] ?? client.auth.currentUser!.id,
+      });
+    } else {
+      await client
+          .from('time_entries')
+          .update(values)
+          .eq('id', id)
+          .eq('org_id', orgId);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> billingRates() async => Repo._rows(
+    await client
+        .from('billing_rates')
+        .select('*, projects!billing_rates_project_id_fkey(code, name)')
+        .eq('org_id', orgId)
+        .order('effective_from', ascending: false),
+  );
+
+  Future<void> addBillingRate(Map<String, dynamic> values) =>
+      client.from('billing_rates').insert({...values, 'org_id': orgId});
+
+  Future<String> billProjectTime(
+    String projectId,
+    DateTime from,
+    DateTime to, {
+    DateTime? dueDate,
+  }) async =>
+      await client.rpc(
+            'bill_project_time',
+            params: {
+              'p_project_id': projectId,
+              'p_from': Fmt.iso(from),
+              'p_to': Fmt.iso(to),
+              'p_due': dueDate == null ? null : Fmt.iso(dueDate),
+            },
+          )
+          as String;
+
+  Future<String> billMatterTime(
+    String matterId,
+    DateTime from,
+    DateTime to, {
+    DateTime? dueDate,
+  }) async =>
+      await client.rpc(
+            'bill_matter_time',
+            params: {
+              'p_matter_id': matterId,
+              'p_from': Fmt.iso(from),
+              'p_to': Fmt.iso(to),
+              'p_due': dueDate == null ? null : Fmt.iso(dueDate),
+            },
+          )
+          as String;
+
+  /// Hours by person, billable against not, and what is still unbilled.
+  Future<List<Map<String, dynamic>>> timesheetReport(
+    DateTime from,
+    DateTime to,
+  ) async => Repo._rows(
+    await client.rpc(
+      'report_timesheet',
+      params: {'p_org_id': orgId, 'p_from': Fmt.iso(from), 'p_to': Fmt.iso(to)},
+    ),
+  );
+}

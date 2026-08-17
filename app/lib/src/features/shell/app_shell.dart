@@ -172,6 +172,16 @@ const _destinations = <_Dest>[
     module: 'inventory',
   ),
   _Dest('Chat', Icons.forum_outlined, Icons.forum, '/chat', module: 'chat'),
+  // Legal firms already record time; everyone else who sells hours now
+  // can too, which is why this answers to either module.
+  _Dest(
+    'Timesheets',
+    Icons.schedule_outlined,
+    Icons.schedule,
+    '/timesheets',
+    module: 'timesheets',
+    altModule: 'legal',
+  ),
   // Two modules, one destination. Which half of it a site belongs to is
   // a fact about the site, not a choice in the navigation, and an agent
   // holding both has one portfolio rather than two lists.
