@@ -118,8 +118,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         // other people's companies, and the console is their home. They
         // may still reach /onboarding deliberately if they want books of
         // their own — it just is not forced on them.
+        //
+        // And /settings, which is not about a company at all below the
+        // company cards: it is where Change password and Sign out live,
+        // and the avatar menu offers it on every screen including this
+        // one. Left out of this list it was a dead link — the tap
+        // navigated and the redirect put them straight back, which
+        // looks identical to nothing happening.
         if (admin.value ?? false) {
-          return path.startsWith('/admin') || path == '/onboarding'
+          return path.startsWith('/admin') ||
+                  path == '/onboarding' ||
+                  path == '/settings'
               ? null
               : '/admin';
         }
