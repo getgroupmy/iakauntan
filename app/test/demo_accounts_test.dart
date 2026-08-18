@@ -34,11 +34,11 @@ void main() {
       // move together — and the seed goes first. `property@` was added
       // to both in the same change that built the property tenant.
       expect(demoAccounts.map((a) => a.email).toList(), [
-        'demo@iakauntan.my',
-        'clerk@iakauntan.my',
-        'auditor@iakauntan.my',
-        'secretary@iakauntan.my',
-        'property@iakauntan.my',
+        'demo@iakauntan.com',
+        'clerk@iakauntan.com',
+        'auditor@iakauntan.com',
+        'secretary@iakauntan.com',
+        'property@iakauntan.com',
       ]);
     });
 
@@ -46,7 +46,7 @@ void main() {
       // It is the one account that is not scoped to the demo company:
       // the console lists every tenant on the deployment, including any
       // real one. A visitor should not be handed that.
-      expect(demoAccounts.map((a) => a.email), isNot(contains('superadmin@iakauntan.my')));
+      expect(demoAccounts.map((a) => a.email), isNot(contains('superadmin@iakauntan.com')));
       expect(demoAccounts.map((a) => a.role), isNot(contains('Platform operator')));
     });
 
@@ -62,7 +62,7 @@ void main() {
       // A stray real address here would sign a visitor into somebody's
       // books with a password printed in the bundle.
       for (final a in demoAccounts) {
-        expect(a.email, endsWith('@iakauntan.my'), reason: a.role);
+        expect(a.email, endsWith('@iakauntan.com'), reason: a.role);
       }
     });
   });
@@ -83,7 +83,7 @@ void main() {
       await tester.tap(find.text('Auditor'));
       await tester.pump();
 
-      expect(picked?.email, 'auditor@iakauntan.my');
+      expect(picked?.email, 'auditor@iakauntan.com');
     });
 
     testWidgets('says the demo company is shared, before anyone changes it',
@@ -98,7 +98,7 @@ void main() {
         tester,
         DemoAccountPicker(
           onPick: (_) => taps++,
-          busyEmail: 'demo@iakauntan.my',
+          busyEmail: 'demo@iakauntan.com',
         ),
         settle: false,
       );
@@ -143,10 +143,10 @@ void main() {
       bool blocked(String typed) => demoAccounts
           .any((a) => a.email.toLowerCase() == typed.toLowerCase());
 
-      expect(blocked('demo@iakauntan.my'), isTrue);
+      expect(blocked('demo@iakauntan.com'), isTrue);
       expect(blocked('DEMO@IAkauntan.MY'), isTrue,
           reason: 'an address is not case sensitive, so neither is the guard');
-      expect(blocked('  demo@iakauntan.my'.trim()), isTrue);
+      expect(blocked('  demo@iakauntan.com'.trim()), isTrue);
       expect(blocked('someone@example.com'), isFalse,
           reason: 'a real user must still be able to reset their password');
     });

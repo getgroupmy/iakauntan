@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786940929.074609,
-    "ast_hash": "74aa60291337199a21b6a07dcba2266c",
+    "mtime": 1787061418.2178695,
+    "ast_hash": "41d09f881b394c32ed6dc612ad6a5209",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -1125,13 +1125,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/demo_accounts.dart": {
-    "mtime": 1786983736.5630682,
-    "ast_hash": "9a0c40a5d3498469a9916423441c6c1c",
+    "mtime": 1787061404.6289957,
+    "ast_hash": "3ec38ecbbd6ecff8a9da58041067c090",
     "semantic_hash": ""
   },
   "app/test/demo_accounts_test.dart": {
-    "mtime": 1786984475.4070358,
-    "ast_hash": "d0d32157a08b6c01b6c07f1e740268b2",
+    "mtime": 1787061404.6296237,
+    "ast_hash": "81c88e6bca150039d5305a6647df122a",
     "semantic_hash": ""
   },
   "supabase/migrations/0076_lock_demo_credentials.sql": {
@@ -3097,6 +3097,11 @@
   "app/test/settings_no_org_test.dart": {
     "mtime": 1787048670.0736015,
     "ast_hash": "05b1afa53a306a99e4980be8ac733286",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0196_the_demo_logins_move_to_dot_com.sql": {
+    "mtime": 1787061347.6316493,
+    "ast_hash": "851b89e3ce4379b1cc372142494c6a6e",
     "semantic_hash": ""
   }
 }

@@ -1229,16 +1229,16 @@ All five logins share the password `Demo!Akaun2026`:
 
 | Login | Sees |
 | --- | --- |
-| `demo@iakauntan.my` | Owner — the whole company |
-| `clerk@iakauntan.my` | Accounts Clerk — can prepare, cannot post |
-| `auditor@iakauntan.my` | Auditor — reads the ledger, writes nothing |
-| `secretary@iakauntan.my` | Company secretary — a practice and its clients |
+| `demo@iakauntan.com` | Owner — the whole company |
+| `clerk@iakauntan.com` | Accounts Clerk — can prepare, cannot post |
+| `auditor@iakauntan.com` | Auditor — reads the ledger, writes nothing |
+| `secretary@iakauntan.com` | Company secretary — a practice and its clients |
 
 **None of that needs typing.** The sign-in page lists those four accounts
 under *or look around a demo*, each described by what it will show rather
 than by the name of its role, and a tap signs straight in.
 
-**`superadmin@iakauntan.my` is deliberately not among them.** Every other
+**`superadmin@iakauntan.com` is deliberately not among them.** Every other
 demo login is scoped to a demo company, so the worst a visitor can do is
 scribble on invented books. The platform operator console is scoped to
 nothing — it lists every tenant on the deployment and can change their
@@ -1249,7 +1249,7 @@ signs in if somebody types the password above, which this file publishes.
 **Rotate it.** `0077` has already taken the credential lock off that one
 account, which is what makes the password changeable — so the only step
 left is setting a new one, in **Supabase → Authentication → Users →
-superadmin@iakauntan.my → Reset password**.
+superadmin@iakauntan.com → Reset password**.
 
 Until that is done the account is at its least protected: the published
 password works *and* can now be changed by anybody who uses it. That is
@@ -1291,7 +1291,7 @@ needs the service role:
 
 ```sql
 update auth.users set raw_app_meta_data = raw_app_meta_data - 'demo'
- where email = 'demo@iakauntan.my';
+ where email = 'demo@iakauntan.com';
 ```
 
 ### Printing what a customer or an employee receives
@@ -1388,7 +1388,7 @@ Two things the layouts get right on purpose:
 
 ### The secretarial practice
 
-`secretary@iakauntan.my` owns a second organization, **Amanah Setiausaha
+`secretary@iakauntan.com` owns a second organization, **Amanah Setiausaha
 Sdn Bhd**, with the secretarial add-on enabled — a separate company
 rather than a role inside Sinar Teknologi, because the module is about
 managing *other people's* companies. Nurul Aina is the named s.236

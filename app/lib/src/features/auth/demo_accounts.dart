@@ -53,38 +53,38 @@ class DemoAccount {
 /// the one most people want.
 const demoAccounts = <DemoAccount>[
   DemoAccount(
-    email: 'demo@iakauntan.my',
+    email: 'demo@iakauntan.com',
     role: 'Owner',
     sees: 'The whole company — books, payroll, everything',
     icon: Icons.workspace_premium_outlined,
   ),
   DemoAccount(
-    email: 'clerk@iakauntan.my',
+    email: 'clerk@iakauntan.com',
     role: 'Accounts clerk',
     sees: 'Can prepare documents, cannot post to the ledger',
     icon: Icons.edit_note_outlined,
   ),
   DemoAccount(
-    email: 'auditor@iakauntan.my',
+    email: 'auditor@iakauntan.com',
     role: 'Auditor',
     sees: 'Reads the ledger, writes nothing',
     icon: Icons.fact_check_outlined,
   ),
   DemoAccount(
-    email: 'secretary@iakauntan.my',
+    email: 'secretary@iakauntan.com',
     role: 'Company secretary',
     sees: 'A practice and the client companies it files for',
     icon: Icons.domain_outlined,
   ),
   DemoAccount(
-    email: 'property@iakauntan.my',
+    email: 'property@iakauntan.com',
     role: 'Property manager',
     sees: 'A strata scheme and a commercial block, with their charges',
     icon: Icons.apartment_outlined,
   ),
 ];
 
-/// Not offered: `superadmin@iakauntan.my`, the platform operator.
+/// Not offered: `superadmin@iakauntan.com`, the platform operator.
 ///
 /// Every other account here is scoped to a demo company, so the worst a
 /// visitor can do is scribble on invented books. The operator console is
