@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787038103.2060158,
-    "ast_hash": "5fd5fda188ee95d11266f22ebd812fa2",
+    "mtime": 1787069264.5290833,
+    "ast_hash": "f9fefe1601dd93f8955b7b1c4f6d9c89",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -3112,6 +3112,26 @@
   "supabase/migrations/0198_forecast_demand_and_lead_time.sql": {
     "mtime": 1787068306.900991,
     "ast_hash": "99d51dfa98b8053f08d5acad92e9fafa",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0199_forecast_arithmetic.sql": {
+    "mtime": 1787068718.080426,
+    "ast_hash": "3b5dd7181da93b8e06569b6073843e0f",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0200_forecast_run.sql": {
+    "mtime": 1787068834.988433,
+    "ast_hash": "2b8b9232f27e6e9e819435b2b3a783dc",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0201_demo_forecasting.sql": {
+    "mtime": 1787069178.6743164,
+    "ast_hash": "b10108535a111d894f0c012103a3802d",
+    "semantic_hash": ""
+  },
+  "supabase/tests/inventory_forecast.sql": {
+    "mtime": 1787069031.7133548,
+    "ast_hash": "983c8b67df41b90bff7886dd204cedf8",
     "semantic_hash": ""
   }
 }
