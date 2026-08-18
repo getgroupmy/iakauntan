@@ -1000,6 +1000,17 @@ jobs:
           test -f .vercel/output/static/index.html
           test -f .vercel/output/static/canvaskit/canvaskit.wasm
 
+          # A marker the deploy can be checked against afterwards.
+          # Written here rather than compiled into the bundle because it
+          # has to be readable without running the app, and because a
+          # Dart constant would be subject to tree shaking — a marker
+          # that can be optimised away is a marker that reports success
+          # by being absent.
+          printf '{"commit":"%s","ref":"%s","run":"%s","built_at":"%s"}\n' \
+            "$GITHUB_SHA" "$GITHUB_REF_NAME" "$GITHUB_RUN_NUMBER" \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            > .vercel/output/static/build-info.json
+
           # Creating .vercel/ is what links this checkout to the project,
           # and the CLI reads that link from project.json rather than from
           # the environment. Without it, a .vercel directory that exists
@@ -1024,3 +1035,75 @@ jobs:
             echo "### Preview deploy" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "$url" >> "$GITHUB_STEP_SUMMARY"
+
+      # A green deploy step means the CLI uploaded something and exited
+      # zero. It does not mean the domain is serving it, and the two came
+      # apart badly enough here to be worth a step: this workflow was
+      # reported as "not deploying" for an entire session on the strength
+      # of one cancelled run, while production was in fact current. The
+      # run should answer that question itself rather than leave it to be
+      # inferred from a job status.
+      #
+      # Production only. A preview deployment answers on a URL that
+      # deployment protection may put behind authentication, and a check
+      # that fails for want of a cookie teaches everyone to ignore it.
+      - name: Confirm the domain is serving this commit
+        if: >-
+          steps.creds.outputs.ready == 'true' &&
+          github.ref_name == github.event.repository.default_branch
+        env:
+          # A repository variable, so a project that moves domains does
+          # not need this file edited.
+          PROD_URL: ${{ vars.PRODUCTION_URL || 'https://iakauntan.com' }}
+        run: |
+          # Aliasing is not instantaneous, so this retries rather than
+          # asserting once and calling a slow alias a failed deploy.
+          got=""
+          for attempt in $(seq 1 12); do
+            body="$(curl -fsS --max-time 20 \
+                      "$PROD_URL/build-info.json?cb=$GITHUB_RUN_ID-$attempt" \
+                    || true)"
+            got="$(printf '%s' "$body" | jq -r '.commit // empty' 2>/dev/null || true)"
+
+            if [ "$got" = "$GITHUB_SHA" ]; then
+              echo "$PROD_URL is serving $GITHUB_SHA (attempt $attempt)."
+              {
+                echo "### The domain is serving this commit"
+                echo
+                echo "\`$PROD_URL\` returned \`$GITHUB_SHA\`."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+
+            echo "attempt $attempt: got '${got:-nothing}', want $GITHUB_SHA"
+            sleep 15
+          done
+
+          # Distinguish the two failures, because they call for entirely
+          # different things: an older commit means the deploy did not
+          # take, and nothing at all means the domain did not answer.
+          if [ -n "$got" ]; then
+            echo "::error::$PROD_URL is serving $got, not $GITHUB_SHA. The deploy did not take."
+            {
+              echo "### The domain is serving an older commit"
+              echo
+              echo "\`$PROD_URL\` returned \`$got\`, but this run built"
+              echo "\`$GITHUB_SHA\`. The upload reported success, so look at"
+              echo "whether something else re-aliased the domain after it."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::$PROD_URL did not return a readable build-info.json."
+            {
+              echo "### The domain did not answer"
+              echo
+              echo "\`$PROD_URL/build-info.json\` returned nothing readable"
+              echo "after twelve attempts over three minutes."
+              echo
+              echo "Three things produce this. The domain may not answer at"
+              echo "all; the alias may point somewhere other than this"
+              echo "project; or the marker may not have been uploaded, in"
+              echo "which case the route config falls back to index.html and"
+              echo "the request succeeds with HTML instead of JSON."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 1
