@@ -5,7 +5,6 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
-import '../../data/repository.dart';
 import '../hr/statutory_rates_tab.dart';
 
 /// Publishing the EPF, SOCSO, EIS, PCB and HRD Corp rate tables.
