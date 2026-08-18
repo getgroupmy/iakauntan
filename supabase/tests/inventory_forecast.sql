@@ -267,3 +267,238 @@ begin
   raise notice 'inventory forecasting: all assertions passed';
 end;
 $$;
+
+-- =====================================================================
+-- Inventory forecasting :: the suggestion becomes an order
+--
+-- The arithmetic above decides what to buy. This decides whether a
+-- buyer can act on it without retyping, and the ways that goes wrong
+-- all cost real money:
+--
+--   * ordering twice because the screen was submitted twice, or
+--     because the forecast was re-run after the drafts were raised and
+--     could not see them;
+--   * an item quietly left out because nobody had set a supplier;
+--   * a draft deleted and the suggestion never coming back, so the
+--     stock is never ordered at all.
+--
+-- The fixture pins each item's target with min_quantity = max_quantity
+-- so every suggested quantity is a number that can be checked by hand,
+-- independently of which forecasting method ran.
+-- =====================================================================
+do $$
+declare
+  v_org    uuid;
+  v_wh     uuid;
+  v_sup_a  uuid;
+  v_sup_b  uuid;
+  v_bolt   uuid;
+  v_nut    uuid;
+  v_clamp  uuid;
+  v_orphan uuid;
+  v_run    uuid;
+  v_line   uuid;
+  v_doc    uuid;
+  v_n      integer;
+  v_docs   integer;
+  v_a      numeric;
+  v_b      numeric;
+  v_c      numeric;
+  v_txt    text;
+  v_outsider uuid;
+begin
+  v_org := pg_temp.test_org('Replenishment Fixture Sdn Bhd');
+
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['forecasting','purchases','inventory']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'MAIN', 'Main') returning id into v_wh;
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-A', 'Ah Seng Fasteners', 'supplier') returning id into v_sup_a;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-B', 'Zenith Tooling', 'supplier') returning id into v_sup_b;
+
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values
+    (v_org, 'BOLT',  'Bolt',  'stock', true, 'C62', 10),
+    (v_org, 'NUT',   'Nut',   'stock', true, 'C62', 5),
+    (v_org, 'CLAMP', 'Clamp', 'stock', true, 'C62', 2.5),
+    (v_org, 'SPARE', 'Spare', 'stock', true, 'C62', 1);
+
+  select id into v_bolt   from public.items where org_id = v_org and code = 'BOLT';
+  select id into v_nut    from public.items where org_id = v_org and code = 'NUT';
+  select id into v_clamp  from public.items where org_id = v_org and code = 'CLAMP';
+  select id into v_orphan from public.items where org_id = v_org and code = 'SPARE';
+
+  -- Some demand, so the fixture is not forecasting silence — and the
+  -- stock it was sold out of. Selling what was never bought in leaves
+  -- the position negative, and the order-up-to would then cover the
+  -- hole as well as the target: correct behaviour, but it would make
+  -- every quantity below a number nobody could check by hand.
+  insert into public.stock_movements
+    (org_id, movement_no, movement_type, movement_date, item_id, warehouse_id,
+     quantity, unit_cost)
+  values
+    (v_org, 'R0', 'purchase_receipt', current_date - 30, v_bolt, v_wh, 12, 10),
+    (v_org, 'R1', 'sales_delivery',   current_date - 20, v_bolt, v_wh, -5, 0),
+    (v_org, 'R2', 'sales_delivery',   current_date - 12, v_bolt, v_wh, -7, 0),
+    (v_org, 'R4', 'purchase_receipt', current_date - 30, v_nut,  v_wh, 3,  5),
+    (v_org, 'R3', 'sales_delivery',   current_date - 4,  v_nut,  v_wh, -3, 0);
+
+  -- Target pinned, so the suggestion is exactly the target: nothing is
+  -- on hand, so ordering up to it is the whole quantity.
+  insert into public.item_forecast_params
+    (org_id, item_id, min_quantity, max_quantity, supplier_id)
+  values
+    (v_org, v_bolt,   100, 100, v_sup_a),
+    (v_org, v_nut,     60,  60, v_sup_a),
+    (v_org, v_clamp,   40,  40, v_sup_b),
+    -- Deliberately no supplier: the item nobody can be asked to supply.
+    (v_org, v_orphan,  25,  25, null);
+
+  insert into public.forecast_settings
+    (org_id, bucket, horizon_buckets, history_days, min_periods)
+  values (v_org, 'week', 2, 84, 3)
+  on conflict (org_id) do update set bucket = 'week';
+
+  v_run := public.run_inventory_forecast(v_org);
+
+  -- ------------------------------------------------------------------
+  -- What the run says, before anything is ordered
+  -- ------------------------------------------------------------------
+  select count(*) into v_n from public.forecast_suggestions(v_org);
+  perform pg_temp.check_eq('four items are suggested', v_n, 4);
+
+  select s.suggested_qty, s.already_drafted, s.outstanding, s.supplier_name
+    into v_a, v_b, v_c, v_txt
+    from public.forecast_suggestions(v_org) s where s.item_code = 'BOLT';
+  perform pg_temp.check_eq('the pinned target is the suggestion', v_a, 100);
+  perform pg_temp.check_eq('nothing is drafted yet', v_b, 0);
+  perform pg_temp.check_eq('so all of it is outstanding', v_c, 100);
+  perform pg_temp.check_true('and the supplier is named for the buyer',
+    v_txt = 'Ah Seng Fasteners');
+
+  -- ------------------------------------------------------------------
+  -- One order per supplier
+  -- ------------------------------------------------------------------
+  select count(*), count(*) filter (where r.document_id is not null)
+    into v_n, v_docs
+    from public.create_po_from_suggestions(v_org) r;
+  perform pg_temp.check_eq('two suppliers, two orders, and one row that is not an order',
+    v_n, 3);
+  perform pg_temp.check_eq('two documents were raised', v_docs, 2);
+
+  select d.id, count(l.*), sum(l.quantity), d.subtotal
+    into v_doc, v_n, v_a, v_b
+    from public.purchase_documents d
+    join public.purchase_document_lines l on l.document_id = d.id
+   where d.org_id = v_org and d.contact_id = v_sup_a
+   group by d.id, d.subtotal;
+  perform pg_temp.check_eq('both of one supplier''s items on one order', v_n, 2);
+  perform pg_temp.check_eq('and the quantities are the suggestions', v_a, 160);
+  -- 100 bolts at 10 plus 60 nuts at 5. The totals triggers did this,
+  -- which is the point: the order is an ordinary purchase order.
+  perform pg_temp.check_eq('priced from the item cost and totalled by the triggers',
+    v_b, 1300);
+
+  select d.status::text, count(l.*) filter (where l.forecast_line_id is not null)
+    into v_txt, v_n
+    from public.purchase_documents d
+    join public.purchase_document_lines l on l.document_id = d.id
+   where d.id = v_doc group by d.status;
+  perform pg_temp.check_true('the order is a draft, not something sent to a supplier',
+    v_txt = 'draft');
+  perform pg_temp.check_eq('every line remembers the suggestion it came from', v_n, 2);
+
+  -- The item with no supplier is reported rather than dropped.
+  select r.line_count, r.total_quantity, r.note into v_n, v_a, v_txt
+    from public.create_po_from_suggestions(v_org) r where r.document_id is null;
+  perform pg_temp.check_eq('the unassigned item is counted', v_n, 1);
+  perform pg_temp.check_eq('with its quantity', v_a, 25);
+  perform pg_temp.check_true('and named, so somebody can fix it',
+    v_txt like '%SPARE%');
+
+  -- ------------------------------------------------------------------
+  -- The double tap
+  -- ------------------------------------------------------------------
+  select s.already_drafted, s.outstanding into v_a, v_b
+    from public.forecast_suggestions(v_org) s where s.item_code = 'BOLT';
+  perform pg_temp.check_eq('the draft is netted off the suggestion', v_a, 100);
+  perform pg_temp.check_eq('leaving nothing outstanding', v_b, 0);
+
+  select count(*) filter (where r.document_id is not null) into v_docs
+    from public.create_po_from_suggestions(v_org) r;
+  perform pg_temp.check_eq('a second identical call raises no second order', v_docs, 0);
+
+  -- ------------------------------------------------------------------
+  -- A quantity given is a target, not an increment
+  -- ------------------------------------------------------------------
+  select s.line_id into v_line
+    from public.forecast_suggestions(v_org) s where s.item_code = 'BOLT';
+
+  select count(*) filter (where r.document_id is not null) into v_docs
+    from public.create_po_from_suggestions(v_org,
+      jsonb_build_array(jsonb_build_object('line_id', v_line, 'quantity', 100))) r;
+  perform pg_temp.check_eq('asking again for the hundred already drafted orders nothing',
+    v_docs, 0);
+
+  select sum(r.total_quantity) filter (where r.document_id is not null) into v_a
+    from public.create_po_from_suggestions(v_org,
+      jsonb_build_array(jsonb_build_object('line_id', v_line, 'quantity', 130))) r;
+  perform pg_temp.check_eq('asking for 130 when 100 is drafted orders the difference',
+    v_a, 30);
+
+  -- ------------------------------------------------------------------
+  -- The two counters partition the live orders between them
+  -- ------------------------------------------------------------------
+  -- This is the claim the whole netting-off rests on. A draft counted
+  -- by both would be subtracted twice and the item under-ordered; one
+  -- counted by neither would be ordered twice.
+  perform pg_temp.check_eq('a draft is not stock on the way',
+    app.quantity_on_order(v_org, v_bolt, null), 0);
+  perform pg_temp.check_eq('it is stock on a draft',
+    app.quantity_on_draft_order(v_org, v_bolt, null), 130);
+
+  update public.purchase_documents set status = 'pending'
+   where org_id = v_org and contact_id = v_sup_a;
+
+  perform pg_temp.check_eq('approving it moves the whole quantity across',
+    app.quantity_on_order(v_org, v_bolt, null), 130);
+  perform pg_temp.check_eq('and leaves nothing behind',
+    app.quantity_on_draft_order(v_org, v_bolt, null), 0);
+
+  -- ------------------------------------------------------------------
+  -- Deleting a draft returns its suggestion
+  -- ------------------------------------------------------------------
+  -- Derived, not recorded. A flag written on the forecast line would
+  -- still claim this stock was on order.
+  select s.outstanding into v_a
+    from public.forecast_suggestions(v_org) s where s.item_code = 'CLAMP';
+  perform pg_temp.check_eq('the clamp is fully drafted', v_a, 0);
+
+  delete from public.purchase_documents
+   where org_id = v_org and contact_id = v_sup_b;
+
+  select s.outstanding into v_a
+    from public.forecast_suggestions(v_org) s where s.item_code = 'CLAMP';
+  perform pg_temp.check_eq('and comes back the moment the draft is deleted', v_a, 40);
+
+  -- ------------------------------------------------------------------
+  -- Somebody else's replenishment
+  -- ------------------------------------------------------------------
+  v_outsider := pg_temp.another_user('outsider@iakauntan.test');
+  perform pg_temp.sign_in_as(v_outsider);
+  begin
+    perform * from public.create_po_from_suggestions(v_org);
+    raise exception 'FAIL a non-member raised a purchase order';
+  exception when insufficient_privilege then
+    raise notice 'ok   a non-member cannot order against this company''s forecast';
+  end;
+
+  raise notice 'forecast to purchase order: all assertions passed';
+end;
+$$;
