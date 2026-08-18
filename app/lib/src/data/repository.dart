@@ -3294,6 +3294,67 @@ class PlatformRepo {
     'platform_mark_invoice_paid',
     params: {'p_invoice_id': invoiceId, 'p_note': note},
   );
+
+  // ------------------------------------------------------------------
+  // Statutory rate tables
+  //
+  // These have no `org_id`: one table, shared by every organization in
+  // the database. Anybody may read them — that is what makes "are we
+  // filing on verified figures?" answerable — and only a platform
+  // administrator may change them.
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> statutorySchedules() async => Repo._rows(
+    await client
+        .from('statutory_schedules')
+        .select('*, statutory_rates(*)')
+        .order('body')
+        .order('effective_from', ascending: false),
+  );
+
+  Future<String> publishStatutorySchedule({
+    required String body,
+    required String name,
+    required String method,
+    required DateTime effectiveFrom,
+    required List<Map<String, dynamic>> rates,
+    String? source,
+    String? notes,
+    double? wageRoundUpTo,
+    String resultRounding = 'nearest_cent',
+    bool isVerified = false,
+  }) async {
+    final data = await client.rpc(
+      'platform_publish_statutory_schedule',
+      params: {
+        'p_body': body,
+        'p_name': name,
+        'p_method': method,
+        'p_effective_from': Fmt.iso(effectiveFrom),
+        'p_rates': rates,
+        if (source != null) 'p_source': source,
+        if (notes != null) 'p_notes': notes,
+        if (wageRoundUpTo != null) 'p_wage_round_up_to': wageRoundUpTo,
+        'p_result_rounding': resultRounding,
+        'p_is_verified': isVerified,
+      },
+    );
+    return data as String;
+  }
+
+  Future<void> setScheduleVerified(
+    String scheduleId,
+    bool verified, {
+    String? source,
+    String? notes,
+  }) => client.rpc(
+    'platform_set_schedule_verified',
+    params: {
+      'p_schedule_id': scheduleId,
+      'p_verified': verified,
+      if (source != null) 'p_source': source,
+      if (notes != null) 'p_notes': notes,
+    },
+  );
 }
 
 /// Tenant-scoped extras: team management, module entitlements and the
@@ -4398,67 +4459,6 @@ extension RepoHrSetup on Repo {
     );
     return Fmt.toInt(data);
   }
-
-  // ------------------------------------------------------------------
-  // Statutory rate tables
-  //
-  // These have no `org_id`: one table, shared by every organization in
-  // the database. Anybody may read them — that is what makes "are we
-  // filing on verified figures?" answerable — and only a platform
-  // administrator may change them.
-  // ------------------------------------------------------------------
-  Future<List<Map<String, dynamic>>> statutorySchedules() async => Repo._rows(
-    await client
-        .from('statutory_schedules')
-        .select('*, statutory_rates(*)')
-        .order('body')
-        .order('effective_from', ascending: false),
-  );
-
-  Future<String> publishStatutorySchedule({
-    required String body,
-    required String name,
-    required String method,
-    required DateTime effectiveFrom,
-    required List<Map<String, dynamic>> rates,
-    String? source,
-    String? notes,
-    double? wageRoundUpTo,
-    String resultRounding = 'nearest_cent',
-    bool isVerified = false,
-  }) async {
-    final data = await client.rpc(
-      'platform_publish_statutory_schedule',
-      params: {
-        'p_body': body,
-        'p_name': name,
-        'p_method': method,
-        'p_effective_from': Fmt.iso(effectiveFrom),
-        'p_rates': rates,
-        if (source != null) 'p_source': source,
-        if (notes != null) 'p_notes': notes,
-        if (wageRoundUpTo != null) 'p_wage_round_up_to': wageRoundUpTo,
-        'p_result_rounding': resultRounding,
-        'p_is_verified': isVerified,
-      },
-    );
-    return data as String;
-  }
-
-  Future<void> setScheduleVerified(
-    String scheduleId,
-    bool verified, {
-    String? source,
-    String? notes,
-  }) => client.rpc(
-    'platform_set_schedule_verified',
-    params: {
-      'p_schedule_id': scheduleId,
-      'p_verified': verified,
-      if (source != null) 'p_source': source,
-      if (notes != null) 'p_notes': notes,
-    },
-  );
 
   // ------------------------------------------------------------------
   // Item prices

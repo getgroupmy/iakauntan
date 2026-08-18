@@ -131,7 +131,7 @@ class _AdminScheduleTile extends ConsumerWidget {
     await runWithFeedback(
       context,
       action: () => ref
-          .read(repoProvider)!
+          .read(platformRepoProvider)
           .setScheduleVerified(schedule['id'] as String, to),
       successMessage: to ? 'Marked verified' : 'Marked unverified',
     );
@@ -428,7 +428,7 @@ class _PublishDialogState extends ConsumerState<_PublishDialog> {
     setState(() => _saving = true);
     final done = await runWithFeedback(
       context,
-      action: () => ref.read(repoProvider)!.publishStatutorySchedule(
+      action: () => ref.read(platformRepoProvider).publishStatutorySchedule(
             body: _body,
             name: _name.text.trim(),
             method: _method,

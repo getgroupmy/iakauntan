@@ -1247,12 +1247,23 @@ final leaveBandsProvider = FutureProvider.autoDispose
       return requireRepo(ref).leaveBands(leaveTypeId);
     });
 
-/// Not autoDispose: the statutory tables are the same for every
-/// organization in the database and change a few times a decade.
+/// The statutory rate tables — EPF, SOCSO, EIS, PCB.
+///
+/// Not autoDispose: they are the same for every organization in the
+/// database and change a few times a decade.
+///
+/// Off [platformRepoProvider] rather than the org-bound repository, for
+/// the same reason: the rows have no `org_id`. Going through
+/// `requireRepo` made an organization a precondition for reading data
+/// that has nothing to do with one — and the platform console, where
+/// the only person who may *edit* these works, is exactly where
+/// somebody may belong to no company. It surfaced as "your company has
+/// not finished loading, check your connection", which sends the reader
+/// to look at their network.
 final statutorySchedulesProvider = FutureProvider<List<Map<String, dynamic>>>((
   ref,
 ) {
-  return requireRepo(ref).statutorySchedules();
+  return ref.watch(platformRepoProvider).statutorySchedules();
 });
 
 final itemPricesProvider = FutureProvider.autoDispose
