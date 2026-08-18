@@ -5989,3 +5989,134 @@ extension RepoTicketing on Repo {
     );
   }
 }
+
+/// Inventory forecasting.
+///
+/// The reads that matter go through the RPCs rather than the tables:
+/// `forecast_suggestions` nets off the draft orders already raised and
+/// names the item and the supplier, which a select on `forecast_lines`
+/// cannot do without three joins the client would have to keep in step
+/// with the migration that owns them.
+extension RepoForecasting on Repo {
+  /// The company's forecasting settings, or null before anybody has
+  /// opened the screen. Null rather than a fabricated default: the
+  /// defaults live in the column definitions, and inventing a second
+  /// copy here is how the screen comes to disagree with the run.
+  Future<Map<String, dynamic>?> forecastSettings() async {
+    final row = await client
+        .from('forecast_settings')
+        .select()
+        .eq('org_id', orgId)
+        .maybeSingle();
+    return row == null ? null : Map<String, dynamic>.from(row);
+  }
+
+  Future<void> saveForecastSettings(Map<String, dynamic> values) async {
+    await client
+        .from('forecast_settings')
+        .upsert({'org_id': orgId, ...values}, onConflict: 'org_id');
+  }
+
+  /// The most recent run, or null if none has been made.
+  Future<Map<String, dynamic>?> latestForecastRun() async {
+    final rows = Repo.rows(
+      await client
+          .from('forecast_runs')
+          .select()
+          .eq('org_id', orgId)
+          .order('run_at', ascending: false)
+          .limit(1),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<String> runForecast({String? warehouseId}) async {
+    final id = await client.rpc(
+      'run_inventory_forecast',
+      params: {
+        'p_org': orgId,
+        if (warehouseId != null) 'p_warehouse': warehouseId,
+      },
+    );
+    return id as String;
+  }
+
+  Future<List<Map<String, dynamic>>> forecastSuggestions() async =>
+      Repo.rows(await client.rpc('forecast_suggestions', params: {'p_org': orgId}));
+
+  /// Every line of a run, including the items with nothing to order and
+  /// the ones skipped for want of history. The skipped ones are the
+  /// point of having this beside the suggestions: an item silently
+  /// absent from a replenishment report is one nobody notices they
+  /// stopped ordering.
+  Future<List<Map<String, dynamic>>> forecastLines(String runId) async =>
+      Repo.rows(
+        await client
+            .from('forecast_lines')
+            .select()
+            .eq('org_id', orgId)
+            .eq('run_id', runId)
+            .order('state'),
+      );
+
+  Future<Map<String, dynamic>?> itemForecastParams(String itemId) async {
+    final row = await client
+        .from('item_forecast_params')
+        .select()
+        .eq('org_id', orgId)
+        .eq('item_id', itemId)
+        .isFilter('warehouse_id', null)
+        .maybeSingle();
+    return row == null ? null : Map<String, dynamic>.from(row);
+  }
+
+  /// Update, then insert if there was nothing to update.
+  ///
+  /// Not an upsert. `warehouse_id` is nullable — null means "the
+  /// company" — so the unique indexes that enforce one row per item are
+  /// *partial*, one for each side of the null. PostgREST names its
+  /// conflict target by column list and Postgres will not infer a
+  /// partial index from one, so `onConflict: 'org_id,item_id,warehouse_id'`
+  /// does not resolve and the write fails at the moment somebody saves
+  /// a parameter for the second time.
+  Future<void> saveItemForecastParams(
+    String itemId,
+    Map<String, dynamic> values,
+  ) async {
+    final updated = Repo.rows(
+      await client
+          .from('item_forecast_params')
+          .update(values)
+          .eq('org_id', orgId)
+          .eq('item_id', itemId)
+          .isFilter('warehouse_id', null)
+          .select('id'),
+    );
+    if (updated.isEmpty) {
+      await client.from('item_forecast_params').insert({
+        'org_id': orgId,
+        'item_id': itemId,
+        ...values,
+      });
+    }
+  }
+
+  /// Raises one draft purchase order per supplier. Passing nothing means
+  /// every outstanding suggestion; passing a list means those lines at
+  /// those quantities, where the quantity is the total wanted on order
+  /// against the suggestion rather than an amount to add to it.
+  Future<List<Map<String, dynamic>>> createPurchaseOrdersFromSuggestions({
+    List<Map<String, dynamic>>? lines,
+    DateTime? expected,
+  }) async => Repo.rows(
+    await client.rpc(
+      'create_po_from_suggestions',
+      params: {
+        'p_org': orgId,
+        if (lines != null) 'p_lines': lines,
+        if (expected != null)
+          'p_expected_date': expected.toIso8601String().substring(0, 10),
+      },
+    ),
+  );
+}

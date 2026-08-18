@@ -171,6 +171,15 @@ const _destinations = <_Dest>[
     '/lots',
     module: 'inventory',
   ),
+  // With the stock screens, because the question it answers — what is
+  // running out — is asked while looking at what is on the shelf.
+  _Dest(
+    'Replenishment',
+    Icons.inventory_outlined,
+    Icons.inventory,
+    '/forecasting',
+    module: 'forecasting',
+  ),
   _Dest('Chat', Icons.forum_outlined, Icons.forum, '/chat', module: 'chat'),
   // No module gate. Chasing an unpaid invoice is what the sales ledger
   // is for when a customer does not pay, and sales is core.
@@ -208,9 +217,6 @@ const _destinations = <_Dest>[
     module: 'timesheets',
     altModule: 'legal',
   ),
-  // Two modules, one destination. Which half of it a site belongs to is
-  // a fact about the site, not a choice in the navigation, and an agent
-  // holding both has one portfolio rather than two lists.
   // Next to the modules whose work it interrupts. A service desk is
   // read between other jobs rather than sat in all day, so it sits with
   // them rather than at the bottom of the list.
@@ -221,6 +227,9 @@ const _destinations = <_Dest>[
     '/tickets',
     module: 'ticketing',
   ),
+  // Two modules, one destination. Which half of it a site belongs to is
+  // a fact about the site, not a choice in the navigation, and an agent
+  // holding both has one portfolio rather than two lists.
   _Dest(
     'Property',
     Icons.apartment_outlined,

@@ -1699,3 +1699,32 @@ final cannedResponsesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
       (ref) => requireRepo(ref).cannedResponses(),
     );
+
+// ---------------------------------------------------------------------
+// Inventory forecasting
+// ---------------------------------------------------------------------
+
+final forecastSettingsProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>?>(
+      (ref) => requireRepo(ref).forecastSettings(),
+    );
+
+final latestForecastRunProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>?>(
+      (ref) => requireRepo(ref).latestForecastRun(),
+    );
+
+final forecastSuggestionsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).forecastSuggestions(),
+    );
+
+final forecastLinesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, runId) => requireRepo(ref).forecastLines(runId),
+    );
+
+final itemForecastParamsProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>(
+      (ref, itemId) => requireRepo(ref).itemForecastParams(itemId),
+    );
