@@ -214,7 +214,7 @@ end $$;
 do $$
 declare
   v_org uuid := pg_temp.desk_org();
-  v_net uuid; v_svc uuid; v_tkt uuid; v_t public.tickets;
+  v_net uuid; v_svc uuid; v_tkt uuid; v_other uuid; v_t public.tickets;
   v_refused boolean := false;
   v_msg text;
 begin
@@ -235,11 +235,18 @@ begin
     v_t.response_due_at is not null and v_t.resolution_due_at is not null);
 
   -- A ticket with no category still has to land somewhere.
+  --
+  -- The id is captured before the select rather than calling
+  -- create_ticket() inside the WHERE clause: the function is volatile
+  -- and inserts a row, and that row is not visible to the snapshot of
+  -- the query that is calling it. Written the short way this reads
+  -- perfectly and asserts nothing, because the select finds no row and
+  -- the comparison is null rather than false.
+  v_other := public.create_ticket(v_org, 'Something else');
   perform pg_temp.check_true(
     'an uncategorised ticket falls to the default team, because a ticket '
     'with no team is a queue nobody is looking at',
-    (select team_id from public.tickets
-      where id = public.create_ticket(v_org, 'Something else')) = v_svc);
+    (select team_id from public.tickets where id = v_other) = v_svc);
 
   perform public.add_ticket_comment(v_tkt, 'Checked the print queue', true);
   select * into v_t from public.tickets where id = v_tkt;
@@ -299,7 +306,7 @@ end $$;
 do $$
 declare
   v_org uuid := pg_temp.desk_org();
-  v_tkt uuid; v_t public.tickets; v_n integer; v_before integer;
+  v_tkt uuid; v_other uuid; v_t public.tickets; v_n integer; v_before integer;
 begin
   v_tkt := public.create_ticket(v_org, 'Nobody answered this one', null, 'PRINTER');
 
@@ -330,10 +337,11 @@ begin
   perform pg_temp.check_eq('running it again finds nothing new',
     public.ticket_sla_sweep(v_org), 0);
 
-  -- The control: a ticket inside its deadline is left alone.
+  -- The control: a ticket inside its deadline is left alone. Same
+  -- reason as above for splitting the call out of the select.
+  v_other := public.create_ticket(v_org, 'This one is fine', null, 'PRINTER');
   perform pg_temp.check_true('a ticket still within its deadline is untouched',
-    not (select response_breached from public.tickets
-          where id = public.create_ticket(v_org, 'This one is fine', null, 'PRINTER')));
+    not (select response_breached from public.tickets where id = v_other));
 end $$;
 
 rollback;
