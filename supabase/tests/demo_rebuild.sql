@@ -356,6 +356,33 @@ begin
       where e.org_id = v_harta and e.status = 'posted' and a.code = '4100') > 0);
 
   -- --------------------------------------------------------------
+  -- The service desk, and the two ways it can look full but be broken
+  --
+  -- A ticket with no team is in a queue nobody is looking at, and a
+  -- ticket with no deadline is one no report can call late. Both render
+  -- perfectly in a list, which is exactly why they are worth asserting
+  -- rather than eyeballing.
+  -- --------------------------------------------------------------
+  select count(*) into v_units from public.tickets where org_id = v_sinar;
+  perform pg_temp.check_true(
+    format('the demo service desk has tickets in it (%s)', v_units), v_units > 0);
+
+  perform pg_temp.check_eq(
+    'every one of them was routed to a team',
+    (select count(*) from public.tickets
+      where org_id = v_sinar and team_id is null), 0);
+
+  perform pg_temp.check_eq(
+    'and every one carries the deadlines it was promised',
+    (select count(*) from public.tickets
+      where org_id = v_sinar and resolution_due_at is null), 0);
+
+  perform pg_temp.check_true(
+    'the queue shows more than one state — a demo where everything is '
+    'closed is a screenshot, and one where nothing is is a backlog',
+    (select count(distinct status) from public.tickets where org_id = v_sinar) >= 3);
+
+  -- --------------------------------------------------------------
   -- Every module in the catalogue has somewhere to be seen
   -- --------------------------------------------------------------
   select count(*) into v_modules
