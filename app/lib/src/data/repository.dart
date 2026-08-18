@@ -5812,4 +5812,178 @@ extension RepoFinancialStatements on Repo {
       'element_code': elementCode,
     }, onConflict: 'org_id,account_id');
   }
+
+  // ------------------------------------------------------------------
+  // Service desk
+  //
+  // The list carries the joins the queue actually shows — who it is
+  // assigned to, which team, which category — because a ticket list
+  // that renders a row of uuids is a list nobody can triage from.
+  // ------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> tickets({
+    String? status,
+    String? teamId,
+    String? priority,
+    bool onlyMine = false,
+    bool onlyBreached = false,
+  }) async {
+    var q = client
+        .from('tickets')
+        // Deliberately no embedded lookups. Every foreign key from
+        // `tickets` to a team, a category or a contact is composite —
+        // (org_id, x) — so a tenant cannot borrow another's rows, and
+        // scripts/check_embeds.py only catches *ambiguous* embeds that
+        // failed to name a constraint. It cannot tell whether a named
+        // one resolves, so an embed that PostgREST refuses would reach
+        // production exactly as the receipts screen once did. The names
+        // are joined on the client from lists it already holds.
+        .select('*')
+        .eq('org_id', orgId)
+        .isFilter('deleted_at', null);
+
+    if (status == 'open') {
+      // "Open" in a queue means "still ours", not the single status of
+      // that name — a ticket waiting on the requester has not left the
+      // queue, it is just not moving.
+      q = q.inFilter('status', ['new', 'open', 'pending', 'on_hold']);
+    } else if (status != null) {
+      q = q.eq('status', status);
+    }
+    if (teamId != null) q = q.eq('team_id', teamId);
+    if (priority != null) q = q.eq('priority', priority);
+    if (onlyMine) q = q.eq('assignee_id', client.auth.currentUser?.id ?? '');
+    if (onlyBreached) {
+      q = q.or('response_breached.eq.true,resolution_breached.eq.true');
+    }
+
+    return Repo._rows(await q.order('opened_at', ascending: false).limit(200));
+  }
+
+  Future<Map<String, dynamic>> ticket(String id) async =>
+      Map<String, dynamic>.from(
+        await client
+            .from('tickets')
+            .select('*')
+            .eq('id', id)
+            .eq('org_id', orgId)
+            .single(),
+      );
+
+  Future<List<Map<String, dynamic>>> ticketComments(String ticketId) async =>
+      Repo._rows(
+        await client
+            .from('ticket_comments')
+            .select()
+            .eq('ticket_id', ticketId)
+            .eq('org_id', orgId)
+            .order('created_at'),
+      );
+
+  Future<List<Map<String, dynamic>>> ticketEvents(String ticketId) async =>
+      Repo._rows(
+        await client
+            .from('ticket_events')
+            .select()
+            .eq('ticket_id', ticketId)
+            .eq('org_id', orgId)
+            .order('created_at'),
+      );
+
+  Future<List<Map<String, dynamic>>> ticketTeams() async => Repo._rows(
+    await client
+        .from('ticket_teams')
+        .select()
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('name'),
+  );
+
+  Future<List<Map<String, dynamic>>> ticketCategories() async => Repo._rows(
+    await client
+        .from('ticket_categories')
+        .select()
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('name'),
+  );
+
+  Future<List<Map<String, dynamic>>> cannedResponses() async => Repo._rows(
+    await client
+        .from('canned_responses')
+        .select()
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('title'),
+  );
+
+  Future<String> createTicket({
+    required String subject,
+    String? description,
+    String? categoryCode,
+    String? priority,
+    String? type,
+    String channel = 'web',
+    String? requesterContactId,
+  }) async {
+    final id = await client.rpc(
+      'create_ticket',
+      params: {
+        'p_org_id': orgId,
+        'p_subject': subject,
+        if (description != null && description.isNotEmpty)
+          'p_description': description,
+        if (categoryCode != null) 'p_category': categoryCode,
+        if (priority != null) 'p_priority': priority,
+        if (type != null) 'p_type': type,
+        'p_channel': channel,
+        if (requesterContactId != null)
+          'p_requester_contact_id': requesterContactId,
+      },
+    );
+    return id as String;
+  }
+
+  Future<void> transitionTicket(String id, String to, {String? note}) async {
+    await client.rpc(
+      'transition_ticket',
+      params: {'p_ticket': id, 'p_to': to, if (note != null) 'p_note': note},
+    );
+  }
+
+  Future<void> assignTicket(String id, String? userId) async {
+    await client.rpc(
+      'assign_ticket',
+      params: {'p_ticket': id, 'p_user': userId},
+    );
+  }
+
+  Future<void> addTicketComment(
+    String id,
+    String body, {
+    bool internal = true,
+  }) async {
+    await client.rpc(
+      'add_ticket_comment',
+      params: {'p_ticket': id, 'p_body': body, 'p_internal': internal},
+    );
+  }
+
+  Future<void> escalateTicket(
+    String id,
+    String kind, {
+    String? toTeam,
+    String? toUser,
+    String? reason,
+  }) async {
+    await client.rpc(
+      'escalate_ticket',
+      params: {
+        'p_ticket': id,
+        'p_kind': kind,
+        if (toTeam != null) 'p_to_team': toTeam,
+        if (toUser != null) 'p_to_user': toUser,
+        if (reason != null) 'p_reason': reason,
+      },
+    );
+  }
 }

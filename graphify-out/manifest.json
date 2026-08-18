@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1786942291.32269,
-    "ast_hash": "6f0642e42f1c935b7f2698d80b1c11d7",
+    "mtime": 1787041886.3748233,
+    "ast_hash": "005fb68582e764402f89bef340f0d5c9",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1786977375.937903,
-    "ast_hash": "08120adcda22983930cf46f6ede32cbe",
+    "mtime": 1787042065.0974665,
+    "ast_hash": "61a83bb888d8ef764b5fd22b61c6915c",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -85,8 +85,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/widgets.dart": {
-    "mtime": 1786722469.4364948,
-    "ast_hash": "5b61bafbd81f134dc1907f9a07e23d4e",
+    "mtime": 1787042076.778837,
+    "ast_hash": "c891c07b2ff9b0eb0aab8afff2449aff",
     "semantic_hash": ""
   },
   "app/lib/src/data/attachments_repository.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1786977215.2378123,
-    "ast_hash": "916583c03d5fd3a98054bb3e0449afd7",
+    "mtime": 1787042222.538652,
+    "ast_hash": "f0be0a1a4a9fb69469cc3696a0884cf3",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1786942401.2870111,
-    "ast_hash": "2b2012dfd712e8f98edf67c914d646f7",
+    "mtime": 1787042076.7617917,
+    "ast_hash": "4ae4443a50d5533564c177e82090f61b",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787019520.93509,
-    "ast_hash": "0b1dbaf98282612bc5283c8fff2328d5",
+    "mtime": 1787038103.2060158,
+    "ast_hash": "5fd5fda188ee95d11266f22ebd812fa2",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -3035,8 +3035,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_rebuild.sql": {
-    "mtime": 1787019560.7163894,
-    "ast_hash": "e33725b6c55273cc72a4971f94146899",
+    "mtime": 1787038116.761601,
+    "ast_hash": "9ff0f8862e4604a3549b2777103de469",
     "semantic_hash": ""
   },
   "supabase/tests/demo_teardown.sql": {
@@ -3047,6 +3047,51 @@
   "supabase/tests/payroll_chart.sql": {
     "mtime": 1787019227.5898845,
     "ast_hash": "a7b08e8360b207753bdd53e3a4bb9598",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/ticketing/ticket_editor.dart": {
+    "mtime": 1787042054.6042902,
+    "ast_hash": "64c29180f157052d6eca15f738169b7f",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/ticketing/ticket_screen.dart": {
+    "mtime": 1787042305.8546536,
+    "ast_hash": "25d6ca163cf625458fdcb1e1cf96929a",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/ticketing/tickets_screen.dart": {
+    "mtime": 1787042222.5390007,
+    "ast_hash": "fc51b4f8a46b08b512cdeadaf3563513",
+    "semantic_hash": ""
+  },
+  "app/test/ticket_transitions_test.dart": {
+    "mtime": 1787042129.5375986,
+    "ast_hash": "a564d9c4517a94bd581644a98ff31929",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0192_ticketing.sql": {
+    "mtime": 1787038667.1344063,
+    "ast_hash": "ae32883a0494315f192d5135cfe04787",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0193_ticketing_sla_clock.sql": {
+    "mtime": 1787037551.7896664,
+    "ast_hash": "39e9f350ee2a6347f4a1501e2f333ff6",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0194_ticketing_lifecycle.sql": {
+    "mtime": 1787039662.2351441,
+    "ast_hash": "646048a185e996ac7f2071656d095484",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0195_demo_service_desk.sql": {
+    "mtime": 1787038082.7943742,
+    "ast_hash": "8ed2e7f451a0441b0b5fcc0159fdd8a9",
+    "semantic_hash": ""
+  },
+  "supabase/tests/ticketing.sql": {
+    "mtime": 1787039248.8366709,
+    "ast_hash": "1bccad8afcb40415ba522693e40698d2",
     "semantic_hash": ""
   }
 }

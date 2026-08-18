@@ -34,6 +34,9 @@ import '../features/financials/filings_screen.dart';
 import '../features/timesheets/timesheet_screen.dart';
 import '../features/property/property_screen.dart';
 import '../features/property/site_editor.dart';
+import '../features/ticketing/ticket_editor.dart';
+import '../features/ticketing/ticket_screen.dart';
+import '../features/ticketing/tickets_screen.dart';
 import '../features/property/site_screen.dart';
 import '../features/manufacturing/order_screen.dart';
 import '../features/onboarding/create_org_screen.dart';
@@ -317,6 +320,26 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/timesheets',
             builder: (_, __) => const TimesheetScreen(),
+          ),
+          GoRoute(
+            path: '/tickets',
+            builder: (_, __) => const TicketsScreen(),
+            routes: [
+              // Before `:id`, or `/tickets/new` matches it and the
+              // viewer is handed the literal string `new` as a uuid —
+              // the same trap `/property/new` fell into.
+              GoRoute(
+                path: 'new',
+                parentNavigatorKey: _rootKey,
+                builder: (_, __) => const TicketEditor(),
+              ),
+              GoRoute(
+                path: ':id',
+                parentNavigatorKey: _rootKey,
+                builder: (_, st) =>
+                    TicketScreen(id: st.pathParameters['id']!),
+              ),
+            ],
           ),
           GoRoute(
             path: '/property',

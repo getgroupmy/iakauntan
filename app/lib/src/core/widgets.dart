@@ -225,6 +225,13 @@ class StatusChip extends StatelessWidget {
     const dim = Color(0xFF94A3B8);
     return switch (status) {
       'draft' => neutral,
+      // A ticket is new or open long before anything is wrong with it,
+      // so neither reads as a warning; on_hold does, because somebody
+      // stopped the clock and it stays stopped until they come back.
+      'new' || 'open' => c.info,
+      'on_hold' => c.warning,
+      'resolved' => c.success,
+      'closed' => dim,
       'pending' || 'queued' || 'partial' || 'in_progress' => c.warning,
       'submitted' || 'approved' || 'confirmed' => c.info,
       'posted' || 'valid' || 'completed' || 'fulfilled' || 'done' => c.success,

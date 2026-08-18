@@ -1,0 +1,141 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../core/providers.dart';
+import '../../core/widgets.dart';
+
+/// Raising one.
+///
+/// Deliberately short. Everything the desk needs to route and to promise
+/// a deadline follows from the category, so asking for a category and a
+/// sentence is enough — priority and type are offered as overrides
+/// rather than as questions, because the person raising a ticket is
+/// usually the one least able to answer them.
+class TicketEditor extends ConsumerStatefulWidget {
+  const TicketEditor({super.key});
+
+  @override
+  ConsumerState<TicketEditor> createState() => _TicketEditorState();
+}
+
+class _TicketEditorState extends ConsumerState<TicketEditor> {
+  final _form = GlobalKey<FormState>();
+  final _subject = TextEditingController();
+  final _description = TextEditingController();
+  String? _category;
+  String? _priority;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _subject.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!(_form.currentState?.validate() ?? false)) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final router = GoRouter.of(context);
+    setState(() => _busy = true);
+    try {
+      final id = await requireRepo(ref).createTicket(
+        subject: _subject.text.trim(),
+        description: _description.text.trim(),
+        categoryCode: _category,
+        priority: _priority,
+      );
+      ref.invalidate(ticketsProvider);
+      router.go('/tickets/$id');
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(e is PostgrestException ? e.message : '$e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final categories = ref.watch(ticketCategoriesProvider);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('New ticket')),
+      body: PageBody(
+        child: Form(
+          key: _form,
+          child: ListView(
+            children: [
+              TextFormField(
+                controller: _subject,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'What is wrong?',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'A ticket needs a subject'
+                    : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _description,
+                minLines: 3,
+                maxLines: 8,
+                decoration: const InputDecoration(
+                  labelText: 'Anything else that would help',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              categories.maybeWhen(
+                data: (list) => DropdownButtonFormField<String>(
+                  value: _category,
+                  decoration: const InputDecoration(
+                    labelText: 'Category',
+                    border: OutlineInputBorder(),
+                    helperText:
+                        'Decides the team, the priority and the deadline',
+                  ),
+                  items: [
+                    for (final c in list)
+                      DropdownMenuItem(
+                        value: c['code'] as String,
+                        child: Text((c['name'] ?? '') as String),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => _category = v),
+                ),
+                orElse: () => const SizedBox.shrink(),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _priority,
+                decoration: const InputDecoration(
+                  labelText: 'Priority',
+                  border: OutlineInputBorder(),
+                  helperText: 'Leave blank to take the category\'s own',
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'p1', child: Text('P1 — critical')),
+                  DropdownMenuItem(value: 'p2', child: Text('P2 — high')),
+                  DropdownMenuItem(value: 'p3', child: Text('P3 — normal')),
+                  DropdownMenuItem(value: 'p4', child: Text('P4 — low')),
+                ],
+                onChanged: (v) => setState(() => _priority = v),
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: _busy ? null : _save,
+                child: const Text('Raise ticket'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

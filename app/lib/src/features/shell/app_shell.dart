@@ -211,6 +211,16 @@ const _destinations = <_Dest>[
   // Two modules, one destination. Which half of it a site belongs to is
   // a fact about the site, not a choice in the navigation, and an agent
   // holding both has one portfolio rather than two lists.
+  // Next to the modules whose work it interrupts. A service desk is
+  // read between other jobs rather than sat in all day, so it sits with
+  // them rather than at the bottom of the list.
+  _Dest(
+    'Service desk',
+    Icons.support_agent_outlined,
+    Icons.support_agent,
+    '/tickets',
+    module: 'ticketing',
+  ),
   _Dest(
     'Property',
     Icons.apartment_outlined,

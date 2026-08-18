@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -1584,3 +1585,94 @@ final fsExemptionProvider = FutureProvider.autoDispose
 final mbrsElementsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).mbrsElements();
 });
+
+// ---------------------------------------------------------------------
+// Service desk
+//
+// The queue's filters travel as one record rather than four families,
+// because they are read together and invalidated together: changing the
+// team while a status filter is on has to refetch once, not twice.
+// ---------------------------------------------------------------------
+@immutable
+class TicketQuery {
+  const TicketQuery({
+    this.status = 'open',
+    this.teamId,
+    this.priority,
+    this.onlyMine = false,
+    this.onlyBreached = false,
+  });
+
+  final String? status;
+  final String? teamId;
+  final String? priority;
+  final bool onlyMine;
+  final bool onlyBreached;
+
+  TicketQuery copyWith({
+    String? Function()? status,
+    String? Function()? teamId,
+    String? Function()? priority,
+    bool? onlyMine,
+    bool? onlyBreached,
+  }) => TicketQuery(
+    status: status == null ? this.status : status(),
+    teamId: teamId == null ? this.teamId : teamId(),
+    priority: priority == null ? this.priority : priority(),
+    onlyMine: onlyMine ?? this.onlyMine,
+    onlyBreached: onlyBreached ?? this.onlyBreached,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is TicketQuery &&
+      other.status == status &&
+      other.teamId == teamId &&
+      other.priority == priority &&
+      other.onlyMine == onlyMine &&
+      other.onlyBreached == onlyBreached;
+
+  @override
+  int get hashCode =>
+      Object.hash(status, teamId, priority, onlyMine, onlyBreached);
+}
+
+final ticketsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, TicketQuery>((ref, q) {
+      return requireRepo(ref).tickets(
+        status: q.status,
+        teamId: q.teamId,
+        priority: q.priority,
+        onlyMine: q.onlyMine,
+        onlyBreached: q.onlyBreached,
+      );
+    });
+
+final ticketProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, String>((ref, id) {
+      return requireRepo(ref).ticket(id);
+    });
+
+final ticketCommentsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, id) {
+      return requireRepo(ref).ticketComments(id);
+    });
+
+final ticketEventsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, id) {
+      return requireRepo(ref).ticketEvents(id);
+    });
+
+final ticketTeamsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+  (ref) => requireRepo(ref).ticketTeams(),
+);
+
+final ticketCategoriesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).ticketCategories(),
+    );
+
+final cannedResponsesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).cannedResponses(),
+    );
