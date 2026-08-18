@@ -59,14 +59,14 @@ begin
   -- --------------------------------------------------------------
   select m.role::text into v_role
     from public.org_members m join auth.users u on u.id = m.user_id
-   where u.email = 'auditor@iakauntan.my';
+   where u.email = 'auditor@iakauntan.com';
   perform pg_temp.check_true(
     'auditor@ is an auditor, which is what the picker says it is — it '
     'used to be an admin of the demo company', v_role = 'auditor');
 
   select m.role::text into v_role
     from public.org_members m join auth.users u on u.id = m.user_id
-   where u.email = 'clerk@iakauntan.my';
+   where u.email = 'clerk@iakauntan.com';
   perform pg_temp.check_true(
     'clerk@ is an accounts clerk rather than a purchaser',
     v_role = 'accounts_clerk');

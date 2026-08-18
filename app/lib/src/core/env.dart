@@ -33,7 +33,7 @@ class Env {
   static const webPushPublicKey = String.fromEnvironment('WEB_PUSH_PUBLIC_KEY');
 
   static const appName = 'iAkauntan';
-  static const supportEmail = 'support@iakauntan.my';
+  static const supportEmail = 'support@iakauntan.com';
 
   /// What is wrong with this build's configuration, or null if nothing
   /// is. Checked before `Supabase.initialize`, which refuses to run

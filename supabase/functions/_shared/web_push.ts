@@ -426,6 +426,6 @@ export function vapidFromEnv(): VapidKeys | null {
   return {
     publicKey,
     privateKey,
-    subject: Deno.env.get("WEB_PUSH_SUBJECT") ?? "mailto:support@iakauntan.my",
+    subject: Deno.env.get("WEB_PUSH_SUBJECT") ?? "mailto:support@iakauntan.com",
   };
 }

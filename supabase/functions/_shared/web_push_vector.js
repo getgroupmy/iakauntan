@@ -53,7 +53,7 @@ const endpoint = 'https://fcm.googleapis.com/fcm/send/abcdef-0123456789';
 const exp = 1786780000 + 12 * 60 * 60;
 const headers = webpush.getVapidHeaders(
   new URL(endpoint).origin,
-  'mailto:support@iakauntan.my',
+  'mailto:support@iakauntan.com',
   vapid.publicKey,
   vapid.privateKey,
   'aes128gcm',
@@ -80,7 +80,7 @@ console.log(JSON.stringify({
   vapid: {
     publicKey: vapid.publicKey,
     privateKey: vapid.privateKey,
-    subject: 'mailto:support@iakauntan.my',
+    subject: 'mailto:support@iakauntan.com',
     expiry: exp,
     authorization: headers.Authorization,
   },

@@ -160,7 +160,7 @@ which are called without a request all over the place.
 
 Unset still means `*`, so the running deployment is not broken by this
 commit. **To finish it**, set `ALLOWED_ORIGINS` in Edge Functions →
-Secrets to the app's own origin, e.g. `https://app.iakauntan.my`. Only
+Secrets to the app's own origin, e.g. `https://app.iakauntan.com`. Only
 browsers are affected — the scheduled workflows and the mobile app send
 no `Origin` and enforce nothing — so it is safe to turn on without
 deploying anything else.
