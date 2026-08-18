@@ -3108,5 +3108,10 @@
     "mtime": 1787067959.764381,
     "ast_hash": "58016ae5e73cb25a9516d6e1a0845956",
     "semantic_hash": ""
+  },
+  "supabase/migrations/0198_forecast_demand_and_lead_time.sql": {
+    "mtime": 1787068306.900991,
+    "ast_hash": "99d51dfa98b8053f08d5acad92e9fafa",
+    "semantic_hash": ""
   }
 }
