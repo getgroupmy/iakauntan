@@ -149,11 +149,6 @@ create table if not exists public.sla_policies (
   -- but Johor, Kedah, Kelantan and Terengganu run Sun–Thu, so this is
   -- per policy rather than assumed.
   work_days   smallint[] not null default array[1,2,3,4,5],
-  -- Whose working day. The database runs in UTC and no other table
-  -- carries a timezone, so without this a 09:00 start means 09:00 UTC —
-  -- which is 5pm in Kuala Lumpur, and every deadline computed from it
-  -- would be wrong by eight hours while looking entirely plausible.
-  time_zone   text not null default 'Asia/Kuala_Lumpur',
   -- Which state's holidays pause the clock. Null means the company's
   -- own state.
   holiday_state_code text,
@@ -161,6 +156,18 @@ create table if not exists public.sla_policies (
   is_active   boolean not null default true,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
+  -- Whose working day. The database runs in UTC and no other table
+  -- carries a timezone, so without this a 09:00 start means 09:00 UTC —
+  -- which is 5pm in Kuala Lumpur, and every deadline computed from it
+  -- would be wrong by eight hours while looking entirely plausible.
+  --
+  -- Last, out of the grouping it belongs to, because that is where the
+  -- hosted project has it: the table was created there first and this
+  -- column added afterwards, so it is column 14 and no `create table`
+  -- that declares it in the middle will ever reproduce that. The schema
+  -- drift gate compares column order and is right to — moving it back
+  -- up to sit beside `work_days` reads better and makes CI red.
+  time_zone   text not null default 'Asia/Kuala_Lumpur',
   unique (org_id, code),
   unique (org_id, id),
   constraint sla_policies_work_window check (work_end > work_start),

@@ -6,6 +6,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/repository.dart';
 
 /// One ticket: what was asked, what was said, and what may happen next.
 ///
@@ -101,7 +102,7 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
                 ticket: t,
                 busy: _busy,
                 onTransition: (to) => _run(
-                  () => requireRepo(ref).transitionTicket(widget.id, to),
+                  () => ref.read(repoProvider)!.transitionTicket(widget.id, to),
                 ),
               ),
               const SizedBox(height: 24),
@@ -117,9 +118,9 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
                   final body = _reply.text.trim();
                   if (body.isEmpty) return;
                   _run(() async {
-                    await requireRepo(
-                      ref,
-                    ).addTicketComment(widget.id, body, internal: _internal);
+                    await ref
+                        .read(repoProvider)!
+                        .addTicketComment(widget.id, body, internal: _internal);
                     _reply.clear();
                   });
                 },

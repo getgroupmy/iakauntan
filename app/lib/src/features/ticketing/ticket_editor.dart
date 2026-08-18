@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
+import '../../data/repository.dart';
 
 /// Raising one.
 ///
@@ -41,7 +42,7 @@ class _TicketEditorState extends ConsumerState<TicketEditor> {
     final router = GoRouter.of(context);
     setState(() => _busy = true);
     try {
-      final id = await requireRepo(ref).createTicket(
+      final id = await ref.read(repoProvider)!.createTicket(
         subject: _subject.text.trim(),
         description: _description.text.trim(),
         categoryCode: _category,

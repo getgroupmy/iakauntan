@@ -5812,14 +5812,16 @@ extension RepoFinancialStatements on Repo {
       'element_code': elementCode,
     }, onConflict: 'org_id,account_id');
   }
+}
 
-  // ------------------------------------------------------------------
-  // Service desk
-  //
-  // The list carries the joins the queue actually shows — who it is
-  // assigned to, which team, which category — because a ticket list
-  // that renders a row of uuids is a list nobody can triage from.
-  // ------------------------------------------------------------------
+/// The service desk.
+///
+/// Its own extension rather than more surface on [Repo] because the
+/// ticketing screens are the only callers, and an extension keeps the
+/// module separable. Anything importing this file gets these methods;
+/// the ticketing screens do, which is why they import it directly
+/// rather than reaching the repo only through the providers.
+extension RepoTicketing on Repo {
   Future<List<Map<String, dynamic>>> tickets({
     String? status,
     String? teamId,
