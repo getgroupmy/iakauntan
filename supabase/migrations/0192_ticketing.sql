@@ -219,6 +219,32 @@ create table if not exists public.ticket_categories (
 );
 
 -- ---------------------------------------------------------------------
+-- The composite key a ticket's asset link needs
+--
+-- Every table this schema points at org-scoped carries `unique (org_id,
+-- id)` so the reference can be made composite and a row cannot borrow
+-- another tenant's record. `fixed_assets` was the one that did not have
+-- it — `id` is already unique, so this adds an index and forbids
+-- nothing that was previously allowed.
+-- ---------------------------------------------------------------------
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.fixed_assets'::regclass
+       and contype = 'u'
+       and conkey = array[
+         (select attnum from pg_attribute
+           where attrelid = 'public.fixed_assets'::regclass and attname = 'org_id'),
+         (select attnum from pg_attribute
+           where attrelid = 'public.fixed_assets'::regclass and attname = 'id')]
+  ) then
+    alter table public.fixed_assets add constraint fixed_assets_org_id_id_key
+      unique (org_id, id);
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------
 -- The ticket
 -- ---------------------------------------------------------------------
 create table if not exists public.tickets (
@@ -364,32 +390,6 @@ create table if not exists public.canned_responses (
     foreign key (org_id, category_id) references public.ticket_categories(org_id, id)
     on delete set null
 );
-
--- ---------------------------------------------------------------------
--- The composite key a ticket's asset link needs
---
--- Every table this schema points at org-scoped carries `unique (org_id,
--- id)` so the reference can be made composite and a row cannot borrow
--- another tenant's record. `fixed_assets` was the one that did not have
--- it — `id` is already unique, so this adds an index and forbids
--- nothing that was previously allowed.
--- ---------------------------------------------------------------------
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-     where conrelid = 'public.fixed_assets'::regclass
-       and contype = 'u'
-       and conkey = array[
-         (select attnum from pg_attribute
-           where attrelid = 'public.fixed_assets'::regclass and attname = 'org_id'),
-         (select attnum from pg_attribute
-           where attrelid = 'public.fixed_assets'::regclass and attname = 'id')]
-  ) then
-    alter table public.fixed_assets add constraint fixed_assets_org_id_id_key
-      unique (org_id, id);
-  end if;
-end $$;
 
 -- ---------------------------------------------------------------------
 -- Keeping updated_at honest, and a history of what changed
