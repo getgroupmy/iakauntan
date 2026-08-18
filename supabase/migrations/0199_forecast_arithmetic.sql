@@ -41,6 +41,7 @@ create or replace function app.normal_z(p numeric)
 returns numeric
 language plpgsql
 immutable
+set search_path = pg_catalog, pg_temp
 as $$
 declare
   -- Acklam's coefficients. Named a/b/c/d as in the published algorithm
@@ -123,6 +124,7 @@ create or replace function app.safety_stock(
 returns numeric
 language sql
 immutable
+set search_path = pg_catalog, pg_temp
 as $$
   -- z · σ · √L. The square root is the whole point: demand over L days
   -- is a sum of L daily demands, variances add, so the standard
@@ -144,6 +146,7 @@ create or replace function app.reorder_point(
 returns numeric
 language sql
 immutable
+set search_path = pg_catalog, pg_temp
 as $$
   -- Expected demand across the lead time, plus the buffer for the days
   -- it runs hot. Nothing more: a reorder point is not an order
@@ -174,6 +177,7 @@ create or replace function app.forecast_moving_average(
 returns numeric[]
 language plpgsql
 immutable
+set search_path = pg_catalog, pg_temp
 as $$
 declare
   v_n     integer := coalesce(array_length(p_history, 1), 0);
@@ -207,6 +211,7 @@ create or replace function app.forecast_exponential_smoothing(
 returns numeric[]
 language plpgsql
 immutable
+set search_path = pg_catalog, pg_temp
 as $$
 declare
   v_n     integer := coalesce(array_length(p_history, 1), 0);
@@ -242,6 +247,7 @@ create or replace function app.forecast_seasonal_naive(
 returns numeric[]
 language plpgsql
 immutable
+set search_path = pg_catalog, pg_temp
 as $$
 declare
   v_n   integer := coalesce(array_length(p_history, 1), 0);
@@ -290,6 +296,7 @@ create or replace function app.days_of_cover(
 returns numeric
 language sql
 immutable
+set search_path = pg_catalog, pg_temp
 as $$
   select case
            when coalesce(p_mean_daily, 0) <= 0 then null
@@ -322,6 +329,7 @@ create or replace function app.suggested_order_qty(
 returns numeric
 language plpgsql
 immutable
+set search_path = pg_catalog, pg_temp
 as $$
 declare
   v_target numeric;

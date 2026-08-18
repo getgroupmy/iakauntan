@@ -39,6 +39,7 @@ create or replace function app.bucket_days(p_bucket app.forecast_bucket)
 returns numeric
 language sql
 immutable
+set search_path = pg_catalog, pg_temp
 as $$
   -- 30.44 rather than 30: the average Gregorian month. A month bucket
   -- treated as 30 days drifts a forecast by five days a year, which is
