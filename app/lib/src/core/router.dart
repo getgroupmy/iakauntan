@@ -108,8 +108,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       final orgs = ref.read(organizationsProvider);
       if (orgs.isLoading || orgs.hasError) return null;
 
+      // Held on error as well as while loading, exactly as the
+      // organizations above are. Deciding without this answer sends the
+      // operator to onboarding, and getting there by mistake is worse
+      // than waiting: the redirect re-runs when the provider settles.
       final admin = ref.read(isPlatformAdminProvider);
-      if (admin.isLoading) return null;
+      if (admin.isLoading || admin.hasError) return null;
 
       final hasOrg = (orgs.value ?? const []).isNotEmpty;
 

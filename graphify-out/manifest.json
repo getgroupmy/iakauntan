@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787046826.7080805,
-    "ast_hash": "079260fff02fa98cf1b7315e191afa7d",
+    "mtime": 1787065764.2549758,
+    "ast_hash": "9115624896a92a0cfaa7946bb7065e14",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787060395.3294158,
-    "ast_hash": "7f004272c76fe4ce151e075f4ecc4ce1",
+    "mtime": 1787065764.2556474,
+    "ast_hash": "66f1fc98dd81f53f0d727579d5fead9b",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -2475,8 +2475,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/_shared/web_push_vector.js": {
-    "mtime": 1787061825.3327343,
-    "ast_hash": "43e63b4d9616f3c13550648c5fea9cdd",
+    "mtime": 1787062448.089635,
+    "ast_hash": "02ab1173a376b55af165e2601d3a29cf",
     "semantic_hash": ""
   },
   "supabase/migrations/0143_web_push.sql": {

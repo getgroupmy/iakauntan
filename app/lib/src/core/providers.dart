@@ -587,14 +587,28 @@ final platformRepoProvider = Provider<PlatformRepo>(
 );
 
 /// Whether the signed-in user is platform staff. Drives whether the
-/// admin console appears at all.
+/// admin console appears, and where the router sends somebody who
+/// belongs to no organization.
+///
+/// Allowed to fail rather than answering false. It used to catch
+/// everything and report "not an admin", which reads like a safe
+/// default and is not one. The operator belongs to no company by
+/// design, so the router's no-organization branch is the one they land
+/// in — and with a false here that branch pins them to the
+/// company-setup form. One failed RPC, a token refreshing mid-flight,
+/// a request that timed out, and the person who runs the platform is
+/// looking at "Set up your company" with nothing on screen saying why.
+///
+/// A question that could not be asked is not a question answered no.
+///
+/// Nobody gains access from this. The console's real guard is the
+/// SECURITY DEFINER function behind this call, and every platform RPC
+/// checks again server-side. What the error state buys is the router
+/// holding still instead of guessing, and the console offering "try
+/// again" instead of "not a platform administrator".
 final isPlatformAdminProvider = FutureProvider<bool>((ref) async {
   if (ref.watch(currentUserProvider) == null) return false;
-  try {
-    return await ref.watch(platformRepoProvider).amIPlatformAdmin();
-  } catch (_) {
-    return false;
-  }
+  return ref.watch(platformRepoProvider).amIPlatformAdmin();
 });
 
 final platformStatsProvider = FutureProvider.autoDispose<Map<String, dynamic>>((
