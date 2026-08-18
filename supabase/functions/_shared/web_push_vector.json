@@ -16,7 +16,7 @@
   "vapid": {
     "publicKey": "BOO8QZ1cBXgqVnrbeZPZKQTZoQA7ubnZ9_PFPePO2acqSj-G1v16VKnAf0smtN3Sr4sa_1Ng6ZW-SxjMKHPT0oQ",
     "privateKey": "3O3LteUn1K47Liq_hwHKcJvU83eVRdE_232wXmEHRv4",
-    "subject": "mailto:support@iakauntan.com",
+    "subject": "mailto:support@iakauntan.my",
     "expiry": 1786823200,
     "authorization": "vapid t=eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJhdWQiOiJodHRwczovL2ZjbS5nb29nbGVhcGlzLmNvbSIsImV4cCI6MTc4NjgyMzIwMCwic3ViIjoibWFpbHRvOnN1cHBvcnRAaWFrYXVudGFuLm15In0.YWj9Gwum3pnHE-UVHioimN-k0-C_PSp_jEvyVzWhH8YJ8dG80IPUZX2MQwgeuapIlsdxv_mpm2qlWJpDmqJrbQ, k=BOO8QZ1cBXgqVnrbeZPZKQTZoQA7ubnZ9_PFPePO2acqSj-G1v16VKnAf0smtN3Sr4sa_1Ng6ZW-SxjMKHPT0oQ"
   }

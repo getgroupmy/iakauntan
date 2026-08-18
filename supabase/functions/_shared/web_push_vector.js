@@ -53,7 +53,17 @@ const endpoint = 'https://fcm.googleapis.com/fcm/send/abcdef-0123456789';
 const exp = 1786780000 + 12 * 60 * 60;
 const headers = webpush.getVapidHeaders(
   new URL(endpoint).origin,
-  'mailto:support@iakauntan.com',
+  // Recorded, not configuration. This address is baked into the
+  // expected VAPID header further down — a base64 payload captured from
+  // the reference `web-push` library — so changing it here without
+  // regenerating that string makes the vector disagree with itself.
+  //
+  // It deliberately keeps `iakauntan.my` after the rest of the project
+  // moved to .com. A vector is a snapshot of what another
+  // implementation produced on a particular day; sweeping a rename
+  // through it edits the evidence rather than the code, and the
+  // assertion it feeds stops being a cross-check against anything.
+  'mailto:support@iakauntan.my',
   vapid.publicKey,
   vapid.privateKey,
   'aes128gcm',
@@ -80,7 +90,7 @@ console.log(JSON.stringify({
   vapid: {
     publicKey: vapid.publicKey,
     privateKey: vapid.privateKey,
-    subject: 'mailto:support@iakauntan.com',
+    subject: 'mailto:support@iakauntan.my',
     expiry: exp,
     authorization: headers.Authorization,
   },
