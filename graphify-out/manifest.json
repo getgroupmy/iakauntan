@@ -3125,8 +3125,8 @@
     "semantic_hash": ""
   },
   "supabase/migrations/0201_demo_forecasting.sql": {
-    "mtime": 1787069178.6743164,
-    "ast_hash": "b10108535a111d894f0c012103a3802d",
+    "mtime": 1787070005.3965461,
+    "ast_hash": "8b7d33da856b330494210c93251761c4",
     "semantic_hash": ""
   },
   "supabase/tests/inventory_forecast.sql": {

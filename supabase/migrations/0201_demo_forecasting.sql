@@ -54,6 +54,19 @@ declare
   v_measured  integer;
   v_item      uuid;
 begin
+  -- Act as the owner before anything guarded is called.
+  --
+  -- The seeder that runs immediately before this one signs out on its
+  -- way out — `set_config('request.jwt.claims', '', true)` — so this
+  -- function starts with no caller at all. `app.module_access` returns
+  -- 'none' the moment `auth.uid()` is null, so `run_inventory_forecast`
+  -- refused with "not permitted", which reads like a permissions bug in
+  -- the module and is nothing of the sort.
+  --
+  -- The tell was in this function's own signature: it took `p_owner`
+  -- and never used it.
+  perform app.demo_act_as(p_owner);
+
   perform app.demo_modules(p_org, array['forecasting']);
 
   insert into public.forecast_settings (
@@ -153,6 +166,8 @@ begin
          count(*) filter (where lead_time_source = 'measured')
     into v_lines, v_suggested, v_measured
     from public.forecast_lines where run_id = v_run;
+
+  perform set_config('request.jwt.claims', '', true);
 
   return format(
     'Sinar forecasting: %s back-dated orders linked to %s bill line(s), '
