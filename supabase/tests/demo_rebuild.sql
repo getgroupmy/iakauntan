@@ -39,6 +39,8 @@ declare
   v_harta   uuid;
   v_entities integer;
   v_units   integer;
+  v_bank    numeric;
+  v_gl      numeric;
   v_bad     integer;
   v_missing text;
 begin
@@ -125,18 +127,103 @@ begin
        join public.accounts a on a.id = l.account_id
       where e.org_id = v_sinar and e.status = 'posted' and a.code = '2130') > 0);
 
-  perform pg_temp.check_true(
-    'receivables equal revenue plus that tax, which is the identity a '
-    'missing tax_rate silently breaks',
+  -- Sinar now collects some of what it invoices, so receivables are no
+  -- longer the whole of revenue plus tax — they are what is left after
+  -- the receipts. Stated with the receipts on the left rather than
+  -- dropped, because it is the same identity and it is still the one a
+  -- missing `tax_rate` silently breaks.
+  perform pg_temp.check_eq(
+    'receivables plus what was collected equal revenue plus output SST',
     (select coalesce(sum(l.debit - l.credit), 0) from public.gl_lines l
        join public.gl_entries e on e.id = l.entry_id
        join public.accounts a on a.id = l.account_id
       where e.org_id = v_sinar and e.status = 'posted' and a.code = '1210')
-    = (select coalesce(sum(l.credit - l.debit), 0) from public.gl_lines l
-         join public.gl_entries e on e.id = l.entry_id
-         join public.accounts a on a.id = l.account_id
-        where e.org_id = v_sinar and e.status = 'posted'
-          and a.code in ('4100', '2130')));
+    + (select coalesce(sum(amount), 0) from public.receipts
+        where org_id = v_sinar and status = 'posted'),
+    (select coalesce(sum(l.credit - l.debit), 0) from public.gl_lines l
+       join public.gl_entries e on e.id = l.entry_id
+       join public.accounts a on a.id = l.account_id
+      where e.org_id = v_sinar and e.status = 'posted'
+        and a.code in ('4100', '2130')));
+
+  -- --------------------------------------------------------------
+  -- Sinar's cash, staff and assets
+  --
+  -- Three subledgers that each keep their own running total and are each
+  -- capable of disagreeing with the ledger without anything failing.
+  --
+  --   * `bank_accounts.current_balance` is a cached column. Receipts and
+  --     payments maintain it; a journal that touches the bank account
+  --     directly does not. The demo posts several of those — capital, an
+  --     asset bought for cash, a salary run — so the column is a real
+  --     opportunity to drift and the identity is worth asserting.
+  --   * the fixed asset register carries cost and accumulated
+  --     depreciation of its own, which the balance sheet then reports
+  --     from the ledger. If those two ever part company the register and
+  --     the accounts tell different stories about the same van.
+  --   * net pay is credited to 2145 by `post_payroll_run()` and cleared
+  --     by the bank transfer. A balance left there means the demo shows
+  --     wages owing to people it also shows as paid.
+  -- --------------------------------------------------------------
+  perform pg_temp.check_true('Sinar has a bank account at all — it had '
+    'none, which is why every invoice sat unpaid',
+    exists (select 1 from public.bank_accounts where org_id = v_sinar));
+
+  select b.current_balance into v_bank
+    from public.bank_accounts b where b.org_id = v_sinar;
+  select coalesce(sum(l.debit - l.credit), 0) into v_gl
+    from public.gl_lines l
+    join public.gl_entries e on e.id = l.entry_id
+    join public.bank_accounts b on b.account_id = l.account_id
+   where e.org_id = v_sinar and e.status = 'posted' and b.org_id = v_sinar;
+  perform pg_temp.check_eq(
+    'the cached bank balance equals the ledger, which is the whole point '
+    'of a cache nobody reconciles', v_bank, v_gl);
+
+  -- Both aging buckets. Either extreme is a screen with nothing to read.
+  select count(*) into v_units from public.sales_documents
+   where org_id = v_sinar and doc_type = 'invoice' and status = 'posted';
+  perform pg_temp.check_true(
+    format('some invoices are still outstanding (%s), so the aging report '
+           'has a current bucket', v_units), v_units > 0);
+  select count(*) into v_units from public.receipts where org_id = v_sinar;
+  perform pg_temp.check_true(
+    format('and some were collected (%s receipts), so it has a settled '
+           'side too', v_units), v_units > 0);
+
+  perform pg_temp.check_eq(
+    'the asset register''s cost equals the ledger''s property, plant and '
+    'equipment — a register the balance sheet has never heard of is worse '
+    'than an empty one',
+    (select coalesce(sum(cost), 0) from public.fixed_assets
+      where org_id = v_sinar and deleted_at is null),
+    (select coalesce(sum(l.debit - l.credit), 0) from public.gl_lines l
+       join public.gl_entries e on e.id = l.entry_id
+       join public.accounts a on a.id = l.account_id
+      where e.org_id = v_sinar and e.status = 'posted'
+        and a.code in ('1510', '1520')));
+
+  perform pg_temp.check_eq(
+    'and its accumulated depreciation equals the ledger''s',
+    (select coalesce(sum(accumulated_depreciation), 0) from public.fixed_assets
+      where org_id = v_sinar and deleted_at is null),
+    (select coalesce(sum(l.credit - l.debit), 0) from public.gl_lines l
+       join public.gl_entries e on e.id = l.entry_id
+       join public.accounts a on a.id = l.account_id
+      where e.org_id = v_sinar and e.status = 'posted' and a.code = '1590'));
+
+  select count(*) into v_units from public.payroll_runs where org_id = v_sinar;
+  perform pg_temp.check_true(
+    format('payroll ran (%s runs), which it could not do at all until the '
+           'chart gained account 2145', v_units), v_units > 0);
+
+  perform pg_temp.check_eq(
+    'nothing is left in net salaries payable: everyone the demo shows as '
+    'paid was actually paid',
+    (select coalesce(sum(l.credit - l.debit), 0) from public.gl_lines l
+       join public.gl_entries e on e.id = l.entry_id
+       join public.accounts a on a.id = l.account_id
+      where e.org_id = v_sinar and e.status = 'posted' and a.code = '2145'), 0);
 
   -- --------------------------------------------------------------
   -- Amanah: the client register, which is the module's whole point
