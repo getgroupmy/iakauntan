@@ -295,6 +295,7 @@ declare
   v_bolt   uuid;
   v_nut    uuid;
   v_clamp  uuid;
+  v_gasket uuid;
   v_orphan uuid;
   v_run    uuid;
   v_line   uuid;
@@ -327,11 +328,15 @@ begin
     (v_org, 'BOLT',  'Bolt',  'stock', true, 'C62', 10),
     (v_org, 'NUT',   'Nut',   'stock', true, 'C62', 5),
     (v_org, 'CLAMP', 'Clamp', 'stock', true, 'C62', 2.5),
+    -- Deep stock and almost no demand: overstocked on every measure
+    -- the model has, and still under the floor its buyer set.
+    (v_org, 'GASKET', 'Gasket', 'stock', true, 'C62', 1.25),
     (v_org, 'SPARE', 'Spare', 'stock', true, 'C62', 1);
 
   select id into v_bolt   from public.items where org_id = v_org and code = 'BOLT';
   select id into v_nut    from public.items where org_id = v_org and code = 'NUT';
   select id into v_clamp  from public.items where org_id = v_org and code = 'CLAMP';
+  select id into v_gasket from public.items where org_id = v_org and code = 'GASKET';
   select id into v_orphan from public.items where org_id = v_org and code = 'SPARE';
 
   -- Some demand, so the fixture is not forecasting silence — and the
@@ -347,7 +352,9 @@ begin
     (v_org, 'R1', 'sales_delivery',   current_date - 20, v_bolt, v_wh, -5, 0),
     (v_org, 'R2', 'sales_delivery',   current_date - 12, v_bolt, v_wh, -7, 0),
     (v_org, 'R4', 'purchase_receipt', current_date - 30, v_nut,  v_wh, 3,  5),
-    (v_org, 'R3', 'sales_delivery',   current_date - 4,  v_nut,  v_wh, -3, 0);
+    (v_org, 'R3', 'sales_delivery',   current_date - 4,  v_nut,  v_wh, -3, 0),
+    (v_org, 'R5', 'purchase_receipt', current_date - 30, v_gasket, v_wh, 500, 1.25),
+    (v_org, 'R6', 'sales_delivery',   current_date - 10, v_gasket, v_wh, -2, 0);
 
   -- Target pinned, so the suggestion is exactly the target: nothing is
   -- on hand, so ordering up to it is the whole quantity.
@@ -360,6 +367,12 @@ begin
     -- Deliberately no supplier: the item nobody can be asked to supply.
     (v_org, v_orphan,  25,  25, null);
 
+  -- No ceiling on this one: the point is the floor, and 498 on hand
+  -- against a floor of 600 leaves 102 to buy.
+  insert into public.item_forecast_params
+    (org_id, item_id, min_quantity, supplier_id)
+  values (v_org, v_gasket, 600, v_sup_b);
+
   insert into public.forecast_settings
     (org_id, bucket, horizon_buckets, history_days, min_periods)
   values (v_org, 'week', 2, 84, 3)
@@ -371,7 +384,7 @@ begin
   -- What the run says, before anything is ordered
   -- ------------------------------------------------------------------
   select count(*) into v_n from public.forecast_suggestions(v_org);
-  perform pg_temp.check_eq('four items are suggested', v_n, 4);
+  perform pg_temp.check_eq('five items are suggested', v_n, 5);
 
   select s.suggested_qty, s.already_drafted, s.outstanding, s.supplier_name
     into v_a, v_b, v_c, v_txt
@@ -385,6 +398,22 @@ begin
   -- ------------------------------------------------------------------
   -- One order per supplier
   -- ------------------------------------------------------------------
+  -- ------------------------------------------------------------------
+  -- A buyer's floor is a reason to order, whatever the cover says
+  -- ------------------------------------------------------------------
+  -- The gasket has years of stock by every measure the model has, and
+  -- it is still under the minimum its buyer set. Before this was
+  -- fixed the row read `overstocked` while the suggestion beside it
+  -- said to buy a hundred, which reads as a bug in the arithmetic.
+  select s.state::text, s.days_cover, s.suggested_qty into v_txt, v_a, v_b
+    from public.forecast_suggestions(v_org) s where s.item_code = 'GASKET';
+  -- The control: without this the state below could be right because
+  -- the item is genuinely short, which is not what is being tested.
+  perform pg_temp.check_true('the gasket really is deeply stocked', v_a > 1000);
+  perform pg_temp.check_eq('and still 102 short of the floor its buyer set', v_b, 102);
+  perform pg_temp.check_true('so it reads as something to order, not as overstock',
+    v_txt = 'order_now');
+
   select count(*), count(*) filter (where r.document_id is not null)
     into v_n, v_docs
     from public.create_po_from_suggestions(v_org) r;
