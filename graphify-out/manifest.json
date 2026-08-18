@@ -290,8 +290,8 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1786898278.6311662,
-    "ast_hash": "c324601da0c3cf6e2f66fec05bd61218",
+    "mtime": 1787048600.0148244,
+    "ast_hash": "89ebf4ca16ef540ac71ef74ac66f6e7c",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -1385,8 +1385,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/statutory_rates_admin.dart": {
-    "mtime": 1787046765.2373507,
-    "ast_hash": "29eadb91e5a04d02fb18281b9e493270",
+    "mtime": 1787047251.347509,
+    "ast_hash": "1608e54e6871ed5c4749630187f01992",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/holidays_tab.dart": {
@@ -3092,6 +3092,11 @@
   "supabase/tests/ticketing.sql": {
     "mtime": 1787039248.8366709,
     "ast_hash": "1bccad8afcb40415ba522693e40698d2",
+    "semantic_hash": ""
+  },
+  "app/test/settings_no_org_test.dart": {
+    "mtime": 1787048670.0736015,
+    "ast_hash": "05b1afa53a306a99e4980be8ac733286",
     "semantic_hash": ""
   }
 }

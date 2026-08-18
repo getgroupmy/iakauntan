@@ -35,70 +35,86 @@ class SettingsScreen extends ConsumerWidget {
         value: org,
         onRetry: () => refreshOrganization(ref),
         builder: (organization) {
-          if (organization == null) {
-            return const EmptyState(
-              icon: Icons.business_outlined,
-              title: 'No organization',
-              message: 'Create a company to get started.',
-            );
-          }
-
           return SingleChildScrollView(
             child: PageBody(
               maxWidth: 860,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  CompanyCard(org: organization),
-                  const SizedBox(height: 16),
-                  // Directly under the company it describes: it is a
-                  // fact about this company, and it decides what every
-                  // invoice line is taxed at.
-                  const SstCard(),
-                  const SizedBox(height: 16),
-                  // Beside the company they describe: a branch is part
-                  // of this company, a group is the companies beside it.
-                  if (moduleEnabled(ref, 'chat')) ...[
-                    const ChatCard(),
-                    const SizedBox(height: Space.md),
-                    // Beside chat, because chat is the only thing that
-                    // notifies anybody — and unlike everything else on
-                    // this screen it is per browser, not per company.
-                    const NotificationsCard(),
-                    const SizedBox(height: Space.md),
-                  ],
-                  if (moduleEnabled(ref, 'branches')) ...[
-                    const BranchesCard(),
+                  if (organization == null) ...[
+                    const EmptyState(
+                      icon: Icons.business_outlined,
+                      title: 'No organization',
+                      message: 'Create a company and its settings appear '
+                          'here. Your own account is below either way.',
+                    ),
+                    const SizedBox(height: 16),
+                  ] else ...[
+                    CompanyCard(org: organization),
+                    const SizedBox(height: 16),
+                    // Directly under the company it describes: it is a
+                    // fact about this company, and it decides what every
+                    // invoice line is taxed at.
+                    const SstCard(),
+                    const SizedBox(height: 16),
+                    // Beside the company they describe: a branch is part
+                    // of this company, a group is the companies beside it.
+                    if (moduleEnabled(ref, 'chat')) ...[
+                      const ChatCard(),
+                      const SizedBox(height: Space.md),
+                      // Beside chat, because chat is the only thing that
+                      // notifies anybody — and unlike everything else on
+                      // this screen it is per browser, not per company.
+                      const NotificationsCard(),
+                      const SizedBox(height: Space.md),
+                    ],
+                    if (moduleEnabled(ref, 'branches')) ...[
+                      const BranchesCard(),
+                      const SizedBox(height: 16),
+                    ],
+                    const CompanyGroupCard(),
+                    const SizedBox(height: 16),
+                    _EinvoiceCard(org: organization, canEdit: isAdmin),
+                    const SizedBox(height: 16),
+                    _ScanningCard(canEdit: isAdmin),
+                    const SizedBox(height: 16),
+                    _ModulesCard(canAdmin: isAdmin),
+                    const SizedBox(height: 16),
+                    _FiscalYearsCard(canAdmin: isAdmin),
+                    const SizedBox(height: 16),
+                    _CreditControlCard(org: organization, canAdmin: isAdmin),
+                    const SizedBox(height: 16),
+                    if (moduleEnabled(ref, 'hr')) ...[
+                      ClaimApprovalCard(org: organization, canAdmin: isAdmin),
+                      const SizedBox(height: 16),
+                    ],
+                    if (organization.baseCurrency.isNotEmpty)
+                      _ForeignBalancesCard(org: organization, canPost: canPost),
+                    const SizedBox(height: 16),
+                    if (moduleEnabled(ref, 'inventory')) ...[
+                      const WarehousesCard(),
+                      const SizedBox(height: 16),
+                    ],
+                    const _ChartOfAccountsCard(),
+                    const SizedBox(height: 16),
+                    _TaxCodesCard(),
                     const SizedBox(height: 16),
                   ],
-                  const CompanyGroupCard(),
-                  const SizedBox(height: 16),
-                  _EinvoiceCard(org: organization, canEdit: isAdmin),
-                  const SizedBox(height: 16),
-                  _ScanningCard(canEdit: isAdmin),
-                  const SizedBox(height: 16),
-                  _ModulesCard(canAdmin: isAdmin),
-                  const SizedBox(height: 16),
-                  _FiscalYearsCard(canAdmin: isAdmin),
-                  const SizedBox(height: 16),
-                  _CreditControlCard(org: organization, canAdmin: isAdmin),
-                  const SizedBox(height: 16),
-                  if (moduleEnabled(ref, 'hr')) ...[
-                    ClaimApprovalCard(org: organization, canAdmin: isAdmin),
-                    const SizedBox(height: 16),
-                  ],
-                  if (organization.baseCurrency.isNotEmpty)
-                    _ForeignBalancesCard(org: organization, canPost: canPost),
-                  const SizedBox(height: 16),
-                  if (moduleEnabled(ref, 'inventory')) ...[
-                    const WarehousesCard(),
-                    const SizedBox(height: 16),
-                  ],
-                  const _ChartOfAccountsCard(),
-                  const SizedBox(height: 16),
-                  _TaxCodesCard(),
-                  const SizedBox(height: 16),
-                  _AboutCard(role: role),
+                  // Outside the branch above, because this card is about
+                  // *you* and not about a company. It used to sit below
+                  // the null check with everything else, so somebody who
+                  // belonged to no organization — which platform staff
+                  // routinely do — got "create a company to get started"
+                  // and no way to change their own password, sign out,
+                  // or close their account. The one credential they
+                  // most need to rotate was the one the screen would not
+                  // let them reach.
+                  //
+                  // `role` goes in null in that case rather than the
+                  // 'viewer' the provider falls back to: no company means
+                  // no role in one, and printing "Viewer" would be a
+                  // statement about a company that is not there.
+                  _AboutCard(role: organization == null ? null : role),
                   const SizedBox(height: 40),
                 ],
               ),
@@ -1698,7 +1714,9 @@ class _TaxCodeDialogState extends ConsumerState<_TaxCodeDialog> {
 class _AboutCard extends ConsumerWidget {
   const _AboutCard({required this.role});
 
-  final String role;
+  /// The caller's role in the current company, or null when they belong
+  /// to no company at all.
+  final String? role;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1712,7 +1730,7 @@ class _AboutCard extends ConsumerWidget {
           children: [
             const SectionHeader('Your account'),
             FieldRow(label: 'Signed in as', value: user?.email ?? '—'),
-            FieldRow(label: 'Role', value: Fmt.label(role)),
+            if (role != null) FieldRow(label: 'Role', value: Fmt.label(role!)),
             const SizedBox(height: 12),
             // A demo login is shared with everybody else looking at the
             // demo, so changing its password would lock all of them out.
@@ -1752,7 +1770,13 @@ class _AboutCard extends ConsumerWidget {
             ),
             // Not offered on the shared demo logins: closing one would
             // take the panel away from everybody.
-            if (!ref.watch(isDemoAccountProvider)) ...[
+            // Needs a company: the blockers it lists — unapproved
+            // claims, unposted journals, an unfiled return — are all
+            // facts about one, and the provider behind them is
+            // org-bound. Closing an account that belongs to no company
+            // is a real thing to want and not what this widget does, so
+            // it is left off rather than shown broken.
+            if (role != null && !ref.watch(isDemoAccountProvider)) ...[
               const SizedBox(height: Space.lg),
               const Divider(),
               const SizedBox(height: Space.sm),
