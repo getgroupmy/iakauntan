@@ -144,7 +144,7 @@ void main() {
           .any((a) => a.email.toLowerCase() == typed.toLowerCase());
 
       expect(blocked('demo@iakauntan.com'), isTrue);
-      expect(blocked('DEMO@IAkauntan.MY'), isTrue,
+      expect(blocked('DEMO@IAkauntan.COM'), isTrue,
           reason: 'an address is not case sensitive, so neither is the guard');
       expect(blocked('  demo@iakauntan.com'.trim()), isTrue);
       expect(blocked('someone@example.com'), isFalse,

@@ -1130,8 +1130,8 @@
     "semantic_hash": ""
   },
   "app/test/demo_accounts_test.dart": {
-    "mtime": 1787061404.6296237,
-    "ast_hash": "81c88e6bca150039d5305a6647df122a",
+    "mtime": 1787062273.2106242,
+    "ast_hash": "d9a1b6e7afec27b0b8b92baea5f74f1f",
     "semantic_hash": ""
   },
   "supabase/migrations/0076_lock_demo_credentials.sql": {
