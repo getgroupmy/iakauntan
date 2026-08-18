@@ -50,6 +50,11 @@ create or replace function app.ticket_transition_allowed(
 returns boolean
 language sql
 immutable
+-- Pinned like every other function here. supabase/tests/search_path.sql
+-- requires it, and a function referenced from a policy resolving its
+-- names against whatever search_path the caller happens to carry is the
+-- shape of a real problem even when this one resolves nothing.
+set search_path = public, app, pg_temp
 as $$
   select case p_from
     when 'new'       then p_to in ('open','pending','on_hold','resolved','cancelled')
@@ -64,7 +69,9 @@ as $$
 $$;
 
 create or replace function app.ticket_status_pauses_clock(p_status app.ticket_status)
-returns boolean language sql immutable as $$
+returns boolean language sql immutable
+set search_path = public, app, pg_temp
+as $$
   select p_status in ('pending', 'on_hold');
 $$;
 
