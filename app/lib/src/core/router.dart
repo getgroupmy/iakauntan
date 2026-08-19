@@ -35,6 +35,7 @@ import '../features/timesheets/timesheet_screen.dart';
 import '../features/property/property_screen.dart';
 import '../features/property/site_editor.dart';
 import '../features/forecasting/forecast_screen.dart';
+import '../features/pos/till_screen.dart';
 import '../features/ticketing/ticket_editor.dart';
 import '../features/ticketing/ticket_screen.dart';
 import '../features/ticketing/tickets_screen.dart';
@@ -359,6 +360,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/forecasting',
             builder: (_, __) => const ForecastScreen(),
           ),
+          GoRoute(path: '/till', builder: (_, __) => const TillScreen()),
           GoRoute(
             path: '/property',
             builder: (_, __) => const PropertyScreen(),

@@ -1743,3 +1743,40 @@ final itemForecastParamsProvider = FutureProvider.autoDispose
         ref,
       ).itemForecastParams(key.itemId, warehouseId: key.warehouseId),
     );
+
+// ---------------------------------------------------------------------
+// Point of sale
+// ---------------------------------------------------------------------
+
+final posRegistersProvider = FutureProvider.autoDispose<
+  List<Map<String, dynamic>>
+>((ref) => requireRepo(ref).posRegisters());
+
+/// The open shift on a register, or null. Everything the till can do
+/// hangs off this being a row, which is why it is a provider rather
+/// than something the screen reads once and remembers: a drawer closed
+/// on another device has to reach this one.
+final currentPosShiftProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>(
+      (ref, registerId) => requireRepo(ref).currentPosShift(registerId),
+    );
+
+final posTenderTypesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posTenderTypes(),
+    );
+
+final posSaleProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>(
+      (ref, saleId) => requireRepo(ref).posSale(saleId),
+    );
+
+final posSaleLinesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, saleId) => requireRepo(ref).posSaleLines(saleId),
+    );
+
+final parkedPosSalesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, registerId) => requireRepo(ref).parkedPosSales(registerId),
+    );

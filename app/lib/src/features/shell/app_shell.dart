@@ -180,6 +180,16 @@ const _destinations = <_Dest>[
     '/forecasting',
     module: 'forecasting',
   ),
+  // Above the ledger screens rather than among them. Somebody standing
+  // at a till is not doing accounting, and the thing they need is the
+  // one thing they need all day.
+  _Dest(
+    'Till',
+    Icons.point_of_sale_outlined,
+    Icons.point_of_sale,
+    '/till',
+    module: 'pos',
+  ),
   _Dest('Chat', Icons.forum_outlined, Icons.forum, '/chat', module: 'chat'),
   // No module gate. Chasing an unpaid invoice is what the sales ledger
   // is for when a customer does not pay, and sales is core.

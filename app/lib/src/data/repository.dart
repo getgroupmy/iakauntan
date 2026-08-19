@@ -6140,3 +6140,173 @@ extension RepoForecasting on Repo {
     ),
   );
 }
+
+/// Point of sale.
+///
+/// Almost every call here is an RPC rather than a table write, and that
+/// is the design rather than an accident: a sale, its lines and its
+/// tenders are read-only to the API. The functions are the things that
+/// know a drawer is open, price a line and prove the money adds up, so
+/// a till that could write those rows directly could tell the drawer it
+/// had been paid.
+extension RepoPos on Repo {
+  /// The tills this company has, with the outlet each stands in.
+  Future<List<Map<String, dynamic>>> posRegisters() async => Repo.rows(
+    await client
+        .from('pos_registers')
+        .select('*, pos_outlets(id, name, code, business_type)')
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('code'),
+  );
+
+  /// The shift a register is in the middle of, or null if the drawer has
+  /// not been opened. Nothing can be sold until this returns a row,
+  /// which is deliberate: takings that belong to no count belong to
+  /// nobody.
+  Future<Map<String, dynamic>?> currentPosShift(String registerId) async {
+    final rows = Repo.rows(
+      await client
+          .from('pos_shifts')
+          .select()
+          .eq('register_id', registerId)
+          .neq('status', 'closed')
+          .limit(1),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<String> openPosShift(String registerId, num float) async =>
+      await client.rpc(
+            'open_pos_shift',
+            params: {'p_register': registerId, 'p_float': float},
+          )
+          as String;
+
+  /// Returns what was expected, what was declared and the difference —
+  /// all three, because a variance without the two numbers behind it is
+  /// a figure nobody can check.
+  Future<Map<String, dynamic>?> closePosShift(
+    String shiftId,
+    num declared, {
+    String? notes,
+  }) async {
+    final rows = Repo.rows(
+      await client.rpc(
+        'close_pos_shift',
+        params: {
+          'p_shift': shiftId,
+          'p_declared': declared,
+          if (notes != null) 'p_notes': notes,
+        },
+      ),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> posTenderTypes() async => Repo.rows(
+    await client
+        .from('pos_tender_types')
+        .select()
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('code'),
+  );
+
+  /// A scan or a typed search. One row with `matched_on = 'barcode'` is
+  /// the case a till can act on without asking anybody.
+  Future<List<Map<String, dynamic>>> posLookup(
+    String outletId,
+    String code,
+  ) async => Repo.rows(
+    await client.rpc(
+      'pos_lookup_item',
+      params: {'p_outlet': outletId, 'p_code': code},
+    ),
+  );
+
+  Future<String> openPosSale(
+    String registerId, {
+    String? contactId,
+    String? clientUuid,
+  }) async =>
+      await client.rpc(
+            'open_pos_sale',
+            params: {
+              'p_register': registerId,
+              if (contactId != null) 'p_contact': contactId,
+              if (clientUuid != null) 'p_client_uuid': clientUuid,
+            },
+          )
+          as String;
+
+  Future<String> addPosSaleLine(
+    String saleId,
+    String itemId, {
+    num quantity = 1,
+    num? price,
+    String? note,
+  }) async =>
+      await client.rpc(
+            'add_pos_sale_line',
+            params: {
+              'p_sale': saleId,
+              'p_item': itemId,
+              'p_quantity': quantity,
+              if (price != null) 'p_price': price,
+              if (note != null) 'p_note': note,
+            },
+          )
+          as String;
+
+  Future<Map<String, dynamic>?> posSale(String saleId) async {
+    final rows = Repo.rows(
+      await client.from('pos_sales').select().eq('id', saleId).limit(1),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> posSaleLines(String saleId) async =>
+      Repo.rows(
+        await client
+            .from('pos_sale_lines')
+            .select()
+            .eq('sale_id', saleId)
+            .order('line_no'),
+      );
+
+  /// Baskets set aside. A till with a queue behind it parks one sale to
+  /// serve the next, and the parked ones have to be findable or the
+  /// money on them is lost.
+  Future<List<Map<String, dynamic>>> parkedPosSales(String registerId) async =>
+      Repo.rows(
+        await client
+            .from('pos_sales')
+            .select()
+            .eq('register_id', registerId)
+            .eq('status', 'parked')
+            .order('opened_at'),
+      );
+
+  /// The whole answer: what it came to, what the drawer asks for, what
+  /// comes back and what rounding did. Four numbers because the customer
+  /// can see all four, and a till that only showed the total would be
+  /// asking the cashier to do the subtraction.
+  Future<Map<String, dynamic>?> completePosSale(
+    String saleId,
+    List<Map<String, dynamic>> tenders, {
+    String? contactId,
+  }) async {
+    final rows = Repo.rows(
+      await client.rpc(
+        'complete_pos_sale',
+        params: {
+          'p_sale': saleId,
+          'p_tenders': tenders,
+          if (contactId != null) 'p_contact': contactId,
+        },
+      ),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+}
