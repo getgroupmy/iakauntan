@@ -43,6 +43,13 @@ declare
   v_nocuc  uuid;
   v_line   uuid;
   v_lm     uuid;
+  v_cat    uuid;
+  v_teh    uuid;
+  v_hotst  uuid;
+  v_barst  uuid;
+  v_tk     uuid;
+  v_split  uuid;
+  v_l1     uuid;
 begin
   v_org := pg_temp.test_org('Warung Sedap Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
@@ -300,6 +307,154 @@ begin
   delete from public.pos_sale_lines where id = v_line;
   perform pg_temp.check_eq('taking the plate off takes the egg with it',
     (select count(*) from public.pos_sale_line_modifiers m where m.line_id = v_line), 0);
+
+  -- ------------------------------------------------------------------
+  -- The kitchen gets told once
+  -- ------------------------------------------------------------------
+  insert into public.item_categories (org_id, code, name)
+  values (v_org, 'DRINK', 'Minuman') returning id into v_cat;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code,
+     unit_price, cost_price, category_id)
+  values (v_org, 'TEH', 'Teh tarik', 'stock', true, 'C62', 3.00, 1.00, v_cat)
+  returning id into v_teh;
+
+  insert into public.pos_kitchen_stations
+    (org_id, outlet_id, code, name, is_default, sort_order)
+  values (v_org, v_outlet, 'HOT', 'Dapur', true, 1) returning id into v_hotst;
+  insert into public.pos_kitchen_stations (org_id, outlet_id, code, name, sort_order)
+  values (v_org, v_outlet, 'BAR', 'Bar', 2) returning id into v_barst;
+  insert into public.category_kitchen_stations (org_id, category_id, station_id)
+  values (v_org, v_cat, v_barst);
+
+  perform pg_temp.check_true('a dish with no rule goes to the default station',
+    app.pos_route_item(v_outlet, v_item) = v_hotst);
+  perform pg_temp.check_true('drinks go to the bar by category',
+    app.pos_route_item(v_outlet, v_teh) = v_barst);
+  insert into public.item_kitchen_stations (org_id, item_id, station_id)
+  values (v_org, v_teh, v_hotst);
+  perform pg_temp.check_true('and a rule on the dish itself beats its category',
+    app.pos_route_item(v_outlet, v_teh) = v_hotst);
+  delete from public.item_kitchen_stations where item_id = v_teh;
+
+  v_sale := public.seat_table(v_reg, v_bar, 2);
+  v_line := public.add_pos_sale_line(v_sale, v_item, 2, 12.00);
+  perform public.add_pos_sale_line(v_sale, v_teh, 2, 3.00);
+
+  -- A cook cannot guess "choose one".
+  begin
+    perform * from public.send_order_to_kitchen(v_sale);
+    raise exception 'FAIL sent an order with a choice still to make';
+  exception when check_violation then
+    raise notice 'ok   an unanswered required choice does not reach the kitchen';
+  end;
+  perform public.add_line_modifier(v_line, v_mild);
+
+  perform pg_temp.check_eq('one send makes one docket per station',
+    (select count(*) from public.send_order_to_kitchen(v_sale)), 2);
+  perform pg_temp.check_true('with the choice written on the food docket',
+    (select kl.modifiers from public.pos_kitchen_ticket_lines kl
+      join public.pos_kitchen_tickets k on k.id = kl.ticket_id
+     where k.station_id = v_hotst and k.sale_id = v_sale) = 'Kurang pedas');
+
+  -- The assertion this whole stage is built around. A send that
+  -- reissued the bill would have the first course cooked twice, and the
+  -- second plate is a cost nothing downstream ever accounts for.
+  perform pg_temp.check_eq('sending again sends nothing, because nothing is new',
+    (select count(*) from public.send_order_to_kitchen(v_sale)), 0);
+  perform pg_temp.check_eq('the kitchen still has two dockets, not four',
+    (select count(*) from public.pos_kitchen_tickets k where k.sale_id = v_sale), 2);
+  perform pg_temp.check_eq('and four plates in total, not eight',
+    (select sum(kl.quantity) from public.pos_kitchen_ticket_lines kl
+      join public.pos_kitchen_tickets k on k.id = kl.ticket_id
+     where k.sale_id = v_sale), 4);
+
+  -- A later round is its own docket, not an addition to one that may
+  -- already be cooking.
+  perform public.add_pos_sale_line(v_sale, v_teh, 1, 3.00);
+  perform pg_temp.check_eq('a second round is one new docket',
+    (select count(*) from public.send_order_to_kitchen(v_sale)), 1);
+  perform pg_temp.check_eq('at the bar, alongside the first',
+    (select count(*) from public.pos_kitchen_tickets k
+      where k.sale_id = v_sale and k.station_id = v_barst), 2);
+  perform pg_temp.check_eq('and the bar screen shows both',
+    (select count(*) from public.kitchen_display(v_barst)), 2);
+
+  select k.id into v_tk from public.pos_kitchen_tickets k
+   where k.sale_id = v_sale and k.station_id = v_hotst;
+  perform public.bump_kitchen_ticket(v_tk, 'cooking');
+  perform pg_temp.check_true('the clock starts when somebody picks it up',
+    (select k.started_at is not null from public.pos_kitchen_tickets k where k.id = v_tk));
+  perform public.bump_kitchen_ticket(v_tk, 'ready');
+  begin
+    perform public.bump_kitchen_ticket(v_tk, 'new');
+    raise exception 'FAIL sent a ticket backwards';
+  exception when check_violation then
+    raise notice 'ok   a ticket goes forward, or not at all';
+  end;
+  perform public.bump_kitchen_ticket(v_tk, 'served');
+  perform pg_temp.check_eq('a served ticket leaves the screen',
+    (select count(*) from public.kitchen_display(v_hotst) d where d.ticket_id = v_tk), 0);
+
+  -- ------------------------------------------------------------------
+  -- Splitting the bill
+  -- ------------------------------------------------------------------
+  -- Evenly first, because it moves nothing: one meal is one supply and
+  -- one invoice, settled by several tenders.
+  perform pg_temp.check_eq('the bill so far',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 33.00);
+  perform pg_temp.check_eq('three ways is three shares',
+    (select count(*) from public.pos_even_split(v_sale, 3)), 3);
+  -- The property that matters. The shares are only how it is reached.
+  perform pg_temp.check_eq('and they add up to the bill exactly',
+    (select sum(e.amount) from public.pos_even_split(v_sale, 3) e), 33.00);
+
+  -- A bill that does not divide. 33.00 does; 10.00 three ways does not.
+  perform public.add_pos_sale_line(v_sale, v_teh, 1, 1.00);
+  perform pg_temp.check_eq('an awkward total still adds up exactly',
+    (select sum(e.amount) from public.pos_even_split(v_sale, 3) e),
+    (select s.total_amount from public.pos_sales s where s.id = v_sale));
+  perform pg_temp.check_true('with the odd sen on the first share',
+    (select e.amount from public.pos_even_split(v_sale, 3) e where e.share_no = 1)
+      >= (select e.amount from public.pos_even_split(v_sale, 3) e where e.share_no = 3));
+
+  -- By item, which does move things.
+  select l.id into v_l1 from public.pos_sale_lines l
+   where l.sale_id = v_sale and l.item_id = v_item;
+  v_split := public.split_pos_sale(v_sale, array[v_l1]);
+  perform pg_temp.check_true('the second bill is on the same table',
+    (select s.table_id from public.pos_sales s where s.id = v_split)
+      = (select s.table_id from public.pos_sales s where s.id = v_sale));
+  perform pg_temp.check_eq('the fish went with the person who ate it',
+    (select s.total_amount from public.pos_sales s where s.id = v_split), 24.00);
+  perform pg_temp.check_eq('and the two bills still add to what was ordered',
+    (select sum(s.total_amount) from public.pos_sales s
+      where s.id in (v_sale, v_split)), 34.00);
+  -- A moved line keeps its id, so everything pointing at it still does.
+  perform pg_temp.check_eq('its modifiers moved with it',
+    (select count(*) from public.pos_sale_line_modifiers m where m.line_id = v_l1), 1);
+  perform pg_temp.check_eq('and the kitchen docket still knows it was cooked',
+    (select count(*) from public.pos_kitchen_ticket_lines kl where kl.sale_line_id = v_l1), 1);
+  perform pg_temp.check_eq('the table now shows two bills',
+    (select count(*) from public.pos_floor_plan(v_outlet) f
+      where f.table_id = v_bar and f.sale_id is not null), 2);
+
+  begin
+    perform public.split_pos_sale(v_split, array[v_l1]);
+    raise exception 'FAIL split every line off a bill';
+  exception when check_violation then
+    raise notice 'ok   splitting the whole bill is a move, not a split';
+  end;
+
+  -- And back together.
+  perform pg_temp.check_eq('merging brings the line back', 
+    public.merge_pos_sales(v_sale, v_split), 1);
+  perform pg_temp.check_eq('the bill is whole again',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 34.00);
+  perform pg_temp.check_eq('and the emptied bill is gone, not left on the floor plan',
+    (select count(*) from public.pos_sales s where s.id = v_split), 0);
+  perform pg_temp.check_eq('and no docket was lost along the way',
+    (select count(*) from public.pos_kitchen_tickets k where k.sale_id = v_sale), 3);
 
   raise notice 'point of sale dining room: all assertions passed';
 end;
