@@ -1801,3 +1801,20 @@ final kitchenDisplayProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, stationId) => requireRepo(ref).kitchenDisplay(stationId),
     );
+
+/// A day in the diary, keyed on the outlet and the date together so
+/// paging back and forth does not refetch what is already held.
+final posDaySheetProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({String outletId, DateTime day})>(
+      (ref, args) => requireRepo(ref).posDaySheet(args.outletId, args.day),
+    );
+
+final posServicesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posServices(),
+    );
+
+final posServiceProvidersProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, outletId) => requireRepo(ref).posServiceProviders(outletId),
+    );

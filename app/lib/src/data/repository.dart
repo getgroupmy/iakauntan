@@ -6369,6 +6369,92 @@ extension RepoPos on Repo {
         await client.rpc('send_order_to_kitchen', params: {'p_sale': saleId}),
       );
 
+  /// A day, by provider. Every provider appears whether or not they are
+  /// booked — a left join, deliberately, because "who is free this
+  /// afternoon" is the question a diary is opened to answer and a list
+  /// of only busy people cannot answer it.
+  Future<List<Map<String, dynamic>>> posDaySheet(
+    String outletId,
+    DateTime day,
+  ) async => Repo.rows(
+    await client.rpc(
+      'pos_day_sheet',
+      params: {
+        'p_outlet': outletId,
+        'p_date': day.toIso8601String().substring(0, 10),
+      },
+    ),
+  );
+
+  /// The services this company sells by the hour, with the item behind
+  /// each one — the price and the name live on the item, because a
+  /// haircut is something sold like anything else.
+  Future<List<Map<String, dynamic>>> posServices() async => Repo.rows(
+    await client
+        .from('pos_services')
+        .select('*, items(id, name, code, unit_price)')
+        .eq('org_id', orgId)
+        .eq('is_active', true),
+  );
+
+  Future<List<Map<String, dynamic>>> posServiceProviders(
+    String outletId,
+  ) async => Repo.rows(
+    await client
+        .from('pos_service_providers')
+        .select()
+        .eq('outlet_id', outletId)
+        .eq('is_active', true)
+        .order('name'),
+  );
+
+  /// Sells a slot. Refuses an overlap, a slot outside the hours the
+  /// provider works, and one while they are away — all three in the
+  /// database, so a second device booking the same minute loses.
+  Future<String> bookAppointment({
+    required String providerId,
+    required String itemId,
+    required DateTime startsAt,
+    String? contactId,
+    String? note,
+  }) async =>
+      await client.rpc(
+            'book_appointment',
+            params: {
+              'p_provider': providerId,
+              'p_item': itemId,
+              'p_starts_at': startsAt.toUtc().toIso8601String(),
+              if (contactId != null) 'p_contact': contactId,
+              if (note != null) 'p_note': note,
+            },
+          )
+          as String;
+
+  Future<String> setBookingStatus(
+    String bookingId,
+    String status, {
+    String? note,
+  }) async =>
+      await client.rpc(
+            'set_booking_status',
+            params: {
+              'p_booking': bookingId,
+              'p_status': status,
+              if (note != null) 'p_note': note,
+            },
+          )
+          as String;
+
+  /// Arrival, which is a claim about money rather than a status
+  /// somebody types: checking in opens a sale with the service on it at
+  /// the price that was quoted, and returns it.
+  Future<String> checkInBooking(String bookingId, String registerId) async =>
+      await client.rpc(
+            'check_in_booking',
+            params: {'p_booking': bookingId, 'p_register': registerId},
+          )
+          as String;
+
   /// The whole answer: what it came to, what the drawer asks for, what
   /// comes back and what rounding did. Four numbers because the customer
   /// can see all four, and a till that only showed the total would be

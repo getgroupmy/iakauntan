@@ -35,6 +35,7 @@ import '../features/timesheets/timesheet_screen.dart';
 import '../features/property/property_screen.dart';
 import '../features/property/site_editor.dart';
 import '../features/forecasting/forecast_screen.dart';
+import '../features/pos/diary_screen.dart';
 import '../features/pos/floor_plan_screen.dart';
 import '../features/pos/kitchen_screen.dart';
 import '../features/pos/till_screen.dart';
@@ -371,6 +372,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/kitchen',
             builder: (_, __) => const KitchenScreen(),
           ),
+          GoRoute(path: '/diary', builder: (_, __) => const DiaryScreen()),
           GoRoute(
             path: '/property',
             builder: (_, __) => const PropertyScreen(),
