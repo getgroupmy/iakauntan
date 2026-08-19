@@ -314,6 +314,10 @@ returns table (
   sort_order integer)
 language sql
 immutable
+-- Pinned even though this reads no table: `supabase/tests/search_path.sql`
+-- asks every function to say where it looks, and a function that only
+-- needs the catalog says so by naming only the catalog.
+set search_path = pg_catalog, pg_temp
 as $$
   select v.channel::app.pos_order_channel, v.is_default, v.sort_order
     from (values
@@ -383,6 +387,7 @@ select o.org_id, o.id, d.channel, d.is_default, d.sort_order
 create or replace function app.pos_register_default_channel()
 returns trigger
 language plpgsql
+set search_path = pg_catalog, pg_temp
 as $$
 begin
   if new.is_kiosk and new.default_channel is null then
