@@ -61,6 +61,16 @@ dependencies:
   # storage needs somewhere to land first.
   path_provider: ^2.1.5
   crypto: ^3.0.6
+  # Where the offline queue and the cached menu live between launches.
+  # `localStorage` on the web — which is where a market stall's phone
+  # browser actually runs this — and platform storage on Android and
+  # iOS, from one call. A file written through `path_provider` would
+  # not exist on the web at all.
+  #
+  # Named here rather than relied on transitively through
+  # `supabase_flutter`: `offline_store.dart` imports it directly, and a
+  # transitive dependency is not a promise.
+  shared_preferences: ^2.5.3
   # Any file, from any of the four surfaces. `image_picker` above only
   # does images, which is right for a receipt and not enough for a chat
   # that has to carry a quotation as well as a photograph of one.

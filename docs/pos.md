@@ -243,6 +243,61 @@ What genuinely cannot land goes to `pos_offline_rejects`, unique on
 it was worth. A sale arriving for a drawer that has already been counted
 is parked rather than lost, and the next shift takes it.
 
+## The device's half of selling with no signal
+
+0219 built the landing half — `ingest_offline_sales` takes a batch,
+lands each payload in its own subtransaction, and is safe to call twice
+because a sale already there is reported rather than repeated. Nothing
+in the client produced such a batch, which made "works offline" true of
+the database and false of the product.
+
+`app/lib/src/features/pos/offline_store.dart` is the device's half.
+
+**Offline is a separate selling surface, not a mode woven through the
+till.** With no server there is no sale to open, no line to price and no
+shift to check — almost nothing is shared. What is left is the outlet's
+menu as the device last saw it, a basket held in memory, and one write
+to disk when the money changes hands.
+
+**The menu is cached the moment it is read**, because that is the only
+moment the device is certain it is current. A till that has never been
+online for a given outlet says so rather than showing an empty grid.
+
+**The client uuid is the whole idempotence story.** It is generated on
+the device before any attempt to send, from `Random.secure()` — two
+phones seeded from the same clock tick would otherwise collide, and the
+unique index on `(org_id, client_uuid)` would make one shop's sale
+silently swallow another's.
+
+**Change is the one rule implemented twice, deliberately.** A cashier
+cannot wait for a server to say what coins to hand back, so `cashDue()`
+mirrors `app.pos_cash_due` — five sen, by multiplying by 20, rounding
+and dividing back. It is not the authority: when the batch lands,
+`complete_pos_sale` computes it again and that answer is what posts. The
+two are written to agree, and `app/test/offline_store_test.dart` asserts
+the same worked examples `supabase/tests/pos.sql` asserts.
+
+**Every outcome comes off the queue, including `rejected`.** Keeping a
+rejected payload would retry it on every flush for ever. It is not
+lost — `app.pos_record_reject` has already written it to
+`pos_offline_rejects`, where `pos_offline_problems` shows it to somebody
+who can act on it. The device is the wrong place for a payload nobody is
+looking at.
+
+**Going offline is explicit as well as automatic.** A connectivity check
+tells you the phone has a bar, not that the database is reachable, and a
+van driving through a town gets a bar every few minutes without ever
+completing a request. A stallholder who knows the market has no signal
+says so once, rather than discovering it one failed sale at a time.
+Coming back is a decision too: nothing flushes on its own, because a
+flush that starts mid-sale on a flaky connection is slow at the worst
+possible moment.
+
+The banner stays up while anything is queued, even after signal returns.
+Sales still sitting on a device are the most important thing about a
+till holding them, and a banner that vanished when the bars came back
+would hide exactly that.
+
 ## Kiosk — a customer serving themselves
 
 `pos_registers.is_kiosk` marks the till, and it changes three things: a
@@ -545,7 +600,13 @@ for is therefore visible in the demo data, not only asserted in
   terminal
 - Cash drawer and receipt printer drivers. The receipt renders; opening a
   physical drawer is between the browser and the hardware
-- Landing an offline batch. `ingest_offline_sales` expects a payload
-  from a till that queued sales locally; nothing in the Flutter client
-  queues them yet, so the offline path is server-ready and
-  client-unbuilt — which is the honest half of "works offline"
+- Setting kitchen routing from the app. `item_kitchen_stations` and
+  `category_kitchen_stations` decide which counter a dish goes to, and
+  `pos_kitchen_stations` is where a counter is defined — all three are
+  built, asserted and reachable only by SQL. There is no screen for
+  adding a bar, or for saying "drinks go to it"
+- Order channels. An outlet has a `business_type` (retail, food and
+  beverage, mobile, service, kiosk), which is the shape of the shop and
+  not how an order arrived. Dine-in, takeaway, reservation, delivery and
+  online are not modelled at all, so a sale cannot say which of them it
+  was

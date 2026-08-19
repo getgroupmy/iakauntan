@@ -9,6 +9,8 @@ import '../../core/widgets.dart';
 // only in scope where its declaring library is imported.
 import '../../data/repository.dart';
 import 'modifier_sheet.dart';
+import 'offline_controller.dart';
+import 'offline_till.dart';
 import 'split_sheet.dart';
 import 'tender_sheet.dart';
 import 'void_sheet.dart';
@@ -525,6 +527,20 @@ class _TillScreenState extends ConsumerState<TillScreen> {
   @override
   Widget build(BuildContext context) {
     final registers = ref.watch(posRegistersProvider);
+    final offline = ref.watch(posOfflineProvider);
+
+    // Kept the moment it is read, because that is the only moment the
+    // device is certain the menu is current. A till that cached on a
+    // schedule would be caching whatever it happened to have.
+    final outlet = _outletId;
+    if (outlet != null) {
+      ref.listen(posMenuProvider(outlet), (_, next) {
+        final rows = next.asData?.value;
+        if (rows != null && rows.isNotEmpty) {
+          ref.read(posOfflineProvider.notifier).cacheMenu(outlet, rows);
+        }
+      });
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -540,7 +556,27 @@ class _TillScreenState extends ConsumerState<TillScreen> {
           ),
         ],
       ),
-      body: AsyncView<List<Map<String, dynamic>>>(
+      body: Column(
+        children: [
+          // Above everything, and shown while there is a queue even
+          // after signal returns: sales still on the device are the
+          // most important thing about a till holding them, and a
+          // banner that vanished the moment the bars came back would
+          // hide exactly that.
+          const OfflineBanner(),
+          Expanded(child: _body(offline.offline, registers)),
+        ],
+      ),
+    );
+  }
+
+  /// Split out of [build] so the offline banner can sit above it
+  /// without the register plumbing being indented one level further
+  /// into an already deep tree.
+  Widget _body(
+    bool offline,
+    AsyncValue<List<Map<String, dynamic>>> registers,
+  ) => AsyncView<List<Map<String, dynamic>>>(
         value: registers,
         builder: (rows) {
           if (rows.isEmpty) {
@@ -561,6 +597,13 @@ class _TillScreenState extends ConsumerState<TillScreen> {
             });
           }
           if (reg == null) return const SizedBox.shrink();
+          // A separate surface rather than a mode woven through this
+          // one, because with no server there is no sale to open, no
+          // line to price and no shift to check — almost nothing is
+          // shared.
+          if (offline) {
+            return OfflineTill(registerId: reg, outletId: _outletId);
+          }
           return _Register(
             registerId: reg,
             outletId: _outletId,
@@ -583,9 +626,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
             onPark: _park,
           );
         },
-      ),
-    );
-  }
+      );
 }
 
 class _Register extends ConsumerWidget {

@@ -6636,6 +6636,30 @@ extension RepoPos on Repo {
     return rows.isEmpty ? null : rows.first;
   }
 
+  /// Lands a batch of sales rung up with no signal.
+  ///
+  /// Safe to call twice, which is the point: a device that is not sure
+  /// its request arrived should send again, and each payload comes back
+  /// `landed`, `already` or `rejected` rather than being repeated. One
+  /// bad payload is rejected on its own and kept in
+  /// `pos_offline_rejects`; it does not take the day's takings with it.
+  Future<List<Map<String, dynamic>>> ingestOfflineSales(
+    String registerId,
+    List<Map<String, dynamic>> payloads,
+  ) async => Repo.rows(
+    await client.rpc(
+      'ingest_offline_sales',
+      params: {'p_register': registerId, 'p_sales': payloads},
+    ),
+  );
+
+  /// What is still stuck. A payload the server refused is not the
+  /// device's problem any more — it is somebody's, and this is where
+  /// they find it.
+  Future<List<Map<String, dynamic>>> posOfflineProblems() async => Repo.rows(
+    await client.rpc('pos_offline_problems', params: {'p_org': orgId}),
+  );
+
   /// Who is on a bill, what they hold, and what paying it would earn.
   ///
   /// One read rather than contact-then-balance, so the panel cannot
