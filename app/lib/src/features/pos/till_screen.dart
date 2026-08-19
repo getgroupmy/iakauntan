@@ -456,7 +456,6 @@ class _Register extends ConsumerWidget {
     required this.onEvenSplit,
     required this.onMerge,
     required this.onResume,
-    required this.compact,
   });
 
   final String registerId;
@@ -719,6 +718,7 @@ class _Basket extends ConsumerWidget {
     required this.onEvenSplit,
     required this.onMerge,
     required this.onResume,
+    required this.compact,
   });
 
   final String registerId;
