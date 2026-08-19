@@ -1838,6 +1838,14 @@ final kioskOrderBoardProvider = FutureProvider.autoDispose
 /// menu changes when somebody edits it rather than while a queue is
 /// waiting — refetching it on every tap would be spending a round trip
 /// to learn nothing.
+/// The member panel on the tender sheet. Keyed by sale, because what it
+/// shows is as much about the bill (what is being redeemed against it,
+/// what paying it would earn) as about the customer.
+final posSaleMemberProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>(
+      (ref, saleId) => requireRepo(ref).posSaleMember(saleId),
+    );
+
 final posMenuProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, outletId) => requireRepo(ref).posMenu(outletId),

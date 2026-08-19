@@ -6636,6 +6636,68 @@ extension RepoPos on Repo {
     return rows.isEmpty ? null : rows.first;
   }
 
+  /// Who is on a bill, what they hold, and what paying it would earn.
+  ///
+  /// One read rather than contact-then-balance, so the panel cannot
+  /// show a name and a points figure belonging to two different
+  /// customers.
+  Future<Map<String, dynamic>?> posSaleMember(String saleId) async {
+    final rows = Repo.rows(
+      await client.rpc('pos_sale_member', params: {'p_sale': saleId}),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// Finds a member from whatever the customer said — a card number, a
+  /// mobile, part of a name. An exact card match sorts first, so
+  /// scanning a card returns an answer rather than a shortlist.
+  Future<List<Map<String, dynamic>>> loyaltyLookup(String query) async =>
+      Repo.rows(
+        await client.rpc(
+          'loyalty_lookup',
+          params: {'p_org': orgId, 'p_query': query},
+        ),
+      );
+
+  /// Puts a customer on a parked bill. This is what redemption reads:
+  /// points belong to an account, and an account is reached through the
+  /// contact on the sale.
+  Future<void> namePosSaleCustomer(String saleId, String? contactId) async =>
+      await client.rpc(
+        'name_pos_sale_customer',
+        params: {'p_sale': saleId, 'p_contact': contactId},
+      );
+
+  /// Signs somebody up at the counter. Idempotent: a cashier who taps
+  /// twice enrols one member and gets back the account they already
+  /// had, rather than an error to explain to somebody holding a card.
+  Future<String> enrolLoyaltyMember(String contactId, {String? cardNo}) async =>
+      await client.rpc(
+            'enrol_loyalty_member',
+            params: {
+              'p_contact': contactId,
+              if (cardNo != null) 'p_card_no': cardNo,
+            },
+          )
+          as String;
+
+  /// Puts points against a basket. Nothing is deducted yet — the ledger
+  /// entries are written when the sale completes, so a parked bill that
+  /// is abandoned costs the customer nothing. Zero clears a redemption
+  /// somebody thought better of.
+  Future<Map<String, dynamic>?> redeemLoyaltyPoints(
+    String saleId,
+    int points,
+  ) async {
+    final rows = Repo.rows(
+      await client.rpc(
+        'redeem_loyalty_points',
+        params: {'p_sale': saleId, 'p_points': points},
+      ),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
   /// The whole answer: what it came to, what the drawer asks for, what
   /// comes back and what rounding did. Four numbers because the customer
   /// can see all four, and a till that only showed the total would be

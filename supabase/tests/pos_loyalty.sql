@@ -40,6 +40,7 @@ declare
   v_a      numeric;
   v_b      numeric;
   v_c      numeric;
+  v_mrow   record;
 begin
   v_org := pg_temp.test_org('Pasaraya Mesra Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
@@ -282,6 +283,98 @@ begin
   perform pg_temp.check_eq('and what it is worth at the counter', v_a, 2.50);
   perform pg_temp.check_eq('one card, not one per sale',
     (select count(*) from public.loyalty_account_balance(v_member)), 1);
+
+  -- ------------------------------------------------------------------
+  -- Finding the member from what the customer said
+  -- ------------------------------------------------------------------
+  --
+  -- `loyalty_account_balance` answers the question you can only ask
+  -- once you already know who somebody is. At a counter you have what
+  -- they said: a card, a mobile, half a name.
+  update public.contacts set mobile = '012-3456789' where id = v_member;
+
+  perform pg_temp.check_eq('a card number finds one member',
+    (select count(*) from public.loyalty_lookup(v_org, 'CARD-0001')), 1);
+  perform pg_temp.check_eq('and says that is what matched',
+    (select l.matched_on from public.loyalty_lookup(v_org, 'CARD-0001') l),
+    'card');
+  perform pg_temp.check_eq('a phone number finds them too',
+    (select l.contact_id from public.loyalty_lookup(v_org, '3456789') l),
+    v_member);
+  perform pg_temp.check_eq('so does part of a name',
+    (select l.contact_id from public.loyalty_lookup(v_org, 'minah') l),
+    v_member);
+
+  -- The positive control. Every assertion above would pass on an empty
+  -- table if it only counted absences, so this one counts a search that
+  -- must find nothing against searches that must find something.
+  perform pg_temp.check_eq('and a stranger finds nobody',
+    (select count(*) from public.loyalty_lookup(v_org, 'Nobody At All')), 0);
+  perform pg_temp.check_eq('an empty box is not a wildcard',
+    (select count(*) from public.loyalty_lookup(v_org, '   ')), 0);
+
+  -- ------------------------------------------------------------------
+  -- Saying whose bill this is, at the counter
+  -- ------------------------------------------------------------------
+  --
+  -- Redemption reads `pos_sales.contact_id`, and until 0227 nothing
+  -- could set it on a parked sale: the contact was passed when the sale
+  -- opened or when it completed, and neither is the moment somebody
+  -- produces a card.
+  v_sale := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_sale, v_item, 10, 10.00);
+
+  begin
+    perform public.redeem_loyalty_points(v_sale, 100);
+    raise exception 'FAIL redeemed against a bill with nobody on it';
+  exception when no_data_found then
+    raise notice 'ok   points need a member on the bill';
+  end;
+
+  perform public.name_pos_sale_customer(v_sale, v_member);
+  perform pg_temp.check_eq('naming the bill puts them on it',
+    (select s.contact_id from public.pos_sales s where s.id = v_sale), v_member);
+
+  -- ------------------------------------------------------------------
+  -- The panel the tender sheet draws
+  -- ------------------------------------------------------------------
+  select * into v_mrow from public.pos_sale_member(v_sale);
+  perform pg_temp.check_eq('the panel finds the card', v_mrow.card_no, 'CARD-0001');
+  perform pg_temp.check_eq('and reads the same ledger everything else does',
+    v_mrow.points, app.loyalty_balance(v_acct));
+  perform pg_temp.check_eq('and knows what joining is worth per point',
+    v_mrow.value_per_point, 0.0100);
+  perform pg_temp.check_eq('and what paying this bill would earn',
+    v_mrow.would_earn, 100);
+
+  perform public.redeem_loyalty_points(v_sale, 200);
+  select * into v_mrow from public.pos_sale_member(v_sale);
+  perform pg_temp.check_eq('a redemption shows on the panel',
+    v_mrow.points_redeemed, 200);
+  perform pg_temp.check_eq('with what it takes off', v_mrow.discount, 2.00);
+
+  -- The one that stops a cashier reading out a number the customer
+  -- will not have. The ledger is deliberately untouched until the sale
+  -- completes, so `points` is still the old balance and `points_after`
+  -- is the figure worth saying out loud.
+  perform pg_temp.check_eq('the balance has not moved yet',
+    v_mrow.points, app.loyalty_balance(v_acct));
+  perform pg_temp.check_eq('and the panel says what it will be',
+    v_mrow.points_after, app.loyalty_balance(v_acct) - 200);
+
+  -- Points belong to an account, so a bill moved to somebody else with
+  -- a redemption still on it would be spending the wrong balance.
+  begin
+    perform public.name_pos_sale_customer(v_sale, v_walkin);
+    raise exception 'FAIL moved a bill carrying somebody else''s points';
+  exception when check_violation then
+    raise notice 'ok   points come off before the bill changes hands';
+  end;
+
+  perform public.redeem_loyalty_points(v_sale, 0);
+  perform public.name_pos_sale_customer(v_sale, v_walkin);
+  perform pg_temp.check_eq('and once they are off, it moves',
+    (select s.contact_id from public.pos_sales s where s.id = v_sale), v_walkin);
 
   raise notice 'point of sale loyalty: all assertions passed';
 end;

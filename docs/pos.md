@@ -132,6 +132,50 @@ it, clearing it restores the basket, and a basket cleared entirely by
 points still completes: it raises an invoice for nothing and a posted
 receipt behind it, which is what the shop's books have to show.
 
+## Loyalty at the counter
+
+0212 built the ledger and left its two acts with no caller. Wiring them
+to the tender sheet needed two things that did not exist, both of them
+the database's job:
+
+- **A cashier has a phone number, not a contact id.**
+  `loyalty_account_balance(contact)` answers the question you can only
+  ask once you know who somebody is. `loyalty_lookup(org, text)` takes
+  the one string the customer actually said and searches card number,
+  mobile and name. Exact card matches sort first and the till takes a
+  single one without asking, because a scanned card is an answer rather
+  than a shortlist.
+- **A sale has to know whose points these are.**
+  `redeem_loyalty_points` reads `pos_sales.contact_id`, and nothing
+  could set it on a parked bill: the contact was passed when the sale
+  opened or when it completed, and neither is the moment a card comes
+  out. `name_pos_sale_customer` fills that, and refuses once the sale
+  has completed — renaming an issued invoice is
+  `request_einvoice_for_sale`, with LHDN's rules attached. It also
+  refuses to move a bill that still carries somebody else's redemption,
+  since points belong to an account.
+
+`pos_sale_member(sale)` returns the whole panel in one read, so it
+cannot show a name and a balance belonging to two different customers.
+
+**The panel shows two balances, and that is the point.** Redemption
+records the intent on the sale and writes the ledger entries only when
+the sale completes — so a parked bill that is abandoned costs the
+customer nothing, and the balance genuinely has not moved yet. A panel
+showing only "506 points" beside "300 being used" would have the cashier
+reading out a figure the customer is about to spend, so it says both:
+what is on the card now, and what will be left after paying.
+
+The earning figure is labelled as an estimate because it is one.
+`pos_settle_loyalty` earns on what was actually paid, which includes the
+five-sen rounding, and the rounding is not decided until somebody says
+how much of the bill is cash.
+
+The sheet does no arithmetic that matters. `redeem_loyalty_points`
+decides how many points a basket can absorb, floors them so a redemption
+never takes more than the goods are worth, and returns the new total —
+and the till reports what came back rather than what was asked for.
+
 ## Food and beverage — the room, the plate and the kitchen
 
 `pos_tables` sit in `pos_floor_areas`. Occupancy is derived from whether
@@ -467,8 +511,6 @@ for is therefore visible in the demo data, not only asserted in
   `complete_kiosk_order` have no screen: the board customers watch is
   built, but the touchscreen they order from is not, so a kiosk order
   still has to be started from the till
-- Loyalty at the counter. `enrol_loyalty_member` and
-  `redeem_loyalty_points` are not on the tender sheet
 - Landing an offline batch. `ingest_offline_sales` expects a payload
   from a till that queued sales locally; nothing in the Flutter client
   queues them yet, so the offline path is server-ready and

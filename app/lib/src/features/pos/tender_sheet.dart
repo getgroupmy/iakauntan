@@ -6,6 +6,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import 'member_panel.dart';
 import 'till_screen.dart' show posNum;
 
 /// Taking the money.
@@ -136,6 +137,12 @@ class _TenderSheetState extends ConsumerState<_TenderSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Above the total, because a redemption changes it. Asked
+              // here rather than at the basket because "do you have a
+              // card?" is a question about paying, and asking it while
+              // the shopping is being rung up asks it of the four
+              // hundred people a day who are buying a drink.
+              MemberPanel(saleId: widget.saleId),
               _Row('To pay', total, big: true),
               const SizedBox(height: 16),
               Wrap(
