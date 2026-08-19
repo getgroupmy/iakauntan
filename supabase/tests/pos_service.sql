@@ -39,6 +39,7 @@ declare
   v_sub    uuid;
   v_sale2  uuid;
   v_line   uuid;
+  v_covered uuid;
   v_a      numeric;
 begin
   v_org := pg_temp.test_org('Salon Seri Sdn Bhd');
@@ -261,11 +262,11 @@ begin
   -- Taking what was paid for
   -- ------------------------------------------------------------------
   v_sale2 := public.open_pos_sale(v_reg, v_cust);
-  v_line  := public.add_pos_sale_line(v_sale2, v_cut, 1, 45.00);
+  v_covered := public.add_pos_sale_line(v_sale2, v_cut, 1, 45.00);
   perform pg_temp.check_eq('a haircut costs forty-five before the membership',
     (select s.total_amount from public.pos_sales s where s.id = v_sale2), 45.00);
 
-  v_a := public.cover_line_with_membership(v_line, v_sub);
+  v_a := public.cover_line_with_membership(v_covered, v_sub);
   perform pg_temp.check_eq('the membership covers the whole line', v_a, 45.00);
   perform pg_temp.check_eq('so there is nothing to pay',
     (select s.total_amount from public.pos_sales s where s.id = v_sale2), 0.00);
@@ -280,15 +281,19 @@ begin
     (select b.remaining from public.membership_balance(v_sub) b), 1);
 
   begin
-    perform public.cover_line_with_membership(v_line, v_sub);
+    perform public.cover_line_with_membership(v_covered, v_sub);
     raise exception 'FAIL covered one line with two sessions';
   exception when unique_violation then
     raise notice 'ok   a line cannot be covered twice';
   end;
 
+  -- Rung up OUTSIDE the block. A plpgsql exception handler rolls back
+  -- everything done inside its block, so a line added in there vanishes
+  -- with the refusal -- and the assertion below would then be checking
+  -- a bill the massage had never been on.
+  v_line := public.add_pos_sale_line(v_sale2, v_urut, 1, 120.00);
   begin
-    perform public.cover_line_with_membership(
-      public.add_pos_sale_line(v_sale2, v_urut, 1, 120.00), v_sub);
+    perform public.cover_line_with_membership(v_line, v_sub);
     raise exception 'FAIL covered something the membership does not include';
   exception when check_violation then
     raise notice 'ok   a membership does not cover what it does not cover';
@@ -311,7 +316,7 @@ begin
 
   -- The property that makes the ledger worth having: taking the class
   -- off the bill gives the session back, without anybody remembering to.
-  delete from public.pos_sale_lines where id = v_line;
+  delete from public.pos_sale_lines where id = v_covered;
   perform pg_temp.check_eq('removing the line gives the session back',
     (select b.remaining from public.membership_balance(v_sub) b), 1);
 
