@@ -104,6 +104,12 @@ drop policy if exists pos_sale_line_voids_read on public.pos_sale_line_voids;
 create policy pos_sale_line_voids_read on public.pos_sale_line_voids
   for select using (app.can_read_module(org_id, 'pos'));
 
+-- The privilege the policy needs to be reachable at all. RLS narrows
+-- what a grant already allows; a policy without the grant behind it is
+-- a door with no doorway, and `supabase/tests/table_grants.sql` is the
+-- gate that says so.
+grant select on public.pos_sale_line_voids to authenticated;
+
 -- No insert, update or delete policy on purpose. Rows arrive through
 -- `void_pos_sale_line` and never leave: a void log somebody can edit is
 -- a void log that proves nothing.

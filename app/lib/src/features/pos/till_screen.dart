@@ -383,10 +383,15 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     final id = _saleId;
     final lineId = line['id'] as String?;
     if (id == null || lineId == null) return;
-    final repo = ref.read(repoProvider);
-    if (repo == null) return;
     final sent = line['sent_to_kitchen_at'] != null;
 
+    // What the line offers is decided by whether the kitchen has it,
+    // and asked before anything is looked up. The repository is
+    // fetched at the point of writing instead: a sheet that silently
+    // refuses to open is a fault nobody can describe, whereas a write
+    // that stops is one the cashier sees.
+    String? reason;
+    String? note;
     if (!sent) {
       final go = await showModalBottomSheet<bool>(
         context: context,
@@ -409,12 +414,6 @@ class _TillScreenState extends ConsumerState<TillScreen> {
         ),
       );
       if (go != true || !mounted) return;
-      final ok = await runWithFeedback(
-        context,
-        successMessage: null,
-        action: () => repo.removePosSaleLine(lineId),
-      );
-      if (!ok || !mounted) return;
     } else {
       final answer = await showModalBottomSheet<({String reason, String note})>(
         context: context,
@@ -422,17 +421,24 @@ class _TillScreenState extends ConsumerState<TillScreen> {
         builder: (_) => VoidReasonSheet(description: '${line['description']}'),
       );
       if (answer == null || !mounted) return;
-      final ok = await runWithFeedback(
-        context,
-        successMessage: 'Taken off, and recorded',
-        action: () => repo.voidPosSaleLine(
-          lineId,
-          answer.reason,
-          note: answer.note.isEmpty ? null : answer.note,
-        ),
-      );
-      if (!ok || !mounted) return;
+      reason = answer.reason;
+      note = answer.note.isEmpty ? null : answer.note;
     }
+
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final held = reason;
+    final ok = await runWithFeedback(
+      context,
+      // Nothing is said when an unsent line comes off: the line
+      // disappearing is the whole message. A void is different — it
+      // has been written down, and the cashier should know that.
+      successMessage: held == null ? null : 'Taken off, and recorded',
+      action: () => held == null
+          ? repo.removePosSaleLine(lineId)
+          : repo.voidPosSaleLine(lineId, held, note: note),
+    );
+    if (!ok || !mounted) return;
 
     ref
       ..invalidate(posSaleProvider(id))
@@ -1460,9 +1466,11 @@ class _BasketLines extends StatelessWidget {
               ? null
               // The one column the rule turns on, said on the row: a
               // plate the kitchen has is not a plate you can simply
-              // un-order.
+              // un-order. A padlock rather than a cooking pot, because
+              // what the row is reporting is not where the plate is but
+              // what may still be done to it.
               : Icon(
-                  sent ? Icons.soup_kitchen_outlined : Icons.close,
+                  sent ? Icons.lock_outline : Icons.remove_circle_outline,
                   size: 18,
                 ),
           title: Text('${l['description']}'),

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/features/pos/till_screen.dart';
+import 'package:iakauntan/src/features/pos/void_sheet.dart';
 
 /// The till.
 ///
@@ -531,8 +532,10 @@ void main() {
       await tester.pumpAndSettle();
 
       // The one column the rule turns on, readable on the row itself.
-      expect(find.byIcon(Icons.close), findsOneWidget);
-      expect(find.byIcon(Icons.soup_kitchen_outlined), findsOneWidget);
+      // Two glyphs that appear nowhere else on this screen, so what is
+      // asserted is the row and not something behind the sheet.
+      expect(find.byIcon(Icons.remove_circle_outline), findsOneWidget);
+      expect(find.byIcon(Icons.lock_outline), findsOneWidget);
 
       // Unsent: taken off with no ceremony.
       await tester.tap(find.text('Teh tarik'));
@@ -574,21 +577,26 @@ void main() {
       );
       expect(find.text('Never came out'), findsOneWidget);
 
+      // Scoped to the sheet: the till behind it has its own filled
+      // button ("Take payment"), and a finder that caught both would
+      // be asserting whichever came first.
+      final confirm = find.descendant(
+        of: find.byType(VoidReasonSheet),
+        matching: find.byType(FilledButton),
+      );
+
       // Nothing goes until a reason is picked.
-      var button = tester.widget<FilledButton>(find.byType(FilledButton));
-      expect(button.onPressed, isNull);
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
 
       await tester.tap(find.text('Never came out'));
       await tester.pumpAndSettle();
-      button = tester.widget<FilledButton>(find.byType(FilledButton));
-      expect(button.onPressed, isNotNull);
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
 
       // "Something else" then insists on words, the same rule the
       // database applies.
       await tester.tap(find.text('Something else'));
       await tester.pumpAndSettle();
-      button = tester.widget<FilledButton>(find.byType(FilledButton));
-      expect(button.onPressed, isNull);
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
     });
   });
 }
