@@ -1289,11 +1289,21 @@ class _BasketBar extends StatelessWidget {
               color: scheme.onSurfaceVariant,
             ),
             const SizedBox(width: 10),
-            Text(
-              count == 0
-                  ? 'Nothing on the counter'
-                  : '${Fmt.qty(count)} item${count == 1 ? '' : 's'}',
-              style: Theme.of(context).textTheme.titleMedium,
+            // Expanded rather than a Spacer between two natural-width
+            // texts. The money must never be pushed off: with a Spacer
+            // both sides size to their content and collide on a narrow
+            // phone — "Nothing on the counter" beside a total is the
+            // widest case, and it is the one that appears for a frame
+            // while a resumed bill loads. Giving the label the slack
+            // and letting it ellipsize makes the row fit at any width.
+            Expanded(
+              child: Text(
+                count == 0
+                    ? 'Nothing on the counter'
+                    : '${Fmt.qty(count)} item${count == 1 ? '' : 's'}',
+                style: Theme.of(context).textTheme.titleMedium,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             if (onTap != null) ...[
               const SizedBox(width: 6),
@@ -1303,7 +1313,7 @@ class _BasketBar extends StatelessWidget {
                 color: scheme.onSurfaceVariant,
               ),
             ],
-            const Spacer(),
+            const SizedBox(width: 8),
             Text(
               Fmt.money(total),
               style: Theme.of(context).textTheme.titleLarge,
