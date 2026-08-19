@@ -15,8 +15,9 @@ than a bolt-on.
 ```
 app/                  Flutter client (web + mobile)
 supabase/
-  migrations/         Schema, RLS, business logic, reports  (0001 … 0044)
-  functions/myinvois/ Deno edge function: LHDN MyInvois integration
+  migrations/         Schema, RLS, business logic, reports  (0001 … 0221)
+  tests/              SQL assertions, run in CI on a throwaway stack
+  functions/          Deno edge functions (MyInvois, email, OCR, push, …)
 ```
 
 **Supabase project:** `ewwcgtnniwqndrzukksm` (`iakauntan`, ap-northeast-2)
@@ -39,6 +40,7 @@ an unbalanced journal, so the ledger cannot drift.
 | Banking | Bank accounts, statement lines, reconciliation, expense claims |
 | CRM | Leads, pipelines, opportunities with stage history, activities |
 | Reports | Trial balance, P&L, balance sheet, AR/AP ageing, stock valuation, SST summary |
+| Point of sale | Outlets, registers and counted shifts; retail variants and barcodes; loyalty; tables, modifiers and a kitchen display; bookings and memberships; offline capture; self-service kiosk — `docs/pos.md` |
 
 Malaysian specifics: MPERS-aligned default chart of accounts, SST tax codes
 (service tax 8% / 6%, sales tax 10% / 5%, exempt, zero-rated), and Bank
@@ -1222,10 +1224,15 @@ and that does not belong in this repo.
 
 ## Demo data
 
-A worked example is loaded in the project: **Sinar Teknologi Sdn Bhd**,
-with a customer, two invoice lines, a posted journal and a part payment.
+Four worked companies are loaded in the project, rebuilt together by
+`app.demo_rebuild()`: **Sinar Teknologi Sdn Bhd** (a trading company with
+a full financial year, payroll, a helpdesk and a trade counter),
+**Amanah Setiausaha Sdn Bhd** (a corp-sec practice), **Harta Prima
+Management Sdn Bhd** (a strata scheme and a commercial block) and
+**Warung Sedap Enterprise** (a sole proprietor café mid-service — see
+`docs/pos.md`).
 
-All five logins share the password `Demo!Akaun2026`:
+All six logins share the password `Demo!Akaun2026`:
 
 | Login | Sees |
 | --- | --- |
@@ -1233,8 +1240,10 @@ All five logins share the password `Demo!Akaun2026`:
 | `clerk@iakauntan.com` | Accounts Clerk — can prepare, cannot post |
 | `auditor@iakauntan.com` | Auditor — reads the ledger, writes nothing |
 | `secretary@iakauntan.com` | Company secretary — a practice and its clients |
+| `property@iakauntan.com` | Property manager — a strata scheme and a commercial block |
+| `warung@iakauntan.com` | Café owner — tables, kitchen screen and a kiosk |
 
-**None of that needs typing.** The sign-in page lists those four accounts
+**None of that needs typing.** The sign-in page lists those six accounts
 under *or look around a demo*, each described by what it will show rather
 than by the name of its role, and a tap signs straight in.
 
@@ -1262,11 +1271,12 @@ demonstrating something other than the product.
 
 **Turn it off before this project holds a real ledger.** The panel ships
 the demo password inside the bundle, which is harmless only while those
-five accounts are the only thing it opens. Two things to do, together:
+six accounts are the only thing it opens. Two things to do, together:
 
 - set the repository variable `DEMO_MODE` to `false` (or build with
   `--dart-define=DEMO_MODE=false`), which removes the panel; and
-- delete the demo users and **both** demo organizations.
+- delete the demo users and every demo organization — `app.demo_teardown()`
+  does both, and is what `app.demo_rebuild()` calls first.
 
 The switch is compile-time on purpose. A door that can be reopened by
 editing a row is not closed.
@@ -1276,7 +1286,7 @@ session on a shared account means handing them the ability to change its
 password and lock out every visitor after them — or move its email and
 take the account. `0076` puts a trigger on `auth.users` that refuses any
 change to the password, email or phone of an account flagged
-`app_metadata.demo`, and the five seeded logins carry that flag.
+`app_metadata.demo`, and the six seeded logins carry that flag.
 
 It is a trigger rather than a hidden button because the change is an
 ordinary POST to GoTrue's `/auth/v1/user`, which never passes through
@@ -1485,8 +1495,10 @@ Stated plainly so nothing here is mistaken for finished:
 - Self-billed e-Invoice for foreign suppliers: schema supports it, no UI
 - Goods Received and Purchase Request screens (the types exist in the
   schema; only PO, Bill and Purchase Credit Note are exposed in the app)
-- E-mail delivery of anything. Invoices, payslips and secretarial
-  documents all render to PDF and download; nothing sends them
+- ~~E-mail delivery of anything.~~ Built and deployed: documents send
+  through Resend, overdue invoices are chased on a schedule, and every
+  send is logged per document. What is left is not code — a provider
+  account, two secrets and a DNS record. See `docs/email-setup.md`
 - Bank statement import and auto-matching
 - Statutory submission files: CP39, Borang A, Lampiran 1 and the EA form
   are all computable from what is stored, but no exporter is written
