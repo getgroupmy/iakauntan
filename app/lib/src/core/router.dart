@@ -38,6 +38,7 @@ import '../features/forecasting/forecast_screen.dart';
 import '../features/pos/diary_screen.dart';
 import '../features/pos/floor_plan_screen.dart';
 import '../features/pos/kiosk_board_screen.dart';
+import '../features/pos/kiosk_screen.dart';
 import '../features/pos/kitchen_screen.dart';
 import '../features/pos/till_screen.dart';
 import '../features/ticketing/ticket_editor.dart';
@@ -374,6 +375,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const KitchenScreen(),
           ),
           GoRoute(path: '/diary', builder: (_, __) => const DiaryScreen()),
+          GoRoute(path: '/kiosk', builder: (_, __) => const KioskScreen()),
           GoRoute(
             path: '/order-board',
             builder: (_, __) => const KioskBoardScreen(),

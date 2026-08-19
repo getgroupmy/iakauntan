@@ -264,9 +264,44 @@ Two kiosks pressing "pay" in the same millisecond get different numbers.
 `kiosk_order_board()` is the screen customers watch: preparing on one
 side, ready on the other, and a collected order leaves it.
 
-## Five screens, five readers
+## The kiosk's own face
 
-The module is not one face but five, and what separates them is who is
+`start_kiosk_order` and `complete_kiosk_order` had no screen: the board
+customers watch was built, the touchscreen they order from was not. It
+is at `/kiosk`, and it is the only screen in this application whose
+reader is a stranger — somebody using it once, holding a tray, who will
+not read anything and cannot be corrected. That decides most of its
+design: large targets, one decision at a time, and categories always
+before items, because a cashier knows the menu and a customer does not.
+
+Four rules it enforces that the till does not need to:
+
+- **Only a kiosk register is offered.** `start_kiosk_order` refuses a
+  staff till — a kiosk order on one would be a sale with nobody behind
+  it and a drawer that could take cash. The screen filters the list
+  rather than making that refusal reachable.
+- **Cash is not on the list.** `complete_kiosk_order` refuses it, and a
+  customer told "no" by a machine has nobody to ask why.
+- **Nothing is written until an item is tapped.** Walking up starts no
+  sale, because an empty parked sale would be worse than untidy:
+  `close_pos_shift` refuses while anything is parked, so a day of people
+  tapping the screen and leaving would stop the shop closing its drawer.
+- **It returns to "Tap to order" by itself** — after paying, and after
+  two minutes of nothing. A kiosk still showing the last customer's
+  basket charges the next person for food they did not order.
+
+An abandoned basket *with* something in it is left parked rather than
+voided. It holds no money and no number, and a till can settle it if the
+customer comes to the counter saying the machine ate their order — which
+is the one recovery a kiosk has, and it is reachable now that every till
+lists every open bill in the shop.
+
+The number comes before the thanks because `complete_kiosk_order` takes
+it before the sale completes, so a customer who has paid always has one.
+
+## Six screens, six readers
+
+The module is not one face but six, and what separates them is who is
 holding the device rather than which feature they reach.
 
 | Screen | Route | Read by |
@@ -275,11 +310,14 @@ holding the device rather than which feature they reach.
 | Floor | `/floor` | A waiter, crossing a room, at a distance |
 | Kitchen | `/kitchen` | A cook, hands full, further away still |
 | Diary | `/diary` | A receptionist, on a phone, mid-sentence |
+| Kiosk | `/kiosk` | **A customer**, ordering for themselves |
 | Order board | `/order-board` | **A customer**, holding a tray |
 
 They share a register picker and nothing else, because the thing that
 makes a POS screen good is different in each case. The board shows the
-least of anything in this application; the till shows the most.
+least of anything in this application; the till shows the most. The two
+customer-facing screens are the only ones built for somebody who will
+use them once and cannot be trained or corrected.
 
 ## On a counter, a tablet and a phone
 
@@ -507,10 +545,6 @@ for is therefore visible in the demo data, not only asserted in
   terminal
 - Cash drawer and receipt printer drivers. The receipt renders; opening a
   physical drawer is between the browser and the hardware
-- The kiosk's own ordering face. `start_kiosk_order` and
-  `complete_kiosk_order` have no screen: the board customers watch is
-  built, but the touchscreen they order from is not, so a kiosk order
-  still has to be started from the till
 - Landing an offline batch. `ingest_offline_sales` expects a payload
   from a till that queued sales locally; nothing in the Flutter client
   queues them yet, so the offline path is server-ready and

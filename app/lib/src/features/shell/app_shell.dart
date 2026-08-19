@@ -215,6 +215,17 @@ const _destinations = <_Dest>[
     '/diary',
     module: 'pos',
   ),
+  // The customer's own screen, and the screen they watch afterwards.
+  // Both are on the staff menu because somebody has to be able to set
+  // the machine up and check on it; neither is a place a cashier
+  // works.
+  _Dest(
+    'Kiosk',
+    Icons.storefront_outlined,
+    Icons.storefront,
+    '/kiosk',
+    module: 'pos',
+  ),
   _Dest(
     'Order board',
     Icons.tv_outlined,
