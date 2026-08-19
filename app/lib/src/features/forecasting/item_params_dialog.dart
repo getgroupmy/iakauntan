@@ -98,7 +98,7 @@ class _ItemParamsDialogState extends ConsumerState<_ItemParamsDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  warehouseId == null
+                  widget.warehouseId == null
                       ? 'Company-wide. Leave a field empty to use the '
                             'default.'
                       : 'This location only. Leave a field empty to use '
