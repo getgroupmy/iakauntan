@@ -33,6 +33,7 @@ declare
   v_far    uuid;
   v_shift  uuid;
   v_sale   uuid;
+  v_sale2  uuid;
   v_cash   uuid;
   v_spice  uuid;
   v_extra  uuid;
@@ -123,9 +124,13 @@ begin
   perform pg_temp.check_eq('covers can be corrected on the way past',
     (select s.covers from public.pos_sales s where s.id = v_sale), 5);
 
+  -- Called once into a variable, not inlined into the subquery's WHERE.
+  -- `seat_table` is volatile, so a planner free to evaluate it per row
+  -- opens a bill per row and matches none of them -- which is exactly
+  -- what an earlier version of this line did.
+  v_sale2 := public.seat_table(v_reg, v_t8);
   perform pg_temp.check_eq('an uncounted table assumes it is full',
-    (select s.covers from public.pos_sales s
-      where s.id = public.seat_table(v_reg, v_t8)), 2);
+    (select s.covers from public.pos_sales s where s.id = v_sale2), 2);
 
   -- A waiter cannot seat a table they are not standing in.
   begin
