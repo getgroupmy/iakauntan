@@ -41,10 +41,16 @@ class ForecastScreen extends ConsumerStatefulWidget {
 class _ForecastScreenState extends ConsumerState<ForecastScreen> {
   String _view = 'order';
 
+  /// Null is the company as a whole, not "no filter". A company that
+  /// transfers stock freely forecasts centrally; one whose branches each
+  /// hold their own forecasts per location. Both are legitimate, which
+  /// is why this is a choice rather than a default.
+  String? _warehouse;
+
   void _refresh() {
     ref
-      ..invalidate(latestForecastRunProvider)
-      ..invalidate(forecastSuggestionsProvider);
+      ..invalidate(latestForecastRunProvider(_warehouse))
+      ..invalidate(forecastSuggestionsProvider(_warehouse));
   }
 
   Future<void> _run() async {
@@ -54,19 +60,23 @@ class _ForecastScreenState extends ConsumerState<ForecastScreen> {
       context,
       pendingMessage: 'Forecasting…',
       successMessage: 'Forecast run',
-      action: () => repo.runForecast(),
+      action: () => repo.runForecast(warehouseId: _warehouse),
     );
     if (ok) _refresh();
   }
 
   @override
   Widget build(BuildContext context) {
-    final run = ref.watch(latestForecastRunProvider);
+    final run = ref.watch(latestForecastRunProvider(_warehouse));
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Replenishment'),
         actions: [
+          _WarehousePicker(
+            selected: _warehouse,
+            onChanged: (id) => setState(() => _warehouse = id),
+          ),
           IconButton(
             tooltip: 'Run a forecast now',
             icon: const Icon(Icons.play_arrow_outlined),
@@ -89,7 +99,9 @@ class _ForecastScreenState extends ConsumerState<ForecastScreen> {
           if (r == null) {
             return EmptyState(
               icon: Icons.insights_outlined,
-              title: 'No forecast yet',
+              title: _warehouse == null
+                  ? 'No forecast yet'
+                  : 'No forecast yet for this location',
               message:
                   'A run reads the last year of deliveries, measures how '
                   'long each supplier actually takes, and works out what '
@@ -104,6 +116,7 @@ class _ForecastScreenState extends ConsumerState<ForecastScreen> {
           return _Loaded(
             run: r,
             view: _view,
+            warehouseId: _warehouse,
             onView: (v) => setState(() => _view = v),
             onChanged: _refresh,
           );
@@ -117,12 +130,14 @@ class _Loaded extends StatelessWidget {
   const _Loaded({
     required this.run,
     required this.view,
+    required this.warehouseId,
     required this.onView,
     required this.onChanged,
   });
 
   final Map<String, dynamic> run;
   final String view;
+  final String? warehouseId;
   final ValueChanged<String> onView;
   final VoidCallback onChanged;
 
@@ -182,7 +197,10 @@ class _Loaded extends StatelessWidget {
               Space.lg,
             ),
             child: view == 'order'
-                ? _Suggestions(onChanged: onChanged)
+                ? _Suggestions(
+                    warehouseId: warehouseId,
+                    onChanged: onChanged,
+                  )
                 : _AllLines(
                     runId: run['id'] as String,
                     skippedOnly: view == 'skipped',
@@ -259,17 +277,18 @@ class _Count extends StatelessWidget {
 }
 
 class _Suggestions extends ConsumerWidget {
-  const _Suggestions({required this.onChanged});
+  const _Suggestions({required this.warehouseId, required this.onChanged});
 
+  final String? warehouseId;
   final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final suggestions = ref.watch(forecastSuggestionsProvider);
+    final suggestions = ref.watch(forecastSuggestionsProvider(warehouseId));
 
     return AsyncView<List<Map<String, dynamic>>>(
       value: suggestions,
-      onRetry: () => ref.invalidate(forecastSuggestionsProvider),
+      onRetry: () => ref.invalidate(forecastSuggestionsProvider(warehouseId)),
       builder: (list) {
         if (list.isEmpty) {
           return const EmptyState(
@@ -305,8 +324,11 @@ class _Suggestions extends ConsumerWidget {
             Expanded(
               child: ListView.builder(
                 itemCount: list.length,
-                itemBuilder: (_, i) =>
-                    _SuggestionRow(list[i], onChanged: onChanged),
+                itemBuilder: (_, i) => _SuggestionRow(
+                  list[i],
+                  warehouseId: warehouseId,
+                  onChanged: onChanged,
+                ),
               ),
             ),
           ],
@@ -326,12 +348,14 @@ class _Suggestions extends ConsumerWidget {
       // The result is the confirmation, and it is shown below.
       successMessage: null,
       action: () async {
-        result = await repo.createPurchaseOrdersFromSuggestions();
+        result = await repo.createPurchaseOrdersFromSuggestions(
+          warehouseId: warehouseId,
+        );
       },
     );
     if (!ok || !context.mounted) return;
 
-    ref.invalidate(forecastSuggestionsProvider);
+    ref.invalidate(forecastSuggestionsProvider(warehouseId));
     onChanged();
     await showDialog<void>(
       context: context,
@@ -418,9 +442,14 @@ class _OrdersRaised extends StatelessWidget {
 }
 
 class _SuggestionRow extends StatelessWidget {
-  const _SuggestionRow(this.s, {required this.onChanged});
+  const _SuggestionRow(
+    this.s, {
+    required this.warehouseId,
+    required this.onChanged,
+  });
 
   final Map<String, dynamic> s;
+  final String? warehouseId;
   final VoidCallback onChanged;
 
   @override
@@ -433,7 +462,12 @@ class _SuggestionRow extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: Space.sm),
       child: ListTile(
-        onTap: () => showForecastLineSheet(context, s, onChanged: onChanged),
+        onTap: () => showForecastLineSheet(
+          context,
+          s,
+          warehouseId: warehouseId,
+          onChanged: onChanged,
+        ),
         title: Text('${s['item_code']} · ${s['item_name']}'),
         subtitle: Text(
           [
@@ -583,20 +617,27 @@ class _StateChip extends StatelessWidget {
 Future<void> showForecastLineSheet(
   BuildContext context,
   Map<String, dynamic> s, {
+  required String? warehouseId,
   required VoidCallback onChanged,
 }) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (ctx) => _LineSheet(s, onChanged: onChanged),
+    builder: (ctx) =>
+        _LineSheet(s, warehouseId: warehouseId, onChanged: onChanged),
   );
 }
 
 class _LineSheet extends ConsumerWidget {
-  const _LineSheet(this.s, {required this.onChanged});
+  const _LineSheet(
+    this.s, {
+    required this.warehouseId,
+    required this.onChanged,
+  });
 
   final Map<String, dynamic> s;
+  final String? warehouseId;
   final VoidCallback onChanged;
 
   @override
@@ -656,6 +697,7 @@ class _LineSheet extends ConsumerWidget {
                     ref,
                     itemId: s['item_id'] as String,
                     itemLabel: '${s['item_code']} · ${s['item_name']}',
+                    warehouseId: warehouseId,
                   );
                   if (saved) onChanged();
                 },
@@ -669,4 +711,51 @@ class _LineSheet extends ConsumerWidget {
 
   Widget _row(String label, String value) =>
       FieldRow(label: label, value: value);
+}
+
+
+/// Which stock the question is about.
+///
+/// Null is "the company", and it is a real answer rather than the
+/// absence of one: a business that transfers freely between locations
+/// forecasts centrally, and one whose branches each hold their own does
+/// not. Both are correct, so neither is assumed.
+///
+/// Hidden when there is nothing to choose between. One warehouse is
+/// every small business in the country, and a picker with a single
+/// entry is a control that can only ever confirm what is already true.
+class _WarehousePicker extends ConsumerWidget {
+  const _WarehousePicker({required this.selected, required this.onChanged});
+
+  final String? selected;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final warehouses = ref.watch(warehousesProvider);
+    final list = warehouses.value ?? const <Map<String, dynamic>>[];
+    if (list.length < 2) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Space.sm),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String?>(
+          value: selected,
+          borderRadius: BorderRadius.circular(Radii.md),
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('Whole company'),
+            ),
+            for (final w in list)
+              DropdownMenuItem<String?>(
+                value: w['id'] as String,
+                child: Text('${w['code']} · ${w['name']}'),
+              ),
+          ],
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
 }

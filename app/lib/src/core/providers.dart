@@ -1709,14 +1709,22 @@ final forecastSettingsProvider =
       (ref) => requireRepo(ref).forecastSettings(),
     );
 
-final latestForecastRunProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>?>(
-      (ref) => requireRepo(ref).latestForecastRun(),
+/// Keyed on the location, with null meaning the company as a whole.
+///
+/// A family rather than a single provider because the company-level
+/// answer and a branch's are different answers to different questions,
+/// and one cache holding whichever was asked for last is how a branch's
+/// figures end up under the main store's heading.
+final latestForecastRunProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String?>(
+      (ref, warehouseId) =>
+          requireRepo(ref).latestForecastRun(warehouseId: warehouseId),
     );
 
-final forecastSuggestionsProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
-      (ref) => requireRepo(ref).forecastSuggestions(),
+final forecastSuggestionsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>(
+      (ref, warehouseId) =>
+          requireRepo(ref).forecastSuggestions(warehouseId: warehouseId),
     );
 
 final forecastLinesProvider = FutureProvider.autoDispose
@@ -1724,7 +1732,14 @@ final forecastLinesProvider = FutureProvider.autoDispose
       (ref, runId) => requireRepo(ref).forecastLines(runId),
     );
 
+/// One item's parameters at one location. The record is keyed on both,
+/// so asking with the wrong half returns the company-wide row and
+/// silently saves over it.
+typedef ItemParamsKey = ({String itemId, String? warehouseId});
+
 final itemForecastParamsProvider = FutureProvider.autoDispose
-    .family<Map<String, dynamic>?, String>(
-      (ref, itemId) => requireRepo(ref).itemForecastParams(itemId),
+    .family<Map<String, dynamic>?, ItemParamsKey>(
+      (ref, key) => requireRepo(
+        ref,
+      ).itemForecastParams(key.itemId, warehouseId: key.warehouseId),
     );

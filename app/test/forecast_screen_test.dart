@@ -20,8 +20,13 @@ import 'package:iakauntan/src/features/forecasting/forecast_screen.dart';
 ///     merely absent, because an item missing from a replenishment
 ///     report is one nobody notices they stopped ordering.
 void main() {
-  Map<String, dynamic> run({int suggested = 2, int skipped = 1}) => {
+  Map<String, dynamic> run({
+    int suggested = 2,
+    int skipped = 1,
+    String? warehouseId,
+  }) => {
     'id': 'run-1',
+    'warehouse_id': warehouseId,
     'as_of_date': '2026-08-18',
     'bucket': 'month',
     'horizon_buckets': 3,
@@ -67,13 +72,21 @@ void main() {
     'supplier_name': supplier,
   };
 
+  /// The screen opens on the company as a whole, so the fixtures answer
+  /// for the null key. `byWarehouse` is for the one test that cares that
+  /// the two are different questions.
   Widget harness({
     Map<String, dynamic>? latest,
     List<Map<String, dynamic>> suggestions = const [],
+    Map<String?, Map<String, dynamic>?> byWarehouse = const {},
+    List<Map<String, dynamic>> warehouses = const [],
   }) => ProviderScope(
     overrides: [
-      latestForecastRunProvider.overrideWith((_) async => latest),
-      forecastSuggestionsProvider.overrideWith((_) async => suggestions),
+      latestForecastRunProvider.overrideWith(
+        (_, id) async => byWarehouse.isEmpty ? latest : byWarehouse[id],
+      ),
+      forecastSuggestionsProvider.overrideWith((_, __) async => suggestions),
+      warehousesProvider.overrideWith((_) async => warehouses),
     ],
     child: MaterialApp(theme: AppTheme.light(), home: const ForecastScreen()),
   );
@@ -149,6 +162,61 @@ void main() {
 
     expect(find.text('Skipped (2)'), findsOneWidget);
     expect(find.text('To order (2)'), findsOneWidget);
+  });
+
+  testWidgets('with one warehouse there is nothing to pick', (tester) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    // Every small business in the country. A picker with a single entry
+    // is a control that can only confirm what is already true.
+    await tester.pumpWidget(
+      harness(
+        latest: run(),
+        warehouses: const [
+          {'id': 'w1', 'code': 'MAIN', 'name': 'Main'},
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Whole company'), findsNothing);
+  });
+
+  testWidgets('a company-level run is not shown for a branch', (tester) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    // The trap 0205 exists to close. Before the run recorded its
+    // warehouse, "the latest run for this company" was the only
+    // question that could be asked, so opening a branch showed whatever
+    // had been forecast last — real numbers about somewhere else, with
+    // nothing saying so.
+    await tester.pumpWidget(
+      harness(
+        byWarehouse: {null: run(), 'w2': null},
+        warehouses: const [
+          {'id': 'w1', 'code': 'MAIN', 'name': 'Main'},
+          {'id': 'w2', 'code': 'BR2', 'name': 'Branch'},
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The company has a run.
+    expect(find.text('Whole company'), findsOneWidget);
+    expect(find.text('Considered'), findsOneWidget);
+
+    await tester.tap(find.text('Whole company'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('BR2 · Branch').last);
+    await tester.pumpAndSettle();
+
+    // The branch does not, and says so rather than borrowing.
+    expect(find.text('No forecast yet for this location'), findsOneWidget);
+    expect(find.text('Considered'), findsNothing);
   });
 
   testWidgets('an item with no supplier says so on its row', (tester) async {

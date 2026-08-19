@@ -290,6 +290,7 @@ do $$
 declare
   v_org    uuid;
   v_wh     uuid;
+  v_wh2    uuid;
   v_sup_a  uuid;
   v_sup_b  uuid;
   v_bolt   uuid;
@@ -316,6 +317,11 @@ begin
 
   insert into public.warehouses (org_id, code, name)
   values (v_org, 'MAIN', 'Main') returning id into v_wh;
+  -- A second location, holding nothing. Its emptiness is the point: a
+  -- branch with no stock and no history must answer for itself rather
+  -- than borrow whatever was forecast last.
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'BR2', 'Branch') returning id into v_wh2;
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'S-A', 'Ah Seng Fasteners', 'supplier') returning id into v_sup_a;
@@ -519,6 +525,43 @@ begin
   -- ------------------------------------------------------------------
   -- Somebody else's replenishment
   -- ------------------------------------------------------------------
+  -- ------------------------------------------------------------------
+  -- One location's answer is not another's
+  -- ------------------------------------------------------------------
+  -- The run records the warehouse it was about. Without that, "the
+  -- latest run for this company" is the only question that can be
+  -- asked, and forecasting a branch after the company silently
+  -- re-labels the branch's figures as the company's — real numbers
+  -- about the wrong stock, with nothing to show for it.
+  -- Nothing is stocked at the branch and nothing has ever moved there,
+  -- so its own answer is "nothing to order" — and this run is the
+  -- newest in the company, which is what makes the control below bite.
+  v_run := public.run_inventory_forecast(v_org, v_wh2);
+
+  select count(*) into v_n
+    from public.forecast_runs r
+   where r.org_id = v_org and r.warehouse_id = v_wh2;
+  perform pg_temp.check_eq('the run knows which location it was for', v_n, 1);
+
+  select count(*) into v_n
+    from public.forecast_runs r
+   where r.org_id = v_org and r.warehouse_id is null;
+  perform pg_temp.check_eq('and the company-level run is still its own', v_n, 1);
+
+  -- Nothing is stocked at the second warehouse, so its suggestions are
+  -- its own rather than the company's five.
+  select count(*) into v_n from public.forecast_suggestions(v_org, v_wh2);
+  select count(*) into v_docs from public.forecast_suggestions(v_org);
+  perform pg_temp.check_true(
+    'the branch is asked its own question, not the company''s',
+    v_n <> v_docs);
+
+  -- The control. If the company-level call had started returning the
+  -- branch's newer run, both would be equal and the assertion above
+  -- would pass for the wrong reason.
+  perform pg_temp.check_eq(
+    'and the company still answers with its own five', v_docs, 5);
+
   v_outsider := pg_temp.another_user('outsider@iakauntan.test');
   perform pg_temp.sign_in_as(v_outsider);
   begin

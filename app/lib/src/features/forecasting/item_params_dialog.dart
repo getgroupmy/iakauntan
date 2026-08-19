@@ -22,18 +22,21 @@ Future<bool> showItemForecastParams(
   WidgetRef ref, {
   required String itemId,
   required String itemLabel,
+  String? warehouseId,
 }) async {
-  final current = await ref.read(itemForecastParamsProvider(itemId).future);
+  final key = (itemId: itemId, warehouseId: warehouseId);
+  final current = await ref.read(itemForecastParamsProvider(key).future);
   if (!context.mounted) return false;
   final saved = await showDialog<bool>(
     context: context,
     builder: (_) => _ItemParamsDialog(
       itemId: itemId,
       itemLabel: itemLabel,
+      warehouseId: warehouseId,
       current: current ?? const {},
     ),
   );
-  if (saved ?? false) ref.invalidate(itemForecastParamsProvider(itemId));
+  if (saved ?? false) ref.invalidate(itemForecastParamsProvider(key));
   return saved ?? false;
 }
 
@@ -41,11 +44,13 @@ class _ItemParamsDialog extends ConsumerStatefulWidget {
   const _ItemParamsDialog({
     required this.itemId,
     required this.itemLabel,
+    required this.warehouseId,
     required this.current,
   });
 
   final String itemId;
   final String itemLabel;
+  final String? warehouseId;
   final Map<String, dynamic> current;
 
   @override
@@ -93,7 +98,11 @@ class _ItemParamsDialogState extends ConsumerState<_ItemParamsDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Leave a field empty to use the company setting.',
+                  warehouseId == null
+                      ? 'Company-wide. Leave a field empty to use the '
+                            'default.'
+                      : 'This location only. Leave a field empty to use '
+                            'the default.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: Space.md),
@@ -238,7 +247,7 @@ class _ItemParamsDialogState extends ConsumerState<_ItemParamsDialog> {
         'lead_time_days': _valueOf(_lead, whole: true),
         'supplier_id': _supplier,
         'is_excluded': _excluded,
-      }),
+      }, warehouseId: widget.warehouseId),
     );
     if (!mounted) return;
     setState(() => _saving = false);

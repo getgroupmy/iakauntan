@@ -6017,15 +6017,20 @@ extension RepoForecasting on Repo {
         .upsert({'org_id': orgId, ...values}, onConflict: 'org_id');
   }
 
-  /// The most recent run, or null if none has been made.
-  Future<Map<String, dynamic>?> latestForecastRun() async {
+  /// The most recent run for a location, or null if none has been made.
+  ///
+  /// Null [warehouseId] means the company as a whole, and is a different
+  /// run from any branch's rather than a wildcard over them — which is
+  /// why the filter is `is null` rather than being left off. Leaving it
+  /// off would return whichever location was forecast most recently and
+  /// present it as this one's.
+  Future<Map<String, dynamic>?> latestForecastRun({String? warehouseId}) async {
+    var q = client.from('forecast_runs').select().eq('org_id', orgId);
+    q = warehouseId == null
+        ? q.isFilter('warehouse_id', null)
+        : q.eq('warehouse_id', warehouseId);
     final rows = Repo.rows(
-      await client
-          .from('forecast_runs')
-          .select()
-          .eq('org_id', orgId)
-          .order('run_at', ascending: false)
-          .limit(1),
+      await q.order('run_at', ascending: false).limit(1),
     );
     return rows.isEmpty ? null : rows.first;
   }
@@ -6041,8 +6046,14 @@ extension RepoForecasting on Repo {
     return id as String;
   }
 
-  Future<List<Map<String, dynamic>>> forecastSuggestions() async =>
-      Repo.rows(await client.rpc('forecast_suggestions', params: {'p_org': orgId}));
+  Future<List<Map<String, dynamic>>> forecastSuggestions({
+    String? warehouseId,
+  }) async => Repo.rows(
+    await client.rpc(
+      'forecast_suggestions',
+      params: {'p_org': orgId, 'p_warehouse': warehouseId},
+    ),
+  );
 
   /// Every line of a run, including the items with nothing to order and
   /// the ones skipped for want of history. The skipped ones are the
@@ -6059,14 +6070,19 @@ extension RepoForecasting on Repo {
             .order('state'),
       );
 
-  Future<Map<String, dynamic>?> itemForecastParams(String itemId) async {
-    final row = await client
+  Future<Map<String, dynamic>?> itemForecastParams(
+    String itemId, {
+    String? warehouseId,
+  }) async {
+    var q = client
         .from('item_forecast_params')
         .select()
         .eq('org_id', orgId)
-        .eq('item_id', itemId)
-        .isFilter('warehouse_id', null)
-        .maybeSingle();
+        .eq('item_id', itemId);
+    q = warehouseId == null
+        ? q.isFilter('warehouse_id', null)
+        : q.eq('warehouse_id', warehouseId);
+    final row = await q.maybeSingle();
     return row == null ? null : Map<String, dynamic>.from(row);
   }
 
@@ -6081,21 +6097,23 @@ extension RepoForecasting on Repo {
   /// a parameter for the second time.
   Future<void> saveItemForecastParams(
     String itemId,
-    Map<String, dynamic> values,
-  ) async {
-    final updated = Repo.rows(
-      await client
-          .from('item_forecast_params')
-          .update(values)
-          .eq('org_id', orgId)
-          .eq('item_id', itemId)
-          .isFilter('warehouse_id', null)
-          .select('id'),
-    );
+    Map<String, dynamic> values, {
+    String? warehouseId,
+  }) async {
+    var q = client
+        .from('item_forecast_params')
+        .update(values)
+        .eq('org_id', orgId)
+        .eq('item_id', itemId);
+    q = warehouseId == null
+        ? q.isFilter('warehouse_id', null)
+        : q.eq('warehouse_id', warehouseId);
+    final updated = Repo.rows(await q.select('id'));
     if (updated.isEmpty) {
       await client.from('item_forecast_params').insert({
         'org_id': orgId,
         'item_id': itemId,
+        'warehouse_id': warehouseId,
         ...values,
       });
     }
@@ -6108,11 +6126,13 @@ extension RepoForecasting on Repo {
   Future<List<Map<String, dynamic>>> createPurchaseOrdersFromSuggestions({
     List<Map<String, dynamic>>? lines,
     DateTime? expected,
+    String? warehouseId,
   }) async => Repo.rows(
     await client.rpc(
       'create_po_from_suggestions',
       params: {
         'p_org': orgId,
+        'p_warehouse': warehouseId,
         if (lines != null) 'p_lines': lines,
         if (expected != null)
           'p_expected_date': expected.toIso8601String().substring(0, 10),
