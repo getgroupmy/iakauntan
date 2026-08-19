@@ -36,11 +36,16 @@ declare
   v_card   uuid;
   v_shift  uuid;
   v_sale   uuid;
+  v_cash_sale uuid;
+  v_card_sale uuid;
+  v_named  uuid;
   v_n      integer;
   v_a      numeric;
   v_b      numeric;
   v_c      numeric;
   v_d      numeric;
+  v_due    date;
+  v_pend   date;
   v_txt    text;
 begin
   -- ------------------------------------------------------------------
@@ -95,7 +100,7 @@ begin
   perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
 
   insert into public.org_modules (org_id, module_code, is_enabled)
-  select v_org, m, true from unnest(array['pos','purchases','inventory']) m
+  select v_org, m, true from unnest(array['pos','purchases','inventory','einvoice']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
 
   insert into public.warehouses (org_id, code, name)
@@ -158,6 +163,7 @@ begin
     from public.complete_pos_sale(
       v_sale, jsonb_build_array(
         jsonb_build_object('type', v_cash, 'amount', 50.00))) r;
+  v_cash_sale := v_sale;
   perform pg_temp.check_eq('the sale totals to the rounded figure', v_a, 10.05);
   perform pg_temp.check_eq('which is what the drawer asks for', v_b, 10.05);
   perform pg_temp.check_eq('and 39.95 comes back from fifty', v_c, 39.95);
@@ -197,6 +203,7 @@ begin
     from public.complete_pos_sale(
       v_sale, jsonb_build_array(
         jsonb_build_object('type', v_card, 'amount', 10.03))) r;
+  v_card_sale := v_sale;
   perform pg_temp.check_eq('a card pays the basket to the sen', v_a, 10.03);
   perform pg_temp.check_eq('with nothing rounded', v_b, 0);
   perform pg_temp.check_eq('and no change from a card', v_c, 0);
@@ -245,6 +252,105 @@ begin
   perform pg_temp.check_eq(
     'the drawer expects the float plus the net cash, and not the card',
     app.pos_expected_cash(v_shift), 115.10);
+
+  -- ------------------------------------------------------------------
+  -- What the shop owes LHDN, and how it is not one document per drink
+  -- ------------------------------------------------------------------
+  -- Three sales completed above, all to the walk-in. Nobody identified
+  -- themselves, so under the guideline they roll into one monthly
+  -- submission rather than three.
+  update public.organizations
+     set einvoice_enabled = true, tin = 'C24680135790' where id = v_org;
+  insert into public.contacts
+    (org_id, code, name, contact_type, tin, id_type, id_value)
+  values (v_org, 'BERDAFTAR', 'Syarikat Berdaftar', 'customer',
+          'C99887766550', 'BRN', '202301999999')
+  returning id into v_named;
+
+  select o.sales_waiting, o.due_date, o.consolidation_status
+    into v_n, v_due, v_txt
+    from public.pos_einvoice_outstanding(v_org) o
+   where o.period_start = date_trunc('month', current_date)::date;
+  perform pg_temp.check_eq('three counter sales are waiting to be rolled up',
+    v_n, 3);
+  perform pg_temp.check_true('and no consolidation has been started',
+    v_txt = 'not started');
+  perform pg_temp.check_true('due seven days after month end',
+    v_due = (date_trunc('month', current_date) + interval '1 month - 1 day')::date + 7);
+
+  -- "Boss, I need it under the company name" -- which arrives after the
+  -- money, not before it.
+  perform public.request_einvoice_for_sale(v_card_sale, v_named);
+  perform pg_temp.check_true('a claimed sale is no longer anonymous',
+    not app.pos_invoice_is_anonymous(
+      (select s.invoice_id from public.pos_sales s where s.id = v_card_sale)));
+  perform pg_temp.check_true('and it has an e-Invoice of its own',
+    (select d.einvoice_id is not null from public.sales_documents d
+      join public.pos_sales s on s.invoice_id = d.id where s.id = v_card_sale));
+
+  -- A buyer with no TIN cannot be named on one: LHDN needs the number,
+  -- and a blank there is the walk-in by another route.
+  begin
+    perform public.request_einvoice_for_sale(v_cash_sale, v_walkin);
+    raise exception 'FAIL named an e-Invoice to a customer with no TIN';
+  exception when check_violation then
+    raise notice 'ok   a customer with no TIN cannot be named on one';
+  end;
+
+  select r.document_count, r.total_amount, r.added, r.due_date, r.period_end
+    into v_n, v_a, v_b, v_due, v_pend
+    from public.consolidate_pos_einvoices(v_org, current_date) r;
+  perform pg_temp.check_eq('two anonymous sales roll up', v_n, 2);
+  perform pg_temp.check_eq('both added on the first run', v_b, 2);
+  perform pg_temp.check_eq('for the cash sale plus the split sale',
+    v_a, 20.10);
+  perform pg_temp.check_true('the deadline is generated from the period',
+    v_due = v_pend + 7);
+  perform pg_temp.check_true('and the claimed sale stayed out of it',
+    not exists (select 1 from public.einvoice_consolidation_items i
+                  join public.pos_sales s on s.invoice_id = i.sales_document_id
+                 where s.id = v_card_sale));
+
+  -- The property that matters most here. This is the kind of function
+  -- somebody runs a second time because they are not sure the first one
+  -- worked, and a roll-up that double-counts on the second run files a
+  -- return for twice the month's takings.
+  select r.document_count, r.total_amount, r.added into v_n, v_a, v_b
+    from public.consolidate_pos_einvoices(v_org, current_date) r;
+  perform pg_temp.check_eq('running it again adds nothing', v_b, 0);
+  perform pg_temp.check_eq('the count does not move', v_n, 2);
+  perform pg_temp.check_eq('nor the total', v_a, 20.10);
+  perform pg_temp.check_eq('and there is still one consolidation for the month',
+    (select count(*) from public.einvoice_consolidations c
+      where c.org_id = v_org), 1);
+
+  -- Too late to ask. That submission has already told LHDN this sale
+  -- had no identified buyer.
+  begin
+    perform public.request_einvoice_for_sale(v_cash_sale, v_named);
+    raise exception 'FAIL re-billed a sale already consolidated';
+  exception when check_violation then
+    raise notice 'ok   a consolidated sale cannot be re-billed';
+  end;
+
+  -- Nothing is outstanding once it has been rolled up: what the screen
+  -- shows and what the roll-up takes are the same predicate, and this
+  -- is the assertion that keeps them so.
+  perform pg_temp.check_eq('nothing waits for this month any more',
+    (select count(*) from public.pos_einvoice_outstanding(v_org) o
+      where o.period_start = date_trunc('month', current_date)::date), 0);
+
+  -- Once it has gone to LHDN it stops absorbing. A consolidation that
+  -- keeps growing after submission is a return that no longer matches
+  -- what was filed.
+  update public.einvoice_consolidations set status = 'submitted'
+   where org_id = v_org;
+  begin
+    perform * from public.consolidate_pos_einvoices(v_org, current_date);
+    raise exception 'FAIL absorbed a sale into a submitted consolidation';
+  exception when check_violation then
+    raise notice 'ok   a submitted consolidation takes no more sales';
+  end;
 
   raise notice 'point of sale: all assertions passed';
 end;
