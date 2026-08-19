@@ -171,6 +171,22 @@ The earning figure is labelled as an estimate because it is one.
 five-sen rounding, and the rounding is not decided until somebody says
 how much of the bill is cash.
 
+**The demo card carries an opening balance**, and it has to. The member
+earns six points from one RM6.50 sale against a scheme that redeems from
+a hundred, so without one the panel demonstrates itself by refusing —
+"Redeems from 100", greyed out, on the only tenant that has a card at
+all.
+
+It is not invented sales. It is what every shop does on the day it
+installs a scheme: put the customer's existing points on the card, with
+`adjust_loyalty_points`, which insists on a reason and refuses anyone
+who is not an owner or admin. So the seed demonstrates three rules
+rather than fabricating a balance. It tops up *to* 500 rather than *by*
+an amount, because `demo_rebuild` is safe to run twice and this has to
+be. `demo_rebuild.sql` asserts the balance clears the programme's own
+minimum — not a number typed in the test — so raising the minimum fails
+CI instead of quietly making the demo useless again.
+
 The sheet does no arithmetic that matters. `redeem_loyalty_points`
 decides how many points a basket can absorb, floors them so a redemption
 never takes more than the goods are worth, and returns the new total —
@@ -665,7 +681,7 @@ looked at.
 | Type | Login | What is going on in it |
 |---|---|---|
 | `retail` | `demo@iakauntan.com` | Sinar's trade counter, selling out of the warehouse the forecast is about |
-| `food_beverage` | `warung@iakauntan.com` | **Warung Sedap Enterprise** — two rooms, seven tables, two kitchen stations, a menu with modifier groups, a loyalty card, two parties seated with orders in the kitchen and one bill already settled |
+| `food_beverage` | `warung@iakauntan.com` | **Warung Sedap Enterprise** — two rooms, seven tables, two kitchen stations, a menu with modifier groups, a loyalty card with 500 points on it, two parties seated with orders in the kitchen and one bill already settled |
 | `kiosk` | `warung@iakauntan.com` | The screen by the warung's door: an order paid by card, given a number, waiting on the board |
 | `service` | `salon@iakauntan.com` | **Seri Ayu Salon & Spa** — two chairs on different hours, four services, a monthly facial package, and a day holding all four states a slot can be in |
 | `mobile` | `stall@iakauntan.com` | **Roti Warisan Enterprise** — one phone in a van, and a lunchtime rush that landed from the offline queue |

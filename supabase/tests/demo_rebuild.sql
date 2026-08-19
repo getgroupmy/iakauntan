@@ -173,6 +173,46 @@ begin
       where g.is_demo and o.business_type = 'food_beverage') > 0);
 
   -- --------------------------------------------------------------
+  -- The demo card can actually be spent
+  -- --------------------------------------------------------------
+  --
+  -- The member earns six points from one RM6.50 sale and the scheme
+  -- redeems from a hundred, so without an opening balance the loyalty
+  -- panel on the tender sheet demonstrates itself by refusing —
+  -- "Redeems from 100", greyed out, on the only tenant with a card.
+  --
+  -- Asserted against the programme's own minimum rather than a number
+  -- typed here, so raising the minimum fails this instead of quietly
+  -- making the demo useless again.
+  perform pg_temp.check_true(
+    'the demo card holds enough to redeem',
+    (select app.loyalty_balance(a.id) >= p.min_redeem_points
+       from public.loyalty_accounts a
+       join public.loyalty_programs p on p.id = a.program_id
+       join public.organizations g on g.id = a.org_id
+      where g.is_demo and p.is_active and a.is_active
+      limit 1));
+
+  -- The positive control. The assertion above passes for free if the
+  -- minimum is zero, which is exactly what a scheme set up carelessly
+  -- would look like.
+  perform pg_temp.check_true(
+    'and the scheme has a minimum worth clearing',
+    (select p.min_redeem_points > 0 from public.loyalty_programs p
+       join public.organizations g on g.id = p.org_id
+      where g.is_demo and p.is_active limit 1));
+
+  -- Points handed out have to say why. `adjust_loyalty_points` refuses
+  -- an unexplained one, so this is also the check that the seed used
+  -- the real call rather than writing the ledger itself.
+  perform pg_temp.check_true(
+    'and the opening balance says where it came from',
+    exists (select 1 from public.loyalty_entries e
+              join public.organizations g on g.id = e.org_id
+             where g.is_demo and e.kind = 'adjust'
+               and nullif(btrim(coalesce(e.note, '')), '') is not null));
+
+  -- --------------------------------------------------------------
   -- The salon: a day with all four states of a slot in it
   -- --------------------------------------------------------------
   --
