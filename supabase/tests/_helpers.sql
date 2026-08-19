@@ -20,6 +20,40 @@ begin
 end;
 $$;
 
+-- The same helper for the two other things a test actually compares.
+--
+-- `check_eq(text, numeric, numeric)` above cannot take them: numeric has
+-- no implicit cast from text and none at all from uuid, so an assertion
+-- about which station a dish routes to, or which contact ended up on a
+-- sale, failed to resolve rather than failing to hold — which reads in
+-- CI like a broken test rather than a broken expectation.
+--
+-- Three overloads resolve without ambiguity because the arguments are
+-- typed at every real call site, and an all-literal call picks text,
+-- which is the preferred type of the string category and the right
+-- guess.
+create or replace function pg_temp.check_eq(
+  p_label text, p_actual text, p_expected text)
+returns void language plpgsql as $$
+begin
+  if p_actual is distinct from p_expected then
+    raise exception 'FAIL %: expected %, got %', p_label, p_expected, p_actual;
+  end if;
+  raise notice 'ok   % = %', p_label, p_actual;
+end;
+$$;
+
+create or replace function pg_temp.check_eq(
+  p_label text, p_actual uuid, p_expected uuid)
+returns void language plpgsql as $$
+begin
+  if p_actual is distinct from p_expected then
+    raise exception 'FAIL %: expected %, got %', p_label, p_expected, p_actual;
+  end if;
+  raise notice 'ok   %', p_label;
+end;
+$$;
+
 create or replace function pg_temp.check_true(p_label text, p_value boolean)
 returns void language plpgsql as $$
 begin
