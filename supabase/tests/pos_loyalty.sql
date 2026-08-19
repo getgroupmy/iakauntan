@@ -1,0 +1,288 @@
+-- =====================================================================
+-- Point of sale :: loyalty
+--
+-- The balance is a sum over an append-only ledger, so most of what can
+-- go wrong here is arithmetic that looks right. Three assertions carry
+-- the file:
+--
+--   * points are earned on what was PAID, not on the basket. Redeeming
+--     five ringgit off a hundred-ringgit basket must earn ninety-five
+--     points, not a hundred -- otherwise the scheme pays points for
+--     money nobody handed over, and compounds every time.
+--
+--   * a parked sale holds no points. The ledger does not move until the
+--     sale completes, because a balance that fell when a cashier
+--     changed their mind is money taken for a transaction that never
+--     happened.
+--
+--   * a basket cleared entirely by points still completes -- posted
+--     invoice, posted receipt, stock off the shelf, nothing allocated
+--     because nothing was owed. A customer who has saved enough points
+--     to pay must not find the till refuses to ring it up.
+-- =====================================================================
+\i supabase/tests/_helpers.sql
+
+do $$
+declare
+  v_org    uuid;
+  v_wh     uuid;
+  v_item   uuid;
+  v_walkin uuid;
+  v_member uuid;
+  v_outlet uuid;
+  v_reg    uuid;
+  v_cash   uuid;
+  v_prog   uuid;
+  v_acct   uuid;
+  v_shift  uuid;
+  v_sale   uuid;
+  v_n      integer;
+  v_a      numeric;
+  v_b      numeric;
+  v_c      numeric;
+begin
+  v_org := pg_temp.test_org('Pasaraya Mesra Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['pos','purchases','inventory']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'MAIN', 'Shop floor') returning id into v_wh;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'WALK-IN', 'Counter sales', 'customer') returning id into v_walkin;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'AMINAH', 'Puan Aminah', 'customer') returning id into v_member;
+
+  -- Priced before tax and with no tax code, so every figure below can
+  -- be worked by hand.
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price, cost_price)
+  values (v_org, 'TIN', 'Tin susu', 'stock', true, 'C62', 100.00, 40.00)
+  returning id into v_item;
+
+  insert into public.pos_outlets
+    (org_id, code, name, business_type, warehouse_id, walk_in_contact_id,
+     prices_include_tax)
+  values (v_org, 'SHOP', 'The shop', 'retail', v_wh, v_walkin, false)
+  returning id into v_outlet;
+  insert into public.pos_registers (org_id, outlet_id, code, name)
+  values (v_org, v_outlet, 'T1', 'Counter') returning id into v_reg;
+  insert into public.pos_settings (org_id, round_cash_to_5sen) values (v_org, true);
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
+  values (v_org, 'CASH', 'Cash', 'cash', '01', true, true) returning id into v_cash;
+
+  -- ------------------------------------------------------------------
+  -- The programme, and somebody on it
+  -- ------------------------------------------------------------------
+  -- One point per ringgit, one sen a point: a 1% scheme, stated as the
+  -- two numbers a shopkeeper actually sets.
+  insert into public.loyalty_programs
+    (org_id, code, name, earn_points_per_myr, redeem_value_per_point, min_redeem_points)
+  values (v_org, 'KAD', 'Kad Mesra', 1, 0.01, 100) returning id into v_prog;
+
+  begin
+    insert into public.loyalty_programs (org_id, code, name)
+    values (v_org, 'KAD2', 'Second scheme');
+    raise exception 'FAIL two live schemes at once';
+  exception when unique_violation then
+    raise notice 'ok   a company runs one scheme at a time';
+  end;
+
+  v_acct := public.enrol_loyalty_member(v_member, 'CARD-0001');
+  perform pg_temp.check_true('enrolling twice enrols once',
+    public.enrol_loyalty_member(v_member, 'CARD-0001') = v_acct);
+  perform pg_temp.check_eq('a new member starts at nothing',
+    app.loyalty_balance(v_acct), 0);
+
+  perform pg_temp.check_eq('an opening adjustment lands',
+    public.adjust_loyalty_points(v_acct, 1000, 'Opening balance carried over'), 1000);
+
+  -- Handing out points is handing out money.
+  begin
+    perform public.adjust_loyalty_points(v_acct, 50, '   ');
+    raise exception 'FAIL adjusted points with no reason given';
+  exception when check_violation then
+    raise notice 'ok   an unexplained adjustment is refused';
+  end;
+  begin
+    perform public.adjust_loyalty_points(v_acct, -5000, 'Clawback');
+    raise exception 'FAIL took an account below zero';
+  exception when check_violation then
+    raise notice 'ok   an adjustment cannot take an account below zero';
+  end;
+
+  -- ------------------------------------------------------------------
+  -- What a parked sale does to the ledger, which is nothing
+  -- ------------------------------------------------------------------
+  v_shift := public.open_pos_shift(v_reg, 100.00);
+  v_sale  := public.open_pos_sale(v_reg, v_member);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 100.00);
+  perform pg_temp.check_eq('the basket is the price', 
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 100.00);
+
+  begin
+    perform * from public.redeem_loyalty_points(v_sale, 50);
+    raise exception 'FAIL redeemed below the programme minimum';
+  exception when check_violation then
+    raise notice 'ok   below the minimum is refused';
+  end;
+  begin
+    perform * from public.redeem_loyalty_points(v_sale, 99999);
+    raise exception 'FAIL redeemed points the account does not have';
+  exception when check_violation then
+    raise notice 'ok   more points than the account holds is refused';
+  end;
+
+  select r.discount, r.new_total, r.points_after into v_a, v_b, v_n
+    from public.redeem_loyalty_points(v_sale, 500) r;
+  perform pg_temp.check_eq('five hundred points is five ringgit', v_a, 5.00);
+  perform pg_temp.check_eq('so the basket falls to ninety-five', v_b, 95.00);
+  perform pg_temp.check_eq('the ledger has not moved', app.loyalty_balance(v_acct), 1000);
+  perform pg_temp.check_eq('though the till can say what it will be', v_n, 500);
+
+  -- Applied twice is applied once. A second call that stacked would let
+  -- a cashier tap until the sale was free.
+  perform * from public.redeem_loyalty_points(v_sale, 500);
+  perform pg_temp.check_eq('redeeming again replaces rather than stacks',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 95.00);
+
+  -- And thought better of.
+  perform * from public.redeem_loyalty_points(v_sale, 0);
+  perform pg_temp.check_eq('clearing the redemption restores the basket',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 100.00);
+  perform * from public.redeem_loyalty_points(v_sale, 500);
+
+  -- A line rung up after the redemption keeps it applied, which is why
+  -- the recalculation reads the redemption rather than being told it.
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 10.00);
+  perform pg_temp.check_eq('the redemption survives another line',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 105.00);
+
+  -- ------------------------------------------------------------------
+  -- Completing it: the arithmetic that looks right either way
+  -- ------------------------------------------------------------------
+  perform public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 110.00)));
+
+  perform pg_temp.check_eq('the invoice carries the redemption as a discount',
+    (select d.discount_amount from public.sales_documents d
+      join public.pos_sales s on s.invoice_id = d.id where s.id = v_sale), 5.00);
+  perform pg_temp.check_eq('and bills a hundred and five',
+    (select d.total_amount from public.sales_documents d
+      join public.pos_sales s on s.invoice_id = d.id where s.id = v_sale), 105.00);
+  perform pg_temp.check_eq('owing nothing, because it was paid',
+    (select d.balance_amount from public.sales_documents d
+      join public.pos_sales s on s.invoice_id = d.id where s.id = v_sale), 0);
+
+  -- 110 basket, 5 off, 105 paid. Earning on the basket would give 110.
+  perform pg_temp.check_eq('points are earned on what was paid, not on the basket',
+    (select s.loyalty_points_earned from public.pos_sales s where s.id = v_sale), 105);
+  perform pg_temp.check_eq('the ledger records the redemption and the earning',
+    (select count(*) from public.loyalty_entries e where e.sale_id = v_sale), 2);
+  perform pg_temp.check_eq('and the balance is 1000 - 500 + 105',
+    app.loyalty_balance(v_acct), 605);
+
+  -- ------------------------------------------------------------------
+  -- The walk-in
+  -- ------------------------------------------------------------------
+  v_sale := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 100.00);
+  perform public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 100.00)));
+  perform pg_temp.check_eq('somebody who is nobody earns nothing',
+    (select s.loyalty_points_earned from public.pos_sales s where s.id = v_sale), 0);
+  perform pg_temp.check_eq('and their invoice carries no discount',
+    (select d.discount_amount from public.sales_documents d
+      join public.pos_sales s on s.invoice_id = d.id where s.id = v_sale), 0);
+
+  -- ------------------------------------------------------------------
+  -- Points cannot buy more than the basket
+  -- ------------------------------------------------------------------
+  perform public.adjust_loyalty_points(v_acct, 100000, 'Long-standing customer');
+  v_sale := public.open_pos_sale(v_reg, v_member);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 10.00);
+  select r.points_applied, r.discount, r.new_total into v_n, v_a, v_b
+    from public.redeem_loyalty_points(v_sale, 100000) r;
+  perform pg_temp.check_eq('only the points the basket is worth are taken', v_n, 1000);
+  perform pg_temp.check_eq('for a discount of exactly the basket', v_a, 10.00);
+  perform pg_temp.check_eq('leaving nothing to pay', v_b, 0.00);
+
+  -- And a sale with nothing to pay is a completed sale, not a stuck one.
+  v_c := app.loyalty_balance(v_acct);
+  perform public.complete_pos_sale(v_sale, '[]'::jsonb);
+  perform pg_temp.check_true('a basket cleared by points still completes',
+    (select s.status = 'completed' from public.pos_sales s where s.id = v_sale));
+  perform pg_temp.check_eq('with an invoice for nothing',
+    (select d.total_amount from public.sales_documents d
+      join public.pos_sales s on s.invoice_id = d.id where s.id = v_sale), 0);
+  perform pg_temp.check_true('a posted receipt behind it',
+    (select r.gl_entry_id is not null from public.receipts r
+      join public.pos_sales s on s.receipt_id = r.id where s.id = v_sale));
+  -- `payment_allocations` checks its amount is positive, and is right
+  -- to: an allocation of nothing is not an allocation.
+  perform pg_temp.check_eq('nothing allocated, because nothing was owed',
+    (select count(*) from public.payment_allocations a
+      join public.pos_sales s on s.receipt_id = a.receipt_id where s.id = v_sale), 0);
+  perform pg_temp.check_eq('the stock still left the shelf',
+    (select count(*) from public.stock_movements m
+      join public.pos_sales s on s.invoice_id = m.source_id where s.id = v_sale), 1);
+  perform pg_temp.check_eq('the points went', app.loyalty_balance(v_acct), v_c - 1000);
+  perform pg_temp.check_eq('and nothing was paid, so nothing was earned',
+    (select s.loyalty_points_earned from public.pos_sales s where s.id = v_sale), 0);
+
+  -- A sale with something still to pay is refused as before.
+  v_sale := public.open_pos_sale(v_reg, v_member);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 10.00);
+  begin
+    perform * from public.complete_pos_sale(v_sale, '[]'::jsonb);
+    raise exception 'FAIL completed a sale nobody paid for';
+  exception when check_violation then
+    raise notice 'ok   a sale with something left to pay still needs paying for';
+  end;
+
+  -- ------------------------------------------------------------------
+  -- Dormancy
+  -- ------------------------------------------------------------------
+  update public.loyalty_programs set dormancy_expiry_months = 12 where id = v_prog;
+  perform pg_temp.check_eq('an account that has been used expires nothing',
+    (select count(*) from public.expire_loyalty_points(v_org)), 0);
+
+  update public.loyalty_entries set created_at = now() - interval '3 years'
+   where account_id = v_acct;
+  update public.loyalty_accounts set joined_on = current_date - 1500 where id = v_acct;
+
+  v_c := app.loyalty_balance(v_acct);
+  perform pg_temp.check_true('there were points there to lose', v_c > 0);
+  perform pg_temp.check_eq('a dormant account is swept',
+    (select count(*) from public.expire_loyalty_points(v_org)), 1);
+  perform pg_temp.check_eq('and lands at exactly zero',
+    app.loyalty_balance(v_acct), 0);
+  perform pg_temp.check_eq('by one entry saying so',
+    (select count(*) from public.loyalty_entries e
+      where e.account_id = v_acct and e.kind = 'expire'), 1);
+  -- Idempotent, because the sweep is the kind of thing that gets run
+  -- twice by a scheduler nobody is watching.
+  perform pg_temp.check_eq('running the sweep again writes nothing',
+    (select count(*) from public.expire_loyalty_points(v_org)), 0);
+
+  -- ------------------------------------------------------------------
+  -- What the screen shows
+  -- ------------------------------------------------------------------
+  -- The same number by a second route. A card screen that computed the
+  -- balance its own way would be the second copy of the fact this whole
+  -- design exists to avoid.
+  perform public.adjust_loyalty_points(v_acct, 250, 'Goodwill');
+  select b.points, b.worth into v_n, v_a
+    from public.loyalty_account_balance(v_member) b;
+  perform pg_temp.check_eq('the screen shows the ledger', v_n,
+    app.loyalty_balance(v_acct));
+  perform pg_temp.check_eq('and what it is worth at the counter', v_a, 2.50);
+  perform pg_temp.check_eq('one card, not one per sale',
+    (select count(*) from public.loyalty_account_balance(v_member)), 1);
+
+  raise notice 'point of sale loyalty: all assertions passed';
+end;
+$$;
