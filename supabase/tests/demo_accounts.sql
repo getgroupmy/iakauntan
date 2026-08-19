@@ -103,4 +103,49 @@ begin
   raise notice 'ok   a normal account can still change password and email';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The lock must not lock the account out of its own front door
+-- ---------------------------------------------------------------------
+--
+-- This is the assertion 0223 exists for, and it is worth stating why a
+-- test about a *cost factor* belongs in a file about a security rule.
+--
+-- GoTrue, after a successful password check, rehashes the password when
+-- the stored bcrypt cost is below its configured cost and writes the
+-- result back. That write is an update to `encrypted_password`, which
+-- the trigger above refuses -- correctly, since a trigger cannot tell a
+-- rehash from a theft. The result was a demo account that verified its
+-- password, wrote `last_sign_in_at`, and then failed the request: every
+-- demo button on the live site returned "not available on this
+-- deployment" while the accounts sat there perfectly intact.
+--
+-- So the two rules are coupled. The lock is only safe to keep while
+-- nothing ever needs to rewrite the hash, and that holds only while the
+-- seed matches GoTrue's cost. Asserted here, next to the lock, so the
+-- next person to read one reads the other.
+do $$
+declare
+  v_user uuid;
+  v_cost integer;
+begin
+  v_user := app.demo_user('fixture-cost@iakauntan.test', 'Cost Fixture');
+  select split_part(u.encrypted_password, '$', 3)::integer into v_cost
+    from auth.users u where u.id = v_user;
+
+  -- 10 is GoTrue's configured cost on this project. If Supabase raises
+  -- it, this fails here -- which is the point. The alternative is
+  -- discovering it as a sign-in button that silently stopped working.
+  perform pg_temp.check_eq(
+    'a seeded demo login is hashed at the cost GoTrue expects, so it '
+    'is never rehashed into the credentials lock', v_cost, 10);
+
+  -- And the password still has to be the one the button sends, which
+  -- is the half a cost check on its own would not catch.
+  perform pg_temp.check_true(
+    'and it is still the published demo password',
+    (select u.encrypted_password = extensions.crypt('Demo!Akaun2026',
+                                                    u.encrypted_password)
+       from auth.users u where u.id = v_user));
+end $$;
+
 rollback;
