@@ -1835,3 +1835,16 @@ final posMenuProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, outletId) => requireRepo(ref).posMenu(outletId),
     );
+
+final itemModifierOptionsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, itemId) => requireRepo(ref).itemModifierOptions(itemId),
+    );
+
+/// What was chosen on the lines of a sale. Keyed on the sale rather
+/// than the line so the basket makes one round trip instead of one per
+/// line.
+final posSaleLineModifiersProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, saleId) => requireRepo(ref).posSaleLineModifiers(saleId),
+    );

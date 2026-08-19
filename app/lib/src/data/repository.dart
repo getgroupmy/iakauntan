@@ -6213,6 +6213,44 @@ extension RepoPos on Repo {
         .order('code'),
   );
 
+  /// The questions a plate comes with: "how spicy", "anything extra".
+  /// Empty for most items, which is why the till asks before it opens
+  /// anything — a sheet that appears for a tin of drink is a sheet in
+  /// the way.
+  Future<List<Map<String, dynamic>>> itemModifierOptions(
+    String itemId,
+  ) async => Repo.rows(
+    await client.rpc('item_modifier_options', params: {'p_item': itemId}),
+  );
+
+  Future<String> addLineModifier(
+    String lineId,
+    String modifierId, {
+    int quantity = 1,
+  }) async =>
+      await client.rpc(
+            'add_line_modifier',
+            params: {
+              'p_line': lineId,
+              'p_modifier': modifierId,
+              'p_quantity': quantity,
+            },
+          )
+          as String;
+
+  /// What was chosen on each line of a sale, for the basket to show.
+  /// Read from the snapshot on the line rather than from the menu, so a
+  /// bill printed at seven still reads correctly after the menu is
+  /// edited at nine.
+  Future<List<Map<String, dynamic>>> posSaleLineModifiers(
+    String saleId,
+  ) async => Repo.rows(
+    await client
+        .from('pos_sale_line_modifiers')
+        .select('*, pos_sale_lines!inner(sale_id)')
+        .eq('pos_sale_lines.sale_id', saleId),
+  );
+
   /// Everything the outlet can actually sell, for a till with nothing
   /// scanned yet. The same sellability rules as [posLookup] — a style
   /// with variants under it is not offered, because tapping one would

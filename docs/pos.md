@@ -265,6 +265,17 @@ phone categories where a counter terminal shows items, which is why
 desktop web, mobile web and the app need no special-casing between
 them. One category is never turned into a choice, however long the list.
 
+**A plate's questions are asked on the tap that orders it.** An item
+with modifier groups opens a sheet before anything is written: "choose
+one" is drawn as a single-select that replaces rather than refuses,
+"up to two" caps and drops the oldest choice, and a required group
+leaves the button disabled and named — `Choose Pedas` rather than a
+silent dead button. `min_select` and `max_select` are enforced by
+`add_line_modifier` regardless; the sheet repeats them so the refusal
+never has to happen, because a queue is a bad place to learn a form was
+incomplete. Backing out writes nothing, since the line does not exist
+until the questions are answered.
+
 Every figure on the tender sheet — the total, the cash due, the change,
 the rounding — comes back from `complete_pos_sale()` rather than being
 recomputed in Dart. A till that does its own arithmetic is a till that
@@ -359,10 +370,6 @@ for is therefore visible in the demo data, not only asserted in
   `complete_kiosk_order` have no screen: the board customers watch is
   built, but the touchscreen they order from is not, so a kiosk order
   still has to be started from the till
-- Modifiers from the till. `add_line_modifier` and
-  `item_modifier_options` are reachable only from SQL, so "no onions,
-  add egg" cannot yet be tapped — the menu grid is where that will
-  hang, since tapping a plate is the moment the question arises
 - Splitting a bill on screen. `split_pos_sale`, `merge_pos_sales` and
   `pos_even_split` all work and none has a button
 - Loyalty at the counter. `enrol_loyalty_member` and

@@ -8,6 +8,7 @@ import '../../core/widgets.dart';
 // The POS methods live in an extension on Repo, and a Dart extension is
 // only in scope where its declaring library is imported.
 import '../../data/repository.dart';
+import 'modifier_sheet.dart';
 import 'tender_sheet.dart';
 
 /// PostgREST hands numerics back as strings so nothing is lost on the
@@ -158,18 +159,50 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     if (reg == null) return;
     final repo = ref.read(repoProvider);
     if (repo == null) return;
+    final itemId = hit['item_id'] as String;
+
+    // Asked before anything is written, because the answer changes the
+    // line rather than following it. Most items have no questions, and
+    // for those this costs one cheap round trip and opens nothing — a
+    // sheet that appears for a tin of drink is a sheet in the way.
+    List<String> mods = const [];
+    final options = await ref.read(
+      itemModifierOptionsProvider(itemId).future,
+    );
+    if (!mounted) return;
+    if (options.isNotEmpty) {
+      final picked = await showModalBottomSheet<List<String>>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => ModifierSheet(
+          itemName: '${hit['name']}',
+          basePrice: posNum(hit['unit_price']),
+          options: options,
+        ),
+      );
+      // Dismissed rather than answered. Nothing has been written yet,
+      // so backing out costs nothing and leaves no half-built line.
+      if (picked == null || !mounted) return;
+      mods = picked;
+    }
+
     var sale = _saleId;
     final ok = await runWithFeedback(
       context,
       successMessage: null,
       action: () async {
         sale ??= await repo.openPosSale(reg);
-        await repo.addPosSaleLine(
+        final line = await repo.addPosSaleLine(
           sale!,
-          hit['item_id'] as String,
+          itemId,
           quantity: posNum(hit['quantity']) == 0 ? 1 : posNum(hit['quantity']),
           price: posNum(hit['unit_price']),
         );
+        // After the line, because a modifier is priced onto a line that
+        // exists. `add_line_modifier` reprices as each one lands.
+        for (final m in mods) {
+          await repo.addLineModifier(line, m);
+        }
       },
     );
     if (!ok || !mounted) return;
@@ -180,7 +213,8 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     _searchFocus.requestFocus();
     ref
       ..invalidate(posSaleProvider(sale!))
-      ..invalidate(posSaleLinesProvider(sale!));
+      ..invalidate(posSaleLinesProvider(sale!))
+      ..invalidate(posSaleLineModifiersProvider(sale!));
   }
 
   Future<void> _tender() async {
@@ -613,6 +647,13 @@ class _Basket extends ConsumerWidget {
 
     final sale = ref.watch(posSaleProvider(id));
     final lines = ref.watch(posSaleLinesProvider(id));
+    // What was chosen on each line. Read once for the sale rather than
+    // once per line, and from the snapshot on the line rather than the
+    // menu — a bill printed at seven must still read correctly after
+    // somebody edits the menu at nine.
+    final mods = ref
+        .watch(posSaleLineModifiersProvider(id))
+        .maybeWhen(data: (rows) => rows, orElse: () => const <Map<String, dynamic>>[]);
     final total = sale.maybeWhen(
       data: (row) => posNum(row?['total_amount']),
       orElse: () => 0.0,
@@ -628,12 +669,23 @@ class _Basket extends ConsumerWidget {
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (_, i) {
                 final l = rows[i];
+                final chosen = [
+                  for (final m in mods)
+                    if (m['line_id'] == l['id']) '${m['name']}',
+                ];
                 return ListTile(
                   dense: true,
+                  isThreeLine: chosen.isNotEmpty,
                   title: Text('${l['description']}'),
                   subtitle: Text(
-                    '${Fmt.qty(posNum(l['quantity']))} × '
-                    '${Fmt.money(posNum(l['unit_price']))}',
+                    [
+                      '${Fmt.qty(posNum(l['quantity']))} × '
+                          '${Fmt.money(posNum(l['unit_price']))}',
+                      // Under the plate rather than beside it: a
+                      // modifier read as its own line is a modifier
+                      // somebody cooks separately.
+                      if (chosen.isNotEmpty) chosen.join(', '),
+                    ].join('\n'),
                   ),
                   trailing: Text(Fmt.money(posNum(l['line_total']))),
                 );
