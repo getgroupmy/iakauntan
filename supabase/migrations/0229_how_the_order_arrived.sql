@@ -297,18 +297,26 @@ grant execute on function
 -- What a shop of this shape sells through, to start with
 -- ---------------------------------------------------------------------
 --
--- Seeded rather than left empty, because an outlet with no channels can
--- record nothing and every existing shop would arrive at this migration
--- with none. The list per business type is the ordinary case, not a
--- rule: `set_outlet_channel` changes any of it.
-insert into public.pos_outlet_channels
-  (org_id, outlet_id, channel, is_default, sort_order)
-select o.org_id, o.id,
-       -- Explicit: the VALUES list types these as text, and Postgres
-       -- will not cast text to an enum on its own.
-       v.channel::app.pos_order_channel, v.is_default, v.sort_order
-  from public.pos_outlets o
-  join (values
+-- One function rather than one INSERT, because this is needed twice and
+-- the two must not drift: every outlet that already exists needs a list
+-- today, and every outlet made after this migration needs the same one
+-- tomorrow. A backfill alone would leave a shop that opens a second
+-- branch next week with an outlet that can record nothing at all, and
+-- `set_pos_sale_channel` refusing everything it is asked.
+--
+-- The list is the ordinary case, not a rule. `set_outlet_channel`
+-- changes any of it, including turning the default into something else
+-- entirely.
+create or replace function app.pos_default_channels(p_type app.pos_business_type)
+returns table (
+  channel    app.pos_order_channel,
+  is_default boolean,
+  sort_order integer)
+language sql
+immutable
+as $$
+  select v.channel::app.pos_order_channel, v.is_default, v.sort_order
+    from (values
       ('retail',        'walk_in',     true,  1),
       ('retail',        'phone',       false, 2),
       ('retail',        'online',      false, 3),
@@ -323,11 +331,72 @@ select o.org_id, o.id,
       ('service',       'phone',       false, 3),
       ('kiosk',         'takeaway',    true,  1)
     ) as v(business_type, channel, is_default, sort_order)
-    on v.business_type = o.business_type::text
+   -- Explicit: the VALUES list types these as text, and Postgres will
+   -- not cast text to an enum on its own.
+   where v.business_type = p_type::text;
+$$;
+
+revoke all on function app.pos_default_channels(app.pos_business_type)
+  from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- A new shop starts able to record something
+-- ---------------------------------------------------------------------
+create or replace function app.pos_outlet_seed_channels()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, app, pg_temp
+as $$
+begin
+  insert into public.pos_outlet_channels
+    (org_id, outlet_id, channel, is_default, sort_order)
+  select new.org_id, new.id, d.channel, d.is_default, d.sort_order
+    from app.pos_default_channels(new.business_type) d
+  on conflict (outlet_id, channel) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists pos_outlets_seed_channels on public.pos_outlets;
+create trigger pos_outlets_seed_channels
+  after insert on public.pos_outlets
+  for each row execute function app.pos_outlet_seed_channels();
+
+-- And every outlet that was already here, through the same function so
+-- the two can never say different things.
+insert into public.pos_outlet_channels
+  (org_id, outlet_id, channel, is_default, sort_order)
+select o.org_id, o.id, d.channel, d.is_default, d.sort_order
+  from public.pos_outlets o
+  cross join lateral app.pos_default_channels(o.business_type) d
  on conflict (outlet_id, channel) do nothing;
 
--- A kiosk register is a takeaway machine wherever it stands, which is
--- the one register default worth setting for everybody.
+-- ---------------------------------------------------------------------
+-- A kiosk is a takeaway machine wherever it stands
+-- ---------------------------------------------------------------------
+--
+-- The one register default worth setting for everybody, and worth
+-- setting on insert rather than only in a backfill: a kiosk added to a
+-- dining room later would otherwise inherit `dine_in` from the outlet
+-- and report every order at the door as somebody sitting down.
+create or replace function app.pos_register_default_channel()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.is_kiosk and new.default_channel is null then
+    new.default_channel := 'takeaway';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists pos_registers_default_channel on public.pos_registers;
+create trigger pos_registers_default_channel
+  before insert on public.pos_registers
+  for each row execute function app.pos_register_default_channel();
+
 update public.pos_registers r
    set default_channel = 'takeaway'
  where r.is_kiosk and r.default_channel is null;

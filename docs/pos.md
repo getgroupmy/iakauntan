@@ -407,8 +407,11 @@ calls takeaway "bungkus" is changing what a screen says, not what a
 report groups by.
 
 **Three levels, resolved on insert.** A sale takes the register's
-channel, else the outlet's default, else `walk_in`. A kiosk is takeaway
-and a waiter's tablet is dine-in, so on most devices nobody ever touches
+channel, else the outlet's default, else `walk_in`. A kiosk register
+gets `takeaway` on insert — a kiosk added to a dining room later would
+otherwise inherit `dine_in` and report every order at the door as
+somebody sitting down. So a kiosk is takeaway and a waiter's tablet is
+dine-in, so on most devices nobody ever touches
 it — which is the point: a control the cashier has to set on every sale
 is a control that gets set wrong.
 
@@ -419,9 +422,16 @@ derivation, and a 250-line diff to add one resolved column is a diff
 nobody checks.
 
 **An outlet accepts what it says it accepts.** `pos_outlet_channels` is
-the list, seeded per business type on migration so the feature works the
-day it ships rather than after somebody configures every shop by hand. A
-market stall that does not deliver cannot record a delivery, because a
+the list, and `app.pos_default_channels(business_type)` is where the
+starting set lives — used twice, by the backfill and by a trigger on
+`pos_outlets`, so the two can never drift. A backfill alone was the
+first version and it was wrong: it left every outlet created *after* the
+migration with no channels at all, so a shop opening a second branch
+next week would have one that could record nothing and a
+`set_pos_sale_channel` that refused everything. CI caught it, because
+the test creates its own outlet.
+
+A market stall that does not deliver cannot record a delivery, because a
 report split by a channel nobody sells has a row that can only be a
 mistake. The default moves rather than disappearing: naming a new one
 clears the old in the same statement, and switching a channel off gives
