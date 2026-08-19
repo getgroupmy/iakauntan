@@ -276,6 +276,21 @@ never has to happen, because a queue is a bad place to learn a form was
 incomplete. Backing out writes nothing, since the line does not exist
 until the questions are answered.
 
+**"Can we pay separately?" is two questions, and the till keeps them
+apart.** Splitting by item moves lines onto a second bill — two
+invoices, two receipts, two e-Invoices if anybody asks. Splitting
+evenly moves nothing: one supply, one document, several tenders. 0216
+separated them in the database because conflating them is how a till
+issues four invoices for one meal, and the screen follows that
+division rather than offering one "split" button that guesses.
+
+Moving every line is refused before it is attempted, since that is a
+rename rather than a split and would leave an empty bill behind. The
+even-split dialog shows what the shares add up to as well as the
+shares, because the sum is the property that matters — ten ringgit
+three ways is 3.34 + 3.33 + 3.33, and a split that quietly collected
+9.99 would leave a sen on the table for ever.
+
 Every figure on the tender sheet — the total, the cash due, the change,
 the rounding — comes back from `complete_pos_sale()` rather than being
 recomputed in Dart. A till that does its own arithmetic is a till that
@@ -370,8 +385,6 @@ for is therefore visible in the demo data, not only asserted in
   `complete_kiosk_order` have no screen: the board customers watch is
   built, but the touchscreen they order from is not, so a kiosk order
   still has to be started from the till
-- Splitting a bill on screen. `split_pos_sale`, `merge_pos_sales` and
-  `pos_even_split` all work and none has a button
 - Loyalty at the counter. `enrol_loyalty_member` and
   `redeem_loyalty_points` are not on the tender sheet
 - Landing an offline batch. `ingest_offline_sales` expects a payload

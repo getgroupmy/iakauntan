@@ -6213,6 +6213,44 @@ extension RepoPos on Repo {
         .order('code'),
   );
 
+  /// Moves chosen lines onto a bill of their own. Two bills, settled
+  /// separately — which is the right answer when two people ate
+  /// different things and each wants their own invoice.
+  ///
+  /// A moved line keeps its id, so its modifiers and its kitchen docket
+  /// line still point at it. Only which bill it sits on changes.
+  Future<String> splitPosSale(String saleId, List<String> lineIds) async =>
+      await client.rpc(
+            'split_pos_sale',
+            params: {'p_sale': saleId, 'p_lines': lineIds},
+          )
+          as String;
+
+  /// Puts two bills back together. Returns how many lines moved.
+  Future<int> mergePosSales(String into, String from) async =>
+      (await client.rpc(
+                'merge_pos_sales',
+                params: {'p_into': into, 'p_from': from},
+              )
+              as num)
+          .toInt();
+
+  /// One bill, N people, N cards. Nothing moves and no second invoice
+  /// is raised — there was one supply, so LHDN gets one document and
+  /// the sale simply takes several tenders.
+  ///
+  /// The shares sum to the total exactly; the remainder rides on the
+  /// first. See 0216 for why that beats rounding each independently.
+  Future<List<Map<String, dynamic>>> posEvenSplit(
+    String saleId,
+    int ways,
+  ) async => Repo.rows(
+    await client.rpc(
+      'pos_even_split',
+      params: {'p_sale': saleId, 'p_ways': ways},
+    ),
+  );
+
   /// The questions a plate comes with: "how spicy", "anything extra".
   /// Empty for most items, which is why the till asks before it opens
   /// anything — a sheet that appears for a tin of drink is a sheet in

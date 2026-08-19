@@ -9,6 +9,7 @@ import '../../core/widgets.dart';
 // only in scope where its declaring library is imported.
 import '../../data/repository.dart';
 import 'modifier_sheet.dart';
+import 'split_sheet.dart';
 import 'tender_sheet.dart';
 
 /// PostgREST hands numerics back as strings so nothing is lost on the
@@ -273,6 +274,105 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     ref.invalidate(posSaleLinesProvider(id));
   }
 
+  /// Two people, two bills. The lines move; nothing is re-priced and
+  /// no line is recreated, so the modifiers and the kitchen docket that
+  /// point at them still do.
+  Future<void> _split() async {
+    final id = _saleId;
+    if (id == null) return;
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final lines = await ref.read(posSaleLinesProvider(id).future);
+    if (!mounted) return;
+    if (lines.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('A bill needs two lines before it can be split.'),
+        ),
+      );
+      return;
+    }
+    final moving = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => SplitSheet(lines: lines),
+    );
+    if (moving == null || !mounted) return;
+
+    String? made;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: null,
+      action: () async {
+        made = await repo.splitPosSale(id, moving);
+      },
+    );
+    if (!ok || !mounted) return;
+    ref
+      ..invalidate(posSaleProvider(id))
+      ..invalidate(posSaleLinesProvider(id))
+      ..invalidate(parkedPosSalesProvider(_registerId!));
+    final other = made;
+    if (other == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Second bill created and parked.'),
+        // Offered rather than forced: the person who asked to split is
+        // usually still settling the first bill, and jumping the till
+        // to the second one would take the screen away mid-payment.
+        action: SnackBarAction(
+          label: 'Open it',
+          onPressed: () => setState(() => _saleId = other),
+        ),
+      ),
+    );
+  }
+
+  /// One bill, N cards. Nothing moves — see 0216 on why this is not the
+  /// same question as splitting by item, even though a customer asks
+  /// both with the same words.
+  Future<void> _evenSplit() async {
+    final id = _saleId;
+    if (id == null) return;
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final ways = await _askWays(context);
+    if (ways == null || ways < 2 || !mounted) return;
+    List<Map<String, dynamic>> shares = const [];
+    final ok = await runWithFeedback(
+      context,
+      successMessage: null,
+      action: () async {
+        shares = await repo.posEvenSplit(id, ways);
+      },
+    );
+    if (!ok || !mounted || shares.isEmpty) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => EvenSplitDialog(shares: shares),
+    );
+  }
+
+  /// Putting one back together — the table that decided to pay as one
+  /// after all.
+  Future<void> _merge(String from) async {
+    final into = _saleId;
+    if (into == null || into == from) return;
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Merged',
+      action: () => repo.mergePosSales(into, from),
+    );
+    if (!ok || !mounted) return;
+    ref
+      ..invalidate(posSaleProvider(into))
+      ..invalidate(posSaleLinesProvider(into))
+      ..invalidate(posSaleLineModifiersProvider(into))
+      ..invalidate(parkedPosSalesProvider(_registerId!));
+  }
+
   @override
   Widget build(BuildContext context) {
     final registers = ref.watch(posRegistersProvider);
@@ -326,6 +426,9 @@ class _TillScreenState extends ConsumerState<TillScreen> {
             onCloseShift: _closeShift,
             onTender: _tender,
             onSend: _send,
+            onSplit: _split,
+            onEvenSplit: _evenSplit,
+            onMerge: _merge,
             onResume: (id) => setState(() => _saleId = id),
           );
         },
@@ -349,6 +452,9 @@ class _Register extends ConsumerWidget {
     required this.onCloseShift,
     required this.onTender,
     required this.onSend,
+    required this.onSplit,
+    required this.onEvenSplit,
+    required this.onMerge,
     required this.onResume,
   });
 
@@ -365,6 +471,9 @@ class _Register extends ConsumerWidget {
   final ValueChanged<String> onCloseShift;
   final VoidCallback onTender;
   final VoidCallback onSend;
+  final VoidCallback onSplit;
+  final VoidCallback onEvenSplit;
+  final ValueChanged<String> onMerge;
   final ValueChanged<String> onResume;
 
   @override
@@ -419,6 +528,9 @@ class _Register extends ConsumerWidget {
           saleId: saleId,
           onTender: onTender,
           onSend: onSend,
+          onSplit: onSplit,
+          onEvenSplit: onEvenSplit,
+          onMerge: onMerge,
           onResume: onResume,
         );
         final finder = _Finder(
@@ -597,6 +709,9 @@ class _Basket extends ConsumerWidget {
     required this.saleId,
     required this.onTender,
     required this.onSend,
+    required this.onSplit,
+    required this.onEvenSplit,
+    required this.onMerge,
     required this.onResume,
   });
 
@@ -604,6 +719,9 @@ class _Basket extends ConsumerWidget {
   final String? saleId;
   final VoidCallback onTender;
   final VoidCallback onSend;
+  final VoidCallback onSplit;
+  final VoidCallback onEvenSplit;
+  final ValueChanged<String> onMerge;
   final ValueChanged<String> onResume;
 
   @override
@@ -700,6 +818,30 @@ class _Basket extends ConsumerWidget {
             children: [
               _AmountRow('Total', total, emphasise: true),
               const SizedBox(height: 12),
+              // Splitting sits with the bill rather than with the
+              // tender sheet, because "can we pay separately?" is asked
+              // while looking at what was eaten, not while holding a
+              // card.
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: total > 0 ? onSplit : null,
+                      icon: const Icon(Icons.call_split, size: 18),
+                      label: const Text('Split items'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: total > 0 ? onEvenSplit : null,
+                      icon: const Icon(Icons.groups_outlined, size: 18),
+                      label: const Text('Split evenly'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
               // Sending and paying are two different moments and two
               // different people. A kitchen is told when the order is
               // taken; the money is taken when the meal is over. Making
@@ -721,6 +863,15 @@ class _Basket extends ConsumerWidget {
                   icon: const Icon(Icons.payments),
                   label: const Text('Take payment'),
                 ),
+              ),
+              // The table that split and then decided to pay as one
+              // after all. Only offered when there is something to
+              // merge, which is why it hangs off the parked list rather
+              // than sitting as a permanent button.
+              _MergeBar(
+                registerId: registerId,
+                saleId: id,
+                onMerge: onMerge,
               ),
             ],
           ),
@@ -931,6 +1082,103 @@ class _MenuTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// An offer to put two bills back together, shown only when there is
+/// another bill to put this one together with.
+class _MergeBar extends ConsumerWidget {
+  const _MergeBar({
+    required this.registerId,
+    required this.saleId,
+    required this.onMerge,
+  });
+
+  final String registerId;
+  final String saleId;
+  final ValueChanged<String> onMerge;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final parked = ref.watch(parkedPosSalesProvider(registerId));
+    final others = parked.maybeWhen(
+      data: (rows) => [
+        for (final r in rows)
+          if (r['id'] != saleId) r,
+      ],
+      orElse: () => const <Map<String, dynamic>>[],
+    );
+    if (others.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: PopupMenuButton<String>(
+          tooltip: 'Merge another bill into this one',
+          onSelected: onMerge,
+          itemBuilder: (_) => [
+            for (final o in others)
+              PopupMenuItem(
+                value: o['id'] as String,
+                child: Text(
+                  '${o['sale_no']}  ·  ${Fmt.money(posNum(o['total_amount']))}',
+                ),
+              ),
+          ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.merge, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                'Merge another bill in',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// How many people are paying. A number pad rather than a text field,
+/// for the same reason the float dialog is one.
+Future<int?> _askWays(BuildContext context) {
+  var value = 2;
+  return showDialog<int>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('How many ways?'),
+      content: StatefulBuilder(
+        builder: (context, setInner) => Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.remove_circle_outline),
+              onPressed: value > 2
+                  ? () => setInner(() => value = value - 1)
+                  : null,
+            ),
+            Text('$value', style: Theme.of(context).textTheme.headlineMedium),
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline),
+              onPressed: () => setInner(() => value = value + 1),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(ctx).pop(value),
+          child: const Text('Work it out'),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Which till this device is.
