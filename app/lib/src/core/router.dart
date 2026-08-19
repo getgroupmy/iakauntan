@@ -36,6 +36,7 @@ import '../features/property/property_screen.dart';
 import '../features/property/site_editor.dart';
 import '../features/forecasting/forecast_screen.dart';
 import '../features/pos/floor_plan_screen.dart';
+import '../features/pos/kitchen_screen.dart';
 import '../features/pos/till_screen.dart';
 import '../features/ticketing/ticket_editor.dart';
 import '../features/ticketing/ticket_screen.dart';
@@ -365,6 +366,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/floor',
             builder: (_, __) => const FloorPlanScreen(),
+          ),
+          GoRoute(
+            path: '/kitchen',
+            builder: (_, __) => const KitchenScreen(),
           ),
           GoRoute(
             path: '/property',

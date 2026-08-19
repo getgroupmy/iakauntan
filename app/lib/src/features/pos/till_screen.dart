@@ -197,6 +197,48 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     _searchFocus.requestFocus();
   }
 
+  /// Telling the kitchen.
+  ///
+  /// Separate from tendering on purpose: an order is cooked long before
+  /// it is paid for, and a till that only spoke to the kitchen at the
+  /// moment money changed hands would be a till that served cold food.
+  ///
+  /// `send_order_to_kitchen` sends only what has not already gone, so
+  /// this is safe to press again after adding a course — which is
+  /// exactly how it gets used.
+  Future<void> _send() async {
+    final id = _saleId;
+    if (id == null) return;
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    List<Map<String, dynamic>> sent = const [];
+    final ok = await runWithFeedback(
+      context,
+      successMessage: null,
+      action: () async {
+        sent = await repo.sendOrderToKitchen(id);
+      },
+    );
+    if (!ok || !mounted) return;
+    final lines = sent.fold<int>(
+      0,
+      (n, r) => n + ((r['line_count'] as num?)?.toInt() ?? 0),
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          // Named stations rather than a bare "sent", because a waiter
+          // who ordered a plate and a drink needs to know both halves
+          // went somewhere.
+          sent.isEmpty
+              ? 'Everything on this bill has already gone to the kitchen.'
+              : '$lines to ${sent.map((r) => r['station']).join(', ')}',
+        ),
+      ),
+    );
+    ref.invalidate(posSaleLinesProvider(id));
+  }
+
   @override
   Widget build(BuildContext context) {
     final registers = ref.watch(posRegistersProvider);
@@ -249,6 +291,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
             onOpenShift: _openShift,
             onCloseShift: _closeShift,
             onTender: _tender,
+            onSend: _send,
             onResume: (id) => setState(() => _saleId = id),
           );
         },
@@ -271,6 +314,7 @@ class _Register extends ConsumerWidget {
     required this.onOpenShift,
     required this.onCloseShift,
     required this.onTender,
+    required this.onSend,
     required this.onResume,
   });
 
@@ -286,6 +330,7 @@ class _Register extends ConsumerWidget {
   final VoidCallback onOpenShift;
   final ValueChanged<String> onCloseShift;
   final VoidCallback onTender;
+  final VoidCallback onSend;
   final ValueChanged<String> onResume;
 
   @override
@@ -339,6 +384,7 @@ class _Register extends ConsumerWidget {
           registerId: registerId,
           saleId: saleId,
           onTender: onTender,
+          onSend: onSend,
           onResume: onResume,
         );
         final finder = _Finder(
@@ -512,12 +558,14 @@ class _Basket extends ConsumerWidget {
     required this.registerId,
     required this.saleId,
     required this.onTender,
+    required this.onSend,
     required this.onResume,
   });
 
   final String registerId;
   final String? saleId;
   final VoidCallback onTender;
+  final VoidCallback onSend;
   final ValueChanged<String> onResume;
 
   @override
@@ -596,6 +644,20 @@ class _Basket extends ConsumerWidget {
             children: [
               _AmountRow('Total', total, emphasise: true),
               const SizedBox(height: 12),
+              // Sending and paying are two different moments and two
+              // different people. A kitchen is told when the order is
+              // taken; the money is taken when the meal is over. Making
+              // one button do both would mean either cooking on credit
+              // or serving a cold plate.
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: total > 0 ? onSend : null,
+                  icon: const Icon(Icons.soup_kitchen_outlined),
+                  label: const Text('Send to kitchen'),
+                ),
+              ),
+              const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(

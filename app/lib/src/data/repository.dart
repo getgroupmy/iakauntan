@@ -6325,6 +6325,50 @@ extension RepoPos on Repo {
         params: {'p_sale': saleId, 'p_table': tableId},
       );
 
+  /// The kitchens in an outlet. A shop with one of them still has one,
+  /// because a ticket has to be routed somewhere and `is_default` is
+  /// how an outlet with a single kitchen never thinks about routing.
+  Future<List<Map<String, dynamic>>> posKitchenStations(
+    String outletId,
+  ) async => Repo.rows(
+    await client
+        .from('pos_kitchen_stations')
+        .select()
+        .eq('outlet_id', outletId)
+        .eq('is_active', true)
+        .order('sort_order')
+        .order('code'),
+  );
+
+  /// What is on the pass. Only the tickets still in play — served and
+  /// cancelled ones are gone, because a board nobody clears is a board
+  /// nobody reads.
+  Future<List<Map<String, dynamic>>> kitchenDisplay(String stationId) async =>
+      Repo.rows(
+        await client.rpc(
+          'kitchen_display',
+          params: {'p_station': stationId},
+        ),
+      );
+
+  /// Moves a ticket forward. Forward only — `bump_kitchen_ticket`
+  /// refuses to go back, so a plate that has left the kitchen cannot be
+  /// un-cooked by a mis-tap.
+  Future<String> bumpKitchenTicket(String ticketId, String status) async =>
+      await client.rpc(
+            'bump_kitchen_ticket',
+            params: {'p_ticket': ticketId, 'p_status': status},
+          )
+          as String;
+
+  /// Sends what has not been sent. Returns one row per station it
+  /// reached, which is what lets the waiter be told "2 to the kitchen,
+  /// 1 to the bar" rather than a bare "sent".
+  Future<List<Map<String, dynamic>>> sendOrderToKitchen(String saleId) async =>
+      Repo.rows(
+        await client.rpc('send_order_to_kitchen', params: {'p_sale': saleId}),
+      );
+
   /// The whole answer: what it came to, what the drawer asks for, what
   /// comes back and what rounding did. Four numbers because the customer
   /// can see all four, and a till that only showed the total would be

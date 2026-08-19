@@ -201,6 +201,13 @@ const _destinations = <_Dest>[
     '/floor',
     module: 'pos',
   ),
+  _Dest(
+    'Kitchen',
+    Icons.soup_kitchen_outlined,
+    Icons.soup_kitchen,
+    '/kitchen',
+    module: 'pos',
+  ),
   _Dest('Chat', Icons.forum_outlined, Icons.forum, '/chat', module: 'chat'),
   // No module gate. Chasing an unpaid invoice is what the sales ledger
   // is for when a customer does not pay, and sales is core.

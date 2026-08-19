@@ -1788,3 +1788,16 @@ final posFloorPlanProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, outletId) => requireRepo(ref).posFloorPlan(outletId),
     );
+
+final posKitchenStationsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, outletId) => requireRepo(ref).posKitchenStations(outletId),
+    );
+
+/// What is on the pass at one station. Deliberately not cached beyond
+/// the screen that watches it: a kitchen board showing a ticket that
+/// was bumped two minutes ago is worse than one showing nothing.
+final kitchenDisplayProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, stationId) => requireRepo(ref).kitchenDisplay(stationId),
+    );
