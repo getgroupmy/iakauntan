@@ -107,12 +107,25 @@ final Map<String, List<ProviderOrFamily>> _watchers = {
     claimsProvider,
   ],
   'org_credits': [ocrStatusProvider],
+  // What the navigation is built from. Without this a module bought or
+  // switched on anywhere but this tab stays invisible until the person
+  // reloads, and nothing tells them to — they paid and the screen did
+  // not change.
+  //
+  // Only the entitlement. `myModuleAccessProvider` is not listed
+  // because it cannot move for this table: `my_module_access` reads
+  // `platform_modules` and the caller's access type, and neither is
+  // touched by enabling a module. Listing it anyway would be a refetch
+  // that can never return anything different, which is the kind of
+  // generosity that makes a map hard to trust.
+  'org_modules': [enabledModulesProvider],
 };
 
-/// The tables listened to. Must match what `0117_live_updates.sql` and
-/// `0124_a_claim_moves_while_you_watch.sql` publish between them: a name
-/// that is in one and not the other subscribes to nothing, or is sent
-/// changes nobody reads, and neither says so.
+/// The tables listened to. Must match what `0117_live_updates.sql`,
+/// `0124_a_claim_moves_while_you_watch.sql` and
+/// `0204_an_entitlement_arrives_without_a_reload.sql` publish between
+/// them: a name that is in one and not the other subscribes to nothing,
+/// or is sent changes nobody reads, and neither says so.
 Iterable<String> get liveUpdateTables => _watchers.keys;
 
 /// What goes stale when [table] changes.

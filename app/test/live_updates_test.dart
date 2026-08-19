@@ -12,10 +12,12 @@ import 'package:iakauntan/src/core/providers.dart';
 /// shows up as an error. So the map is asserted rather than trusted.
 void main() {
   test('the tables subscribed to are the ones the database publishes', () {
-    // Kept in step with `0117_live_updates.sql` and
-    // `0124_a_claim_moves_while_you_watch.sql` by hand, so it is written
-    // down twice on purpose: if they ever disagree, one side listens for
-    // something nobody sends and the feature quietly does nothing.
+    // Kept in step with `0117_live_updates.sql`,
+    // `0124_a_claim_moves_while_you_watch.sql` and
+    // `0204_an_entitlement_arrives_without_a_reload.sql` by hand, so it
+    // is written down twice on purpose: if they ever disagree, one side
+    // listens for something nobody sends and the feature quietly does
+    // nothing.
     expect(
       liveUpdateTables.toSet(),
       {
@@ -31,7 +33,32 @@ void main() {
         'expense_claims',
         'claim_approvals',
         'org_credits',
+        'org_modules',
       },
+    );
+  });
+
+  test('a module switched on appears without a reload', () {
+    // The navigation is built from `enabledModulesProvider`, which is
+    // read once per sign-in. Before this it was invalidated only by the
+    // platform console in the same tab, so a module granted by another
+    // admin, from another device, or by support stayed invisible until
+    // the person happened to reload — and nothing told them to.
+    expect(
+      liveUpdateProviders('org_modules'),
+      contains(enabledModulesProvider),
+    );
+  });
+
+  test('the access map is left alone by an entitlement change', () {
+    // `my_module_access` reads `platform_modules` and the caller's
+    // access type. Neither moves when a module is switched on, so
+    // invalidating it here would be a refetch that can never come back
+    // different — and a map with entries that do nothing is a map
+    // nobody can reason about.
+    expect(
+      liveUpdateProviders('org_modules'),
+      isNot(contains(myModuleAccessProvider)),
     );
   });
 
