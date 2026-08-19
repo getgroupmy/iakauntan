@@ -56,6 +56,16 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     super.dispose();
   }
 
+  /// Both lists of open bills. The merge bar still asks per-register
+  /// and the basket asks per-outlet, so anything that opens, moves or
+  /// closes a bill has to unsettle both or one of them lies.
+  void _refreshOrders() {
+    final reg = _registerId;
+    if (reg != null) ref.invalidate(parkedPosSalesProvider(reg));
+    final outlet = _outletId;
+    if (outlet != null) ref.invalidate(posOpenOrdersProvider(outlet));
+  }
+
   void _pickRegister(Map<String, dynamic> reg) {
     setState(() {
       _registerId = reg['id'] as String?;
@@ -228,8 +238,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       _saleId = null;
       _results = const [];
     });
-    final reg = _registerId;
-    if (reg != null) ref.invalidate(parkedPosSalesProvider(reg));
+    _refreshOrders();
     _searchFocus.requestFocus();
   }
 
@@ -311,8 +320,8 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     if (!ok || !mounted) return;
     ref
       ..invalidate(posSaleProvider(id))
-      ..invalidate(posSaleLinesProvider(id))
-      ..invalidate(parkedPosSalesProvider(_registerId!));
+      ..invalidate(posSaleLinesProvider(id));
+    _refreshOrders();
     final other = made;
     if (other == null) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -370,8 +379,8 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     ref
       ..invalidate(posSaleProvider(into))
       ..invalidate(posSaleLinesProvider(into))
-      ..invalidate(posSaleLineModifiersProvider(into))
-      ..invalidate(parkedPosSalesProvider(_registerId!));
+      ..invalidate(posSaleLineModifiersProvider(into));
+    _refreshOrders();
   }
 
   /// Taking a line off, which is two different acts depending on one
@@ -379,6 +388,73 @@ class _TillScreenState extends ConsumerState<TillScreen> {
   /// comes off free; after it, food exists and somebody has to say why
   /// it is not being charged for. The database enforces both — this
   /// only makes sure the right one is offered.
+  /// Stepping back to the list without settling.
+  ///
+  /// Nothing is written. A sale is already `parked` from the moment it
+  /// is opened — this only stops looking at it, which is why it can be
+  /// offered while the kitchen has half the order.
+  void _park() {
+    setState(() {
+      _saleId = null;
+      _results = const [];
+    });
+    _refreshOrders();
+  }
+
+  /// Opening a bill off the shop-wide list.
+  ///
+  /// One of these is a plain resume and the other moves money between
+  /// drawers, so they are not the same tap. A bill already on this till
+  /// simply opens. A bill on another till is claimed first — register
+  /// and shift together — and the question is asked out loud, because
+  /// the cashier is about to become the person whose drawer has to
+  /// account for it.
+  Future<void> _openOrder(Map<String, dynamic> row) async {
+    final reg = _registerId;
+    final saleId = row['sale_id'] as String?;
+    if (reg == null || saleId == null) return;
+
+    if (row['register_id'] == reg) {
+      setState(() => _saleId = saleId);
+      return;
+    }
+
+    final where = row['register_name'] ?? row['register_code'] ?? 'another till';
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Take this bill?'),
+        content: Text(
+          '${row['sale_no']} is open on $where. Taking it moves it to '
+          'this till, so this drawer is the one that has to account for '
+          'it at cash-up.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Leave it'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Take it'),
+          ),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Bill moved to this till',
+      action: () => repo.claimPosSale(saleId, reg),
+    );
+    if (!ok || !mounted) return;
+    _refreshOrders();
+    setState(() => _saleId = saleId);
+  }
+
   Future<void> _lineAction(Map<String, dynamic> line) async {
     final id = _saleId;
     final lineId = line['id'] as String?;
@@ -503,7 +579,8 @@ class _TillScreenState extends ConsumerState<TillScreen> {
             onEvenSplit: _evenSplit,
             onMerge: _merge,
             onLineAction: _lineAction,
-            onResume: (id) => setState(() => _saleId = id),
+            onOpenOrder: _openOrder,
+            onPark: _park,
           );
         },
       ),
@@ -530,7 +607,8 @@ class _Register extends ConsumerWidget {
     required this.onEvenSplit,
     required this.onMerge,
     required this.onLineAction,
-    required this.onResume,
+    required this.onOpenOrder,
+    required this.onPark,
   });
 
   final String registerId;
@@ -550,7 +628,8 @@ class _Register extends ConsumerWidget {
   final VoidCallback onEvenSplit;
   final ValueChanged<String> onMerge;
   final ValueChanged<Map<String, dynamic>> onLineAction;
-  final ValueChanged<String> onResume;
+  final ValueChanged<Map<String, dynamic>> onOpenOrder;
+  final VoidCallback onPark;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -601,6 +680,7 @@ class _Register extends ConsumerWidget {
 
         _Basket basket({required bool compact}) => _Basket(
           registerId: registerId,
+          outletId: outletId,
           saleId: saleId,
           onTender: onTender,
           onSend: onSend,
@@ -608,7 +688,8 @@ class _Register extends ConsumerWidget {
           onEvenSplit: onEvenSplit,
           onMerge: onMerge,
           onLineAction: onLineAction,
-          onResume: onResume,
+          onOpenOrder: onOpenOrder,
+          onPark: onPark,
           compact: compact,
         );
         final finder = _Finder(
@@ -788,6 +869,7 @@ class _Finder extends StatelessWidget {
 class _Basket extends ConsumerWidget {
   const _Basket({
     required this.registerId,
+    required this.outletId,
     required this.saleId,
     required this.onTender,
     required this.onSend,
@@ -795,11 +877,13 @@ class _Basket extends ConsumerWidget {
     required this.onEvenSplit,
     required this.onMerge,
     required this.onLineAction,
-    required this.onResume,
+    required this.onOpenOrder,
+    required this.onPark,
     required this.compact,
   });
 
   final String registerId;
+  final String? outletId;
   final String? saleId;
   final VoidCallback onTender;
   final VoidCallback onSend;
@@ -807,7 +891,15 @@ class _Basket extends ConsumerWidget {
   final VoidCallback onEvenSplit;
   final ValueChanged<String> onMerge;
   final ValueChanged<Map<String, dynamic>> onLineAction;
-  final ValueChanged<String> onResume;
+
+  /// A whole row rather than an id, because what the till does next
+  /// depends on which register the bill is on and the row is what says
+  /// so.
+  final ValueChanged<Map<String, dynamic>> onOpenOrder;
+
+  /// Steps back to the shop-wide list, leaving the bill exactly where
+  /// it is. Nothing is written: a parked sale is already parked.
+  final VoidCallback onPark;
 
   /// True on a phone, where the bill cannot share the screen with the
   /// menu and becomes a tappable summary instead.
@@ -817,9 +909,17 @@ class _Basket extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final id = saleId;
     if (id == null) {
-      final parked = ref.watch(parkedPosSalesProvider(registerId));
+      // The whole shop, not this till. A counter that could only see
+      // its own parked baskets could not find the bill a waiter opened
+      // on a tablet, which is the bill the customer is standing there
+      // holding.
+      final open = outletId == null
+          ? const AsyncValue<List<Map<String, dynamic>>>.data(
+              <Map<String, dynamic>>[],
+            )
+          : ref.watch(posOpenOrdersProvider(outletId!));
       final list = AsyncView<List<Map<String, dynamic>>>(
-        value: parked,
+        value: open,
         builder: (rows) => rows.isEmpty
             ? (compact
                   // On a phone this branch is one line under a full
@@ -840,15 +940,11 @@ class _Basket extends ConsumerWidget {
             : ListView(
                 shrinkWrap: compact,
                 children: [
-                  // Parked baskets are money that has been set aside,
-                  // so they are listed rather than left to be
-                  // remembered.
                   for (final s in rows)
-                    ListTile(
-                      leading: const Icon(Icons.pause_circle_outline),
-                      title: Text('${s['sale_no']}'),
-                      trailing: Text(Fmt.money(posNum(s['total_amount']))),
-                      onTap: () => onResume(s['id'] as String),
+                    _OpenOrderTile(
+                      row: s,
+                      mine: s['register_id'] == registerId,
+                      onTap: () => onOpenOrder(s),
                     ),
                 ],
               ),
@@ -866,7 +962,7 @@ class _Basket extends ConsumerWidget {
       }
       return Column(
         children: [
-          const SectionHeader('Nothing on the counter'),
+          const SectionHeader('Open in this shop'),
           Expanded(child: list),
         ],
       );
@@ -921,6 +1017,35 @@ class _Basket extends ConsumerWidget {
 
     return Column(
       children: [
+        // Which bill this is, and the way back to the others.
+        //
+        // Without this the till is a one-way street: once a sale is
+        // open the only exit is taking money for it. A waiter who has
+        // started table 3 and is called to table 5 has to be able to
+        // leave the first one where it is — which is what parking has
+        // always meant, and what the shop-wide list is for.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  sale.maybeWhen(
+                    data: (r) => '${r?['sale_no'] ?? 'Open bill'}',
+                    orElse: () => 'Open bill',
+                  ),
+                  style: Theme.of(context).textTheme.titleSmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: onPark,
+                icon: const Icon(Icons.arrow_back, size: 18),
+                label: const Text('Leave it open'),
+              ),
+            ],
+          ),
+        ),
         // On a counter or a tablet the bill is read continuously, so it
         // stays on screen. On a phone there is not room for both the
         // menu and the bill, and the old split gave the bill a strip
@@ -1033,6 +1158,105 @@ class _Basket extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// One open bill in the shop, on the list every till shows.
+///
+/// The row has to answer "is this the one?" without being opened, so it
+/// carries the things people actually say out loud: the table, how many
+/// are on it, how long it has been open, and whose name is on it. The
+/// register only appears when the bill is somebody else's — on your own
+/// till it is noise, and on another's it is the reason the next tap
+/// asks a question.
+class _OpenOrderTile extends StatelessWidget {
+  const _OpenOrderTile({
+    required this.row,
+    required this.mine,
+    required this.onTap,
+  });
+
+  final Map<String, dynamic> row;
+  final bool mine;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final table = row['table_name'];
+    final covers = row['covers'];
+    final lines = (row['line_count'] as num?)?.toInt() ?? 0;
+    final sent = (row['sent_count'] as num?)?.toInt() ?? 0;
+    final minutes = (row['minutes'] as num?)?.toInt() ?? 0;
+    final contact = row['contact_name'];
+
+    final parts = <String>[
+      if (table != null) 'Table $table',
+      if (covers != null) '$covers cover${covers == 1 ? '' : 's'}',
+      '$lines item${lines == 1 ? '' : 's'}',
+      // Only when it is true. "0 sent" on every row would train people
+      // to stop reading the column that matters.
+      if (sent > 0) '$sent with the kitchen',
+      if (minutes > 0) '${minutes}m',
+      if (contact != null) '$contact',
+      if (!mine) 'on ${row['register_name'] ?? row['register_code']}',
+    ];
+
+    return ListTile(
+      leading: Icon(
+        mine
+            ? Icons.pause_circle_outline
+            // Another till's bill. A different glyph rather than a
+            // different colour, because the difference has to survive
+            // being read at arm's length on a bright counter.
+            : Icons.devices_other_outlined,
+      ),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              '${row['sale_no']}',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (row['order_no'] != null) ...[
+            const SizedBox(width: 8),
+            _Pill('#${row['order_no']}'),
+          ],
+          if (row['is_kiosk'] == true) ...[
+            const SizedBox(width: 8),
+            const _Pill('Kiosk'),
+          ],
+        ],
+      ),
+      subtitle: Text(parts.join(' · '), overflow: TextOverflow.ellipsis),
+      trailing: Text(Fmt.money(posNum(row['total']))),
+      onTap: onTap,
+    );
+  }
+}
+
+/// A short label that has to stay legible next to a number.
+class _Pill extends StatelessWidget {
+  const _Pill(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: scheme.onSecondaryContainer,
+        ),
+      ),
     );
   }
 }

@@ -1781,6 +1781,13 @@ final parkedPosSalesProvider = FutureProvider.autoDispose
       (ref, registerId) => requireRepo(ref).parkedPosSales(registerId),
     );
 
+/// Every open bill in the outlet, keyed by outlet rather than register
+/// — which is the whole difference from [parkedPosSalesProvider].
+final posOpenOrdersProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, outletId) => requireRepo(ref).posOpenOrders(outletId),
+    );
+
 /// The room. Keyed on the outlet rather than the register, because the
 /// tables belong to the shop and not to the device looking at them —
 /// two waiters on two tablets are looking at the same floor.

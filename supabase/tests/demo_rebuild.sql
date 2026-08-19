@@ -144,6 +144,35 @@ begin
       where e::text <> 'kiosk'));
 
   -- --------------------------------------------------------------
+  -- The dining room has somebody sitting in it
+  -- --------------------------------------------------------------
+  --
+  -- `pos_floor_plan` derives occupancy from a parked sale pointing at a
+  -- table, so a seed that opened its bills with `open_pos_sale` rather
+  -- than `seat_table` would leave a room of empty tables -- and the
+  -- floor plan is the one screen the food_beverage tenant exists to
+  -- demonstrate. The same null would empty the `table_name` column
+  -- `pos_open_orders` puts on every row.
+  --
+  -- Counted against the tables that exist, so a seed that stopped
+  -- seating anybody fails here rather than quietly showing an empty
+  -- restaurant.
+  perform pg_temp.check_true(
+    'the demo dining room has a bill on a table',
+    (select count(*) from public.pos_sales s
+       join public.organizations g on g.id = s.org_id
+       join public.pos_outlets o on o.id = s.outlet_id
+      where g.is_demo and o.business_type = 'food_beverage'
+        and s.status = 'parked' and s.table_id is not null) > 0);
+
+  perform pg_temp.check_true(
+    'and the room it is in has tables to sit at',
+    (select count(*) from public.pos_tables t
+       join public.pos_outlets o on o.id = t.outlet_id
+       join public.organizations g on g.id = o.org_id
+      where g.is_demo and o.business_type = 'food_beverage') > 0);
+
+  -- --------------------------------------------------------------
   -- The salon: a day with all four states of a slot in it
   -- --------------------------------------------------------------
   --

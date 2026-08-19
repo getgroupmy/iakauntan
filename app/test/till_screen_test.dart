@@ -53,10 +53,40 @@ void main() {
     'tracks_stock': false,
   };
 
+  Map<String, dynamic> openOrder(
+    String id, {
+    required String saleNo,
+    required String total,
+    String registerId = 'reg-1',
+    String registerName = 'Counter',
+    String registerCode = 'T1',
+    int lineCount = 0,
+    int sentCount = 0,
+    String? tableName,
+  }) => {
+    'sale_id': id,
+    'sale_no': saleNo,
+    'register_id': registerId,
+    'register_code': registerCode,
+    'register_name': registerName,
+    'is_kiosk': false,
+    'order_no': null,
+    'table_id': null,
+    'table_name': tableName,
+    'covers': null,
+    'contact_name': null,
+    'opened_at': null,
+    'minutes': 0,
+    'line_count': lineCount,
+    'sent_count': sentCount,
+    'total': total,
+  };
+
   Widget harness({
     List<Map<String, dynamic>> registers = const [],
     Map<String, dynamic>? openShift,
     List<Map<String, dynamic>> parked = const [],
+    List<Map<String, dynamic>>? open,
     List<Map<String, dynamic>> menu = const [],
     Map<String, dynamic>? sale,
     List<Map<String, dynamic>> saleLines = const [],
@@ -66,6 +96,18 @@ void main() {
       posRegistersProvider.overrideWith((_) async => registers),
       currentPosShiftProvider.overrideWith((_, __) async => openShift),
       parkedPosSalesProvider.overrideWith((_, __) async => parked),
+      // The shop-wide list. Derived from [parked] by default so a test
+      // that only cares about one bill does not have to say the same
+      // thing twice; pass [open] when the point of the test is a bill
+      // sitting on another till.
+      posOpenOrdersProvider.overrideWith(
+        (_, __) async =>
+            open ??
+            [
+              for (final s in parked) openOrder(s['id'] as String,
+                  saleNo: '${s['sale_no']}', total: '${s['total_amount']}'),
+            ],
+      ),
       posTenderTypesProvider.overrideWith((_) async => const []),
       posMenuProvider.overrideWith((_, __) async => menu),
       posSaleProvider.overrideWith((_, __) async => sale),
@@ -110,7 +152,7 @@ void main() {
 
     expect(find.text('Scan, or type a code or a name'), findsOneWidget);
     expect(find.text('Shift SH-0001'), findsOneWidget);
-    expect(find.text('Nothing on the counter'), findsOneWidget);
+    expect(find.text('Open in this shop'), findsOneWidget);
     expect(find.text('Empty'), findsOneWidget);
   });
 
@@ -134,6 +176,92 @@ void main() {
 
     expect(find.text('POS-0007'), findsOneWidget);
     expect(find.text('RM 42.50'), findsOneWidget);
+  });
+
+  testWidgets('a bill open on another till is listed, and says whose', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      harness(
+        registers: [register()],
+        openShift: shift(),
+        open: [
+          openOrder('s-1', saleNo: 'POS-0009', total: '18.00', lineCount: 2),
+          openOrder(
+            's-2',
+            saleNo: 'POS-0010',
+            total: '78.00',
+            lineCount: 9,
+            sentCount: 5,
+            registerId: 'reg-2',
+            registerName: 'Waiter tablet',
+            registerCode: 'W1',
+            tableName: '3',
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Both are in the shop, so both are on the list. That is the whole
+    // change: a till used to see only its own.
+    expect(find.text('POS-0009'), findsOneWidget);
+    expect(find.text('POS-0010'), findsOneWidget);
+
+    // The row says where the other one is, because the next tap on it
+    // is going to ask to move it.
+    expect(find.textContaining('on Waiter tablet'), findsOneWidget);
+    expect(find.textContaining('Table 3'), findsOneWidget);
+    expect(find.textContaining('5 with the kitchen'), findsOneWidget);
+
+    // And this till's own bill says nothing about a register at all.
+    expect(find.textContaining('on Counter'), findsNothing);
+  });
+
+  testWidgets('taking another till\'s bill asks before it moves the money', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      harness(
+        registers: [register()],
+        openShift: shift(),
+        open: [
+          openOrder(
+            's-2',
+            saleNo: 'POS-0010',
+            total: '78.00',
+            registerId: 'reg-2',
+            registerName: 'Waiter tablet',
+            registerCode: 'W1',
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('POS-0010'));
+    await tester.pumpAndSettle();
+
+    // The question names the consequence rather than asking "are you
+    // sure": what changes is which drawer has to account for the bill,
+    // and that is the only thing worth telling a cashier.
+    expect(find.text('Take this bill?'), findsOneWidget);
+    expect(find.textContaining('this drawer'), findsOneWidget);
+    expect(find.text('Leave it'), findsOneWidget);
+
+    // Declining leaves the list exactly as it was.
+    await tester.tap(find.text('Leave it'));
+    await tester.pumpAndSettle();
+    expect(find.text('POS-0010'), findsOneWidget);
+    expect(find.text('Take payment'), findsNothing);
   });
 
   testWidgets('one till needs no picker', (tester) async {
@@ -311,6 +439,44 @@ void main() {
       'total_amount': '21.00',
       'status': 'parked',
     };
+
+    testWidgets('an open bill offers the way back to the others', (
+      tester,
+    ) async {
+      await openParked(
+        tester,
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          saleLines: [
+            {
+              'id': 'l1',
+              'line_no': 1,
+              'description': 'Teh tarik',
+              'quantity': '1',
+              'unit_price': '3.00',
+              'line_total': '3.00',
+            },
+          ],
+        ),
+      );
+
+      // Which bill this is, said on the screen rather than remembered.
+      expect(find.text('POS-2026-00001'), findsOneWidget);
+
+      // Without this the till is a one-way street: the only exit from
+      // an open bill would be taking money for it, and a waiter called
+      // to another table would have to settle the first one to leave.
+      await tester.tap(find.text('Leave it open'));
+      await tester.pumpAndSettle();
+
+      // Back on the list, with the bill still there — parking writes
+      // nothing, because a sale is parked from the moment it opens.
+      expect(find.text('Take payment'), findsNothing);
+      expect(find.text('POS-2026-00001'), findsOneWidget);
+    });
 
     testWidgets('a phone shows a count and a total, not the lines', (
       tester,

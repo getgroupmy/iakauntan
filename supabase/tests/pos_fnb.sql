@@ -26,6 +26,9 @@ declare
   v_out2   uuid;
   v_reg    uuid;
   v_reg2   uuid;
+  v_reg3   uuid;
+  v_shift3 uuid;
+  v_claim  uuid;
   v_area   uuid;
   v_t7     uuid;
   v_t8     uuid;
@@ -82,6 +85,11 @@ begin
   values (v_org, v_outlet, 'T1', 'Waiter tablet') returning id into v_reg;
   insert into public.pos_registers (org_id, outlet_id, code, name)
   values (v_org, v_out2, 'T2', 'Branch till') returning id into v_reg2;
+  -- The counter in the same room as the waiter's tablet. A restaurant
+  -- has both, and the whole point of `claim_pos_sale` is what happens
+  -- when a bill has to move between them.
+  insert into public.pos_registers (org_id, outlet_id, code, name)
+  values (v_org, v_outlet, 'C1', 'Front counter') returning id into v_reg3;
   insert into public.pos_settings (org_id, round_cash_to_5sen) values (v_org, true);
 
   -- ------------------------------------------------------------------
@@ -520,6 +528,78 @@ begin
   perform pg_temp.check_eq('and the day has a figure somebody can question',
     (select sum(x.value) from public.pos_void_summary(v_org) x
       where x.reason = 'not_received'), 6.00);
+
+  -- ------------------------------------------------------------------
+  -- Every open bill in the shop, and moving one between drawers
+  -- ------------------------------------------------------------------
+  --
+  -- `parkedPosSales` answers "what is on this till". That is the wrong
+  -- question at a counter: the customer walks up holding a bill a
+  -- waiter opened on a tablet, and a till that can only see itself
+  -- cannot find it at all.
+  perform pg_temp.check_true('the shop-wide list finds a bill on another till',
+    exists (select 1 from public.pos_open_orders(v_outlet) o
+             where o.sale_id = v_split and o.register_id = v_reg));
+
+  -- The count as well as the presence: a list that happened to be
+  -- empty would satisfy an existence check that only looked for
+  -- absences, and a positive control is what stops that passing
+  -- vacuously.
+  perform pg_temp.check_eq('and lists every parked bill, not just one',
+    (select count(*) from public.pos_open_orders(v_outlet)),
+    (select count(*) from public.pos_sales s
+      where s.outlet_id = v_outlet and s.status = 'parked'));
+
+  perform pg_temp.check_eq('with the room it is in on the row',
+    (select o.table_name from public.pos_open_orders(v_outlet) o
+      where o.sale_id = v_sale2), 'T8');
+
+  -- A drawer that is not open cannot take a bill, for the same reason
+  -- it cannot take a sale: takings that belong to no count belong to
+  -- nobody.
+  begin
+    perform public.claim_pos_sale(v_split, v_reg3);
+    raise exception 'FAIL took a bill onto a till with no shift open';
+  exception when check_violation then
+    raise notice 'ok   a closed drawer cannot take a bill';
+  end;
+
+  v_shift3 := public.open_pos_shift(v_reg3, 50.00);
+  v_claim  := public.claim_pos_sale(v_split, v_reg3);
+
+  perform pg_temp.check_true('claiming moves the bill to the counter',
+    v_claim = v_split
+      and (select s.register_id = v_reg3 from public.pos_sales s where s.id = v_split));
+
+  -- The assertion this whole function exists for. `app.pos_expected_cash`
+  -- counts by shift, so a bill settled at the counter while its shift
+  -- still pointed at the tablet would put the counter's cash into the
+  -- tablet's expected figure and fail both counts, in opposite
+  -- directions, for a reason neither cashier could see.
+  perform pg_temp.check_true('and the shift with it, which is the point',
+    (select s.shift_id = v_shift3 from public.pos_sales s where s.id = v_split));
+
+  perform pg_temp.check_true('while the row still says where it started',
+    (select s.opened_on_register_id = v_reg
+       from public.pos_sales s where s.id = v_split));
+
+  -- Twice is a no-op. A cashier who taps a bill already on their till
+  -- wants to open it, not to be told off -- and the second call must
+  -- not rewrite where it started.
+  perform public.claim_pos_sale(v_split, v_reg3);
+  perform pg_temp.check_true('claiming again changes nothing',
+    (select s.register_id = v_reg3 and s.opened_on_register_id = v_reg
+       from public.pos_sales s where s.id = v_split));
+
+  -- A bill cannot walk to another shop: the stock it will move comes
+  -- out of this outlet's warehouse and the receipt carries this
+  -- outlet's header.
+  begin
+    perform public.claim_pos_sale(v_split, v_reg2);
+    raise exception 'FAIL took a bill onto a till in another outlet';
+  exception when check_violation then
+    raise notice 'ok   a bill cannot be taken to another outlet';
+  end;
 
   raise notice 'point of sale dining room: all assertions passed';
 end;

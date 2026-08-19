@@ -6396,6 +6396,32 @@ extension RepoPos on Repo {
             .order('opened_at'),
       );
 
+  /// Every bill still open in the shop, whichever till holds it.
+  ///
+  /// [parkedPosSales] answers a narrower question — what is on *this*
+  /// register — and is still what the merge bar wants, because merging
+  /// two bills across two drawers is not a thing to offer casually.
+  /// This one is what a counter needs: a customer walks up holding a
+  /// bill a waiter opened on a tablet, and a till that can only see
+  /// itself cannot find it at all.
+  Future<List<Map<String, dynamic>>> posOpenOrders(String outletId) async =>
+      Repo.rows(
+        await client.rpc('pos_open_orders', params: {'p_outlet': outletId}),
+      );
+
+  /// Moves an open bill onto this till — register and shift together.
+  ///
+  /// The shift is the point. `app.pos_expected_cash` counts by
+  /// `shift_id`, so settling another till's bill without this would put
+  /// this drawer's cash into that drawer's expected figure and fail
+  /// both counts, in opposite directions, for a reason neither cashier
+  /// can see.
+  Future<void> claimPosSale(String saleId, String registerId) async =>
+      await client.rpc(
+        'claim_pos_sale',
+        params: {'p_sale': saleId, 'p_register': registerId},
+      );
+
   /// The room, as one query: every active table in the outlet and the
   /// parked bill sitting on it, if there is one.
   ///

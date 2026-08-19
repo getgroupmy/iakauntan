@@ -334,6 +334,50 @@ the rounding — comes back from `complete_pos_sale()` rather than being
 recomputed in Dart. A till that does its own arithmetic is a till that
 can disagree with the receipt it just printed.
 
+## Every open bill in the shop, and whose drawer it lands in
+
+A till used to list only the baskets parked on itself. That is right for
+a corner shop with one register and wrong for everything else this
+module sells to: a waiter opens table 6 on a tablet, the customer walks
+to the counter, and the counter cannot see the bill at all.
+
+`pos_open_orders(outlet)` answers the question the room actually asks —
+what is open in this shop — and the till lists that instead. Each row
+carries what people say out loud: the table, the covers, how long it has
+been open, how many lines the kitchen already has, and whose name is on
+it. The register appears only when the bill belongs to another till,
+because on your own it is noise.
+
+**Seeing a bill and taking it are two different acts.** Settling
+somebody else's bill moves money between drawers, so it is a deliberate
+second step:
+
+- `app.pos_expected_cash` counts by `pos_sales.shift_id`. A bill settled
+  in cash at the counter while its shift still points at the tablet puts
+  the counter's cash into the tablet's expected figure — and both
+  drawers then fail their count, in opposite directions, for a reason
+  neither cashier can see.
+- `close_pos_shift` refuses while a sale is parked against the shift, so
+  a waiter holding a bill the counter is about to settle cannot go home.
+
+`claim_pos_sale(sale, register)` moves the bill — **register and shift
+together**, since separating them is what causes the first problem — and
+keeps where it started in `pos_sales.opened_on_register_id`. That column
+exists so "why is a bill from the tablet in my drawer" has an answer in
+the row rather than in somebody's memory. Nothing else moves: the lines,
+the modifiers, the kitchen tickets and the invoice numbering are
+untouched, because this is a change of till and not a change of sale.
+
+The till asks before it claims, and the question names the consequence
+rather than asking whether you are sure — what changes is which drawer
+has to account for the bill, and that is the only part worth telling a
+cashier.
+
+An open bill also has a way back to the list. Without one the till is a
+one-way street whose only exit is taking money, and a waiter called from
+table 3 to table 5 would have to settle the first to leave it. Parking
+writes nothing: a sale is `parked` from the moment it opens.
+
 ## The room, the pass, the diary and the board
 
 **Floor** (`floor_plan_screen.dart`) draws tables as tiles grouped by
