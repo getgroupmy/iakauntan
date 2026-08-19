@@ -389,6 +389,59 @@ on the menu instead. It is why the list is grouped by category: that is
 where the rule covering most of a menu actually lives, and the rows
 under it are the exceptions.
 
+## How the order arrived
+
+`pos_outlets.business_type` says what shape of shop this is — a counter,
+a dining room, a van, a salon, a machine by the door. It has never said
+how an order *reached* it, and those are different questions: one warung
+takes a bill at a table, a bag over the counter, a phone call and a
+delivery app, and every one of those is the same shop. Nothing in the
+module could tell them apart, so nothing could answer the questions a
+shopkeeper actually asks — how much of Friday was delivery, is the
+dining room worth the seats, did the app pay for itself.
+
+`app.pos_order_channel` names eight: `walk_in`, `dine_in`, `takeaway`,
+`delivery`, `reservation`, `phone`, `online`, `mobile_app`. The labels
+live in Dart, because they are wording rather than data — a shop that
+calls takeaway "bungkus" is changing what a screen says, not what a
+report groups by.
+
+**Three levels, resolved on insert.** A sale takes the register's
+channel, else the outlet's default, else `walk_in`. A kiosk is takeaway
+and a waiter's tablet is dine-in, so on most devices nobody ever touches
+it — which is the point: a control the cashier has to set on every sale
+is a control that gets set wrong.
+
+It is a trigger rather than an argument to `open_pos_sale`, and that is
+a deliberate trade. Adding a parameter would restate a function 0209
+wrote and 0212 already restated once, for a default that is pure
+derivation, and a 250-line diff to add one resolved column is a diff
+nobody checks.
+
+**An outlet accepts what it says it accepts.** `pos_outlet_channels` is
+the list, seeded per business type on migration so the feature works the
+day it ships rather than after somebody configures every shop by hand. A
+market stall that does not deliver cannot record a delivery, because a
+report split by a channel nobody sells has a row that can only be a
+mistake. The default moves rather than disappearing: naming a new one
+clears the old in the same statement, and switching a channel off gives
+up its default flag, since a default nobody can order through is not a
+default.
+
+**A completed sale keeps how it arrived.** `set_pos_sale_channel`
+refuses once the sale is issued — the channel is on the invoice by then
+and part of what was reported for the day, and an issued document does
+not change because somebody re-categorised it.
+
+The chip sits on the open bill rather than in settings, because "this
+one is takeaway" is a fact about this order. It shows the resolved
+channel even when nobody chose it, so a cashier can see the till's
+assumption before it becomes what the day gets reported as.
+
+`pos_sales_by_channel(org, from, to)` splits completed sales by it, with
+covers on the dine-in row only — reporting a null as a zero would make
+an empty column look like an empty dining room.
+
 ## Seven screens, seven readers
 
 The module is not one face but seven, and what separates them is who is
@@ -401,7 +454,7 @@ holding the device rather than which feature they reach.
 | Kitchen | `/kitchen` | A cook, hands full, further away still |
 | Diary | `/diary` | A receptionist, on a phone, mid-sentence |
 | Kiosk | `/kiosk` | **A customer**, ordering for themselves |
-| Counters | `/counters` | Whoever runs the shop, once |
+| Outlet setup | `/counters` | Whoever runs the shop, once |
 | Order board | `/order-board` | **A customer**, holding a tray |
 
 They share a register picker and nothing else, because the thing that
@@ -636,8 +689,3 @@ for is therefore visible in the demo data, not only asserted in
   terminal
 - Cash drawer and receipt printer drivers. The receipt renders; opening a
   physical drawer is between the browser and the hardware
-- Order channels. An outlet has a `business_type` (retail, food and
-  beverage, mobile, service, kiosk), which is the shape of the shop and
-  not how an order arrived. Dine-in, takeaway, reservation, delivery and
-  online are not modelled at all, so a sale cannot say which of them it
-  was

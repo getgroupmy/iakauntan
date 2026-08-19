@@ -705,6 +705,94 @@ begin
     (select count(*) from public.pos_kitchen_stations st
       where st.id = v_st3), 1);
 
+  -- ------------------------------------------------------------------
+  -- How the order arrived
+  -- ------------------------------------------------------------------
+  --
+  -- `business_type` says what shape of shop this is. It has never said
+  -- how an order reached it, and one warung takes a bill at a table, a
+  -- bag over the counter, a phone call and a delivery app.
+
+  -- Seeded by 0229 from the shape of the shop, which is what makes the
+  -- feature usable on the day it ships rather than after somebody
+  -- configures every outlet by hand.
+  perform pg_temp.check_eq('a dining room is set up to take dine-in',
+    (select c.channel::text from public.pos_outlet_channels c
+      where c.outlet_id = v_outlet and c.is_default), 'dine_in');
+  perform pg_temp.check_true('and more than one way in',
+    (select count(*) from public.pos_outlet_channels c
+      where c.outlet_id = v_outlet and c.is_active) > 1);
+
+  -- The trigger, resolved in the order a shop actually sets it up.
+  v_sale2 := public.open_pos_sale(v_reg);
+  perform pg_temp.check_eq('a sale takes the outlet default',
+    (select s.order_channel::text from public.pos_sales s where s.id = v_sale2),
+    'dine_in');
+
+  update public.pos_registers set default_channel = 'takeaway' where id = v_reg;
+  v_split := public.open_pos_sale(v_reg);
+  perform pg_temp.check_eq('but the till beats the outlet',
+    (select s.order_channel::text from public.pos_sales s where s.id = v_split),
+    'takeaway');
+  update public.pos_registers set default_channel = null where id = v_reg;
+
+  -- Saying this one was something else.
+  perform public.set_pos_sale_channel(v_split, 'delivery');
+  perform pg_temp.check_eq('a bill can say it arrived another way',
+    (select s.order_channel::text from public.pos_sales s where s.id = v_split),
+    'delivery');
+
+  -- A shop that does not do a thing cannot record it. A report split
+  -- by a channel nobody sells has a row that can only be a mistake.
+  perform public.set_outlet_channel(v_outlet, 'mobile_app', false);
+  begin
+    perform public.set_pos_sale_channel(v_split, 'mobile_app');
+    raise exception 'FAIL recorded a channel the outlet does not take';
+  exception when check_violation then
+    raise notice 'ok   an outlet only records what it accepts';
+  end;
+
+  -- Moving the default clears the old one in the same statement, which
+  -- is what the unique partial index requires.
+  perform public.set_outlet_channel(v_outlet, 'takeaway', true, true);
+  perform pg_temp.check_eq('the default moves rather than duplicating',
+    (select count(*) from public.pos_outlet_channels c
+      where c.outlet_id = v_outlet and c.is_default), 1);
+  perform pg_temp.check_eq('and it is the one just named',
+    (select c.channel::text from public.pos_outlet_channels c
+      where c.outlet_id = v_outlet and c.is_default), 'takeaway');
+
+  -- A default nobody can order through is not a default.
+  begin
+    perform public.set_outlet_channel(v_outlet, 'delivery', false, true);
+    raise exception 'FAIL made a switched-off channel the default';
+  exception when check_violation then
+    raise notice 'ok   a channel cannot be off and be the default';
+  end;
+
+  -- Switching one off clears its own default flag, so a shop is never
+  -- left defaulting to something it does not sell.
+  perform public.set_outlet_channel(v_outlet, 'takeaway', false);
+  perform pg_temp.check_eq('switching the default off gives it up',
+    (select count(*) from public.pos_outlet_channels c
+      where c.outlet_id = v_outlet and c.is_default), 0);
+  perform public.set_outlet_channel(v_outlet, 'dine_in', true, true);
+
+  -- Completed sales are what the day was, so the channel stops moving.
+  perform public.add_pos_sale_line(v_split, v_teh, 1, 3.00);
+  perform public.complete_pos_sale(v_split, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 3.00)));
+  begin
+    perform public.set_pos_sale_channel(v_split, 'dine_in');
+    raise exception 'FAIL re-categorised a sale that had already been reported';
+  exception when check_violation then
+    raise notice 'ok   an issued invoice keeps how the order arrived';
+  end;
+
+  perform pg_temp.check_true('and the day can be split by it',
+    exists (select 1 from public.pos_sales_by_channel(v_org) x
+             where x.channel = 'delivery' and x.sales > 0));
+
   raise notice 'point of sale dining room: all assertions passed';
 end;
 $$;

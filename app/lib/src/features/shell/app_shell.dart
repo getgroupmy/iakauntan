@@ -226,12 +226,13 @@ const _destinations = <_Dest>[
     '/kiosk',
     module: 'pos',
   ),
-  // Where a bar is created and "drinks go to it" is said. Setup rather
-  // than daily work, but it sits with the POS screens because the
-  // person who adds a counter is the person who runs the shop, not the
-  // person who administers the company.
+  // Where a bar is created, "drinks go to it" is said, and a shop
+  // decides it does deliveries. Setup rather than daily work, but it
+  // sits with the POS screens because the person who does it is the
+  // person who runs the shop, not the person who administers the
+  // company.
   _Dest(
-    'Counters',
+    'Outlet setup',
     Icons.rule_outlined,
     Icons.rule,
     '/counters',

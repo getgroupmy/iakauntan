@@ -4,8 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import 'channels.dart';
 
-/// The counters, and what goes to each.
+/// Setting a shop up: its counters, and how orders reach it.
+///
+/// Two per-outlet questions on one screen because they are asked at the
+/// same moment by the same person — whoever opens a shop decides that
+/// drinks go to the bar and that this one does deliveries, and neither
+/// is daily work.
 ///
 /// ## Why this screen exists at all
 ///
@@ -158,7 +164,7 @@ class _StationsScreenState extends ConsumerState<StationsScreen> {
     final outlets = ref.watch(posOutletsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Counters')),
+      appBar: AppBar(title: const Text('Outlet setup')),
       floatingActionButton: _outletId == null
           ? null
           : FloatingActionButton.extended(
@@ -266,6 +272,20 @@ class _Body extends ConsumerWidget {
                 ],
               ),
             ),
+          const SectionHeader('How orders arrive'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              'What this shop takes, and what a sale is unless the till '
+              'says otherwise. A kind of order that is switched off '
+              'cannot be recorded at all, which is what keeps a report '
+              'free of rows that can only be mistakes.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          OutletChannels(outletId: outletId),
+          const SectionHeader('The last thirty days'),
+          const ChannelMix(),
           const SectionHeader('What goes where'),
           AsyncView<List<Map<String, dynamic>>>(
             value: routing,

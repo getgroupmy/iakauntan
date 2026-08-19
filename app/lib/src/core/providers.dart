@@ -1834,6 +1834,22 @@ final posServiceProvidersProvider = FutureProvider.autoDispose
 /// What is being made and what is ready, for the screen customers
 /// watch. Keyed on the outlet: the board belongs to the shop, not to
 /// the kiosk that happens to be showing it.
+final posOutletChannelsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, outletId) => requireRepo(ref).posOutletChannels(outletId),
+    );
+
+/// The last thirty days, split by how the order arrived. A fixed window
+/// rather than a picker: the question this answers on a settings screen
+/// is "is this channel worth keeping on", and that is a recent
+/// question.
+final posChannelMixProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posSalesByChannel(
+        from: DateTime.now().subtract(const Duration(days: 30)),
+      ),
+    );
+
 /// Where every dish goes, and why. Keyed by outlet because the same
 /// menu in two shops routes two different ways.
 final posStationRoutingProvider = FutureProvider.autoDispose

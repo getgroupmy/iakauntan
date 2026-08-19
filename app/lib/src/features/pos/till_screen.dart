@@ -8,6 +8,7 @@ import '../../core/widgets.dart';
 // The POS methods live in an extension on Repo, and a Dart extension is
 // only in scope where its declaring library is imported.
 import '../../data/repository.dart';
+import 'channels.dart';
 import 'modifier_sheet.dart';
 import 'offline_controller.dart';
 import 'offline_till.dart';
@@ -1079,6 +1080,22 @@ class _Basket extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              // How the order arrived, on the bill rather than in
+              // settings, because it is a fact about this order. Shown
+              // even when nobody chose it, so a cashier can see the
+              // till's assumption before it becomes what the day gets
+              // reported as.
+              sale.maybeWhen(
+                data: (r) => r == null
+                    ? const SizedBox.shrink()
+                    : SaleChannelChip(
+                        saleId: id,
+                        outletId: outletId,
+                        channel: r['order_channel'],
+                      ),
+                orElse: () => const SizedBox.shrink(),
+              ),
+              const SizedBox(width: 4),
               TextButton.icon(
                 onPressed: onPark,
                 icon: const Icon(Icons.arrow_back, size: 18),

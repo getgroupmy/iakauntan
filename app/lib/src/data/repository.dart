@@ -6487,6 +6487,77 @@ extension RepoPos on Repo {
         .order('code'),
   );
 
+  /// The kinds of order this shop takes. Not a free-for-all: a stall
+  /// that does not deliver should not be able to record a delivery, and
+  /// a report split by a channel nobody sells has a row that can only
+  /// be a mistake.
+  Future<List<Map<String, dynamic>>> posOutletChannels(
+    String outletId,
+  ) async => Repo.rows(
+    await client
+        .from('pos_outlet_channels')
+        .select()
+        .eq('outlet_id', outletId)
+        .order('sort_order'),
+  );
+
+  /// Turns one on or off, and picks which one a sale gets when nobody
+  /// says. One call, because naming a new default has to clear the old
+  /// one in the same transaction.
+  Future<void> setOutletChannel(
+    String outletId,
+    String channel, {
+    bool isActive = true,
+    bool isDefault = false,
+    int sortOrder = 0,
+  }) async => await client.rpc(
+    'set_outlet_channel',
+    params: {
+      'p_outlet': outletId,
+      'p_channel': channel,
+      'p_is_active': isActive,
+      'p_is_default': isDefault,
+      'p_sort_order': sortOrder,
+    },
+  );
+
+  /// What this till is usually for. A kiosk is takeaway and a waiter's
+  /// tablet is dine-in, so nobody has to say so on every sale — which
+  /// matters because a control set on every sale is one that gets set
+  /// wrong.
+  Future<void> setRegisterDefaultChannel(
+    String registerId,
+    String? channel,
+  ) async => await client
+      .from('pos_registers')
+      .update({'default_channel': channel})
+      .eq('id', registerId);
+
+  /// Says this particular bill arrived some other way. Refused once the
+  /// sale has completed: the channel is on an issued invoice and part
+  /// of what was reported for the day.
+  Future<void> setPosSaleChannel(String saleId, String channel) async =>
+      await client.rpc(
+        'set_pos_sale_channel',
+        params: {'p_sale': saleId, 'p_channel': channel},
+      );
+
+  /// The day, split by how the orders came in — how much of Friday was
+  /// delivery, whether the dining room is worth the seats.
+  Future<List<Map<String, dynamic>>> posSalesByChannel({
+    DateTime? from,
+    DateTime? to,
+  }) async => Repo.rows(
+    await client.rpc(
+      'pos_sales_by_channel',
+      params: {
+        'p_org': orgId,
+        if (from != null) 'p_from': from.toIso8601String().substring(0, 10),
+        if (to != null) 'p_to': to.toIso8601String().substring(0, 10),
+      },
+    ),
+  );
+
   /// Adds a counter, or renames one. One call rather than two, because
   /// making a second station the default has to clear the first in the
   /// same transaction — the unique partial index rejects a second, and
