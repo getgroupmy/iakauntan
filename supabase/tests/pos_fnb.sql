@@ -34,6 +34,14 @@ declare
   v_shift  uuid;
   v_sale   uuid;
   v_cash   uuid;
+  v_spice  uuid;
+  v_extra  uuid;
+  v_mild   uuid;
+  v_hot    uuid;
+  v_egg    uuid;
+  v_nocuc  uuid;
+  v_line   uuid;
+  v_lm     uuid;
 begin
   v_org := pg_temp.test_org('Warung Sedap Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
@@ -195,6 +203,98 @@ begin
   perform pg_temp.check_eq('and settling it clears the table',
     (select count(*) from public.pos_floor_plan(v_outlet) f
       where f.table_id = v_t7 and f.sale_id is not null), 0);
+
+  -- ------------------------------------------------------------------
+  -- What is on the plate
+  -- ------------------------------------------------------------------
+  -- A modifier belongs to a line, not to the bill. One plate is one
+  -- line at one price -- which is both what the kitchen needs on a
+  -- docket and what the customer expects to read.
+  insert into public.pos_modifier_groups (org_id, code, name, min_select, max_select)
+  values (v_org, 'SPICE', 'Pedas', 1, 1) returning id into v_spice;
+  insert into public.pos_modifier_groups (org_id, code, name, min_select, max_select)
+  values (v_org, 'EXTRA', 'Tambah', 0, 2) returning id into v_extra;
+  insert into public.pos_modifiers (org_id, group_id, code, name, price_delta)
+  values (v_org, v_spice, 'MILD', 'Kurang pedas', 0) returning id into v_mild;
+  insert into public.pos_modifiers (org_id, group_id, code, name, price_delta)
+  values (v_org, v_spice, 'HOT', 'Extra pedas', 0) returning id into v_hot;
+  insert into public.pos_modifiers (org_id, group_id, code, name, price_delta)
+  values (v_org, v_extra, 'EGG', 'Telur mata', 1.50) returning id into v_egg;
+  insert into public.pos_modifiers (org_id, group_id, code, name, price_delta)
+  values (v_org, v_extra, 'NOCUC', 'Tiada timun', 0) returning id into v_nocuc;
+  insert into public.item_modifier_groups (org_id, item_id, group_id)
+  values (v_org, v_item, v_spice), (v_org, v_item, v_extra);
+
+  v_sale := public.seat_table(v_reg, v_t8, 2);
+  v_line := public.add_pos_sale_line(v_sale, v_item, 2, 12.00);
+  perform pg_temp.check_eq('two plates at the menu price',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 24.00);
+  perform pg_temp.check_true('and no base price is kept while there is nothing to keep',
+    (select l.base_unit_price from public.pos_sale_lines l where l.id = v_line) is null);
+
+  v_lm := public.add_line_modifier(v_line, v_egg);
+  perform pg_temp.check_eq('the menu price is remembered once a modifier lands',
+    (select l.base_unit_price from public.pos_sale_lines l where l.id = v_line), 12.0000);
+  perform pg_temp.check_eq('the plate costs the menu price plus the egg',
+    (select l.unit_price from public.pos_sale_lines l where l.id = v_line), 13.5000);
+  perform pg_temp.check_eq('and the bill is two of those', 
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 27.00);
+  -- The whole reason a modifier is not a second line.
+  perform pg_temp.check_eq('it is still one line, not two',
+    (select count(*) from public.pos_sale_lines l where l.sale_id = v_sale), 1);
+
+  perform public.add_line_modifier(v_line, v_egg);
+  perform pg_temp.check_eq('asked for twice is two eggs',
+    (select m.quantity from public.pos_sale_line_modifiers m where m.id = v_lm), 2);
+  perform pg_temp.check_eq('at another one fifty a plate',
+    (select l.unit_price from public.pos_sale_lines l where l.id = v_line), 15.0000);
+
+  -- Two eggs already fills a group that takes two.
+  begin
+    perform public.add_line_modifier(v_line, v_nocuc);
+    raise exception 'FAIL exceeded the group maximum';
+  exception when check_violation then
+    raise notice 'ok   the group maximum is a hard stop';
+  end;
+
+  perform public.remove_line_modifier(v_lm);
+  perform pg_temp.check_eq('taking the eggs off restores the menu price',
+    (select l.unit_price from public.pos_sale_lines l where l.id = v_line), 12.0000);
+  perform pg_temp.check_eq('and the bill with it',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 24.00);
+
+  -- A question a cook cannot guess the answer to.
+  perform pg_temp.check_eq('one required choice is still open',
+    (select count(*) from public.pos_line_modifier_gaps(v_sale)), 1);
+  perform pg_temp.check_true('and it is the one that has to be answered',
+    (select g.group_name from public.pos_line_modifier_gaps(v_sale) g) = 'Pedas');
+  perform public.add_line_modifier(v_line, v_mild);
+  perform pg_temp.check_eq('answering it closes the gap',
+    (select count(*) from public.pos_line_modifier_gaps(v_sale)), 0);
+  perform pg_temp.check_eq('and a choice worth nothing changes no price',
+    (select l.unit_price from public.pos_sale_lines l where l.id = v_line), 12.0000);
+
+  begin
+    perform public.add_line_modifier(v_line, v_hot);
+    raise exception 'FAIL took two answers to a choose-one question';
+  exception when check_violation then
+    raise notice 'ok   it cannot be both mild and hot';
+  end;
+
+  -- The snapshot. A menu edit tonight must not re-price a plate that
+  -- was ordered an hour ago.
+  perform public.add_line_modifier(v_line, v_egg);
+  update public.pos_modifiers set price_delta = 99.00 where id = v_egg;
+  -- Re-priced deliberately, so this asserts the snapshot rather than
+  -- the absence of anything having recalculated.
+  perform app.reprice_pos_line(v_line);
+  perform pg_temp.check_eq('what was ordered was priced when it was ordered',
+    (select l.unit_price from public.pos_sale_lines l where l.id = v_line), 13.5000);
+
+  -- And the plate owns its modifiers.
+  delete from public.pos_sale_lines where id = v_line;
+  perform pg_temp.check_eq('taking the plate off takes the egg with it',
+    (select count(*) from public.pos_sale_line_modifiers m where m.line_id = v_line), 0);
 
   raise notice 'point of sale dining room: all assertions passed';
 end;
