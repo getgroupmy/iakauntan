@@ -6455,6 +6455,53 @@ extension RepoPos on Repo {
           )
           as String;
 
+  /// The board a customer watches while their food is made. Only the
+  /// last four hours, and only orders the kitchen has not finished —
+  /// a collection screen listing yesterday is a screen nobody scans.
+  Future<List<Map<String, dynamic>>> kioskOrderBoard(String outletId) async =>
+      Repo.rows(
+        await client.rpc(
+          'kiosk_order_board',
+          params: {'p_outlet': outletId},
+        ),
+      );
+
+  Future<String> startKioskOrder(
+    String registerId, {
+    String? clientUuid,
+  }) async =>
+      await client.rpc(
+            'start_kiosk_order',
+            params: {
+              'p_register': registerId,
+              if (clientUuid != null) 'p_client_uuid': clientUuid,
+            },
+          )
+          as String;
+
+  /// Takes the money and gives back the number. One tender, because a
+  /// kiosk has nobody to split a payment with, and never cash — there
+  /// is no drawer and nobody to open it.
+  Future<Map<String, dynamic>?> completeKioskOrder(
+    String saleId,
+    String tenderId, {
+    num? amount,
+    String? reference,
+  }) async {
+    final rows = Repo.rows(
+      await client.rpc(
+        'complete_kiosk_order',
+        params: {
+          'p_sale': saleId,
+          'p_tender': tenderId,
+          if (amount != null) 'p_amount': amount,
+          if (reference != null) 'p_reference': reference,
+        },
+      ),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
   /// The whole answer: what it came to, what the drawer asks for, what
   /// comes back and what rounding did. Four numbers because the customer
   /// can see all four, and a till that only showed the total would be

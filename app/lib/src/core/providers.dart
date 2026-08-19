@@ -1818,3 +1818,11 @@ final posServiceProvidersProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, outletId) => requireRepo(ref).posServiceProviders(outletId),
     );
+
+/// What is being made and what is ready, for the screen customers
+/// watch. Keyed on the outlet: the board belongs to the shop, not to
+/// the kiosk that happens to be showing it.
+final kioskOrderBoardProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, outletId) => requireRepo(ref).kioskOrderBoard(outletId),
+    );
