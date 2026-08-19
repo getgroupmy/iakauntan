@@ -206,7 +206,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
         title: const Text('Till'),
         actions: [
           registers.maybeWhen(
-            data: (rows) => _RegisterPicker(
+            data: (rows) => PosRegisterPicker(
               registers: rows,
               selectedId: _registerId,
               onPicked: _pickRegister,
@@ -612,8 +612,14 @@ class _Basket extends ConsumerWidget {
   }
 }
 
-class _RegisterPicker extends StatelessWidget {
-  const _RegisterPicker({
+/// Which till this device is.
+///
+/// Public, and shared with the floor plan, because "which register am I"
+/// is the same question on every POS screen and answering it twice
+/// invites the two answers to differ.
+class PosRegisterPicker extends StatelessWidget {
+  const PosRegisterPicker({
+    super.key,
     required this.registers,
     required this.selectedId,
     required this.onPicked,

@@ -6288,6 +6288,43 @@ extension RepoPos on Repo {
             .order('opened_at'),
       );
 
+  /// The room, as one query: every active table in the outlet and the
+  /// parked bill sitting on it, if there is one.
+  ///
+  /// Occupancy is not a column anywhere — it is derived from whether a
+  /// parked sale points at the table. That is what makes a crashed
+  /// tablet harmless: nothing was left set, so nothing has to be
+  /// unset.
+  Future<List<Map<String, dynamic>>> posFloorPlan(String outletId) async =>
+      Repo.rows(
+        await client.rpc('pos_floor_plan', params: {'p_outlet': outletId}),
+      );
+
+  /// Seats a table and returns the bill on it. Returns the bill that is
+  /// already there when there is one, so a second tap on an occupied
+  /// table opens it rather than starting a rival.
+  Future<String> seatTable(
+    String registerId,
+    String tableId, {
+    int? covers,
+  }) async =>
+      await client.rpc(
+            'seat_table',
+            params: {
+              'p_register': registerId,
+              'p_table': tableId,
+              if (covers != null) 'p_covers': covers,
+            },
+          )
+          as String;
+
+  /// Moves a bill, and everything ordered on it, to another table.
+  Future<void> movePosSale(String saleId, String tableId) async =>
+      await client.rpc(
+        'move_pos_sale',
+        params: {'p_sale': saleId, 'p_table': tableId},
+      );
+
   /// The whole answer: what it came to, what the drawer asks for, what
   /// comes back and what rounding did. Four numbers because the customer
   /// can see all four, and a till that only showed the total would be

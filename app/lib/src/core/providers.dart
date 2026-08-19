@@ -1780,3 +1780,11 @@ final parkedPosSalesProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, registerId) => requireRepo(ref).parkedPosSales(registerId),
     );
+
+/// The room. Keyed on the outlet rather than the register, because the
+/// tables belong to the shop and not to the device looking at them —
+/// two waiters on two tablets are looking at the same floor.
+final posFloorPlanProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, outletId) => requireRepo(ref).posFloorPlan(outletId),
+    );

@@ -190,6 +190,17 @@ const _destinations = <_Dest>[
     '/till',
     module: 'pos',
   ),
+  // Beside the till rather than inside it. A waiter working the room
+  // and a cashier working the counter are two people on two devices,
+  // and making one of them a tab of the other's screen would put a
+  // dining room behind a drawer they never open.
+  _Dest(
+    'Floor',
+    Icons.table_restaurant_outlined,
+    Icons.table_restaurant,
+    '/floor',
+    module: 'pos',
+  ),
   _Dest('Chat', Icons.forum_outlined, Icons.forum, '/chat', module: 'chat'),
   // No module gate. Chasing an unpaid invoice is what the sales ledger
   // is for when a customer does not pay, and sales is core.
