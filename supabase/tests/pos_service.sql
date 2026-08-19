@@ -33,6 +33,13 @@ declare
   v_sale   uuid;
   v_mon    date;
   v_ten    timestamptz;
+  v_plan   uuid;
+  v_urut   uuid;
+  v_mem    uuid;
+  v_sub    uuid;
+  v_sale2  uuid;
+  v_line   uuid;
+  v_a      numeric;
 begin
   v_org := pg_temp.test_org('Salon Seri Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
@@ -195,6 +202,126 @@ begin
   perform pg_temp.check_eq('a quiet day is a day with no bookings on it',
     (select count(*) from public.pos_day_sheet(v_outlet, v_mon + 1) d
       where d.booking_id is not null), 0);
+
+  -- ------------------------------------------------------------------
+  -- Memberships
+  -- ------------------------------------------------------------------
+  -- Two halves that must not be confused: money arriving every month,
+  -- and an entitlement taken one class at a time.
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price, cost_price)
+  values (v_org, 'PLAN', 'Keahlian bulanan', 'service', false, 'C62', 150.00, 0)
+  returning id into v_plan;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price, cost_price)
+  values (v_org, 'URUT', 'Urutan', 'service', false, 'C62', 120.00, 0)
+  returning id into v_urut;
+
+  insert into public.pos_memberships
+    (org_id, code, name, item_id, period, sessions_included)
+  values (v_org, 'GOLD', 'Gold bulanan', v_plan, 'monthly', 2) returning id into v_mem;
+  -- Covers haircuts and nothing else. An empty list would mean
+  -- everything, which is what "unlimited" is.
+  insert into public.membership_items (org_id, membership_id, item_id)
+  values (v_org, v_mem, v_cut);
+
+  v_sale2 := public.open_pos_sale(v_reg, v_cust);
+  perform public.add_pos_sale_line(v_sale2, v_plan, 1, 150.00);
+  begin
+    perform public.start_membership(v_sale2, v_mem);
+    raise exception 'FAIL started a membership nobody had paid for';
+  exception when check_violation then
+    raise notice 'ok   a membership cannot start before the money does';
+  end;
+
+  perform public.complete_pos_sale(v_sale2, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 150.00)));
+  v_sub := public.start_membership(v_sale2, v_mem);
+  perform pg_temp.check_true('paying for it starts it', v_sub is not null);
+
+  -- The renewal is the scheduler 0097 already built, not a second one.
+  perform pg_temp.check_true('the renewal is on the existing scheduler',
+    (select s.recurring_document_id from public.pos_membership_subscriptions s
+      where s.id = v_sub) is not null);
+  perform pg_temp.check_true('at the membership''s own period',
+    (select r.frequency from public.recurring_documents r
+      join public.pos_membership_subscriptions s on s.recurring_document_id = r.id
+     where s.id = v_sub) = 'monthly');
+  perform pg_temp.check_true('starting after the period just paid for',
+    (select r.next_run_date from public.recurring_documents r
+      join public.pos_membership_subscriptions s on s.recurring_document_id = r.id
+     where s.id = v_sub) = (current_date + interval '1 month')::date);
+  perform pg_temp.check_eq('so nothing is waiting for a billing schedule',
+    (select count(*) from public.membership_billing_gaps(v_org)), 0);
+
+  perform pg_temp.check_eq('two sessions are included',
+    (select b.included from public.membership_balance(v_sub) b), 2);
+
+  -- ------------------------------------------------------------------
+  -- Taking what was paid for
+  -- ------------------------------------------------------------------
+  v_sale2 := public.open_pos_sale(v_reg, v_cust);
+  v_line  := public.add_pos_sale_line(v_sale2, v_cut, 1, 45.00);
+  perform pg_temp.check_eq('a haircut costs forty-five before the membership',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale2), 45.00);
+
+  v_a := public.cover_line_with_membership(v_line, v_sub);
+  perform pg_temp.check_eq('the membership covers the whole line', v_a, 45.00);
+  perform pg_temp.check_eq('so there is nothing to pay',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale2), 0.00);
+  -- The line stays, at nothing. A receipt showing "Cut 45.00 —
+  -- Membership -45.00" is one the member can check; one showing nothing
+  -- looks like they were never there.
+  perform pg_temp.check_eq('and the line is still on the bill',
+    (select count(*) from public.pos_sale_lines l where l.sale_id = v_sale2), 1);
+  perform pg_temp.check_eq('one session used',
+    (select b.used from public.membership_balance(v_sub) b), 1);
+  perform pg_temp.check_eq('one left',
+    (select b.remaining from public.membership_balance(v_sub) b), 1);
+
+  begin
+    perform public.cover_line_with_membership(v_line, v_sub);
+    raise exception 'FAIL covered one line with two sessions';
+  exception when unique_violation then
+    raise notice 'ok   a line cannot be covered twice';
+  end;
+
+  begin
+    perform public.cover_line_with_membership(
+      public.add_pos_sale_line(v_sale2, v_urut, 1, 120.00), v_sub);
+    raise exception 'FAIL covered something the membership does not include';
+  exception when check_violation then
+    raise notice 'ok   a membership does not cover what it does not cover';
+  end;
+  perform pg_temp.check_eq('so the massage is still chargeable',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale2), 120.00);
+
+  -- The allowance runs out, and says so.
+  perform public.cover_line_with_membership(
+    public.add_pos_sale_line(v_sale2, v_cut, 1, 45.00), v_sub);
+  perform pg_temp.check_eq('both sessions are gone',
+    (select b.remaining from public.membership_balance(v_sub) b), 0);
+  begin
+    perform public.cover_line_with_membership(
+      public.add_pos_sale_line(v_sale2, v_cut, 1, 45.00), v_sub);
+    raise exception 'FAIL gave away a third session on a package of two';
+  exception when check_violation then
+    raise notice 'ok   a third class on a package of two is not covered';
+  end;
+
+  -- The property that makes the ledger worth having: taking the class
+  -- off the bill gives the session back, without anybody remembering to.
+  delete from public.pos_sale_lines where id = v_line;
+  perform pg_temp.check_eq('removing the line gives the session back',
+    (select b.remaining from public.membership_balance(v_sub) b), 1);
+
+  -- And cancelling stops the invoices. A cancelled member who keeps
+  -- being billed is the complaint that reaches the regulator.
+  perform public.set_membership_status(v_sub, 'cancelled');
+  perform pg_temp.check_true('a cancelled member stops being invoiced',
+    not (select r.is_active from public.recurring_documents r
+          join public.pos_membership_subscriptions s on s.recurring_document_id = r.id
+         where s.id = v_sub));
 
   raise notice 'point of sale service: all assertions passed';
 end;
