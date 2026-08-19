@@ -211,7 +211,11 @@ void main() {
     await tester.tap(find.textContaining('Add · '));
     await tester.pumpAndSettle();
 
-    expect(out, containsAll<String>(['m2', 'm3']));
+    // `containsAll` takes no type argument — it is
+    // `Matcher Function(Iterable<dynamic>)`. Writing containsAll<String>
+    // is an analyzer error rather than a runtime one, which is why it
+    // took a CI run to find rather than a failing assertion.
+    expect(out, containsAll(<String>['m2', 'm3']));
 
     // And backing out writes nothing at all — the line does not exist
     // yet when the sheet is open, so there is nothing half-built to
