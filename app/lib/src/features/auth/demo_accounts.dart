@@ -82,6 +82,12 @@ const demoAccounts = <DemoAccount>[
     sees: 'A strata scheme and a commercial block, with their charges',
     icon: Icons.apartment_outlined,
   ),
+  DemoAccount(
+    email: 'warung@iakauntan.com',
+    role: 'Café owner',
+    sees: 'A dining room mid-service — tables, kitchen screen, kiosk',
+    icon: Icons.restaurant_outlined,
+  ),
 ];
 
 /// Not offered: `superadmin@iakauntan.com`, the platform operator.

@@ -37,6 +37,7 @@ declare
   v_sinar   uuid;
   v_amanah  uuid;
   v_harta   uuid;
+  v_warung  uuid;
   v_entities integer;
   v_units   integer;
   v_bank    numeric;
@@ -51,8 +52,8 @@ begin
   select count(*) into v_users from auth.users
    where raw_app_meta_data ->> 'demo' = 'true';
 
-  perform pg_temp.check_eq('three demo companies', v_orgs, 3);
-  perform pg_temp.check_eq('five demo logins', v_users, 5);
+  perform pg_temp.check_eq('four demo companies', v_orgs, 4);
+  perform pg_temp.check_eq('six demo logins', v_users, 6);
 
   -- --------------------------------------------------------------
   -- The promise on the sign-in page
@@ -92,6 +93,32 @@ begin
   perform pg_temp.check_true(
     'a demo company is fully set up, not a shell: ' ||
     coalesce(v_missing, 'nothing missing'), v_missing is null);
+
+  -- --------------------------------------------------------------
+  -- The dining room is furnished, and in service
+  -- --------------------------------------------------------------
+  -- A demo whose floor plan shows eight free tables demonstrates a
+  -- floor plan. The point of the warung is that service is under way,
+  -- so what is asserted is the parties seated and the food ordered
+  -- rather than the furniture.
+  select id into v_warung from public.organizations
+   where name = 'Warung Sedap Enterprise';
+  perform pg_temp.check_true('the warung exists', v_warung is not null);
+  perform pg_temp.check_true('with tables in more than one area',
+    (select count(distinct t.area_id) from public.pos_tables t
+      where t.org_id = v_warung) > 1);
+  perform pg_temp.check_true('a kiosk among its tills',
+    exists (select 1 from public.pos_registers r
+             where r.org_id = v_warung and r.is_kiosk));
+  perform pg_temp.check_true('parties actually seated',
+    (select count(*) from public.pos_sales s
+      where s.org_id = v_warung and s.status = 'parked'
+        and s.table_id is not null) >= 2);
+  perform pg_temp.check_true('with their order in the kitchen',
+    exists (select 1 from public.pos_kitchen_tickets k where k.org_id = v_warung));
+  perform pg_temp.check_true('and something already settled, so the day is not zero',
+    exists (select 1 from public.pos_sales s
+             where s.org_id = v_warung and s.status = 'completed'));
 
   -- --------------------------------------------------------------
   -- SST, set the only way that produces a coherent state
