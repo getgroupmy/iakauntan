@@ -92,6 +92,7 @@ jobs:
                    supabase/tests/payroll_chart.sql \
                    supabase/tests/ticketing.sql \
                    supabase/tests/inventory_forecast.sql \
+                   supabase/tests/pos.sql \
                    supabase/tests/demo_teardown.sql \
                    supabase/tests/demo_rebuild.sql \
                    supabase/tests/multicurrency.sql \
