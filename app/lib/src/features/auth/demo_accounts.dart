@@ -88,6 +88,18 @@ const demoAccounts = <DemoAccount>[
     sees: 'A dining room mid-service — tables, kitchen screen, kiosk',
     icon: Icons.restaurant_outlined,
   ),
+  DemoAccount(
+    email: 'salon@iakauntan.com',
+    role: 'Salon owner',
+    sees: 'A day of appointments, two chairs, and a monthly package',
+    icon: Icons.content_cut_outlined,
+  ),
+  DemoAccount(
+    email: 'stall@iakauntan.com',
+    role: 'Stall owner',
+    sees: 'A phone in a van, and a morning of sales that landed late',
+    icon: Icons.local_shipping_outlined,
+  ),
 ];
 
 /// Not offered: `superadmin@iakauntan.com`, the platform operator.

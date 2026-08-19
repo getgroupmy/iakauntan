@@ -33,7 +33,9 @@ void main() {
       // a button that fails on tap, so the list and the seed have to
       // move together — and the seed goes first. `property@` was added
       // to both in the same change that built the property tenant, and
-      // `warung@` in the one that built the café the till sells from.
+      // `warung@` in the one that built the café the till sells from,
+      // and `salon@` and `stall@` in the one that gave the service and
+      // mobile business types somewhere to be looked at.
       //
       // This assertion has now caught the same omission twice, which is
       // the argument for pinning the whole list rather than checking
@@ -47,6 +49,8 @@ void main() {
         'secretary@iakauntan.com',
         'property@iakauntan.com',
         'warung@iakauntan.com',
+        'salon@iakauntan.com',
+        'stall@iakauntan.com',
       ]);
     });
 

@@ -38,6 +38,8 @@ declare
   v_amanah  uuid;
   v_harta   uuid;
   v_warung  uuid;
+  v_salon   uuid;
+  v_stall   uuid;
   v_entities integer;
   v_units   integer;
   v_bank    numeric;
@@ -52,8 +54,8 @@ begin
   select count(*) into v_users from auth.users
    where raw_app_meta_data ->> 'demo' = 'true';
 
-  perform pg_temp.check_eq('four demo companies', v_orgs, 4);
-  perform pg_temp.check_eq('six demo logins', v_users, 6);
+  perform pg_temp.check_eq('six demo companies', v_orgs, 6);
+  perform pg_temp.check_eq('eight demo logins', v_users, 8);
 
   -- --------------------------------------------------------------
   -- The promise on the sign-in page
@@ -119,6 +121,86 @@ begin
   perform pg_temp.check_true('and something already settled, so the day is not zero',
     exists (select 1 from public.pos_sales s
              where s.org_id = v_warung and s.status = 'completed'));
+
+  -- --------------------------------------------------------------
+  -- Every POS business type has somewhere to be looked at
+  -- --------------------------------------------------------------
+  --
+  -- The gate this section exists to be: `app.pos_business_type` has
+  -- five values, and a module sold on running five kinds of shop that
+  -- can only be shown running three is a module whose demo argues
+  -- against its own pitch. Counted rather than listed, so adding a
+  -- sixth business type fails here until it has a tenant.
+  perform pg_temp.check_eq(
+    'every POS business type has a demo outlet',
+    (select count(distinct o.business_type)
+       from public.pos_outlets o
+       join public.organizations g on g.id = o.org_id
+      where g.is_demo),
+    (select count(*) from unnest(enum_range(null::app.pos_business_type)) e
+      -- kiosk is a register flag rather than a shop of its own; the
+      -- warung's screen by the door is where it is demonstrated, and
+      -- the assertion below is the one that covers it.
+      where e::text <> 'kiosk'));
+
+  -- --------------------------------------------------------------
+  -- The salon: a day with all four states of a slot in it
+  -- --------------------------------------------------------------
+  --
+  -- Writing the seed established that `arrived` is a state you pass
+  -- through rather than rest in — completing the sale moves the
+  -- booking to `completed`. So a demo that checked somebody in and
+  -- then took their money would show nobody in the chair. Asserted
+  -- here because it is exactly the sort of thing a later edit would
+  -- quietly undo.
+  select id into v_salon from public.organizations
+   where name = 'Seri Ayu Salon & Spa Sdn Bhd';
+  perform pg_temp.check_true('the salon exists', v_salon is not null);
+  perform pg_temp.check_true('two chairs, and not on the same hours',
+    (select count(distinct h.starts_at) from public.pos_provider_hours h
+      where h.org_id = v_salon) > 1);
+  perform pg_temp.check_true('somebody is in the chair, with the bill still open',
+    exists (select 1 from public.pos_bookings b
+             where b.org_id = v_salon and b.status = 'arrived'
+               and b.sale_id is not null));
+  perform pg_temp.check_true('one already done and paid for',
+    exists (select 1 from public.pos_bookings b
+             where b.org_id = v_salon and b.status = 'completed'));
+  perform pg_temp.check_true('one still to come',
+    exists (select 1 from public.pos_bookings b
+             where b.org_id = v_salon and b.status = 'booked'));
+  perform pg_temp.check_true('and one that did not turn up',
+    exists (select 1 from public.pos_bookings b
+             where b.org_id = v_salon and b.status = 'no_show'));
+  perform pg_temp.check_true('with a membership to sell',
+    exists (select 1 from public.pos_memberships m where m.org_id = v_salon));
+
+  -- --------------------------------------------------------------
+  -- The stall: takings that arrived after the fact, exactly once
+  -- --------------------------------------------------------------
+  --
+  -- The seed deliberately sends the same batch twice. What is asserted
+  -- is the count that would double if landing were not idempotent —
+  -- the property the whole offline design exists for, carried by the
+  -- tenant as evidence rather than only claimed in a test.
+  select id into v_stall from public.organizations
+   where name = 'Roti Warisan Enterprise';
+  perform pg_temp.check_true('the stall exists', v_stall is not null);
+  perform pg_temp.check_eq('three sales came in from the offline queue',
+    (select count(*)::integer from public.pos_sales s
+      where s.org_id = v_stall and s.offline_sold_at is not null), 3);
+  perform pg_temp.check_eq(
+    'and the batch sent twice landed once, not twice',
+    (select count(*)::integer from public.pos_sales s
+      where s.org_id = v_stall and s.status = 'completed'), 4);
+  perform pg_temp.check_true(
+    'the till''s clock is kept alongside the server''s',
+    (select bool_and(s.offline_sold_at < s.completed_at)
+       from public.pos_sales s
+      where s.org_id = v_stall and s.offline_sold_at is not null));
+  perform pg_temp.check_eq('and nothing was rejected',
+    (select count(*)::integer from public.pos_offline_rejects r
+      where r.org_id = v_stall), 0);
 
   -- --------------------------------------------------------------
   -- SST, set the only way that produces a coherent state

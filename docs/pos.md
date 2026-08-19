@@ -297,13 +297,38 @@ counter that has collected one.
 
 ## Somewhere to look at it
 
-`warung@iakauntan.com` — **Warung Sedap Enterprise**, a sole proprietor
-café with two rooms and seven tables,
-three registers (counter, waiter's tablet, kiosk), two kitchen stations,
-a menu with modifier groups, a loyalty scheme with a member on it, two
-tables mid-service with orders in the kitchen, one settled counter sale
-and one kiosk order waiting to be collected. Seeded by
-`app.demo_warung()` and asserted by `supabase/tests/demo_rebuild.sql`.
+Every business type the module sells has a tenant, and
+`demo_rebuild.sql` counts them against the enum rather than listing
+them — so a sixth business type fails CI until it has somewhere to be
+looked at.
+
+| Type | Login | What is going on in it |
+|---|---|---|
+| `retail` | `demo@iakauntan.com` | Sinar's trade counter, selling out of the warehouse the forecast is about |
+| `food_beverage` | `warung@iakauntan.com` | **Warung Sedap Enterprise** — two rooms, seven tables, two kitchen stations, a menu with modifier groups, a loyalty card, two parties seated with orders in the kitchen and one bill already settled |
+| `kiosk` | `warung@iakauntan.com` | The screen by the warung's door: an order paid by card, given a number, waiting on the board |
+| `service` | `salon@iakauntan.com` | **Seri Ayu Salon & Spa** — two chairs on different hours, four services, a monthly facial package, and a day holding all four states a slot can be in |
+| `mobile` | `stall@iakauntan.com` | **Roti Warisan Enterprise** — one phone in a van, and a lunchtime rush that landed from the offline queue |
+
+Two of these carry evidence rather than claims, which is the point of
+seeding them at all:
+
+**The salon's day has one of each.** One appointment done and paid,
+one *in the chair with the bill still open*, two still to come and one
+no-show. Writing the seed is what established that `arrived` is a state
+you pass through rather than rest in — `app.pos_booking_follows_sale`
+moves the booking to `completed` the moment its sale completes, so a
+demo that checked somebody in and then took their money would show
+nobody in the chair at all. The test asserts all four states, because
+that is exactly the kind of thing a later edit undoes without noticing.
+
+**The stall sends its batch twice.** `app.demo_stall` calls
+`ingest_offline_sales` with the same three sales a second time, the way
+a van coming back into signal retries what it is not sure went. Three
+land, three come back `already`, and the tenant ends with four completed
+sales rather than seven. The idempotence the whole offline design exists
+for is therefore visible in the demo data, not only asserted in
+`pos_offline.sql`.
 
 ## Not built yet
 

@@ -1224,15 +1224,18 @@ and that does not belong in this repo.
 
 ## Demo data
 
-Four worked companies are loaded in the project, rebuilt together by
+Six worked companies are loaded in the project, rebuilt together by
 `app.demo_rebuild()`: **Sinar Teknologi Sdn Bhd** (a trading company with
 a full financial year, payroll, a helpdesk and a trade counter),
 **Amanah Setiausaha Sdn Bhd** (a corp-sec practice), **Harta Prima
-Management Sdn Bhd** (a strata scheme and a commercial block) and
-**Warung Sedap Enterprise** (a sole proprietor café mid-service — see
-`docs/pos.md`).
+Management Sdn Bhd** (a strata scheme and a commercial block), and three
+shops that between them cover every kind of till the POS module sells —
+**Warung Sedap Enterprise** (a café mid-service, with the kiosk by its
+door), **Seri Ayu Salon & Spa Sdn Bhd** (a day of appointments) and
+**Roti Warisan Enterprise** (a van whose morning takings landed after
+the signal came back). See `docs/pos.md`.
 
-All six logins share the password `Demo!Akaun2026`:
+All eight logins share the password `Demo!Akaun2026`:
 
 | Login | Sees |
 | --- | --- |
@@ -1242,8 +1245,10 @@ All six logins share the password `Demo!Akaun2026`:
 | `secretary@iakauntan.com` | Company secretary — a practice and its clients |
 | `property@iakauntan.com` | Property manager — a strata scheme and a commercial block |
 | `warung@iakauntan.com` | Café owner — tables, kitchen screen and a kiosk |
+| `salon@iakauntan.com` | Salon owner — two chairs, a day of bookings, a monthly package |
+| `stall@iakauntan.com` | Stall owner — one phone, and sales that landed offline |
 
-**None of that needs typing.** The sign-in page lists those six accounts
+**None of that needs typing.** The sign-in page lists those eight accounts
 under *or look around a demo*, each described by what it will show rather
 than by the name of its role, and a tap signs straight in.
 
@@ -1271,7 +1276,7 @@ demonstrating something other than the product.
 
 **Turn it off before this project holds a real ledger.** The panel ships
 the demo password inside the bundle, which is harmless only while those
-six accounts are the only thing it opens. Two things to do, together:
+eight accounts are the only thing it opens. Two things to do, together:
 
 - set the repository variable `DEMO_MODE` to `false` (or build with
   `--dart-define=DEMO_MODE=false`), which removes the panel; and
@@ -1286,7 +1291,7 @@ session on a shared account means handing them the ability to change its
 password and lock out every visitor after them — or move its email and
 take the account. `0076` puts a trigger on `auth.users` that refuses any
 change to the password, email or phone of an account flagged
-`app_metadata.demo`, and the six seeded logins carry that flag.
+`app_metadata.demo`, and the eight seeded logins carry that flag.
 
 It is a trigger rather than a hidden button because the change is an
 ordinary POST to GoTrue's `/auth/v1/user`, which never passes through
