@@ -6150,6 +6150,19 @@ extension RepoForecasting on Repo {
 /// a till that could write those rows directly could tell the drawer it
 /// had been paid.
 extension RepoPos on Repo {
+  /// The shops. Registers carry their outlet, which is enough for a
+  /// till but not for a settings screen: a shop with a kitchen and no
+  /// till yet still has to be configurable, and one with three tills
+  /// must not appear three times in the picker.
+  Future<List<Map<String, dynamic>>> posOutlets() async => Repo.rows(
+    await client
+        .from('pos_outlets')
+        .select()
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .order('code'),
+  );
+
   /// The tills this company has, with the outlet each stands in.
   Future<List<Map<String, dynamic>>> posRegisters() async => Repo.rows(
     await client
@@ -6472,6 +6485,83 @@ extension RepoPos on Repo {
         .eq('is_active', true)
         .order('sort_order')
         .order('code'),
+  );
+
+  /// Adds a counter, or renames one. One call rather than two, because
+  /// making a second station the default has to clear the first in the
+  /// same transaction — the unique partial index rejects a second, and
+  /// doing it as two round trips leaves a moment with no default at
+  /// all, which is the moment `send_order_to_kitchen` refuses an
+  /// unrouted dish.
+  Future<String> upsertKitchenStation({
+    required String outletId,
+    required String code,
+    required String name,
+    String? id,
+    int sortOrder = 0,
+    bool isDefault = false,
+    bool isActive = true,
+  }) async =>
+      await client.rpc(
+            'upsert_kitchen_station',
+            params: {
+              'p_outlet': outletId,
+              'p_code': code,
+              'p_name': name,
+              if (id != null) 'p_id': id,
+              'p_sort_order': sortOrder,
+              'p_is_default': isDefault,
+              'p_is_active': isActive,
+            },
+          )
+          as String;
+
+  /// Takes a counter out of service. Retired rather than deleted:
+  /// `pos_kitchen_tickets.station_id` cascades, so removing the row
+  /// would remove every docket it ever received.
+  Future<void> retireKitchenStation(String stationId) async =>
+      await client.rpc(
+        'retire_kitchen_station',
+        params: {'p_station': stationId},
+      );
+
+  /// "This dish goes to the bar." Null clears it, so the dish falls
+  /// back to its category rule and then to the outlet's default.
+  Future<void> routeItemToStation(
+    String itemId,
+    String outletId,
+    String? stationId,
+  ) async => await client.rpc(
+    'route_item_to_station',
+    params: {
+      'p_item': itemId,
+      'p_outlet': outletId,
+      'p_station': stationId,
+    },
+  );
+
+  /// "Drinks go to the bar."
+  Future<void> routeCategoryToStation(
+    String categoryId,
+    String outletId,
+    String? stationId,
+  ) async => await client.rpc(
+    'route_category_to_station',
+    params: {
+      'p_category': categoryId,
+      'p_outlet': outletId,
+      'p_station': stationId,
+    },
+  );
+
+  /// Where everything currently goes, and which of the three rules
+  /// decided it. The reason comes back with the answer: a screen
+  /// showing only the station would leave somebody unable to tell a
+  /// rule they set from a default they inherited.
+  Future<List<Map<String, dynamic>>> posStationRouting(
+    String outletId,
+  ) async => Repo.rows(
+    await client.rpc('pos_station_routing', params: {'p_outlet': outletId}),
   );
 
   /// What is on the pass. Only the tickets still in play — served and

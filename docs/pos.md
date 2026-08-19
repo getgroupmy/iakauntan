@@ -354,9 +354,44 @@ lists every open bill in the shop.
 The number comes before the thanks because `complete_kiosk_order` takes
 it before the sale completes, so a customer who has paid always has one.
 
-## Six screens, six readers
+## Setting up a counter, and saying what goes to it
 
-The module is not one face but six, and what separates them is who is
+0215 built the routing and asserted it. It was reachable only by writing
+SQL: a shop that wanted a bar had no way to say so. `/counters` is where
+a shopkeeper states it now, over three functions in 0228 that exist
+because doing the same thing directly goes wrong.
+
+- **One default, cleared in the same transaction.**
+  `pos_kitchen_stations_one_default` is a unique partial index, so
+  making a second counter the default has to clear the first or the
+  write fails. Two client calls would leave a moment with no default at
+  all — which is exactly the moment `send_order_to_kitchen` refuses an
+  unrouted dish.
+- **One counter per dish per outlet.** `item_kitchen_stations` is unique
+  on `(item_id, station_id)` and has to allow two rows, because the same
+  dish in two shops is two rows. But `app.pos_route_item` takes
+  `limit 1`, so two rows in *one* outlet means the bar and the kitchen
+  take turns receiving the drink and nobody can say why.
+  `route_item_to_station` clears that outlet's other rules first.
+- **Retired, never deleted.** `pos_kitchen_tickets.station_id` cascades,
+  so deleting a counter would delete every docket it ever received — a
+  day of kitchen history removed by somebody tidying a list. Retiring
+  sets `is_active` false, which is what routing already checks, and
+  refuses while tickets are still in play or while it is the counter
+  unrouted dishes fall back to.
+
+**The screen shows the reason, not just the answer.**
+`pos_station_routing` returns, for every sellable item, where it goes
+*and* which of the three rules decided — the dish, its category, or the
+outlet default. Without that column a default and a deliberate rule look
+identical, and somebody meaning to change one dish changes every drink
+on the menu instead. It is why the list is grouped by category: that is
+where the rule covering most of a menu actually lives, and the rows
+under it are the exceptions.
+
+## Seven screens, seven readers
+
+The module is not one face but seven, and what separates them is who is
 holding the device rather than which feature they reach.
 
 | Screen | Route | Read by |
@@ -366,6 +401,7 @@ holding the device rather than which feature they reach.
 | Kitchen | `/kitchen` | A cook, hands full, further away still |
 | Diary | `/diary` | A receptionist, on a phone, mid-sentence |
 | Kiosk | `/kiosk` | **A customer**, ordering for themselves |
+| Counters | `/counters` | Whoever runs the shop, once |
 | Order board | `/order-board` | **A customer**, holding a tray |
 
 They share a register picker and nothing else, because the thing that
@@ -600,11 +636,6 @@ for is therefore visible in the demo data, not only asserted in
   terminal
 - Cash drawer and receipt printer drivers. The receipt renders; opening a
   physical drawer is between the browser and the hardware
-- Setting kitchen routing from the app. `item_kitchen_stations` and
-  `category_kitchen_stations` decide which counter a dish goes to, and
-  `pos_kitchen_stations` is where a counter is defined — all three are
-  built, asserted and reachable only by SQL. There is no screen for
-  adding a bar, or for saying "drinks go to it"
 - Order channels. An outlet has a `business_type` (retail, food and
   beverage, mobile, service, kiosk), which is the shape of the shop and
   not how an order arrived. Dine-in, takeaway, reservation, delivery and

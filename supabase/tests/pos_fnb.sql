@@ -29,6 +29,7 @@ declare
   v_reg3   uuid;
   v_shift3 uuid;
   v_claim  uuid;
+  v_st3    uuid;
   v_area   uuid;
   v_t7     uuid;
   v_t8     uuid;
@@ -600,6 +601,109 @@ begin
   exception when check_violation then
     raise notice 'ok   a bill cannot be taken to another outlet';
   end;
+
+  -- ------------------------------------------------------------------
+  -- Setting up a counter, and saying what goes to it
+  -- ------------------------------------------------------------------
+  --
+  -- 0215 built the routing and left it reachable only by writing SQL.
+  -- 0228's functions are what a screen calls, and each exists because
+  -- doing the same thing directly goes wrong.
+
+  -- One default, cleared in the same transaction. Two client calls
+  -- would leave a moment with no default at all, which is exactly the
+  -- moment `send_order_to_kitchen` refuses an unrouted dish.
+  v_st3 := public.upsert_kitchen_station(
+    v_outlet, 'PASTRY', 'Pastry', null, 3, true);
+  perform pg_temp.check_eq('exactly one counter takes anything unrouted',
+    (select count(*) from public.pos_kitchen_stations st
+      where st.outlet_id = v_outlet and st.is_default), 1);
+  perform pg_temp.check_true('and it is the one just made the default',
+    (select st.is_default from public.pos_kitchen_stations st
+      where st.id = v_st3));
+
+  -- A dish beats its category. The drink already has a category rule
+  -- pointing at the bar, so this is the override rather than the first
+  -- rule it has ever had.
+  perform public.route_item_to_station(v_teh, v_outlet, v_st3);
+  perform pg_temp.check_eq('the dish goes where it was told',
+    (select r.station from public.pos_station_routing(v_outlet) r
+      where r.item_id = v_teh), 'Pastry');
+  perform pg_temp.check_eq('and the screen can say a person decided that',
+    (select r.decided_by from public.pos_station_routing(v_outlet) r
+      where r.item_id = v_teh), 'item');
+
+  -- Routing it again replaces rather than adds. Two rows for one dish
+  -- in one outlet would make `app.pos_route_item` take `limit 1` from a
+  -- set of two, and the bar and the kitchen would take turns receiving
+  -- the drink with nobody able to say why.
+  perform public.route_item_to_station(v_teh, v_outlet, v_hotst);
+  perform pg_temp.check_eq('routing again replaces the rule, not adds to it',
+    (select count(*) from public.item_kitchen_stations iks
+       join public.pos_kitchen_stations st on st.id = iks.station_id
+      where iks.item_id = v_teh and st.outlet_id = v_outlet), 1);
+  perform pg_temp.check_eq('and it goes to the new one',
+    (select r.station from public.pos_station_routing(v_outlet) r
+      where r.item_id = v_teh), 'Dapur');
+
+  -- Clearing hands the dish back to the level below, which for this one
+  -- is the category rule set up earlier.
+  perform public.route_item_to_station(v_teh, v_outlet, null);
+  perform pg_temp.check_eq('cleared, the dish falls back to its category',
+    (select r.decided_by from public.pos_station_routing(v_outlet) r
+      where r.item_id = v_teh), 'category');
+  perform pg_temp.check_eq('which is the bar',
+    (select r.station from public.pos_station_routing(v_outlet) r
+      where r.item_id = v_teh), 'Bar');
+
+  -- And clearing that one hands it to the outlet default, which is the
+  -- bottom of the three rules.
+  perform public.route_category_to_station(
+    (select i.category_id from public.items i where i.id = v_teh),
+    v_outlet, null);
+  perform pg_temp.check_eq('with no category rule either, the default takes it',
+    (select r.decided_by from public.pos_station_routing(v_outlet) r
+      where r.item_id = v_teh), 'default');
+  perform pg_temp.check_eq('and the default is the new counter',
+    (select r.station from public.pos_station_routing(v_outlet) r
+      where r.item_id = v_teh), 'Pastry');
+
+  -- Put the category rule back, because the rest of the room depends
+  -- on drinks going to the bar.
+  perform public.route_category_to_station(
+    (select i.category_id from public.items i where i.id = v_teh),
+    v_outlet, v_barst);
+  perform pg_temp.check_eq('and it can be put back',
+    (select r.station from public.pos_station_routing(v_outlet) r
+      where r.item_id = v_teh), 'Bar');
+
+  -- A counter in another outlet is not this outlet's to route to.
+  begin
+    perform public.route_item_to_station(v_teh, v_outlet, v_reg2);
+    raise exception 'FAIL routed a dish to something that is not a counter here';
+  exception when check_violation then
+    raise notice 'ok   a dish cannot be routed outside its outlet';
+  end;
+
+  -- Retiring, and the two refusals that make it safe.
+  begin
+    perform public.retire_kitchen_station(v_st3);
+    raise exception 'FAIL retired the counter unrouted dishes fall back to';
+  exception when check_violation then
+    raise notice 'ok   the default counter cannot simply be retired';
+  end;
+
+  perform public.upsert_kitchen_station(v_outlet, 'HOT', 'Dapur', v_hotst, 1, true);
+  perform public.retire_kitchen_station(v_st3);
+  perform pg_temp.check_true('a retired counter stops receiving',
+    (select not st.is_active from public.pos_kitchen_stations st
+      where st.id = v_st3));
+
+  -- Retired, not deleted. `pos_kitchen_tickets.station_id` cascades, so
+  -- a delete would take every docket the counter ever received with it.
+  perform pg_temp.check_eq('and it is still there to hang history off',
+    (select count(*) from public.pos_kitchen_stations st
+      where st.id = v_st3), 1);
 
   raise notice 'point of sale dining room: all assertions passed';
 end;

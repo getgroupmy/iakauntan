@@ -1748,6 +1748,11 @@ final itemForecastParamsProvider = FutureProvider.autoDispose
 // Point of sale
 // ---------------------------------------------------------------------
 
+final posOutletsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posOutlets(),
+    );
+
 final posRegistersProvider = FutureProvider.autoDispose<
   List<Map<String, dynamic>>
 >((ref) => requireRepo(ref).posRegisters());
@@ -1829,6 +1834,13 @@ final posServiceProvidersProvider = FutureProvider.autoDispose
 /// What is being made and what is ready, for the screen customers
 /// watch. Keyed on the outlet: the board belongs to the shop, not to
 /// the kiosk that happens to be showing it.
+/// Where every dish goes, and why. Keyed by outlet because the same
+/// menu in two shops routes two different ways.
+final posStationRoutingProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, outletId) => requireRepo(ref).posStationRouting(outletId),
+    );
+
 final kioskOrderBoardProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, outletId) => requireRepo(ref).kioskOrderBoard(outletId),
