@@ -5,9 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
-// `RepoPos` is an extension, and a Dart extension is only in scope
-// where its declaring library is imported.
-import '../../data/repository.dart';
+// No `repository.dart` here, unlike its sibling screens. This one only
+// reads a provider and calls nothing on Repo, so the extension it would
+// bring into scope is unused — and `--fatal-infos` is right to say so.
 import 'till_screen.dart' show PosRegisterPicker;
 
 /// The collection board.
