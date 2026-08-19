@@ -46,7 +46,7 @@ begin
   perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
 
   insert into public.org_modules (org_id, module_code, is_enabled)
-  select v_org, m, true from unnest(array['pos','purchases','inventory']) m
+  select v_org, m, true from unnest(array['pos','loyalty','purchases','inventory']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
 
   insert into public.warehouses (org_id, code, name)
@@ -375,6 +375,58 @@ begin
   perform public.name_pos_sale_customer(v_sale, v_walkin);
   perform pg_temp.check_eq('and once they are off, it moves',
     (select s.contact_id from public.pos_sales s where s.id = v_sale), v_walkin);
+
+  -- ------------------------------------------------------------------
+  -- Loyalty is a module of its own
+  -- ------------------------------------------------------------------
+  --
+  -- 0231 moved every guard here off `pos`. The assertion that matters
+  -- is the negative one: a company with the till and without loyalty
+  -- must be refused, because until 0231 it was not.
+  update public.org_modules set is_enabled = false
+   where org_id = v_org and module_code = 'loyalty';
+
+  perform pg_temp.check_eq('with the module off, the card is invisible',
+    (select count(*) from public.loyalty_account_balance(v_member)), 0);
+  perform pg_temp.check_eq('and so is the search',
+    (select count(*) from public.loyalty_lookup(v_org, 'CARD-0001')), 0);
+
+  begin
+    perform public.enrol_loyalty_member(v_member, 'CARD-0002');
+    raise exception 'FAIL enrolled a member without the loyalty module';
+  exception when insufficient_privilege then
+    raise notice 'ok   enrolling needs the loyalty module';
+  end;
+
+  -- The one that was never guarded at all before 0231: handing out
+  -- points is handing out money, and an owner of a company that never
+  -- bought the feature could do it.
+  begin
+    perform public.adjust_loyalty_points(v_acct, 100, 'Should be refused');
+    raise exception 'FAIL adjusted points without the loyalty module';
+  exception when insufficient_privilege then
+    raise notice 'ok   adjusting points needs the loyalty module';
+  end;
+
+  -- A sale still completes. Turning the module off must not stop the
+  -- shop selling -- it stops the sale earning.
+  v_sale := public.open_pos_sale(v_reg, v_member);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 50.00);
+  perform public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 50.00)));
+  perform pg_temp.check_true('the till keeps selling without loyalty',
+    (select s.status = 'completed' from public.pos_sales s where s.id = v_sale));
+  perform pg_temp.check_eq('and the sale earns nothing',
+    (select coalesce(s.loyalty_points_earned, 0) from public.pos_sales s
+      where s.id = v_sale), 0);
+
+  -- The positive control. Every refusal above would also hold if the
+  -- functions were simply broken, so switch it back on and watch them
+  -- work again.
+  update public.org_modules set is_enabled = true
+   where org_id = v_org and module_code = 'loyalty';
+  perform pg_temp.check_eq('switched back on, the card is there again',
+    (select count(*) from public.loyalty_account_balance(v_member)), 1);
 
   raise notice 'point of sale loyalty: all assertions passed';
 end;

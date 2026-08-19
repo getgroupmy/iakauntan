@@ -36,6 +36,13 @@ class MemberPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Loyalty is its own module. A shop that has not bought it gets no
+    // panel rather than an empty one — and the server agrees: since
+    // 0231 every loyalty function is gated on `loyalty` rather than on
+    // the till, so a client that showed this anyway would be offering
+    // buttons that come back refused.
+    if (!moduleEnabled(ref, 'loyalty')) return const SizedBox.shrink();
+
     final member = ref.watch(posSaleMemberProvider(saleId));
     return member.maybeWhen(
       data: (row) => row == null ? const SizedBox.shrink() : _Panel(

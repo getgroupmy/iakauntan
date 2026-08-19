@@ -132,6 +132,63 @@ it, clearing it restores the basket, and a basket cleared entirely by
 points still completes: it raises an invoice for nothing and a posted
 receipt behind it, which is what the shop's books have to show.
 
+## Loyalty and memberships are modules of their own
+
+Both were built inside `pos` and gated by it, which made them free with
+the till and unavailable without it. Neither matches how they are sold:
+a salon runs memberships and a minimart runs a points card, and a shop
+that wants only the till should not be paying for either. `0231` gives
+them their own codes — `loyalty` and `memberships`, RM29 each.
+
+Registering the codes is the small part. The gate is the guard inside
+each SECURITY DEFINER function, because those bypass RLS by definition —
+a policy on `loyalty_accounts` does not stop `enrol_loyalty_member`
+writing to it. So the work was ten guards moved, two added, and a set of
+policies rebuilt.
+
+**The migration derives rather than restates.** Pasting thirteen
+function bodies with one word changed in each is six hundred lines in
+which the reader has to find thirteen differences — precisely the diff
+nobody can check that this repository objects to. Instead
+`pg_get_functiondef` returns what is installed, the module argument is
+replaced by a regex that only matches the second argument of
+`can_read_module` / `can_write_module`, and the result is executed. Both
+blocks refuse to finish unless they changed something, because a replace
+that silently matched nothing would leave the feature gated on `pos`
+while the module list claimed otherwise — a hole that looks like a
+working feature.
+
+**It found a real one.** The assertion fired on the first pass:
+`adjust_loyalty_points` and `expire_loyalty_points` are gated by
+`app.can_admin` and by nothing else, so an owner of a company that never
+bought the till could hand out or sweep points. Those two are restated
+with a module check *added*, which is why they appear in the diff in
+full — a check being added should be visible in the change that adds it.
+
+**The policies are derived for a sharper reason.** These tables do not
+carry a uniform set and must not be given one. `loyalty_entries`,
+`pos_membership_sessions` and `pos_membership_subscriptions` have a read
+policy and no write policy at all, deliberately — they are ledgers,
+written only through the functions, and a block that created a write
+policy on each would have handed clients the ability to grant themselves
+points. `loyalty_programs_write` is not module-gated but narrower, and
+replacing it would have widened who can change a company's earning rate.
+So each existing policy is rebuilt as itself with one word changed, and
+anything that never named the till is left alone.
+
+**Nothing that works today stops working.** Every organization with the
+till switched on gets both new modules switched on. Withdrawing a
+running loyalty scheme in a migration and calling it a refactor would be
+taking a feature away from people mid-service.
+
+Going forward they are genuinely separate: a *new* company buying the
+till does not get either. The demo warung buys loyalty explicitly, in
+the seed that demonstrates it.
+
+Memberships have no Flutter screen yet — the SQL is built and asserted,
+and nothing in the client calls it. So the module gate there is real but
+currently invisible, and the salon's package still lives in data only.
+
 ## Loyalty at the counter
 
 0212 built the ledger and left its two acts with no caller. Wiring them

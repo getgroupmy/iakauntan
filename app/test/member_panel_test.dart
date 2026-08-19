@@ -43,9 +43,16 @@ void main() {
     'would_earn': wouldEarn,
   };
 
-  Widget harness(Map<String, dynamic>? row) => ProviderScope(
+  Widget harness(Map<String, dynamic>? row, {bool loyalty = true}) => ProviderScope(
     overrides: [
       posSaleMemberProvider.overrideWith((_, __) async => row),
+      // Loyalty is its own module since 0231. Without these the panel
+      // is correctly hidden and every assertion below would be testing
+      // an empty screen.
+      enabledModulesProvider.overrideWith(
+        (_) async => loyalty ? {'pos', 'loyalty'} : {'pos'},
+      ),
+      myModuleAccessProvider.overrideWith((_) async => const {}),
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
@@ -125,5 +132,19 @@ void main() {
     // to spend, and a box saying so is a box in the way of the total.
     expect(find.byType(Card), findsNothing);
     expect(find.text('Puan Aminah binti Yusof'), findsNothing);
+  });
+
+  testWidgets('a shop without the loyalty module gets no panel', (
+    tester,
+  ) async {
+    await tester.pumpWidget(harness(member(), loyalty: false));
+    await tester.pumpAndSettle();
+
+    // Not a disabled panel — none. Since 0231 every loyalty function is
+    // gated on its own module, so a client that drew this anyway would
+    // be offering buttons the server comes back and refuses.
+    expect(find.byType(Card), findsNothing);
+    expect(find.text('Puan Aminah binti Yusof'), findsNothing);
+    expect(find.textContaining('points'), findsNothing);
   });
 }

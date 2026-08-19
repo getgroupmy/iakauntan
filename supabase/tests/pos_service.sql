@@ -46,7 +46,7 @@ begin
   perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
 
   insert into public.org_modules (org_id, module_code, is_enabled)
-  select v_org, m, true from unnest(array['pos','purchases','inventory']) m
+  select v_org, m, true from unnest(array['pos','memberships','purchases','inventory']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
 
   insert into public.warehouses (org_id, code, name)
