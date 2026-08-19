@@ -395,5 +395,103 @@ void main() {
       expect(find.text('Nothing on the counter'), findsOneWidget);
       expect(find.text('On the counter'), findsNothing);
     });
+
+    testWidgets('sending to the kitchen shows the bill first', (tester) async {
+      await openParked(
+        tester,
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          saleLines: [
+            {
+              'id': 'l1',
+              'line_no': 1,
+              'description': 'Mee goreng mamak',
+              'quantity': '1',
+              'unit_price': '9.00',
+              'line_total': '9.00',
+            },
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('Send to kitchen'));
+      await tester.pumpAndSettle();
+
+      // The bill, and the same words on the button that agrees to it.
+      // A cashier who cannot check what is about to be cooked finds out
+      // from the customer.
+      expect(find.text('On the counter'), findsOneWidget);
+      expect(find.text('Mee goreng mamak'), findsOneWidget);
+      expect(find.text('Send to kitchen'), findsNWidgets(2));
+    });
+
+    testWidgets('taking payment shows the bill first too', (tester) async {
+      await openParked(
+        tester,
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          saleLines: [
+            {
+              'id': 'l1',
+              'line_no': 1,
+              'description': 'Mee goreng mamak',
+              'quantity': '1',
+              'unit_price': '9.00',
+              'line_total': '9.00',
+            },
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('Take payment'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('On the counter'), findsOneWidget);
+      expect(find.text('Take payment'), findsNWidgets(2));
+    });
+
+    testWidgets('a counter needs no confirmation, the bill is on screen', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          saleLines: [
+            {
+              'id': 'l1',
+              'line_no': 1,
+              'description': 'Mee goreng mamak',
+              'quantity': '1',
+              'unit_price': '9.00',
+              'line_total': '9.00',
+            },
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('POS-2026-00001'));
+      await tester.pumpAndSettle();
+
+      // Already visible in the panel, so no sheet is opened — a
+      // confirmation that repeats what you are looking at is ceremony
+      // rather than a check.
+      expect(find.text('Mee goreng mamak'), findsOneWidget);
+      await tester.tap(find.text('Send to kitchen'));
+      await tester.pumpAndSettle();
+      expect(find.text('On the counter'), findsNothing);
+    });
   });
 }

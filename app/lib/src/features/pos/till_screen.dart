@@ -816,6 +816,30 @@ class _Basket extends ConsumerWidget {
       (n, l) => n + posNum(l['quantity']),
     );
 
+    /// On a phone the bill is behind a tap, so the two actions that
+    /// leave the till — telling the kitchen, taking the money — would
+    /// otherwise fire on a list nobody has seen. A cashier who cannot
+    /// check what is about to be cooked is a cashier who finds out from
+    /// the customer.
+    ///
+    /// Not done on a counter or a tablet: the lines are already on
+    /// screen there, and a confirmation that repeats what you are
+    /// looking at is ceremony rather than a check.
+    Future<void> review(String label, VoidCallback then) async {
+      final agreed = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => _BasketLines(
+          rows: rows,
+          mods: mods,
+          total: total,
+          scrollable: true,
+          confirmLabel: label,
+        ),
+      );
+      if (agreed == true) then();
+    }
+
     return Column(
       children: [
         // On a counter or a tablet the bill is read continuously, so it
@@ -889,7 +913,11 @@ class _Basket extends ConsumerWidget {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: total > 0 ? onSend : null,
+                  onPressed: total > 0
+                      ? (compact
+                            ? () => review('Send to kitchen', onSend)
+                            : onSend)
+                      : null,
                   icon: const Icon(Icons.soup_kitchen_outlined),
                   label: const Text('Send to kitchen'),
                 ),
@@ -898,7 +926,11 @@ class _Basket extends ConsumerWidget {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: total > 0 ? onTender : null,
+                  onPressed: total > 0
+                      ? (compact
+                            ? () => review('Take payment', onTender)
+                            : onTender)
+                      : null,
                   icon: const Icon(Icons.payments),
                   label: const Text('Take payment'),
                 ),
@@ -1295,6 +1327,7 @@ class _BasketLines extends StatelessWidget {
     required this.mods,
     required this.total,
     this.scrollable = false,
+    this.confirmLabel,
   });
 
   final List<Map<String, dynamic>> rows;
@@ -1304,6 +1337,11 @@ class _BasketLines extends StatelessWidget {
   /// True in the phone's sheet, where the list is the whole point and
   /// has to scroll however long the bill gets.
   final bool scrollable;
+
+  /// Set when the sheet is being shown to be agreed with rather than
+  /// merely read — "Send to kitchen", "Take payment". Popping true is
+  /// the agreement.
+  final String? confirmLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -1371,7 +1409,21 @@ class _BasketLines extends StatelessWidget {
           const Divider(height: 1),
           Padding(
             padding: const EdgeInsets.all(16),
-            child: _AmountRow('Total', total, emphasise: true),
+            child: Column(
+              children: [
+                _AmountRow('Total', total, emphasise: true),
+                if (confirmLabel != null) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: Text(confirmLabel!),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),

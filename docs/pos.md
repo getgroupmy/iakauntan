@@ -291,6 +291,20 @@ shares, because the sum is the property that matters — ten ringgit
 three ways is 3.34 + 3.33 + 3.33, and a split that quietly collected
 9.99 would leave a sen on the table for ever.
 
+**On a phone the bill is a count, and the lines are a tap away.** The
+narrow layout used to give the basket a fixed share of the height,
+which on an ordinary phone was enough to show one item and clip it. It
+is now one row — how many items, what they come to — opening a
+scrollable sheet with every line and its modifiers.
+
+That hiding creates an obligation, and the till meets it: **the two
+actions that leave the till show the bill first.** Sending to the
+kitchen and taking payment both open the sheet with the agreement on
+its button, because a cashier who cannot check what is about to be
+cooked finds out from the customer. A counter and a tablet skip the
+step — the lines are already on screen there, and a confirmation that
+repeats what you are looking at is ceremony rather than a check.
+
 Every figure on the tender sheet — the total, the cash due, the change,
 the rounding — comes back from `complete_pos_sale()` rather than being
 recomputed in Dart. A till that does its own arithmetic is a till that
