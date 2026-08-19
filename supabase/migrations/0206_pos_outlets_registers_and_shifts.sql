@@ -328,20 +328,44 @@ comment on table public.pos_shifts is
 -- What a till's paperwork is called
 -- ---------------------------------------------------------------------
 --
--- Restated in full rather than patched, because it is a `case` and a
--- `create or replace` that adds one arm from memory is how another
--- loses one. The only additions are the two POS types.
+-- Restated from the definition that is *current* — 0133's, which is the
+-- one running in production — and not from 0009's, which is where the
+-- function was born.
+--
+-- That distinction cost a build. "Restate in full rather than patch" is
+-- the right practice and it is only half the rule: the base has to be
+-- the newest version. Eight migrations have touched this `case` since
+-- 0009, and a restatement from the original silently dropped three arms
+-- that 0099, 0101 and 0133 had added — `withholding`, `bank_transfer`
+-- and `manufacturing_order`. A diff against 0009 showed exactly the two
+-- additions I expected, which is precisely why it was reassuring and
+-- wrong.
+--
+-- What that would have done is worse than it looks. Nothing already
+-- numbered would move, because a prefix is copied into
+-- `number_sequences` the first time a type is used. But the next
+-- company to raise its first withholding certificate would have got
+-- `WIT-` instead of `WHT-`, and kept it forever, and nothing would have
+-- said so.
+--
+-- The gate that caught it was the search_path one, which this
+-- restatement had also reverted — 0159 pinned every function and 0009
+-- predates it. It caught the right file for the wrong reason. The
+-- md5 body check I use to verify restatements cannot see `proconfig` at
+-- all, and would have been just as blind to the lost arms had I run it
+-- against 0009 rather than against production.
+--
+-- ## Why the two POS types need naming at all
 --
 -- Without them both fall to the `else`, which takes the first three
 -- letters: a shift and a sale would both be numbered `POS-`, from two
 -- different sequences, and the two series would interleave on screen
--- with no way to tell which was which. Prefixes are copied into
--- `number_sequences` the first time a type is used, so nothing already
--- numbered moves.
+-- with no way to tell which was which.
 create or replace function app.default_doc_prefix(p_doc_type text)
 returns text
 language sql
 immutable
+set search_path = pg_catalog, pg_temp
 as $$
   select case p_doc_type
     when 'quotation'            then 'QT-'
@@ -369,6 +393,9 @@ as $$
     when 'opportunity'          then 'OPP-'
     when 'contact'              then 'C-'
     when 'item'                 then 'I-'
+    when 'withholding'          then 'WHT-'
+    when 'bank_transfer'        then 'TRF-'
+    when 'manufacturing_order'  then 'MO-'
     when 'pos_shift'            then 'SH-'
     when 'pos_sale'             then 'POS-'
     else upper(left(p_doc_type, 3)) || '-'
