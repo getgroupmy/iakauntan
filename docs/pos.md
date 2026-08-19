@@ -291,6 +291,30 @@ shares, because the sum is the property that matters — ten ringgit
 three ways is 3.34 + 3.33 + 3.33, and a split that quietly collected
 9.99 would leave a sen on the table for ever.
 
+**Taking something off is two acts, and `sent_to_kitchen_at` is the
+whole test.** Before the kitchen is told, a line is a keystroke: it
+comes off with no dialog, no reason and no trace. After, food exists —
+somebody stood at a pan — so the line can only be voided with a reason
+and a name against it, and `pos_sale_line_voids` keeps what it said,
+what it was worth and whether it had been sent. `pos_void_summary()`
+groups the day by reason, because one void is an accident and thirty
+"never came out" in a week is a conversation.
+
+The line is *deleted* rather than flagged, which is the decision worth
+recording: a `voided_at` column would have forced `recalc_pos_sale`,
+the "a sale has to have a line" guard, the invoice loop and the
+loyalty basket each to remember to exclude it — four places, one of
+them the invoice, and forgetting any one bills the customer for a
+plate that was taken off. Deleting means the arithmetic simply sees
+fewer lines. The kitchen docket survives untouched because 0215 made
+`pos_kitchen_ticket_lines.sale_line_id` `on delete set null`, with the
+comment that the food was cooked whatever the bill ends up saying.
+
+What the database does *not* do is invent a cashier role. It enforces
+that a sent line needs a reason and a name; where the action is
+offered — the till, not the floor plan — is the client's half of the
+same rule.
+
 **On a phone the bill is a count, and the lines are a tap away.** The
 narrow layout used to give the basket a fixed share of the height,
 which on an ordinary phone was enough to show one item and clip it. It

@@ -6213,6 +6213,29 @@ extension RepoPos on Repo {
         .order('code'),
   );
 
+  /// Takes an unsent line off a parked bill. Refuses once the kitchen
+  /// has been told — that is [voidPosSaleLine], which wants a reason.
+  Future<void> removePosSaleLine(String lineId) async =>
+      await client.rpc('remove_pos_sale_line', params: {'p_line': lineId});
+
+  /// Takes a line off after the kitchen was told, recording what it
+  /// said, why it went and who did it. The line is deleted; the
+  /// evidence lives in `pos_sale_line_voids`.
+  Future<String> voidPosSaleLine(
+    String lineId,
+    String reason, {
+    String? note,
+  }) async =>
+      await client.rpc(
+            'void_pos_sale_line',
+            params: {
+              'p_line': lineId,
+              'p_reason': reason,
+              if (note != null) 'p_note': note,
+            },
+          )
+          as String;
+
   /// Moves chosen lines onto a bill of their own. Two bills, settled
   /// separately — which is the right answer when two people ate
   /// different things and each wants their own invoice.

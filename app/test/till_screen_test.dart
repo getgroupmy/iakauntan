@@ -493,5 +493,102 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('On the counter'), findsNothing);
     });
+
+    testWidgets('an unsent line offers to come off; a sent one does not', (
+      tester,
+    ) async {
+      await openParked(
+        tester,
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          saleLines: [
+            {
+              'id': 'l1',
+              'line_no': 1,
+              'description': 'Teh tarik',
+              'quantity': '1',
+              'unit_price': '3.00',
+              'line_total': '3.00',
+              'sent_to_kitchen_at': null,
+            },
+            {
+              'id': 'l2',
+              'line_no': 2,
+              'description': 'Mee goreng mamak',
+              'quantity': '1',
+              'unit_price': '9.00',
+              'line_total': '9.00',
+              'sent_to_kitchen_at': '2026-08-19T12:00:00Z',
+            },
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('2 items'));
+      await tester.pumpAndSettle();
+
+      // The one column the rule turns on, readable on the row itself.
+      expect(find.byIcon(Icons.close), findsOneWidget);
+      expect(find.byIcon(Icons.soup_kitchen_outlined), findsOneWidget);
+
+      // Unsent: taken off with no ceremony.
+      await tester.tap(find.text('Teh tarik'));
+      await tester.pumpAndSettle();
+      expect(find.text('Take off the bill'), findsOneWidget);
+      expect(find.text('Not sent yet'), findsOneWidget);
+    });
+
+    testWidgets('a sent line asks why before it comes off', (tester) async {
+      await openParked(
+        tester,
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          saleLines: [
+            {
+              'id': 'l2',
+              'line_no': 1,
+              'description': 'Mee goreng mamak',
+              'quantity': '1',
+              'unit_price': '9.00',
+              'line_total': '9.00',
+              'sent_to_kitchen_at': '2026-08-19T12:00:00Z',
+            },
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('1 item'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mee goreng mamak'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('The kitchen has already made this, so it needs a reason.'),
+        findsOneWidget,
+      );
+      expect(find.text('Never came out'), findsOneWidget);
+
+      // Nothing goes until a reason is picked.
+      var button = tester.widget<FilledButton>(find.byType(FilledButton));
+      expect(button.onPressed, isNull);
+
+      await tester.tap(find.text('Never came out'));
+      await tester.pumpAndSettle();
+      button = tester.widget<FilledButton>(find.byType(FilledButton));
+      expect(button.onPressed, isNotNull);
+
+      // "Something else" then insists on words, the same rule the
+      // database applies.
+      await tester.tap(find.text('Something else'));
+      await tester.pumpAndSettle();
+      button = tester.widget<FilledButton>(find.byType(FilledButton));
+      expect(button.onPressed, isNull);
+    });
   });
 }

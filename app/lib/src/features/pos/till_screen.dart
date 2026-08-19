@@ -11,6 +11,7 @@ import '../../data/repository.dart';
 import 'modifier_sheet.dart';
 import 'split_sheet.dart';
 import 'tender_sheet.dart';
+import 'void_sheet.dart';
 
 /// PostgREST hands numerics back as strings so nothing is lost on the
 /// way through JSON.
@@ -373,6 +374,72 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       ..invalidate(parkedPosSalesProvider(_registerId!));
   }
 
+  /// Taking a line off, which is two different acts depending on one
+  /// column. Before `sent_to_kitchen_at` the line is a keystroke and
+  /// comes off free; after it, food exists and somebody has to say why
+  /// it is not being charged for. The database enforces both — this
+  /// only makes sure the right one is offered.
+  Future<void> _lineAction(Map<String, dynamic> line) async {
+    final id = _saleId;
+    final lineId = line['id'] as String?;
+    if (id == null || lineId == null) return;
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final sent = line['sent_to_kitchen_at'] != null;
+
+    if (!sent) {
+      final go = await showModalBottomSheet<bool>(
+        context: context,
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text('${line['description']}'),
+                subtitle: const Text('Not sent yet'),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Take off the bill'),
+                onTap: () => Navigator.of(ctx).pop(true),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (go != true || !mounted) return;
+      final ok = await runWithFeedback(
+        context,
+        successMessage: null,
+        action: () => repo.removePosSaleLine(lineId),
+      );
+      if (!ok || !mounted) return;
+    } else {
+      final answer = await showModalBottomSheet<({String reason, String note})>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => VoidReasonSheet(description: '${line['description']}'),
+      );
+      if (answer == null || !mounted) return;
+      final ok = await runWithFeedback(
+        context,
+        successMessage: 'Taken off, and recorded',
+        action: () => repo.voidPosSaleLine(
+          lineId,
+          answer.reason,
+          note: answer.note.isEmpty ? null : answer.note,
+        ),
+      );
+      if (!ok || !mounted) return;
+    }
+
+    ref
+      ..invalidate(posSaleProvider(id))
+      ..invalidate(posSaleLinesProvider(id))
+      ..invalidate(posSaleLineModifiersProvider(id));
+  }
+
   @override
   Widget build(BuildContext context) {
     final registers = ref.watch(posRegistersProvider);
@@ -429,6 +496,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
             onSplit: _split,
             onEvenSplit: _evenSplit,
             onMerge: _merge,
+            onLineAction: _lineAction,
             onResume: (id) => setState(() => _saleId = id),
           );
         },
@@ -455,6 +523,7 @@ class _Register extends ConsumerWidget {
     required this.onSplit,
     required this.onEvenSplit,
     required this.onMerge,
+    required this.onLineAction,
     required this.onResume,
   });
 
@@ -474,6 +543,7 @@ class _Register extends ConsumerWidget {
   final VoidCallback onSplit;
   final VoidCallback onEvenSplit;
   final ValueChanged<String> onMerge;
+  final ValueChanged<Map<String, dynamic>> onLineAction;
   final ValueChanged<String> onResume;
 
   @override
@@ -531,6 +601,7 @@ class _Register extends ConsumerWidget {
           onSplit: onSplit,
           onEvenSplit: onEvenSplit,
           onMerge: onMerge,
+          onLineAction: onLineAction,
           onResume: onResume,
           compact: compact,
         );
@@ -717,6 +788,7 @@ class _Basket extends ConsumerWidget {
     required this.onSplit,
     required this.onEvenSplit,
     required this.onMerge,
+    required this.onLineAction,
     required this.onResume,
     required this.compact,
   });
@@ -728,6 +800,7 @@ class _Basket extends ConsumerWidget {
   final VoidCallback onSplit;
   final VoidCallback onEvenSplit;
   final ValueChanged<String> onMerge;
+  final ValueChanged<Map<String, dynamic>> onLineAction;
   final ValueChanged<String> onResume;
 
   /// True on a phone, where the bill cannot share the screen with the
@@ -862,6 +935,7 @@ class _Basket extends ConsumerWidget {
                       mods: mods,
                       total: total,
                       scrollable: true,
+                      onLineAction: onLineAction,
                     ),
                   ),
           )
@@ -869,7 +943,12 @@ class _Basket extends ConsumerWidget {
           Expanded(
             child: AsyncView<List<Map<String, dynamic>>>(
               value: lines,
-              builder: (r) => _BasketLines(rows: r, mods: mods, total: total),
+              builder: (r) => _BasketLines(
+                rows: r,
+                mods: mods,
+                total: total,
+                onLineAction: onLineAction,
+              ),
             ),
           ),
         const Divider(height: 1),
@@ -1338,6 +1417,7 @@ class _BasketLines extends StatelessWidget {
     required this.total,
     this.scrollable = false,
     this.confirmLabel,
+    this.onLineAction,
   });
 
   final List<Map<String, dynamic>> rows;
@@ -1347,6 +1427,12 @@ class _BasketLines extends StatelessWidget {
   /// True in the phone's sheet, where the list is the whole point and
   /// has to scroll however long the bill gets.
   final bool scrollable;
+
+  /// Tapping a line offers to take it off. Null on the confirmation
+  /// sheet: that one is shown to be read and agreed with, and an
+  /// editable list is a list somebody edits by accident while checking
+  /// it.
+  final ValueChanged<Map<String, dynamic>>? onLineAction;
 
   /// Set when the sheet is being shown to be agreed with rather than
   /// merely read — "Send to kitchen", "Take payment". Popping true is
@@ -1365,9 +1451,20 @@ class _BasketLines extends StatelessWidget {
           for (final m in mods)
             if (m['line_id'] == l['id']) '${m['name']}',
         ];
+        final sent = l['sent_to_kitchen_at'] != null;
         return ListTile(
           dense: true,
           isThreeLine: chosen.isNotEmpty,
+          onTap: onLineAction == null ? null : () => onLineAction!(l),
+          leading: onLineAction == null
+              ? null
+              // The one column the rule turns on, said on the row: a
+              // plate the kitchen has is not a plate you can simply
+              // un-order.
+              : Icon(
+                  sent ? Icons.soup_kitchen_outlined : Icons.close,
+                  size: 18,
+                ),
           title: Text('${l['description']}'),
           subtitle: Text(
             [

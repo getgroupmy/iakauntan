@@ -49,6 +49,9 @@ declare
   v_barst  uuid;
   v_tk     uuid;
   v_split  uuid;
+  v_void   uuid;
+  v_vline  uuid;
+  v_msg    text;
   v_l1     uuid;
 begin
   v_org := pg_temp.test_org('Warung Sedap Sdn Bhd');
@@ -455,6 +458,68 @@ begin
     (select count(*) from public.pos_sales s where s.id = v_split), 0);
   perform pg_temp.check_eq('and no docket was lost along the way',
     (select count(*) from public.pos_kitchen_tickets k where k.sale_id = v_sale), 3);
+
+  -- ------------------------------------------------------------------
+  -- Taking something off, before and after the kitchen was told
+  -- ------------------------------------------------------------------
+  --
+  -- The rule 0225 exists for: `sent_to_kitchen_at` is the whole test.
+  -- Before it, a line is a keystroke and comes off free. After it,
+  -- food exists, and a till that let it vanish silently could not tell
+  -- a mistake from a theft.
+  v_split := public.open_pos_sale(v_reg);
+  v_vline := public.add_pos_sale_line(v_split, v_teh, 1, 3.00);
+  perform pg_temp.check_eq('a line is on the bill',
+    (select s.total_amount from public.pos_sales s where s.id = v_split), 3.00);
+
+  perform public.remove_pos_sale_line(v_vline);
+  perform pg_temp.check_eq('an unsent line comes off, and the bill follows',
+    (select s.total_amount from public.pos_sales s where s.id = v_split), 0.00);
+  perform pg_temp.check_eq('leaving nothing behind to explain',
+    (select count(*) from public.pos_sale_line_voids v where v.sale_id = v_split), 0);
+
+  -- Now one the kitchen has been told about.
+  v_vline := public.add_pos_sale_line(v_split, v_teh, 2, 3.00);
+  perform public.send_order_to_kitchen(v_split);
+
+  begin
+    perform public.remove_pos_sale_line(v_vline);
+    raise exception 'FAIL removed a line the kitchen was already making';
+  exception when check_violation then
+    raise notice 'ok   a sent line cannot simply be removed';
+  end;
+
+  begin
+    perform public.void_pos_sale_line(v_vline, 'other', null);
+    raise exception 'FAIL voided as "other" with nothing said';
+  exception when check_violation then
+    raise notice 'ok   "other" has to say what happened';
+  end;
+
+  v_void := public.void_pos_sale_line(v_vline, 'not_received', 'never came out');
+  perform pg_temp.check_eq('voiding takes it off the bill',
+    (select s.total_amount from public.pos_sales s where s.id = v_split), 0.00);
+  perform pg_temp.check_eq('and leaves exactly one thing to explain',
+    (select count(*) from public.pos_sale_line_voids v where v.sale_id = v_split), 1);
+  perform pg_temp.check_true('which says what went, and what it was worth',
+    (select v.description = 'Teh tarik' and v.quantity = 2 and v.line_total = 6.00
+       from public.pos_sale_line_voids v where v.id = v_void));
+  perform pg_temp.check_true('and that the kitchen had already been told',
+    (select v.was_sent_at is not null
+       from public.pos_sale_line_voids v where v.id = v_void));
+
+  -- The assertion 0215 built the `on delete set null` for. The docket
+  -- keeps its own words: the food was cooked, whatever the bill says.
+  perform pg_temp.check_true('the kitchen docket keeps what it made',
+    exists (select 1 from public.pos_kitchen_ticket_lines kl
+              join public.pos_kitchen_tickets k on k.id = kl.ticket_id
+             where k.sale_id = v_split
+               and kl.description = 'Teh tarik'
+               and kl.sale_line_id is null));
+
+  perform pg_temp.check_eq('and the day has a figure somebody can question',
+    (select sum(x.value) from public.pos_void_summary(v_org) x
+      where x.reason = 'not_received'), 6.00);
 
   raise notice 'point of sale dining room: all assertions passed';
 end;
