@@ -220,6 +220,23 @@ Two kiosks pressing "pay" in the same millisecond get different numbers.
 `kiosk_order_board()` is the screen customers watch: preparing on one
 side, ready on the other, and a collected order leaves it.
 
+## Five screens, five readers
+
+The module is not one face but five, and what separates them is who is
+holding the device rather than which feature they reach.
+
+| Screen | Route | Read by |
+|---|---|---|
+| Till | `/till` | A cashier, at a counter, with a queue |
+| Floor | `/floor` | A waiter, crossing a room, at a distance |
+| Kitchen | `/kitchen` | A cook, hands full, further away still |
+| Diary | `/diary` | A receptionist, on a phone, mid-sentence |
+| Order board | `/order-board` | **A customer**, holding a tray |
+
+They share a register picker and nothing else, because the thing that
+makes a POS screen good is different in each case. The board shows the
+least of anything in this application; the till shows the most.
+
 ## On a counter, a tablet and a phone
 
 `app/lib/src/features/pos/till_screen.dart` is one screen at three
@@ -236,6 +253,47 @@ Every figure on the tender sheet — the total, the cash due, the change,
 the rounding — comes back from `complete_pos_sale()` rather than being
 recomputed in Dart. A till that does its own arithmetic is a till that
 can disagree with the receipt it just printed.
+
+## The room, the pass, the diary and the board
+
+**Floor** (`floor_plan_screen.dart`) draws tables as tiles grouped by
+area, because "which tables are taken" is read at three metres and a
+list of rows is not. Tapping is the same gesture on both states —
+`seat_table()` returns the existing bill rather than raising, so the
+server settled what a second tap means. Covers are asked for only on the
+way in, defaulting to the table's seats, which is the assumption
+`seat_table()` itself makes when given nothing. Moving a party offers
+only free tables, because `move_pos_sale` refuses an occupied one.
+
+**Kitchen** (`kitchen_screen.dart`) is the screen with the least in
+common with the rest of this app. One control per ticket, labelled with
+a verb — Start, Ready, Away — rather than the status it sets, because a
+cook does not need to be told a ticket is "new". Colour carries **age**
+rather than status: which ticket has been waiting is the question a
+kitchen actually asks. It polls every ten seconds, alone among these
+screens, because nobody is going to pull-to-refresh with their hands
+full and a board thirty seconds stale sends the wrong plate.
+
+Sending is not part of tendering. An order is cooked long before it is
+paid for, so one button doing both would mean cooking on credit or
+serving a cold plate. `send_order_to_kitchen` sends only what has not
+gone, which makes the button safe to press again after a second course.
+
+**Diary** (`diary_screen.dart`) is a column per provider rather than one
+list sorted by hour, because "who is free at three" is a question about
+people. Every provider gets a column whether or not they are booked —
+that is what the left join in `pos_day_sheet` is for — and an empty one
+says "Free all day" rather than being left blank, since blank reads as
+not-loaded and the good news should not look like a failure. Checking in
+calls `check_in_booking`, so the button says "Check in" and what it does
+is start charging; nothing here can mark somebody arrived without
+opening their bill.
+
+**Order board** (`kiosk_board_screen.dart`) has no navigation, no detail
+and nothing to tap — a test asserts the absence of every kind of button,
+because a board on a wall that can be pressed is one somebody will
+press. Numbers rather than names: a counter that calls out a name is a
+counter that has collected one.
 
 ## Somewhere to look at it
 
@@ -256,6 +314,18 @@ and one kiosk order waiting to be collected. Seeded by
   terminal
 - Cash drawer and receipt printer drivers. The receipt renders; opening a
   physical drawer is between the browser and the hardware
-- Screens for most of what the SQL supports: the floor plan, the kitchen
-  display, the diary and the kiosk all exist as functions with no Flutter
-  route yet. The till itself is the one face that is built
+- The kiosk's own ordering face. `start_kiosk_order` and
+  `complete_kiosk_order` have no screen: the board customers watch is
+  built, but the touchscreen they order from is not, so a kiosk order
+  still has to be started from the till
+- Modifiers from the till. `add_line_modifier` and
+  `item_modifier_options` are reachable only from SQL, so "no onions,
+  add egg" cannot yet be tapped
+- Splitting a bill on screen. `split_pos_sale`, `merge_pos_sales` and
+  `pos_even_split` all work and none has a button
+- Loyalty at the counter. `enrol_loyalty_member` and
+  `redeem_loyalty_points` are not on the tender sheet
+- Landing an offline batch. `ingest_offline_sales` expects a payload
+  from a till that queued sales locally; nothing in the Flutter client
+  queues them yet, so the offline path is server-ready and
+  client-unbuilt — which is the honest half of "works offline"

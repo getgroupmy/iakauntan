@@ -40,7 +40,7 @@ an unbalanced journal, so the ledger cannot drift.
 | Banking | Bank accounts, statement lines, reconciliation, expense claims |
 | CRM | Leads, pipelines, opportunities with stage history, activities |
 | Reports | Trial balance, P&L, balance sheet, AR/AP ageing, stock valuation, SST summary |
-| Point of sale | Outlets, registers and counted shifts; retail variants and barcodes; loyalty; tables, modifiers and a kitchen display; bookings and memberships; offline capture; self-service kiosk — `docs/pos.md` |
+| Point of sale | Five screens for five readers — till, floor plan, kitchen display, appointment diary, customer order board — over outlets, counted shifts, retail variants and barcodes, loyalty, tables and modifiers, bookings and memberships, offline capture and self-service kiosk — `docs/pos.md` |
 
 Malaysian specifics: MPERS-aligned default chart of accounts, SST tax codes
 (service tax 8% / 6%, sales tax 10% / 5%, exempt, zero-rated), and Bank
