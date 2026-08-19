@@ -32,13 +32,21 @@ void main() {
       // the picker offers them. An entry here with no user behind it is
       // a button that fails on tap, so the list and the seed have to
       // move together — and the seed goes first. `property@` was added
-      // to both in the same change that built the property tenant.
+      // to both in the same change that built the property tenant, and
+      // `warung@` in the one that built the café the till sells from.
+      //
+      // This assertion has now caught the same omission twice, which is
+      // the argument for pinning the whole list rather than checking
+      // that each entry looks plausible: a seeded login the picker does
+      // not offer is invisible, and an offered login with no seed
+      // behind it is a button that fails in front of a visitor.
       expect(demoAccounts.map((a) => a.email).toList(), [
         'demo@iakauntan.com',
         'clerk@iakauntan.com',
         'auditor@iakauntan.com',
         'secretary@iakauntan.com',
         'property@iakauntan.com',
+        'warung@iakauntan.com',
       ]);
     });
 
