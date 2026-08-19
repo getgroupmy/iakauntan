@@ -516,12 +516,16 @@ class _Finder extends StatelessWidget {
             ),
           ),
         Expanded(
+          // Nothing searched for yet is the normal state of a till, not
+          // an empty one. It used to render "Ready — scan an item",
+          // which is true and useless to most shops this is sold to: a
+          // barcode is a retail assumption, and nasi lemak, a haircut
+          // and a roti john all have no label. So the resting state is
+          // the menu.
           child: results.isEmpty
-              ? const EmptyState(
-                  icon: Icons.qr_code_scanner,
-                  title: 'Ready',
-                  message: 'Scan an item, or type part of its name.',
-                )
+              ? (outletId == null
+                    ? const SizedBox.shrink()
+                    : _Browse(outletId: outletId!, onPick: onPick))
               : ListView.separated(
                   itemCount: results.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
@@ -670,6 +674,209 @@ class _Basket extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The menu, when nothing has been scanned.
+///
+/// ## Items, or categories, decided by what actually fits
+///
+/// A stall with six things sells them off one screen and should never
+/// make anybody tap a category to reach them. A minimart with four
+/// hundred cannot show them at all, and a grid that scrolls for a
+/// minute is a grid nobody uses.
+///
+/// So the choice is not a hard-coded threshold but a measurement: the
+/// tiles that fit in the space this pane has been given are counted,
+/// and if the whole menu fits it is shown whole. Otherwise the
+/// categories are shown and tapping one drills in. The same rule
+/// therefore gives a phone categories where a counter terminal shows
+/// items, which is the right answer on both — and it is why this works
+/// the same on desktop web, mobile web and the app without any of them
+/// being special-cased.
+///
+/// ## Nothing here can raise when tapped
+///
+/// `pos_menu` applies the same sellability rules as the scan path, so a
+/// style with variants under it never becomes a tile. That matters more
+/// on a grid than in a search result: a search is something you typed
+/// and can re-read, a tile is something you hit with your thumb.
+class _Browse extends StatefulWidget {
+  const _Browse({required this.outletId, required this.onPick});
+
+  final String outletId;
+  final ValueChanged<Map<String, dynamic>> onPick;
+
+  @override
+  State<_Browse> createState() => _BrowseState();
+}
+
+class _BrowseState extends State<_Browse> {
+  /// Null while showing the top level. Holds the category name rather
+  /// than its id because `pos_menu` already coalesces an unset category
+  /// to a real heading, so the name is the thing that groups.
+  String? _category;
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(
+      builder: (context, ref, _) {
+        final menu = ref.watch(posMenuProvider(widget.outletId));
+        return AsyncView<List<Map<String, dynamic>>>(
+          value: menu,
+          builder: (rows) {
+            if (rows.isEmpty) {
+              return const EmptyState(
+                icon: Icons.sell_outlined,
+                title: 'Nothing to sell yet',
+                message:
+                    'Items marked as sold show up here, ready to tap. '
+                    'Until then, scanning still works.',
+              );
+            }
+            return LayoutBuilder(
+              builder: (context, box) {
+                // Tile sizes chosen for a thumb rather than a cursor:
+                // the same grid is used on a counter terminal and a
+                // phone, and the phone is the harder constraint.
+                const tileWidth = 150.0;
+                const tileHeight = 96.0;
+                final columns = (box.maxWidth / tileWidth).floor().clamp(2, 8);
+                final visibleRows =
+                    (box.maxHeight / tileHeight).floor().clamp(1, 20);
+                final fits = rows.length <= columns * visibleRows;
+
+                final categories = <String>[];
+                for (final r in rows) {
+                  final c = '${r['category']}';
+                  if (!categories.contains(c)) categories.add(c);
+                }
+
+                // One category is not a choice, so it is never made
+                // into one however long the list is.
+                final showItems =
+                    fits || categories.length < 2 || _category != null;
+                final shown = _category == null
+                    ? rows
+                    : [
+                        for (final r in rows)
+                          if (r['category'] == _category) r,
+                      ];
+
+                return Column(
+                  children: [
+                    if (_category != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                          child: TextButton.icon(
+                            onPressed: () => setState(() => _category = null),
+                            icon: const Icon(Icons.arrow_back, size: 18),
+                            label: Text('$_category'),
+                          ),
+                        ),
+                      ),
+                    Expanded(
+                      child: showItems
+                          ? _Grid(
+                              columns: columns,
+                              children: [
+                                for (final r in shown)
+                                  _MenuTile(
+                                    title: '${r['name']}',
+                                    subtitle: Fmt.money(
+                                      posNum(r['unit_price']),
+                                    ),
+                                    onTap: () => widget.onPick(r),
+                                  ),
+                              ],
+                            )
+                          : _Grid(
+                              columns: columns,
+                              children: [
+                                for (final c in categories)
+                                  _MenuTile(
+                                    title: c,
+                                    // A door with nothing written on it
+                                    // is a door nobody opens.
+                                    subtitle:
+                                        '${rows.where((r) => r['category'] == c).length} items',
+                                    onTap: () => setState(() => _category = c),
+                                  ),
+                              ],
+                            ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _Grid extends StatelessWidget {
+  const _Grid({required this.columns, required this.children});
+
+  final int columns;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.count(
+      padding: const EdgeInsets.all(8),
+      crossAxisCount: columns,
+      childAspectRatio: 1.55,
+      crossAxisSpacing: 8,
+      mainAxisSpacing: 8,
+      children: children,
+    );
+  }
+}
+
+class _MenuTile extends StatelessWidget {
+  const _MenuTile({
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      color: scheme.surfaceContainerHighest,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              Text(
+                subtitle,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

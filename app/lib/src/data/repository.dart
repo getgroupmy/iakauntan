@@ -6213,6 +6213,15 @@ extension RepoPos on Repo {
         .order('code'),
   );
 
+  /// Everything the outlet can actually sell, for a till with nothing
+  /// scanned yet. The same sellability rules as [posLookup] — a style
+  /// with variants under it is not offered, because tapping one would
+  /// raise.
+  Future<List<Map<String, dynamic>>> posMenu(String outletId) async =>
+      Repo.rows(
+        await client.rpc('pos_menu', params: {'p_outlet': outletId}),
+      );
+
   /// A scan or a typed search. One row with `matched_on = 'barcode'` is
   /// the case a till can act on without asking anybody.
   Future<List<Map<String, dynamic>>> posLookup(

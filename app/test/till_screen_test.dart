@@ -39,16 +39,31 @@ void main() {
     'opening_float': '100.00',
   };
 
+  Map<String, dynamic> menuItem(String name, String category, num price) => {
+    'item_id': 'i-$name',
+    'code': name.toUpperCase(),
+    'name': name,
+    'unit_price': '$price',
+    'uom_code': 'C62',
+    'category_id': null,
+    'category': category,
+    'variant_attributes': <String, dynamic>{},
+    'on_hand': '0',
+    'tracks_stock': false,
+  };
+
   Widget harness({
     List<Map<String, dynamic>> registers = const [],
     Map<String, dynamic>? openShift,
     List<Map<String, dynamic>> parked = const [],
+    List<Map<String, dynamic>> menu = const [],
   }) => ProviderScope(
     overrides: [
       posRegistersProvider.overrideWith((_) async => registers),
       currentPosShiftProvider.overrideWith((_, __) async => openShift),
       parkedPosSalesProvider.overrideWith((_, __) async => parked),
       posTenderTypesProvider.overrideWith((_) async => const []),
+      posMenuProvider.overrideWith((_, __) async => menu),
     ],
     child: MaterialApp(theme: AppTheme.light(), home: const TillScreen()),
   );
@@ -133,5 +148,134 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.devices_other), findsOneWidget);
+  });
+
+  group('the menu, when nothing has been scanned', () {
+    // The pane used to read "Ready — scan an item, or type part of its
+    // name". A barcode is a retail assumption: nasi lemak, a haircut
+    // and a roti john all have no label, so for three of the five
+    // business types that screen offered no way in at all.
+
+    testWidgets('a short menu is shown as items, not as categories', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          menu: [
+            menuItem('Nasi lemak', 'Makanan', 8.50),
+            menuItem('Mee goreng', 'Makanan', 9.00),
+            menuItem('Teh tarik', 'Minuman', 3.00),
+            menuItem('Kopi O', 'Minuman', 2.50),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nasi lemak'), findsOneWidget);
+      expect(find.text('Teh tarik'), findsOneWidget);
+      // Four things fit on a counter terminal, so making somebody tap
+      // a category to reach them would be pure ceremony.
+      expect(find.text('Makanan'), findsNothing);
+      expect(find.text('Minuman'), findsNothing);
+    });
+
+    testWidgets('a menu too long for the screen is shown as categories', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(420, 780);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          menu: [
+            for (var i = 0; i < 20; i++) menuItem('Makan $i', 'Makanan', 8),
+            for (var i = 0; i < 20; i++) menuItem('Minum $i', 'Minuman', 3),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Makanan'), findsOneWidget);
+      expect(find.text('Minuman'), findsOneWidget);
+      // A door with nothing written on it is a door nobody opens.
+      expect(find.text('20 items'), findsNWidgets(2));
+      expect(find.text('Makan 0'), findsNothing);
+    });
+
+    testWidgets('tapping a category drills into it, and there is a way back', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(420, 780);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          menu: [
+            for (var i = 0; i < 20; i++) menuItem('Makan $i', 'Makanan', 8),
+            for (var i = 0; i < 20; i++) menuItem('Minum $i', 'Minuman', 3),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Minuman'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Minum 0'), findsOneWidget);
+      // Nothing from the other category leaks in.
+      expect(find.text('Makan 0'), findsNothing);
+      // And the heading doubles as the way out.
+      expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      expect(find.text('20 items'), findsNWidgets(2));
+    });
+
+    testWidgets('one category is never turned into a choice', (tester) async {
+      tester.view.physicalSize = const Size(420, 780);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          menu: [
+            for (var i = 0; i < 40; i++) menuItem('Makan $i', 'Makanan', 8),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Too long to fit, but there is nothing to choose between, so the
+      // items are shown and scrolled rather than hidden behind a tap.
+      expect(find.text('Makan 0'), findsOneWidget);
+      expect(find.text('40 items'), findsNothing);
+    });
+
+    testWidgets('an outlet with nothing sellable says so', (tester) async {
+      await tester.pumpWidget(
+        harness(registers: [register()], openShift: shift()),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nothing to sell yet'), findsOneWidget);
+      // Scanning is still offered, because a shop mid-setup may have
+      // barcodes before it has tidied its item list.
+      expect(find.text('Scan, or type a code or a name'), findsOneWidget);
+    });
   });
 }

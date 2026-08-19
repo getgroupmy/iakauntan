@@ -249,6 +249,22 @@ A closed drawer renders **only** the card that opens it — no scan box, no
 rather than the presence, because a disabled button is still a button
 somebody taps.
 
+**The till browses as well as scans.** The resting pane used to read
+"Ready — scan an item", which is true and useless to most of the shops
+this module is sold to: a barcode is a retail assumption, and nasi
+lemak, a haircut and a roti john all have no label. It now shows the
+menu, from `pos_menu()`, which applies the same sellability rules as
+the scan path — so a style with variants under it never becomes a tile
+that raises when a thumb lands on it.
+
+Items or categories is decided by measurement rather than by a
+threshold: the tiles that fit the pane are counted, and the whole menu
+is shown when the whole menu fits. Otherwise the categories are shown
+with a count on each and tapping one drills in. The same rule gives a
+phone categories where a counter terminal shows items, which is why
+desktop web, mobile web and the app need no special-casing between
+them. One category is never turned into a choice, however long the list.
+
 Every figure on the tender sheet — the total, the cash due, the change,
 the rounding — comes back from `complete_pos_sale()` rather than being
 recomputed in Dart. A till that does its own arithmetic is a till that
@@ -345,7 +361,8 @@ for is therefore visible in the demo data, not only asserted in
   still has to be started from the till
 - Modifiers from the till. `add_line_modifier` and
   `item_modifier_options` are reachable only from SQL, so "no onions,
-  add egg" cannot yet be tapped
+  add egg" cannot yet be tapped — the menu grid is where that will
+  hang, since tapping a plate is the moment the question arises
 - Splitting a bill on screen. `split_pos_sale`, `merge_pos_sales` and
   `pos_even_split` all work and none has a button
 - Loyalty at the counter. `enrol_loyalty_member` and

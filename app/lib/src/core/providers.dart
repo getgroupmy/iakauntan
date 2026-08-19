@@ -1826,3 +1826,12 @@ final kioskOrderBoardProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, outletId) => requireRepo(ref).kioskOrderBoard(outletId),
     );
+
+/// What an outlet can sell. Read once per outlet and held, because a
+/// menu changes when somebody edits it rather than while a queue is
+/// waiting — refetching it on every tap would be spending a round trip
+/// to learn nothing.
+final posMenuProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, outletId) => requireRepo(ref).posMenu(outletId),
+    );

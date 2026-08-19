@@ -223,6 +223,34 @@ begin
     raise notice 'ok   an item with stock cannot be split into variants';
   end;
 
+  -- ------------------------------------------------------------------
+  -- What the till offers when nobody has scanned anything
+  -- ------------------------------------------------------------------
+  --
+  -- `pos_menu` fills the pane that used to say "Ready — scan an item",
+  -- and its whole risk is that a grid tile is easier to hit than a
+  -- search result is to misread. So it must offer exactly what the sale
+  -- line will accept: the style whose variants exist is not sellable,
+  -- and a tile for it would raise under somebody's thumb.
+  perform pg_temp.check_eq(
+    'the style is not offered as something to tap',
+    (select count(*)::integer from public.pos_menu(v_outlet) m
+      where m.item_id = v_style), 0);
+  perform pg_temp.check_true(
+    'but its variants are',
+    (select count(*) from public.pos_menu(v_outlet) m
+      where m.item_id in (select i.id from public.items i
+                           where i.parent_item_id = v_style)) > 0);
+  perform pg_temp.check_eq(
+    'and an item nobody sells is not on the menu either',
+    (select count(*)::integer from public.pos_menu(v_outlet) m
+       join public.items i on i.id = m.item_id
+      where not i.is_sold), 0);
+  -- The positive control: an assertion that only counts absences passes
+  -- just as well when the function returns nothing at all.
+  perform pg_temp.check_true('the menu is not simply empty',
+    (select count(*) from public.pos_menu(v_outlet)) > 0);
+
   raise notice 'point of sale retail: all assertions passed';
 end;
 $$;
