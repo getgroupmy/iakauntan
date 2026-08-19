@@ -57,6 +57,9 @@ void main() {
     Map<String, dynamic>? openShift,
     List<Map<String, dynamic>> parked = const [],
     List<Map<String, dynamic>> menu = const [],
+    Map<String, dynamic>? sale,
+    List<Map<String, dynamic>> saleLines = const [],
+    List<Map<String, dynamic>> saleMods = const [],
   }) => ProviderScope(
     overrides: [
       posRegistersProvider.overrideWith((_) async => registers),
@@ -64,6 +67,9 @@ void main() {
       parkedPosSalesProvider.overrideWith((_, __) async => parked),
       posTenderTypesProvider.overrideWith((_) async => const []),
       posMenuProvider.overrideWith((_, __) async => menu),
+      posSaleProvider.overrideWith((_, __) async => sale),
+      posSaleLinesProvider.overrideWith((_, __) async => saleLines),
+      posSaleLineModifiersProvider.overrideWith((_, __) async => saleMods),
     ],
     child: MaterialApp(theme: AppTheme.light(), home: const TillScreen()),
   );
@@ -276,6 +282,118 @@ void main() {
       // Scanning is still offered, because a shop mid-setup may have
       // barcodes before it has tidied its item list.
       expect(find.text('Scan, or type a code or a name'), findsOneWidget);
+    });
+  });
+
+  group('the bill on a phone', () {
+    // The bill used to take a fixed 42% of the height, which on an
+    // ordinary phone was four lines tall and clipped its own contents.
+    // A list that cannot show what is in it is worse than a number
+    // saying how much there is.
+    //
+    // `_saleId` is the till's own state rather than a provider, so
+    // these resume a parked bill to get one open — which is also how a
+    // cashier reaches an existing bill.
+    Future<void> openParked(WidgetTester tester, Widget app) async {
+      tester.view.physicalSize = const Size(420, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('POS-2026-00001'));
+      await tester.pumpAndSettle();
+    }
+
+    Map<String, dynamic> parkedSale() => {
+      'id': 'sale-1',
+      'sale_no': 'POS-2026-00001',
+      'total_amount': '21.00',
+      'status': 'parked',
+    };
+
+    testWidgets('a phone shows a count and a total, not the lines', (
+      tester,
+    ) async {
+      await openParked(
+        tester,
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          saleLines: [
+            {
+              'id': 'l1',
+              'line_no': 1,
+              'description': 'Mee goreng mamak',
+              'quantity': '1',
+              'unit_price': '9.00',
+              'line_total': '9.00',
+            },
+            {
+              'id': 'l2',
+              'line_no': 2,
+              'description': 'Teh tarik',
+              'quantity': '4',
+              'unit_price': '3.00',
+              'line_total': '12.00',
+            },
+          ],
+        ),
+      );
+
+      expect(find.text('5 items'), findsOneWidget);
+      expect(find.text('RM 21.00'), findsOneWidget);
+      // The lines themselves are behind the tap, not squeezed on
+      // screen under a menu that needs the room.
+      expect(find.text('Mee goreng mamak'), findsNothing);
+    });
+
+    testWidgets('tapping the count opens the whole bill', (tester) async {
+      await openParked(
+        tester,
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          saleLines: [
+            {
+              'id': 'l1',
+              'line_no': 1,
+              'description': 'Mee goreng mamak',
+              'quantity': '1',
+              'unit_price': '9.00',
+              'line_total': '9.00',
+            },
+          ],
+          saleMods: [
+            {'line_id': 'l1', 'name': 'Biasa', 'price_delta': '0'},
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('1 item'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('On the counter'), findsOneWidget);
+      expect(find.text('Mee goreng mamak'), findsOneWidget);
+      // And the modifier travels with its line into the sheet.
+      expect(find.textContaining('Biasa'), findsOneWidget);
+    });
+
+    testWidgets('an empty till offers no tap into nothing', (tester) async {
+      tester.view.physicalSize = const Size(420, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(registers: [register()], openShift: shift()),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nothing on the counter'), findsOneWidget);
+      expect(find.text('On the counter'), findsNothing);
     });
   });
 }

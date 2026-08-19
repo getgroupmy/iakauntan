@@ -456,6 +456,7 @@ class _Register extends ConsumerWidget {
     required this.onEvenSplit,
     required this.onMerge,
     required this.onResume,
+    required this.compact,
   });
 
   final String registerId;
@@ -523,7 +524,7 @@ class _Register extends ConsumerWidget {
           );
         }
 
-        final basket = _Basket(
+        _Basket basket({required bool compact}) => _Basket(
           registerId: registerId,
           saleId: saleId,
           onTender: onTender,
@@ -532,6 +533,7 @@ class _Register extends ConsumerWidget {
           onEvenSplit: onEvenSplit,
           onMerge: onMerge,
           onResume: onResume,
+          compact: compact,
         );
         final finder = _Finder(
           outletId: outletId,
@@ -559,15 +561,19 @@ class _Register extends ConsumerWidget {
                 children: [
                   Expanded(flex: 3, child: finder),
                   const VerticalDivider(width: 1),
-                  SizedBox(width: 360, child: basket),
+                  SizedBox(width: 360, child: basket(compact: false)),
                 ],
               );
             }
+            // The bill no longer takes a fixed share of the height.
+            // It is as tall as its own controls and no taller, which
+            // gives the menu the rest — the menu being the thing a
+            // phone is short of room for.
             return Column(
               children: [
                 Expanded(child: finder),
                 const Divider(height: 1),
-                SizedBox(height: box.maxHeight * 0.42, child: basket),
+                basket(compact: true),
               ],
             );
           },
@@ -724,41 +730,65 @@ class _Basket extends ConsumerWidget {
   final ValueChanged<String> onMerge;
   final ValueChanged<String> onResume;
 
+  /// True on a phone, where the bill cannot share the screen with the
+  /// menu and becomes a tappable summary instead.
+  final bool compact;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final id = saleId;
     if (id == null) {
       final parked = ref.watch(parkedPosSalesProvider(registerId));
-      return Column(
-        children: [
-          const SectionHeader('Nothing on the counter'),
-          Expanded(
-            child: AsyncView<List<Map<String, dynamic>>>(
-              value: parked,
-              builder: (rows) => rows.isEmpty
-                  ? const EmptyState(
+      final list = AsyncView<List<Map<String, dynamic>>>(
+        value: parked,
+        builder: (rows) => rows.isEmpty
+            ? (compact
+                  // On a phone this branch is one line under a full
+                  // menu, so the illustrated empty state has nowhere to
+                  // go and would only push the menu off the screen.
+                  ? const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 12, 16, 12),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('Nothing on the counter'),
+                      ),
+                    )
+                  : const EmptyState(
                       icon: Icons.shopping_basket_outlined,
                       title: 'Empty',
                       message: 'Scan something to start a sale.',
-                    )
-                  : ListView(
-                      children: [
-                        // Parked baskets are money that has been set
-                        // aside, so they are listed rather than left to
-                        // be remembered.
-                        for (final s in rows)
-                          ListTile(
-                            leading: const Icon(Icons.pause_circle_outline),
-                            title: Text('${s['sale_no']}'),
-                            trailing: Text(
-                              Fmt.money(posNum(s['total_amount'])),
-                            ),
-                            onTap: () => onResume(s['id'] as String),
-                          ),
-                      ],
+                    ))
+            : ListView(
+                shrinkWrap: compact,
+                children: [
+                  // Parked baskets are money that has been set aside,
+                  // so they are listed rather than left to be
+                  // remembered.
+                  for (final s in rows)
+                    ListTile(
+                      leading: const Icon(Icons.pause_circle_outline),
+                      title: Text('${s['sale_no']}'),
+                      trailing: Text(Fmt.money(posNum(s['total_amount']))),
+                      onTap: () => onResume(s['id'] as String),
                     ),
-            ),
-          ),
+                ],
+              ),
+      );
+
+      // The phone's basket is as tall as its contents, so it cannot use
+      // Expanded — there is no bounded height to expand into. Capped
+      // instead, so a shift with eight parked bills does not take the
+      // whole screen.
+      if (compact) {
+        return ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 220),
+          child: list,
+        );
+      }
+      return Column(
+        children: [
+          const SectionHeader('Nothing on the counter'),
+          Expanded(child: list),
         ],
       );
     }
@@ -777,47 +807,56 @@ class _Basket extends ConsumerWidget {
       orElse: () => 0.0,
     );
 
+    final rows = lines.maybeWhen(
+      data: (r) => r,
+      orElse: () => const <Map<String, dynamic>>[],
+    );
+    final count = rows.fold<double>(
+      0,
+      (n, l) => n + posNum(l['quantity']),
+    );
+
     return Column(
       children: [
-        Expanded(
-          child: AsyncView<List<Map<String, dynamic>>>(
-            value: lines,
-            builder: (rows) => ListView.separated(
-              itemCount: rows.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (_, i) {
-                final l = rows[i];
-                final chosen = [
-                  for (final m in mods)
-                    if (m['line_id'] == l['id']) '${m['name']}',
-                ];
-                return ListTile(
-                  dense: true,
-                  isThreeLine: chosen.isNotEmpty,
-                  title: Text('${l['description']}'),
-                  subtitle: Text(
-                    [
-                      '${Fmt.qty(posNum(l['quantity']))} × '
-                          '${Fmt.money(posNum(l['unit_price']))}',
-                      // Under the plate rather than beside it: a
-                      // modifier read as its own line is a modifier
-                      // somebody cooks separately.
-                      if (chosen.isNotEmpty) chosen.join(', '),
-                    ].join('\n'),
+        // On a counter or a tablet the bill is read continuously, so it
+        // stays on screen. On a phone there is not room for both the
+        // menu and the bill, and the old split gave the bill a strip
+        // four lines tall that clipped its own contents — a list that
+        // cannot show what is in it is worse than a number that says
+        // how much there is.
+        if (compact)
+          _BasketBar(
+            count: count,
+            total: total,
+            onTap: rows.isEmpty
+                ? null
+                : () => showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => _BasketLines(
+                      rows: rows,
+                      mods: mods,
+                      total: total,
+                      scrollable: true,
+                    ),
                   ),
-                  trailing: Text(Fmt.money(posNum(l['line_total']))),
-                );
-              },
+          )
+        else
+          Expanded(
+            child: AsyncView<List<Map<String, dynamic>>>(
+              value: lines,
+              builder: (r) => _BasketLines(rows: r, mods: mods, total: total),
             ),
           ),
-        ),
         const Divider(height: 1),
         Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
             children: [
-              _AmountRow('Total', total, emphasise: true),
-              const SizedBox(height: 12),
+              if (!compact) ...[
+                _AmountRow('Total', total, emphasise: true),
+                const SizedBox(height: 12),
+              ],
               // Splitting sits with the bill rather than with the
               // tender sheet, because "can we pay separately?" is asked
               // while looking at what was eaten, not while holding a
@@ -1179,6 +1218,165 @@ Future<int?> _askWays(BuildContext context) {
       ],
     ),
   );
+}
+
+/// The bill, as a line at the top of the buttons.
+///
+/// A phone has room for the menu or the bill, not both. The old layout
+/// gave the bill a fixed 42% of the height, which on an ordinary phone
+/// was four lines tall and clipped its own contents — the customer's
+/// last item half visible under the total. A list that cannot show what
+/// is in it is worse than a number saying how much there is, so this
+/// says the count and the money and opens the rest on a tap.
+class _BasketBar extends StatelessWidget {
+  const _BasketBar({
+    required this.count,
+    required this.total,
+    required this.onTap,
+  });
+
+  final double count;
+  final double total;
+
+  /// Null when the bill is empty. Nothing to look at, so nothing to
+  /// tap — an affordance that opens an empty sheet is a small lie.
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Row(
+          children: [
+            Icon(
+              Icons.shopping_basket_outlined,
+              size: 20,
+              color: scheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              count == 0
+                  ? 'Nothing on the counter'
+                  : '${Fmt.qty(count)} item${count == 1 ? '' : 's'}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            if (onTap != null) ...[
+              const SizedBox(width: 6),
+              Icon(
+                Icons.keyboard_arrow_up,
+                size: 20,
+                color: scheme.onSurfaceVariant,
+              ),
+            ],
+            const Spacer(),
+            Text(
+              Fmt.money(total),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// What is on the bill.
+///
+/// One widget for both places it is read: the side panel on a counter,
+/// and the sheet a phone opens. Written once so the two cannot drift —
+/// a modifier shown in one and missing from the other would be the
+/// same bill telling two stories.
+class _BasketLines extends StatelessWidget {
+  const _BasketLines({
+    required this.rows,
+    required this.mods,
+    required this.total,
+    this.scrollable = false,
+  });
+
+  final List<Map<String, dynamic>> rows;
+  final List<Map<String, dynamic>> mods;
+  final double total;
+
+  /// True in the phone's sheet, where the list is the whole point and
+  /// has to scroll however long the bill gets.
+  final bool scrollable;
+
+  @override
+  Widget build(BuildContext context) {
+    final list = ListView.separated(
+      shrinkWrap: scrollable,
+      itemCount: rows.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (_, i) {
+        final l = rows[i];
+        final chosen = [
+          for (final m in mods)
+            if (m['line_id'] == l['id']) '${m['name']}',
+        ];
+        return ListTile(
+          dense: true,
+          isThreeLine: chosen.isNotEmpty,
+          title: Text('${l['description']}'),
+          subtitle: Text(
+            [
+              '${Fmt.qty(posNum(l['quantity']))} × '
+                  '${Fmt.money(posNum(l['unit_price']))}',
+              // Under the plate rather than beside it: a modifier read
+              // as its own line is a modifier somebody cooks
+              // separately.
+              if (chosen.isNotEmpty) chosen.join(', '),
+            ].join('\n'),
+          ),
+          trailing: Text(Fmt.money(posNum(l['line_total']))),
+        );
+      },
+    );
+    if (!scrollable) return list;
+
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'On the counter',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+          ),
+          // Capped rather than free, so a long bill scrolls inside the
+          // sheet instead of pushing the sheet off the screen.
+          Flexible(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.7,
+              ),
+              child: list,
+            ),
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: _AmountRow('Total', total, emphasise: true),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Which till this device is.
