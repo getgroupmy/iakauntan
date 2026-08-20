@@ -253,6 +253,15 @@ const _destinations = <_Dest>[
     '/memberships',
     module: 'memberships',
   ),
+  // Its own module too, and the pair a shop chooses between: a gym
+  // runs memberships, a minimart runs a points card.
+  _Dest(
+    'Loyalty',
+    Icons.card_giftcard_outlined,
+    Icons.card_giftcard,
+    '/loyalty',
+    module: 'loyalty',
+  ),
   // The customer's own screen, and the screen they watch afterwards.
   // Both are on the staff menu because somebody has to be able to set
   // the machine up and check on it; neither is a place a cashier

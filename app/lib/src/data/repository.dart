@@ -7263,3 +7263,59 @@ extension RepoItemVariants on Repo {
     ),
   );
 }
+
+
+/// Points are a ledger, and somebody has to be able to look at it.
+///
+/// 0212 built the programme, the entries, the balance, a signed
+/// adjustment and a dormancy sweep. The till reached the parts that
+/// happen during a sale; these three were granted to `authenticated`
+/// and never called. The sweep is the one that matters most: it is on
+/// no schedule either, so a shop that set `dormancy_expiry_months`
+/// has points that never expire and a liability that only grows.
+extension RepoLoyaltyAdmin on Repo {
+  /// What a customer holds, what it is worth, and when they last did
+  /// anything. `worth` is the programme's redeem value applied on the
+  /// server — the rate belongs next to the rule that uses it, not in a
+  /// screen that would disagree the day somebody changes it.
+  Future<Map<String, dynamic>?> loyaltyAccountBalance(String contactId) async {
+    final rows = Repo.rows(
+      await callRpc('loyalty_account_balance', params: {'p_contact': contactId}),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// A points adjustment somebody has to sign for. Returns the new
+  /// balance.
+  ///
+  /// Deliberately narrower than selling: handing out points is handing
+  /// out money, so the server requires an owner or admin and refuses an
+  /// adjustment of zero, one with no reason, and one that would take
+  /// the account below nothing. All four refusals are its own and are
+  /// shown as they arrive.
+  Future<int> adjustLoyaltyPoints(
+    String accountId,
+    int points,
+    String note,
+  ) async =>
+      (await callRpc(
+            'adjust_loyalty_points',
+            params: {
+              'p_account': accountId,
+              'p_points': points,
+              'p_note': note,
+            },
+          ) as num)
+          .toInt();
+
+  /// The dormancy sweep. Returns one row per account it cleared, so the
+  /// screen can say who lost what rather than reporting a count.
+  ///
+  /// Idempotent: an account already at zero has nothing to expire, so
+  /// running it twice in a day writes nothing the second time. A
+  /// programme with no dormancy period set returns nothing at all,
+  /// which is the correct answer rather than an error.
+  Future<List<Map<String, dynamic>>> expireLoyaltyPoints() async => Repo.rows(
+    await callRpc('expire_loyalty_points', params: {'p_org': orgId}),
+  );
+}

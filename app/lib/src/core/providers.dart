@@ -2005,3 +2005,10 @@ final itemVariantsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, parentId) => requireRepo(ref).itemVariants(parentId),
     );
+
+
+/// What one customer holds on the loyalty programme.
+final loyaltyAccountBalanceProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>(
+      (ref, contactId) => requireRepo(ref).loyaltyAccountBalance(contactId),
+    );
