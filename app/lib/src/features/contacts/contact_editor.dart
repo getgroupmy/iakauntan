@@ -8,6 +8,9 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+// `RepoGroupContacts` is an extension, and a Dart extension is only
+// in scope where its declaring library is imported.
+import '../../data/repository.dart';
 import 'statement_pdf.dart';
 import 'contact_extras.dart';
 
@@ -27,6 +30,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
 
   String _contactType = 'customer';
   String? _priceLevelId;
+  String? _linkedOrgId;
   bool _statementBusy = false;
   String _entityType = 'sdn_bhd';
   String _idType = 'BRN';
@@ -102,6 +106,19 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         _tinValid = contact.isTinVerified ? true : null;
         _loading = false;
       });
+      // Read separately, because it is not on the model: see
+      // `RepoGroupContacts`. Its own try, so that a company without the
+      // group feature — or a transient failure on one extra column —
+      // reports nothing rather than "could not load contact" about a
+      // contact that has plainly just loaded.
+      try {
+        final linked = await ref
+            .read(repoProvider)!
+            .contactLinkedOrg(widget.contactId!);
+        if (mounted) setState(() => _linkedOrgId = linked);
+      } catch (_) {
+        // The field simply stays unset, which is what it means.
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _loading = false);
@@ -204,9 +221,16 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
     final ok = await runWithFeedback(
       context,
       action: () async {
-        await ref
+        final saved = await ref
             .read(repoProvider)!
             .saveContact(_build(), id: widget.contactId);
+        // After the contact, and through its own function rather than
+        // as a column on the update: the link asserts that two
+        // companies are related, and 0142 checks both ends before
+        // believing it.
+        await ref
+            .read(repoProvider)!
+            .linkGroupContact(saved.id, _linkedOrgId);
       },
       successMessage: 'Contact saved',
     );
@@ -548,6 +572,52 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                           ],
                           onChanged: (v) =>
                               setState(() => _priceLevelId = v),
+                        ),
+                      // Only where there is a group to point at. A
+                      // company that stands alone has no sister to link
+                      // to, and an empty dropdown would be an invitation
+                      // to wonder what it was for.
+                      //
+                      // The list is `my_group_companies`, which is
+                      // already narrowed to companies this person is a
+                      // member of — the same narrowing
+                      // `link_group_contact` enforces, so the options
+                      // offered are the options that will be accepted.
+                      if ((ref.watch(groupCompaniesProvider).value ?? const [])
+                          .where((o) => o['is_current'] != true)
+                          .isNotEmpty)
+                        DropdownButtonFormField<String?>(
+                          value: _linkedOrgId,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Company in this group',
+                            helperText:
+                                'Links trading with a sister company so it '
+                                'can be eliminated on consolidation',
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                              value: null,
+                              child: Text('Not a group company'),
+                            ),
+                            // `my_group_companies` includes the company
+                            // you are standing in, flagged is_current.
+                            // A contact of this company standing for
+                            // this company is not a thing, so it is not
+                            // offered.
+                            for (final o
+                                in (ref.watch(groupCompaniesProvider).value ??
+                                        const [])
+                                    .where((o) => o['is_current'] != true))
+                              DropdownMenuItem(
+                                value: o['org_id'] as String?,
+                                child: Text(
+                                  '${o['name']}',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                          onChanged: (v) => setState(() => _linkedOrgId = v),
                         ),
                       // Only on a saved contact: a person or an address
                       // needs a contact_id to hang off, and there isn't

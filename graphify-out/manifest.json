@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787231656.0528126,
-    "ast_hash": "d0f47d85204bbe190d0cd6aba54022c4",
+    "mtime": 1787232608.668923,
+    "ast_hash": "9a88a3308501be43cc23f5a736202a4e",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -125,8 +125,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
-    "mtime": 1787201675.659856,
-    "ast_hash": "00bd6159b5e3158d46be1fffa1b96789",
+    "mtime": 1787232668.1979492,
+    "ast_hash": "60673fdf6bddc6a856cf5030d3d002af",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contacts_screen.dart": {

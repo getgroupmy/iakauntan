@@ -7359,3 +7359,42 @@ extension RepoPosControls on Repo {
         params: {'p_line_modifier': lineModifierId},
       );
 }
+
+
+/// Saying that a customer is another company in the same group.
+///
+/// 0142 added `contacts.linked_org_id` and the guarded function that
+/// sets it, and nothing ever called it. Two features read that column:
+/// 0146 matches an intercompany invoice to the bill it should become,
+/// and 0148 eliminates intercompany balances on consolidation. With
+/// nothing able to set it, both look and find nothing — a consolidation
+/// that silently eliminates none of the trading between sister
+/// companies, which is the one thing consolidating is for.
+extension RepoGroupContacts on Repo {
+  /// Which organization this contact stands for, if any. Read on its
+  /// own rather than carried on the `Contact` model deliberately:
+  /// putting it there would send it through the ordinary contact update
+  /// and around the checks below.
+  Future<String?> contactLinkedOrg(String contactId) async {
+    final row = await client
+        .from('contacts')
+        .select('linked_org_id')
+        .eq('id', contactId)
+        .maybeSingle();
+    return row?['linked_org_id'] as String?;
+  }
+
+  /// Points a contact at a sister company, or clears the link with
+  /// null.
+  ///
+  /// Not a free-text edit, which is 0142's reasoning and worth keeping:
+  /// the target has to be in the same group *and* one the caller can
+  /// already reach, because without the second test this becomes a way
+  /// to discover which companies exist. Unlinking is always allowed —
+  /// it removes an assertion rather than making one.
+  Future<void> linkGroupContact(String contactId, String? orgId) async =>
+      await callRpc(
+        'link_group_contact',
+        params: {'p_contact_id': contactId, 'p_org_id': orgId},
+      );
+}
