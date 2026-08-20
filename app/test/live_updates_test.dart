@@ -50,6 +50,18 @@ void main() {
     );
   });
 
+  test('a module put away leaves the dashboard with it', () {
+    // 0234 gave `org_modules` a second reason to move: `is_hidden`, which
+    // an admin writes from Settings. The rail follows through
+    // `enabledModulesProvider`, but the dashboard is assembled from its
+    // own call — so an admin switching the service desk off would have
+    // left the ticket cards sitting there until somebody reloaded.
+    expect(
+      liveUpdateProviders('org_modules'),
+      allOf(contains(moduleSurfaceProvider), contains(moduleDashboardProvider)),
+    );
+  });
+
   test('the access map is left alone by an entitlement change', () {
     // `my_module_access` reads `platform_modules` and the caller's
     // access type. Neither moves when a module is switched on, so

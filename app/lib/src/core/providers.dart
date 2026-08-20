@@ -641,6 +641,25 @@ final enabledModulesProvider = FutureProvider<Set<String>>((ref) async {
   return repo.enabledModules();
 });
 
+/// Every module with what this company may see of it. The settings
+/// screen's list, and the only place `entitled` and `hidden` are shown
+/// side by side.
+final moduleSurfaceProvider =
+    FutureProvider.autoDispose<List<ModuleSurface>>((ref) async {
+      final repo = ref.watch(repoProvider);
+      if (repo == null) return const [];
+      return repo.moduleSurface();
+    });
+
+/// Figures for the modules this company actually uses, keyed by module
+/// code. Empty for a company whose dashboard is the accounting one.
+final moduleDashboardProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+      final repo = ref.watch(repoProvider);
+      if (repo == null) return const {};
+      return repo.moduleDashboard();
+    });
+
 /// What the person signed in may do in each module: `none`, `read` or
 /// `write`. Everything is `write` until their company defines an access
 /// type and assigns it, which is how every member stands today.

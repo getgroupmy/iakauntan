@@ -118,7 +118,16 @@ final Map<String, List<ProviderOrFamily>> _watchers = {
   // touched by enabling a module. Listing it anyway would be a refetch
   // that can never return anything different, which is the kind of
   // generosity that makes a map hard to trust.
-  'org_modules': [enabledModulesProvider],
+  //
+  // 0234 added a second reason this table moves: a company putting a
+  // module away writes `is_hidden` here. Everything assembled from the
+  // module surface has to follow — the rail, the settings card that did
+  // the writing, and the dashboard, which loses or gains a card by it.
+  'org_modules': [
+    enabledModulesProvider,
+    moduleSurfaceProvider,
+    moduleDashboardProvider,
+  ],
 };
 
 /// The tables listened to. Must match what `0117_live_updates.sql`,

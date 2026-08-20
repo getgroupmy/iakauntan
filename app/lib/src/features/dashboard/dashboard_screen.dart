@@ -9,13 +9,32 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 
+/// The dashboard a company gets is the one its modules make.
+///
+/// This used to be four figures — revenue, expenses, receivables, bank
+/// balance — a revenue chart and an ageing table, shown to everybody. A
+/// firm that bought nothing but the service desk signed in to six
+/// accounting numbers, all of them zero, and had to go looking for the
+/// one screen it pays for.
+///
+/// So the page is assembled rather than fixed. `module_dashboard`
+/// returns figures for the modules the company holds and has not put
+/// away, and those go at the top, because they are what the company
+/// does. The accounting half comes after and only when the ledger
+/// screens are on — hidden by 0234, or simply not what this company is
+/// here for.
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final summary = ref.watch(dashboardProvider);
     final org = ref.watch(currentOrgProvider).value;
+    final modules = ref.watch(moduleDashboardProvider).valueOrNull ?? const {};
+
+    // `accounting` is core, so this is true for almost everybody. It is
+    // false for the company that has deliberately put the ledger screens
+    // away, and for the person whose access type does not reach them.
+    final books = moduleEnabled(ref, 'accounting');
 
     return Scaffold(
       appBar: AppBar(
@@ -23,7 +42,10 @@ class DashboardScreen extends ConsumerWidget {
         actions: [
           IconButton(
             tooltip: 'Refresh',
-            onPressed: () => refreshLedgerData(ref),
+            onPressed: () {
+              refreshLedgerData(ref);
+              ref.invalidate(moduleDashboardProvider);
+            },
             icon: const Icon(Icons.refresh),
           ),
           const SizedBox(width: 8),
@@ -32,36 +54,170 @@ class DashboardScreen extends ConsumerWidget {
       body: RefreshIndicator(
         onRefresh: () async {
           refreshLedgerData(ref);
-          await ref.read(dashboardProvider.future);
+          ref.invalidate(moduleDashboardProvider);
+          await ref.read(moduleDashboardProvider.future);
+          if (books) await ref.read(dashboardProvider.future);
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: PageBody(
-            child: AsyncView(
-              value: summary,
-              onRetry: () => ref.invalidate(dashboardProvider),
-              builder: (data) => Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _Greeting(orgName: org?.name ?? ''),
-                  const SizedBox(height: 20),
-                  _MetricGrid(data: data),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _Greeting(orgName: org?.name ?? ''),
+                const SizedBox(height: 20),
+                if (modules.isNotEmpty) ...[
+                  const _ModuleCards(),
                   const SizedBox(height: 24),
-                  if (data.einvoiceInvalid > 0 || data.einvoicePending > 0)
-                    _EinvoiceBanner(data: data),
-                  const _TrendCard(),
-                  const SizedBox(height: 20),
-                  const _TwoColumn(
-                    left: _ReceivablesCard(),
-                    right: _ActivitiesCard(),
-                  ),
-                  const SizedBox(height: 32),
                 ],
-              ),
+                if (books)
+                  const _Books()
+                else if (modules.isEmpty)
+                  const EmptyState(
+                    icon: Icons.dashboard_customize_outlined,
+                    title: 'Nothing to show yet',
+                    message: 'Every module is switched off for this company. '
+                        'Turn one back on under Settings › Modules.',
+                  ),
+                const SizedBox(height: 32),
+              ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The accounting dashboard, for the companies that keep books here.
+class _Books extends ConsumerWidget {
+  const _Books();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final summary = ref.watch(dashboardProvider);
+
+    return AsyncView(
+      value: summary,
+      onRetry: () => ref.invalidate(dashboardProvider),
+      builder: (data) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _MetricGrid(data: data),
+          const SizedBox(height: 24),
+          if (moduleEnabled(ref, 'einvoice') &&
+              (data.einvoiceInvalid > 0 || data.einvoicePending > 0))
+            _EinvoiceBanner(data: data),
+          const _TrendCard(),
+          const SizedBox(height: 20),
+          if (moduleEnabled(ref, 'crm'))
+            const _TwoColumn(
+              left: _ReceivablesCard(),
+              right: _ActivitiesCard(),
+            )
+          else
+            const _ReceivablesCard(),
+        ],
+      ),
+    );
+  }
+}
+
+/// A tile for each module that has figures worth one.
+///
+/// The keys come from `module_dashboard`, which returns only what this
+/// company holds, has not put away, and this person may read. A key this
+/// build of the app does not recognise is skipped rather than guessed
+/// at, so the server can start answering for a new module before the
+/// client knows how to draw it.
+class _ModuleCards extends ConsumerWidget {
+  const _ModuleCards();
+
+  static Map<String, dynamic> _block(Map<String, dynamic> all, String key) {
+    final v = all[key];
+    return v is Map ? Map<String, dynamic>.from(v) : const {};
+  }
+
+  static num _n(Map<String, dynamic> m, String key) => Fmt.toDouble(m[key]);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final all = ref.watch(moduleDashboardProvider).valueOrNull ?? const {};
+    final width = MediaQuery.sizeOf(context).width;
+    final columns = width >= 1100 ? 4 : (width >= 700 ? 2 : 1);
+
+    final tiles = <Widget>[];
+
+    if (all.containsKey('ticketing')) {
+      final t = _block(all, 'ticketing');
+      final breaching = _n(t, 'breaching');
+      final breached = _n(t, 'breached');
+      tiles.addAll([
+        StatTile(
+          label: 'Open tickets',
+          value: _n(t, 'open').toStringAsFixed(0),
+          caption: _n(t, 'unassigned') > 0
+              ? '${_n(t, 'unassigned').toStringAsFixed(0)} unassigned'
+              : 'All assigned',
+          icon: Icons.confirmation_number_outlined,
+          accent: context.colors.info,
+          onTap: () => context.go('/tickets'),
+        ),
+        StatTile(
+          label: 'Against the clock',
+          value: breaching.toStringAsFixed(0),
+          caption: breached > 0
+              ? '${breached.toStringAsFixed(0)} already past due'
+              : 'Due within four hours',
+          icon: Icons.timer_outlined,
+          accent: breaching > 0 ? context.colors.danger : null,
+          onTap: () => context.go('/tickets'),
+        ),
+        StatTile(
+          label: 'Resolved today',
+          value: _n(t, 'resolved_today').toStringAsFixed(0),
+          caption: 'Closed off since midnight',
+          icon: Icons.task_alt,
+          accent: context.colors.success,
+          onTap: () => context.go('/tickets'),
+        ),
+      ]);
+    }
+
+    if (all.containsKey('pos')) {
+      final p = _block(all, 'pos');
+      tiles.addAll([
+        StatTile(
+          label: 'Takings today',
+          value: Fmt.money(_n(p, 'takings_today')),
+          caption: '${_n(p, 'sales_today').toStringAsFixed(0)} sales rung up',
+          icon: Icons.point_of_sale_outlined,
+          accent: context.colors.success,
+          onTap: () => context.go('/till'),
+        ),
+        StatTile(
+          label: 'Bills still open',
+          value: _n(p, 'open_bills').toStringAsFixed(0),
+          caption: _n(p, 'open_shifts') > 0
+              ? '${_n(p, 'open_shifts').toStringAsFixed(0)} shifts open'
+              : 'No shift open',
+          icon: Icons.receipt_long_outlined,
+          accent: _n(p, 'open_bills') > 0 ? context.colors.warning : null,
+          onTap: () => context.go('/till'),
+        ),
+      ]);
+    }
+
+    if (tiles.isEmpty) return const SizedBox.shrink();
+
+    return GridView.count(
+      crossAxisCount: columns,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: columns == 1 ? 3.2 : 1.75,
+      children: tiles,
     );
   }
 }

@@ -1322,6 +1322,47 @@ class ModuleInfo {
   );
 }
 
+/// One module as this company sees it: whether it holds it, whether it
+/// has put it away, and what it costs.
+///
+/// `entitled` and `visible` are deliberately separate. Entitlement is a
+/// permission and decides what the API answers; visibility is a
+/// preference and decides what the navigation shows. A company can put
+/// away a module it pays for -- the screens go, the ledger behind them
+/// does not.
+class ModuleSurface {
+  ModuleSurface({
+    required this.code,
+    required this.name,
+    required this.isCore,
+    required this.monthlyPrice,
+    required this.entitled,
+    required this.hidden,
+    required this.visible,
+    this.description,
+  });
+
+  final String code;
+  final String name;
+  final String? description;
+  final bool isCore;
+  final double monthlyPrice;
+  final bool entitled;
+  final bool hidden;
+  final bool visible;
+
+  factory ModuleSurface.fromMap(Map<String, dynamic> j) => ModuleSurface(
+    code: j['module_code'] as String,
+    name: j['name'] as String,
+    description: j['description'] as String?,
+    isCore: j['is_core'] == true,
+    monthlyPrice: Fmt.toDouble(j['monthly_price']),
+    entitled: j['entitled'] == true,
+    hidden: j['hidden'] == true,
+    visible: j['visible'] == true,
+  );
+}
+
 class PlatformOrg {
   PlatformOrg({
     required this.id,

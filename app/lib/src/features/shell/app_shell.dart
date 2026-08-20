@@ -32,9 +32,20 @@ class _Dest {
   /// live behind "More".
   final bool primary;
 
-  /// Add-on this destination belongs to. Hidden when the tenant is not
-  /// entitled to it. The database blocks the writes regardless — this
-  /// just avoids showing doors that will not open.
+  /// Module this destination belongs to. Hidden when the company does
+  /// not hold it, and hidden when the company holds it but has put it
+  /// away — `moduleEnabled` asks both questions, and 0234 keeps them
+  /// apart on the server.
+  ///
+  /// Every destination but Dashboard, Import, Team, Email and Settings
+  /// carries one. Those five are the workspace rather than the product:
+  /// a company that uses nothing but the service desk still has people
+  /// to invite and a company name to change, and Settings is where a
+  /// module that has been put away is taken out again — hiding it would
+  /// be a door that locks behind you.
+  ///
+  /// The database blocks the writes regardless. This just avoids showing
+  /// doors that will not open, and doors nobody asked for.
   final String? module;
 
   /// A second add-on that also opens this destination. Property is sold
@@ -60,6 +71,7 @@ const _destinations = <_Dest>[
     Icons.receipt_long,
     '/sales/invoice',
     primary: true,
+    module: 'sales',
   ),
   _Dest(
     'Purchases',
@@ -68,7 +80,13 @@ const _destinations = <_Dest>[
     '/purchases/bill',
     module: 'purchases',
   ),
-  _Dest('Expenses', Icons.receipt_outlined, Icons.receipt, '/expenses'),
+  _Dest(
+    'Expenses',
+    Icons.receipt_outlined,
+    Icons.receipt,
+    '/expenses',
+    module: 'accounting',
+  ),
   _Dest(
     'Matters',
     Icons.gavel_outlined,
@@ -82,6 +100,7 @@ const _destinations = <_Dest>[
     Icons.people,
     '/contacts',
     primary: true,
+    module: 'contacts',
   ),
   _Dest(
     'Items',
@@ -253,6 +272,7 @@ const _destinations = <_Dest>[
     Icons.phone_forwarded_outlined,
     Icons.phone_forwarded,
     '/collections',
+    module: 'sales',
   ),
   _Dest(
     'Approvals',
@@ -317,42 +337,72 @@ const _destinations = <_Dest>[
     Icons.payments_outlined,
     Icons.payments,
     '/receipts',
+    module: 'accounting',
   ),
   _Dest(
     'Reconcile',
     Icons.account_balance_outlined,
     Icons.account_balance,
     '/reconcile',
+    module: 'accounting',
   ),
   _Dest(
     'Fixed assets',
     Icons.inventory_2_outlined,
     Icons.inventory_2,
     '/assets',
+    module: 'fixed_assets',
   ),
-  _Dest('Journals', Icons.menu_book_outlined, Icons.menu_book, '/journals'),
-  _Dest('Recurring journals', Icons.repeat, Icons.repeat_on, '/recurring'),
+  _Dest(
+    'Journals',
+    Icons.menu_book_outlined,
+    Icons.menu_book,
+    '/journals',
+    module: 'accounting',
+  ),
+  _Dest(
+    'Recurring journals',
+    Icons.repeat,
+    Icons.repeat_on,
+    '/recurring',
+    module: 'accounting',
+  ),
   _Dest(
     'Recurring invoices',
     Icons.event_repeat_outlined,
     Icons.event_repeat,
     '/recurring-documents',
+    module: 'sales',
   ),
   _Dest(
     'Withholding tax',
     Icons.account_balance_outlined,
     Icons.account_balance,
     '/withholding',
+    module: 'accounting',
   ),
-  _Dest('Salespeople', Icons.badge_outlined, Icons.badge, '/salespeople'),
+  _Dest(
+    'Salespeople',
+    Icons.badge_outlined,
+    Icons.badge,
+    '/salespeople',
+    module: 'sales',
+  ),
   _Dest(
     'Exchange rates',
     Icons.currency_exchange_outlined,
     Icons.currency_exchange,
     '/exchange-rates',
+    module: 'accounting',
   ),
   _Dest('Import', Icons.upload_file_outlined, Icons.upload_file, '/import'),
-  _Dest('Reports', Icons.bar_chart_outlined, Icons.bar_chart, '/reports'),
+  _Dest(
+    'Reports',
+    Icons.bar_chart_outlined,
+    Icons.bar_chart,
+    '/reports',
+    module: 'accounting',
+  ),
   _Dest('Team', Icons.manage_accounts_outlined, Icons.manage_accounts, '/team'),
   _Dest('Email', Icons.mail_outline, Icons.mail, '/email'),
   _Dest('Settings', Icons.settings_outlined, Icons.settings, '/settings'),
@@ -378,8 +428,8 @@ class AppShell extends ConsumerWidget {
   static const _extendedWidth = 256.0;
   static const _collapsedWidth = 80.0;
 
-  /// Destinations this user can actually reach: add-ons the tenant is
-  /// entitled to, plus the platform console for staff.
+  /// Destinations this user can actually reach: modules the company
+  /// holds and has not put away, plus the platform console for staff.
   List<_Dest> _visible(WidgetRef ref) {
     final isPlatformAdmin = ref.watch(isPlatformAdminProvider).value ?? false;
 

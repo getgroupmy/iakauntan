@@ -99,6 +99,7 @@ jobs:
                    supabase/tests/pos_service.sql \
                    supabase/tests/pos_offline.sql \
                    supabase/tests/pos_kiosk.sql \
+                   supabase/tests/module_surface.sql \
                    supabase/tests/demo_teardown.sql \
                    supabase/tests/demo_rebuild.sql \
                    supabase/tests/multicurrency.sql \

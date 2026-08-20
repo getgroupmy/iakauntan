@@ -799,6 +799,20 @@ class _OwnKeyFields extends StatelessWidget {
 /// What the tenant is entitled to. Add-ons are switched on by platform
 /// staff, not here, so this is informational with one exception: the
 /// legal module needs a one-time setup the company admin runs.
+/// What this company has, and what it wants to look at.
+///
+/// Two different facts about a module, and 0234 keeps them apart on the
+/// server for a reason:
+///
+///   * whether the company **holds** it, which is billing and is not
+///     changed from here; and
+///   * whether the company wants it **on screen**, which is a
+///     preference and is.
+///
+/// A company that only runs a service desk can put Sales, the ledger
+/// screens and the rest away and be left with what it uses. Nothing is
+/// revoked by doing so: tickets still post to the same ledger, the API
+/// still answers, and the switch comes back on from this same card.
 class _ModulesCard extends ConsumerWidget {
   const _ModulesCard({required this.canAdmin});
 
@@ -806,8 +820,7 @@ class _ModulesCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final enabled = ref.watch(enabledModulesProvider);
-    final catalog = ref.watch(platformModulesProvider).value ?? const [];
+    final surface = ref.watch(moduleSurfaceProvider);
 
     return Card(
       child: Padding(
@@ -817,73 +830,124 @@ class _ModulesCard extends ConsumerWidget {
           children: [
             const SectionHeader(
               'Modules',
-              subtitle: 'Contact us to add or remove an add-on',
+              subtitle: 'Switch off what this company does not use. '
+                  'Nothing is cancelled — the screens come back from here.',
             ),
             AsyncView(
-              value: enabled,
-              onRetry: () => ref.invalidate(enabledModulesProvider),
+              value: surface,
+              onRetry: () => ref.invalidate(moduleSurfaceProvider),
               loading: const LinearProgressIndicator(),
-              builder: (active) => Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final m in catalog)
-                        Chip(
-                          avatar: Icon(
-                            active.contains(m.code)
-                                ? Icons.check_circle
-                                : Icons.remove_circle_outline,
-                            size: 16,
-                            color: active.contains(m.code)
-                                ? context.colors.success
-                                : Theme.of(context).colorScheme.outline,
+              builder: (modules) {
+                final held = [for (final m in modules) if (m.entitled) m];
+                final rest = [for (final m in modules) if (!m.entitled) m];
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final m in held)
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        value: m.visible,
+                        title: Text(m.name),
+                        subtitle: m.description == null
+                            ? null
+                            : Text(
+                                m.description!,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                        onChanged: !canAdmin
+                            ? null
+                            : (on) async {
+                                await runWithFeedback(
+                                  context,
+                                  action: () => ref
+                                      .read(repoProvider)!
+                                      .setModuleHidden(m.code, !on),
+                                  successMessage: on
+                                      ? '${m.name} is back'
+                                      : '${m.name} put away',
+                                );
+                                ref.invalidate(moduleSurfaceProvider);
+                                ref.invalidate(enabledModulesProvider);
+                                ref.invalidate(moduleDashboardProvider);
+                              },
+                      ),
+                    if (rest.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Not on this account',
+                        style: Theme.of(context).textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Contact us to add one of these.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final m in rest)
+                            Chip(
+                              avatar: Icon(
+                                Icons.remove_circle_outline,
+                                size: 16,
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                              label: Text(
+                                m.monthlyPrice > 0
+                                    ? '${m.name} · ${Fmt.money(m.monthlyPrice)}/mo'
+                                    : m.name,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                    if (held.any((m) => m.code == 'legal')) ...[
+                      const SizedBox(height: 16),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Legal firm accounting',
+                        style: Theme.of(context).textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Creates the client account, client monies liability '
+                        'and disbursement accounts required to keep client '
+                        'money separate from office money. Safe to run twice.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 12),
+                      if (canAdmin)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              await runWithFeedback(
+                                context,
+                                action: () =>
+                                    ref.read(repoProvider)!.setupLegalModule(),
+                                successMessage: 'Client account ready',
+                              );
+                              ref.invalidate(accountsProvider);
+                              ref.invalidate(bankAccountsProvider);
+                            },
+                            icon: const Icon(Icons.gavel_outlined, size: 18),
+                            label: const Text('Set up client account'),
                           ),
-                          label: Text(m.name),
                         ),
                     ],
-                  ),
-                  if (active.contains('legal')) ...[
-                    const SizedBox(height: 16),
-                    const Divider(),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Legal firm accounting',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Creates the client account, client monies liability '
-                      'and disbursement accounts required to keep client '
-                      'money separate from office money. Safe to run twice.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 12),
-                    if (canAdmin)
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            await runWithFeedback(
-                              context,
-                              action: () =>
-                                  ref.read(repoProvider)!.setupLegalModule(),
-                              successMessage: 'Client account ready',
-                            );
-                            ref.invalidate(accountsProvider);
-                            ref.invalidate(bankAccountsProvider);
-                          },
-                          icon: const Icon(Icons.gavel_outlined, size: 18),
-                          label: const Text('Set up client account'),
-                        ),
-                      ),
                   ],
-                ],
-              ),
+                );
+              },
             ),
           ],
         ),

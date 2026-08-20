@@ -41,9 +41,17 @@ void main() {
         ),
       );
 
+  /// Every module, including the core three. Since 0234 tagged the
+  /// destinations that used to carry no module at all — Sales, Journals,
+  /// Reports and the rest — a set without `sales`, `accounting` and
+  /// `contacts` is a *short* rail, which is the opposite of what these
+  /// two tests are for.
   const everything = {
+    'sales', 'accounting', 'contacts',
     'purchases', 'legal', 'inventory', 'crm', 'einvoice',
-    'hr', 'payroll', 'secretarial',
+    'hr', 'payroll', 'secretarial', 'fixed_assets',
+    'pos', 'ticketing', 'timesheets', 'property_strata',
+    'approvals', 'mbrs', 'forecasting', 'chat', 'manufacturing',
   };
 
   /// A phone, in logical pixels: narrow enough for the bottom bar and

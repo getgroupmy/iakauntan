@@ -3363,29 +3363,54 @@ extension RepoExtras on Repo {
   // ------------------------------------------------------------------
   // Modules the tenant is entitled to
   // ------------------------------------------------------------------
+  /// What belongs on this company's navigation.
+  ///
+  /// Two questions, and 0234 keeps them apart: the company must hold the
+  /// module, and it must not have put it away. `org_module_surface`
+  /// answers both in one call, and answers the first the same way the
+  /// policies do -- which is the point of asking the server rather than
+  /// reassembling the rule here, as this method used to. Reading
+  /// `org_modules` directly meant the client had its own opinion about
+  /// entitlement, and an opinion is exactly what 0232 found had been
+  /// standing in for enforcement.
   Future<Set<String>> enabledModules() async {
-    final rows = await client
-        .from('org_modules')
-        .select('module_code, is_enabled, expires_at')
-        .eq('org_id', orgId);
+    final rows = Repo._rows(
+      await client.rpc('org_module_surface', params: {'p_org_id': orgId}),
+    );
+    return {
+      for (final r in rows)
+        if (r['visible'] == true) r['module_code'].toString(),
+    };
+  }
 
-    final enabled = <String>{};
-    for (final r in Repo._rows(rows)) {
-      if (r['is_enabled'] != true) continue;
-      final expires = Fmt.parseDate(r['expires_at']);
-      if (expires != null && expires.isBefore(DateTime.now())) continue;
-      enabled.add(r['module_code'].toString());
-    }
+  /// Every active module with what this company may see of it: whether
+  /// it is held, whether it has been put away, and what it costs. The
+  /// settings screen's list.
+  Future<List<ModuleSurface>> moduleSurface() async {
+    final rows = Repo._rows(
+      await client.rpc('org_module_surface', params: {'p_org_id': orgId}),
+    );
+    return [for (final r in rows) ModuleSurface.fromMap(r)];
+  }
 
-    // Core modules are always available.
-    final core = await client
-        .from('platform_modules')
-        .select('code')
-        .eq('is_core', true);
-    for (final r in Repo._rows(core)) {
-      enabled.add(r['code'].toString());
-    }
-    return enabled;
+  /// Put a module away, or take it out again. A preference: the server
+  /// refuses a module the company does not hold, and hiding one never
+  /// closes the API behind it.
+  Future<void> setModuleHidden(String module, bool hidden) => client.rpc(
+    'set_module_hidden',
+    params: {'p_org_id': orgId, 'p_module': module, 'p_hidden': hidden},
+  );
+
+  /// Figures for the modules this company actually uses, keyed by module
+  /// code. A company with no such module gets an empty map and keeps the
+  /// accounting dashboard.
+  Future<Map<String, dynamic>> moduleDashboard() async {
+    final data = await client.rpc(
+      'module_dashboard',
+      params: {'p_org_id': orgId},
+    );
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return const {};
   }
 
   // ------------------------------------------------------------------
