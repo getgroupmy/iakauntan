@@ -20,6 +20,7 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/repository.dart';
 import 'download.dart';
 import 'providers.dart';
 

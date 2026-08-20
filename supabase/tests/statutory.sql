@@ -285,7 +285,19 @@ begin
            -- Takes a share token and returns one sales document, with
            -- internal notes and line cost deliberately left out.
            -- `supabase/tests/document_share.sql` asserts both absences.
-           'open_shared_document')));
+           'open_shared_document',
+           -- 0235. Reachable before anybody has signed in, because the
+           -- only moment a rejected password can be reported is before
+           -- there is a session. It is built to be safe rather than
+           -- trusted: nothing is recorded for an address that is not a
+           -- user, no password or attempt is stored, the same void comes
+           -- back either way so it cannot be used to find out which
+           -- addresses exist, and at most one row a minute per account is
+           -- written so it cannot bury a real event.
+           -- `supabase/tests/security_audit.sql` asserts the silence and
+           -- the rate limit; the rest is the signature, which takes an
+           -- address and nothing else.
+           'report_failed_sign_in')));
 
   -- The other half of that allowlist, and it is not decoration.
   --
@@ -300,7 +312,7 @@ begin
   --
   -- So assert the exposure. A share link that has silently stopped
   -- working is found by a customer, not by us.
-  perform pg_temp.check_eq('and the three that need anon still have it',
+  perform pg_temp.check_eq('and the four that need anon still have it',
     (select count(*)
        from pg_proc p
        join pg_namespace n on n.oid = p.pronamespace
@@ -308,8 +320,8 @@ begin
         and p.prosecdef
         and has_function_privilege('anon', p.oid, 'execute')
         and p.proname in ('corp_open_signing_link', 'corp_sign_with_link',
-                          'open_shared_document')),
-    3);
+                          'open_shared_document', 'report_failed_sign_in')),
+    4);
 
   perform pg_temp.check_true('and the link tables stay shut to anon',
     not exists (

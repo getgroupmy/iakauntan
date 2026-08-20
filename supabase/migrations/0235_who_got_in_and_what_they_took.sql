@@ -79,12 +79,20 @@ $do$;
 create table if not exists public.security_events (
   id          bigserial primary key,
   org_id      uuid references public.organizations (id) on delete cascade,
-  user_id     uuid references auth.users (id) on delete set null,
 
-  -- Kept beside `user_id` on purpose. The foreign key nulls on delete,
-  -- and a security log that forgets who did something the moment their
-  -- account is removed is a log that cannot be read after the one event
-  -- most worth reading about.
+  -- Deliberately not a foreign key, which `audit_logs.user_id` is.
+  --
+  -- A log has to outlive what it records, and it must never be able to
+  -- block the deletion it is recording. `record_session_end` fires
+  -- *during* the cascade that removes an account -- deleting a user
+  -- deletes their sessions -- so a reference here would be this table
+  -- writing a row pointing at a row being deleted by the same statement.
+  -- Nothing else in the schema needs it: the log is read through
+  -- `security_log`, which joins `profiles` and falls back to the email.
+  user_id     uuid,
+
+  -- And the email beside it, so the row still names somebody once the
+  -- account is gone -- which is the one event most worth reading about.
   email       text,
 
   kind        app.security_event not null,
@@ -180,10 +188,10 @@ as $$
 begin
   insert into public.security_events
     (org_id, user_id, email, kind, ip_address, user_agent, session_id)
-  select m.org_id, NEW.user_id, u.email, 'sign_in',
-         NEW.ip, NEW.user_agent, NEW.id
+  select m.org_id, NEW.user_id,
+         (select u.email from auth.users u where u.id = NEW.user_id),
+         'sign_in', NEW.ip, NEW.user_agent, NEW.id
     from public.org_members m
-    join auth.users u on u.id = NEW.user_id
    where m.user_id = NEW.user_id;
 
   -- Somebody who belongs to no company yet: a sign-up that has not
@@ -193,17 +201,33 @@ begin
   if not found then
     insert into public.security_events
       (org_id, user_id, email, kind, ip_address, user_agent, session_id)
-    select null, NEW.user_id, u.email, 'sign_in',
-           NEW.ip, NEW.user_agent, NEW.id
-      from auth.users u where u.id = NEW.user_id;
+    values (null, NEW.user_id,
+            (select u.email from auth.users u where u.id = NEW.user_id),
+            'sign_in', NEW.ip, NEW.user_agent, NEW.id);
   end if;
 
   return null;
 end;
 $$;
 
--- A session row is deleted when somebody signs out and also when one
--- expires or is revoked. The name says what is actually known.
+-- A session row is deleted when somebody signs out, when one expires or
+-- is revoked, and when the account itself is removed. The name says what
+-- is actually known.
+--
+-- The email comes from a scalar subquery rather than a join. An inner
+-- join against `auth.users` would drop the row entirely in the one case
+-- where the user is already gone, and a null email is a better answer
+-- than no row.
+--
+-- **An account being deleted is not recorded here, and does not need to
+-- be.** Removing a user cascades to their sessions *and* to their
+-- `org_members` row, so by the time this fires there is no membership
+-- left to say which company the session belonged to -- measured, after
+-- the join above was already fixed. That is the right outcome rather
+-- than a gap: `org_members` has carried an audit trigger since 0055, so
+-- the deletion itself is recorded against the right company, with who
+-- did it. Filing a second, orgless row for the session would add
+-- nothing a reader could act on.
 create or replace function app.record_session_end()
 returns trigger
 language plpgsql
@@ -213,10 +237,10 @@ as $$
 begin
   insert into public.security_events
     (org_id, user_id, email, kind, ip_address, user_agent, session_id)
-  select m.org_id, OLD.user_id, u.email, 'session_ended',
-         OLD.ip, OLD.user_agent, OLD.id
+  select m.org_id, OLD.user_id,
+         (select u.email from auth.users u where u.id = OLD.user_id),
+         'session_ended', OLD.ip, OLD.user_agent, OLD.id
     from public.org_members m
-    join auth.users u on u.id = OLD.user_id
    where m.user_id = OLD.user_id;
   return null;
 end;

@@ -3244,23 +3244,28 @@ class MyInvoisException implements Exception {
 /// Platform-level data access. Not tenant scoped: every call lands on a
 /// SECURITY DEFINER function that re-checks platform admin rights, so a
 /// normal user calling these simply gets an error.
+///
+/// Deliberately not routed through [Repo.callRpc]. A refusal here has no
+/// organization to be filed under -- `report_denied` takes an org_id and
+/// checks membership -- and "somebody who is not platform staff tried the
+/// console" is not a tenant's event to hold.
 class PlatformRepo {
   PlatformRepo(this.client);
 
   final SupabaseClient client;
 
   Future<bool> amIPlatformAdmin() async {
-    final data = await callRpc('am_i_platform_admin');
+    final data = await client.rpc('am_i_platform_admin');
     return data == true;
   }
 
   Future<Map<String, dynamic>> stats() async {
-    final data = await callRpc('platform_stats');
+    final data = await client.rpc('platform_stats');
     return Map<String, dynamic>.from(data as Map);
   }
 
   Future<List<PlatformOrg>> organizations() async {
-    final data = await callRpc('platform_organizations');
+    final data = await client.rpc('platform_organizations');
     return Repo._rows(data).map(PlatformOrg.fromJson).toList();
   }
 
@@ -3273,12 +3278,12 @@ class PlatformRepo {
     return Repo._rows(data).map(ModuleInfo.fromJson).toList();
   }
 
-  Future<void> setModule(String orgId, String code, bool enabled) => callRpc(
+  Future<void> setModule(String orgId, String code, bool enabled) => client.rpc(
     'platform_set_module',
     params: {'p_org_id': orgId, 'p_module_code': code, 'p_enabled': enabled},
   );
 
-  Future<void> setOrgStatus(String orgId, String status) => callRpc(
+  Future<void> setOrgStatus(String orgId, String status) => client.rpc(
     'platform_set_org_status',
     params: {'p_org_id': orgId, 'p_status': status},
   );
@@ -3301,7 +3306,7 @@ class PlatformRepo {
   /// Every tenant's balance and what they have spent lately, emptiest
   /// first — which is the order somebody chasing top-ups wants.
   Future<List<Map<String, dynamic>>> creditSummary() async =>
-      Repo._rows(await callRpc('platform_credit_summary'));
+      Repo._rows(await client.rpc('platform_credit_summary'));
 
   /// Grants [amount] of credit and raises the invoice for it. Service
   /// tax, if the issuer is registered for it, goes on top.
@@ -3310,7 +3315,7 @@ class PlatformRepo {
     double amount, {
     String? note,
   }) async {
-    final data = await callRpc(
+    final data = await client.rpc(
       'platform_topup_credit',
       params: {'p_org_id': orgId, 'p_amount': amount, 'p_note': note},
     );
@@ -3321,7 +3326,7 @@ class PlatformRepo {
   /// top-up — either way it writes the same ledger line everything else
   /// does, so it cannot be done invisibly.
   Future<void> adjustCredit(String orgId, double amount, String reason) =>
-      callRpc(
+      client.rpc(
         'platform_adjust_credit',
         params: {'p_org_id': orgId, 'p_amount': amount, 'p_reason': reason},
       );
@@ -3332,7 +3337,7 @@ class PlatformRepo {
     return Repo._rows(await query.order('issue_date', ascending: false));
   }
 
-  Future<void> markInvoicePaid(String invoiceId, {String? note}) => callRpc(
+  Future<void> markInvoicePaid(String invoiceId, {String? note}) => client.rpc(
     'platform_mark_invoice_paid',
     params: {'p_invoice_id': invoiceId, 'p_note': note},
   );
@@ -3365,7 +3370,7 @@ class PlatformRepo {
     String resultRounding = 'nearest_cent',
     bool isVerified = false,
   }) async {
-    final data = await callRpc(
+    final data = await client.rpc(
       'platform_publish_statutory_schedule',
       params: {
         'p_body': body,
@@ -3388,7 +3393,7 @@ class PlatformRepo {
     bool verified, {
     String? source,
     String? notes,
-  }) => callRpc(
+  }) => client.rpc(
     'platform_set_schedule_verified',
     params: {
       'p_schedule_id': scheduleId,

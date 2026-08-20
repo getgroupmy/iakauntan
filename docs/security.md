@@ -21,12 +21,26 @@ it saw more than it did is worse than one that says where it stops.
 | Event | Source | Can it be skipped? |
 |---|---|---|
 | Sign-in | trigger on `auth.sessions` insert | **No.** GoTrue writes the row; the trigger is on the table. |
-| Session ended | trigger on `auth.sessions` delete | **No.** Covers signing out, expiry and revocation alike, which is why it is not called "signed out". |
+| Session ended | trigger on `auth.sessions` delete | **No.** Covers signing out, expiry and revocation alike, which is why it is not called "signed out". An account *being deleted* is the exception — see below. |
 | Data change | `audit_changes` on 41 tables | **No.** A trigger, and the API cannot turn it off. |
 | Export | `record_export`, called by `exportTextFile`/`exportBytesFile` | Only by not using the app. Every download path goes through those two. |
 | Sensitive read | `app.note_read`, inside `security_log` and `audit_trail` | **No.** Reading either log records the read. |
 | Refusal | `report_denied`, called by `Repo.callRpc` on a 42501 | **Yes** — see below. |
 | Failed sign-in | `report_failed_sign_in`, called by the sign-in screen | **Yes** — see below. |
+
+### An account being deleted
+
+Removing a user cascades to their sessions *and* to their `org_members`
+row, so when `record_session_end` fires there is no membership left to
+say which company the session belonged to. No row is written, and that
+is the right outcome rather than a gap: `org_members` has carried an
+audit trigger since 0055, so the deletion is recorded against the right
+company with who did it. A second, orgless row for the session would add
+nothing anybody could act on.
+
+`security_events.user_id` is deliberately **not** a foreign key, unlike
+`audit_logs.user_id`. A log has to outlive what it records and must
+never be able to block the deletion it is recording.
 
 ### Why two of them are reported rather than recorded
 
