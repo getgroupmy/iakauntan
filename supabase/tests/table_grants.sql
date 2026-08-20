@@ -273,4 +273,60 @@ begin
   raise notice 'ok   all % relations in public are owned by postgres', v_mine;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Nor MAINTAIN, where the server has such a thing
+--
+-- 0241 revokes it. The guard is not decoration: MAINTAIN arrived in
+-- PostgreSQL 17, production runs 17.6, and the stack CI builds is pinned
+-- to major_version 15 in `supabase/config.toml`. On 15 the privilege
+-- does not exist -- `has_table_privilege(..., 'MAINTAIN')` raises
+-- `unrecognized privilege type` rather than returning false -- so the
+-- call has to be reached dynamically and only when the server is new
+-- enough.
+--
+-- Which means this assertion is vacuous in CI and real only against the
+-- hosted project. Worth saying out loud rather than letting a green run
+-- imply more than it proved.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_held int;
+  v_acl  text;
+begin
+  if current_setting('server_version_num')::int < 170000 then
+    raise notice
+      'skip MAINTAIN: server is %, the privilege does not exist before 17',
+      current_setting('server_version');
+    return;
+  end if;
+
+  execute $q$
+    select count(*)
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+     cross join unnest(array['authenticated', 'anon']) as g(grantee)
+     where n.nspname = 'public'
+       and c.relkind in ('r', 'p', 'v', 'm', 'f')
+       and has_table_privilege(g.grantee, c.oid, 'MAINTAIN')
+  $q$ into v_held;
+
+  if v_held > 0 then
+    raise exception 'FAIL a client role holds MAINTAIN on % relations', v_held;
+  end if;
+
+  select coalesce(string_agg(d.defaclacl::text, ' | '), '(no row, built-in default)')
+    into v_acl
+    from pg_default_acl d
+    join pg_namespace n on n.oid = d.defaclnamespace
+   where n.nspname = 'public'
+     and d.defaclobjtype = 'r'
+     and pg_get_userbyid(d.defaclrole) = 'postgres';
+
+  if v_acl ~ '(anon|authenticated)=[a-zA-Z]*m' then
+    raise exception 'FAIL new tables would still be created with MAINTAIN: %', v_acl;
+  end if;
+
+  raise notice 'ok   no client role holds MAINTAIN, and new tables will not get it';
+end $$;
+
 rollback;

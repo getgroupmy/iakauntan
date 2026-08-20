@@ -204,13 +204,50 @@ migrations run as.
 rather than trusting it: if a relation ever appears under another owner,
 the test fails.
 
-**Still open, deliberately:** `MAINTAIN`. The same default grant includes
-it, `authenticated` holds it on 240 tables, and it is live — `analyze
-public.gl_lines` as `authenticated` succeeds on production. It carries
-`VACUUM FULL` and `CLUSTER`, both of which take an ACCESS EXCLUSIVE lock,
-so it is a way to stall a table rather than to corrupt one. That is an
-availability argument rather than an integrity one, and it should be
-decided on its own terms.
+### A client role does not vacuum your tables
+
+`MAINTAIN` is the fourth privilege in that default grant — the `m` in
+`arwdDxtm` — and **0241 revokes it**, on every relation and in the
+default for new ones. `authenticated` held it on 240 of the 249
+relations in `public`.
+
+It carries `ANALYZE`, `VACUUM`, `REINDEX`, `CLUSTER`, `LOCK TABLE` and
+`REFRESH MATERIALIZED VIEW`. `VACUUM FULL` and `CLUSTER` take an ACCESS
+EXCLUSIVE lock and rewrite the table, so this is a way to stall the
+ledger rather than to corrupt it — an availability hole, which is why it
+was held back from 0240 rather than folded into it.
+
+**How not to test for it.** Running `analyze public.gl_lines` as
+`authenticated` succeeds — and it succeeds just as happily *after* the
+privilege has been revoked, which is how the mistake was caught. ANALYZE
+does not raise when the caller lacks the privilege; it emits a warning
+and skips the table. An earlier note here cited that success as evidence
+the grant was live, and it was not evidence of anything. The privilege
+bit is: `has_table_privilege('authenticated', rel, 'MAINTAIN')` was true
+on 240 relations before 0241 and is false on all 249 after. `VACUUM
+FULL` and `CLUSTER` were not demonstrated end to end — neither runs
+inside a transaction block, so probing them on production would have
+meant rewriting a live table to prove a point about a grant.
+
+### The two environments are not the same major version
+
+Worth knowing before reading a green CI run as proof of anything about
+grants. **Production runs PostgreSQL 17.6; the stack CI builds with
+`supabase start` is pinned to `major_version = 15`** in
+`supabase/config.toml`.
+
+`MAINTAIN` did not exist before 17. On the CI stack `revoke maintain` is
+a syntax error and `has_table_privilege(..., 'MAINTAIN')` raises
+`unrecognized privilege type` rather than returning false. So 0241 puts
+the whole of its work behind a `server_version_num >= 170000` guard and
+issues it as dynamic SQL, and `table_grants.sql` guards its assertion the
+same way.
+
+The consequence is that **CI cannot prove 0241.** It runs where the
+privilege is absent, so the assertion passes vacuously; the real check
+happens when `supabase db push` applies the file against 17.6. The same
+caveat applies to anything else version-dependent: a green run means the
+schema is consistent on 15, not that it is on 17.
 
 ### The part that would have broken every posting
 
