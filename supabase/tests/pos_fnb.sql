@@ -14,6 +14,10 @@
 -- occupies the one they went to, and there is no second copy to fall
 -- out of step.
 -- =====================================================================
+\set ON_ERROR_STOP on
+
+begin;
+
 \i supabase/tests/_helpers.sql
 
 do $$
@@ -796,3 +800,5 @@ begin
   raise notice 'point of sale dining room: all assertions passed';
 end;
 $$;
+
+rollback;

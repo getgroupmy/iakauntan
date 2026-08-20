@@ -23,6 +23,10 @@
 --     online sends everything it has, and a sale naming an item
 --     somebody deleted yesterday must be rejected alone.
 -- =====================================================================
+\set ON_ERROR_STOP on
+
+begin;
+
 \i supabase/tests/_helpers.sql
 
 do $$
@@ -205,3 +209,5 @@ begin
   raise notice 'point of sale offline: all assertions passed';
 end;
 $$;
+
+rollback;

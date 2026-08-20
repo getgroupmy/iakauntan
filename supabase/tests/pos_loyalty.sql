@@ -20,6 +20,10 @@
 --     because nothing was owed. A customer who has saved enough points
 --     to pay must not find the till refuses to ring it up.
 -- =====================================================================
+\set ON_ERROR_STOP on
+
+begin;
+
 \i supabase/tests/_helpers.sql
 
 do $$
@@ -431,3 +435,5 @@ begin
   raise notice 'point of sale loyalty: all assertions passed';
 end;
 $$;
+
+rollback;

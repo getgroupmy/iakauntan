@@ -17,6 +17,10 @@
 --     not when somebody taps a button, because at a kiosk there is
 --     nobody to tap it.
 -- =====================================================================
+\set ON_ERROR_STOP on
+
+begin;
+
 \i supabase/tests/_helpers.sql
 
 do $$
@@ -137,3 +141,5 @@ begin
   raise notice 'point of sale kiosk: all assertions passed';
 end;
 $$;
+
+rollback;

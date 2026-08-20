@@ -13,6 +13,10 @@
 -- sentence; if it were the only guard, this file would be asserting
 -- something that is true right up until the shop gets busy.
 -- =====================================================================
+\set ON_ERROR_STOP on
+
+begin;
+
 \i supabase/tests/_helpers.sql
 
 do $$
@@ -331,3 +335,5 @@ begin
   raise notice 'point of sale service: all assertions passed';
 end;
 $$;
+
+rollback;

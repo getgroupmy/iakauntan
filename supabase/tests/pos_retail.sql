@@ -14,6 +14,10 @@
 --     six-pack as one unit undercharges by five sixths and nothing
 --     notices until the stock count.
 -- =====================================================================
+\set ON_ERROR_STOP on
+
+begin;
+
 \i supabase/tests/_helpers.sql
 
 do $$
@@ -254,3 +258,5 @@ begin
   raise notice 'point of sale retail: all assertions passed';
 end;
 $$;
+
+rollback;

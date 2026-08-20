@@ -22,6 +22,10 @@
 --     other state is a till that took money and recorded nothing, which
 --     is the failure this whole module is arranged around.
 -- =====================================================================
+\set ON_ERROR_STOP on
+
+begin;
+
 \i supabase/tests/_helpers.sql
 
 do $$
@@ -355,3 +359,5 @@ begin
   raise notice 'point of sale: all assertions passed';
 end;
 $$;
+
+rollback;

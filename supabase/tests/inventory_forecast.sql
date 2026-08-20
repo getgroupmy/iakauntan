@@ -18,6 +18,10 @@
 --     collapses it hardest for the intermittent items whose buffer
 --     matters most.
 -- =====================================================================
+\set ON_ERROR_STOP on
+
+begin;
+
 \i supabase/tests/_helpers.sql
 
 do $$
@@ -574,3 +578,5 @@ begin
   raise notice 'forecast to purchase order: all assertions passed';
 end;
 $$;
+
+rollback;
