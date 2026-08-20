@@ -157,15 +157,60 @@ truncate public.gl_lines cascade;   -- 10 rows -> 0 rows
 Supabase grants `TRUNCATE` to `authenticated` on every table in `public`
 by default — 238 of them here. PostgREST emits no verb that produces a
 TRUNCATE, so this was not reachable over the API; that is a property of
-the client in front of the database, not of the database.
+the client in front of the database, not of the database. Anything
+holding a connection string gets the privilege, not the API's opinion of
+it.
 
 0239 revokes `TRUNCATE`, `REFERENCES` and `TRIGGER` on the two ledger
 tables, leaving a client role with `INSERT, SELECT` and nothing else.
 
-**Still open, deliberately:** the same three grants sit on the other 238
-tables. Revoking them across the board is very likely right, but it is a
-decision about the whole database rather than about the ledger, and it
-belongs in its own reviewable change.
+### The same three grants, on every other table
+
+0239 left the same three grants on the rest of the schema and said the
+decision belonged in its own change. **0240 is that change.** Counted on
+production before writing it:
+
+| role | TRUNCATE | REFERENCES | TRIGGER |
+|---|---|---|---|
+| `authenticated` | 238 | 238 | 238 |
+| `anon` | 228 | 228 | 228 |
+
+out of 247 tables and 2 views. 0240 revokes all three from both roles on
+every relation in `public`, including `audit_logs` and
+`security_events` — the two tables an attacker would most want to empty,
+and the two `TRUNCATE` would have emptied without leaving a row behind.
+
+`SELECT`, `INSERT`, `UPDATE` and `DELETE` are untouched, and so are
+`service_role` and `postgres`. Verified on production inside a
+rolled-back transaction, as `authenticated` with a real member's JWT:
+truncating `audit_logs` and `security_events` refused with 42501, while
+reading `accounts`, `contacts`, `gl_entries`, `audit_logs` and
+`org_modules`, updating a contact, and posting a balanced journal all
+still worked.
+
+**The half of it that is easy to miss.** A one-time revoke only covers
+the tables that exist. Supabase's default ACL grants `anon` and
+`authenticated` `arwdDxtm` on every *new* table in `public` — the `D`,
+`x` and `t` being exactly these three. Without changing the default, one
+`create table` in migration 0241 silently re-opens the hole for that
+table. 0240 narrows the default privileges for `postgres`, the role
+migrations run as.
+
+**Known limit:** a second default ACL over `public` is owned by
+`supabase_admin` and still carries all three. 0240 cannot change it —
+`postgres` is not a member of that role, and the attempt fails with
+42501. It is inert only because every one of the 249 relations in
+`public` is owned by `postgres`. `table_grants.sql` asserts that premise
+rather than trusting it: if a relation ever appears under another owner,
+the test fails.
+
+**Still open, deliberately:** `MAINTAIN`. The same default grant includes
+it, `authenticated` holds it on 240 tables, and it is live — `analyze
+public.gl_lines` as `authenticated` succeeds on production. It carries
+`VACUUM FULL` and `CLUSTER`, both of which take an ACCESS EXCLUSIVE lock,
+so it is a way to stall a table rather than to corrupt one. That is an
+availability argument rather than an integrity one, and it should be
+decided on its own terms.
 
 ### The part that would have broken every posting
 

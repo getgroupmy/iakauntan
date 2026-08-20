@@ -108,4 +108,160 @@ begin
   raise notice 'ok   every table in public has row level security on';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- No client role holds TRUNCATE, REFERENCES or TRIGGER on anything
+--
+-- 0239 took these three off the ledger; 0240 took them off the rest of
+-- `public`. None of them is a data privilege:
+--
+--   TRUNCATE   empties a table without producing a row for RLS to
+--              filter or an audit trigger to see
+--   REFERENCES points a foreign key at the table, pinning its rows
+--   TRIGGER    attaches code to the table
+--
+-- The environments differ in how they got here, which is the reason
+-- this is asserted rather than assumed. On the hosted project every one
+-- of these was granted by Supabase's default privileges -- 238 tables
+-- for `authenticated`, 228 for `anon`, counted before 0240 was written.
+-- A stack built from these migrations alone never had them, because
+-- 0125 grants each data privilege by name rather than `grant all`. The
+-- assertion has to be true in both.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_held      text;
+  v_n         int;
+  v_relations int;
+  v_readable  int;
+begin
+  select count(*),
+         string_agg(distinct rel || ' (' || grantee || ' ' || priv || ')',
+                    ', ' order by rel || ' (' || grantee || ' ' || priv || ')')
+    into v_n, v_held
+    from (
+      select c.oid::regclass::text as rel, g.grantee, p.priv
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+       cross join unnest(array['authenticated', 'anon']) as g(grantee)
+       cross join unnest(array['TRUNCATE', 'REFERENCES', 'TRIGGER']) as p(priv)
+       where n.nspname = 'public'
+         and c.relkind in ('r', 'p', 'v', 'm', 'f')
+         and has_table_privilege(g.grantee, c.oid, p.priv)
+    ) t;
+
+  if v_n > 0 then
+    raise exception 'FAIL % client grants of truncate/references/trigger remain: %',
+      v_n, left(v_held, 400);
+  end if;
+
+  -- The positive control. The check above counts absences, and an empty
+  -- schema -- or one where every grant had been revoked -- would satisfy
+  -- it without meaning anything. Say what was actually examined, and
+  -- that the application can still reach it.
+  select count(*),
+         count(*) filter (where has_table_privilege('authenticated', c.oid, 'SELECT'))
+    into v_relations, v_readable
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public'
+     and c.relkind in ('r', 'p', 'v', 'm', 'f');
+
+  if v_relations < 200 then
+    raise exception
+      'FAIL only % relations in public -- the check above proved nothing',
+      v_relations;
+  end if;
+  if v_readable < 200 then
+    raise exception
+      'FAIL authenticated can read only % of % relations -- too much was revoked',
+      v_readable, v_relations;
+  end if;
+
+  raise notice
+    'ok   none of the three on any of % relations, % still readable',
+    v_relations, v_readable;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And the next table created does not get them back
+--
+-- Supabase's default ACL hands `anon` and `authenticated` arwdDxtm on
+-- every new table in `public`. Without 0240's `alter default
+-- privileges`, one `create table` in a later migration re-opens the hole
+-- for that table and nothing says so. `D`, `x` and `t` in an aclitem are
+-- TRUNCATE, REFERENCES and TRIGGER.
+--
+-- Only `postgres` is checked, and the second block says why rather than
+-- leaving it to be taken on trust. There is a second default ACL over
+-- this schema owned by `supabase_admin` which still carries all three,
+-- and 0240 cannot touch it: `postgres` is not a member of that role and
+-- `alter default privileges` for it fails with 42501, measured. It is
+-- inert here only because nothing in `public` is created by that role —
+-- which is the premise the block below turns into an assertion.
+--
+-- Where no default ACL row exists for a role the built-in default
+-- applies, which grants a client role nothing — so an absent row is a
+-- pass, not a gap.
+-- ---------------------------------------------------------------------
+do $$
+declare v_acl text;
+begin
+  select coalesce(string_agg(d.defaclacl::text, ' | '), '(no row, built-in default)')
+    into v_acl
+    from pg_default_acl d
+    join pg_namespace n on n.oid = d.defaclnamespace
+   where n.nspname = 'public'
+     and d.defaclobjtype = 'r'
+     and pg_get_userbyid(d.defaclrole) = 'postgres';
+
+  if v_acl ~ '(anon|authenticated)=[a-zA-Z]*[Dxt]' then
+    raise exception
+      'FAIL tables created by postgres would carry truncate/references/trigger: %',
+      v_acl;
+  end if;
+  raise notice 'ok   new tables are created without the three';
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The premise that scoping the check to `postgres` rests on
+--
+-- Checking one role's defaults is only sufficient while that role is the
+-- one creating things here. Every relation in `public` is owned by
+-- `postgres` — 249 of them on the hosted project, counted. If a table
+-- ever appears under another owner, the check above stops covering the
+-- schema, and this is what says so instead of leaving it silently
+-- half-true.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_others text;
+  v_mine   int;
+begin
+  select string_agg(distinct pg_get_userbyid(c.relowner), ', '),
+         count(*) filter (where pg_get_userbyid(c.relowner) = 'postgres')
+    into v_others, v_mine
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public'
+     and c.relkind in ('r', 'p', 'v', 'm', 'f')
+     and pg_get_userbyid(c.relowner) <> 'postgres';
+
+  if v_others is not null then
+    raise exception
+      'FAIL relations in public are owned by %, whose default privileges 0240 does not reach',
+      v_others;
+  end if;
+
+  select count(*) into v_mine
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm', 'f');
+
+  if v_mine < 200 then
+    raise exception 'FAIL only % relations in public -- nothing was examined', v_mine;
+  end if;
+
+  raise notice 'ok   all % relations in public are owned by postgres', v_mine;
+end $$;
+
 rollback;
