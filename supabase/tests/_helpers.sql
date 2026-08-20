@@ -176,6 +176,23 @@ begin
           'sdn_bhd', 'MYR', v_owner)
   returning id into v_org;
   perform app.seed_chart_of_accounts(v_org);
+
+  -- Every module, switched on.
+  --
+  -- Until 0232 `app.module_access` never read `org_modules`, so a test
+  -- org could use any feature without holding it and most of these
+  -- files never mention entitlement at all. Now that the check is real,
+  -- a fixture that did not say otherwise would be a fixture that cannot
+  -- post a journal.
+  --
+  -- Granting everything is the right default here rather than a
+  -- shortcut: these files assert business rules, not billing. A test
+  -- about entitlement says so by switching one back off, which is what
+  -- `pos_loyalty.sql` does.
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, pm.code, true from public.platform_modules pm
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
   perform pg_temp.sign_in_as(v_owner);
   return v_org;
 end;

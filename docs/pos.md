@@ -140,7 +140,13 @@ a salon runs memberships and a minimart runs a points card, and a shop
 that wants only the till should not be paying for either. `0231` gives
 them their own codes — `loyalty` and `memberships`, RM29 each.
 
-Registering the codes is the small part. The gate is the guard inside
+Registering the codes was the small part, and moving the guards turned
+out not to be the whole of it either: `app.module_access` never read
+`org_modules`, so entitlement was enforced only in the Flutter client.
+`0232` fixes that for every module at once — see `docs/modules.md`.
+The split above is what found it.
+
+Moving the guards still mattered. The gate is the guard inside
 each SECURITY DEFINER function, because those bypass RLS by definition —
 a policy on `loyalty_accounts` does not stop `enrol_loyalty_member`
 writing to it. So the work was ten guards moved, two added, and a set of
