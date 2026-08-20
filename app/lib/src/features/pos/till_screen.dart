@@ -458,6 +458,64 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     setState(() => _saleId = saleId);
   }
 
+  /// What is currently on a line, from the sale-wide read the basket
+  /// already holds. No extra round trip to answer a question the screen
+  /// can already see.
+  List<Map<String, dynamic>> _modifiersOn(String lineId) {
+    final id = _saleId;
+    if (id == null) return const [];
+    final all = ref
+        .read(posSaleLineModifiersProvider(id))
+        .maybeWhen(data: (rows) => rows, orElse: () => const <Map<String, dynamic>>[]);
+    return [
+      for (final m in all)
+        if (m['line_id'] == lineId) m,
+    ];
+  }
+
+  /// Takes one modifier back off a parked line.
+  ///
+  /// The server reprices the line afterwards, so nothing here adjusts a
+  /// total — a till that subtracted the modifier's price itself would
+  /// be a second opinion on what the plate costs, and the bill is the
+  /// thing the customer is holding.
+  Future<void> _removeModifier(String saleId, String lineId) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final mods = _modifiersOn(lineId);
+    if (mods.isEmpty) return;
+
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final m in mods)
+              ListTile(
+                leading: const Icon(Icons.remove_circle_outline),
+                title: Text('${m['name']}'),
+                onTap: () => Navigator.of(ctx).pop(m['id'] as String),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (chosen == null || !mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      // The line repricing in front of them is the message.
+      successMessage: null,
+      action: () => repo.removeLineModifier(chosen),
+    );
+    if (!ok || !mounted) return;
+    ref
+      ..invalidate(posSaleProvider(saleId))
+      ..invalidate(posSaleLinesProvider(saleId))
+      ..invalidate(posSaleLineModifiersProvider(saleId));
+  }
+
   /// Takes a class, a wash or a treatment on the membership the
   /// customer is already paying for.
   ///
@@ -566,6 +624,17 @@ class _TillScreenState extends ConsumerState<TillScreen> {
                   title: const Text('Cover with membership'),
                   onTap: () => Navigator.of(ctx).pop('cover'),
                 ),
+              // Offered only when there is one to take off. A waiter who
+              // tapped "extra cheese" by mistake could previously only
+              // void the whole line and ring it again — `add_line_modifier`
+              // has had a caller since the till was built and its
+              // opposite never did.
+              if (_modifiersOn(lineId).isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.playlist_remove),
+                  title: const Text('Take a modifier off'),
+                  onTap: () => Navigator.of(ctx).pop('modifier'),
+                ),
               ListTile(
                 leading: const Icon(Icons.delete_outline),
                 title: const Text('Take off the bill'),
@@ -578,6 +647,10 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       if (!mounted) return;
       if (go == 'cover') {
         await _coverWithMembership(id, lineId);
+        return;
+      }
+      if (go == 'modifier') {
+        await _removeModifier(id, lineId);
         return;
       }
       if (go != 'remove') return;

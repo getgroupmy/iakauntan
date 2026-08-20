@@ -243,6 +243,17 @@ const _destinations = <_Dest>[
     '/diary',
     module: 'pos',
   ),
+  // A control rather than a screen anybody works in, which is why it
+  // sits with the till and not in Reports: the person who needs it is
+  // the person who runs the shop, and Reports is gated on accounting
+  // that a food stall may not have bought.
+  _Dest(
+    'Voids',
+    Icons.remove_shopping_cart_outlined,
+    Icons.remove_shopping_cart,
+    '/voids',
+    module: 'pos',
+  ),
   // Its own module since 0231, and gated on that rather than on the
   // till: a gym that runs memberships and a minimart that does not are
   // the reason the two were separated in the first place.

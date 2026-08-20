@@ -2012,3 +2012,10 @@ final loyaltyAccountBalanceProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>?, String>(
       (ref, contactId) => requireRepo(ref).loyaltyAccountBalance(contactId),
     );
+
+
+/// What went off the bills over a range, grouped by reason.
+final posVoidSummaryProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({DateTime from, DateTime to})>(
+      (ref, range) => requireRepo(ref).posVoidSummary(range.from, range.to),
+    );

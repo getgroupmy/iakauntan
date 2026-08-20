@@ -7319,3 +7319,43 @@ extension RepoLoyaltyAdmin on Repo {
     await callRpc('expire_loyalty_points', params: {'p_org': orgId}),
   );
 }
+
+
+/// The two loose ends the till was left with.
+extension RepoPosControls on Repo {
+  /// What went off the bills, grouped by reason.
+  ///
+  /// 0225 wrote this for "the screen a manager opens when the food cost
+  /// does not match the takings" and nothing ever opened it. Grouped
+  /// rather than listed because one void is an accident and thirty
+  /// "not received" in a week is a conversation.
+  ///
+  /// The dates are the shop's, not the server's: the function works in
+  /// Asia/Kuala_Lumpur, so a sale at eleven at night belongs to the day
+  /// the shop thinks it does.
+  Future<List<Map<String, dynamic>>> posVoidSummary(
+    DateTime from,
+    DateTime to,
+  ) async => Repo.rows(
+    await callRpc(
+      'pos_void_summary',
+      params: {
+        'p_org': orgId,
+        'p_from': Fmt.iso(from),
+        'p_to': Fmt.iso(to),
+      },
+    ),
+  );
+
+  /// Takes one modifier back off a parked line.
+  ///
+  /// `add_line_modifier` has had a caller since the till was built and
+  /// this never did, so a waiter who tapped "extra cheese" by mistake
+  /// had to void the whole line and ring it again. The server reprices
+  /// the line afterwards and refuses once the bill is no longer parked.
+  Future<void> removeLineModifier(String lineModifierId) async =>
+      await callRpc(
+        'remove_line_modifier',
+        params: {'p_line_modifier': lineModifierId},
+      );
+}
