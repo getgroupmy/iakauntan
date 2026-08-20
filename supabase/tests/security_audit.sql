@@ -41,15 +41,22 @@ declare
   v_owner uuid;
   v_sess  uuid := gen_random_uuid();
 begin
-  v_org   := pg_temp.test_org('Kilang Selamat Sdn Bhd');
-  v_owner := pg_temp.test_user();
+  v_org := pg_temp.test_org('Kilang Selamat Sdn Bhd');
 
-  -- Stated rather than assumed. The first version of this block queried
-  -- by `session_id` alone and got two rows back in CI where production
-  -- gives one, and the cause could not be read off the failure -- so the
-  -- premise the block rests on is now an assertion that names the real
-  -- number when it is wrong.
-  perform pg_temp.check_eq('the fixture keeps one set of books here',
+  -- A colleague rather than `test_user()`, and that is not cosmetic.
+  -- Eight files in this suite -- the POS family and
+  -- `inventory_forecast.sql` -- carry no `begin`/`rollback` at all, so
+  -- their fixtures commit and `fixture@iakauntan.test` reaches this file
+  -- already owning nine companies. A sign-in writes one row per company,
+  -- so anything counted over that account counts nine other files'
+  -- leftovers: the assertion that found this reported `expected 1, got
+  -- 10`. `another_user` is fresh on every call, which makes the
+  -- membership set exactly what this block puts in it.
+  v_owner := pg_temp.another_user('signin-probe@iakauntan.test');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_owner, 'viewer', 'active');
+
+  perform pg_temp.check_eq('this person keeps one set of books',
     (select count(*)::int from public.org_members where user_id = v_owner), 1);
 
   -- Exactly what GoTrue does on a successful password sign-in. Nothing
@@ -80,7 +87,7 @@ begin
   perform pg_temp.check_eq('and who',
     (select email from public.security_events
       where org_id = v_org and session_id = v_sess and kind = 'sign_in'),
-    'fixture@iakauntan.test');
+    'signin-probe@iakauntan.test');
 
   delete from auth.sessions where id = v_sess;
 
@@ -107,9 +114,14 @@ declare
   v_owner uuid;
   v_sess  uuid := gen_random_uuid();
 begin
-  v_one   := pg_temp.test_org('Dua Buku Satu Sdn Bhd');
-  v_owner := pg_temp.test_user();
-  v_two   := pg_temp.test_org('Dua Buku Dua Sdn Bhd');
+  v_one := pg_temp.test_org('Dua Buku Satu Sdn Bhd');
+  v_two := pg_temp.test_org('Dua Buku Dua Sdn Bhd');
+
+  -- Fresh again, for the reason given above.
+  v_owner := pg_temp.another_user('two-books@iakauntan.test');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_one, v_owner, 'viewer', 'active'),
+         (v_two, v_owner, 'viewer', 'active');
 
   perform pg_temp.check_eq('the same person keeps two sets of books',
     (select count(*)::int from public.org_members where user_id = v_owner), 2);
@@ -136,20 +148,27 @@ $$;
 -- ---------------------------------------------------------------------
 do $$
 declare
-  v_org uuid;
+  v_org  uuid;
+  v_them uuid;
 begin
-  v_org := pg_temp.test_org('Kilang Selamat Dua Sdn Bhd');
+  v_org  := pg_temp.test_org('Kilang Selamat Dua Sdn Bhd');
+  v_them := pg_temp.another_user('locked-out@iakauntan.test');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_them, 'viewer', 'active');
 
-  perform public.report_failed_sign_in('fixture@iakauntan.test');
+  perform public.report_failed_sign_in('locked-out@iakauntan.test');
   perform pg_temp.check_eq('a rejected password is recorded',
     (select count(*)::int from public.security_events
-      where org_id = v_org and kind = 'sign_in' and outcome = 'refused'), 1);
+      where user_id = v_them and kind = 'sign_in' and outcome = 'refused'), 1);
 
-  -- Within the minute, so it must not write a second.
-  perform public.report_failed_sign_in('fixture@iakauntan.test');
+  -- Within the minute, so it must not write a second. Counted over the
+  -- person rather than the company, because the rate limit is per
+  -- account -- counting per company would pass even if the limit had
+  -- stopped working for somebody who keeps more than one set of books.
+  perform public.report_failed_sign_in('locked-out@iakauntan.test');
   perform pg_temp.check_eq('and a second within the minute is dropped',
     (select count(*)::int from public.security_events
-      where org_id = v_org and kind = 'sign_in' and outcome = 'refused'), 1);
+      where user_id = v_them and kind = 'sign_in' and outcome = 'refused'), 1);
 
   -- An address nobody has. Nothing is written and nothing is returned,
   -- so the function cannot be used to find out which addresses exist.
