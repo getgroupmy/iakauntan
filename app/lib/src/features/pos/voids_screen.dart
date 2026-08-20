@@ -5,9 +5,6 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
-// `RepoPosControls` is an extension, and a Dart extension is only in
-// scope where its declaring library is imported.
-import '../../data/repository.dart';
 
 /// What went off the bills, and why.
 ///
