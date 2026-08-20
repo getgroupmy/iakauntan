@@ -133,15 +133,49 @@ may also edit or delete a journal that has already been posted, through
 the API. No screen offers it — the Flutter client only ever selects from
 those two tables — but the policy decides, not the screen.
 
-0236 does not close this, because closing it changes what the product
-allows. What it does is make it visible: update and delete on both
-tables are audited. Insert is not, because an insert *is* the ledger and
-auditing it would keep the books twice.
+0236 made the tampering visible: update and delete on both tables are
+audited. Insert is not, because an insert *is* the ledger and auditing
+it would keep the books twice.
 
-**The fix, when somebody decides to take it:** drop the four policies
-and let reversal be the way to undo a posting, which is what
-double-entry expects and what `reverse_journal` already does. Nothing in
-the client would notice.
+**0238 closed it.** The four policies are gone and the `update`/`delete`
+grants are revoked, so a posted journal cannot be changed or removed by
+any hand the API offers. The supported way to undo one is
+`reverse_gl_entry`: the original stands and a reversing entry says so,
+which is what double-entry expects.
+
+### The part that would have broken every posting
+
+Dropping the four policies on its own breaks *all* posting, and not
+visibly. `assert_balanced` on `gl_lines` is DEFERRABLE INITIALLY
+DEFERRED, so it fires at COMMIT — and a deferred trigger runs under the
+session's role, not under the SECURITY DEFINER function that queued it.
+`app.assert_gl_balanced` maintains the entry's totals with an `update
+public.gl_entries`, and it was SECURITY INVOKER. At commit, as
+`authenticated`, with the policy gone, that fails:
+
+```
+ERROR: permission denied for table gl_entries
+```
+
+An ordinary rolled-back test never reaches commit, so the trigger never
+fires and the totals sit at zero — which looks identical to the bug.
+`SET CONSTRAINTS ALL IMMEDIATE` forces it, and the three cases separate:
+
+| | totals after posting |
+|---|---|
+| as it was | 100.00 / 100.00 |
+| policies dropped, trigger SECURITY INVOKER | **permission denied** |
+| policies dropped, trigger SECURITY DEFINER | 100.00 / 100.00 |
+
+So the trigger is now SECURITY DEFINER, which is the right shape
+regardless: an entry's totals are the database's own bookkeeping about
+rows it has already accepted, derived from the lines. They were never
+the writer's to authorise.
+
+`supabase/tests/ledger_append_only.sql` asserts both halves — every
+refusal paired with the posting and the reversal that must still work,
+because a ledger nobody can edit is worthless if nobody can post to it
+either.
 
 ## Seven years
 
