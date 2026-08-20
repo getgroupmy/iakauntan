@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/download.dart';
+import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
@@ -386,7 +386,7 @@ class _PaymentBody extends ConsumerWidget {
           children: [
             OutlinedButton.icon(
               onPressed:
-                  payable.isEmpty ? null : () => _export(context, payable),
+                  payable.isEmpty ? null : () => _export(context, ref, payable),
               icon: const Icon(Icons.download_outlined, size: 18),
               label: const Text('Payment file (CSV)'),
             ),
@@ -415,11 +415,21 @@ class _PaymentBody extends ConsumerWidget {
     );
   }
 
-  Future<void> _export(BuildContext context, List<PaymentLine> payable) async {
+  Future<void> _export(
+    BuildContext context,
+    WidgetRef ref,
+    List<PaymentLine> payable,
+  ) async {
     final csv = PaymentFile.csv(payable);
     final messenger = ScaffoldMessenger.of(context);
-    final saved =
-        await saveTextFile(PaymentFile.filename(run.runNo), 'text/csv', csv);
+    final saved = await exportTextFile(
+      ref,
+      PaymentFile.filename(run.runNo),
+      'text/csv',
+      csv,
+      what: 'Payroll bank file',
+      detail: 'Run ${run.runNo}, ${payable.length} people',
+    );
     if (!saved) {
       // Nothing downloads on a phone, so leave it somewhere the payer can
       // paste it rather than pretending the export happened.

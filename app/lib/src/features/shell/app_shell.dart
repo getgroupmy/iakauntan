@@ -21,6 +21,7 @@ class _Dest {
     this.module,
     this.altModule,
     this.platformOnly = false,
+    this.adminOnly = false,
   });
 
   final String label;
@@ -55,6 +56,14 @@ class _Dest {
 
   /// Only visible to platform staff.
   final bool platformOnly;
+
+  /// Only visible to an owner or an admin of this company.
+  ///
+  /// Not a module: the security log is not sold, it is part of keeping
+  /// books. It is hidden from everybody else because it says where each
+  /// colleague works from, and `security_log` refuses them anyway -- so
+  /// showing it would be a door that opens onto an error message.
+  final bool adminOnly;
 }
 
 const _destinations = <_Dest>[
@@ -404,6 +413,13 @@ const _destinations = <_Dest>[
     module: 'accounting',
   ),
   _Dest('Team', Icons.manage_accounts_outlined, Icons.manage_accounts, '/team'),
+  _Dest(
+    'Security',
+    Icons.shield_outlined,
+    Icons.shield,
+    '/security',
+    adminOnly: true,
+  ),
   _Dest('Email', Icons.mail_outline, Icons.mail, '/email'),
   _Dest('Settings', Icons.settings_outlined, Icons.settings, '/settings'),
   _Dest(
@@ -440,9 +456,12 @@ class AppShell extends ConsumerWidget {
     final hasOrg =
         (ref.watch(organizationsProvider).value ?? const []).isNotEmpty;
 
+    final isAdmin = ref.watch(canAdminProvider);
+
     return _destinations.where((d) {
       if (d.platformOnly) return isPlatformAdmin;
       if (!hasOrg) return false;
+      if (d.adminOnly && !isAdmin) return false;
       if (d.module == null) return true;
       if (moduleEnabled(ref, d.module!)) return true;
       return d.altModule != null && moduleEnabled(ref, d.altModule!);

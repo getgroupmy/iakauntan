@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/download.dart';
+import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
@@ -150,11 +150,14 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
 
       final stem =
           contact.code.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
-      final saved = await saveBytesFile(
+      final saved = await exportBytesFile(
+          ref,
           '${supplier ? 'supplier-statement' : 'statement'}'
           '-$stem-${Fmt.iso(asAt)}.pdf',
           'application/pdf',
-          bytes);
+          bytes,
+          what: supplier ? 'Supplier statement' : 'Customer statement',
+          detail: '${contact.name} to ${Fmt.iso(asAt)}');
       messenger.showSnackBar(SnackBar(
         content: Text(saved
             ? 'Downloaded'

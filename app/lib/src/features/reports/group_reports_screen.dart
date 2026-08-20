@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/download.dart';
+import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
@@ -113,10 +113,13 @@ class _GroupReportsScreenState extends ConsumerState<GroupReportsScreen>
     final stem = spec.title
         .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')
         .toLowerCase();
-    final saved = await saveBytesFile(
+    final saved = await exportBytesFile(
+      ref,
       '$stem-${Fmt.iso(_range.end)}.pdf',
       'application/pdf',
       bytes,
+      what: 'Group report',
+      detail: '${spec.title} to ${Fmt.iso(_range.end)}',
     );
     messenger.showSnackBar(
       SnackBar(

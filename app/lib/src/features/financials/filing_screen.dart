@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/download.dart';
+import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
@@ -82,10 +82,13 @@ class FilingScreen extends ConsumerWidget {
       return;
     }
 
-    final saved = await saveTextFile(
+    final saved = await exportTextFile(
+      ref,
       mtoolFilename(rows),
       'text/csv',
       mtoolCsv(rows),
+      what: 'MBRS mTool export',
+      detail: '${rows.length} lines',
     );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

@@ -72,6 +72,7 @@ import '../features/hr/payroll_screen.dart';
 import '../features/hr/payslip_screen.dart';
 import '../features/hr/people_screen.dart';
 import '../features/hr/talent_screen.dart';
+import '../features/team/security_screen.dart';
 import '../features/team/team_screen.dart';
 import '../features/shell/app_shell.dart';
 import 'providers.dart';
@@ -224,6 +225,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
           GoRoute(path: '/team', builder: (_, __) => const TeamScreen()),
+          GoRoute(
+            path: '/security',
+            builder: (_, __) => const SecurityScreen(),
+          ),
           GoRoute(path: '/hr/me', builder: (_, __) => const MyHrScreen()),
           GoRoute(
             path: '/hr/people',

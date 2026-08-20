@@ -1238,6 +1238,18 @@ final payslipAccessLogProvider =
 /// The change history. Owners and admins only — the RPC refuses anyone
 /// else, so the screen guards on the same right rather than showing an
 /// error where a card should be.
+/// The security log, filtered by kind. Null is everything.
+final securityLogProvider = FutureProvider.autoDispose
+    .family<List<SecurityEvent>, String?>((ref, kind) {
+      return requireRepo(ref).securityLog(kind: kind);
+    });
+
+/// Sign-ins, exports, reads, refusals and changes over a window.
+final securitySummaryProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) {
+      return requireRepo(ref).securitySummary();
+    });
+
 final auditTrailProvider = FutureProvider.autoDispose<List<AuditEntry>>((ref) {
   return requireRepo(ref).auditTrail();
 });

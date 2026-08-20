@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/download.dart';
+import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
@@ -316,8 +316,14 @@ class _SettlementDetail extends ConsumerWidget {
       );
       final no = '${s[isSales ? 'receipt_no' : 'payment_no'] ?? 'receipt'}';
       final stem = no.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
-      final saved =
-          await saveBytesFile('$stem.pdf', 'application/pdf', bytes);
+      final saved = await exportBytesFile(
+        ref,
+        '$stem.pdf',
+        'application/pdf',
+        bytes,
+        what: isSales ? 'Receipt' : 'Payment advice',
+        detail: no,
+      );
       messenger.showSnackBar(SnackBar(
         content: Text(saved
             ? 'Downloaded'

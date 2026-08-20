@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/download.dart';
+import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
@@ -43,8 +43,14 @@ class PayslipScreen extends ConsumerWidget {
       slip.employeeNo ?? slip.employeeName,
       slip.periodCode ?? '',
     ].join('-').replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
-    final saved =
-        await saveBytesFile('payslip-$stem.pdf', 'application/pdf', bytes);
+    final saved = await exportBytesFile(
+      ref,
+      'payslip-$stem.pdf',
+      'application/pdf',
+      bytes,
+      what: 'Payslip',
+      detail: '${slip.employeeName} ${slip.periodCode ?? ''}'.trim(),
+    );
     messenger.showSnackBar(SnackBar(
       content: Text(saved
           ? 'Downloaded'

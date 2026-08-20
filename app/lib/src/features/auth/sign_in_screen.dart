@@ -66,11 +66,42 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
         );
       }
     } on AuthException catch (e) {
+      await _noteRefusal(e);
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Tell the company that somebody was refused at its door.
+  ///
+  /// The only party that knows a password was rejected is this browser:
+  /// GoTrue writes no row for a failed sign-in and this project's
+  /// `auth.audit_log_entries` is empty, so 0235 has the client report it.
+  /// The server takes it as a hint rather than as evidence -- it records
+  /// nothing for an address that is not a user, stores neither the
+  /// password nor the attempt, and writes at most one row a minute.
+  ///
+  /// Only for a rejected credential. A network failure or a rate limit is
+  /// not somebody trying a password, and filing it as one would teach
+  /// whoever reads the log to ignore it.
+  ///
+  /// Never allowed to interrupt the sign-in screen: if reporting fails,
+  /// the person in front of it still needs their error message.
+  Future<void> _noteRefusal(AuthException e) async {
+    if (_isSignUp) return;
+    final email = _email.text.trim();
+    if (email.isEmpty) return;
+    if (e.statusCode != '400') return;
+
+    try {
+      await ref
+          .read(supabaseProvider)
+          .rpc('report_failed_sign_in', params: {'p_email': email});
+    } catch (_) {
+      // Deliberately swallowed.
     }
   }
 

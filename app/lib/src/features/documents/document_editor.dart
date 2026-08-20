@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/download.dart';
+import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/layout.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
@@ -532,7 +532,14 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       final stem = _docNo
           .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')
           .toLowerCase();
-      final saved = await saveBytesFile('$stem.pdf', 'application/pdf', bytes);
+      final saved = await exportBytesFile(
+        ref,
+        '$stem.pdf',
+        'application/pdf',
+        bytes,
+        what: 'Document',
+        detail: _docNo,
+      );
 
       // Recorded only when a file actually reached the user, and only
       // for sales documents — the activity trail is about what the

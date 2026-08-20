@@ -2049,6 +2049,61 @@ class JournalLine {
 /// [changes] holds only the fields that moved, from and to, so a salary
 /// change reads as a salary change rather than a wall of unchanged
 /// columns.
+/// One line of the security log: a sign-in, a session ending, an export,
+/// a sensitive read, or a refusal.
+///
+/// Deliberately a different thing from [AuditEntry]. That one says what
+/// the data did; this one says what the people did, and neither can be
+/// derived from the other.
+class SecurityEvent {
+  SecurityEvent({
+    required this.id,
+    required this.at,
+    required this.actor,
+    required this.kind,
+    required this.outcome,
+    this.target,
+    this.detail,
+    this.ipAddress,
+    this.userAgent,
+  });
+
+  final int id;
+  final DateTime at;
+  final String actor;
+  final String kind;
+  final String outcome;
+  final String? target;
+  final String? detail;
+  final String? ipAddress;
+  final String? userAgent;
+
+  bool get refused => outcome == 'refused';
+
+  /// What to call it on a screen. The stored value is the enum, which is
+  /// exact and not English.
+  String get label => switch (kind) {
+    'sign_in' => refused ? 'Sign-in refused' : 'Signed in',
+    'session_ended' => 'Session ended',
+    'export' => 'Exported',
+    'sensitive_read' => 'Read',
+    'denied' => 'Refused',
+    _ => kind,
+  };
+
+  factory SecurityEvent.fromMap(Map<String, dynamic> j) => SecurityEvent(
+    id: (j['id'] as num).toInt(),
+    at: DateTime.parse(j['at'].toString()).toLocal(),
+    actor: j['actor']?.toString() ?? 'unknown',
+    kind: j['kind']?.toString() ?? '',
+    outcome: j['outcome']?.toString() ?? 'ok',
+    target: j['target']?.toString(),
+    detail: j['detail']?.toString(),
+    ipAddress: j['ip_address']?.toString(),
+    userAgent: j['user_agent']?.toString(),
+  );
+}
+
 class AuditEntry {
   AuditEntry({
     required this.id,

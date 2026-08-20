@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/download.dart';
+import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
@@ -1531,14 +1531,14 @@ class _DocumentRow extends ConsumerWidget {
         IconButton(
           icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
           tooltip: 'Download PDF',
-          onPressed: () => _downloadPdf(context),
+          onPressed: () => _downloadPdf(context, ref),
         ),
         PopupMenuButton<String>(
           tooltip: 'More',
           icon: const Icon(Icons.more_horiz, size: 18),
           onSelected: (choice) => switch (choice) {
-            'letterhead' => _downloadPdf(context, ref: ref),
-            _ => _downloadMarkdown(context),
+            'letterhead' => _downloadPdf(context, ref, letterhead: true),
+            _ => _downloadMarkdown(context, ref),
           },
           itemBuilder: (_) => const [
             PopupMenuItem(
@@ -1576,10 +1576,19 @@ class _DocumentRow extends ConsumerWidget {
   /// and the icon button stays plain: the resolution is the client
   /// company's act, not yours, so your name goes on it only when you ask
   /// for it — and then as "Prepared by", which is what you actually did.
-  Future<void> _downloadPdf(BuildContext context, {WidgetRef? ref}) async {
+  ///
+  /// `ref` is always given -- it is what records the export -- so
+  /// `letterhead` is the flag that decides whose name goes on the page.
+  /// The two used to be the same argument, which meant the plain PDF was
+  /// the one nobody could log.
+  Future<void> _downloadPdf(
+    BuildContext context,
+    WidgetRef ref, {
+    bool letterhead = false,
+  }) async {
     final messenger = ScaffoldMessenger.of(context);
-    final org = ref == null ? null : await ref.read(currentOrgProvider.future);
-    final logo = ref == null ? null : await ref.read(orgLogoProvider.future);
+    final org = letterhead ? await ref.read(currentOrgProvider.future) : null;
+    final logo = letterhead ? await ref.read(orgLogoProvider.future) : null;
     final bytes = await buildDocumentPdf(
       title: document.title,
       body: document.body,
@@ -1590,7 +1599,14 @@ class _DocumentRow extends ConsumerWidget {
     // Named apart, because a secretary who downloads both wants to know
     // which one is which without opening them.
     final name = org == null ? '$_stem.pdf' : '$_stem-letterhead.pdf';
-    final saved = await saveBytesFile(name, 'application/pdf', bytes);
+    final saved = await exportBytesFile(
+      ref,
+      name,
+      'application/pdf',
+      bytes,
+      what: 'Secretarial document',
+      detail: _stem,
+    );
     messenger.showSnackBar(SnackBar(
       content: Text(saved
           ? 'Downloaded'
@@ -1598,9 +1614,16 @@ class _DocumentRow extends ConsumerWidget {
     ));
   }
 
-  Future<void> _downloadMarkdown(BuildContext context) async {
+  Future<void> _downloadMarkdown(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
-    final saved = await saveTextFile('$_stem.md', 'text/markdown', document.body);
+    final saved = await exportTextFile(
+      ref,
+      '$_stem.md',
+      'text/markdown',
+      document.body,
+      what: 'Secretarial document',
+      detail: _stem,
+    );
     if (!saved) await Clipboard.setData(ClipboardData(text: document.body));
     messenger.showSnackBar(SnackBar(
       content: Text(saved ? 'Downloaded' : 'Copied to the clipboard'),
