@@ -133,6 +133,27 @@ begin
   end;
   perform pg_temp.check_true('and neither can the journal', v_failed);
 
+  -- Truncation, which no policy in this schema can touch. Row level
+  -- security filters rows; TRUNCATE does not look at rows, so every
+  -- policy above is irrelevant to it and only the privilege stands in
+  -- the way. Before 0239 this emptied the table: 10 rows to 0, measured
+  -- on production with 0238 already applied.
+  v_failed := false;
+  begin
+    truncate public.gl_lines cascade;
+  exception when others then
+    v_failed := true;
+  end;
+  perform pg_temp.check_true('and the ledger cannot be truncated', v_failed);
+
+  v_failed := false;
+  begin
+    truncate public.gl_entries cascade;
+  exception when others then
+    v_failed := true;
+  end;
+  perform pg_temp.check_true('nor can the entries', v_failed);
+
   -- The half that stops all of the above being satisfied by a ledger
   -- nobody can reach at all.
   perform pg_temp.check_true('but it can still be read',

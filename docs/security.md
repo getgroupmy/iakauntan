@@ -143,6 +143,30 @@ any hand the API offers. The supported way to undo one is
 `reverse_gl_entry`: the original stands and a reversing entry says so,
 which is what double-entry expects.
 
+### TRUNCATE ignores every policy you have written
+
+0238 was not enough, and the gap is worth remembering. Row level
+security filters rows; `TRUNCATE` does not look at rows, so no policy in
+the schema applies to it. With 0238 already on production, as
+`authenticated`:
+
+```
+truncate public.gl_lines cascade;   -- 10 rows -> 0 rows
+```
+
+Supabase grants `TRUNCATE` to `authenticated` on every table in `public`
+by default — 238 of them here. PostgREST emits no verb that produces a
+TRUNCATE, so this was not reachable over the API; that is a property of
+the client in front of the database, not of the database.
+
+0239 revokes `TRUNCATE`, `REFERENCES` and `TRIGGER` on the two ledger
+tables, leaving a client role with `INSERT, SELECT` and nothing else.
+
+**Still open, deliberately:** the same three grants sit on the other 238
+tables. Revoking them across the board is very likely right, but it is a
+decision about the whole database rather than about the ledger, and it
+belongs in its own reviewable change.
+
 ### The part that would have broken every posting
 
 Dropping the four policies on its own breaks *all* posting, and not
