@@ -44,6 +44,12 @@ declare
 begin
   v_org := pg_temp.test_org('Lejar Kekal Sdn Bhd');
 
+  -- `test_org` seeds the chart of accounts but not a fiscal year, and
+  -- nothing posts outside one: "No fiscal period covers ...". Derived
+  -- from today rather than pinned to 2026, so this file does not quietly
+  -- stop testing anything when the year turns.
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+
   select id into v_a from public.accounts
    where org_id = v_org and not is_group and is_active and deleted_at is null
      and account_type = 'asset' order by code limit 1;
