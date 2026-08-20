@@ -90,6 +90,15 @@ class _TenderSheetState extends ConsumerState<_TenderSheet> {
         ],
       ),
       actions: [
+        // Offered after the money, never before. `start_membership`
+        // refuses a sale that has not completed, for the reason it
+        // gives: a membership that starts first is an entitlement
+        // nobody paid for.
+        if (moduleEnabledNow(ref, 'memberships'))
+          TextButton(
+            onPressed: () => _startMembership(ctx),
+            child: const Text('Start membership'),
+          ),
         FilledButton(
           onPressed: () => Navigator.of(ctx).pop(),
           child: const Text('Next customer'),
@@ -97,6 +106,59 @@ class _TenderSheetState extends ConsumerState<_TenderSheet> {
       ],
     ),
   );
+
+  /// Puts the customer on the membership they just bought.
+  ///
+  /// Every condition is the server's: that the sale completed, that
+  /// somebody is named on it, that the membership is on offer, and —
+  /// the one that matters — that this sale actually contains the
+  /// membership item, because otherwise "start a membership" is a
+  /// button that gives one away. Those refusals arrive already written
+  /// for a person, so they are shown rather than second-guessed.
+  Future<void> _startMembership(BuildContext receiptCtx) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final offers = await ref.read(posMembershipsProvider.future);
+    if (!mounted) return;
+
+    final live = offers.where((o) => o['is_active'] == true).toList();
+    if (live.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No memberships are on offer.')),
+      );
+      return;
+    }
+
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            for (final o in live)
+              ListTile(
+                title: Text((o['name'] ?? '—') as String),
+                subtitle: Text(
+                  o['sessions_included'] == null
+                      ? '${o['period']} · unlimited'
+                      : '${o['period']} · ${o['sessions_included']} '
+                            'per period',
+                ),
+                onTap: () => Navigator.of(ctx).pop(o['id'] as String),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (chosen == null || !mounted) return;
+
+    await runWithFeedback(
+      context,
+      successMessage: 'Membership started',
+      action: () => repo.startMembership(widget.saleId, chosen),
+    );
+    if (mounted && receiptCtx.mounted) Navigator.of(receiptCtx).pop();
+  }
 
   @override
   Widget build(BuildContext context) {

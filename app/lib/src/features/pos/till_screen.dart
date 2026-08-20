@@ -458,6 +458,79 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     setState(() => _saleId = saleId);
   }
 
+  /// Takes a class, a wash or a treatment on the membership the
+  /// customer is already paying for.
+  ///
+  /// The line stays on the bill and goes to zero rather than coming
+  /// off it — a receipt reading "Yoga 45.00 / Membership -45.00" is one
+  /// the member can check, and one showing nothing looks like they were
+  /// never there. `cover_line_with_membership` decides all of that and
+  /// returns what the line came to; nothing here works out whether the
+  /// membership covers the item or whether a session is left, because a
+  /// second opinion on that would be wrong at exactly the counter where
+  /// it is being argued.
+  Future<void> _coverWithMembership(String saleId, String lineId) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+
+    final sale = await ref.read(posSaleProvider(saleId).future);
+    final contactId = sale?['contact_id'] as String?;
+    if (!mounted) return;
+    if (contactId == null) {
+      // Said here rather than let the server say it, because the fix is
+      // on this screen: the cashier has to name the customer first.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Say who the customer is first.'),
+        ),
+      );
+      return;
+    }
+
+    final subs = await repo.contactMemberships(contactId);
+    if (!mounted) return;
+    if (subs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This customer is not on a membership.')),
+      );
+      return;
+    }
+
+    final chosen = subs.length == 1
+        ? subs.first['id'] as String
+        : await showModalBottomSheet<String>(
+            context: context,
+            builder: (ctx) => SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final sub in subs)
+                    ListTile(
+                      title: Text(
+                        ((sub['pos_memberships']
+                                as Map<String, dynamic>?)?['name'] ??
+                            'Membership') as String,
+                      ),
+                      onTap: () =>
+                          Navigator.of(ctx).pop(sub['id'] as String),
+                    ),
+                ],
+              ),
+            ),
+          );
+    if (chosen == null || !mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Covered by the membership',
+      action: () => repo.coverLineWithMembership(lineId, chosen),
+    );
+    if (!ok || !mounted) return;
+    ref
+      ..invalidate(posSaleProvider(saleId))
+      ..invalidate(posSaleLinesProvider(saleId));
+  }
+
   Future<void> _lineAction(Map<String, dynamic> line) async {
     final id = _saleId;
     final lineId = line['id'] as String?;
@@ -472,7 +545,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     String? reason;
     String? note;
     if (!sent) {
-      final go = await showModalBottomSheet<bool>(
+      final go = await showModalBottomSheet<String>(
         context: context,
         builder: (ctx) => SafeArea(
           child: Column(
@@ -483,16 +556,31 @@ class _TillScreenState extends ConsumerState<TillScreen> {
                 subtitle: const Text('Not sent yet'),
               ),
               const Divider(height: 1),
+              // Offered only where it can work. Covering needs the
+              // memberships module and a named customer, and a button
+              // that is always there and usually refuses teaches a
+              // cashier to stop reading what it says.
+              if (moduleEnabledNow(ref, 'memberships'))
+                ListTile(
+                  leading: const Icon(Icons.card_membership_outlined),
+                  title: const Text('Cover with membership'),
+                  onTap: () => Navigator.of(ctx).pop('cover'),
+                ),
               ListTile(
                 leading: const Icon(Icons.delete_outline),
                 title: const Text('Take off the bill'),
-                onTap: () => Navigator.of(ctx).pop(true),
+                onTap: () => Navigator.of(ctx).pop('remove'),
               ),
             ],
           ),
         ),
       );
-      if (go != true || !mounted) return;
+      if (!mounted) return;
+      if (go == 'cover') {
+        await _coverWithMembership(id, lineId);
+        return;
+      }
+      if (go != 'remove') return;
     } else {
       final answer = await showModalBottomSheet<({String reason, String note})>(
         context: context,

@@ -243,6 +243,16 @@ const _destinations = <_Dest>[
     '/diary',
     module: 'pos',
   ),
+  // Its own module since 0231, and gated on that rather than on the
+  // till: a gym that runs memberships and a minimart that does not are
+  // the reason the two were separated in the first place.
+  _Dest(
+    'Memberships',
+    Icons.card_membership_outlined,
+    Icons.card_membership,
+    '/memberships',
+    module: 'memberships',
+  ),
   // The customer's own screen, and the screen they watch afterwards.
   // Both are on the staff menu because somebody has to be able to set
   // the machine up and check on it; neither is a place a cashier

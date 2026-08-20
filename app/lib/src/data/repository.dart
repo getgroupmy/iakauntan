@@ -7022,3 +7022,130 @@ extension RepoPos on Repo {
     return rows.isEmpty ? null : rows.first;
   }
 }
+
+
+/// Memberships: paying once a month for things you take one at a time.
+///
+/// 0218 built all of this — the offers, the subscriptions, the session
+/// ledger, and five functions granted to `authenticated` — and nothing
+/// in the app has ever called one of them. Every figure below is the
+/// server's: the balance, the period boundaries and the coverage
+/// decision are all worked out in SQL, because a screen that computed
+/// "three classes left" itself would be a second implementation of the
+/// membership rules, disagreeing with the receipt on exactly the
+/// visits that get argued about.
+extension RepoMemberships on Repo {
+  /// What this company sells. The offers, not the people on them.
+  Future<List<Map<String, dynamic>>> posMemberships() async => Repo.rows(
+    await client
+        .from('pos_memberships')
+        .select('id, code, name, period, sessions_included, is_active')
+        .eq('org_id', orgId)
+        .order('name'),
+  );
+
+  /// Who is on what.
+  ///
+  /// The member's name and the offer's name come back in the same read
+  /// rather than as two more round trips per row, which on a list of
+  /// two hundred subscriptions is the difference between a screen and
+  /// a wait. Neither embed is ambiguous — there is exactly one foreign
+  /// key between these tables in each direction, which `check_embeds`
+  /// re-establishes against the real schema on every CI run.
+  Future<List<Map<String, dynamic>>> membershipSubscriptions({
+    String? status,
+  }) async {
+    var query = client
+        .from('pos_membership_subscriptions')
+        .select(
+          'id, started_on, ends_on, status, note, recurring_document_id, '
+          'contacts(name), pos_memberships(name, period, sessions_included)',
+        )
+        .eq('org_id', orgId);
+
+    if (status != null && status != 'all') {
+      query = query.eq('status', status);
+    }
+    return Repo.rows(await query.order('started_on', ascending: false));
+  }
+
+  /// What is left this period.
+  ///
+  /// `included` and `remaining` come back null for an unlimited
+  /// membership, which is a different thing from zero and is why the
+  /// screen has to distinguish them rather than defaulting one to the
+  /// other.
+  Future<Map<String, dynamic>?> membershipBalance(String subscriptionId) async {
+    final rows = Repo.rows(
+      await callRpc(
+        'membership_balance',
+        params: {'p_subscription': subscriptionId},
+      ),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// The memberships nobody is billing.
+  ///
+  /// This exists because `start_membership` deliberately does not fail
+  /// when the cashier cannot post: somebody who has paid gets their
+  /// membership, and the missing renewal schedule is reported instead
+  /// of refused. Reported to nobody is the same as refused, so this is
+  /// the half that makes that trade honest.
+  Future<List<Map<String, dynamic>>> membershipBillingGaps() async =>
+      Repo.rows(
+        await callRpc('membership_billing_gaps', params: {'p_org': orgId}),
+      );
+
+  /// Starts one from the sale that paid for it. Returns the new
+  /// subscription's id.
+  Future<String> startMembership(String saleId, String membershipId) async =>
+      await callRpc(
+            'start_membership',
+            params: {'p_sale': saleId, 'p_membership': membershipId},
+          )
+          as String;
+
+  /// Pausing, cancelling, reinstating. The server stops the billing
+  /// when the membership stops; nothing here has to remember to.
+  Future<String> setMembershipStatus(
+    String subscriptionId,
+    String status,
+  ) async =>
+      await callRpc(
+            'set_membership_status',
+            params: {'p_subscription': subscriptionId, 'p_status': status},
+          )
+          as String;
+
+  /// Takes a class on the membership. Returns what the line came down
+  /// to — which is the server's arithmetic, not this screen's.
+  ///
+  /// The line stays on the bill at zero rather than being removed, so
+  /// the receipt shows what the member had.
+  Future<num> coverLineWithMembership(
+    String lineId,
+    String subscriptionId,
+  ) async {
+    final result = await callRpc(
+      'cover_line_with_membership',
+      params: {'p_line': lineId, 'p_subscription': subscriptionId},
+    );
+    return (result as num?) ?? 0;
+  }
+
+  /// The live subscriptions a customer holds, for the till: "is this
+  /// covered?" is asked of a person, and answered from what they are
+  /// on.
+  Future<List<Map<String, dynamic>>> contactMemberships(
+    String contactId,
+  ) async => Repo.rows(
+    await client
+        .from('pos_membership_subscriptions')
+        .select('id, status, pos_memberships(name, sessions_included)')
+        .eq('org_id', orgId)
+        .eq('contact_id', contactId)
+        .eq('status', 'active')
+        .order('started_on', ascending: false),
+  );
+}

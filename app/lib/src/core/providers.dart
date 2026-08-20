@@ -694,6 +694,25 @@ bool moduleEnabled(WidgetRef ref, String code) {
       );
 }
 
+/// The same question, asked from somewhere that is not a build method.
+///
+/// [moduleEnabled] watches, and watching outside `build` throws. An
+/// event handler — a bottom sheet being assembled after a tap, a dialog
+/// deciding which buttons to show — has to read instead. The answer is
+/// the same and so is the permissiveness while it loads: a screen that
+/// hid a button because an entitlement had not arrived yet would be
+/// hiding it from the person who does hold it.
+///
+/// Hiding remains a courtesy either way. The server refuses on its own
+/// account, and 0231 gates every loyalty and membership function on the
+/// module rather than on the till.
+bool moduleEnabledNow(WidgetRef ref, String code) {
+  final modules = ref.read(enabledModulesProvider).valueOrNull;
+  if (modules != null && !modules.contains(code)) return false;
+  final access = ref.read(myModuleAccessProvider).valueOrNull;
+  return (access?[code] ?? 'write') != 'none';
+}
+
 /// Whether this person may change anything in a module, as opposed to
 /// only looking at it.
 bool moduleWritable(WidgetRef ref, String code) => ref
@@ -1921,4 +1940,45 @@ final itemModifierOptionsProvider = FutureProvider.autoDispose
 final posSaleLineModifiersProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, saleId) => requireRepo(ref).posSaleLineModifiers(saleId),
+    );
+
+
+// ---------------------------------------------------------------------
+// Memberships
+// ---------------------------------------------------------------------
+
+/// The offers this company sells.
+final posMembershipsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posMemberships(),
+    );
+
+/// Who is on what, filtered by status. `'all'` is a real choice rather
+/// than the absence of one: a cancelled membership is the row somebody
+/// goes looking for when a customer says they were still being charged.
+final membershipSubscriptionsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, status) =>
+          requireRepo(ref).membershipSubscriptions(status: status),
+    );
+
+/// What is left this period, for one subscription.
+final membershipBalanceProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>(
+      (ref, subscriptionId) =>
+          requireRepo(ref).membershipBalance(subscriptionId),
+    );
+
+/// Active memberships with no renewal schedule behind them. Watched by
+/// the screen rather than fetched on demand, because the point of the
+/// list is that somebody sees it without going to look.
+final membershipBillingGapsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).membershipBillingGaps(),
+    );
+
+/// What a customer is on, for the till.
+final contactMembershipsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, contactId) => requireRepo(ref).contactMemberships(contactId),
     );
