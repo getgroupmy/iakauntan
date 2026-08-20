@@ -81,6 +81,36 @@ Security destination carries `adminOnly` rather than a module code, and
 `security_log` refuses anybody who is not an owner or an admin. The bar
 is not membership: the log says where each colleague works from.
 
+## A log must not block the deletion it records
+
+Three separate bugs in this work were the same bug, so the rule is worth
+stating once:
+
+1. `security_events.user_id` as a foreign key — `record_session_end`
+   fires *during* the cascade that deletes an account, so the reference
+   pointed at a row being deleted by the same statement. Dropped.
+2. `record_session_end` inner-joining `auth.users` — by the time it fires
+   the user row is gone, so the join matched nothing and the event went
+   unrecorded. Changed to a scalar subquery.
+3. `write_audit_log` writing a row for a company that is already gone —
+   0236 put the trigger on thirteen tables that cascade from
+   `organizations`, and `audit_logs.org_id` then refused the row. That
+   broke demo teardown, and would have broken closing any account with a
+   contact or an invoice in it.
+
+The third is fixed in 0237 by declining to write when the organization
+no longer exists, on DELETE only — on insert and update the source row's
+own foreign key already guarantees it exists, so the check stays off the
+path every invoice takes.
+
+Nothing is lost by declining. `audit_logs.org_id` cascades, so every
+audit row for that company is being deleted by the same statement:
+measured on a real company, 27 rows before the delete and 0 after. A row
+written mid-cascade would have been inserted and immediately removed.
+Measured on production before the change: across 1,988 audit rows there
+was not one `delete` of an `organizations` row — the record was never
+being kept, only either doomed or fatal.
+
 ## Secrets never reach the trail
 
 `einvoice_credentials` holds a client secret and a private key, and

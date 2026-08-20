@@ -341,6 +341,62 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------
+-- A log must not block the deletion it records
+-- ---------------------------------------------------------------------
+--
+-- 0236 put the audit trigger on thirteen tables that cascade from
+-- `organizations`, and deleting a company stopped working: the trigger
+-- fired after the parent row was gone and `audit_logs.org_id` refused
+-- the row. It broke demo teardown, and it would have broken closing any
+-- account with a contact or an invoice in it.
+--
+-- Both halves are asserted. Skipping the write when the company is
+-- already gone is only correct if an ordinary delete inside a company
+-- that goes on existing is still recorded -- otherwise the fix would
+-- have bought a working teardown by turning the delete trail off.
+do $$
+declare
+  v_org uuid;
+  v_one uuid;
+  v_gone boolean;
+begin
+  v_org := pg_temp.test_org('Kilang Selamat Lapan Sdn Bhd');
+
+  insert into public.contacts (org_id, code, contact_type, name)
+  values (v_org, 'C-1', 'customer', 'Pelanggan Satu')
+  returning id into v_one;
+
+  delete from public.contacts where id = v_one;
+  perform pg_temp.check_eq('a delete inside a living company is recorded',
+    (select count(*)::int from public.audit_logs
+      where org_id = v_org and table_name = 'contacts' and action = 'delete'), 1);
+
+  -- Left behind on purpose, so the company's deletion has to cascade
+  -- through a table 0236 audits.
+  insert into public.contacts (org_id, code, contact_type, name)
+  values (v_org, 'C-2', 'customer', 'Pelanggan Dua');
+  insert into public.items (org_id, code, name, item_type)
+  values (v_org, 'I-1', 'Barang', 'stock');
+
+  v_gone := false;
+  begin
+    delete from public.organizations where id = v_org;
+    v_gone := true;
+  exception when others then
+    raise exception 'FAIL a company with audited rows could not be deleted: %',
+      sqlerrm;
+  end;
+  perform pg_temp.check_true('and the company itself can still be deleted', v_gone);
+
+  -- And nothing was left pointing at it. `audit_logs.org_id` cascades,
+  -- which is the reason a row written during the cascade could never
+  -- have survived the statement that wrote it.
+  perform pg_temp.check_eq('its trail went with it',
+    (select count(*)::int from public.audit_logs where org_id = v_org), 0);
+end;
+$$;
+
+-- ---------------------------------------------------------------------
 -- A secret never reaches the trail, by any of the three routes
 -- ---------------------------------------------------------------------
 do $$
