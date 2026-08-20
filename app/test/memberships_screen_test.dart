@@ -187,48 +187,63 @@ void main() {
     expect(find.text('Aisyah Rahman'), findsNothing);
   });
 
-  testWidgets('the rail offers memberships only to a company that has it', (
-    tester,
-  ) async {
-    Widget shell(Set<String> modules) => ProviderScope(
-      overrides: [
-        currentUserProvider.overrideWithValue(null),
-        authStateProvider.overrideWith((_) => const Stream<AuthState>.empty()),
-        isPlatformAdminProvider.overrideWith((_) async => false),
-        organizationsProvider.overrideWith(
-          (_) async => [
-            Organization(
-              id: 'o1',
-              name: 'Gim Sihat Sdn Bhd',
-              slug: 'gim',
-              baseCurrency: 'MYR',
-            ),
-          ],
-        ),
-        currentOrgProvider.overrideWith((_) async => null),
-        enabledModulesProvider.overrideWith((_) async => modules),
-      ],
-      child: MaterialApp(
-        theme: AppTheme.light(),
-        home: const AppShell(
-          location: '/',
-          child: Scaffold(body: Text('body')),
-        ),
+  // The rail, one company per test.
+  //
+  // Deliberately not one test that pumps the shell twice with different
+  // overrides: swapping a FutureProvider override inside a live
+  // ProviderScope leaves the old value in place through the reload, and
+  // `moduleEnabled` reads "still loading" as enabled so navigation does
+  // not flicker on start-up. That is right for the app and useless for
+  // an assertion, and it is what made the first version of this test
+  // fail. A fresh pump asks the question cleanly.
+  Widget shell(Set<String> modules) => ProviderScope(
+    overrides: [
+      currentUserProvider.overrideWithValue(null),
+      authStateProvider.overrideWith((_) => const Stream<AuthState>.empty()),
+      isPlatformAdminProvider.overrideWith((_) async => false),
+      organizationsProvider.overrideWith(
+        (_) async => [
+          Organization(
+            id: 'o1',
+            name: 'Gim Sihat Sdn Bhd',
+            slug: 'gim',
+            baseCurrency: 'MYR',
+          ),
+        ],
       ),
-    );
+      currentOrgProvider.overrideWith((_) async => null),
+      enabledModulesProvider.overrideWith((_) async => modules),
+    ],
+    child: MaterialApp(
+      theme: AppTheme.light(),
+      home: const AppShell(
+        location: '/',
+        child: Scaffold(body: Text('body')),
+      ),
+    ),
+  );
 
+  Future<void> onADesktop(WidgetTester tester, Widget widget) async {
     tester.view.physicalSize = const Size(1400, 1600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-
-    await tester.pumpWidget(shell(const {'memberships'}));
+    await tester.pumpWidget(widget);
     await tester.pumpAndSettle();
+  }
+
+  testWidgets('a gym that runs memberships is offered them', (tester) async {
+    await onADesktop(tester, shell(const {'memberships'}));
     expect(find.text('Memberships'), findsOneWidget);
+  });
 
-    // A minimart runs a points card and no memberships. That the two
-    // are separable is the whole reason 0231 split them.
-    await tester.pumpWidget(shell(const {'pos', 'loyalty'}));
-    await tester.pumpAndSettle();
+  testWidgets('a minimart with a points card and no memberships is not', (
+    tester,
+  ) async {
+    // That the two are separable is the whole reason 0231 split them.
+    await onADesktop(tester, shell(const {'pos', 'loyalty'}));
     expect(find.text('Memberships'), findsNothing);
+    // The positive control: the rail is populated, so "not found" is an
+    // answer rather than an empty screen.
+    expect(find.text('Till'), findsOneWidget);
   });
 }
