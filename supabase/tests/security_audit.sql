@@ -44,6 +44,14 @@ begin
   v_org   := pg_temp.test_org('Kilang Selamat Sdn Bhd');
   v_owner := pg_temp.test_user();
 
+  -- Stated rather than assumed. The first version of this block queried
+  -- by `session_id` alone and got two rows back in CI where production
+  -- gives one, and the cause could not be read off the failure -- so the
+  -- premise the block rests on is now an assertion that names the real
+  -- number when it is wrong.
+  perform pg_temp.check_eq('the fixture keeps one set of books here',
+    (select count(*)::int from public.org_members where user_id = v_owner), 1);
+
   -- Exactly what GoTrue does on a successful password sign-in. Nothing
   -- in the application is involved, which is the point.
   insert into auth.sessions (id, user_id, created_at, updated_at, ip, user_agent)
@@ -53,19 +61,25 @@ begin
     (select count(*)::int from public.security_events
       where org_id = v_org and kind = 'sign_in' and session_id = v_sess), 1);
 
+  -- Every one of these is scoped by organization as well as session,
+  -- because (session, org) is the grain and session alone is not: one
+  -- sign-in writes one row per company the person belongs to. The block
+  -- below proves that rather than leaving it as a claim.
   perform pg_temp.check_eq('with the address it came from',
     (select host(ip_address) from public.security_events
-      where session_id = v_sess and kind = 'sign_in'), '203.0.113.7');
+      where org_id = v_org and session_id = v_sess and kind = 'sign_in'),
+    '203.0.113.7');
 
   perform pg_temp.check_eq('and what it came from',
     (select user_agent from public.security_events
-      where session_id = v_sess and kind = 'sign_in'), 'Probe/1.0');
+      where org_id = v_org and session_id = v_sess and kind = 'sign_in'),
+    'Probe/1.0');
 
   -- The email is stored beside the id so the row still names somebody
   -- after the account is gone.
   perform pg_temp.check_eq('and who',
     (select email from public.security_events
-      where session_id = v_sess and kind = 'sign_in'),
+      where org_id = v_org and session_id = v_sess and kind = 'sign_in'),
     'fixture@iakauntan.test');
 
   delete from auth.sessions where id = v_sess;
@@ -73,6 +87,47 @@ begin
   perform pg_temp.check_eq('and the session ending is recorded too',
     (select count(*)::int from public.security_events
       where org_id = v_org and kind = 'session_ended' and session_id = v_sess), 1);
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- One sign-in, every company the person keeps books for
+-- ---------------------------------------------------------------------
+--
+-- A bookkeeper who keeps four sets of books signing in at midnight from
+-- an unfamiliar address is a fact all four auditors are entitled to, and
+-- an event filed under one of them is an event the other three cannot
+-- see. So the fan-out is the design, and it is the reason `session_id`
+-- is not a key on its own -- which the first version of the block above
+-- assumed, and CI caught.
+do $$
+declare
+  v_one   uuid;
+  v_two   uuid;
+  v_owner uuid;
+  v_sess  uuid := gen_random_uuid();
+begin
+  v_one   := pg_temp.test_org('Dua Buku Satu Sdn Bhd');
+  v_owner := pg_temp.test_user();
+  v_two   := pg_temp.test_org('Dua Buku Dua Sdn Bhd');
+
+  perform pg_temp.check_eq('the same person keeps two sets of books',
+    (select count(*)::int from public.org_members where user_id = v_owner), 2);
+
+  insert into auth.sessions (id, user_id, created_at, updated_at, ip, user_agent)
+  values (v_sess, v_owner, now(), now(), '198.51.100.4'::inet, 'Two/1.0');
+
+  perform pg_temp.check_eq('and one sign-in reaches both auditors',
+    (select count(*)::int from public.security_events
+      where session_id = v_sess and kind = 'sign_in'), 2);
+  perform pg_temp.check_eq('one row each, not two under one company',
+    (select count(distinct org_id)::int from public.security_events
+      where session_id = v_sess and kind = 'sign_in'), 2);
+
+  delete from auth.sessions where id = v_sess;
+  perform pg_temp.check_eq('and the session ending reaches both as well',
+    (select count(*)::int from public.security_events
+      where session_id = v_sess and kind = 'session_ended'), 2);
 end;
 $$;
 
