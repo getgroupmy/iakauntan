@@ -16,6 +16,22 @@ Two things to know before you touch the code:
   runs in CI. Anything touching EPF, SOCSO, EIS, PCB or an SSM deadline needs a
   test that would fail if the number moved.
 
+## After every push: watch CI to green
+
+A push is not finished when it lands. After pushing, set a recurring check of
+the branch's latest CI run every 5 minutes and keep it running:
+
+- still running — note it in one line and wait
+- a job failed — pull that job's logs, diagnose the real cause, fix, commit,
+  push, and keep checking until the run is green
+- green — say so once, naming the commit SHA, then stay quiet about that SHA
+
+Do not stop the watch the first time a run turns green; it should also catch
+the next push. Do not poll with `sleep` — schedule it.
+
+CI is the only place the SQL assertions in `supabase/tests/` actually run, so a
+red run is the project's real failure signal, not a formality.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
