@@ -7208,3 +7208,58 @@ extension RepoPosEinvoice on Repo {
           )
           as String;
 }
+
+
+/// The same shirt in six sizes.
+///
+/// 0211 made a variant an item rather than a row hanging off one,
+/// because everything downstream in this database keys on `item_id` —
+/// stock movements, weighted-average cost, `stock_levels`, the
+/// forecasting reorder point, sales and purchase lines, the e-Invoice
+/// snapshot. A variant that is not an item is a variant stock does not
+/// know about. All of that was built and none of it had a caller.
+extension RepoItemVariants on Repo {
+  /// The axes a style already has, read back out of the children that
+  /// exist rather than out of a second copy of the same fact. Empty
+  /// means the item has not been split yet.
+  Future<List<Map<String, dynamic>>> itemVariantMatrix(String parentId) async =>
+      Repo.rows(
+        await callRpc('item_variant_matrix', params: {'p_parent': parentId}),
+      );
+
+  /// The variants themselves, so the dialog can show what exists rather
+  /// than only what axes were used.
+  Future<List<Map<String, dynamic>>> itemVariants(String parentId) async =>
+      Repo.rows(
+        await client
+            .from('items')
+            .select('id, code, name, variant_attributes, quantity_on_hand, '
+                'unit_price, is_active')
+            .eq('org_id', orgId)
+            .eq('parent_item_id', parentId)
+            .isFilter('deleted_at', null)
+            .order('code'),
+      );
+
+  /// Generates the combinations of the axes given.
+  ///
+  /// Re-runnable by design: a shop that adds a colour in March passes
+  /// the full axis list again and gets back only the new combinations,
+  /// because the codes are deterministic and existing ones are skipped.
+  /// Each returned row carries `created`, so the screen can say what it
+  /// actually made rather than implying it made all of them.
+  ///
+  /// The codes and names are the server's. A client that built
+  /// `SHIRT-M-NAVY` itself would be a second implementation of the
+  /// naming rule, and the first disagreement would be a duplicate item
+  /// nobody can merge.
+  Future<List<Map<String, dynamic>>> createItemVariants(
+    String parentId,
+    Map<String, List<String>> axes,
+  ) async => Repo.rows(
+    await callRpc(
+      'create_item_variants',
+      params: {'p_parent': parentId, 'p_axes': axes},
+    ),
+  );
+}

@@ -1993,3 +1993,15 @@ final posEinvoiceOutstandingProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
       (ref) => requireRepo(ref).posEinvoiceOutstanding(),
     );
+
+
+/// The axes a style has been split along, and the variants under it.
+final itemVariantMatrixProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, parentId) => requireRepo(ref).itemVariantMatrix(parentId),
+    );
+
+final itemVariantsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, parentId) => requireRepo(ref).itemVariants(parentId),
+    );

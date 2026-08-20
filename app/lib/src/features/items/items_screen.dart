@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'item_prices_dialog.dart';
+import 'item_variants_dialog.dart';
 import 'stock_card_dialog.dart';
 
 class ItemsScreen extends ConsumerStatefulWidget {
@@ -129,6 +130,23 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                     TextButton(
                       onPressed: () => showItemPrices(context, item),
                       child: const Text('Prices'),
+                    ),
+                  ],
+                  // Offered on things that sit on a shelf. A variant is
+                  // an item of its own — 0211's whole point — so this is
+                  // where "the same shirt in six sizes" becomes six
+                  // rows that stock and costing can actually see.
+                  //
+                  // Not hidden for an item that is already a variant of
+                  // something: the model does not carry the parent, and
+                  // the server refuses that case by name rather than
+                  // leaving somebody to guess why a button did nothing.
+                  if (canWrite && item.trackInventory) ...[
+                    const SizedBox(width: Space.sm),
+                    TextButton(
+                      key: ValueKey('variants-${item.id}'),
+                      onPressed: () => showItemVariants(context, item),
+                      child: const Text('Variants'),
                     ),
                   ],
                 ]),
