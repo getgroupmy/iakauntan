@@ -479,3 +479,60 @@ class OcrException implements Exception {
   @override
   String toString() => message;
 }
+
+
+/// Editing the reader catalog.
+///
+/// 0113 wrote `platform_set_ocr_provider` because the console already
+/// edits `platform_settings` as loose JSON and a reader has a shape
+/// worth naming. Nothing ever called it, so adding a reader, correcting
+/// a price or retiring one has meant hand-written SQL against
+/// production.
+///
+/// The catalog itself was never invisible — `ocr_status` carries it to
+/// the tenant settings screen, which is why a company can pick a reader
+/// the app has never heard of. It is only the editing that had no way
+/// in.
+extension RepoOcrCatalog on Repo {
+  /// Every reader, active or not. The platform view rather than the
+  /// tenant one: a retired reader still matters to whoever retired it.
+  Future<List<Map<String, dynamic>>> ocrProviderCatalog() async => Repo.rows(
+    await client
+        .from('ocr_providers')
+        .select(
+          'code, name, kind, endpoint, model, price, takes_key, '
+          'runs_on_device, blurb, is_active',
+        )
+        .order('code'),
+  );
+
+  /// Adds a reader or edits one.
+  ///
+  /// Null leaves what is stored alone, which is the whole reason this
+  /// is an RPC and not an update: correcting a price must not blank the
+  /// endpoint. So only the fields actually edited are sent, and the
+  /// ones left untouched are omitted rather than sent as null-meaning-
+  /// empty.
+  Future<void> setOcrProvider(
+    String code, {
+    String? name,
+    String? kind,
+    String? endpoint,
+    String? model,
+    double? price,
+    bool? isActive,
+    String? blurb,
+  }) async => await callRpc(
+    'platform_set_ocr_provider',
+    params: {
+      'p_code': code,
+      if (name != null) 'p_name': name,
+      if (kind != null) 'p_kind': kind,
+      if (endpoint != null) 'p_endpoint': endpoint,
+      if (model != null) 'p_model': model,
+      if (price != null) 'p_price': price,
+      if (isActive != null) 'p_is_active': isActive,
+      if (blurb != null) 'p_blurb': blurb,
+    },
+  );
+}

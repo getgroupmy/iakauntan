@@ -2019,3 +2019,10 @@ final posVoidSummaryProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, ({DateTime from, DateTime to})>(
       (ref, range) => requireRepo(ref).posVoidSummary(range.from, range.to),
     );
+
+
+/// Every OCR reader the platform offers, active or retired.
+final ocrProviderCatalogProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).ocrProviderCatalog(),
+    );
