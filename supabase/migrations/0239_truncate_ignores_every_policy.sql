@@ -33,7 +33,8 @@
 -- ledger, and it belongs to whoever owns that decision, in a change that
 -- can be reviewed and reverted on its own.
 --
--- `service_role` and `postgres` are untouched. Nothing in the schema
+-- `service_role` and `postgres` are untouched: the revokes name
+-- `authenticated, anon` and nothing else. Nothing in the schema
 -- truncates either table -- checked across every migration and edge
 -- function before writing this.
 
@@ -69,9 +70,19 @@ begin
     raise exception 'FAIL 0239: posting and reading must both survive';
   end if;
 
-  -- And the roles that do the work still can.
-  if not has_table_privilege('service_role', 'public.gl_entries', 'UPDATE') then
-    raise exception 'FAIL 0239: service_role lost its access to the ledger';
-  end if;
+  -- `service_role` is deliberately not asserted here, and the first
+  -- version of this migration got that wrong: it checked that
+  -- service_role still had UPDATE on `gl_entries`, which is a fact about
+  -- the environment rather than about this migration.
+  --
+  -- The revokes above name `authenticated, anon` and nothing else, so
+  -- service_role is out of scope by construction. And the two
+  -- environments genuinely differ -- on the hosted project service_role
+  -- holds DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+  -- on the ledger; on a freshly migrated local stack it holds none of
+  -- them, and every CI run this project has ever had was green that way.
+  -- Which also settles whether anything needs them: nothing does. The
+  -- edge functions reach the ledger through SECURITY DEFINER functions,
+  -- not through table grants.
 end
 $do$;
