@@ -8,6 +8,9 @@ import '../../core/safe_link.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+// `RepoPosEinvoice` is an extension, and a Dart extension is only in
+// scope where its declaring library is imported.
+import '../../data/repository.dart';
 
 /// Operational view over MyInvois: what is queued, what LHDN validated,
 /// and what needs fixing.
