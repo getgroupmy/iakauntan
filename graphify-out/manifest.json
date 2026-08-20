@@ -3623,5 +3623,10 @@
     "mtime": 1787233468.7129095,
     "ast_hash": "a3cb345a91b5581eb1e652b6a7913aec",
     "semantic_hash": ""
+  },
+  "supabase/migrations/0242_the_support_address_follows_the_domain.sql": {
+    "mtime": 1787238974.0227566,
+    "ast_hash": "bc67a41f793fd4b3c58bc44d5cbff86d",
+    "semantic_hash": ""
   }
 }
