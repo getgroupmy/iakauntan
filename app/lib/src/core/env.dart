@@ -33,7 +33,22 @@ class Env {
   static const webPushPublicKey = String.fromEnvironment('WEB_PUSH_PUBLIC_KEY');
 
   static const appName = 'iAkauntan';
-  static const supportEmail = 'support@iakauntan.com';
+
+  // There is deliberately no `supportEmail` here.
+  //
+  // The support contact is a platform setting — `platform_settings`
+  // under the key `support`, carrying an address and a phone, editable
+  // in the console under Service settings and described in 0018 as the
+  // "Support contact shown in the app". An operator changes it without
+  // an app release, and does: the phone on production was filled in
+  // long after the row was seeded.
+  //
+  // A constant here was a second copy of that fact, and it had already
+  // drifted — it read `support@iakauntan.com` while the setting reads
+  // `support@iakauntan.my`. Nothing referenced the constant, so nothing
+  // showed the wrong address, but correcting the string would only have
+  // reset a clock: the next console edit would put the two out of step
+  // again. Read the setting instead.
 
   /// What is wrong with this build's configuration, or null if nothing
   /// is. Checked before `Supabase.initialize`, which refuses to run
