@@ -383,16 +383,24 @@ $$;
 -- Seven years, and then gone
 -- ---------------------------------------------------------------------
 do $$
-declare v_org uuid;
+declare
+  v_org uuid;
+  -- The two planted rows are found by id rather than by table name.
+  -- `test_org` seeds the chart of accounts, and `accounts` has carried
+  -- an audit trigger since 0055, so building the fixture writes about a
+  -- hundred and sixty `accounts` rows dated now -- which is what the
+  -- first version of the assertion below counted: `expected 1, got 161`.
+  v_old    uuid := '00000000-0000-4000-8000-00000000ae01';
+  v_recent uuid := '00000000-0000-4000-8000-00000000ae02';
 begin
   v_org := pg_temp.test_org('Kilang Selamat Tujuh Sdn Bhd');
 
   insert into public.security_events (org_id, email, kind, created_at)
   values (v_org, 'old@example.test',    'export', now() - interval '8 years'),
          (v_org, 'recent@example.test', 'export', now() - interval '6 years 11 months');
-  insert into public.audit_logs (org_id, table_name, action, created_at)
-  values (v_org, 'accounts', 'update', now() - interval '8 years'),
-         (v_org, 'accounts', 'update', now() - interval '6 years 11 months');
+  insert into public.audit_logs (org_id, table_name, record_id, action, created_at)
+  values (v_org, 'accounts', v_old,    'update', now() - interval '8 years'),
+         (v_org, 'accounts', v_recent, 'update', now() - interval '6 years 11 months');
 
   perform app.purge_audit_history(7);
 
@@ -401,7 +409,7 @@ begin
       where email = 'old@example.test'), 0);
   perform pg_temp.check_eq('and the eight-year-old change with it',
     (select count(*)::int from public.audit_logs
-      where org_id = v_org and created_at < now() - interval '7 years'), 0);
+      where org_id = v_org and record_id = v_old), 0);
 
   -- The half that makes the other half mean something: a purge that
   -- deleted everything would satisfy both assertions above.
@@ -410,8 +418,15 @@ begin
       where email = 'recent@example.test'), 1);
   perform pg_temp.check_eq('on both logs',
     (select count(*)::int from public.audit_logs
+      where org_id = v_org and record_id = v_recent), 1);
+
+  -- And the chart the fixture seeded a moment ago is untouched, which is
+  -- the third thing worth knowing: the purge is bounded by age, not by
+  -- table.
+  perform pg_temp.check_true('a purge at seven years leaves today alone',
+    (select count(*) from public.audit_logs
       where org_id = v_org and table_name = 'accounts'
-        and created_at > now() - interval '7 years'), 1);
+        and created_at > now() - interval '1 hour') > 0);
 end;
 $$;
 
