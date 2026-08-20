@@ -59,16 +59,50 @@
 -- The revoke
 -- ---------------------------------------------------------------------
 --
--- A loop rather than `revoke ... on all tables in schema public`, for
--- two reasons: it names materialized views, which that form has not
--- always covered, and it counts what it touched so the assertion below
--- has something to stand on.
+-- Measure, revoke, measure again, and require that the only thing that
+-- moved is the three privileges named. That is the assertion this
+-- migration needs, and the first version of it did not do that: it
+-- checked the surviving counts against fixed thresholds taken from
+-- production -- 242 tables insertable by `authenticated` -- and CI
+-- failed on `write 189`, because a stack built from these migrations
+-- alone grants each data privilege by name in 0125 while the hosted
+-- project also carries Supabase's blanket defaults. The two environments
+-- were never going to agree on that number, and neither number was the
+-- point. A before-and-after comparison inside one transaction is true
+-- in both, and says something stronger: not "enough is left" but
+-- "nothing else changed".
+--
+-- One block, because the two measurements have to see the same schema
+-- with only the revoke between them.
+--
+-- The loop is used rather than `revoke ... on all tables in schema
+-- public` so that materialized views are named explicitly and so the
+-- count of what was touched is available to assert on.
 
 do $do$
 declare
   r         record;
   v_touched int := 0;
+  v_before  int[];
+  v_after   int[];
+  v_privs   text[] := array['SELECT', 'INSERT', 'UPDATE', 'DELETE'];
+  i         int;
 begin
+  -- What a client role can do with data, before.
+  select array_agg(n order by ord) into v_before
+    from (
+      select p.ord,
+             count(*) filter (
+               where has_table_privilege('authenticated', c.oid, p.priv)
+                  or has_table_privilege('anon', c.oid, p.priv)) as n
+        from unnest(v_privs) with ordinality as p(priv, ord)
+       cross join pg_class c
+        join pg_namespace ns on ns.oid = c.relnamespace
+       where ns.nspname = 'public'
+         and c.relkind in ('r', 'p', 'v', 'm', 'f')
+       group by p.ord
+    ) t;
+
   for r in
     select c.oid::regclass as rel
       from pg_class c
@@ -83,12 +117,40 @@ begin
     v_touched := v_touched + 1;
   end loop;
 
-  if v_touched = 0 then
+  if v_touched < 200 then
     raise exception
-      'FAIL 0240: revoked nothing -- public has no relations, which cannot be right';
+      'FAIL 0240: only % relations in public -- the revoke cannot have covered the schema',
+      v_touched;
   end if;
 
-  raise notice '0240: revoked on % relations in public', v_touched;
+  -- And after.
+  select array_agg(n order by ord) into v_after
+    from (
+      select p.ord,
+             count(*) filter (
+               where has_table_privilege('authenticated', c.oid, p.priv)
+                  or has_table_privilege('anon', c.oid, p.priv)) as n
+        from unnest(v_privs) with ordinality as p(priv, ord)
+       cross join pg_class c
+        join pg_namespace ns on ns.oid = c.relnamespace
+       where ns.nspname = 'public'
+         and c.relkind in ('r', 'p', 'v', 'm', 'f')
+       group by p.ord
+    ) t;
+
+  -- The positive control, and the whole of it. If any of the four moved,
+  -- this migration took something it was not asked to take.
+  for i in 1 .. array_length(v_privs, 1) loop
+    if v_before[i] is distinct from v_after[i] then
+      raise exception
+        'FAIL 0240: % went from % relations to % -- the revoke took more than the three',
+        v_privs[i], v_before[i], v_after[i];
+    end if;
+  end loop;
+
+  raise notice
+    '0240: revoked on % relations; select/insert/update/delete unchanged at %',
+    v_touched, v_after;
 end
 $do$;
 
@@ -141,8 +203,6 @@ do $do$
 declare
   v_still_held int;
   v_offenders  text;
-  v_readable   int;
-  v_writable   int;
   v_defaults   text;
 begin
   -- 1. Nobody holds any of the three, anywhere in public.
@@ -164,26 +224,9 @@ begin
     raise exception 'FAIL 0240: % grants survived: %', v_still_held, left(v_offenders, 400);
   end if;
 
-  -- 2. The positive control. An assertion that only counts absences
-  --    passes just as happily against a schema where every grant has
-  --    been revoked and the application can no longer read anything.
-  --    Count what was left behind, and require it to be substantial.
-  select count(*) filter (where has_table_privilege('authenticated', c.oid, 'SELECT')),
-         count(*) filter (where has_table_privilege('authenticated', c.oid, 'INSERT'))
-    into v_readable, v_writable
-    from pg_class c
-    join pg_namespace n on n.oid = c.relnamespace
-   where n.nspname = 'public'
-     and c.relkind in ('r', 'p', 'v', 'm', 'f');
-
-  if v_readable < 200 or v_writable < 200 then
-    raise exception
-      'FAIL 0240: authenticated can read % and write % tables -- the revoke took too much',
-      v_readable, v_writable;
-  end if;
-
-  -- 3. And the ledger still behaves the way 0238 and 0239 left it,
-  --    since this migration swept over it too.
+  -- 2. The ledger still behaves the way 0238 and 0239 left it, since
+  --    this migration swept over it too. Named tables rather than
+  --    counts: these two are the same in every environment.
   if not has_table_privilege('authenticated', 'public.gl_entries', 'INSERT')
      or not has_table_privilege('authenticated', 'public.gl_lines', 'SELECT')
      or has_table_privilege('authenticated', 'public.gl_lines', 'UPDATE')
@@ -191,7 +234,7 @@ begin
     raise exception 'FAIL 0240: the ledger no longer reads as 0239 left it';
   end if;
 
-  -- 4. The default for new tables no longer carries the three. `D`, `x`
+  -- 3. The default for new tables no longer carries the three. `D`, `x`
   --    and `t` are TRUNCATE, REFERENCES and TRIGGER in an aclitem.
   select coalesce(string_agg(d.defaclacl::text, ' | '), '(none)')
     into v_defaults
@@ -206,9 +249,5 @@ begin
       'FAIL 0240: new tables would still be created with truncate/references/trigger: %',
       v_defaults;
   end if;
-
-  raise notice
-    '0240: authenticated reads % and writes % relations; none of the three remain',
-    v_readable, v_writable;
 end
 $do$;

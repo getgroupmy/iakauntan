@@ -132,7 +132,7 @@ declare
   v_held      text;
   v_n         int;
   v_relations int;
-  v_readable  int;
+  v_probe     text;
 begin
   select count(*),
          string_agg(distinct rel || ' (' || grantee || ' ' || priv || ')',
@@ -158,9 +158,15 @@ begin
   -- schema -- or one where every grant had been revoked -- would satisfy
   -- it without meaning anything. Say what was actually examined, and
   -- that the application can still reach it.
-  select count(*),
-         count(*) filter (where has_table_privilege('authenticated', c.oid, 'SELECT'))
-    into v_relations, v_readable
+  --
+  -- Named tables rather than a count of readable ones. The first version
+  -- of 0240 asserted a threshold taken from production and CI failed on
+  -- it: `authenticated` can insert into 242 relations on the hosted
+  -- project and 189 on a stack built from these migrations alone, because
+  -- 0125 grants each privilege by name while the hosted project also
+  -- carries Supabase's blanket defaults. Neither number was the point,
+  -- and no threshold is true in both. These four tables are.
+  select count(*) into v_relations
     from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
    where n.nspname = 'public'
@@ -171,15 +177,18 @@ begin
       'FAIL only % relations in public -- the check above proved nothing',
       v_relations;
   end if;
-  if v_readable < 200 then
-    raise exception
-      'FAIL authenticated can read only % of % relations -- too much was revoked',
-      v_readable, v_relations;
-  end if;
+
+  foreach v_probe in array array['accounts', 'contacts', 'gl_entries', 'audit_logs']
+  loop
+    if not has_table_privilege('authenticated', 'public.' || v_probe, 'SELECT') then
+      raise exception
+        'FAIL authenticated cannot read %s -- too much was revoked', v_probe;
+    end if;
+  end loop;
 
   raise notice
-    'ok   none of the three on any of % relations, % still readable',
-    v_relations, v_readable;
+    'ok   none of the three on any of % relations, and the schema is still readable',
+    v_relations;
 end $$;
 
 -- ---------------------------------------------------------------------
