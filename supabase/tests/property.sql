@@ -48,7 +48,11 @@ declare
   v_interest numeric; v_arrears numeric;
   v_lines integer;
 begin
-  v_org := pg_temp.test_org('Probe Management Corporation');
+  -- Strata only. The block below proves that a company holding strata
+  -- is refused the non-strata rent engine, which is only a test if the
+  -- fixture actually withholds the other module.
+  v_org := pg_temp.test_org('Probe Management Corporation',
+                            array['property_strata']);
 
   -- The module has to be bought. Every function in it refuses without
   -- the entitlement, so the fixture buys it — and `property_nonstrata`

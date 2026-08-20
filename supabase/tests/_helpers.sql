@@ -166,7 +166,23 @@ $$;
 -- and with the standard chart of accounts, which anything that posts
 -- needs. Deliberately not create_organization(): that reads auth.uid(),
 -- and the caller has not signed in yet at this point.
-create or replace function pg_temp.test_org(p_name text)
+-- `p_modules` decides what the fixture holds.
+--
+-- Null means every module, which is right for almost every file here:
+-- they assert business rules rather than billing, and since 0232 made
+-- entitlement real a fixture that said nothing would be a fixture that
+-- cannot post a journal.
+--
+-- An explicit list is for the files that assert a module is *absent*.
+-- `property.sql` is the one that found this: it proves a strata-only
+-- company is refused rent invoicing, "otherwise the modules are one
+-- module with two names" — and a blanket grant quietly turned that
+-- assertion into a no-op. Granting everything by default is convenient;
+-- granting everything unconditionally deletes exactly the tests worth
+-- having.
+create or replace function pg_temp.test_org(
+  p_name    text,
+  p_modules text[] default null)
 returns uuid language plpgsql as $$
 declare v_owner uuid := pg_temp.test_user(); v_org uuid;
 begin
@@ -177,20 +193,9 @@ begin
   returning id into v_org;
   perform app.seed_chart_of_accounts(v_org);
 
-  -- Every module, switched on.
-  --
-  -- Until 0232 `app.module_access` never read `org_modules`, so a test
-  -- org could use any feature without holding it and most of these
-  -- files never mention entitlement at all. Now that the check is real,
-  -- a fixture that did not say otherwise would be a fixture that cannot
-  -- post a journal.
-  --
-  -- Granting everything is the right default here rather than a
-  -- shortcut: these files assert business rules, not billing. A test
-  -- about entitlement says so by switching one back off, which is what
-  -- `pos_loyalty.sql` does.
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v_org, pm.code, true from public.platform_modules pm
+   where p_modules is null or pm.code = any(p_modules)
   on conflict (org_id, module_code) do update set is_enabled = true;
 
   perform pg_temp.sign_in_as(v_owner);
