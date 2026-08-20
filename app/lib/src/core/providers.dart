@@ -1982,3 +1982,14 @@ final contactMembershipsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, contactId) => requireRepo(ref).contactMemberships(contactId),
     );
+
+
+/// What the till owes LHDN and has not filed.
+///
+/// Watched by the e-Invoice screen rather than fetched on demand: the
+/// deadline is seven days after month end and passes whether or not
+/// anybody went looking.
+final posEinvoiceOutstandingProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posEinvoiceOutstanding(),
+    );

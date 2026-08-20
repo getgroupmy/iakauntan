@@ -92,6 +92,7 @@ class _EinvoiceScreenState extends ConsumerState<EinvoiceScreen> {
       body: Column(
         children: [
           if (org != null && !org.einvoiceEnabled) const _SetupBanner(),
+          const _ConsolidationDue(),
           Expanded(
             child: AsyncView(
               value: docs,
@@ -113,6 +114,164 @@ class _EinvoiceScreenState extends ConsumerState<EinvoiceScreen> {
                 );
               },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The consolidated e-Invoice, and how long is left to file it.
+///
+/// A sale gets its own e-Invoice when the buyer asks for one. The rest
+/// roll up: under the LHDN guideline a seller aggregates the period's
+/// unidentified sales into a single submission, due within seven days
+/// of month end. 0210 built all of that and nothing called it, so a
+/// shop selling through the till has been accruing a statutory
+/// obligation with no way to see it, let alone discharge it.
+///
+/// ## Nothing here works out a deadline
+///
+/// `period_end + 7` is generated on the consolidation row and
+/// `days_left` comes back from `pos_einvoice_outstanding`. A screen
+/// that subtracted dates itself would be a second opinion on a
+/// statutory date, and the month it disagreed would be the month
+/// somebody files late.
+///
+/// A negative `days_left` is shown as overdue rather than clamped. The
+/// deadline having passed is the single most important thing this
+/// widget can say, and rounding it up to "0 days left" would hide it.
+class _ConsolidationDue extends ConsumerStatefulWidget {
+  const _ConsolidationDue();
+
+  @override
+  ConsumerState<_ConsolidationDue> createState() => _ConsolidationDueState();
+}
+
+class _ConsolidationDueState extends ConsumerState<_ConsolidationDue> {
+  String? _busy;
+
+  Future<void> _consolidate(Map<String, dynamic> period) async {
+    final start = period['period_start']?.toString();
+    if (start == null) return;
+    setState(() => _busy = start);
+    await runWithFeedback(
+      context,
+      pendingMessage: 'Rolling the period up…',
+      successMessage: 'Consolidated, and queued for MyInvois',
+      action: () => ref.read(repoProvider)!.consolidatePosEinvoices(start),
+    );
+    if (!mounted) return;
+    setState(() => _busy = null);
+    ref
+      ..invalidate(posEinvoiceOutstandingProvider)
+      ..invalidate(einvoicesProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final outstanding = ref.watch(posEinvoiceOutstandingProvider);
+    return outstanding.maybeWhen(
+      // Silent when there is nothing owed and silent while it loads. A
+      // shop with no till, or one that has filed everything, should not
+      // be shown an empty box about consolidation.
+      data: (periods) {
+        if (periods.isEmpty) return const SizedBox.shrink();
+        return Column(
+          children: [
+            for (final p in periods) _PeriodRow(
+              period: p,
+              busy: _busy == p['period_start']?.toString(),
+              onConsolidate: () => _consolidate(p),
+            ),
+          ],
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _PeriodRow extends StatelessWidget {
+  const _PeriodRow({
+    required this.period,
+    required this.busy,
+    required this.onConsolidate,
+  });
+
+  final Map<String, dynamic> period;
+  final bool busy;
+  final VoidCallback onConsolidate;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final days = Fmt.toDouble(period['days_left']).round();
+    final overdue = days < 0;
+    final waiting = period['sales_waiting'] ?? 0;
+    final status = (period['consolidation_status'] ?? 'not started') as String;
+
+    final tone = overdue
+        ? scheme.errorContainer
+        : days <= 3
+        ? context.colors.warning.withValues(alpha: 0.16)
+        : scheme.surfaceContainerHighest;
+    final ink = overdue ? scheme.onErrorContainer : scheme.onSurface;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(Space.lg, Space.md, Space.lg, 0),
+      padding: const EdgeInsets.all(Space.md),
+      decoration: BoxDecoration(
+        color: tone,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$waiting till sales to consolidate for '
+                  '${Fmt.date(Fmt.parseDate(period['period_start']))} – '
+                  '${Fmt.date(Fmt.parseDate(period['period_end']))}',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(color: ink),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  overdue
+                      ? 'Was due ${Fmt.date(Fmt.parseDate(period['due_date']))}'
+                            ' — ${-days} day${days == -1 ? '' : 's'} late'
+                      : 'Due ${Fmt.date(Fmt.parseDate(period['due_date']))}'
+                            ' — $days day${days == 1 ? '' : 's'} left',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: ink,
+                    fontWeight: overdue ? FontWeight.w600 : null,
+                  ),
+                ),
+                Text(
+                  'LHDN wants one submission for the sales nobody asked an '
+                  'invoice for. Status: $status.',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: ink),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: Space.md),
+          FilledButton(
+            onPressed: busy ? null : onConsolidate,
+            child: busy
+                ? const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Consolidate'),
           ),
         ],
       ),

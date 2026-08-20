@@ -7149,3 +7149,62 @@ extension RepoMemberships on Repo {
         .order('started_on', ascending: false),
   );
 }
+
+
+/// The consolidated e-Invoice a shop owes LHDN.
+///
+/// 0210 built this and nothing has ever called it. Under e-Invoicing
+/// every invoice is a submission, so a shop doing five hundred sales a
+/// day would owe LHDN five hundred documents, each with a buyer who
+/// bought a drink and will never be identified. The guideline's answer
+/// is one consolidated submission per period, due within seven days of
+/// month end — and a till that cannot file it is a till that quietly
+/// accrues an obligation nobody can see.
+///
+/// Every date here is the server's. `period_end + 7` is a statutory
+/// deadline and belongs in one place, next to the rule that produced
+/// it, rather than being recomputed by whichever screen is drawing it.
+extension RepoPosEinvoice on Repo {
+  /// What is waiting, by period, with the date it is due and how long
+  /// is left. A negative `days_left` is a deadline already missed, and
+  /// is meant to be shown rather than clamped to zero.
+  Future<List<Map<String, dynamic>>> posEinvoiceOutstanding() async =>
+      Repo.rows(
+        await callRpc('pos_einvoice_outstanding', params: {'p_org': orgId}),
+      );
+
+  /// Rolls a period's anonymous sales into a single submission.
+  ///
+  /// The month is passed explicitly rather than left to the function's
+  /// default, because the screen is showing a specific period and the
+  /// button under it must file that one — a default that quietly means
+  /// "last month" would file a different period from the row that was
+  /// pressed.
+  Future<Map<String, dynamic>?> consolidatePosEinvoices(
+    String periodStart,
+  ) async {
+    final rows = Repo.rows(
+      await callRpc(
+        'consolidate_pos_einvoices',
+        params: {'p_org': orgId, 'p_month': periodStart},
+      ),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// "Boss, I need it under the company name."
+  ///
+  /// Asked after paying, which is when it is actually said across a
+  /// counter. The server refuses once the sale has been rolled into a
+  /// consolidation, because that submission has already told LHDN this
+  /// sale had no identified buyer.
+  Future<String> requestEinvoiceForSale(
+    String saleId,
+    String contactId,
+  ) async =>
+      await callRpc(
+            'request_einvoice_for_sale',
+            params: {'p_sale': saleId, 'p_contact': contactId},
+          )
+          as String;
+}

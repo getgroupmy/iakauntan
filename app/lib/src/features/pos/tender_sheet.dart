@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
+import '../../data/models.dart';
 import '../../data/repository.dart';
 import 'member_panel.dart';
 import 'till_screen.dart' show posNum;
@@ -99,6 +100,16 @@ class _TenderSheetState extends ConsumerState<_TenderSheet> {
             onPressed: () => _startMembership(ctx),
             child: const Text('Start membership'),
           ),
+        // "Boss, I need it under the company name." Said after the
+        // money, with a card produced, which is why 0210 made this its
+        // own function rather than an argument to `complete_pos_sale`:
+        // a till that could only be told before tendering is a till
+        // that makes people queue twice.
+        if (moduleEnabledNow(ref, 'einvoice'))
+          TextButton(
+            onPressed: () => _requestEinvoice(ctx),
+            child: const Text('Needs e-Invoice'),
+          ),
         FilledButton(
           onPressed: () => Navigator.of(ctx).pop(),
           child: const Text('Next customer'),
@@ -156,6 +167,39 @@ class _TenderSheetState extends ConsumerState<_TenderSheet> {
       context,
       successMessage: 'Membership started',
       action: () => repo.startMembership(widget.saleId, chosen),
+    );
+    if (mounted && receiptCtx.mounted) Navigator.of(receiptCtx).pop();
+  }
+
+  /// Bills this sale to somebody identifiable, so it gets its own
+  /// e-Invoice instead of disappearing into the month's consolidation.
+  ///
+  /// The test for "asked for one" is not a checkbox — 0210 derives it
+  /// from whether the sale is billed to a contact with a TIN, so that
+  /// the split cannot drift from what was actually invoiced. Which
+  /// means the useful thing this sheet can do is say which customers
+  /// have one, rather than let a cashier pick a name and find out from
+  /// a refusal.
+  ///
+  /// Re-billing is refused once the sale has been rolled into a
+  /// consolidation, because that submission has already told LHDN this
+  /// sale had no identified buyer. That refusal is the server's and is
+  /// shown as it arrives.
+  Future<void> _requestEinvoice(BuildContext receiptCtx) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const _EinvoiceCustomerSheet(),
+    );
+    if (chosen == null || !mounted) return;
+
+    await runWithFeedback(
+      context,
+      successMessage: 'Billed to them — this sale gets its own e-Invoice',
+      action: () => repo.requestEinvoiceForSale(widget.saleId, chosen),
     );
     if (mounted && receiptCtx.mounted) Navigator.of(receiptCtx).pop();
   }
@@ -288,6 +332,98 @@ class _Row extends StatelessWidget {
         children: [
           Text(label, style: style),
           Text(Fmt.money(amount), style: style),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Who to bill it to.
+///
+/// Searches by name and says plainly which contacts carry a TIN,
+/// because a contact without one does not change anything: the sale
+/// would still be anonymous to LHDN and would still roll into the
+/// consolidation. Showing that up front is kinder than a refusal after
+/// the customer has spelled out their company name.
+class _EinvoiceCustomerSheet extends ConsumerStatefulWidget {
+  const _EinvoiceCustomerSheet();
+
+  @override
+  ConsumerState<_EinvoiceCustomerSheet> createState() =>
+      _EinvoiceCustomerSheetState();
+}
+
+class _EinvoiceCustomerSheetState
+    extends ConsumerState<_EinvoiceCustomerSheet> {
+  final _search = TextEditingController();
+  List<Contact> _results = const [];
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _find() async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    setState(() => _busy = true);
+    final rows = await repo.contacts(search: _search.text, type: 'customer');
+    if (!mounted) return;
+    setState(() {
+      _results = rows;
+      _busy = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _search,
+            autofocus: true,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              labelText: 'Company or name',
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.search),
+                onPressed: _busy ? null : _find,
+              ),
+            ),
+            onSubmitted: (_) => _find(),
+          ),
+          const SizedBox(height: 8),
+          if (_busy) const LinearProgressIndicator(),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final c in _results)
+                  ListTile(
+                    title: Text(c.name),
+                    subtitle: Text(
+                      (c.tin ?? '').trim().isEmpty
+                          ? 'No TIN — this sale would still be consolidated'
+                          : 'TIN ${c.tin}',
+                    ),
+                    // Not disabled. The server decides, and a row that
+                    // cannot be tapped teaches nothing about why.
+                    onTap: () => Navigator.of(context).pop(c.id),
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );
