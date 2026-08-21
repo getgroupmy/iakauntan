@@ -7649,6 +7649,70 @@ extension RepoPosControls on Repo {
     ),
   );
 
+  /// Takes money off one line, by a rate or by an amount.
+  ///
+  /// Passing neither clears it, which is how a discount typed on the
+  /// wrong line is undone. The server measures a percentage against the
+  /// line's full price rather than what is left of it, so pressing this
+  /// twice replaces rather than compounds, and it refuses without a
+  /// reason and without the `pos_discount` permission.
+  Future<void> discountPosSaleLine(
+    String lineId, {
+    double? percent,
+    double? amount,
+    String? reason,
+  }) async => await callRpc(
+    'discount_pos_sale_line',
+    params: {
+      'p_line': lineId,
+      'p_percent': percent,
+      'p_amount': amount,
+      'p_reason': reason,
+    },
+  );
+
+  /// Takes money off the whole bill.
+  ///
+  /// A percentage is re-applied by the server whenever the basket
+  /// changes, so "ten per cent off" is still ten per cent after another
+  /// plate arrives. An amount stays as given. Returns what came off,
+  /// which is not always what was asked for — the server caps it at the
+  /// basket.
+  Future<double> discountPosSale(
+    String saleId, {
+    double? percent,
+    double? amount,
+    String? reason,
+  }) async => Fmt.toDouble(
+    await callRpc(
+      'discount_pos_sale',
+      params: {
+        'p_sale': saleId,
+        'p_percent': percent,
+        'p_amount': amount,
+        'p_reason': reason,
+      },
+    ),
+  );
+
+  /// What was discounted, by whom, on which day and in which shop.
+  ///
+  /// The report the permission exists for. `posVoidSummary` answers
+  /// where the food went; this answers where the price went.
+  Future<List<Map<String, dynamic>>> posDiscountSummary(
+    DateTime from,
+    DateTime to,
+  ) async => Repo.rows(
+    await callRpc(
+      'pos_discount_summary',
+      params: {
+        'p_org': orgId,
+        'p_from': Fmt.iso(from),
+        'p_to': Fmt.iso(to),
+      },
+    ),
+  );
+
   /// Takes one modifier back off a parked line.
   ///
   /// `add_line_modifier` has had a caller since the till was built and

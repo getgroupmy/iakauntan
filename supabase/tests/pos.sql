@@ -52,6 +52,7 @@ declare
   v_pend   date;
   v_txt    text;
   v_board  record;
+  v_line   uuid;
 begin
   -- ------------------------------------------------------------------
   -- The rounding rule, on its own
@@ -405,6 +406,101 @@ begin
   perform pg_temp.check_eq('with nothing against it', v_board.bills, 0);
   perform pg_temp.check_eq('and no division by nothing',
     v_board.average_bill, 0);
+
+  -- ------------------------------------------------------------------
+  -- A price the manager takes off
+  -- ------------------------------------------------------------------
+  --
+  -- 0209 has taken a discount since the beginning and nothing ever
+  -- passed one. 0255 gave it a caller, and these are the four things
+  -- that caller has to get right, all of which look right when wrong:
+  --
+  --   * a percentage measured against the FULL price, so discounting a
+  --     line twice replaces rather than compounds,
+  --   * a rate on the bill that survives another plate arriving, and a
+  --     flat amount that does not move when one does,
+  --   * tax charged on what was paid, not on what was asked,
+  --   * the invoice's header discount naming both the redemption and
+  --     the bill discount, because `prepare_einvoice` passes that field
+  --     to LHDN.
+  v_sale := public.open_pos_sale(v_reg);
+  v_line := public.add_pos_sale_line(v_sale, v_item, 2, 10.00);
+
+  perform public.discount_pos_sale_line(v_line, 10, null, 'burnt');
+  perform pg_temp.check_eq('a tenth off a 20.00 line is 2.00',
+    (select l.discount_amount from public.pos_sale_lines l where l.id = v_line),
+    2.00);
+  perform pg_temp.check_eq('and the line charges 18.00',
+    (select l.line_total from public.pos_sale_lines l where l.id = v_line),
+    18.00);
+
+  -- The one that compounds if it is measured against what is left.
+  perform public.discount_pos_sale_line(v_line, 25, null, 'burnt again');
+  perform pg_temp.check_eq('a second discount replaces the first',
+    (select l.discount_amount from public.pos_sale_lines l where l.id = v_line),
+    5.00);
+
+  perform public.discount_pos_sale_line(v_line, null, null, null);
+  perform pg_temp.check_eq('and clearing it puts the line back',
+    (select l.line_total from public.pos_sale_lines l where l.id = v_line),
+    20.00);
+  perform pg_temp.check_true('with nobody''s name against it',
+    (select l.discounted_by is null and l.discount_reason is null
+       from public.pos_sale_lines l where l.id = v_line));
+
+  begin
+    perform public.discount_pos_sale_line(v_line, 10, null, '   ');
+    raise exception 'FAIL a discount was given with no reason';
+  exception when check_violation then
+    raise notice 'ok   a discount needs a reason';
+  end;
+
+  begin
+    perform public.discount_pos_sale_line(v_line, null, 25.00, 'why not');
+    raise exception 'FAIL more was taken off than the line comes to';
+  exception when check_violation then
+    raise notice 'ok   a discount cannot exceed the line';
+  end;
+
+  -- A rate on the bill is re-applied every time the basket changes.
+  -- The alternative -- storing the amount once -- means a waiter adding
+  -- a drink silently shrinks the discount the customer was promised.
+  perform public.discount_pos_sale(v_sale, 10, null, 'staff');
+  perform pg_temp.check_eq('a tenth off a 20.00 bill is 2.00',
+    (select s.bill_discount from public.pos_sales s where s.id = v_sale), 2.00);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 10.00);
+  perform pg_temp.check_eq('and it is 3.00 once a 10.00 plate arrives',
+    (select s.bill_discount from public.pos_sales s where s.id = v_sale), 3.00);
+  perform pg_temp.check_eq('so the bill comes to 27.00',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 27.00);
+
+  -- A flat amount is a promise of ringgit, not of proportion.
+  perform public.discount_pos_sale(v_sale, null, 4.00, 'voucher');
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 10.00);
+  perform pg_temp.check_eq('a flat 4.00 is still 4.00 a plate later',
+    (select s.bill_discount from public.pos_sales s where s.id = v_sale), 4.00);
+  perform pg_temp.check_eq('and 40.00 of food comes to 36.00',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 36.00);
+
+  -- What LHDN is told. The money was already right without this; what
+  -- was wrong before 0255 was the description of it -- an invoice
+  -- charging 36.00 for 40.00 of food, declaring a discount of nothing.
+  perform public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 40.00)));
+  perform pg_temp.check_eq('the invoice header carries the bill discount',
+    (select d.discount_amount from public.sales_documents d
+      join public.pos_sales s on s.invoice_id = d.id where s.id = v_sale),
+    4.00);
+  perform pg_temp.check_eq('and charges what the customer paid',
+    (select d.total_amount from public.sales_documents d
+      join public.pos_sales s on s.invoice_id = d.id where s.id = v_sale),
+    36.00);
+
+  -- The report the permission exists for.
+  perform pg_temp.check_eq('the discount report names who gave it away',
+    (select d.bill_value from public.pos_discount_summary(
+       v_org, current_date, current_date) d),
+    4.00);
 
   raise notice 'point of sale: all assertions passed';
 end;

@@ -998,6 +998,68 @@ sales rather than seven. The idempotence the whole offline design exists
 for is therefore visible in the demo data, not only asserted in
 `pos_offline.sql`.
 
+## A price the manager takes off
+
+`add_pos_sale_line` has taken a `p_discount` since 0209 and
+`pos_sale_lines` has carried `discount_percent` and `discount_amount`
+since 0208. Nothing ever passed either. The till had no discount button,
+so a cashier asked to knock two ringgit off re-rang the line at a
+made-up price — which works, reports nothing, and is indistinguishable
+from theft. 0255 gave the storage a caller.
+
+**Who may.** `pos_discount`, an entry in 0244's `access_permissions`,
+which is the same answer voiding got. A company that has never defined
+an access type is unaffected and every cashier may discount. A company
+that has defined them must grant it, which is the point.
+
+**A reason, in words.** A void has an enum because the kitchen cares
+which of four things happened to the food. A discount has no such short
+list — "staff meal", "hair in the soup", "regular, third time this week"
+are all real — so the field is free text and required. What matters is
+that somebody typed a sentence and their name went on it.
+
+**A rate is not an amount.** "Ten per cent off" still means ten per cent
+after another plate arrives; "four ringgit off" still means four
+ringgit. Both are stored, and `recalc_pos_sale` re-derives the
+percentage every time the basket changes. Anything else would mean a
+waiter bringing another round silently shrinking the discount the
+customer was promised.
+
+**Where the money comes off.** A line discount reduces that line's
+subtotal and therefore its tax, which is right: SST is charged on what
+was paid. A bill discount cannot be pushed into the lines without
+inventing which plate absorbed it, so it sits on the header where 0212
+put the loyalty redemption, and `complete_pos_sale` adds the two into
+the invoice's `discount_amount` — the field `prepare_einvoice` maps to
+the MyInvois total discount. Before that, an invoice charging RM 36 for
+RM 40 of food would have declared a discount of nothing, and the lines
+on the e-Invoice would not have added up to its total.
+
+**Splitting and merging.** A rate travels to the second bill and
+re-applies to whatever landed there; a flat amount does not, because
+there is no honest way to decide how much of four ringgit belongs to the
+plates that moved. Merging is the other way round: the bill being
+absorbed is about to stop existing, so its discount travels rather than
+vanishing — the same rule 0216 already applied to a redemption.
+
+**A cooked plate has two answers.** Tapping a sent line used to go
+straight to the void reasons. It now asks which: taking money off leaves
+the plate on the bill and the cost where it fell, voiding takes the line
+away. A burnt steak is usually the first. The `pos_void` grant is
+checked down the voiding branch only, so a cashier who may discount and
+may not void reaches the half they hold.
+
+**The report.** `pos_discount_summary` is what the permission exists
+for — one row per person per day per shop, line discounts and bill
+discounts in separate columns because they are different acts. Bills
+that were later written off are excluded, or the same money would be
+reported here and in the void report. `pos_void_summary` answers where
+the food went; this answers where the price went, and a shop reads both
+on a Monday morning. Both live on one screen — `/voids`, renamed "Off
+the bills", because a manager checking one is checking the other and a
+page named after voiding is not where anybody would look for a
+discount.
+
 ## Not built yet
 
 - Submitting the consolidated e-Invoice to MyInvois (the rollup runs; the

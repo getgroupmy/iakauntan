@@ -10,6 +10,7 @@ import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'assign_table.dart';
 import 'channels.dart';
+import 'discount_sheet.dart';
 import 'modifier_sheet.dart';
 import 'offline_controller.dart';
 import 'offline_till.dart';
@@ -419,6 +420,123 @@ class _TillScreenState extends ConsumerState<TillScreen> {
   /// after choosing a reason and typing an explanation is a worse
   /// moment to find out. The database still refuses either way; this
   /// only stops the wasted work.
+  /// Says no once, in words, rather than hiding the button.
+  ///
+  /// Same shape as the void refusal above it and for the same reason: a
+  /// cashier who tapped something is owed an answer, and a control that
+  /// silently does nothing teaches people to tap harder.
+  Future<bool> _mayDiscount() async {
+    final held = await permissionHeld(ref, 'pos_discount');
+    if (!mounted) return false;
+    if (held) return true;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => const SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.lock_outline),
+              title: Text('Taking money off needs permission'),
+              subtitle: Text(
+                'This account has not been given it. A manager can, '
+                'under Team.',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    return false;
+  }
+
+  /// Ten per cent off the table, or five ringgit off because the food
+  /// was late.
+  ///
+  /// The rate is the one worth having on a bill: it survives the waiter
+  /// bringing another round, which a fixed amount cannot. Both go to
+  /// the same function and the server decides which of them to keep
+  /// re-applying.
+  Future<void> _discountBill() async {
+    final id = _saleId;
+    if (id == null) return;
+    if (!await _mayDiscount()) return;
+
+    final row = ref.read(posSaleProvider(id)).valueOrNull;
+    if (row == null || !mounted) return;
+    // Before anything came off, which is what a percentage is a
+    // percentage of. `total_amount` already has the discount and any
+    // redemption taken out of it, so using that would shrink the base
+    // every time the sheet was opened.
+    final full = posNum(row['subtotal']) + posNum(row['tax_amount']);
+
+    final answer = await showDiscountSheet(
+      context,
+      subject: 'The whole bill',
+      full: full,
+      currentPercent: posNum(row['bill_discount_percent']),
+      currentAmount: posNum(row['bill_discount']),
+      currentReason: row['bill_discount_reason'] as String?,
+    );
+    if (answer == null || !mounted) return;
+
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: answer.clear ? 'Back to full price' : 'Taken off',
+      action: () => repo.discountPosSale(
+        id,
+        percent: answer.answer?.percent,
+        amount: answer.answer?.amount,
+        reason: answer.answer?.reason,
+      ),
+    );
+    if (!ok || !mounted) return;
+    ref.invalidate(posSaleProvider(id));
+  }
+
+  /// The same, on one line.
+  ///
+  /// Reachable whether or not the kitchen has the plate, which is the
+  /// difference between this and voiding: a steak that arrived burnt
+  /// has already been cooked, and taking money off it is the ordinary
+  /// answer where taking it off the bill is not.
+  Future<void> _discountLine(Map<String, dynamic> line) async {
+    final id = _saleId;
+    final lineId = line['id'] as String?;
+    if (id == null || lineId == null) return;
+    if (!await _mayDiscount()) return;
+    if (!mounted) return;
+
+    final answer = await showDiscountSheet(
+      context,
+      subject: '${line['description']}',
+      full: posNum(line['unit_price']) * posNum(line['quantity']),
+      currentPercent: posNum(line['discount_percent']),
+      currentAmount: posNum(line['discount_amount']),
+      currentReason: line['discount_reason'] as String?,
+    );
+    if (answer == null || !mounted) return;
+
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: answer.clear ? 'Back to full price' : 'Taken off',
+      action: () => repo.discountPosSaleLine(
+        lineId,
+        percent: answer.answer?.percent,
+        amount: answer.answer?.amount,
+        reason: answer.answer?.reason,
+      ),
+    );
+    if (!ok || !mounted) return;
+    ref
+      ..invalidate(posSaleProvider(id))
+      ..invalidate(posSaleLinesProvider(id));
+  }
+
   Future<void> _voidBill() async {
     final id = _saleId;
     if (id == null) return;
@@ -753,6 +871,11 @@ class _TillScreenState extends ConsumerState<TillScreen> {
                   onTap: () => Navigator.of(ctx).pop('modifier'),
                 ),
               ListTile(
+                leading: const Icon(Icons.percent),
+                title: const Text('Take money off'),
+                onTap: () => Navigator.of(ctx).pop('discount'),
+              ),
+              ListTile(
                 leading: const Icon(Icons.delete_outline),
                 title: const Text('Take off the bill'),
                 onTap: () => Navigator.of(ctx).pop('remove'),
@@ -770,12 +893,58 @@ class _TillScreenState extends ConsumerState<TillScreen> {
         await _removeModifier(id, lineId);
         return;
       }
+      if (go == 'discount') {
+        await _discountLine(line);
+        return;
+      }
       if (go != 'remove') return;
     } else {
-      // Taking food off a bill the kitchen already has is the oldest
-      // way to steal from a till, so a shop can hand it out separately.
-      // Said rather than hidden: the cashier tapped a line and is owed
-      // an answer, and "nothing happened" is not one.
+      // Two things can be done to a plate the kitchen has cooked, and
+      // until now the till offered one of them. A burnt steak is
+      // usually discounted, not voided: the food was made, the cost was
+      // incurred, and pretending the line never existed loses both
+      // facts. Asked as a choice rather than assumed, because the two
+      // answers report differently and a shop reads both reports.
+      final go = await showModalBottomSheet<String>(
+        context: context,
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text('${line['description']}'),
+                subtitle: const Text('Already with the kitchen'),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.percent),
+                title: const Text('Take money off'),
+                subtitle: const Text('The plate stays on the bill'),
+                onTap: () => Navigator.of(ctx).pop('discount'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.block),
+                title: const Text('Void it'),
+                subtitle: const Text('The plate comes off, with a reason'),
+                onTap: () => Navigator.of(ctx).pop('void'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (!mounted) return;
+      if (go == 'discount') {
+        await _discountLine(line);
+        return;
+      }
+      if (go != 'void') return;
+
+      // Asked here rather than before the choice above, because the two
+      // answers are granted separately: a cashier who may discount and
+      // may not void has to be able to reach the first without being
+      // stopped for the second. Taking food off a bill the kitchen
+      // already has is the oldest way to steal from a till, so a shop
+      // can hand that one out on its own.
       //
       // Awaited rather than read, because nothing else on this screen
       // watches the access map: a read would find it unstarted, fall
@@ -787,21 +956,17 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       if (!mayVoid) {
         await showModalBottomSheet<void>(
           context: context,
-          builder: (ctx) => SafeArea(
+          builder: (_) => const SafeArea(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 ListTile(
-                  title: Text('${line['description']}'),
-                  subtitle: const Text('Already with the kitchen'),
-                ),
-                const Divider(height: 1),
-                const ListTile(
                   leading: Icon(Icons.lock_outline),
                   title: Text('Voiding needs permission'),
                   subtitle: Text(
                     'This account has not been given it. A manager can, '
-                    'under Team.',
+                    'under Team. Taking money off the plate may still be '
+                    'open to you.',
                   ),
                 ),
               ],
@@ -810,6 +975,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
         );
         return;
       }
+
       final answer = await showModalBottomSheet<({String reason, String note})>(
         context: context,
         isScrollControlled: true,
@@ -939,6 +1105,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
             onEvenSplit: _evenSplit,
             onMerge: _merge,
             onVoidBill: _voidBill,
+            onDiscountBill: _discountBill,
             onLineAction: _lineAction,
             onOpenOrder: _openOrder,
             onPark: _park,
@@ -966,6 +1133,7 @@ class _Register extends ConsumerWidget {
     required this.onEvenSplit,
     required this.onMerge,
     required this.onVoidBill,
+    required this.onDiscountBill,
     required this.onLineAction,
     required this.onOpenOrder,
     required this.onPark,
@@ -988,6 +1156,11 @@ class _Register extends ConsumerWidget {
   final VoidCallback onEvenSplit;
   final ValueChanged<Map<String, dynamic>> onMerge;
   final VoidCallback onVoidBill;
+
+  /// Taking money off the whole bill. Beside writing it off in the
+  /// same menu, because they are the two things somebody does to a
+  /// bill rather than to a line on it.
+  final VoidCallback onDiscountBill;
   final ValueChanged<Map<String, dynamic>> onLineAction;
   final ValueChanged<Map<String, dynamic>> onOpenOrder;
   final VoidCallback onPark;
@@ -1049,6 +1222,7 @@ class _Register extends ConsumerWidget {
           onEvenSplit: onEvenSplit,
           onMerge: onMerge,
           onVoidBill: onVoidBill,
+          onDiscountBill: onDiscountBill,
           onLineAction: onLineAction,
           onOpenOrder: onOpenOrder,
           onPark: onPark,
@@ -1246,6 +1420,7 @@ class _Basket extends ConsumerWidget {
     required this.onEvenSplit,
     required this.onMerge,
     required this.onVoidBill,
+    required this.onDiscountBill,
     required this.onLineAction,
     required this.onOpenOrder,
     required this.onPark,
@@ -1261,6 +1436,11 @@ class _Basket extends ConsumerWidget {
   final VoidCallback onEvenSplit;
   final ValueChanged<Map<String, dynamic>> onMerge;
   final VoidCallback onVoidBill;
+
+  /// Taking money off the whole bill. Beside writing it off in the
+  /// same menu, because they are the two things somebody does to a
+  /// bill rather than to a line on it.
+  final VoidCallback onDiscountBill;
   final ValueChanged<Map<String, dynamic>> onLineAction;
 
   /// A whole row rather than an id, because what the till does next
@@ -1352,6 +1532,14 @@ class _Basket extends ConsumerWidget {
       data: (row) => posNum(row?['total_amount']),
       orElse: () => 0.0,
     );
+    final billDiscount = sale.maybeWhen(
+      data: (row) => posNum(row?['bill_discount']),
+      orElse: () => 0.0,
+    );
+    final billDiscountReason = sale.maybeWhen(
+      data: (row) => row?['bill_discount_reason'] as String?,
+      orElse: () => null,
+    );
 
     final rows = lines.maybeWhen(
       data: (r) => r,
@@ -1432,8 +1620,17 @@ class _Basket extends ConsumerWidget {
                     tooltip: 'What to do with this bill',
                     icon: const Icon(Icons.more_vert, size: 18),
                     padding: EdgeInsets.zero,
-                    onSelected: (_) => onVoidBill(),
+                    onSelected: (v) =>
+                        v == 'discount' ? onDiscountBill() : onVoidBill(),
                     itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'discount',
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(Icons.percent),
+                          title: Text('Take money off'),
+                        ),
+                      ),
                       PopupMenuItem(
                         value: 'void',
                         child: ListTile(
@@ -1533,6 +1730,20 @@ class _Basket extends ConsumerWidget {
           child: Column(
             children: [
               if (!compact) ...[
+                // A discount on the whole bill is not visible anywhere
+                // else — it is not on a line and it is not in the
+                // total, it is the difference between them. Shown as
+                // its own row above the total, which is where a
+                // customer looks for it and where a receipt puts it.
+                if (billDiscount > 0) ...[
+                  _AmountRow(
+                    billDiscountReason == null
+                        ? 'Less discount'
+                        : 'Less discount · $billDiscountReason',
+                    -billDiscount,
+                  ),
+                  const SizedBox(height: 4),
+                ],
                 _AmountRow('Total', total, emphasise: true),
                 const SizedBox(height: 12),
               ],
@@ -2223,7 +2434,8 @@ class _BasketLines extends StatelessWidget {
         final sent = l['sent_to_kitchen_at'] != null;
         return ListTile(
           dense: true,
-          isThreeLine: chosen.isNotEmpty,
+          isThreeLine:
+              chosen.isNotEmpty || posNum(l['discount_amount']) > 0,
           onTap: onLineAction == null ? null : () => onLineAction!(l),
           leading: onLineAction == null
               ? null
@@ -2245,6 +2457,12 @@ class _BasketLines extends StatelessWidget {
               // as its own line is a modifier somebody cooks
               // separately.
               if (chosen.isNotEmpty) chosen.join(', '),
+              // What came off, and why. On the bill rather than only in
+              // the report, because the customer is standing there and
+              // the cashier has to be able to answer "what's this?".
+              if (posNum(l['discount_amount']) > 0)
+                'less ${Fmt.money(posNum(l['discount_amount']))}'
+                    '${l['discount_reason'] == null ? '' : ' · ${l['discount_reason']}'}',
             ].join('\n'),
           ),
           trailing: Text(Fmt.money(posNum(l['line_total']))),

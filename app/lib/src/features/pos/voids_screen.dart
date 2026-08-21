@@ -48,7 +48,7 @@ class _VoidsScreenState extends ConsumerState<VoidsScreen> {
   Widget build(BuildContext context) {
     if (!moduleEnabled(ref, 'pos')) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Voids')),
+        appBar: AppBar(title: const Text('Off the bills')),
         body: const EmptyState(
           icon: Icons.remove_shopping_cart_outlined,
           title: 'The till is not switched on',
@@ -59,9 +59,10 @@ class _VoidsScreenState extends ConsumerState<VoidsScreen> {
 
     final summary = ref.watch(posVoidSummaryProvider(_range));
     final bills = ref.watch(posVoidedBillsProvider(_range));
+    final discounts = ref.watch(posDiscountSummaryProvider(_range));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Voids')),
+      appBar: AppBar(title: const Text('Off the bills')),
       body: Column(
         children: [
           FilterBar(
@@ -83,14 +84,16 @@ class _VoidsScreenState extends ConsumerState<VoidsScreen> {
               onRetry: () => ref.invalidate(posVoidSummaryProvider(_range)),
               builder: (rows) {
                 final written = bills.valueOrNull ?? const [];
-                if (rows.isEmpty && written.isEmpty) {
+                final given = discounts.valueOrNull ?? const [];
+                if (rows.isEmpty && written.isEmpty && given.isEmpty) {
                   return const EmptyState(
                     icon: Icons.remove_shopping_cart_outlined,
                     title: 'Nothing came off a bill',
                     message:
                         'Lines taken off after the kitchen was told show up '
-                        'here, grouped by the reason given — and whole bills '
-                        'written off are listed one by one underneath.',
+                        'here, grouped by the reason given — whole bills '
+                        'written off are listed underneath, and money '
+                        'discounted at the counter under that.',
                   );
                 }
                 final total = rows.fold<double>(
@@ -214,6 +217,75 @@ class _VoidsScreenState extends ConsumerState<VoidsScreen> {
                             bold: true,
                           ),
                           isThreeLine: '${b['note'] ?? ''}'.isNotEmpty,
+                        ),
+                    ],
+                    // And the third thing that reduces what a shop was
+                    // paid, which is not a void at all.
+                    //
+                    // Here rather than on a screen of its own because a
+                    // manager checking one is checking the other: the
+                    // two ways to make money leave a till are taking
+                    // the food off and taking the price off, and a
+                    // cashier doing a lot of either is the same
+                    // conversation. Kept visibly apart all the same —
+                    // discounting a burnt steak is ordinary, and a list
+                    // that mixed it with voids would report the
+                    // ordinary as suspicious.
+                    if (given.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          Space.lg,
+                          Space.xl,
+                          Space.lg,
+                          Space.sm,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Money taken off',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'One row per person per day. Bills that were '
+                              'later written off are not counted here — that '
+                              'money is above.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      for (final d in given)
+                        ListTile(
+                          title: Text(
+                            [
+                              '${d['given_by_name']}',
+                              '${d['outlet_name']}',
+                            ].join('  ·  '),
+                          ),
+                          subtitle: Text(
+                            [
+                              Fmt.date(Fmt.parseDate(d['on_date'])),
+                              // The two kinds kept apart, because
+                              // knocking a burnt plate off a bill and
+                              // taking a tenth off the whole table are
+                              // different acts by different people for
+                              // different reasons.
+                              if (Fmt.toInt(d['line_count']) > 0)
+                                '${d['line_count']} line'
+                                    '${Fmt.toInt(d['line_count']) == 1 ? '' : 's'} '
+                                    '(${Fmt.money(Fmt.toDouble(d['line_value']))})',
+                              if (Fmt.toInt(d['bill_count']) > 0)
+                                '${d['bill_count']} bill'
+                                    '${Fmt.toInt(d['bill_count']) == 1 ? '' : 's'} '
+                                    '(${Fmt.money(Fmt.toDouble(d['bill_value']))})',
+                            ].join('  ·  '),
+                          ),
+                          trailing: Money(
+                            Fmt.toDouble(d['total_value']),
+                            bold: true,
+                          ),
                         ),
                     ],
                   ],

@@ -248,7 +248,10 @@ const _destinations = <_Dest>[
   // the person who runs the shop, and Reports is gated on accounting
   // that a food stall may not have bought.
   _Dest(
-    'Voids',
+    // Not "Voids" since 0255: the screen carries the discount report
+    // too, and a manager looking for where the price went would not
+    // have thought to open a page named after voiding.
+    'Off the bills',
     Icons.remove_shopping_cart_outlined,
     Icons.remove_shopping_cart,
     '/voids',

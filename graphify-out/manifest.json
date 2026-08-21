@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787316466.9523368,
-    "ast_hash": "818683b419c38a4188c4309f69d45a09",
+    "mtime": 1787318760.1327739,
+    "ast_hash": "73428ff01b08f644f0f26a8db064f6be",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787316466.95158,
-    "ast_hash": "17440d6d1cc90ab20864ff65c1debbe5",
+    "mtime": 1787318084.4520545,
+    "ast_hash": "a05b0e3d6911244f7d7e87c342ad9998",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787315679.166337,
-    "ast_hash": "08a863362633cbd5510f317392d68233",
+    "mtime": 1787318760.1331491,
+    "ast_hash": "1c686c293d36f67fabfd5612b8b595b9",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -3175,8 +3175,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/till_screen.dart": {
-    "mtime": 1787308191.0682003,
-    "ast_hash": "72473557ef83464fc3ac61116f59ea3e",
+    "mtime": 1787318238.6309447,
+    "ast_hash": "3ef53cbdb263cafcec2d3d8d9176b41c",
     "semantic_hash": ""
   },
   "app/test/diary_screen_test.dart": {
@@ -3205,8 +3205,8 @@
     "semantic_hash": ""
   },
   "app/test/till_screen_test.dart": {
-    "mtime": 1787290883.4360077,
-    "ast_hash": "0b9cb7e305efe7307048e3ca093e33d5",
+    "mtime": 1787318547.0431015,
+    "ast_hash": "740394e2077f6eb9fd162da715d1f767",
     "semantic_hash": ""
   },
   "supabase/migrations/0202_forecast_to_purchase_order.sql": {
@@ -3315,8 +3315,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos.sql": {
-    "mtime": 1787315778.7033994,
-    "ast_hash": "cd586f53658ad492c8aa7cd5642b6dae",
+    "mtime": 1787317905.7713108,
+    "ast_hash": "e96df3fccd496d5c162c421eefc8479b",
     "semantic_hash": ""
   },
   "supabase/tests/pos_fnb.sql": {
@@ -3330,8 +3330,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_loyalty.sql": {
-    "mtime": 1787316619.3162622,
-    "ast_hash": "677e7839e96c3f138ebf5907527f8241",
+    "mtime": 1787317727.7882664,
+    "ast_hash": "d9aadae8adaf8dc68873fff7fceb1453",
     "semantic_hash": ""
   },
   "supabase/tests/pos_offline.sql": {
@@ -3350,8 +3350,8 @@
     "semantic_hash": ""
   },
   "docs/pos.md": {
-    "mtime": 1787316654.3777301,
-    "ast_hash": "e96234e8226ac137c921bbfd218cbd80",
+    "mtime": 1787318889.1380694,
+    "ast_hash": "223bb2af95d7c4eb656ea9c0831497ba",
     "semantic_hash": ""
   },
   "app/lib/src/core/export_log.dart": {
@@ -3610,8 +3610,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/voids_screen.dart": {
-    "mtime": 1787295071.088354,
-    "ast_hash": "d4de97a940482e97b7f367963d1f4f4a",
+    "mtime": 1787318760.1330261,
+    "ast_hash": "631bf2642958397873bea1b4afcdcdf4",
     "semantic_hash": ""
   },
   "app/test/voids_screen_test.dart": {
@@ -3727,6 +3727,26 @@
   "supabase/migrations/0253_a_tier_a_member_climbs_into.sql": {
     "mtime": 1787316278.0480092,
     "ast_hash": "a8c00fa11f4841ab981a19756a4fd019",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/pos/discount_sheet.dart": {
+    "mtime": 1787318066.2637248,
+    "ast_hash": "9d4a5d3ef77cbb9ace508d93abebdab6",
+    "semantic_hash": ""
+  },
+  "app/test/discount_sheet_test.dart": {
+    "mtime": 1787318282.6040661,
+    "ast_hash": "725b3ce1d224a1e421b61e32d542c45f",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0254_the_gate_0253_walked_past.sql": {
+    "mtime": 1787317690.496031,
+    "ast_hash": "b814f2e9f8d6771c6b35d02efd379b23",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0255_a_price_the_manager_takes_off.sql": {
+    "mtime": 1787317473.304018,
+    "ast_hash": "6d824355fe7d4c71424ecfdcc989d4d0",
     "semantic_hash": ""
   }
 }

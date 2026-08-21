@@ -930,6 +930,15 @@ void main() {
       await tester.tap(find.text('Mee goreng mamak'));
       await tester.pumpAndSettle();
 
+      // 0255 put a choice in front of this: a cooked plate can be
+      // discounted or voided, and the two are granted separately. The
+      // refusal belongs to the branch that needs the grant, not to the
+      // tap that opened the menu — a cashier who may discount must
+      // reach that without being stopped for something else.
+      expect(find.text('Take money off'), findsOneWidget);
+      await tester.tap(find.text('Void it'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Voiding needs permission'), findsOneWidget);
       // And no way to do it anyway: the reason picker is the door, and
       // it does not open.
@@ -967,9 +976,125 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Mee goreng mamak'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Void it'));
+      await tester.pumpAndSettle();
 
       expect(find.byType(VoidReasonSheet), findsOneWidget);
       expect(find.text('Voiding needs permission'), findsNothing);
+    });
+
+    testWidgets('a cooked plate can be discounted without the void grant', (
+      tester,
+    ) async {
+      // The two acts are granted separately and the till has to keep
+      // them separate. A cashier who may take money off a burnt steak
+      // and may not make the line disappear should reach the first
+      // without being stopped for the second.
+      await openParked(
+        tester,
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          access: const {
+            'pos': 'write',
+            'pos_void': 'none',
+            'pos_discount': 'write',
+          },
+          saleLines: [
+            {
+              'id': 'l2',
+              'line_no': 1,
+              'description': 'Mee goreng mamak',
+              'quantity': '1',
+              'unit_price': '9.00',
+              'line_total': '9.00',
+              'sent_to_kitchen_at': '2026-08-19T12:00:00Z',
+            },
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('1 item'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mee goreng mamak'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Take money off'));
+      await tester.pumpAndSettle();
+
+      // The sheet opened, and it knows what the plate comes to.
+      expect(find.text('Comes to RM 9.00'), findsOneWidget);
+      expect(find.text('Voiding needs permission'), findsNothing);
+    });
+
+    testWidgets('and a cashier without the discount grant is told so', (
+      tester,
+    ) async {
+      await openParked(
+        tester,
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          access: const {'pos': 'write', 'pos_discount': 'none'},
+          saleLines: [
+            {
+              'id': 'l2',
+              'line_no': 1,
+              'description': 'Mee goreng mamak',
+              'quantity': '1',
+              'unit_price': '9.00',
+              'line_total': '9.00',
+              'sent_to_kitchen_at': '2026-08-19T12:00:00Z',
+            },
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('1 item'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mee goreng mamak'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Take money off'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Taking money off needs permission'), findsOneWidget);
+      expect(find.text('Comes to RM 9.00'), findsNothing);
+    });
+
+    testWidgets('what came off a line is said on the bill', (tester) async {
+      // The customer is standing there. A cashier who cannot answer
+      // "what's this?" from the screen in front of them has to go
+      // looking, and the reason is already recorded.
+      await openParked(
+        tester,
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          saleLines: [
+            {
+              'id': 'l2',
+              'line_no': 1,
+              'description': 'Mee goreng mamak',
+              'quantity': '1',
+              'unit_price': '9.00',
+              'discount_amount': '2.00',
+              'discount_reason': 'Burnt',
+              'line_total': '7.00',
+            },
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('1 item'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('less RM 2.00'), findsOneWidget);
+      expect(find.textContaining('Burnt'), findsOneWidget);
     });
 
     testWidgets('a sent line asks why before it comes off', (tester) async {
@@ -997,6 +1122,8 @@ void main() {
       await tester.tap(find.text('1 item'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Mee goreng mamak'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Void it'));
       await tester.pumpAndSettle();
 
       expect(

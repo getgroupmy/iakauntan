@@ -2069,6 +2069,15 @@ final posVoidSummaryProvider = FutureProvider.autoDispose
       (ref, range) => requireRepo(ref).posVoidSummary(range.from, range.to),
     );
 
+/// Who took money off which bills, over a range of days. 0255.
+///
+/// The other half of the void report and read on the same screen: one
+/// answers where the food went, the other where the price went.
+final posDiscountSummaryProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({DateTime from, DateTime to})>(
+      (ref, range) => requireRepo(ref).posDiscountSummary(range.from, range.to),
+    );
+
 /// The company's active loyalty scheme, or nothing if it runs none.
 final loyaltyProgramProvider = FutureProvider.autoDispose<
   Map<String, dynamic>?
