@@ -177,6 +177,71 @@ void main() {
     expect(find.textContaining('2 of 2 cooked'), findsOneWidget);
   });
 
+  testWidgets('the two halves say that they overlap', (tester) async {
+    // A bill void writes a line-void row for every line the kitchen
+    // cooked, so that food is inside the figure at the top *and* inside
+    // the bill total below. Adding the tile to the list overstates the
+    // leak, and nothing on the screen said so.
+    await show(
+      tester,
+      screen(
+        summary: const [
+          {'reason': 'other', 'lines': 2, 'quantity': 3, 'value': 24.00},
+        ],
+        bills: const [
+          {
+            'sale_id': 's1',
+            'sale_no': 'POS-2026-00043',
+            'table_code': 'T7',
+            'total_amount': 24.00,
+            'line_count': 2,
+            'cooked_count': 2,
+            'reason': 'other',
+            'note': 'they walked out',
+            'voided_by': 'u1',
+            'voided_name': 'Hafiz Rahman',
+          },
+        ],
+      ),
+    );
+
+    expect(
+      find.textContaining('already counted above'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('and the tile points at what it does not cover', (tester) async {
+    // The same confusion the other way round: the tile is lines, so a
+    // bill written off before anything was cooked adds nothing to it —
+    // which is the case worth catching. Left alone it reads as the
+    // whole story.
+    await show(
+      tester,
+      screen(
+        summary: const [
+          {'reason': 'not_received', 'lines': 3, 'quantity': 3, 'value': 40.00},
+        ],
+        bills: const [
+          {
+            'sale_id': 's1',
+            'sale_no': 'POS-2026-00044',
+            'table_code': null,
+            'total_amount': 86.00,
+            'line_count': 6,
+            'cooked_count': 0,
+            'reason': 'customer_cancelled',
+            'note': null,
+            'voided_by': 'u1',
+            'voided_name': 'Faridah Ismail',
+          },
+        ],
+      ),
+    );
+
+    expect(find.textContaining('1 bill written off'), findsOneWidget);
+  });
+
   testWidgets('a company with no till is told this is a till control', (
     tester,
   ) async {

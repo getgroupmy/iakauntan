@@ -3320,8 +3320,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_fnb.sql": {
-    "mtime": 1787285862.3906033,
-    "ast_hash": "f019a737e54ecf75d95f53c8a4cb67a7",
+    "mtime": 1787295160.775127,
+    "ast_hash": "00550db96d0a0f0ae1ec6f15d8205c41",
     "semantic_hash": ""
   },
   "supabase/tests/pos_kiosk.sql": {
@@ -3610,13 +3610,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/voids_screen.dart": {
-    "mtime": 1787292301.8303313,
-    "ast_hash": "b902dfcf894198eccb0963e3922827c1",
+    "mtime": 1787295071.088354,
+    "ast_hash": "d4de97a940482e97b7f367963d1f4f4a",
     "semantic_hash": ""
   },
   "app/test/voids_screen_test.dart": {
-    "mtime": 1787292378.517828,
-    "ast_hash": "c15eb7c5efd4c7911148545b1d79406d",
+    "mtime": 1787295176.07433,
+    "ast_hash": "3e176245fe4981c8109d0b65913b1548",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/ocr_catalog_admin.dart": {
@@ -3677,6 +3677,11 @@
   "supabase/migrations/0248_a_written_off_bill_has_to_show_somewhere.sql": {
     "mtime": 1787292208.8250391,
     "ast_hash": "364929fa27d05dbe867aa11da986e945",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0249_a_table_code_may_contain_a_slash.sql": {
+    "mtime": 1787295092.2651486,
+    "ast_hash": "199658e1421aab53c7ae51ea9cd27bbe",
     "semantic_hash": ""
   }
 }

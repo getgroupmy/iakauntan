@@ -231,6 +231,35 @@ begin
   perform pg_temp.check_true('and the token an NFC tag is written with',
     (select t.table_id from public.pos_table_by_code(v_outlet, 'table:T7') t) = v_t7);
 
+  -- ------------------------------------------------------------------
+  -- And a code is asked for as it was scanned, first
+  -- ------------------------------------------------------------------
+  --
+  -- `pos_tables.code` is free text a shop chooses, and "row A, table 1"
+  -- gets written `A/1` by somebody who has never thought about URLs.
+  -- 0243 stripped everything before the last slash unconditionally, so
+  -- that card resolved to a table called `1` — a *different* table,
+  -- with a party already at it. Finding nothing would have been bad;
+  -- seating them somewhere else is the expensive kind of wrong.
+  --
+  -- The decoy is the assertion. Without a table called `1` in the room
+  -- the old rule merely returned nothing and this would have passed.
+  insert into public.pos_tables (org_id, outlet_id, area_id, code, name, seats)
+  values (v_org, v_outlet, v_area, 'A/1', 'Row A, 1', 4) returning id into v_t9;
+  insert into public.pos_tables (org_id, outlet_id, area_id, code, name, seats)
+  values (v_org, v_outlet, v_area, '1', 'Table one', 2);
+
+  perform pg_temp.check_true('a code with a slash in it finds its own table',
+    (select t.table_id from public.pos_table_by_code(v_outlet, 'A/1') t) = v_t9);
+  -- And the wrapper shapes still fall through to the stripping, which
+  -- is the half that must not regress while fixing the other half.
+  perform pg_temp.check_true('while a link is still unwrapped',
+    (select t.table_id
+       from public.pos_table_by_code(v_outlet, 'https://iakauntan.com/t/T7') t)
+    = v_t7);
+  perform pg_temp.check_true('and a token still is',
+    (select t.table_id from public.pos_table_by_code(v_outlet, 'table:T7') t) = v_t7);
+
   -- What it says about the table, so the till does not have to ask
   -- twice to tell the cashier what they just scanned.
   perform pg_temp.check_eq('it says which area the table is in',
@@ -941,13 +970,31 @@ begin
     raise notice 'ok   a split table is not split twice';
   end;
 
-  -- And a number nobody means.
+  -- And a number nobody means. On a table that is *in service*: T9 was
+  -- taken out of service earlier in this file and never put back, so
+  -- asking it this question would be answered by the not-in-service
+  -- guard instead and leave the range check unasserted. That is what
+  -- this assertion did until somebody read it.
   begin
-    perform public.split_pos_table(v_t9, 1);
+    perform public.split_pos_table(v_t8, 1);
     raise exception 'FAIL split a table into one part';
   exception when check_violation then
+    get stacked diagnostics v_smsg = message_text;
     raise notice 'ok   a table does not split into one';
   end;
+  perform pg_temp.check_true('and it is the range that refused it',
+    v_smsg like '%between two and eight%');
+
+  -- The other guard, on its own table, so neither hides the other.
+  begin
+    perform public.split_pos_table(v_t9, 2);
+    raise exception 'FAIL split a table that is out of service';
+  exception when check_violation then
+    get stacked diagnostics v_smsg = message_text;
+    raise notice 'ok   a table out of service is not split';
+  end;
+  perform pg_temp.check_true('and says so',
+    v_smsg like '%not in service%');
 
   -- ------------------------------------------------------------------
   -- Putting it back together

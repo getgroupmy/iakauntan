@@ -114,10 +114,19 @@ class _VoidsScreenState extends ConsumerState<VoidsScreen> {
                         // of the grouping is how many kinds of thing are
                         // happening, and the per-reason counts are on
                         // the rows below.
-                        caption:
-                            '${rows.length} reason${rows.length == 1 ? '' : 's'} '
-                            'over ${_range.to.difference(_range.from).inDays + 1} '
-                            'day${_range.to.difference(_range.from).inDays == 0 ? '' : 's'}',
+                        caption: [
+                          '${rows.length} reason${rows.length == 1 ? '' : 's'} '
+                              'over ${_range.to.difference(_range.from).inDays + 1} '
+                              'day${_range.to.difference(_range.from).inDays == 0 ? '' : 's'}',
+                          // This figure is lines, so a bill written off
+                          // before the kitchen cooked anything adds
+                          // nothing to it — which is the case worth
+                          // catching. Point at the list rather than
+                          // letting the tile read as the whole story.
+                          if (written.isNotEmpty)
+                            '${written.length} bill'
+                                '${written.length == 1 ? '' : 's'} written off',
+                        ].join('  ·  '),
                       ),
                     ),
                     for (final r in rows)
@@ -146,9 +155,28 @@ class _VoidsScreenState extends ConsumerState<VoidsScreen> {
                           Space.lg,
                           Space.sm,
                         ),
-                        child: Text(
-                          'Bills written off',
-                          style: Theme.of(context).textTheme.titleSmall,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Bills written off',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 2),
+                            // The two halves of this screen overlap, and
+                            // saying so is the difference between a
+                            // manager reading it and a manager adding it
+                            // up wrong. A bill void writes a line-void
+                            // row for every line the kitchen cooked, so
+                            // that food is already inside the figure at
+                            // the top; what is new here is the rest of
+                            // the bill, and which bills they were.
+                            Text(
+                              'Each is the whole bill. Anything on it the '
+                              'kitchen had cooked is already counted above.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
                         ),
                       ),
                       for (final b in written)
