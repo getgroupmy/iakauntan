@@ -181,19 +181,22 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     // line rather than following it. Most items have no questions, and
     // for those this costs one cheap round trip and opens nothing — a
     // sheet that appears for a tin of drink is a sheet in the way.
-    List<String> mods = const [];
+    List<ModifierChoice> mods = const [];
     final options = await ref.read(
       itemModifierOptionsProvider(itemId).future,
     );
     if (!mounted) return;
     if (options.isNotEmpty) {
-      final picked = await showModalBottomSheet<List<String>>(
+      final picked = await showModalBottomSheet<List<ModifierChoice>>(
         context: context,
         isScrollControlled: true,
         builder: (_) => ModifierSheet(
           itemName: '${hit['name']}',
           basePrice: posNum(hit['unit_price']),
           options: options,
+          // Staff, and a price they answer for. The kiosk does not get
+          // this, and the reason is the same one.
+          allowTyped: true,
         ),
       );
       // Dismissed rather than answered. Nothing has been written yet,
@@ -217,7 +220,16 @@ class _TillScreenState extends ConsumerState<TillScreen> {
         // After the line, because a modifier is priced onto a line that
         // exists. `add_line_modifier` reprices as each one lands.
         for (final m in mods) {
-          await repo.addLineModifier(line, m);
+          if (m.modifierId != null) {
+            await repo.addLineModifier(line, m.modifierId!);
+          } else {
+            await repo.addLineFreeModifier(
+              line,
+              groupId: m.groupId!,
+              name: m.name!,
+              priceDelta: m.priceDelta,
+            );
+          }
         }
       },
     );

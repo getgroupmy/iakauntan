@@ -150,6 +150,7 @@ class _GroupTile extends ConsumerWidget {
             (group['max_select'] as num?)?.toInt(),
           ),
           '$answers answer${answers == 1 ? '' : 's'}',
+          if (group['allows_free_text'] == true) 'or anything typed',
           // The number that decides whether retiring it is a small act
           // or a menu-wide one.
           'asked about $items dish${items == 1 ? '' : 'es'}',
@@ -375,6 +376,7 @@ class _GroupDialogState extends ConsumerState<_GroupDialog> {
   late final _max = TextEditingController(
     text: (widget.group?['max_select'] as num?)?.toInt().toString() ?? '',
   );
+  late bool _open = widget.group?['allows_free_text'] == true;
   bool _saving = false;
 
   @override
@@ -403,6 +405,7 @@ class _GroupDialogState extends ConsumerState<_GroupDialog> {
         // means by null. Zero would be a question nobody can answer,
         // and 0250 refuses it by name.
         maxSelect: int.tryParse(_max.text.trim()),
+        allowsFreeText: _open,
       ),
     );
 
@@ -485,6 +488,22 @@ class _GroupDialogState extends ConsumerState<_GroupDialog> {
                   'At the till: ${modifierRule(min, max)}.'
                   '${min > 0 ? ' The order cannot go to the kitchen until it is answered.' : ''}',
                   style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _open,
+                onChanged: (v) => setState(() => _open = v),
+                title: const Text('Allow an answer that is not listed'),
+                // A spice level has a fixed set of answers and a fourth
+                // is not something a cook can make. "Anything else" is
+                // the opposite, which is why this is per question.
+                subtitle: const Text(
+                  'The till can type a name and a price for this '
+                  'question. The kiosk never can, and the price can '
+                  'only go up.',
+                  style: TextStyle(fontSize: 12),
                 ),
               ),
             ],

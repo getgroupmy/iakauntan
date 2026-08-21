@@ -6461,6 +6461,7 @@ extension RepoPos on Repo {
     String? id,
     int sortOrder = 0,
     bool isActive = true,
+    bool allowsFreeText = false,
   }) async =>
       await callRpc(
             'upsert_pos_modifier_group',
@@ -6473,6 +6474,7 @@ extension RepoPos on Repo {
               'p_id': id,
               'p_sort_order': sortOrder,
               'p_is_active': isActive,
+              'p_allows_free_text': allowsFreeText,
             },
           )
           as String;
@@ -6525,6 +6527,28 @@ extension RepoPos on Repo {
             params: {'p_item': itemId, 'p_groups': groupIds},
           ))
           as int;
+
+  /// An answer nobody listed: a name and a price typed at the counter.
+  /// 0251, and only for a group whose `allows_free_text` is on — the
+  /// server refuses the rest, including a price below nothing.
+  Future<String> addLineFreeModifier(
+    String lineId, {
+    required String groupId,
+    required String name,
+    double priceDelta = 0,
+    int quantity = 1,
+  }) async =>
+      await callRpc(
+            'add_line_free_modifier',
+            params: {
+              'p_line': lineId,
+              'p_group': groupId,
+              'p_name': name,
+              'p_price_delta': priceDelta,
+              'p_quantity': quantity,
+            },
+          )
+          as String;
 
   Future<String> addLineModifier(
     String lineId,

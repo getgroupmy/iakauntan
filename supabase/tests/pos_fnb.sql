@@ -71,6 +71,7 @@ declare
   v_g1     uuid;
   v_g2     uuid;
   v_m2     uuid;
+  v_free   uuid;
 begin
   v_org := pg_temp.test_org('Warung Sedap Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
@@ -1161,6 +1162,97 @@ begin
   -- written, which is the other half of that assertion.
   perform pg_temp.check_eq('with its answers, so they can be brought back',
     (select count(*) from public.pos_modifier_options_admin(v_g2)), 2);
+
+  -- ------------------------------------------------------------------
+  -- An answer that is not on the list (0251)
+  -- ------------------------------------------------------------------
+  -- A typed answer is an ordinary `pos_sale_line_modifiers` row with
+  -- no `modifier_id`: a name, a price and a group, snapshotted like
+  -- every other answer.
+
+  v_sale := public.seat_table(v_reg, v_t7, 2);
+  v_line := public.add_pos_sale_line(v_sale, v_item, 1, 12.00);
+
+  -- Off until a shop turns it on, and `Tambah` has not been.
+  begin
+    perform public.add_line_free_modifier(v_line, v_extra, 'Sotong', 4.00);
+    raise exception 'FAIL typed into a question that does not take one';
+  exception when check_violation then
+    raise notice 'ok   a closed question refuses a typed answer';
+  end;
+
+  perform public.upsert_pos_modifier_group(v_org, 'EXTRA', 'Tambah', 0, 2,
+    v_extra, 0, true, true);
+
+  v_free := public.add_line_free_modifier(v_line, v_extra, 'Tambah sotong', 4.00);
+  perform pg_temp.check_eq('the plate carries what was typed onto it',
+    (select l.unit_price from public.pos_sale_lines l where l.id = v_line),
+    16.0000);
+  perform pg_temp.check_eq('the menu price is kept, as with any modifier',
+    (select l.base_unit_price from public.pos_sale_lines l where l.id = v_line),
+    12.0000);
+  perform pg_temp.check_true('and the row is a modifier with no menu row behind it',
+    (select m.modifier_id is null and m.group_id = v_extra
+            and m.name = 'Tambah sotong' and m.price_delta = 4.0000
+       from public.pos_sale_line_modifiers m where m.id = v_free));
+  -- Still one line. The whole reason a modifier is not a second line
+  -- applies to a typed one exactly as it does to a listed one.
+  perform pg_temp.check_eq('one plate, one line',
+    (select count(*) from public.pos_sale_lines l where l.sale_id = v_sale), 1);
+
+  -- Money off is what this must never be: a discount handed out by
+  -- whoever is holding the till, with no reason and no grant behind it.
+  begin
+    perform public.add_line_free_modifier(v_line, v_extra, 'Diskaun', -2.00);
+    raise exception 'FAIL took money off the plate';
+  exception when check_violation then
+    raise notice 'ok   a typed answer cannot take money off';
+  end;
+
+  begin
+    perform public.add_line_free_modifier(v_line, v_extra, '   ', 1.00);
+    raise exception 'FAIL accepted an answer with no words in it';
+  exception when check_violation then
+    raise notice 'ok   an answer has to say what it is';
+  end;
+
+  -- It has to fit on a docket, and cutting a cook's instruction in half
+  -- is how the wrong plate goes out.
+  begin
+    perform public.add_line_free_modifier(v_line, v_extra, repeat('x', 61), 0);
+    raise exception 'FAIL accepted an answer too long for a docket';
+  exception when check_violation then
+    raise notice 'ok   sixty characters is the docket''s width';
+  end;
+
+  -- The group's own maximum still governs: it is enforced by the same
+  -- trigger, which counts rows and does not care where they came from.
+  perform public.add_line_free_modifier(v_line, v_extra, 'Tambah kicap', 0);
+  begin
+    perform public.add_line_free_modifier(v_line, v_extra, 'Tambah lagi', 1.00);
+    raise exception 'FAIL typed past the group maximum';
+  exception when check_violation then
+    raise notice 'ok   the maximum counts typed answers too';
+  end;
+
+  -- A required question is answered by a typed answer, because
+  -- `pos_line_modifier_gaps` counts rows per group and a cook can read
+  -- what was typed.
+  perform public.upsert_pos_modifier_group(v_org, 'SPICE', 'Pedas', 1, 1,
+    v_spice, 0, true, true);
+  perform pg_temp.check_eq('the spice question is still open',
+    (select count(*) from public.pos_line_modifier_gaps(v_sale)), 1);
+  perform public.add_line_free_modifier(v_line, v_spice, 'Pedas gila', 0);
+  perform pg_temp.check_eq('and typing an answer closes it',
+    (select count(*) from public.pos_line_modifier_gaps(v_sale)), 0);
+
+  -- The sheet is told which questions are open, or it cannot offer it.
+  perform pg_temp.check_eq('the till is told the question takes one',
+    (select count(distinct o.group_id) from public.item_modifier_options(v_item) o
+      where o.allows_free_text), 2);
+  perform pg_temp.check_eq('and so is the editor',
+    (select count(*) from public.pos_modifier_groups_admin(v_org) g
+      where g.allows_free_text), 2);
 
   raise notice 'point of sale dining room: all assertions passed';
 end;

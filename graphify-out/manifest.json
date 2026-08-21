@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787305382.2206457,
-    "ast_hash": "af1e9fac2829a44ebfb4b78b672cc078",
+    "mtime": 1787308111.1638045,
+    "ast_hash": "3a59ae6b95b982a7f92124cb4faad38d",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -3175,8 +3175,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/till_screen.dart": {
-    "mtime": 1787290859.4295893,
-    "ast_hash": "65b6920940071b16870406719fa7ff8f",
+    "mtime": 1787308191.0682003,
+    "ast_hash": "72473557ef83464fc3ac61116f59ea3e",
     "semantic_hash": ""
   },
   "app/test/diary_screen_test.dart": {
@@ -3320,8 +3320,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_fnb.sql": {
-    "mtime": 1787305771.6651068,
-    "ast_hash": "566829e2c4f62bbd2763de86b371317d",
+    "mtime": 1787308564.7899308,
+    "ast_hash": "8915ce26b5142bc8fa8e806859dc6a9c",
     "semantic_hash": ""
   },
   "supabase/tests/pos_kiosk.sql": {
@@ -3350,8 +3350,8 @@
     "semantic_hash": ""
   },
   "docs/pos.md": {
-    "mtime": 1787306036.9619281,
-    "ast_hash": "eeff8f7a3d8a9c59cc07582c18c7263c",
+    "mtime": 1787308601.2411435,
+    "ast_hash": "d139d2fa458d22b291eff62b22e79a55",
     "semantic_hash": ""
   },
   "app/lib/src/core/export_log.dart": {
@@ -3370,8 +3370,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/kiosk_screen.dart": {
-    "mtime": 1787150021.3087158,
-    "ast_hash": "d876949b69e4b2ff9279f0c348849ffe",
+    "mtime": 1787308185.7583036,
+    "ast_hash": "c77ea5ee34ef1f192b531dee2c5a93c8",
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/member_panel.dart": {
@@ -3385,8 +3385,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/modifier_sheet.dart": {
-    "mtime": 1787137703.1049776,
-    "ast_hash": "47da9d3705818dda300471c41c6aedd1",
+    "mtime": 1787308171.36332,
+    "ast_hash": "69cae75f97b2e8f506a3a8a35c76617c",
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/offline_controller.dart": {
@@ -3445,8 +3445,8 @@
     "semantic_hash": ""
   },
   "app/test/modifier_sheet_test.dart": {
-    "mtime": 1787139777.718983,
-    "ast_hash": "4e5cf2c1472da51349f702efe55c7997",
+    "mtime": 1787308497.8262794,
+    "ast_hash": "044a2a8392581516a6528293afd3764e",
     "semantic_hash": ""
   },
   "app/test/module_surface_test.dart": {
@@ -3685,8 +3685,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/items/modifier_groups_dialog.dart": {
-    "mtime": 1787305538.748655,
-    "ast_hash": "f5dfa756dbee42d458cc9a6146195590",
+    "mtime": 1787308207.225115,
+    "ast_hash": "124cc8bb763c04f02714a4b309ebfce2",
     "semantic_hash": ""
   },
   "app/test/pos_modifiers_test.dart": {
@@ -3697,6 +3697,11 @@
   "supabase/migrations/0250_the_questions_a_shop_asks.sql": {
     "mtime": 1787305239.6566372,
     "ast_hash": "0b77cf028be18d96265d3c1e91f29efb",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0251_an_answer_that_is_not_on_the_list.sql": {
+    "mtime": 1787307972.759308,
+    "ast_hash": "a4c6c6950f6fde1e03d6ca630440985b",
     "semantic_hash": ""
   }
 }

@@ -319,6 +319,25 @@ button beside Price levels keeps the questions themselves. Retired
 questions stay on that list — `(org_id, code)` is unique, so hiding them
 would leave somebody re-creating one under a code they cannot use.
 
+**An answer that is not on the list.** 0251 adds `allows_free_text` to a
+group and `add_line_free_modifier` beside `add_line_modifier`. A typed
+answer is an ordinary `pos_sale_line_modifiers` row with `modifier_id`
+left null — a name, a price and a group, snapshotted at the moment of
+ordering exactly like a listed one, so the receipt, the kitchen docket,
+the repricing and the consolidated e-Invoice need to know nothing about
+the difference. `pos_line_modifier_gaps` counts rows per group without
+looking at `modifier_id`, so a typed answer closes a required question;
+`pos_modifier_max` counts them too, so the group's maximum still holds.
+
+Two limits, both in SQL. The price may not be negative: a surcharge is
+what this is for, and a negative would be a discount entered by whoever
+is holding the till with no reason recorded and no grant asked for —
+the shape 0247 closed on the void. And the name is capped at sixty
+characters and refused rather than truncated, because it goes on a
+kitchen docket and half an instruction is how the wrong plate goes out.
+The kiosk is never offered it at all: a customer alone with a field that
+adds money to their own bill will put nought in it.
+
 ## Service — a slot that cannot be sold twice
 
 The double-booking rule is a **constraint**, not a function:

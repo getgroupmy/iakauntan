@@ -127,11 +127,11 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     // Asked before anything is written, exactly as at the till. On a
     // kiosk the reason is sharper: there is nobody to ask afterwards
     // whether the customer wanted it spicy.
-    List<String> mods = const [];
+    List<ModifierChoice> mods = const [];
     final options = await ref.read(itemModifierOptionsProvider(itemId).future);
     if (!mounted) return;
     if (options.isNotEmpty) {
-      final picked = await showModalBottomSheet<List<String>>(
+      final picked = await showModalBottomSheet<List<ModifierChoice>>(
         context: context,
         isScrollControlled: true,
         builder: (_) => ModifierSheet(
@@ -159,8 +159,13 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
           itemId,
           price: posNum(item['unit_price']),
         );
+        // Listed answers only. `allowTyped` is off on a kiosk, so
+        // nothing else can be here — and a customer who could type
+        // their own price would type nought.
         for (final m in mods) {
-          await repo.addLineModifier(line, m);
+          if (m.modifierId != null) {
+            await repo.addLineModifier(line, m.modifierId!);
+          }
         }
       },
     );
