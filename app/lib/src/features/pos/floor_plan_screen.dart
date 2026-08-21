@@ -54,6 +54,78 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
     });
   }
 
+  /// Turning one long table into two.
+  ///
+  /// The case this is for: a twelve-seater down one wall with two
+  /// unrelated parties at it, which is the ordinary Friday in a warung.
+  /// The room needs two places where it had one — two bills, two cards,
+  /// two tiles — and `split_pos_table` makes them real tables so
+  /// everything that already knows about tables keeps working.
+  Future<void> _split(Map<String, dynamic> t) async {
+    final tableId = t['table_id'] as String?;
+    if (tableId == null) return;
+    final parts = await _askParts(
+      context,
+      code: '${t['table_code'] ?? t['table_name']}',
+      seats: (t['seats'] as num?)?.toInt() ?? 2,
+    );
+    if (parts == null || !mounted) return;
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Split into $parts',
+      action: () => repo.splitPosTable(tableId, parts),
+    );
+    if (!ok || !mounted) return;
+    final outlet = _outletId;
+    if (outlet != null) ref.invalidate(posFloorPlanProvider(outlet));
+  }
+
+  /// And putting it back.
+  ///
+  /// Asked first, because a party still sitting on one half comes back
+  /// to the whole table with it — which is right, and is not something
+  /// to do to somebody's service by accident. Two parties still sitting
+  /// is refused by the server, not here, so the screen cannot disagree
+  /// with the database about when it is safe.
+  Future<void> _merge(Map<String, dynamic> t) async {
+    final tableId = t['table_id'] as String?;
+    if (tableId == null) return;
+    final whole = '${t['table_code'] ?? ''}'.split('-').first;
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Put $whole back together?'),
+        content: const Text(
+          'The halves come off the floor. Anybody still sitting at one '
+          'moves to the whole table with their bill.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Leave it split'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Put it back'),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: '$whole is one table again',
+      action: () => repo.mergePosTable(tableId),
+    );
+    if (!ok || !mounted) return;
+    final outlet = _outletId;
+    if (outlet != null) ref.invalidate(posFloorPlanProvider(outlet));
+  }
+
   /// The cards that go on the tables.
   ///
   /// Printing is the whole point of the codes: `pos_table_by_code` and
@@ -239,6 +311,8 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
             outletId: outlet,
             onSeat: _seat,
             onMove: _move,
+            onSplit: _split,
+            onMerge: _merge,
           );
         },
       ),
@@ -251,11 +325,15 @@ class _Room extends ConsumerWidget {
     required this.outletId,
     required this.onSeat,
     required this.onMove,
+    required this.onSplit,
+    required this.onMerge,
   });
 
   final String outletId;
   final ValueChanged<Map<String, dynamic>> onSeat;
   final void Function(Map<String, dynamic>, List<Map<String, dynamic>>) onMove;
+  final ValueChanged<Map<String, dynamic>> onSplit;
+  final ValueChanged<Map<String, dynamic>> onMerge;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -323,6 +401,8 @@ class _Room extends ConsumerWidget {
                         table: entry.value[i],
                         onTap: () => onSeat(entry.value[i]),
                         onMove: () => onMove(entry.value[i], tables),
+                        onSplit: () => onSplit(entry.value[i]),
+                        onMerge: () => onMerge(entry.value[i]),
                       ),
                     );
                   },
@@ -341,17 +421,25 @@ class _TableTile extends StatelessWidget {
     required this.table,
     required this.onTap,
     required this.onMove,
+    required this.onSplit,
+    required this.onMerge,
   });
 
   final Map<String, dynamic> table;
   final VoidCallback onTap;
   final VoidCallback onMove;
+  final VoidCallback onSplit;
+  final VoidCallback onMerge;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final busy = table['sale_id'] != null;
     final minutes = (table['minutes_seated'] as num?)?.toInt();
+    // A half of a long table. It can be put back; it cannot be split
+    // again, and offering that would be offering something the server
+    // refuses.
+    final isHalf = table['parent_table_id'] != null;
 
     return Card(
       // The one piece of state a waiter reads from across the room.
@@ -359,7 +447,6 @@ class _TableTile extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        onLongPress: busy ? onMove : null,
         child: Padding(
           padding: const EdgeInsets.all(10),
           child: Column(
@@ -374,13 +461,50 @@ class _TableTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (busy)
-                    IconButton(
-                      tooltip: 'Move this party',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.swap_horiz, size: 18),
-                      onPressed: onMove,
-                    ),
+                  // One affordance, always in the same corner,
+                  // carrying whichever of the three actions apply.
+                  // Two icon buttons would not fit beside a table name
+                  // on a phone, and a hidden long-press is no way to
+                  // find something a waiter needs mid-service.
+                  PopupMenuButton<String>(
+                    tooltip: 'What to do with this table',
+                    icon: const Icon(Icons.more_vert, size: 18),
+                    padding: EdgeInsets.zero,
+                    onSelected: (v) => switch (v) {
+                      'move' => onMove(),
+                      'split' => onSplit(),
+                      _ => onMerge(),
+                    },
+                    itemBuilder: (_) => [
+                      if (busy)
+                        const PopupMenuItem(
+                          value: 'move',
+                          child: ListTile(
+                            dense: true,
+                            leading: Icon(Icons.swap_horiz),
+                            title: Text('Move this party'),
+                          ),
+                        ),
+                      if (isHalf)
+                        const PopupMenuItem(
+                          value: 'merge',
+                          child: ListTile(
+                            dense: true,
+                            leading: Icon(Icons.call_merge),
+                            title: Text('Put the table back together'),
+                          ),
+                        )
+                      else
+                        const PopupMenuItem(
+                          value: 'split',
+                          child: ListTile(
+                            dense: true,
+                            leading: Icon(Icons.call_split),
+                            title: Text('Split this table'),
+                          ),
+                        ),
+                    ],
+                  ),
                 ],
               ),
               const Spacer(),
@@ -417,6 +541,79 @@ class _TableTile extends StatelessWidget {
     if (minutes < 60) return '${minutes}m';
     return '${minutes ~/ 60}h ${minutes % 60}m';
   }
+}
+
+/// How many tables one table becomes.
+///
+/// Shows the codes it will produce rather than just the number,
+/// because the codes are what goes on the cards and what a cashier
+/// types, and "2" does not tell anybody that they are about to have a
+/// T1-A and a T1-B.
+Future<int?> _askParts(
+  BuildContext context, {
+  required String code,
+  required int seats,
+}) {
+  var value = 2;
+  String preview(int n) => [
+        for (var i = 0; i < n; i++) '$code-${String.fromCharCode(65 + i)}',
+      ].join('   ');
+
+  return showDialog<int>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text('Split $code'),
+      content: StatefulBuilder(
+        builder: (context, setInner) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.remove_circle_outline),
+                  onPressed: value > 2
+                      ? () => setInner(() => value = value - 1)
+                      : null,
+                ),
+                Text(
+                  '$value',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline),
+                  // Eight is what the server takes. A table split nine
+                  // ways is not a table.
+                  onPressed: value < 8
+                      ? () => setInner(() => value = value + 1)
+                      : null,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(preview(value), textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            Text(
+              // The seats are divided, remainder to the earlier parts.
+              'The $seats seats are shared out between them.',
+              style: Theme.of(context).textTheme.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(ctx).pop(value),
+          child: const Text('Split it'),
+        ),
+      ],
+    ),
+  );
 }
 
 /// How many are actually sitting down.

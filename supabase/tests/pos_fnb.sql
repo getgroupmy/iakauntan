@@ -58,6 +58,12 @@ declare
   v_barst  uuid;
   v_tk     uuid;
   v_split  uuid;
+  v_long   uuid;
+  v_pa     uuid;
+  v_pb     uuid;
+  v_lsale  uuid;
+  v_bsale  uuid;
+  v_smsg   text;
   v_void   uuid;
   v_vline  uuid;
   v_msg    text;
@@ -860,6 +866,144 @@ begin
   perform pg_temp.check_true('and the day can be split by it',
     exists (select 1 from public.pos_sales_by_channel(v_org) x
              where x.channel = 'delivery' and x.sales > 0));
+
+  -- ------------------------------------------------------------------
+  -- A long table is two tables
+  -- ------------------------------------------------------------------
+  --
+  -- Two unrelated parties down one twelve-seater is the ordinary case
+  -- in a warung, and until 0245 the room had one place for them: one
+  -- bill between strangers, or two bills on a table `seat_table`
+  -- refuses to disambiguate.
+  insert into public.pos_tables (org_id, outlet_id, area_id, code, seats)
+  values (v_org, v_outlet, v_area, 'LONG', 7) returning id into v_long;
+
+  -- A party is already sitting there when somebody thinks to split it,
+  -- which is exactly when anybody would.
+  v_lsale := public.seat_table(v_reg, v_long, 3);
+
+  perform pg_temp.check_eq('a long table splits, and hands back its parts',
+    (select count(*)::integer from public.split_pos_table(v_long, 2)), 2);
+
+  select t.id into v_pa from public.pos_tables t
+   where t.outlet_id = v_outlet and t.code = 'LONG-A';
+  select t.id into v_pb from public.pos_tables t
+   where t.outlet_id = v_outlet and t.code = 'LONG-B';
+  perform pg_temp.check_true('both halves exist', v_pa is not null and v_pb is not null);
+
+  -- Seven seats is a four and a three, not two threes and a lost chair.
+  perform pg_temp.check_eq('the seats are divided, remainder first',
+    (select t.seats from public.pos_tables t where t.id = v_pa), 4);
+  perform pg_temp.check_eq('and the rest go to the other half',
+    (select t.seats from public.pos_tables t where t.id = v_pb), 3);
+  perform pg_temp.check_eq('a half knows which table it is half of',
+    (select t.parent_table_id from public.pos_tables t where t.id = v_pa), v_long);
+
+  -- The party that was already there keeps their bill, their number and
+  -- everything the kitchen has. They were the only party on it, so
+  -- there was nothing to guess.
+  perform pg_temp.check_eq('the party sitting there kept their bill',
+    (select s.table_id from public.pos_sales s where s.id = v_lsale), v_pa);
+
+  -- The room now has two places where it had one.
+  perform pg_temp.check_eq('the whole table is off the floor',
+    (select count(*) from public.pos_floor_plan(v_outlet) f
+      where f.table_id = v_long), 0);
+  perform pg_temp.check_eq('and both halves are on it',
+    (select count(*) from public.pos_floor_plan(v_outlet) f
+      where f.table_id in (v_pa, v_pb)), 2);
+  perform pg_temp.check_eq('the plan says which whole a half belongs to',
+    (select f.parent_table_id from public.pos_floor_plan(v_outlet) f
+      where f.table_id = v_pb), v_long);
+
+  -- A card printed for a half resolves the day it is printed, because
+  -- a half is an ordinary table as far as everything else is concerned.
+  perform pg_temp.check_eq('a card that says LONG-A finds the half',
+    (select t.table_id from public.pos_table_by_code(v_outlet, 'long-a') t), v_pa);
+  -- And the old card stops resolving, which is the truth: there is no
+  -- whole table to seat anybody at while two parties are in its halves.
+  perform pg_temp.check_true('and the card for the whole stops answering',
+    (select count(*) from public.pos_table_by_code(v_outlet, 'LONG')) = 0);
+
+  -- A half does not split again.
+  begin
+    perform public.split_pos_table(v_pa, 2);
+    raise exception 'FAIL split a half table';
+  exception when check_violation then
+    raise notice 'ok   a half table does not split again';
+  end;
+
+  -- Nor does a table that is already in halves.
+  begin
+    perform public.split_pos_table(v_long, 2);
+    raise exception 'FAIL split a table that was already split';
+  exception when check_violation then
+    raise notice 'ok   a split table is not split twice';
+  end;
+
+  -- And a number nobody means.
+  begin
+    perform public.split_pos_table(v_t9, 1);
+    raise exception 'FAIL split a table into one part';
+  exception when check_violation then
+    raise notice 'ok   a table does not split into one';
+  end;
+
+  -- ------------------------------------------------------------------
+  -- Putting it back together
+  -- ------------------------------------------------------------------
+  --
+  -- Two parties cannot be merged onto one table, for the same reason
+  -- they had to be split apart: the next tap on it would be ambiguous.
+  v_bsale := public.seat_table(v_reg, v_pb, 2);
+  begin
+    perform public.merge_pos_table(v_pa);
+    raise exception 'FAIL merged two parties onto one table';
+  exception when check_violation then
+    get stacked diagnostics v_smsg = message_text;
+    raise notice 'ok   two parties are not merged onto one table';
+  end;
+  perform pg_temp.check_true('and the refusal names the halves still sat at',
+    v_smsg like '%LONG-A, LONG-B%');
+
+  -- One party gets up.
+  perform public.move_pos_sale(v_bsale, null);
+  perform public.merge_pos_table(v_pb);
+
+  perform pg_temp.check_eq('the whole table is back on the floor',
+    (select count(*) from public.pos_floor_plan(v_outlet) f
+      where f.table_id = v_long), 1);
+  perform pg_temp.check_eq('the halves are not',
+    (select count(*) from public.pos_floor_plan(v_outlet) f
+      where f.table_id in (v_pa, v_pb)), 0);
+  -- Symmetric with the split: the one party left comes back to the
+  -- whole table with the bill they have been eating off all evening.
+  perform pg_temp.check_eq('and the party that stayed came with it',
+    (select s.table_id from public.pos_sales s where s.id = v_lsale), v_long);
+
+  -- Deactivated, not deleted: `pos_sales.table_id` is `on delete set
+  -- null`, so deleting a half would erase which table last week's bills
+  -- were served at.
+  perform pg_temp.check_eq('the halves still exist, out of service',
+    (select count(*) from public.pos_tables t
+      where t.parent_table_id = v_long and not t.is_active), 2);
+
+  -- Which is also why splitting again is the same two halves, so a shop
+  -- that splits its long table every Friday accumulates one history per
+  -- half rather than a new pair of tables every week.
+  perform public.split_pos_table(v_long, 2);
+  perform pg_temp.check_eq('splitting again is the same LONG-A',
+    (select t.id from public.pos_tables t
+      where t.outlet_id = v_outlet and t.code = 'LONG-A'), v_pa);
+  perform public.merge_pos_table(v_long);
+
+  -- A table nobody merged is not a table to merge.
+  begin
+    perform public.merge_pos_table(v_t9);
+    raise exception 'FAIL merged a table that was never split';
+  exception when check_violation then
+    raise notice 'ok   an unsplit table has nothing to put back';
+  end;
 
   raise notice 'point of sale dining room: all assertions passed';
 end;

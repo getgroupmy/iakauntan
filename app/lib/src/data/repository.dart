@@ -6593,6 +6593,28 @@ extension RepoPos on Repo {
           )
           as String;
 
+  /// Turns a long table into T1-A, T1-B and so on, and returns the
+  /// parts in order.
+  ///
+  /// The parts are real tables with their own codes, so everything that
+  /// already knows about tables — seating, scanning a card, the printed
+  /// card sheet — works on them with nothing changed. A party already
+  /// sitting there keeps their bill and lands on the first part.
+  Future<List<String>> splitPosTable(String tableId, int parts) async {
+    final rows = await callRpc(
+      'split_pos_table',
+      params: {'p_table': tableId, 'p_parts': parts},
+    );
+    // A `returns setof uuid` comes back as a bare list of strings, not
+    // as rows with a column name, so `Repo.rows` is the wrong reader.
+    return (rows as List? ?? const []).map((e) => '$e').toList();
+  }
+
+  /// Puts a split table back together. Takes the whole table or any of
+  /// its parts, because the plan only draws the parts.
+  Future<void> mergePosTable(String tableId) async =>
+      await callRpc('merge_pos_table', params: {'p_table': tableId});
+
   /// Moves a bill, and everything ordered on it, to another table.
   Future<void> movePosSale(String saleId, String tableId) async =>
       await callRpc(

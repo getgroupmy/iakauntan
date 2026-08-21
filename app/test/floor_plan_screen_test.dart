@@ -40,6 +40,7 @@ void main() {
     int? covers,
     num total = 0,
     int? minutes,
+    String? parent,
   }) => {
     'table_id': id,
     'table_code': name,
@@ -56,6 +57,7 @@ void main() {
     'minutes_seated': minutes,
     'total_amount': '$total',
     'line_count': saleId == null ? null : 2,
+    'parent_table_id': parent,
   };
 
   Widget harness({
@@ -183,10 +185,74 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // One move button, on the one table with a bill on it. A free table
-    // has no party to move, and an affordance that does nothing is
-    // worse than none.
-    expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
+    // A free table has no party to move, and an affordance that does
+    // nothing is worse than none.
+    await tester.tap(find.byIcon(Icons.more_vert).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Move this party'), findsNothing);
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_vert).last);
+    await tester.pumpAndSettle();
+    expect(find.text('Move this party'), findsOneWidget);
+  });
+
+  testWidgets('an ordinary table offers to split', (tester) async {
+    // Two unrelated parties down one long table is the ordinary case
+    // this exists for, and it happens mid-service — so it is on the
+    // tile, not buried in a setup screen.
+    await tester.pumpWidget(
+      harness(registers: [register()], plan: [table(id: 't1', name: 'T1')]),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    expect(find.text('Split this table'), findsOneWidget);
+    expect(find.text('Put the table back together'), findsNothing);
+  });
+
+  testWidgets('and a half offers to be put back, not split again', (
+    tester,
+  ) async {
+    // `split_pos_table` refuses a half, so offering it here would be
+    // offering something the database will turn down.
+    await tester.pumpWidget(
+      harness(
+        registers: [register()],
+        plan: [table(id: 't1a', name: 'T1 A', parent: 't1')],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    expect(find.text('Put the table back together'), findsOneWidget);
+    expect(find.text('Split this table'), findsNothing);
+  });
+
+  testWidgets('splitting says what the halves will be called', (tester) async {
+    // The codes are what goes on the printed cards and what a cashier
+    // types, so "2" on its own does not tell anybody what they are
+    // about to have.
+    await tester.pumpWidget(
+      harness(registers: [register()], plan: [table(id: 't1', name: 'T1')]),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Split this table'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Split T1'), findsOneWidget);
+    expect(find.text('T1-A   T1-B'), findsOneWidget);
+
+    // Up to three, and the preview keeps up.
+    await tester.tap(find.byIcon(Icons.add_circle_outline));
+    await tester.pumpAndSettle();
+    expect(find.text('T1-A   T1-B   T1-C'), findsOneWidget);
   });
 
   testWidgets('the cards for the tables can be printed from here', (
