@@ -1385,6 +1385,51 @@ print as a QR. `/menu/<token>` is the page a customer's phone lands on —
 outside the shell and outside sign-in, like the signing and share pages
 before it.
 
+## A report somebody builds, rather than one we wrote
+
+The module has a dozen reports in it and every one answers a question we
+thought of. The question a shopkeeper has on a Tuesday is "which dishes
+sell after nine at the Bangsar branch", and nobody is going to ship a
+migration for it.
+
+**A saved report is a declaration, not a query.** It names a source,
+some dimensions and some measures, and every one of those names is a key
+in an allow-list inside `app.pos_report_dimension` and
+`app.pos_report_measure`. A key that is not on the list raises rather
+than being interpolated, so the worst a malicious report can contain is
+a word those functions do not recognise. That is the whole safety
+argument, and it is why this is a builder rather than a SQL box: a SQL
+box in a multi-tenant database is a way to read somebody else's books.
+The only values that reach the query are bound parameters — the org, the
+two dates and the two filter arrays.
+
+**Two sources, because there are two kinds of question.** `sales` is one
+row per bill and answers how many, how much, when and who. `lines` is
+one row per thing sold and answers what.
+
+**The period is a word, not a pair of dates.** "This month" saved as the
+first and last of August is a report that is wrong in September, so the
+word is stored and `app.pos_report_period` resolves it in
+Asia/Kuala_Lumpur when the report runs.
+
+**And the arithmetic is the same arithmetic.** `pos_reports.sql` asserts
+that what the builder totals for an outlet today equals what
+`pos_day_board` says it took — two answers to one question is one answer
+too many.
+
+The keys are checked when a report is saved as well as when it runs, so
+a report that cannot run cannot be saved. A report is private to its
+author until it is shared, and it is the one thing in this module that
+is deleted rather than retired: it is a question, not a record of
+anything that happened.
+
+`pos_report_fields` is what the picker offers, read from the same
+allow-list the query uses — a column can never be offered that the query
+would then refuse. On the screen, **Report builder** lists what a shop
+has built, opens one to a table, and copies it out as comma-separated
+text, because what everybody does with a report is open it in a
+spreadsheet.
+
 ## Not built yet
 
 - Submitting the consolidated e-Invoice to MyInvois (the rollup runs; the

@@ -8226,6 +8226,80 @@ extension RepoPosControls on Repo {
   /// the orders that came in through it still name it.
   Future<void> retirePosMenuLink(String id) async =>
       await callRpc('retire_pos_menu_link', params: {'p_id': id});
+
+  // ------------------------------------------------------------------
+  // Reports somebody builds
+  // ------------------------------------------------------------------
+
+  /// The reports this company keeps, plus the caller's own private ones.
+  Future<List<Map<String, dynamic>>> posReports() async => Repo.rows(
+    await callRpc('pos_reports_list', params: {'p_org': orgId}),
+  );
+
+  /// What a source can be cut by and what it can add up.
+  ///
+  /// Read from the server rather than listed in Dart, so the picker and
+  /// the query can never disagree about which columns exist.
+  Future<List<Map<String, dynamic>>> posReportFields(String source) async =>
+      Repo.rows(
+        await callRpc('pos_report_fields', params: {'p_source': source}),
+      );
+
+  /// Saves a built report. Every key is checked server-side against the
+  /// same allow-list the query uses, so a report that cannot run cannot
+  /// be saved.
+  Future<String> savePosReport({
+    required String name,
+    String source = 'sales',
+    List<String> dimensions = const [],
+    List<String> measures = const ['gross'],
+    String period = 'this_month',
+    DateTime? from,
+    DateTime? to,
+    List<String> outletIds = const [],
+    List<String> channels = const [],
+    String? sortBy,
+    bool sortDesc = true,
+    int rowLimit = 200,
+    bool shared = true,
+    String? id,
+  }) async =>
+      (await callRpc(
+        'upsert_pos_report',
+        params: {
+          'p_org': orgId,
+          'p_name': name,
+          'p_source': source,
+          'p_dimensions': dimensions,
+          'p_measures': measures,
+          'p_period': period,
+          'p_from': from == null ? null : Fmt.iso(from),
+          'p_to': to == null ? null : Fmt.iso(to),
+          'p_outlets': outletIds,
+          'p_channels': channels,
+          'p_sort_by': sortBy,
+          'p_sort_desc': sortDesc,
+          'p_limit': rowLimit,
+          'p_shared': shared,
+          'p_id': id,
+        },
+      )).toString();
+
+  Future<void> deletePosReport(String id) async =>
+      await callRpc('delete_pos_report', params: {'p_id': id});
+
+  /// One row per group: the dimension values as text, the measures as
+  /// numbers, both in the order the report declared.
+  Future<List<Map<String, dynamic>>> runPosReport(String id) async =>
+      Repo.rows(await callRpc('run_pos_report', params: {'p_report': id}));
+
+  /// What the columns are called and which two dates it covers today.
+  Future<Map<String, dynamic>> posReportHeaders(String id) async {
+    final rows = Repo.rows(
+      await callRpc('pos_report_headers', params: {'p_report': id}),
+    );
+    return rows.isEmpty ? const {} : rows.first;
+  }
 }
 
 

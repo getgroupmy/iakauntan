@@ -38,6 +38,7 @@ import '../features/forecasting/forecast_screen.dart';
 import '../features/pos/diary_screen.dart';
 import '../features/pos/memberships_screen.dart';
 import '../features/pos/menu_times_screen.dart';
+import '../features/pos/pos_reports_screen.dart';
 import '../features/pos/promotions_screen.dart';
 import '../features/pos/deliveries_screen.dart';
 import '../features/pos/public_menu_page.dart';
@@ -423,6 +424,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/menu-times',
             builder: (_, __) => const MenuTimesScreen(),
+          ),
+          GoRoute(
+            path: '/pos-reports',
+            builder: (_, __) => const PosReportsScreen(),
           ),
           GoRoute(
             path: '/takings',

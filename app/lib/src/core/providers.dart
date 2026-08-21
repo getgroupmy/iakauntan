@@ -2215,3 +2215,27 @@ final posMenuLinksProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
       (ref) => requireRepo(ref).posMenuLinks(),
     );
+
+/// The reports a company keeps, plus this person's own. 0263.
+final posReportsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posReports(),
+    );
+
+/// What a source can be cut by and what it can add up. 0263.
+final posReportFieldsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, source) => requireRepo(ref).posReportFields(source),
+    );
+
+/// One built report's rows. 0263.
+final posReportRunProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, id) => requireRepo(ref).runPosReport(id),
+    );
+
+/// And what its columns are called. 0263.
+final posReportHeadersProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, String>(
+      (ref, id) => requireRepo(ref).posReportHeaders(id),
+    );
