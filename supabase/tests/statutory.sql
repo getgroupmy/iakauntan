@@ -260,10 +260,12 @@ begin
       select 1 from pg_policies
        where tablename = 'payslip_access_requests' and cmd <> 'SELECT'));
 
-  -- Three functions are deliberately open to an unauthenticated caller,
+  -- Seven functions are deliberately open to an unauthenticated caller,
   -- and each earned its place by someone who has no account needing to
-  -- do exactly one thing: a director signing one resolution, and a
-  -- customer reading one invoice they were sent a link to.
+  -- do exactly one thing: a director signing one resolution, a customer
+  -- reading one invoice they were sent a link to, and — since 0262 — a
+  -- customer at a table reading the menu on the QR sticker in front of
+  -- them and ordering from it.
   --
   -- The allowlist is the point. Deleting this check would be easier and
   -- would stop it doing its job — it caught `open_shared_document` on
@@ -297,7 +299,23 @@ begin
            -- `supabase/tests/security_audit.sql` asserts the silence and
            -- the rate limit; the rest is the signature, which takes an
            -- address and nothing else.
-           'report_failed_sign_in')));
+           'report_failed_sign_in',
+           -- 0262, and the three of them are one feature: a token on a
+           -- sticker, the menu behind it, and an order placed from it.
+           --
+           -- Each takes a token and never an organization id, and every
+           -- one of them resolves the shop from the link row rather
+           -- than from anything the caller says. What a stranger can
+           -- reach is one outlet's sellable items and their prices —
+           -- which is a menu, and a menu is a thing shops print and
+           -- hand out. `supabase/tests/pos_public_menu.sql` asserts the
+           -- rest: an expired or retired link reaches nothing, a
+           -- single-use one closes behind the order it carried, the
+           -- price is the shop's rather than the browser's, and an
+           -- order can only be placed into an outlet with a shift open.
+           'public_pos_menu',
+           'public_pos_menu_modifiers',
+           'place_public_pos_order')));
 
   -- The other half of that allowlist, and it is not decoration.
   --
@@ -312,7 +330,7 @@ begin
   --
   -- So assert the exposure. A share link that has silently stopped
   -- working is found by a customer, not by us.
-  perform pg_temp.check_eq('and the four that need anon still have it',
+  perform pg_temp.check_eq('and the seven that need anon still have it',
     (select count(*)
        from pg_proc p
        join pg_namespace n on n.oid = p.pronamespace
@@ -320,8 +338,14 @@ begin
         and p.prosecdef
         and has_function_privilege('anon', p.oid, 'execute')
         and p.proname in ('corp_open_signing_link', 'corp_sign_with_link',
-                          'open_shared_document', 'report_failed_sign_in')),
-    4);
+                          'open_shared_document', 'report_failed_sign_in',
+                          -- A QR sticker that has silently stopped
+                          -- working is found by a customer holding a
+                          -- phone at a table, which is worse than being
+                          -- found by us.
+                          'public_pos_menu', 'public_pos_menu_modifiers',
+                          'place_public_pos_order')),
+    7);
 
   perform pg_temp.check_true('and the link tables stay shut to anon',
     not exists (

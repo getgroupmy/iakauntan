@@ -40,6 +40,7 @@ import '../features/pos/memberships_screen.dart';
 import '../features/pos/menu_times_screen.dart';
 import '../features/pos/promotions_screen.dart';
 import '../features/pos/deliveries_screen.dart';
+import '../features/pos/public_menu_page.dart';
 import '../features/pos/queue_screen.dart';
 import '../features/pos/voids_screen.dart';
 import '../features/loyalty/loyalty_screen.dart';
@@ -104,6 +105,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       // The other page that works with no account: a customer
       // opening a link to their own invoice.
       if (path.startsWith('/share/')) return null;
+      // And the third: somebody at a table with a phone and a QR
+      // sticker. 0262's functions authorise themselves against the
+      // token, and a customer will not sign up to an accounting system
+      // to order a teh tarik.
+      if (path.startsWith('/menu/')) return null;
 
       if (!signedIn) return path == '/signin' ? null : '/signin';
 
@@ -183,6 +189,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/share/:token',
         builder: (_, state) =>
             SharedDocumentPage(token: state.pathParameters['token']!),
+      ),
+      // The menu on the sticker. No shell, no sign-in, nothing but the
+      // shop's own list and a basket.
+      GoRoute(
+        path: '/menu/:token',
+        builder: (_, state) =>
+            PublicMenuPage(token: state.pathParameters['token']!),
       ),
       ShellRoute(
         navigatorKey: _shellKey,

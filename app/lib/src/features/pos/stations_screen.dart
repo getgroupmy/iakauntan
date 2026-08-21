@@ -5,6 +5,7 @@ import '../../core/providers.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'channels.dart';
+import 'menu_links_screen.dart';
 import 'receipt_settings_screen.dart';
 
 /// Setting a shop up: its counters, and how orders reach it.
@@ -170,6 +171,17 @@ class _StationsScreenState extends ConsumerState<StationsScreen> {
         actions: [
           // The third per-outlet question the same person asks at the
           // same moment: what the paper says.
+          // The fourth per-outlet question, and the one that reaches a
+          // customer's phone rather than a member of staff.
+          IconButton(
+            tooltip: 'Published menus',
+            icon: const Icon(Icons.qr_code_2),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const MenuLinksScreen(),
+              ),
+            ),
+          ),
           IconButton(
             tooltip: 'Receipt',
             icon: const Icon(Icons.receipt_long_outlined),

@@ -2208,3 +2208,10 @@ final posRecentSaleProvider = FutureProvider.autoDispose
     .family<String?, String>(
       (ref, outletId) => requireRepo(ref).posRecentSale(outletId),
     );
+
+/// Every menu a company has published, with how many bills came in
+/// through each. 0262.
+final posMenuLinksProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posMenuLinks(),
+    );

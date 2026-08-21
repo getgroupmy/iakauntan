@@ -1334,6 +1334,57 @@ against the last bill the outlet actually settled. The till's bill menu
 has "Print the bill", and the tender sheet's "Receipt" opens the paper
 once the money is in.
 
+## Publish the menu, and let a phone order from it
+
+Everything the till knows was behind a login. A customer sitting at
+table seven could not see the menu, could not see that the nasi lemak
+ran out an hour ago, and could not order without catching somebody's
+eye — which on a Saturday is the whole problem.
+
+**A token, and nothing else.** `pos_menu_links` is a published menu:
+outlet, kind (a table sticker, a takeaway poster, a delivery link), an
+optional table, an optional expiry, an optional single use. The token is
+the whole credential — `public_pos_menu`, `public_pos_menu_modifiers`
+and `place_public_pos_order` are the only POS functions granted to
+`anon`, they take a token and never an organization id, and they resolve
+the shop from the link row. A static QR and a dynamic one are the same
+row with `expires_at` and `single_use` filled in or not, because the
+difference is a policy rather than a mechanism.
+
+**The price is the shop's.** `p_items` carries an item and a quantity
+and nothing else. A price arriving from a browser is a price somebody
+typed, and `pos_public_menu.sql` asserts that one sent anyway is
+ignored.
+
+**Availability is checked when the customer taps**, not when the page
+loaded: 0258's scheduler and the sold-out list decide, so a menu left
+open on a phone since ten o'clock cannot order breakfast at four.
+
+**And only into an open shift.** A shop that has not counted its float
+in is closed, and "closed" is the honest answer to a phone at seven in
+the morning. Past that the order is an ordinary parked bill: it joins
+the bill already on the table when the sticker names one, it goes to the
+kitchen, it takes the shop's promotions, it can be delivered, and it
+prints the same receipt — none of which knows a phone put it there.
+
+**One copy of the arithmetic.** `open_pos_sale`, `add_pos_sale_line` and
+`add_line_modifier` each begin with a permission check and continue with
+the part a public order needs verbatim. Rather than a second copy that
+drifts, each is now `app.*_internal` plus a thin guarded wrapper, and
+the public path calls the internal. The arithmetic has one home and the
+guard has another.
+
+The allow-list in `supabase/tests/statutory.sql` is where the three new
+`anon` grants had to be argued for; it now names seven functions instead
+of four, and asserts both that nothing else is exposed and that these
+have not silently lost the grant.
+
+On the screens: **Outlet setup → Published menus** publishes a link per
+table, a poster for takeaway or a one-time link, and copies the URL to
+print as a QR. `/menu/<token>` is the page a customer's phone lands on —
+outside the shell and outside sign-in, like the signing and share pages
+before it.
+
 ## Not built yet
 
 - Submitting the consolidated e-Invoice to MyInvois (the rollup runs; the

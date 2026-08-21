@@ -8177,6 +8177,55 @@ extension RepoPosControls on Repo {
   Future<String?> posRecentSale(String outletId) async =>
       (await callRpc('pos_recent_sale', params: {'p_outlet': outletId}))
           ?.toString();
+
+  // ------------------------------------------------------------------
+  // Published menus
+  // ------------------------------------------------------------------
+
+  /// Every menu link this company has published, with how many bills
+  /// came in through each.
+  Future<List<Map<String, dynamic>>> posMenuLinks() async => Repo.rows(
+    await callRpc('pos_menu_links_admin', params: {'p_org': orgId}),
+  );
+
+  /// Publishes a menu, or edits one that is already published.
+  ///
+  /// Comes back with the token, which is the whole of what a customer
+  /// is given: the page at `/menu/<token>` needs nothing else.
+  Future<Map<String, dynamic>> savePosMenuLink({
+    required String outletId,
+    String kind = 'table',
+    String? tableId,
+    String? registerId,
+    String? label,
+    DateTime? expiresAt,
+    bool singleUse = false,
+    String? id,
+    bool isActive = true,
+  }) async {
+    final rows = Repo.rows(
+      await callRpc(
+        'upsert_pos_menu_link',
+        params: {
+          'p_outlet': outletId,
+          'p_kind': kind,
+          'p_table': tableId,
+          'p_register': registerId,
+          'p_label': label,
+          'p_expires': expiresAt?.toIso8601String(),
+          'p_single': singleUse,
+          'p_id': id,
+          'p_active': isActive,
+        },
+      ),
+    );
+    return rows.isEmpty ? const {} : rows.first;
+  }
+
+  /// Switches a published menu off. The sticker stops working at once;
+  /// the orders that came in through it still name it.
+  Future<void> retirePosMenuLink(String id) async =>
+      await callRpc('retire_pos_menu_link', params: {'p_id': id});
 }
 
 
