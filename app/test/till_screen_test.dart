@@ -433,12 +433,81 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    /// A line that says which item it sold. The older tests here leave
+    /// `item_id` off because what they assert is the basket, which
+    /// reads the description; the tile count cannot be told from a
+    /// description, because two items may share one.
+    Map<String, dynamic> saleLine(
+      String id,
+      String name,
+      num quantity,
+      num price,
+    ) => {
+      'id': id,
+      'line_no': int.parse(id.substring(1)),
+      'item_id': 'i-$name',
+      'description': name,
+      'quantity': '$quantity',
+      'unit_price': '$price',
+      'line_total': '${quantity * price}',
+    };
+
     Map<String, dynamic> parkedSale() => {
       'id': 'sale-1',
       'sale_no': 'POS-2026-00001',
       'total_amount': '21.00',
       'status': 'parked',
     };
+
+    testWidgets('a tile says how many of it are already on the bill', (
+      tester,
+    ) async {
+      // A cashier ringing up seven of the same thing has no way to
+      // check the count except by reading the bill, which on a phone
+      // is not even on screen. The tile they are hitting is where the
+      // answer belongs.
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          menu: [
+            menuItem('Roti john daging', 'Makanan', 8.00),
+            menuItem('Kebab ayam', 'Makanan', 9.50),
+            menuItem('Air tin', 'Minuman', 2.50),
+          ],
+          saleLines: [
+            // Split across lines, as a modifier on one of them would
+            // do — the number wanted is how many were sold, not how
+            // many rows it took to sell them.
+            saleLine('l1', 'Roti john daging', 5, 8.00),
+            saleLine('l2', 'Roti john daging', 2, 8.00),
+            saleLine('l3', 'Kebab ayam', 2, 9.50),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('POS-2026-00001'));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('7 on this bill'), findsOneWidget);
+      expect(find.byTooltip('2 on this bill'), findsOneWidget);
+
+      // Two badges, not three: the tile nobody has ordered from
+      // carries none, because a badge on every tile is a badge nobody
+      // reads. Counted across the screen rather than looked for inside
+      // one tile, so a third appearing anywhere fails this.
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Tooltip && (w.message?.endsWith('on this bill') ?? false),
+        ),
+        findsNWidgets(2),
+      );
+    });
 
     testWidgets('an open bill offers the way back to the others', (
       tester,

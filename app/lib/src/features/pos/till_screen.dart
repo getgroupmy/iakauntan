@@ -897,6 +897,7 @@ class _Register extends ConsumerWidget {
         );
         final finder = _Finder(
           outletId: outletId,
+          saleId: saleId,
           search: search,
           searchFocus: searchFocus,
           results: results,
@@ -946,6 +947,7 @@ class _Register extends ConsumerWidget {
 class _Finder extends StatelessWidget {
   const _Finder({
     required this.outletId,
+    required this.saleId,
     required this.search,
     required this.searchFocus,
     required this.results,
@@ -958,6 +960,7 @@ class _Finder extends StatelessWidget {
   });
 
   final String? outletId;
+  final String? saleId;
   final TextEditingController search;
   final FocusNode searchFocus;
   final List<Map<String, dynamic>> results;
@@ -1037,7 +1040,11 @@ class _Finder extends StatelessWidget {
           child: results.isEmpty
               ? (outletId == null
                     ? const SizedBox.shrink()
-                    : _Browse(outletId: outletId!, onPick: onPick))
+                    : _Browse(
+                        outletId: outletId!,
+                        saleId: saleId,
+                        onPick: onPick,
+                      ))
               : ListView.separated(
                   itemCount: results.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
@@ -1505,9 +1512,18 @@ class _Pill extends StatelessWidget {
 /// on a grid than in a search result: a search is something you typed
 /// and can re-read, a tile is something you hit with your thumb.
 class _Browse extends StatefulWidget {
-  const _Browse({required this.outletId, required this.onPick});
+  const _Browse({
+    required this.outletId,
+    required this.saleId,
+    required this.onPick,
+  });
 
   final String outletId;
+
+  /// The bill being rung up, or null before one is opened. Only used to
+  /// count what is already on it, so a tile can say so.
+  final String? saleId;
+
   final ValueChanged<Map<String, dynamic>> onPick;
 
   @override
@@ -1525,6 +1541,25 @@ class _BrowseState extends State<_Browse> {
     return Consumer(
       builder: (context, ref, _) {
         final menu = ref.watch(posMenuProvider(widget.outletId));
+        // How many of each item are already on the bill. The basket
+        // watches the same family, so this is the provider it has
+        // already fetched rather than a second round trip.
+        //
+        // Summed by item rather than counted by line, because two taps
+        // on the same tile may land as one line of two or as two lines
+        // of one depending on whether a modifier was chosen — and the
+        // number a cashier wants is how many of the thing they sold.
+        final onBill = <String, num>{};
+        if (widget.saleId != null) {
+          final lines =
+              ref.watch(posSaleLinesProvider(widget.saleId!)).valueOrNull ??
+              const <Map<String, dynamic>>[];
+          for (final l in lines) {
+            final id = l['item_id'];
+            if (id == null) continue;
+            onBill['$id'] = (onBill['$id'] ?? 0) + posNum(l['quantity']);
+          }
+        }
         return AsyncView<List<Map<String, dynamic>>>(
           value: menu,
           builder: (rows) {
@@ -1591,6 +1626,7 @@ class _BrowseState extends State<_Browse> {
                                     subtitle: Fmt.money(
                                       posNum(r['unit_price']),
                                     ),
+                                    count: onBill['${r['item_id']}'],
                                     onTap: () => widget.onPick(r),
                                   ),
                               ],
@@ -1645,15 +1681,23 @@ class _MenuTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.count,
   });
 
   final String title;
   final String subtitle;
   final VoidCallback onTap;
 
+  /// How many of this are already on the bill, or null on a tile that
+  /// is not an item. Zero is not drawn: a badge on every tile is a
+  /// badge nobody reads, and the question a cashier asks the grid is
+  /// "have I rung this up yet", which only a number can answer.
+  final num? count;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final n = count ?? 0;
     return Card(
       color: scheme.surfaceContainerHighest,
       clipBehavior: Clip.antiAlias,
@@ -1665,11 +1709,47 @@ class _MenuTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleSmall,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  if (n > 0) ...[
+                    const SizedBox(width: 6),
+                    // A bare number next to a name reads as a price, a
+                    // stock level or a table — so it says which it is
+                    // on hover, and to a screen reader.
+                    Tooltip(
+                      message: '${Fmt.qty(n)} on this bill',
+                      child: Container(
+                        constraints: const BoxConstraints(minWidth: 22),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: scheme.primary,
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: Text(
+                          Fmt.qty(n),
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: scheme.onPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               Text(
                 subtitle,
