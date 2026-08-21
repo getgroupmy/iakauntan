@@ -259,7 +259,18 @@ comment on function app.pos_item_off(uuid, uuid) is
 -- see the header — a dish that vanishes reads as a broken menu, and a
 -- greyed tile saying "From 07:00" is the only version a cashier can
 -- answer a customer from.
-create or replace function public.pos_menu(p_outlet uuid)
+--
+-- Dropped first, not `create or replace`. Postgres refuses to replace a
+-- function whose OUT parameters have changed —
+--
+--     42P13: cannot change return type of existing function
+--     DETAIL: Row type defined by OUT parameters is different.
+--
+-- — and two new columns is exactly that. The drop takes the grants with
+-- it, so they are restated underneath rather than inherited.
+drop function if exists public.pos_menu(uuid);
+
+create function public.pos_menu(p_outlet uuid)
 returns table (
   item_id     uuid,
   code        text,
@@ -310,6 +321,9 @@ as $$
                       where v.parent_item_id = i.id and v.deleted_at is null)
    order by coalesce(c.name, 'Uncategorised'), i.name;
 $$;
+
+revoke all on function public.pos_menu(uuid) from public, anon;
+grant execute on function public.pos_menu(uuid) to authenticated;
 
 comment on function public.pos_menu(uuid) is
   'Everything an outlet can sell, with whether it is being offered right now and why not. Nothing is filtered out: a dish that vanishes reads as a broken menu, and a greyed tile saying "From 07:00" is the only version a cashier can answer a customer from.';
