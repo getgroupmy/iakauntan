@@ -7713,6 +7713,65 @@ extension RepoPosControls on Repo {
     ),
   );
 
+  /// Puts a party in the line and hands back their number, what they
+  /// were told to expect, and how many are in front of them.
+  ///
+  /// The number is allocated server-side under an advisory lock, so two
+  /// hosts at the door at once cannot give out the same one.
+  Future<Map<String, dynamic>> joinPosQueue({
+    required String outletId,
+    int party = 2,
+    String? name,
+    String? phone,
+    String? note,
+  }) async {
+    final rows = Repo.rows(
+      await callRpc(
+        'join_pos_queue',
+        params: {
+          'p_outlet': outletId,
+          'p_party': party,
+          'p_name': name,
+          'p_phone': phone,
+          'p_note': note,
+        },
+      ),
+    );
+    return rows.isEmpty ? const {} : rows.first;
+  }
+
+  /// Calls, seats or closes a party. `status` is one of `called`,
+  /// `seated`, `left`, `no_show`.
+  Future<void> setPosQueueStatus(
+    String entryId,
+    String status, {
+    String? tableId,
+  }) async => await callRpc(
+    'set_pos_queue_status',
+    params: {
+      'p_entry': entryId,
+      'p_status': status,
+      'p_table': tableId,
+    },
+  );
+
+  /// Everyone still in the line at this outlet today, in arrival order.
+  ///
+  /// Minutes waited comes back computed, because a phone with a wrong
+  /// clock would otherwise show a different queue from the tablet
+  /// beside it and the argument that follows is with a customer.
+  Future<List<Map<String, dynamic>>> posQueue(String outletId) async =>
+      Repo.rows(await callRpc('pos_queue', params: {'p_outlet': outletId}));
+
+  /// What the line did on one day, per outlet.
+  Future<List<Map<String, dynamic>>> posQueueDay(DateTime date) async =>
+      Repo.rows(
+        await callRpc(
+          'pos_queue_day',
+          params: {'p_org': orgId, 'p_date': Fmt.iso(date)},
+        ),
+      );
+
   /// Every promotion a company has written, retired ones included.
   Future<List<Map<String, dynamic>>> posPromotions() async => Repo.rows(
     await callRpc('pos_promotions_admin', params: {'p_org': orgId}),

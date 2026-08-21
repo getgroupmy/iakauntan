@@ -2069,6 +2069,21 @@ final posVoidSummaryProvider = FutureProvider.autoDispose
       (ref, range) => requireRepo(ref).posVoidSummary(range.from, range.to),
     );
 
+/// Everyone still standing in the line at an outlet today. 0257.
+///
+/// Minutes waited and the count ahead come back from the server, so two
+/// devices with different clocks cannot show two different queues.
+final posQueueProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, outletId) => requireRepo(ref).posQueue(outletId),
+    );
+
+/// What the line did on one day, per outlet. 0257.
+final posQueueDayProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, DateTime>(
+      (ref, date) => requireRepo(ref).posQueueDay(date),
+    );
+
 /// Every promotion a company has written, with what each gave away. 0256.
 final posPromotionsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(

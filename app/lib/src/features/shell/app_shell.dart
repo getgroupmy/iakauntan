@@ -247,6 +247,14 @@ const _destinations = <_Dest>[
   // sits with the till and not in Reports: the person who needs it is
   // the person who runs the shop, and Reports is gated on accounting
   // that a food stall may not have bought.
+  // The line at the door, beside the floor plan it feeds.
+  _Dest(
+    'Queue',
+    Icons.people_outline,
+    Icons.people,
+    '/queue',
+    module: 'pos',
+  ),
   // Beside the till rather than in Reports: writing a happy hour down
   // is running a shop, not analysing one.
   _Dest(

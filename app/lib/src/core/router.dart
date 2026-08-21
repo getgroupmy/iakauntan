@@ -38,6 +38,7 @@ import '../features/forecasting/forecast_screen.dart';
 import '../features/pos/diary_screen.dart';
 import '../features/pos/memberships_screen.dart';
 import '../features/pos/promotions_screen.dart';
+import '../features/pos/queue_screen.dart';
 import '../features/pos/voids_screen.dart';
 import '../features/loyalty/loyalty_screen.dart';
 import '../features/pos/floor_plan_screen.dart';
@@ -399,6 +400,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/promotions',
             builder: (_, __) => const PromotionsScreen(),
           ),
+          GoRoute(path: '/queue', builder: (_, __) => const QueueScreen()),
           GoRoute(
             path: '/takings',
             builder: (_, __) => const TakingsScreen(),

@@ -1129,6 +1129,52 @@ to reduce a price. Honouring a code the shop printed is the opposite —
 the decision was made in advance by whoever wrote the promotion, and a
 till that could not accept its own voucher cannot do its job.
 
+## A number and a wait
+
+What the queue replaces is a scrap of paper by the door. The paper
+cannot tell the next customer how long they are likely to stand there,
+cannot be read from the floor by the waiter who just cleared table 6,
+and does not exist by Monday — so nobody ever learns whether Saturday's
+wait is twenty minutes or fifty.
+
+**The number is shouted across a room**, so it is small and starts again
+every morning: per outlet per trading day, taken as the highest issued
+today plus one under a transaction advisory lock keyed on the outlet and
+the date, so two hosts at the door at once cannot hand out the same one.
+Derived rather than kept in a counter row, because a counter has to be
+reset by something and the something is always missing on the morning it
+matters. `queue_date` is stored beside it only so the unique index can
+exist — an index needs an immutable expression and `at time zone` is
+merely stable.
+
+**The quoted wait is measured or it is not given.** It is the median of
+what parties within two of your size actually waited at this outlet
+today, and it is null under three seated parties. A shop that has just
+opened is told nothing rather than told a guess, because a guess that is
+wrong twice teaches the staff to stop reading it. The median rather than
+the mean, so one party who wandered off to the car park does not move
+everybody else's quote. Rounded up to the next five minutes: nobody says
+"eleven minutes", and a quote that reads precise is one somebody will
+hold the shop to.
+
+**Five states, and no way back out of the last three.** waiting → called
+→ seated is the happy path. A party who has been *called* is still
+counted as ahead of you — they have not sat down, and a queue that said
+otherwise would move everybody up one and then move them back. `left`
+and `no_show` are separate because they are different problems: the
+first is the wait being too long, the second is somebody standing
+outside on the phone, and a shop reading "twelve gave up" cannot tell
+which it had.
+
+**Minutes waited is computed on the server.** A phone with a wrong clock
+would otherwise show a different queue from the tablet beside it, and
+the argument that follows is with a customer.
+
+`pos_queue_day` is why the paper was worth replacing: joined, seated,
+walked away, no-shows, still waiting, and the median and longest wait,
+per outlet. A shop that cannot say how long Saturday's wait was cannot
+decide whether to open another section.
+
 ## Not built yet
 
 - Submitting the consolidated e-Invoice to MyInvois (the rollup runs; the

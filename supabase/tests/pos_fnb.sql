@@ -28,6 +28,11 @@ declare
   v_walkin uuid;
   v_outlet uuid;
   v_out2   uuid;
+  v_qa     uuid;
+  v_qb     uuid;
+  v_qc     uuid;
+  v_qr     record;
+  v_qday   record;
   v_reg    uuid;
   v_reg2   uuid;
   v_reg3   uuid;
@@ -1253,6 +1258,115 @@ begin
   perform pg_temp.check_eq('and so is the editor',
     (select count(*) from public.pos_modifier_groups_admin(v_org) g
       where g.allows_free_text), 2);
+
+  -- ------------------------------------------------------------------
+  -- A number and a wait
+  -- ------------------------------------------------------------------
+  --
+  -- 0257's queue. What is asserted is the arithmetic a host is asked
+  -- for out loud and the state machine that keeps it honest:
+  --
+  --   * the number starts at one and rises, per outlet per day,
+  --   * a party who has been CALLED is still in front of you — they
+  --     have not sat down yet, and a queue that said otherwise would
+  --     move everybody up one and then move them back,
+  --   * a finished party is finished, in every direction,
+  --   * the quoted wait is measured or withheld, never invented.
+  select * into v_qr from public.join_pos_queue(v_outlet, 2, 'Aminah', '0121234567');
+  v_qa := v_qr.entry_id;
+  perform pg_temp.check_eq('the first party gets number one',
+    v_qr.ticket_no, 1);
+  perform pg_temp.check_eq('with nobody in front of them', v_qr.ahead, 0);
+  perform pg_temp.check_true('and no quote, because nothing has been measured',
+    v_qr.quoted_minutes is null);
+
+  select * into v_qr from public.join_pos_queue(v_outlet, 6, 'Rahim');
+  v_qb := v_qr.entry_id;
+  perform pg_temp.check_eq('the second gets number two', v_qr.ticket_no, 2);
+  perform pg_temp.check_eq('and is told one is ahead', v_qr.ahead, 1);
+
+  select * into v_qr from public.join_pos_queue(v_outlet, 4);
+  v_qc := v_qr.entry_id;
+
+  -- The numbers are per outlet, so the branch starts again at one.
+  select * into v_qr from public.join_pos_queue(v_out2, 2);
+  perform pg_temp.check_eq('the other shop numbers its own line',
+    v_qr.ticket_no, 1);
+
+  -- Calling somebody does not take them out of the line.
+  perform public.set_pos_queue_status(v_qa, 'called');
+  perform pg_temp.check_eq('a called party is still ahead of you',
+    (select q.ahead from public.pos_queue(v_outlet) q where q.id = v_qc), 2);
+
+  perform public.set_pos_queue_status(v_qa, 'seated', v_t7);
+  perform public.set_pos_queue_status(v_qb, 'left');
+  perform pg_temp.check_eq('seating one and losing one clears the way',
+    (select q.ahead from public.pos_queue(v_outlet) q where q.id = v_qc), 0);
+  perform pg_temp.check_eq('and leaves one party standing there',
+    (select count(*) from public.pos_queue(v_outlet)), 1);
+  perform pg_temp.check_eq('at the table they were given',
+    (select q.table_id from public.pos_queue_entries q where q.id = v_qa), v_t7);
+
+  begin
+    perform public.set_pos_queue_status(v_qa, 'called');
+    raise exception 'FAIL a seated party was called back into the line';
+  exception when check_violation then
+    raise notice 'ok   a seated party cannot be moved again';
+  end;
+
+  begin
+    perform public.set_pos_queue_status(v_qb, 'seated', v_t8);
+    raise exception 'FAIL a party who had left was seated anyway';
+  exception when check_violation then
+    raise notice 'ok   a party who walked cannot be quietly seated';
+  end;
+
+  -- A table belonging to the branch would put this party on a floor
+  -- plan they are not standing in.
+  begin
+    perform public.set_pos_queue_status(v_qc, 'seated', v_far);
+    raise exception 'FAIL seated at another shop''s table';
+  exception when check_violation then
+    raise notice 'ok   a table in another shop is refused';
+  end;
+
+  -- Three parties who each waited twenty minutes. Their arrival is
+  -- backdated and then they are seated through the real function, so
+  -- what the median is taken over is a duration the state machine
+  -- actually produced rather than one written straight into the table.
+  select * into v_qr from public.join_pos_queue(v_outlet, 2);
+  update public.pos_queue_entries set joined_at = now() - interval '20 minutes'
+   where id = v_qr.entry_id;
+  perform public.set_pos_queue_status(v_qr.entry_id, 'seated');
+
+  select * into v_qr from public.join_pos_queue(v_outlet, 3);
+  update public.pos_queue_entries set joined_at = now() - interval '20 minutes'
+   where id = v_qr.entry_id;
+  perform public.set_pos_queue_status(v_qr.entry_id, 'seated');
+
+  -- The one already seated at T7 counts too, once its arrival is moved
+  -- back to match.
+  update public.pos_queue_entries set joined_at = now() - interval '20 minutes'
+   where id = v_qa;
+
+  perform pg_temp.check_eq('three seated parties turn the quote on',
+    app.pos_queue_quote(v_outlet, 2), 20);
+  perform pg_temp.check_true('and the other shop still has nothing to go on',
+    app.pos_queue_quote(v_out2, 2) is null);
+
+  select * into v_qday from public.pos_queue_day(
+    v_org, (now() at time zone 'Asia/Kuala_Lumpur')::date)
+   where pos_queue_day.outlet_id = v_outlet;
+  perform pg_temp.check_eq('the day counts everybody who joined',
+    v_qday.joined, 5);
+  perform pg_temp.check_eq('and how many sat down', v_qday.seated, 3);
+  -- Kept apart on purpose: one is the wait being too long, the other
+  -- is somebody standing outside on the phone.
+  perform pg_temp.check_eq('and how many walked', v_qday.gave_up, 1);
+  perform pg_temp.check_eq('and who is still standing there',
+    v_qday.still_waiting, 1);
+  perform pg_temp.check_eq('and what the middle one waited',
+    v_qday.median_wait, 20);
 
   raise notice 'point of sale dining room: all assertions passed';
 end;
