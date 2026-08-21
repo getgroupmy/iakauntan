@@ -1127,6 +1127,77 @@ void main() {
     });
   });
 
+  group('writing off a bill needs the grant', () {
+    Map<String, dynamic> parkedSale() => {
+      'id': 'sale-1',
+      'sale_no': 'POS-2026-00001',
+      'total_amount': '21.00',
+      'status': 'parked',
+    };
+
+    testWidgets('a cashier without it is told, before being asked why', (
+      tester,
+    ) async {
+      // 0247 made the grant unconditional, so this is knowable without
+      // asking the server about the bill — and being refused after
+      // choosing a reason and typing an explanation is a worse moment
+      // to find out.
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          access: const {'pos': 'write', 'pos_void': 'none'},
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('POS-2026-00001'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Write off this bill'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Writing off a bill needs permission'), findsOneWidget);
+      // And never got as far as the reasons.
+      expect(find.text('Customer changed their mind'), findsNothing);
+    });
+
+    testWidgets('and a shop that never defined one is untouched', (
+      tester,
+    ) async {
+      // Most companies have no access types at all, and a release that
+      // stopped every cashier in the country writing off a mis-tap
+      // would be an outage rather than a control.
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('POS-2026-00001'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Write off this bill'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Write off POS-2026-00001'), findsOneWidget);
+    });
+  });
+
   group('picking a bill out of a list', () {
     // Two parked bills for RM 34.00 are indistinguishable by amount.
     // The thing the cashier can see from where they are standing is

@@ -222,12 +222,15 @@ begin
   values (v_org, v_outlet, 'KIT', 'Kitchen', true) returning id into v_stn;
 
   -- ------------------------------------------------------------------
-  -- A bill nobody cooked from costs nothing
+  -- Even a bill nobody cooked from
   -- ------------------------------------------------------------------
   --
-  -- Keystrokes. The cashier could already take these off one at a time
-  -- with no grant at all, and a cashier who cannot clear a mis-tap
-  -- cannot close their own drawer at the end of a shift.
+  -- 0246 let this one through, on the reasoning that the lines were
+  -- keystrokes the cashier could remove one at a time anyway. 0247
+  -- closed it: taking a line off leaves the bill and the cashier still
+  -- has to account for it, while making the bill disappear before
+  -- anything reached the kitchen is the shape of an order rung up,
+  -- paid in cash and quietly removed.
   perform pg_temp.sign_in_as(v_owner);
   update public.access_type_modules set access = 'none'
    where access_type_id = v_type and module_code = 'pos_void';
@@ -237,14 +240,28 @@ begin
   perform pg_temp.sign_in_as(v_limited);
   perform pg_temp.check_true('a cashier without the grant does not hold it',
     not app.can_void_pos(v_org));
-  perform pg_temp.check_eq('and can still write off a bill nothing was cooked for',
-    public.void_pos_sale(v_free, 'customer_cancelled'), 0);
-  perform pg_temp.check_eq('which is written off',
-    (select s.status::text from public.pos_sales s where s.id = v_free), 'voided');
-  -- Nothing became food, so nothing belongs in the report that exists
-  -- to answer "where is the food going".
-  perform pg_temp.check_eq('and left nothing in the void record',
+  begin
+    perform public.void_pos_sale(v_free, 'customer_cancelled');
+    raise exception 'FAIL wrote off a bill without the grant';
+  exception when insufficient_privilege then
+    get stacked diagnostics v_msg = message_text;
+    raise notice 'ok   writing off a bill is refused without the grant';
+  end;
+  perform pg_temp.check_true('and the refusal says who to ask',
+    v_msg like '%Ask a manager%');
+  perform pg_temp.check_eq('the bill is still open',
+    (select s.status::text from public.pos_sales s where s.id = v_free), 'parked');
+  perform pg_temp.check_eq('and nothing was written to the void record',
     (select count(*) from public.pos_sale_line_voids v where v.sale_id = v_free), 0);
+
+  -- Taking one unsent line off is still theirs to do: it leaves the
+  -- bill, and the bill is what they have to account for.
+  perform public.remove_pos_sale_line(
+    (select l.id from public.pos_sale_lines l where l.sale_id = v_free));
+  perform pg_temp.check_eq('a line still comes off without the grant',
+    (select count(*) from public.pos_sale_lines l where l.sale_id = v_free), 0);
+  perform pg_temp.check_eq('and the bill is still there to answer for',
+    (select s.status::text from public.pos_sales s where s.id = v_free), 'parked');
 
   -- ------------------------------------------------------------------
   -- Once the kitchen has cooked, it is a write-off
@@ -310,7 +327,12 @@ begin
   -- lets a shift close over it.
   perform pg_temp.check_eq('and it is no longer an open order',
     (select count(*) from public.pos_open_orders(v_outlet) o
-      where o.sale_id in (v_bill, v_free)), 0);
+      where o.sale_id = v_bill), 0);
+  -- And the one that was refused still is, which is the point of the
+  -- refusal: nothing disappeared.
+  perform pg_temp.check_eq('while the bill nobody could write off still is',
+    (select count(*) from public.pos_open_orders(v_outlet) o
+      where o.sale_id = v_free), 1);
 
   -- One event, one row per plate, in the report a manager already has.
   perform pg_temp.check_eq('the loss reaches the void report',

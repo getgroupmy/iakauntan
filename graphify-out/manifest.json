@@ -3175,8 +3175,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/till_screen.dart": {
-    "mtime": 1787290245.4374337,
-    "ast_hash": "58bff369fdf23f9382bdba639a85927c",
+    "mtime": 1787290859.4295893,
+    "ast_hash": "65b6920940071b16870406719fa7ff8f",
     "semantic_hash": ""
   },
   "app/test/diary_screen_test.dart": {
@@ -3205,8 +3205,8 @@
     "semantic_hash": ""
   },
   "app/test/till_screen_test.dart": {
-    "mtime": 1787290197.2613063,
-    "ast_hash": "4464fa50fd2d504f0676b50489b47432",
+    "mtime": 1787290883.4360077,
+    "ast_hash": "0b9cb7e305efe7307048e3ca093e33d5",
     "semantic_hash": ""
   },
   "supabase/migrations/0202_forecast_to_purchase_order.sql": {
@@ -3655,8 +3655,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_void_permission.sql": {
-    "mtime": 1787290099.7083123,
-    "ast_hash": "a6381f379c51e4bcdc54f1de2282e7cc",
+    "mtime": 1787290831.5011046,
+    "ast_hash": "3fcbc8b230e1c9e78b7e97a688982975",
     "semantic_hash": ""
   },
   "supabase/migrations/0245_a_long_table_is_two_tables.sql": {
@@ -3667,6 +3667,11 @@
   "supabase/migrations/0246_voiding_the_whole_bill.sql": {
     "mtime": 1787289813.608897,
     "ast_hash": "176a60e60eb7b63a19bbed1d94b87354",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0247_writing_off_a_bill_always_needs_the_grant.sql": {
+    "mtime": 1787290800.6529555,
+    "ast_hash": "a2ef40d073388ed6c0ca19a292b1cb7c",
     "semantic_hash": ""
   }
 }

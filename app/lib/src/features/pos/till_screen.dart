@@ -401,18 +401,42 @@ class _TillScreenState extends ConsumerState<TillScreen> {
   /// a parked bill before closing a shift since long before there was
   /// a way to void one.
   ///
-  /// The grant is not pre-checked here. `void_pos_sale` asks for it
-  /// only when the kitchen has cooked from the bill, so whether this
-  /// will be refused depends on a fact the server holds; letting it
-  /// answer means the screen cannot disagree with the database, and its
-  /// refusal already says who to ask.
+  /// Asked before the reason, not after. 0247 made the `pos_void` grant
+  /// unconditional here, so whether this will be refused is knowable
+  /// without asking the server about the bill — and being turned down
+  /// after choosing a reason and typing an explanation is a worse
+  /// moment to find out. The database still refuses either way; this
+  /// only stops the wasted work.
   Future<void> _voidBill() async {
     final id = _saleId;
     if (id == null) return;
-    // The question comes first and the repository second: asking why is
-    // a screen's job and needs nothing from the server, so a till that
-    // has lost its connection still gets as far as saying what it was
-    // about to do.
+    final mayVoid = await permissionHeld(ref, 'pos_void');
+    if (!mounted) return;
+    if (!mayVoid) {
+      await showModalBottomSheet<void>(
+        context: context,
+        builder: (_) => const SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.lock_outline),
+                title: Text('Writing off a bill needs permission'),
+                subtitle: Text(
+                  'This account has not been given it. A manager can, '
+                  'under Team.',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      return;
+    }
+    // The question comes next and the repository after it: asking why
+    // is a screen's job and needs nothing from the server, so a till
+    // that has lost its connection still gets as far as saying what it
+    // was about to do.
     final no = '${ref.read(posSaleProvider(id)).valueOrNull?['sale_no'] ?? ''}';
     final what = no.isEmpty ? 'this bill' : no;
 
