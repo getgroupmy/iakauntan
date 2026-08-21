@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787315635.3499987,
-    "ast_hash": "3d1dd104c177daa14835f60946f327cb",
+    "mtime": 1787316466.9523368,
+    "ast_hash": "818683b419c38a4188c4309f69d45a09",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787315635.347909,
-    "ast_hash": "e0f60b871123e66042236fd881b3db62",
+    "mtime": 1787316466.95158,
+    "ast_hash": "17440d6d1cc90ab20864ff65c1debbe5",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -3330,8 +3330,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_loyalty.sql": {
-    "mtime": 1787216489.0710492,
-    "ast_hash": "2effc94c9a38f567a2400afd05152960",
+    "mtime": 1787316619.3162622,
+    "ast_hash": "677e7839e96c3f138ebf5907527f8241",
     "semantic_hash": ""
   },
   "supabase/tests/pos_offline.sql": {
@@ -3350,8 +3350,8 @@
     "semantic_hash": ""
   },
   "docs/pos.md": {
-    "mtime": 1787315984.2330747,
-    "ast_hash": "df9f2b52137d4a0bb1b18e7e67832926",
+    "mtime": 1787316654.3777301,
+    "ast_hash": "e96234e8226ac137c921bbfd218cbd80",
     "semantic_hash": ""
   },
   "app/lib/src/core/export_log.dart": {
@@ -3375,8 +3375,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/member_panel.dart": {
-    "mtime": 1787158574.3517609,
-    "ast_hash": "414fe11aa2e4895be9d6eb7d3699d726",
+    "mtime": 1787316531.0887818,
+    "ast_hash": "a05dea07ea909534aeb00124f6b74513",
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/memberships_screen.dart": {
@@ -3600,8 +3600,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/loyalty/loyalty_screen.dart": {
-    "mtime": 1787230450.3354454,
-    "ast_hash": "5a71387b903d8b9734ea534e086fe74a",
+    "mtime": 1787316484.0058675,
+    "ast_hash": "db3f0938fb04f4e6a1739584dd57fb88",
     "semantic_hash": ""
   },
   "app/test/loyalty_screen_test.dart": {
@@ -3717,6 +3717,16 @@
   "supabase/migrations/0252_the_day_across_every_outlet.sql": {
     "mtime": 1787315542.0639033,
     "ast_hash": "5b33fd4e3066912472d44b5c79d1024f",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/loyalty/loyalty_tiers_dialog.dart": {
+    "mtime": 1787316506.6557293,
+    "ast_hash": "b5d3137ff24e3f23fd1bb8166824b78e",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0253_a_tier_a_member_climbs_into.sql": {
+    "mtime": 1787316278.0480092,
+    "ast_hash": "a8c00fa11f4841ab981a19756a4fd019",
     "semantic_hash": ""
   }
 }

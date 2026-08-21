@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'loyalty_tiers_dialog.dart';
 // `RepoLoyaltyAdmin` and `RepoPos` are extensions, and a Dart extension
 // is only in scope where its declaring library is imported.
 import '../../data/repository.dart';
@@ -196,6 +197,15 @@ class _LoyaltyScreenState extends ConsumerState<LoyaltyScreen> {
       appBar: AppBar(
         title: const Text('Loyalty'),
         actions: [
+          // Setup rather than daily work, but it belongs beside the
+          // members it names rather than in a settings screen nobody
+          // opens while thinking about loyalty.
+          if (isAdmin)
+            IconButton(
+              tooltip: 'Tiers',
+              icon: const Icon(Icons.workspace_premium_outlined, size: 20),
+              onPressed: () => showLoyaltyTiers(context),
+            ),
           if (isAdmin)
             Padding(
               padding: const EdgeInsets.only(right: Space.md),
@@ -244,12 +254,7 @@ class _LoyaltyScreenState extends ConsumerState<LoyaltyScreen> {
                         child: ListTile(
                           selected: _selected?['account_id'] == m['account_id'],
                           title: Text('${m['name'] ?? m['contact'] ?? '—'}'),
-                          subtitle: Text(
-                            [
-                              if (m['card_no'] != null) 'Card ${m['card_no']}',
-                              if (m['points'] != null) '${m['points']} points',
-                            ].join(' · '),
-                          ),
+                          subtitle: _MemberLine(member: m),
                           trailing: isAdmin
                               ? TextButton(
                                   onPressed: () => _adjust(m),
@@ -344,6 +349,35 @@ class _AdjustDialogState extends State<_AdjustDialog> {
           child: const Text('Adjust'),
         ),
       ],
+    );
+  }
+}
+
+/// A member's line: what they hold, and what they are called.
+///
+/// The tier is a second round trip per member rather than a column on
+/// `loyalty_lookup`, because a lookup with a queue behind it must not
+/// wait on a band calculation — the name arrives a moment later and
+/// the row is useful without it.
+class _MemberLine extends ConsumerWidget {
+  const _MemberLine({required this.member});
+
+  final Map<String, dynamic> member;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final id = member['account_id'] as String?;
+    final tier = id == null
+        ? null
+        : ref.watch(loyaltyMemberTierProvider(id)).valueOrNull;
+    final name = tier?['tier_name'];
+
+    return Text(
+      [
+        if (member['card_no'] != null) 'Card ${member['card_no']}',
+        if (member['points'] != null) '${member['points']} points',
+        if (name != null) '$name',
+      ].join(' · '),
     );
   }
 }

@@ -2069,6 +2069,23 @@ final posVoidSummaryProvider = FutureProvider.autoDispose
       (ref, range) => requireRepo(ref).posVoidSummary(range.from, range.to),
     );
 
+/// The company's active loyalty scheme, or nothing if it runs none.
+final loyaltyProgramProvider = FutureProvider.autoDispose<
+  Map<String, dynamic>?
+>((ref) => requireRepo(ref).loyaltyProgram());
+
+/// The bands a loyalty scheme gives its members. 0253.
+final loyaltyTiersProvider = FutureProvider.autoDispose<
+  List<Map<String, dynamic>>
+>((ref) => requireRepo(ref).loyaltyTiers());
+
+/// Which tier one member is in. Keyed on the account rather than the
+/// contact, because the till already has the account.
+final loyaltyMemberTierProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>(
+      (ref, accountId) => requireRepo(ref).loyaltyMemberTier(accountId),
+    );
+
 /// Every outlet's day on one board. Keyed on the date because the
 /// question "and yesterday?" is one tap away and should not refetch
 /// today.

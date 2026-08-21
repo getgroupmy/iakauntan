@@ -245,6 +245,11 @@ class _Panel extends ConsumerWidget {
               ].join(' · '),
               style: small,
             ),
+            // The name the customer actually uses about themselves, and
+            // the sentence that sells the scheme. Its own watch rather
+            // than a column on the panel query, so a slow band
+            // calculation never delays the card appearing.
+            _TierLine(accountId: account),
             // Said out loud rather than left to be inferred. The ledger
             // is not touched until the sale completes, so "506 points"
             // is true now and misleading in a minute.
@@ -496,6 +501,42 @@ class _RedeemSheetState extends State<_RedeemSheet> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Emas · 830 more and you are Platinum."
+///
+/// Absent entirely for a shop with no tiers configured, rather than a
+/// blank line reserving space for a feature nobody turned on.
+class _TierLine extends ConsumerWidget {
+  const _TierLine({required this.accountId});
+
+  final String accountId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tier = ref.watch(loyaltyMemberTierProvider(accountId)).valueOrNull;
+    final name = tier?['tier_name'];
+    if (name == null) return const SizedBox.shrink();
+
+    final toNext = (tier?['points_to_next'] as num?)?.toInt();
+    final next = tier?['next_name'];
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Text(
+        [
+          '$name',
+          if (toNext != null && next != null)
+            '$toNext more and they are $next',
+        ].join(' · '),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: Theme.of(context).colorScheme.primary,
         ),
       ),
     );

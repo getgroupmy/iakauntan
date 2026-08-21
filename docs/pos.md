@@ -368,6 +368,43 @@ rather than through `app.render_email`: every other message is a
 sentence with an amount substituted into it, and this one is a table
 whose row count is the number of shops.
 
+## Loyalty is a name, not only a number
+
+0212 made points a ledger and 0227 put the card at the counter. What
+neither gave a shop is the thing customers talk about: that somebody is
+*Emas*. 0253 adds `loyalty_tiers` — bands with a name, a threshold and
+an `earn_multiplier`.
+
+**Measured on what was earned, never on the balance.** The obvious
+implementation is a threshold against the account balance, and it is
+wrong in a way that takes months to notice: redeeming demotes you, so
+the scheme punishes the exact behaviour it exists to encourage.
+`app.loyalty_earned` counts `earn` entries only, over
+`loyalty_programs.tier_window_months` (null is for ever). An adjustment
+a manager makes to settle an argument is not spending either, so a
+goodwill gesture cannot buy a tier.
+
+**A tier that does nothing is a badge**, so each carries a multiplier.
+`app.pos_settle_loyalty` reads the member's band as the sale settles —
+before this sale's own points land, so a bill that crosses a threshold
+earns at the old rate and the next one earns at the new; any other
+reading makes the rate depend on the order two tills happened to settle
+in. The multiplication happens before the floor, because rounding up
+pays points for money nobody handed over. A company with no tiers
+configured is exactly where it was: the lookup finds nothing and one is
+the identity.
+
+The multiplier has its own internal function that asks no question
+about who is looking. `loyalty_member_tier` is screen-facing and checks
+`can_read_module`; settling must not, or a Gold member would quietly
+earn at the plain rate whenever their sale landed from an offline
+device rather than a counter.
+
+The tiers list shows how many members are sitting in each band, which
+is how a shop finds out whether Gold is an achievement or a
+participation prize. Retiring a band drops its members to the one below
+and deletes nothing.
+
 ## Service — a slot that cannot be sold twice
 
 The double-booking rule is a **constraint**, not a function:

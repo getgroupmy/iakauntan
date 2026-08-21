@@ -45,6 +45,7 @@ declare
   v_b      numeric;
   v_c      numeric;
   v_mrow   record;
+  v_tier   record;
 begin
   v_org := pg_temp.test_org('Pasaraya Mesra Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
@@ -431,6 +432,81 @@ begin
    where org_id = v_org and module_code = 'loyalty';
   perform pg_temp.check_eq('switched back on, the card is there again',
     (select count(*) from public.loyalty_account_balance(v_member)), 1);
+
+  -- ------------------------------------------------------------------
+  -- The name a member keeps (0253)
+  -- ------------------------------------------------------------------
+  -- Tiers are bands over what was EARNED, never over the balance. A
+  -- scheme that demoted somebody for redeeming would punish the exact
+  -- behaviour it exists to encourage, and that is the assertion this
+  -- whole section is built around.
+
+  -- Nothing configured: the plain rate, and no name.
+  select * into v_tier from public.loyalty_member_tier(v_acct);
+  perform pg_temp.check_true('with no tiers, a member has no tier',
+    v_tier.tier_name is null);
+  perform pg_temp.check_eq('and earns at the plain rate',
+    v_tier.multiplier, 1);
+
+  -- Bands placed around what this member has actually earned, rather
+  -- than at round numbers that would depend on every assertion above
+  -- this one still spending the same amounts.
+  v_n := v_tier.earned;
+  perform public.upsert_loyalty_tier(v_prog, 'AHLI',  'Ahli',  0, 1);
+  perform public.upsert_loyalty_tier(v_prog, 'PERAK', 'Perak',
+    greatest(v_n - 1, 1), 1.25);
+  perform public.upsert_loyalty_tier(v_prog, 'EMAS',  'Emas', v_n + 500, 1.5);
+
+  select * into v_tier from public.loyalty_member_tier(v_acct);
+  perform pg_temp.check_eq('the member is in the band their earnings reach',
+    v_tier.tier_name, 'Perak');
+  perform pg_temp.check_eq('and the next one is named',
+    v_tier.next_name, 'Emas');
+  perform pg_temp.check_eq('with the gap said in points',
+    v_tier.points_to_next, 500);
+
+  -- The assertion the design exists for. Spending points must not take
+  -- the name away.
+  v_n := v_tier.earned;
+  perform public.adjust_loyalty_points(v_acct, -40,
+    'Spent at the counter, for the test');
+  select * into v_tier from public.loyalty_member_tier(v_acct);
+  perform pg_temp.check_eq('redeeming does not demote anybody',
+    v_tier.tier_name, 'Perak');
+  perform pg_temp.check_eq('because the tier reads what was earned',
+    v_tier.earned, v_n);
+
+  -- And an adjustment cannot buy one: a goodwill gesture is not
+  -- spending, so `app.loyalty_earned` counts `earn` entries only.
+  perform public.adjust_loyalty_points(v_acct, 5000,
+    'A very generous manager, for the test');
+  select * into v_tier from public.loyalty_member_tier(v_acct);
+  perform pg_temp.check_eq('and an adjustment buys no tier at all',
+    v_tier.tier_name, 'Perak');
+
+  -- What the band is for: the member earns at their own rate. 1.25 on
+  -- a hundred ringgit is 125, floored after the multiplier rather than
+  -- before, because rounding up pays points for money nobody handed
+  -- over.
+  v_sale := public.open_pos_sale(v_reg, v_member);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 100.00);
+  perform public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 100.00)));
+  perform pg_temp.check_eq('a Perak member earns at Perak''s rate',
+    (select s.loyalty_points_earned from public.pos_sales s
+      where s.id = v_sale), 125);
+
+  -- Retiring a band drops its members to whichever is below it, and
+  -- nothing is deleted.
+  perform public.retire_loyalty_tier(
+    (select t.id from public.loyalty_tiers t
+      where t.program_id = v_prog and t.code = 'PERAK'));
+  select * into v_tier from public.loyalty_member_tier(v_acct);
+  perform pg_temp.check_eq('retiring a band drops its members to the one below',
+    v_tier.tier_name, 'Ahli');
+  perform pg_temp.check_eq('and the band itself is still there',
+    (select count(*) from public.loyalty_tiers t
+      where t.program_id = v_prog and t.code = 'PERAK'), 1);
 
   raise notice 'point of sale loyalty: all assertions passed';
 end;

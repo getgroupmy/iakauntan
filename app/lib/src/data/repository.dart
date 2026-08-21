@@ -7546,6 +7546,71 @@ extension RepoPosControls on Repo {
   /// reason. A bill written off before the kitchen cooked anything
   /// writes no line-void rows at all, so that report cannot see the
   /// case the grant exists to control.
+  // ------------------------------------------------------------------
+  // The names a scheme gives its members (0253)
+  // ------------------------------------------------------------------
+
+  /// The scheme itself. One active programme per company, which is
+  /// what `app.pos_settle_loyalty` assumes when it looks one up.
+  Future<Map<String, dynamic>?> loyaltyProgram() async {
+    final rows = Repo.rows(
+      await client
+          .from('loyalty_programs')
+          .select()
+          .eq('org_id', orgId)
+          .eq('is_active', true)
+          .limit(1),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// How far back a tier looks. Null is for ever — the scheme that
+  /// never demotes anybody.
+  Future<void> setLoyaltyTierWindow(String programId, int? months) => client
+      .from('loyalty_programs')
+      .update({'tier_window_months': months})
+      .eq('id', programId);
+
+  /// Every band, retired ones included, with how many members are
+  /// actually sitting in each.
+  Future<List<Map<String, dynamic>>> loyaltyTiers() async => Repo.rows(
+    await callRpc('loyalty_tiers_admin', params: {'p_org': orgId}),
+  );
+
+  /// Which tier one account is in, and how far off the next.
+  Future<Map<String, dynamic>?> loyaltyMemberTier(String accountId) async {
+    final rows = Repo.rows(
+      await callRpc('loyalty_member_tier', params: {'p_account': accountId}),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<String> saveLoyaltyTier({
+    required String programId,
+    required String code,
+    required String name,
+    required int minPoints,
+    double multiplier = 1,
+    String? id,
+    bool isActive = true,
+  }) async =>
+      await callRpc(
+            'upsert_loyalty_tier',
+            params: {
+              'p_program': programId,
+              'p_code': code,
+              'p_name': name,
+              'p_min_points': minPoints,
+              'p_multiplier': multiplier,
+              'p_id': id,
+              'p_is_active': isActive,
+            },
+          )
+          as String;
+
+  Future<void> retireLoyaltyTier(String tierId) async =>
+      await callRpc('retire_loyalty_tier', params: {'p_tier': tierId});
+
   /// Every outlet's trading for one day, for the person who owns all
   /// three shops rather than the one standing in a shop. 0252.
   Future<List<Map<String, dynamic>>> posDayBoard(DateTime date) async =>
