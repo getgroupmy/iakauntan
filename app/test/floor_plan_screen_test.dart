@@ -188,4 +188,31 @@ void main() {
     // worse than none.
     expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
   });
+
+  testWidgets('the cards for the tables can be printed from here', (
+    tester,
+  ) async {
+    // The scan path is only worth having once there is something in
+    // the room to scan, and this screen is where somebody setting a
+    // dining room up already is.
+    await tester.pumpWidget(
+      harness(registers: [register()], plan: [table(id: 't1', name: 'T1')]),
+    );
+    await tester.pumpAndSettle();
+
+    final print = find.widgetWithIcon(IconButton, Icons.qr_code_2);
+    expect(print, findsOneWidget);
+    expect(tester.widget<IconButton>(print).onPressed, isNotNull);
+  });
+
+  testWidgets('and not before a till has been picked', (tester) async {
+    // Without a register there is no outlet, and without an outlet
+    // there are no tables to make cards for. A button that can only
+    // fail is worse than one that is plainly not ready.
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+
+    final print = find.widgetWithIcon(IconButton, Icons.qr_code_2);
+    expect(tester.widget<IconButton>(print).onPressed, isNull);
+  });
 }

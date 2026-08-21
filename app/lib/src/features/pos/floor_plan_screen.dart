@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/widgets.dart';
 // `RepoPos` is an extension, and a Dart extension is only in scope
 // where its declaring library is imported.
 import '../../data/repository.dart';
+import 'table_cards_pdf.dart';
 import 'till_screen.dart' show PosRegisterPicker, posNum;
 
 /// The room.
@@ -41,12 +43,78 @@ class FloorPlanScreen extends ConsumerStatefulWidget {
 class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
   String? _registerId;
   String? _outletId;
+  String _outletName = '';
 
   void _pickRegister(Map<String, dynamic> reg) {
+    final outlet = (reg['pos_outlets'] as Map?)?.cast<String, dynamic>();
     setState(() {
       _registerId = reg['id'] as String?;
-      _outletId = (reg['pos_outlets'] as Map?)?['id'] as String?;
+      _outletId = outlet?['id'] as String?;
+      _outletName = '${outlet?['name'] ?? ''}';
     });
+  }
+
+  /// The cards that go on the tables.
+  ///
+  /// Printing is the whole point of the codes: `pos_table_by_code` and
+  /// the till's assign-table sheet can turn a scan into a table, but
+  /// only once there is something in the room to scan. This is offered
+  /// from the floor plan because that is where somebody setting a
+  /// dining room up already is, and because the plan already carries
+  /// every field a card needs.
+  Future<void> _printCards() async {
+    final outlet = _outletId;
+    if (outlet == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final org = ref.read(currentOrgProvider).valueOrNull;
+    if (org == null) return;
+    // Read through `.future` rather than `valueOrNull`: the button can
+    // be pressed while the plan is still in flight, and a sheet of
+    // nought cards is a worse answer than a moment's wait.
+    final tables = await ref.read(posFloorPlanProvider(outlet).future);
+    if (!mounted) return;
+    if (tables.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('No tables to print cards for.')),
+      );
+      return;
+    }
+    try {
+      final bytes = await buildTableCardsPdf(
+        org: org,
+        outletName: _outletName,
+        tables: tables,
+      );
+      if (!mounted) return;
+      final stem = (_outletName.isEmpty ? 'outlet' : _outletName)
+          .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')
+          .toLowerCase();
+      final saved = await exportBytesFile(
+        ref,
+        'table-cards-$stem.pdf',
+        'application/pdf',
+        bytes,
+        what: 'Table cards',
+        detail: _outletName,
+      );
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(saved
+              ? 'Table cards downloaded. Print, cut and stand them up.'
+              // saveBytesFile only works in the browser, and a PDF is
+              // not something the clipboard can hold, so this says what
+              // to do rather than pretending something happened.
+              : 'Printing table cards needs the browser. Open iAkauntan '
+                  'on a computer and try again.'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not make the cards: $e')),
+      );
+    }
   }
 
   Future<void> _seat(Map<String, dynamic> t) async {
@@ -131,6 +199,11 @@ class _FloorPlanScreenState extends ConsumerState<FloorPlanScreen> {
       appBar: AppBar(
         title: const Text('Floor'),
         actions: [
+          IconButton(
+            tooltip: 'Print table cards',
+            icon: const Icon(Icons.qr_code_2),
+            onPressed: _outletId == null ? null : _printCards,
+          ),
           registers.maybeWhen(
             data: (rows) => PosRegisterPicker(
               registers: rows,

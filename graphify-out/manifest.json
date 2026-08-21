@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787233427.194008,
-    "ast_hash": "eccb94a2874bf543b977e44117b6ee45",
+    "mtime": 1787281069.3858213,
+    "ast_hash": "b64281a052d55ddd01f3f205502fbd1a",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787232608.668923,
-    "ast_hash": "9a88a3308501be43cc23f5a736202a4e",
+    "mtime": 1787280228.7592692,
+    "ast_hash": "1e8cc0717ee0add67225653198ea13bf",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787216476.9310899,
-    "ast_hash": "4c7b3458d991b1c04d19077c968da944",
+    "mtime": 1787280184.800099,
+    "ast_hash": "46d7404ff67b1a525aeeae3c161843ad",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -2105,8 +2105,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/team/access_types_card.dart": {
-    "mtime": 1786785756.622488,
-    "ast_hash": "776011965726f67da6257c088571c713",
+    "mtime": 1787280259.1112247,
+    "ast_hash": "59f417a222f028f1a06d7335e8377f35",
     "semantic_hash": ""
   },
   "supabase/migrations/0127_access_types.sql": {
@@ -3155,8 +3155,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/floor_plan_screen.dart": {
-    "mtime": 1787123702.8983104,
-    "ast_hash": "7125fd6cf7d66ab05a170fa61e7c73d9",
+    "mtime": 1787283714.9786727,
+    "ast_hash": "625bcebdd995e55f67bff99d45ae21f5",
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/kiosk_board_screen.dart": {
@@ -3175,8 +3175,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/till_screen.dart": {
-    "mtime": 1787231709.5615754,
-    "ast_hash": "c3980f64c9b1a3ce5dab56ba340eefb4",
+    "mtime": 1787281621.2011287,
+    "ast_hash": "09c8bf52f5941b2b0f609c00a7cbc740",
     "semantic_hash": ""
   },
   "app/test/diary_screen_test.dart": {
@@ -3185,8 +3185,8 @@
     "semantic_hash": ""
   },
   "app/test/floor_plan_screen_test.dart": {
-    "mtime": 1787123682.6035304,
-    "ast_hash": "87cc812a08beda5bffa2bee439b4dcf0",
+    "mtime": 1787283902.8618023,
+    "ast_hash": "f4200d0f057e3060c6c01a69a4df589d",
     "semantic_hash": ""
   },
   "app/test/forecast_screen_test.dart": {
@@ -3205,8 +3205,8 @@
     "semantic_hash": ""
   },
   "app/test/till_screen_test.dart": {
-    "mtime": 1787149038.343618,
-    "ast_hash": "d5ecec70e2089a8c8617f5472d5c72a5",
+    "mtime": 1787280307.26178,
+    "ast_hash": "f05097a9cbb9536472073103830a3182",
     "semantic_hash": ""
   },
   "supabase/migrations/0202_forecast_to_purchase_order.sql": {
@@ -3320,8 +3320,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_fnb.sql": {
-    "mtime": 1787216489.069304,
-    "ast_hash": "b34c5d54f2e170855eb61b73f762a333",
+    "mtime": 1787279779.063149,
+    "ast_hash": "b31eb125e1a41d50573843aa774bc1a0",
     "semantic_hash": ""
   },
   "supabase/tests/pos_kiosk.sql": {
@@ -3595,8 +3595,8 @@
     "semantic_hash": ""
   },
   "docs/security.md": {
-    "mtime": 1787224603.314292,
-    "ast_hash": "41b41853ffb87d555769b2827f13c979",
+    "mtime": 1787281104.1237874,
+    "ast_hash": "51dae5dbe6abb83abce4c5c1bff786ff",
     "semantic_hash": ""
   },
   "app/lib/src/features/loyalty/loyalty_screen.dart": {
@@ -3627,6 +3627,36 @@
   "supabase/migrations/0242_the_support_address_follows_the_domain.sql": {
     "mtime": 1787238974.0227566,
     "ast_hash": "bc67a41f793fd4b3c58bc44d5cbff86d",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/pos/assign_table.dart": {
+    "mtime": 1787279919.3481567,
+    "ast_hash": "dbaacd7c7d3734e5475afde070e32795",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/pos/table_cards_pdf.dart": {
+    "mtime": 1787283830.9710464,
+    "ast_hash": "7702e6e1c9902abb3f74610d126a90b7",
+    "semantic_hash": ""
+  },
+  "app/test/table_cards_test.dart": {
+    "mtime": 1787283851.9750123,
+    "ast_hash": "e55f767cdd125a85410a4833238d22a5",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0243_the_card_on_the_table_says_which_table.sql": {
+    "mtime": 1787279668.720161,
+    "ast_hash": "1a370068957b675c381c88ae3d31163c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0244_voiding_is_its_own_grant.sql": {
+    "mtime": 1787281031.205449,
+    "ast_hash": "01b80d585d1a934c567833d8c8df3882",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pos_void_permission.sql": {
+    "mtime": 1787281646.6221592,
+    "ast_hash": "c80f0c28c9957c0ba54d109ad37c1792",
     "semantic_hash": ""
   }
 }
