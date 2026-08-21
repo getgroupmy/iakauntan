@@ -181,11 +181,26 @@ begin
   -- fails is worse than no button, and the answer has to come from the
   -- same function the refusal uses or a screen could disagree with the
   -- database about it.
-  perform pg_temp.check_eq('what am I allowed to do names the permission',
+  --
+  -- Asked in both directions, because an answer that is only ever
+  -- checked one way is an answer nobody has tested. The till floor is
+  -- still down from the assertion above, so the honest answer here is
+  -- none — and the screen must say so rather than offering a button
+  -- the database will refuse.
+  perform pg_temp.check_eq('with the till taken away, so is the button',
+    (select a.access from public.my_module_access(v_org) a
+      where a.module_code = 'pos_void'), 'none');
+
+  perform pg_temp.sign_in_as(v_owner);
+  update public.access_type_modules set access = 'write'
+   where access_type_id = v_type and module_code = 'pos';
+  perform pg_temp.sign_in_as(v_limited);
+  perform pg_temp.check_eq('and given back, so is it',
     (select a.access from public.my_module_access(v_org) a
       where a.module_code = 'pos_void'), 'write');
+
   perform pg_temp.sign_in_as(v_plain);
-  perform pg_temp.check_eq('and answers for somebody with no access type too',
+  perform pg_temp.check_eq('and it answers for somebody with no access type',
     (select a.access from public.my_module_access(v_org) a
       where a.module_code = 'pos_void'), 'write');
 

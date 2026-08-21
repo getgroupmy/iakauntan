@@ -666,8 +666,9 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       // back to "held", and walk somebody into a refusal from the
       // database. One round trip on the rarest action buys an answer
       // that is true.
-      if (!await permissionHeld(ref, 'pos_void')) {
-        if (!mounted) return;
+      final mayVoid = await permissionHeld(ref, 'pos_void');
+      if (!mounted) return;
+      if (!mayVoid) {
         await showModalBottomSheet<void>(
           context: context,
           builder: (ctx) => SafeArea(
