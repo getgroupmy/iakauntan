@@ -6527,11 +6527,18 @@ extension RepoPos on Repo {
   /// Baskets set aside. A till with a queue behind it parks one sale to
   /// serve the next, and the parked ones have to be findable or the
   /// money on them is lost.
+  /// The bills parked on this till.
+  ///
+  /// The table comes with them. A merge picker showing two bills for
+  /// RM 34.00 and nothing else is asking the cashier to guess; the
+  /// table is what they can see from where they are standing. One
+  /// foreign key from `pos_sales` to `pos_tables`, so the embed is
+  /// unambiguous and PostgREST resolves it without a hint.
   Future<List<Map<String, dynamic>>> parkedPosSales(String registerId) async =>
       Repo.rows(
         await client
             .from('pos_sales')
-            .select()
+            .select('*, pos_tables(code, name)')
             .eq('register_id', registerId)
             .eq('status', 'parked')
             .order('opened_at'),

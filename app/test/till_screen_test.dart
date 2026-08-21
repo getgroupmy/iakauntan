@@ -1027,4 +1027,42 @@ void main() {
       expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
     });
   });
+
+  group('picking a bill out of a list', () {
+    // Two parked bills for RM 34.00 are indistinguishable by amount.
+    // The thing the cashier can see from where they are standing is
+    // which table the party is at, so it goes next to the number.
+    Map<String, dynamic> bill(String no, {String? table}) => {
+      'id': 'sale-$no',
+      'sale_no': no,
+      'total_amount': '34.00',
+      if (table != null) 'pos_tables': {'code': table, 'name': table},
+    };
+
+    test('a bill at a table is named by both', () {
+      expect(billLabel(bill('S-0001', table: 'T1-A')), 'S-0001  ·  T1-A');
+    });
+
+    test('and a takeaway by its number alone', () {
+      // No separator with nothing after it: an empty middle field
+      // reads as missing data rather than as an order nobody sat down
+      // for.
+      expect(billLabel(bill('S-0002')), 'S-0002');
+      expect(billLabel(bill('S-0002')), isNot(contains('·')));
+    });
+
+    test('a table that came back null is a takeaway, not a crash', () {
+      // `pos_sales.table_id` is nullable and the embed comes back null
+      // with it, which is the ordinary case for three of the four
+      // channels.
+      expect(
+        billLabel({
+          'id': 's',
+          'sale_no': 'S-0003',
+          'pos_tables': null,
+        }),
+        'S-0003',
+      );
+    });
+  });
 }

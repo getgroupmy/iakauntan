@@ -369,14 +369,20 @@ class _TillScreenState extends ConsumerState<TillScreen> {
 
   /// Putting one back together — the table that decided to pay as one
   /// after all.
-  Future<void> _merge(String from) async {
+  ///
+  /// Takes the whole row rather than an id so the confirmation can name
+  /// what went in. "Merged" on its own leaves a cashier holding two
+  /// printed bills with no way to tell which one is now inside the
+  /// other.
+  Future<void> _merge(Map<String, dynamic> row) async {
     final into = _saleId;
-    if (into == null || into == from) return;
+    final from = row['id'] as String?;
+    if (into == null || from == null || into == from) return;
     final repo = ref.read(repoProvider);
     if (repo == null) return;
     final ok = await runWithFeedback(
       context,
-      successMessage: 'Merged',
+      successMessage: '${billLabel(row)} merged in',
       action: () => repo.mergePosSales(into, from),
     );
     if (!ok || !mounted) return;
@@ -868,7 +874,7 @@ class _Register extends ConsumerWidget {
   final VoidCallback onSend;
   final VoidCallback onSplit;
   final VoidCallback onEvenSplit;
-  final ValueChanged<String> onMerge;
+  final ValueChanged<Map<String, dynamic>> onMerge;
   final ValueChanged<Map<String, dynamic>> onLineAction;
   final ValueChanged<Map<String, dynamic>> onOpenOrder;
   final VoidCallback onPark;
@@ -1138,7 +1144,7 @@ class _Basket extends ConsumerWidget {
   final VoidCallback onSend;
   final VoidCallback onSplit;
   final VoidCallback onEvenSplit;
-  final ValueChanged<String> onMerge;
+  final ValueChanged<Map<String, dynamic>> onMerge;
   final ValueChanged<Map<String, dynamic>> onLineAction;
 
   /// A whole row rather than an id, because what the till does next
@@ -1841,6 +1847,26 @@ class _MenuTile extends StatelessWidget {
 
 /// An offer to put two bills back together, shown only when there is
 /// another bill to put this one together with.
+/// What to call a bill out loud.
+///
+/// The number, and the table it is sitting at when it is sitting at
+/// one. Two parked bills for RM 34.00 are indistinguishable by amount,
+/// and the thing the cashier can see from where they are standing is
+/// which table the party is at — so it belongs next to the number
+/// wherever a bill has to be picked out of a list.
+///
+/// Takeaway and delivery have no table and get no separator: an empty
+/// middle field reads as missing data rather than as an order nobody
+/// sat down for.
+String billLabel(Map<String, dynamic> sale) {
+  final table = (sale['pos_tables'] as Map?)?['code'];
+  final code = table == null ? '' : '$table'.trim();
+  return [
+    '${sale['sale_no'] ?? ''}',
+    if (code.isNotEmpty) code,
+  ].join('  ·  ');
+}
+
 class _MergeBar extends ConsumerWidget {
   const _MergeBar({
     required this.registerId,
@@ -1850,7 +1876,7 @@ class _MergeBar extends ConsumerWidget {
 
   final String registerId;
   final String saleId;
-  final ValueChanged<String> onMerge;
+  final ValueChanged<Map<String, dynamic>> onMerge;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1867,15 +1893,16 @@ class _MergeBar extends ConsumerWidget {
       padding: const EdgeInsets.only(top: 8),
       child: Align(
         alignment: Alignment.centerLeft,
-        child: PopupMenuButton<String>(
+        child: PopupMenuButton<Map<String, dynamic>>(
           tooltip: 'Merge another bill into this one',
           onSelected: onMerge,
           itemBuilder: (_) => [
             for (final o in others)
               PopupMenuItem(
-                value: o['id'] as String,
+                value: o,
                 child: Text(
-                  '${o['sale_no']}  ·  ${Fmt.money(posNum(o['total_amount']))}',
+                  '${billLabel(o)}  ·  '
+                  '${Fmt.money(posNum(o['total_amount']))}',
                 ),
               ),
           ],
