@@ -22,6 +22,7 @@ import 'package:iakauntan/src/features/pos/voids_screen.dart';
 void main() {
   Widget screen({
     List<Map<String, dynamic>> summary = const [],
+    List<Map<String, dynamic>> bills = const [],
     Set<String> modules = const {'pos'},
   }) => ProviderScope(
     overrides: [
@@ -37,6 +38,7 @@ void main() {
       ),
       enabledModulesProvider.overrideWith((_) async => modules),
       posVoidSummaryProvider.overrideWith((_, __) async => summary),
+      posVoidedBillsProvider.overrideWith((_, __) async => bills),
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
@@ -105,6 +107,74 @@ void main() {
 
     expect(find.textContaining('548.50'), findsOneWidget);
     expect(find.textContaining('2 reasons'), findsOneWidget);
+  });
+
+  testWidgets('a bill written off with nothing cooked is still listed', (
+    tester,
+  ) async {
+    // The hole 0246 and 0247 left between them, and the one the grant
+    // was tightened for. `pos_void_summary` reads line voids, and a
+    // bill written off before the kitchen cooked anything writes none —
+    // so an order rung up, paid in cash and made to go away would
+    // appear nowhere. The summary is deliberately empty here.
+    await show(
+      tester,
+      screen(
+        bills: const [
+          {
+            'sale_id': 's1',
+            'sale_no': 'POS-2026-00042',
+            'table_code': 'T7',
+            'total_amount': 86.00,
+            'line_count': 6,
+            'cooked_count': 0,
+            'reason': 'customer_cancelled',
+            'note': null,
+            'voided_by': 'u1',
+            'voided_name': 'Hafiz Rahman',
+          },
+        ],
+      ),
+    );
+
+    expect(find.text('Nothing came off a bill'), findsNothing);
+    expect(find.textContaining('POS-2026-00042'), findsOneWidget);
+    expect(find.textContaining('86.00'), findsOneWidget);
+    // Food lost and an order that never existed are different facts.
+    expect(find.textContaining('0 of 6 cooked'), findsOneWidget);
+    // And who, because a void nobody is named for tells nobody
+    // anything.
+    expect(find.textContaining('Hafiz Rahman'), findsOneWidget);
+  });
+
+  testWidgets('and what was said, when something else was the reason', (
+    tester,
+  ) async {
+    // "Something else" is made to explain itself; hiding the
+    // explanation would waste the one rule that makes the catch-all
+    // worth having.
+    await show(
+      tester,
+      screen(
+        bills: const [
+          {
+            'sale_id': 's1',
+            'sale_no': 'POS-2026-00043',
+            'table_code': null,
+            'total_amount': 24.00,
+            'line_count': 2,
+            'cooked_count': 2,
+            'reason': 'other',
+            'note': 'they walked out',
+            'voided_by': 'u1',
+            'voided_name': 'Hafiz Rahman',
+          },
+        ],
+      ),
+    );
+
+    expect(find.textContaining('they walked out'), findsOneWidget);
+    expect(find.textContaining('2 of 2 cooked'), findsOneWidget);
   });
 
   testWidgets('a company with no till is told this is a till control', (

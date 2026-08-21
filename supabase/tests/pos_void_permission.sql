@@ -362,6 +362,63 @@ begin
   end;
   perform public.void_pos_sale(v_free, 'wrong_item');
 
+  -- ------------------------------------------------------------------
+  -- And a written-off bill shows up somewhere
+  -- ------------------------------------------------------------------
+  --
+  -- The hole 0246 and 0247 left between them, and the one the grant was
+  -- tightened for: `pos_void_summary` reads line voids, and a bill
+  -- written off before the kitchen cooked anything writes none. Without
+  -- 0248 that case -- an order rung up, paid in cash and made to go
+  -- away -- appears in no report at all.
+  perform pg_temp.sign_in_as(v_limited);
+  perform pg_temp.check_eq('the written-off bill is listed',
+    (select count(*) from public.pos_voided_bills(v_org) b
+      where b.sale_id = v_bill), 1);
+  perform pg_temp.check_eq('for what it came to',
+    (select b.total_amount from public.pos_voided_bills(v_org) b
+      where b.sale_id = v_bill), 24.00);
+  perform pg_temp.check_eq('with the reason given',
+    (select b.reason from public.pos_voided_bills(v_org) b
+      where b.sale_id = v_bill), 'other');
+  perform pg_temp.check_eq('and what was said',
+    (select b.note from public.pos_voided_bills(v_org) b
+      where b.sale_id = v_bill), 'they walked out');
+  perform pg_temp.check_eq('and whose it was',
+    (select b.voided_by from public.pos_voided_bills(v_org) b
+      where b.sale_id = v_bill), v_limited);
+  -- Food lost and an order that never existed are different facts, and
+  -- a manager reads them differently.
+  perform pg_temp.check_eq('and how much of it had been cooked',
+    (select b.cooked_count from public.pos_voided_bills(v_org) b
+      where b.sale_id = v_bill), 2);
+
+  -- The case that the line report cannot see at all: a bill written off
+  -- with nothing cooked.
+  perform pg_temp.sign_in_as(v_owner);
+  v_free := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_free, v_item, 1, 8.00);
+  perform public.void_pos_sale(v_free, 'customer_cancelled');
+  perform pg_temp.check_eq('a bill nobody cooked from leaves no void lines',
+    (select count(*) from public.pos_sale_line_voids v where v.sale_id = v_free), 0);
+  perform pg_temp.check_eq('and would be invisible in the line report',
+    (select coalesce(sum(v.lines), 0) from public.pos_void_summary(v_org) v
+      where v.reason = 'customer_cancelled'), 0);
+  -- But not here, which is the whole point of 0248.
+  perform pg_temp.check_eq('yet it is listed as a bill written off',
+    (select b.total_amount from public.pos_voided_bills(v_org) b
+      where b.sale_id = v_free), 8.00);
+  perform pg_temp.check_eq('with nothing cooked, said plainly',
+    (select b.cooked_count from public.pos_voided_bills(v_org) b
+      where b.sale_id = v_free), 0);
+
+  -- A day the shop did not have is not a day to report on.
+  perform pg_temp.check_eq('yesterday holds none of it',
+    (select count(*) from public.pos_voided_bills(
+       v_org,
+       ((now() at time zone 'Asia/Kuala_Lumpur')::date - 1),
+       ((now() at time zone 'Asia/Kuala_Lumpur')::date - 1))), 0);
+
   raise notice 'point of sale voiding: all assertions passed';
 end;
 $$;

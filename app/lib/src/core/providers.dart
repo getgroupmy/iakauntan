@@ -2050,6 +2050,14 @@ final posVoidSummaryProvider = FutureProvider.autoDispose
       (ref, range) => requireRepo(ref).posVoidSummary(range.from, range.to),
     );
 
+/// The bills written off, one row each rather than grouped. See
+/// `pos_voided_bills` (0248) on why this is a different question from
+/// the line summary above.
+final posVoidedBillsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({DateTime from, DateTime to})>(
+      (ref, range) => requireRepo(ref).posVoidedBills(range.from, range.to),
+    );
+
 
 /// Every OCR reader the platform offers, active or retired.
 final ocrProviderCatalogProvider =

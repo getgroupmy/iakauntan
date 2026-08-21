@@ -7415,6 +7415,26 @@ extension RepoPosControls on Repo {
   /// The dates are the shop's, not the server's: the function works in
   /// Asia/Kuala_Lumpur, so a sale at eleven at night belongs to the day
   /// the shop thinks it does.
+  /// The bills written off in a period, one row each.
+  ///
+  /// Not the same question as [posVoidSummary], which groups lines by
+  /// reason. A bill written off before the kitchen cooked anything
+  /// writes no line-void rows at all, so that report cannot see the
+  /// case the grant exists to control.
+  Future<List<Map<String, dynamic>>> posVoidedBills(
+    DateTime from,
+    DateTime to,
+  ) async => Repo.rows(
+    await callRpc(
+      'pos_voided_bills',
+      params: {
+        'p_org': orgId,
+        'p_from': Fmt.iso(from),
+        'p_to': Fmt.iso(to),
+      },
+    ),
+  );
+
   Future<List<Map<String, dynamic>>> posVoidSummary(
     DateTime from,
     DateTime to,

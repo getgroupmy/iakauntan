@@ -58,6 +58,7 @@ class _VoidsScreenState extends ConsumerState<VoidsScreen> {
     }
 
     final summary = ref.watch(posVoidSummaryProvider(_range));
+    final bills = ref.watch(posVoidedBillsProvider(_range));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Voids')),
@@ -81,13 +82,15 @@ class _VoidsScreenState extends ConsumerState<VoidsScreen> {
               value: summary,
               onRetry: () => ref.invalidate(posVoidSummaryProvider(_range)),
               builder: (rows) {
-                if (rows.isEmpty) {
+                final written = bills.valueOrNull ?? const [];
+                if (rows.isEmpty && written.isEmpty) {
                   return const EmptyState(
                     icon: Icons.remove_shopping_cart_outlined,
                     title: 'Nothing came off a bill',
                     message:
                         'Lines taken off after the kitchen was told show up '
-                        'here, grouped by the reason given.',
+                        'here, grouped by the reason given — and whole bills '
+                        'written off are listed one by one underneath.',
                   );
                 }
                 final total = rows.fold<double>(
@@ -126,6 +129,65 @@ class _VoidsScreenState extends ConsumerState<VoidsScreen> {
                         ),
                         trailing: Money(Fmt.toDouble(r['value']), bold: true),
                       ),
+                    // Whole bills, listed rather than grouped. There are
+                    // far fewer of them, each is an entire order, and
+                    // the question is which one and whose — grouping
+                    // would hide the only fact that matters.
+                    //
+                    // They must be here even when the summary above is
+                    // empty: a bill written off before the kitchen
+                    // cooked anything leaves no line voids, which is the
+                    // exact case the grant exists to control.
+                    if (written.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          Space.lg,
+                          Space.xl,
+                          Space.lg,
+                          Space.sm,
+                        ),
+                        child: Text(
+                          'Bills written off',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                      for (final b in written)
+                        ListTile(
+                          title: Text(
+                            [
+                              '${b['sale_no']}',
+                              if ('${b['table_code'] ?? ''}'.isNotEmpty)
+                                '${b['table_code']}',
+                            ].join('  ·  '),
+                          ),
+                          subtitle: Text(
+                            [
+                              [
+                                Fmt.label('${b['reason'] ?? ''}'),
+                                // The difference between food lost and
+                                // an order that never existed, which a
+                                // manager reads differently.
+                                '${b['cooked_count']} of '
+                                    '${b['line_count']} cooked',
+                                if ('${b['voided_name'] ?? ''}'.isNotEmpty)
+                                  '${b['voided_name']}',
+                              ].where((v) => v.isNotEmpty).join('  ·  '),
+                              // Shown, not just stored. "Something else"
+                              // is made to explain itself, and hiding
+                              // the explanation would waste the one
+                              // rule that makes the catch-all worth
+                              // having.
+                              if ('${b['note'] ?? ''}'.isNotEmpty)
+                                '${b['note']}',
+                            ].join('\n'),
+                          ),
+                          trailing: Money(
+                            Fmt.toDouble(b['total_amount']),
+                            bold: true,
+                          ),
+                          isThreeLine: '${b['note'] ?? ''}'.isNotEmpty,
+                        ),
+                    ],
                   ],
                 );
               },
