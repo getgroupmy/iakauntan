@@ -37,6 +37,7 @@ declare
   v_area   uuid;
   v_t7     uuid;
   v_t8     uuid;
+  v_t9     uuid;
   v_bar    uuid;
   v_far    uuid;
   v_shift  uuid;
@@ -195,6 +196,69 @@ begin
   perform pg_temp.check_eq('and the table they left is free in the same breath',
     (select count(*) from public.pos_floor_plan(v_outlet) f
       where f.table_id = v_t7 and f.sale_id is null), 1);
+
+  -- ------------------------------------------------------------------
+  -- The card on the table
+  -- ------------------------------------------------------------------
+  -- A cashier at the counter has the bill in front of them and no
+  -- reason to walk to the floor plan. What the shop puts on the table
+  -- is a card, and every reader in this market types its code and
+  -- presses enter — so the whole feature is turning that string into
+  -- this table. What must not live in the client is which strings
+  -- count, because a shop that changes its sticker printer would then
+  -- need a release.
+  perform pg_temp.check_true('a printed code finds the table',
+    (select t.table_id from public.pos_table_by_code(v_outlet, 'T7') t) = v_t7);
+  perform pg_temp.check_true('so does it typed by somebody who lost the card',
+    (select t.table_id from public.pos_table_by_code(v_outlet, 't7') t) = v_t7);
+  -- A QR sticker a customer might also point a phone at has to be a
+  -- link, so the link and the code are the same table.
+  perform pg_temp.check_true('and a QR sticker that is a link',
+    (select t.table_id
+       from public.pos_table_by_code(v_outlet, 'https://iakauntan.com/t/T7') t)
+    = v_t7);
+  perform pg_temp.check_true('and one with a tracking query on it',
+    (select t.table_id
+       from public.pos_table_by_code(v_outlet, 'https://iakauntan.com/t/T7?utm=qr') t)
+    = v_t7);
+  -- What a tag writer defaults to when it is handed a bare code.
+  perform pg_temp.check_true('and the token an NFC tag is written with',
+    (select t.table_id from public.pos_table_by_code(v_outlet, 'table:T7') t) = v_t7);
+
+  -- What it says about the table, so the till does not have to ask
+  -- twice to tell the cashier what they just scanned.
+  perform pg_temp.check_eq('it says which area the table is in',
+    (select t.area from public.pos_table_by_code(v_outlet, 'T7') t), 'Dining room');
+  perform pg_temp.check_eq('a free table reports no bill on it',
+    (select t.open_bills from public.pos_table_by_code(v_outlet, 'T7') t), 0);
+  -- Two bills on one table is legitimate — a split leaves exactly that
+  -- — so this is a fact to show the cashier, not a reason to refuse.
+  perform pg_temp.check_eq('and an occupied one says how many',
+    (select t.open_bills from public.pos_table_by_code(v_outlet, 'BAR1') t), 1);
+
+  -- The refusals. A lookup that fell through to another outlet would
+  -- put a bill in a room the cashier cannot see.
+  perform pg_temp.check_eq('a table in the branch is not this shop''s',
+    (select count(*) from public.pos_table_by_code(v_outlet, 'X1')), 0);
+  perform pg_temp.check_eq('a code nobody printed finds nothing',
+    (select count(*) from public.pos_table_by_code(v_outlet, 'T99')), 0);
+  -- The one that would be worst: an empty scan matching everything and
+  -- the till seating the party at whichever table sorted first.
+  perform pg_temp.check_eq('and an empty scan finds nothing at all',
+    (select count(*) from public.pos_table_by_code(v_outlet, '   ')), 0);
+  perform pg_temp.check_eq('nor does a sticker worn down to its slashes',
+    (select count(*) from public.pos_table_by_code(v_outlet, '///')), 0);
+
+  -- A table taken out of service is off the floor plan, so it must be
+  -- off the scan too — otherwise the one route that skips the plan is
+  -- the one that can still seat somebody at it.
+  insert into public.pos_tables (org_id, outlet_id, area_id, code, seats)
+  values (v_org, v_outlet, v_area, 'T9', 2) returning id into v_t9;
+  perform pg_temp.check_true('a table in service is found',
+    (select t.table_id from public.pos_table_by_code(v_outlet, 'T9') t) = v_t9);
+  update public.pos_tables set is_active = false where id = v_t9;
+  perform pg_temp.check_eq('one taken out of service is not',
+    (select count(*) from public.pos_table_by_code(v_outlet, 'T9')), 0);
 
   begin
     perform public.move_pos_sale(v_sale, v_far);

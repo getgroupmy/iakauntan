@@ -88,6 +88,7 @@ void main() {
     List<Map<String, dynamic>> parked = const [],
     List<Map<String, dynamic>>? open,
     List<Map<String, dynamic>> menu = const [],
+    List<Map<String, dynamic>> plan = const [],
     Map<String, dynamic>? sale,
     List<Map<String, dynamic>> saleLines = const [],
     List<Map<String, dynamic>> saleMods = const [],
@@ -110,6 +111,7 @@ void main() {
       ),
       posTenderTypesProvider.overrideWith((_) async => const []),
       posMenuProvider.overrideWith((_, __) async => menu),
+      posFloorPlanProvider.overrideWith((_, __) async => plan),
       posSaleProvider.overrideWith((_, __) async => sale),
       posSaleLinesProvider.overrideWith((_, __) async => saleLines),
       posSaleLineModifiersProvider.overrideWith((_, __) async => saleMods),
@@ -452,6 +454,32 @@ void main() {
       'line_total': '${quantity * price}',
     };
 
+    /// A table as the floor plan reports it: one row free, one row per
+    /// bill open on it.
+    Map<String, dynamic> planRow(
+      String id,
+      String name, {
+      String? area = 'Dining room',
+      int seats = 4,
+      String? saleId,
+    }) => {
+      'table_id': id,
+      'table_code': name,
+      'table_name': name,
+      'area': area,
+      'seats': seats,
+      'pos_x': 0,
+      'pos_y': 0,
+      'shape': 'square',
+      'sale_id': saleId,
+      'sale_no': saleId == null ? null : 'POS-2026-00002',
+      'covers': null,
+      'opened_at': null,
+      'minutes_seated': null,
+      'total_amount': null,
+      'line_count': null,
+    };
+
     Map<String, dynamic> parkedSale() => {
       'id': 'sale-1',
       'sale_no': 'POS-2026-00001',
@@ -507,6 +535,93 @@ void main() {
         ),
         findsNWidgets(2),
       );
+    });
+
+    testWidgets('a dine-in bill offers a table, and a walk-in does not', (
+      tester,
+    ) async {
+      // The floor plan is the right screen for a waiter walking the
+      // room and the wrong one for a cashier at a counter taking an
+      // order for table seven: they have the bill in front of them and
+      // would have to leave it to go and find a picture of the room.
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: {...parkedSale(), 'order_channel': 'dine_in'},
+          plan: [planRow('t-7', 'T7'), planRow('t-8', 'T8', seats: 2)],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('POS-2026-00001'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Assign a table'), findsOneWidget);
+      await tester.tap(find.text('Assign a table'));
+      await tester.pumpAndSettle();
+
+      // Both ways in: the card on the table, and the room itself for
+      // when the sticker has peeled off or the table is new.
+      expect(
+        find.text('Scan the table card, or type its code'),
+        findsOneWidget,
+      );
+      expect(find.text('T7'), findsOneWidget);
+      expect(find.text('T8'), findsOneWidget);
+    });
+
+    testWidgets('a bill that did not arrive at a table is offered none', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: {...parkedSale(), 'order_channel': 'takeaway'},
+          plan: [planRow('t-7', 'T7')],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('POS-2026-00001'));
+      await tester.pumpAndSettle();
+
+      // A bag over the counter has no table, and asking which one
+      // would be asking a question with no answer.
+      expect(find.text('Assign a table'), findsNothing);
+    });
+
+    testWidgets('a shop with no tables is never asked which one', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: {...parkedSale(), 'order_channel': 'dine_in'},
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('POS-2026-00001'));
+      await tester.pumpAndSettle();
+
+      // Dine-in in a shop that has drawn no room yet. The channel is
+      // still the truth; there is simply nothing to point at.
+      expect(find.text('Assign a table'), findsNothing);
     });
 
     testWidgets('an open bill offers the way back to the others', (

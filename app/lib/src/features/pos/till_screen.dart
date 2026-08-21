@@ -8,6 +8,7 @@ import '../../core/widgets.dart';
 // The POS methods live in an extension on Repo, and a Dart extension is
 // only in scope where its declaring library is imported.
 import '../../data/repository.dart';
+import 'assign_table.dart';
 import 'channels.dart';
 import 'modifier_sheet.dart';
 import 'offline_controller.dart';
@@ -1260,6 +1261,24 @@ class _Basket extends ConsumerWidget {
                         saleId: id,
                         outletId: outletId,
                         channel: r['order_channel'],
+                      ),
+                orElse: () => const SizedBox.shrink(),
+              ),
+              // Which table, next to how the order arrived, because
+              // for a dine-in bill they are one fact: it arrived at a
+              // table, and the bill has to say which. Only on dine-in
+              // — a bag over the counter has no table, and offering
+              // one would be asking a question with no answer.
+              sale.maybeWhen(
+                data: (r) => r == null || '${r['order_channel']}' != 'dine_in'
+                    ? const SizedBox.shrink()
+                    : Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: SaleTableChip(
+                          saleId: id,
+                          outletId: outletId,
+                          tableId: r['table_id'],
+                        ),
                       ),
                 orElse: () => const SizedBox.shrink(),
               ),

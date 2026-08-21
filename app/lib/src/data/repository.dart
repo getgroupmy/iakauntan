@@ -6589,6 +6589,28 @@ extension RepoPos on Repo {
         params: {'p_sale': saleId, 'p_table': tableId},
       );
 
+  /// The table a scanned card, QR sticker or typed code names.
+  ///
+  /// Null when nothing matches, which is the answer the till shows —
+  /// a scan that finds no table is a card from another shop, a code
+  /// nobody printed, or a reader that dropped a character, and none of
+  /// those should seat anybody anywhere.
+  ///
+  /// The normalisation lives in the function, not here: what a shop
+  /// prints on its cards must not decide when the app is released.
+  Future<Map<String, dynamic>?> posTableByCode(
+    String outletId,
+    String code,
+  ) async {
+    final rows = Repo.rows(
+      await callRpc(
+        'pos_table_by_code',
+        params: {'p_outlet': outletId, 'p_code': code},
+      ),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
   /// The kitchens in an outlet. A shop with one of them still has one,
   /// because a ticket has to be routed somewhere and `is_default` is
   /// how an outlet with a single kitchen never thinks about routing.
