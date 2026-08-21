@@ -49,6 +49,7 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
   final _replyTo = TextEditingController();
   final _minAmount = TextEditingController(text: '0');
   final _days = TextEditingController();
+  final _digestTo = TextEditingController();
 
   bool _enabled = false;
   bool _loaded = false;
@@ -56,7 +57,7 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
 
   @override
   void dispose() {
-    for (final c in [_fromName, _replyTo, _minAmount, _days]) {
+    for (final c in [_fromName, _replyTo, _minAmount, _days, _digestTo]) {
       c.dispose();
     }
     super.dispose();
@@ -82,6 +83,7 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
           _days.text = ((row?['reminder_days'] as List?) ?? const [])
               .map((e) => e.toString())
               .join(', ');
+          _digestTo.text = row?['sales_digest_to']?.toString() ?? '';
         }
 
         return SingleChildScrollView(
@@ -173,6 +175,26 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
                                 'costs more goodwill than it collects',
                           ),
                         ),
+                        const SizedBox(height: Space.lg),
+                        const SectionHeader('Yesterday, each morning'),
+                        const SizedBox(height: Space.sm),
+                        TextField(
+                          controller: _digestTo,
+                          enabled: canAdmin,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: const InputDecoration(
+                            labelText: 'Send the day\'s takings to',
+                            hintText: 'owner@example.com',
+                            // Said plainly, because the alternative is
+                            // somebody wondering for a week why the mail
+                            // stopped on the days the shop was shut.
+                            helperText:
+                                'Every outlet\'s bills and takings for the '
+                                'day before, at one in the morning. Empty '
+                                'means none; a day with no trading at all '
+                                'sends nothing.',
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -220,6 +242,9 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
         'reply_to': _replyTo.text.trim().isEmpty ? null : _replyTo.text.trim(),
         'reminder_days': days,
         'reminder_min_amount': double.tryParse(_minAmount.text.trim()) ?? 0,
+        'sales_digest_to': _digestTo.text.trim().isEmpty
+            ? null
+            : _digestTo.text.trim(),
       }),
       successMessage: 'Saved',
     );

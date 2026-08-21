@@ -44,6 +44,7 @@ import '../features/pos/kiosk_board_screen.dart';
 import '../features/pos/kiosk_screen.dart';
 import '../features/pos/kitchen_screen.dart';
 import '../features/pos/stations_screen.dart';
+import '../features/pos/takings_screen.dart';
 import '../features/pos/till_screen.dart';
 import '../features/ticketing/ticket_editor.dart';
 import '../features/ticketing/ticket_screen.dart';
@@ -393,6 +394,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const LoyaltyScreen(),
           ),
           GoRoute(path: '/voids', builder: (_, __) => const VoidsScreen()),
+          GoRoute(
+            path: '/takings',
+            builder: (_, __) => const TakingsScreen(),
+          ),
           GoRoute(path: '/kiosk', builder: (_, __) => const KioskScreen()),
           GoRoute(
             path: '/counters',

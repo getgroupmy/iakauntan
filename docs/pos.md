@@ -338,6 +338,36 @@ kitchen docket and half an instruction is how the wrong plate goes out.
 The kiosk is never offered it at all: a customer alone with a field that
 adds money to their own bill will put nought in it.
 
+## The day, across every outlet
+
+Every other POS screen takes an outlet and answers about that outlet,
+which is right for whoever is standing in it and useless to whoever owns
+three. `pos_day_board` (0252) is the owner's view: one row per shop for
+a trading day — bills, gross, cash and non-cash taken, the average bill,
+what was written off — ranked by takings, with the quiet shops still on
+it, because a missing row reads as "no problem" when it is the problem.
+
+One column is on a different clock and is labelled that way. Open bills
+are open *now*: a parked bill has no trading day yet, and the useful
+reading is "four still open at this moment". Everything else is about
+the day named, in Asia/Kuala_Lumpur, the same boundary 0248 uses.
+
+Cash is net of change — `amount - change_given`, the arithmetic
+`app.pos_expected_cash` does for one shift — because gross is what was
+sold and cash is what should be in the drawer, and an owner comparing
+shops is usually comparing the second one.
+
+The same function feeds a digest. `app.queue_sales_digest` hangs off the
+nightly `run_daily_jobs` at one in the morning, builds a plain-text
+table of yesterday's outlets, and queues it to whatever address
+`email_settings.sales_digest_to` holds — empty by default, because a
+mail nobody asked for is spam however useful it is. A day with no
+trading at all sends nothing; a day with nothing but write-offs does,
+since that is the day worth asking about. The body is composed in SQL
+rather than through `app.render_email`: every other message is a
+sentence with an amount substituted into it, and this one is a table
+whose row count is the number of shops.
+
 ## Service — a slot that cannot be sold twice
 
 The double-booking rule is a **constraint**, not a function:

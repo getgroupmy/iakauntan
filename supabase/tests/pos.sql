@@ -51,6 +51,7 @@ declare
   v_due    date;
   v_pend   date;
   v_txt    text;
+  v_board  record;
 begin
   -- ------------------------------------------------------------------
   -- The rounding rule, on its own
@@ -355,6 +356,55 @@ begin
   exception when check_violation then
     raise notice 'ok   a submitted consolidation takes no more sales';
   end;
+
+  -- ------------------------------------------------------------------
+  -- The day, across every outlet (0252)
+  -- ------------------------------------------------------------------
+  -- The owner's view rather than the shop's. Everything on the row is
+  -- about the trading day named except the open count, which is about
+  -- now -- a parked bill has no day yet.
+
+  select * into v_board from public.pos_day_board(v_org, current_date);
+  perform pg_temp.check_true('the shop is on the board',
+    v_board.outlet_id = v_outlet);
+  perform pg_temp.check_eq('with every bill it settled today',
+    v_board.bills,
+    (select count(*) from public.pos_sales s
+      where s.org_id = v_org and s.status = 'completed'
+        and (s.completed_at at time zone 'Asia/Kuala_Lumpur')::date
+            = current_date));
+  perform pg_temp.check_eq('and what they came to',
+    v_board.gross,
+    (select coalesce(sum(s.total_amount), 0) from public.pos_sales s
+      where s.org_id = v_org and s.status = 'completed'
+        and (s.completed_at at time zone 'Asia/Kuala_Lumpur')::date
+            = current_date));
+
+  -- Cash is net of change: the fifty handed over less the change given
+  -- back, which is what should actually be in the drawer. It is the one
+  -- number an owner compares between shops.
+  perform pg_temp.check_eq('cash is what the drawer should hold',
+    v_board.cash,
+    (select coalesce(sum(t.amount - t.change_given), 0)
+       from public.pos_tenders t
+       join public.pos_sales s on s.id = t.sale_id
+      where s.org_id = v_org and s.status = 'completed'
+        and t.kind = 'cash'
+        and (s.completed_at at time zone 'Asia/Kuala_Lumpur')::date
+            = current_date));
+  perform pg_temp.check_eq('and cash plus the rest is the takings',
+    v_board.cash + v_board.non_cash, v_board.gross);
+  perform pg_temp.check_eq('the average is the takings over the bills',
+    v_board.average_bill, round(v_board.gross / v_board.bills, 2));
+
+  -- A shop that sold nothing is still on the board. Its absence would
+  -- read as "no problem" when it is the problem.
+  select * into v_board from public.pos_day_board(v_org, current_date - 400);
+  perform pg_temp.check_true('a shop with a quiet day is still listed',
+    v_board.outlet_id = v_outlet);
+  perform pg_temp.check_eq('with nothing against it', v_board.bills, 0);
+  perform pg_temp.check_eq('and no division by nothing',
+    v_board.average_bill, 0);
 
   raise notice 'point of sale: all assertions passed';
 end;

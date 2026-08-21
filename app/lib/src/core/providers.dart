@@ -2069,6 +2069,14 @@ final posVoidSummaryProvider = FutureProvider.autoDispose
       (ref, range) => requireRepo(ref).posVoidSummary(range.from, range.to),
     );
 
+/// Every outlet's day on one board. Keyed on the date because the
+/// question "and yesterday?" is one tap away and should not refetch
+/// today.
+final posDayBoardProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, DateTime>(
+      (ref, date) => requireRepo(ref).posDayBoard(date),
+    );
+
 /// The bills written off, one row each rather than grouped. See
 /// `pos_voided_bills` (0248) on why this is a different question from
 /// the line summary above.

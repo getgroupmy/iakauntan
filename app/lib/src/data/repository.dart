@@ -7546,6 +7546,16 @@ extension RepoPosControls on Repo {
   /// reason. A bill written off before the kitchen cooked anything
   /// writes no line-void rows at all, so that report cannot see the
   /// case the grant exists to control.
+  /// Every outlet's trading for one day, for the person who owns all
+  /// three shops rather than the one standing in a shop. 0252.
+  Future<List<Map<String, dynamic>>> posDayBoard(DateTime date) async =>
+      Repo.rows(
+        await callRpc(
+          'pos_day_board',
+          params: {'p_org': orgId, 'p_date': Fmt.iso(date)},
+        ),
+      );
+
   Future<List<Map<String, dynamic>>> posVoidedBills(
     DateTime from,
     DateTime to,

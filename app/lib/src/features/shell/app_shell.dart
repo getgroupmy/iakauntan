@@ -296,6 +296,16 @@ const _destinations = <_Dest>[
     '/counters',
     module: 'pos',
   ),
+  // The owner's view rather than the shop's: every outlet's day on one
+  // board. Beside the till screens because it is about the shops, not
+  // beside the ledger reports it is not made of.
+  _Dest(
+    'Takings',
+    Icons.query_stats_outlined,
+    Icons.query_stats,
+    '/takings',
+    module: 'pos',
+  ),
   _Dest(
     'Order board',
     Icons.tv_outlined,
