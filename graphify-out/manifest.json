@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787292252.3560486,
-    "ast_hash": "fcb776e87a0a63b5a28eb6f407cbeb07",
+    "mtime": 1787305389.7846463,
+    "ast_hash": "6853d0f9f89deeea45927e75ef2c6e89",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787292252.3410418,
-    "ast_hash": "2a4c29d160ab5f07a14b6d1e83e38b71",
+    "mtime": 1787305382.2206457,
+    "ast_hash": "af1e9fac2829a44ebfb4b78b672cc078",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -240,8 +240,8 @@
     "semantic_hash": "a869889f47e74ca3142ba45045017b96"
   },
   "app/lib/src/features/items/items_screen.dart": {
-    "mtime": 1787228808.2206259,
-    "ast_hash": "071b3eedd13bb7d6590b65deb2a9752a",
+    "mtime": 1787305629.0668786,
+    "ast_hash": "b49f978770237c412d0a234f9af5ae96",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journals_screen.dart": {
@@ -3320,8 +3320,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_fnb.sql": {
-    "mtime": 1787295160.775127,
-    "ast_hash": "00550db96d0a0f0ae1ec6f15d8205c41",
+    "mtime": 1787305771.6651068,
+    "ast_hash": "566829e2c4f62bbd2763de86b371317d",
     "semantic_hash": ""
   },
   "supabase/tests/pos_kiosk.sql": {
@@ -3350,8 +3350,8 @@
     "semantic_hash": ""
   },
   "docs/pos.md": {
-    "mtime": 1787293771.1454034,
-    "ast_hash": "55625491706b94927705f8c6413c03eb",
+    "mtime": 1787306036.9619281,
+    "ast_hash": "eeff8f7a3d8a9c59cc07582c18c7263c",
     "semantic_hash": ""
   },
   "app/lib/src/core/export_log.dart": {
@@ -3682,6 +3682,21 @@
   "supabase/migrations/0249_a_table_code_may_contain_a_slash.sql": {
     "mtime": 1787295092.2651486,
     "ast_hash": "199658e1421aab53c7ae51ea9cd27bbe",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/items/modifier_groups_dialog.dart": {
+    "mtime": 1787305538.748655,
+    "ast_hash": "f5dfa756dbee42d458cc9a6146195590",
+    "semantic_hash": ""
+  },
+  "app/test/pos_modifiers_test.dart": {
+    "mtime": 1787306004.6757643,
+    "ast_hash": "a9b7efce9faab9740fbb52d3ee237026",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0250_the_questions_a_shop_asks.sql": {
+    "mtime": 1787305239.6566372,
+    "ast_hash": "0b77cf028be18d96265d3c1e91f29efb",
     "semantic_hash": ""
   }
 }

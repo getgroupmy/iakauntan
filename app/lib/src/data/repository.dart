@@ -6425,6 +6425,107 @@ extension RepoPos on Repo {
     await callRpc('item_modifier_options', params: {'p_item': itemId}),
   );
 
+  // ------------------------------------------------------------------
+  // Keeping the questions themselves
+  // ------------------------------------------------------------------
+  //
+  // 0250. Until it, the only shop with modifiers was the one a
+  // migration seeded: the tables were writable and nothing wrote them.
+
+  /// Every question this company asks, retired ones included — a list
+  /// that hid them would leave somebody re-creating one under a code
+  /// they cannot use.
+  Future<List<Map<String, dynamic>>> posModifierGroups() async => Repo.rows(
+    await callRpc('pos_modifier_groups_admin', params: {'p_org': orgId}),
+  );
+
+  Future<List<Map<String, dynamic>>> posModifierOptions(
+    String groupId,
+  ) async => Repo.rows(
+    await callRpc('pos_modifier_options_admin', params: {'p_group': groupId}),
+  );
+
+  /// What a dish is currently sold with. Not [itemModifierOptions],
+  /// which is the till's question and drops anything retired.
+  Future<List<Map<String, dynamic>>> itemModifierGroupIds(
+    String itemId,
+  ) async => Repo.rows(
+    await callRpc('item_modifier_group_ids', params: {'p_item': itemId}),
+  );
+
+  Future<String> savePosModifierGroup({
+    required String code,
+    required String name,
+    required int minSelect,
+    int? maxSelect,
+    String? id,
+    int sortOrder = 0,
+    bool isActive = true,
+  }) async =>
+      await callRpc(
+            'upsert_pos_modifier_group',
+            params: {
+              'p_org': orgId,
+              'p_code': code,
+              'p_name': name,
+              'p_min_select': minSelect,
+              'p_max_select': maxSelect,
+              'p_id': id,
+              'p_sort_order': sortOrder,
+              'p_is_active': isActive,
+            },
+          )
+          as String;
+
+  /// Returns how many dishes stop being asked, so the caller can say
+  /// what it did rather than that it did something.
+  Future<int> retirePosModifierGroup(String groupId) async =>
+      (await callRpc(
+            'retire_pos_modifier_group',
+            params: {'p_group': groupId},
+          ))
+          as int;
+
+  Future<String> savePosModifier({
+    required String groupId,
+    required String code,
+    required String name,
+    double priceDelta = 0,
+    String? id,
+    bool isDefault = false,
+    int sortOrder = 0,
+    bool isActive = true,
+  }) async =>
+      await callRpc(
+            'upsert_pos_modifier',
+            params: {
+              'p_group': groupId,
+              'p_code': code,
+              'p_name': name,
+              'p_price_delta': priceDelta,
+              'p_id': id,
+              'p_is_default': isDefault,
+              'p_sort_order': sortOrder,
+              'p_is_active': isActive,
+            },
+          )
+          as String;
+
+  Future<void> retirePosModifier(String modifierId) async =>
+      await callRpc('retire_pos_modifier', params: {'p_modifier': modifierId});
+
+  /// The whole set, in the order they will be asked. Anything not in
+  /// the list is detached.
+  Future<int> setItemModifierGroups(
+    String itemId,
+    List<String> groupIds,
+  ) async =>
+      (await callRpc(
+            'set_item_modifier_groups',
+            params: {'p_item': itemId, 'p_groups': groupIds},
+          ))
+          as int;
+
   Future<String> addLineModifier(
     String lineId,
     String modifierId, {

@@ -278,6 +278,47 @@ exactly. Merging repoints the kitchen tickets before it deletes the
 emptied sale, because a ticket pointing at nothing is a plate nobody
 collects.
 
+## The questions a shop asks, and where it edits them
+
+0214 built modifiers and the till has asked them since. Nothing could
+create one: `pos_modifier_groups`, `pos_modifiers` and
+`item_modifier_groups` were writable by RLS and written by nobody, so
+the only shop with any was the demo warung a migration seeded. 0250 is
+the missing half — `upsert_pos_modifier_group`, `upsert_pos_modifier`,
+`retire_pos_modifier_group`, `retire_pos_modifier` and
+`set_item_modifier_groups`.
+
+Three rules live in those functions rather than in the screen.
+
+**A default has to fit inside the maximum.** The till opens with every
+`is_default` answer already selected — that is what a default is for —
+so two defaults in a choose-one group would open the sheet over the
+limit and `pos_modifier_max` would refuse the second one at the counter,
+mid service, to somebody who configured nothing. Making an answer the
+default in a choose-one group therefore clears the previous one in the
+same transaction, and a default beyond the maximum of a larger group is
+refused by name. Tightening a maximum below the defaults already ticked
+is the same fault arriving from the other side, and is refused too.
+
+**Retired, never deleted.** `pos_sale_line_modifiers` snapshots the name
+and the price, so a bill survives its modifier being deleted — but
+`modifier_id` is `on delete set null`, and that column is how anybody
+asks how many extra eggs a month sells. Nothing here deletes; `is_active`
+goes false, which is what `item_modifier_options` already filters on.
+Retiring a group keeps its `item_modifier_groups` rows, so bringing the
+question back brings the thirty dishes with it.
+
+**Attaching states the order.** `set_item_modifier_groups` takes the
+whole array and writes `sort_order` from the position, because the order
+the questions are asked is a decision the screen has already made.
+
+The editor is reached from Items rather than from a till: a question
+belongs to the company, is asked the same way at both branches, and is
+attached to a dish. The item editor carries the attachments; the app-bar
+button beside Price levels keeps the questions themselves. Retired
+questions stay on that list — `(org_id, code)` is unique, so hiding them
+would leave somebody re-creating one under a code they cannot use.
+
 ## Service — a slot that cannot be sold twice
 
 The double-booking rule is a **constraint**, not a function:

@@ -1964,6 +1964,25 @@ final itemModifierOptionsProvider = FutureProvider.autoDispose
       (ref, itemId) => requireRepo(ref).itemModifierOptions(itemId),
     );
 
+/// The questions a company asks, for the screen that edits them.
+/// Retired ones are in the list — see `pos_modifier_groups_admin`.
+final posModifierGroupsProvider = FutureProvider.autoDispose<
+  List<Map<String, dynamic>>
+>((ref) => requireRepo(ref).posModifierGroups());
+
+final posModifierOptionsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, groupId) => requireRepo(ref).posModifierOptions(groupId),
+    );
+
+/// Which questions a dish is sold with. Separate from
+/// [itemModifierOptionsProvider], which is what the till asks and drops
+/// anything retired — the editor has to show what is actually attached.
+final itemModifierGroupIdsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, itemId) => requireRepo(ref).itemModifierGroupIds(itemId),
+    );
+
 /// What was chosen on the lines of a sale. Keyed on the sale rather
 /// than the line so the basket makes one round trip instead of one per
 /// line.

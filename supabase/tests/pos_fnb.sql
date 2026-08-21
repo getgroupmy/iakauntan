@@ -68,6 +68,9 @@ declare
   v_vline  uuid;
   v_msg    text;
   v_l1     uuid;
+  v_g1     uuid;
+  v_g2     uuid;
+  v_m2     uuid;
 begin
   v_org := pg_temp.test_org('Warung Sedap Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
@@ -1051,6 +1054,113 @@ begin
   exception when check_violation then
     raise notice 'ok   an unsplit table has nothing to put back';
   end;
+
+  -- ------------------------------------------------------------------
+  -- Keeping the questions, rather than seeding them (0250)
+  -- ------------------------------------------------------------------
+  -- Everything above inserted the groups directly, because until 0250
+  -- that was the only way there was. These are the functions a shop
+  -- actually calls.
+
+  -- A rule that is not a rule.
+  begin
+    perform public.upsert_pos_modifier_group(v_org, 'IMPOSSIBLE', 'Mustahil', 2, 1);
+    raise exception 'FAIL accepted at-least-two-at-most-one';
+  exception when check_violation then
+    raise notice 'ok   at least two but at most one is refused';
+  end;
+
+  -- And a maximum of none, which is a question nobody can answer.
+  begin
+    perform public.upsert_pos_modifier_group(v_org, 'NONE', 'Tiada', 0, 0);
+    raise exception 'FAIL accepted a maximum of none';
+  exception when check_violation then
+    raise notice 'ok   a maximum of none is refused';
+  end;
+
+  -- Choose-one. The till starts every default selected, so a second
+  -- one would open the sheet already over the limit.
+  v_g1 := public.upsert_pos_modifier_group(v_org, 'SIZE', 'Saiz', 1, 1);
+  perform public.upsert_pos_modifier(v_g1, 'BIASA', 'Biasa', 0, null, true);
+  v_m2 := public.upsert_pos_modifier(v_g1, 'BESAR', 'Besar', 1.50, null, true);
+  perform pg_temp.check_eq('a choose-one question keeps one default',
+    (select count(*) from public.pos_modifiers m
+      where m.group_id = v_g1 and m.is_default), 1);
+  perform pg_temp.check_true('and it is the one just ticked',
+    (select m.is_default from public.pos_modifiers m where m.id = v_m2));
+
+  -- A group that takes two takes two defaults, and not a third.
+  v_g2 := public.upsert_pos_modifier_group(v_org, 'SAUCE', 'Sos', 0, 2);
+  perform public.upsert_pos_modifier(v_g2, 'CILI', 'Cili', 0, null, true);
+  perform public.upsert_pos_modifier(v_g2, 'TOMATO', 'Tomato', 0, null, true);
+  begin
+    perform public.upsert_pos_modifier(v_g2, 'KICAP', 'Kicap', 0, null, true);
+    raise exception 'FAIL ticked more defaults than the group takes';
+  exception when check_violation then
+    raise notice 'ok   a third default in a group of two is refused';
+  end;
+
+  -- Tightening the maximum under the defaults already ticked is the
+  -- same fault arriving from the other side.
+  begin
+    perform public.upsert_pos_modifier_group(v_org, 'SAUCE', 'Sos', 0, 1, v_g2);
+    raise exception 'FAIL capped a group below its own defaults';
+  exception when check_violation then
+    raise notice 'ok   the maximum cannot drop under the defaults';
+  end;
+
+  -- Attaching states the order, and the array is the whole answer.
+  perform pg_temp.check_eq('two questions attached',
+    public.set_item_modifier_groups(v_teh, array[v_g2, v_g1]), 2);
+  perform pg_temp.check_true('the first asked is the first in the array',
+    (select g.group_name from public.item_modifier_group_ids(v_teh) g
+      limit 1) = 'Sos');
+  perform pg_temp.check_eq('and passing one detaches the other',
+    public.set_item_modifier_groups(v_teh, array[v_g1]), 1);
+  perform pg_temp.check_eq('so the dish carries one question',
+    (select count(*) from public.item_modifier_group_ids(v_teh)), 1);
+
+  -- Retiring says what it is about to do, and keeps the wiring.
+  perform pg_temp.check_eq('retiring names the dishes it affects',
+    public.retire_pos_modifier_group(v_g1), 1);
+  perform pg_temp.check_eq('the attachment survives the retirement',
+    (select count(*) from public.item_modifier_groups img
+      where img.group_id = v_g1), 1);
+  perform pg_temp.check_eq('but the till stops asking it',
+    (select count(*) from public.item_modifier_options(v_teh) o
+      where o.group_id = v_g1), 0);
+  -- Which is the whole point of keeping it: bringing the question back
+  -- brings the dish with it.
+  perform public.upsert_pos_modifier_group(v_org, 'SIZE', 'Saiz', 1, 1, v_g1);
+  perform pg_temp.check_eq('and asking it again needs no re-attaching',
+    (select count(distinct o.group_id) from public.item_modifier_options(v_teh) o
+      where o.group_id = v_g1), 1);
+
+  -- An answer comes off the menu without taking the history with it.
+  -- `pos_sale_line_modifiers.modifier_id` is `on delete set null`, and
+  -- that column is how anybody asks how many extra eggs a month sells,
+  -- so retiring has to leave the row where the history can still reach
+  -- it.
+  perform public.retire_pos_modifier(v_egg);
+  perform pg_temp.check_eq('the answer is still there to be pointed at',
+    (select count(*) from public.pos_modifiers m where m.id = v_egg), 1);
+  perform pg_temp.check_true('but it is off the menu, and no longer a default',
+    (select not m.is_active and not m.is_default
+       from public.pos_modifiers m where m.id = v_egg));
+  perform pg_temp.check_eq('so the till stops offering it',
+    (select count(*) from public.item_modifier_options(v_item) o
+      where o.modifier_id = v_egg), 0);
+
+  -- The list a shop is shown holds the retired ones too, or there is no
+  -- way back from a retirement nobody can see.
+  perform public.retire_pos_modifier_group(v_g2);
+  perform pg_temp.check_eq('the editor still lists a retired question',
+    (select count(*) from public.pos_modifier_groups_admin(v_org) g
+      where g.id = v_g2 and not g.is_active), 1);
+  -- Two, not three: the third default was refused before anything was
+  -- written, which is the other half of that assertion.
+  perform pg_temp.check_eq('with its answers, so they can be brought back',
+    (select count(*) from public.pos_modifier_options_admin(v_g2)), 2);
 
   raise notice 'point of sale dining room: all assertions passed';
 end;

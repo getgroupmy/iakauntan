@@ -6,8 +6,10 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../../data/repository.dart';
 import 'item_prices_dialog.dart';
 import 'item_variants_dialog.dart';
+import 'modifier_groups_dialog.dart';
 import 'stock_card_dialog.dart';
 
 class ItemsScreen extends ConsumerStatefulWidget {
@@ -24,11 +26,21 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
   Widget build(BuildContext context) {
     final items = ref.watch(itemsProvider(_search));
     final canWrite = ref.watch(canWriteProvider);
+    final modules = ref.watch(enabledModulesProvider).value ?? const <String>{};
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Items'),
         actions: [
+          // Beside prices, because both are things about the menu
+          // rather than about a shop, and this is where somebody
+          // editing the menu already is.
+          if (canWrite && modules.contains('pos'))
+            IconButton(
+              tooltip: 'Questions a dish comes with',
+              icon: const Icon(Icons.help_outline, size: 20),
+              onPressed: () => showModifierGroups(context),
+            ),
           if (canWrite)
             IconButton(
               tooltip: 'Price levels',
@@ -191,6 +203,12 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
   String _tracking = 'none';
   bool _saving = false;
 
+  /// The questions this dish is sold with, in the order they will be
+  /// asked. Saved with the item rather than on their own, because
+  /// attaching a question is editing the dish — and for a new item
+  /// there is no id to attach to until the item exists.
+  List<String> _modifierGroups = const [];
+
   @override
   void initState() {
     super.initState();
@@ -207,6 +225,21 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
     _trackInventory = i?.trackInventory ?? true;
     _tracking = i?.tracking ?? 'none';
     if (i == null) _suggestCode();
+    if (i != null) _loadModifierGroups(i.id);
+  }
+
+  Future<void> _loadModifierGroups(String itemId) async {
+    try {
+      final rows = await ref.read(repoProvider)!.itemModifierGroupIds(itemId);
+      if (mounted) {
+        setState(
+          () => _modifierGroups = [for (final r in rows) '${r['group_id']}'],
+        );
+      }
+    } catch (_) {
+      // A company without the till has nothing to load, and does not
+      // see the field either.
+    }
   }
 
   Future<void> _suggestCode() async {
@@ -230,25 +263,38 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
 
+    final posOn =
+        (ref.read(enabledModulesProvider).value ?? const <String>{})
+            .contains('pos');
+
     final ok = await runWithFeedback(
       context,
-      action: () => ref.read(repoProvider)!.saveItem(
-            Item(
-              id: widget.item?.id ?? '',
-              code: _code.text.trim(),
-              name: _name.text.trim(),
-              itemType: _itemType,
-              uomCode: _uom,
-              classificationCode: _classification,
-              unitPrice: double.tryParse(_price.text) ?? 0,
-              costPrice: double.tryParse(_cost.text) ?? 0,
-              reorderLevel: double.tryParse(_reorder.text) ?? 0,
-              trackInventory: _itemType == 'stock' && _trackInventory,
-              tracking: _trackInventory ? _tracking : 'none',
-              salesTaxCodeId: _salesTaxCodeId,
-            ),
-            id: widget.item?.id,
+      action: () async {
+        final repo = ref.read(repoProvider)!;
+        final saved = await repo.saveItem(
+          Item(
+            id: widget.item?.id ?? '',
+            code: _code.text.trim(),
+            name: _name.text.trim(),
+            itemType: _itemType,
+            uomCode: _uom,
+            classificationCode: _classification,
+            unitPrice: double.tryParse(_price.text) ?? 0,
+            costPrice: double.tryParse(_cost.text) ?? 0,
+            reorderLevel: double.tryParse(_reorder.text) ?? 0,
+            trackInventory: _itemType == 'stock' && _trackInventory,
+            tracking: _trackInventory ? _tracking : 'none',
+            salesTaxCodeId: _salesTaxCodeId,
           ),
+          id: widget.item?.id,
+        );
+        // After the item, because a new one has no id to attach to
+        // until it exists. Skipped entirely for a company with no till,
+        // and for a new item nobody attached anything to.
+        if (posOn && (widget.item != null || _modifierGroups.isNotEmpty)) {
+          await repo.setItemModifierGroups(saved.id, _modifierGroups);
+        }
+      },
       successMessage: 'Item saved',
     );
 
@@ -262,6 +308,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
   @override
   Widget build(BuildContext context) {
     final taxCodes = ref.watch(taxCodesProvider).value ?? const <TaxCode>[];
+    final modules = ref.watch(enabledModulesProvider).value ?? const <String>{};
     final uoms = ref.watch(_uomProvider).value ?? const [];
     final classifications =
         ref.watch(classificationCodesProvider).value ?? const [];
@@ -378,6 +425,16 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                   ],
                   onChanged: (v) => setState(() => _classification = v ?? '022'),
                 ),
+                // Only for a company that runs a till. A question a
+                // plate comes with is a POS idea, and an accounting-only
+                // company has nothing to attach.
+                if (modules.contains('pos')) ...[
+                  const SizedBox(height: 12),
+                  ItemModifierField(
+                    selected: _modifierGroups,
+                    onChanged: (v) => setState(() => _modifierGroups = v),
+                  ),
+                ],
                 if (_itemType == 'stock') ...[
                   const SizedBox(height: 12),
                   SwitchListTile(
