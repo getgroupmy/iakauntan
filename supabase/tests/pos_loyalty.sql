@@ -508,6 +508,46 @@ begin
     (select count(*) from public.loyalty_tiers t
       where t.program_id = v_prog and t.code = 'PERAK'), 1);
 
+  -- ------------------------------------------------------------------
+  -- The bands belong to the loyalty module too
+  -- ------------------------------------------------------------------
+  --
+  -- 0253 wrote every tier guard against `pos`, which is what the
+  -- loyalty code said before 0231 split the two apart, and 0254 put
+  -- them right. These are the assertions that would have caught it:
+  -- the same negative test as the block above, aimed at the half of
+  -- the feature that did not exist when that block was written.
+  update public.org_modules set is_enabled = false
+   where org_id = v_org and module_code = 'loyalty';
+
+  perform pg_temp.check_eq('with the module off, the bands are invisible',
+    (select count(*) from public.loyalty_tiers_admin(v_org)), 0);
+  perform pg_temp.check_eq('and so is what tier a member is in',
+    (select count(*) from public.loyalty_member_tier(v_acct)), 0);
+
+  begin
+    perform public.upsert_loyalty_tier(v_prog, 'PLAT', 'Platinum', 9999, 2);
+    raise exception 'FAIL named a tier without the loyalty module';
+  exception when insufficient_privilege then
+    raise notice 'ok   naming a tier needs the loyalty module';
+  end;
+
+  begin
+    perform public.retire_loyalty_tier(
+      (select t.id from public.loyalty_tiers t
+        where t.program_id = v_prog and t.code = 'EMAS'));
+    raise exception 'FAIL retired a tier without the loyalty module';
+  exception when insufficient_privilege then
+    raise notice 'ok   retiring a tier needs the loyalty module';
+  end;
+
+  -- The positive control again, so the four refusals above cannot be
+  -- passing because the functions are simply broken.
+  update public.org_modules set is_enabled = true
+   where org_id = v_org and module_code = 'loyalty';
+  perform pg_temp.check_eq('switched back on, the bands are there again',
+    (select count(*) from public.loyalty_tiers_admin(v_org)), 3);
+
   raise notice 'point of sale loyalty: all assertions passed';
 end;
 $$;
