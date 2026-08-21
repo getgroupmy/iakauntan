@@ -7934,6 +7934,183 @@ extension RepoPosControls on Repo {
         'remove_line_modifier',
         params: {'p_line_modifier': lineModifierId},
       );
+
+  // ------------------------------------------------------------------
+  // Deliveries
+  // ------------------------------------------------------------------
+
+  /// Takes or corrects the address on a parked bill.
+  ///
+  /// One call for both, because "the customer just read the unit number
+  /// back differently" is the normal case. Comes back with the zone it
+  /// resolved to, what the ride costs and the shortfall sentence when
+  /// the order is under the zone's minimum — which the till shows while
+  /// the customer is still on the phone.
+  ///
+  /// [fee] overrides the zone's price. Charging less than the zone says
+  /// needs permission to discount, and the server refuses without it.
+  Future<Map<String, dynamic>> setPosDelivery({
+    required String saleId,
+    required String line1,
+    required String phone,
+    String? line2,
+    String? city,
+    String? state,
+    String? postcode,
+    String? recipient,
+    String? notes,
+    DateTime? promisedAt,
+    double? fee,
+  }) async {
+    final rows = Repo.rows(
+      await callRpc(
+        'set_pos_delivery',
+        params: {
+          'p_sale': saleId,
+          'p_line1': line1,
+          'p_phone': phone,
+          'p_line2': line2,
+          'p_city': city,
+          'p_state': state,
+          'p_postcode': postcode,
+          'p_recipient': recipient,
+          'p_notes': notes,
+          'p_promised': promisedAt?.toIso8601String(),
+          'p_fee': fee,
+        },
+      ),
+    );
+    return rows.isEmpty ? const {} : rows.first;
+  }
+
+  /// Takes the address and the fee back off a parked bill. Refused once
+  /// a driver has the order.
+  Future<void> clearPosDelivery(String saleId) async =>
+      await callRpc('clear_pos_delivery', params: {'p_sale': saleId});
+
+  /// Where this bill is going, what the ride costs and who has it.
+  Future<Map<String, dynamic>> posDeliveryFor(String saleId) async {
+    final rows = Repo.rows(
+      await callRpc('pos_delivery_for', params: {'p_sale': saleId}),
+    );
+    return rows.isEmpty ? const {} : rows.first;
+  }
+
+  /// Every run at this outlet that has not landed, oldest first.
+  Future<List<Map<String, dynamic>>> posDeliveryBoard(String outletId) async =>
+      Repo.rows(
+        await callRpc('pos_delivery_board', params: {'p_outlet': outletId}),
+      );
+
+  /// Puts a run on a driver's list, or moves it to another one.
+  Future<void> assignPosDelivery(String deliveryId, String driverId) async =>
+      await callRpc(
+        'assign_pos_delivery',
+        params: {'p_delivery': deliveryId, 'p_driver': driverId},
+      );
+
+  /// Moves a run along. [status] is one of `assigned`, `collected`,
+  /// `delivered`, `failed`; a failure has to say why.
+  Future<void> setPosDeliveryStatus(
+    String deliveryId,
+    String status, {
+    String? reason,
+  }) async => await callRpc(
+    'set_pos_delivery_status',
+    params: {
+      'p_delivery': deliveryId,
+      'p_status': status,
+      'p_reason': reason,
+    },
+  );
+
+  /// How far this company will go and what it charges to get there.
+  Future<List<Map<String, dynamic>>> posDeliveryZones() async => Repo.rows(
+    await callRpc('pos_delivery_zones_admin', params: {'p_org': orgId}),
+  );
+
+  /// Postcodes are normalised to five digits server-side, so whatever
+  /// somebody typed around them does not matter.
+  Future<String> savePosDeliveryZone({
+    required String outletId,
+    required String name,
+    String? id,
+    List<String>? postcodes,
+    double fee = 0,
+    double minOrder = 0,
+    double? freeAbove,
+    int? etaMinutes,
+    int sortOrder = 0,
+    bool isActive = true,
+  }) async =>
+      (await callRpc(
+        'upsert_pos_delivery_zone',
+        params: {
+          'p_id': id,
+          'p_outlet': outletId,
+          'p_name': name,
+          'p_postcodes': postcodes ?? const <String>[],
+          'p_fee': fee,
+          'p_min_order': minOrder,
+          'p_free_above': freeAbove,
+          'p_eta': etaMinutes,
+          'p_sort': sortOrder,
+          'p_active': isActive,
+        },
+      )).toString();
+
+  Future<void> retirePosDeliveryZone(String id) async =>
+      await callRpc('retire_pos_delivery_zone', params: {'p_id': id});
+
+  /// The people who carry the orders, with how many each has out now.
+  Future<List<Map<String, dynamic>>> posDrivers() async => Repo.rows(
+    await callRpc('pos_drivers_admin', params: {'p_org': orgId}),
+  );
+
+  Future<String> savePosDriver({
+    required String name,
+    String? id,
+    String? phone,
+    String? vehicle,
+    String? plateNo,
+    String? outletId,
+    bool isActive = true,
+  }) async =>
+      (await callRpc(
+        'upsert_pos_driver',
+        params: {
+          'p_id': id,
+          'p_org': orgId,
+          'p_name': name,
+          'p_phone': phone,
+          'p_vehicle': vehicle,
+          'p_plate': plateNo,
+          'p_outlet': outletId,
+          'p_active': isActive,
+        },
+      )).toString();
+
+  /// Stands a driver down. Refused while they still have orders out.
+  Future<void> retirePosDriver(String id) async =>
+      await callRpc('retire_pos_driver', params: {'p_id': id});
+
+  /// What each driver carried on one trading day.
+  Future<List<Map<String, dynamic>>> posDriverRuns(DateTime date) async =>
+      Repo.rows(
+        await callRpc(
+          'pos_driver_runs',
+          params: {'p_org': orgId, 'p_date': Fmt.iso(date)},
+        ),
+      );
+
+  /// One day of delivering, per outlet.
+  Future<List<Map<String, dynamic>>> posDeliveryDay(DateTime date) async =>
+      Repo.rows(
+        await callRpc(
+          'pos_delivery_day',
+          params: {'p_org': orgId, 'p_date': Fmt.iso(date)},
+        ),
+      );
 }
 
 

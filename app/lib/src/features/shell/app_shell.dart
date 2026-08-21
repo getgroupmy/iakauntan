@@ -255,6 +255,16 @@ const _destinations = <_Dest>[
     '/queue',
     module: 'pos',
   ),
+  // Everything out on a motorbike, beside the queue for the same
+  // reason: both are somebody standing at the pass being asked how much
+  // longer.
+  _Dest(
+    'Deliveries',
+    Icons.moped_outlined,
+    Icons.moped,
+    '/deliveries',
+    module: 'pos',
+  ),
   // When each part of the menu is offered. Beside promotions, because
   // both are a shop deciding in advance what the till may do.
   _Dest(

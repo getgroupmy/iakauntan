@@ -1225,6 +1225,73 @@ than the end meaning the window crosses midnight — which is what a late
 bar means by "ten till two", and what a naive `BETWEEN` gets exactly
 backwards.
 
+## An address, a fee and a driver
+
+0229 taught the module that an order can arrive by delivery and nothing
+else about it: the address lived in the note field, the fee was rung up
+as an item called DELIVERY, and the driver was a name somebody shouted
+at the door.
+
+**The fee is a shipping charge, not a plate of food.** A fee rung up as
+a line item lands in food revenue, is counted in the item ranking, is
+discounted by every promotion naming "all items", and earns loyalty
+points. `sales_documents.shipping_amount` has existed since 0005 and
+0013 already posts it to 4900 by itself, so `complete_pos_sale` puts the
+fee there. No new account, no new line type, no change to the posting
+function, and the journal still balances because the receivable was
+always the header total. Points settle against the total *less* the fee,
+because a shop paying points on a courier charge is paying points on
+money it hands straight to a rider.
+
+**A zone is a name and a list of postcodes.** Malaysian addresses are
+reliably identified by five digits and unreliably by anything else. A
+zone naming the postcode wins; a zone with an empty list is the
+catch-all — "anywhere else we will go" — and is only reached when no
+other zone matches. Postcodes are normalised on the way in, so matching
+is an equality test rather than a function somebody has to remember to
+call.
+
+**The fee is derived, on every recalculation.** `recalc_pos_sale`
+rebuilds it from the zone before it touches the totals, so `free_above`
+comes true the moment the plate that qualifies is added rather than at
+the till's next guess. A fee somebody typed is marked `fee_is_manual`
+and left alone — and typing one *below* what the zone says needs
+`pos_discount`, because a fee a cashier can quietly set to zero is a
+discount wearing a different hat.
+
+**The ride survives every discount.** The order is: the food, less the
+manual discount, less the promotions, less the redemption, floored at
+nothing — and then the fee on top. A hundred per cent staff discount on
+a delivery bill still owes the courier, and an arithmetic that let the
+fee be discounted away would have the shop paying the rider out of its
+own margin without anybody deciding to.
+
+**A minimum is checked when the money is taken.** Every shop with a
+minimum order takes the address first and the order second, so refusing
+at the door refuses the wrong thing. `app.pos_delivery_blocked` returns
+a sentence with the shortfall in it — the same shape as a blocked
+promotion — and it becomes an error only in `complete_pos_sale`, which
+is the one moment the basket is final.
+
+**Five states, and the driver is required for three.** pending →
+assigned → collected → delivered is the run; `failed` is nobody home, a
+refused order, an address that is not one, and it carries a reason
+because "failed" alone tells a shop nothing it can act on. Assigned,
+collected and delivered all require a driver, enforced by a constraint
+rather than by the function that sets them. Delivered and failed are
+terminal. A driver with orders still out cannot be stood down, and a
+bill already with a driver cannot be folded into another one — merging
+two delivery bills is refused outright rather than quietly keeping one
+of the addresses, because the alternative is food at the wrong house.
+
+On the screens: the till's bill menu carries "Where is it going?", the
+fee shows as its own row above the total with the zone's name on it, and
+the shortfall sentence sits under it in the warning colour while the
+customer can still add to the order. **Deliveries** is the board of
+everything not yet landed, oldest first, with minutes waiting computed
+on the server and whether the driver is collecting the money — and its
+own screen behind it for zones and drivers.
+
 ## Not built yet
 
 - Submitting the consolidated e-Invoice to MyInvois (the rollup runs; the

@@ -39,6 +39,7 @@ import '../features/pos/diary_screen.dart';
 import '../features/pos/memberships_screen.dart';
 import '../features/pos/menu_times_screen.dart';
 import '../features/pos/promotions_screen.dart';
+import '../features/pos/deliveries_screen.dart';
 import '../features/pos/queue_screen.dart';
 import '../features/pos/voids_screen.dart';
 import '../features/loyalty/loyalty_screen.dart';
@@ -402,6 +403,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const PromotionsScreen(),
           ),
           GoRoute(path: '/queue', builder: (_, __) => const QueueScreen()),
+          GoRoute(
+            path: '/deliveries',
+            builder: (_, __) => const DeliveriesScreen(),
+          ),
           GoRoute(
             path: '/menu-times',
             builder: (_, __) => const MenuTimesScreen(),

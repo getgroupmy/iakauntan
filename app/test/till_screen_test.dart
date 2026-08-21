@@ -93,6 +93,7 @@ void main() {
     List<Map<String, dynamic>> saleLines = const [],
     List<Map<String, dynamic>> saleMods = const [],
     List<Map<String, dynamic>> salePromos = const [],
+    Map<String, dynamic> delivery = const {},
     Map<String, String> access = const {},
   }) => ProviderScope(
     overrides: [
@@ -122,6 +123,12 @@ void main() {
       // which forces the org to resolve and fail, and the failure then
       // surfaces on the next unrelated read.
       posSalePromotionsProvider.overrideWith((_, __) async => salePromos),
+      // Overridden even though this harness never sets an address:
+      // watching it unoverridden makes the real repository resolve, and
+      // the failure lands two taps later inside `_send`.
+      posDeliveryForProvider.overrideWith(
+        (_, __) async => delivery,
+      ),
       myModuleAccessProvider.overrideWith((_) async => access),
     ],
     child: MaterialApp(theme: AppTheme.light(), home: const TillScreen()),

@@ -11,6 +11,7 @@ import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'assign_table.dart';
 import 'channels.dart';
+import 'delivery_sheet.dart';
 import 'discount_sheet.dart';
 import 'modifier_sheet.dart';
 import 'offline_controller.dart';
@@ -346,6 +347,68 @@ class _TillScreenState extends ConsumerState<TillScreen> {
   /// attaching it inert, so what matters here is showing what it said —
   /// "Raya five needs 50.00 and this bill is 43.00" is an answer a
   /// cashier can give the customer.
+  /// Where this bill is going, and what the ride costs.
+  ///
+  /// The fee is not asked for here. It comes from the zone the postcode
+  /// falls in and is recomputed on every change to the basket, so the
+  /// free-delivery promise comes true the moment the qualifying plate
+  /// is added rather than at the till's next guess.
+  Future<void> _delivery() async {
+    final id = _saleId;
+    if (id == null) return;
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+
+    // Read first, so correcting an address starts from the one already
+    // taken rather than from an empty form.
+    final existing = await ref.read(posDeliveryForProvider(id).future);
+    if (!mounted) return;
+    final answer = await showDeliverySheet(context, existing: existing);
+    if (answer == null || !mounted) return;
+
+    Map<String, dynamic> got = const {};
+    final ok = await runWithFeedback(
+      context,
+      successMessage: null,
+      action: () async {
+        got = await repo.setPosDelivery(
+          saleId: id,
+          line1: answer.line1,
+          phone: answer.phone,
+          line2: answer.line2.isEmpty ? null : answer.line2,
+          city: answer.city.isEmpty ? null : answer.city,
+          state: answer.state.isEmpty ? null : answer.state,
+          postcode: answer.postcode.isEmpty ? null : answer.postcode,
+          recipient: answer.recipient.isEmpty ? null : answer.recipient,
+          notes: answer.notes.isEmpty ? null : answer.notes,
+        );
+      },
+    );
+    if (!ok || !mounted) return;
+    ref
+      ..invalidate(posSaleProvider(id))
+      ..invalidate(posDeliveryForProvider(id));
+
+    // Said back once: which zone it fell in, what the ride costs, and
+    // the shortfall if the order is under that zone's minimum — while
+    // the customer is still on the phone and can add to it.
+    final blocked = got['blocked_reason'] as String?;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          blocked ??
+              [
+                if ('${got['zone_name'] ?? ''}'.isNotEmpty)
+                  '${got['zone_name']}',
+                'delivery ${Fmt.money(posNum(got['fee']))}',
+                if (Fmt.toInt(got['eta_minutes']) > 0)
+                  'about ${Fmt.toInt(got['eta_minutes'])} minutes',
+              ].join(' · '),
+        ),
+      ),
+    );
+  }
+
   Future<void> _coupon() async {
     final id = _saleId;
     if (id == null) return;
@@ -1256,6 +1319,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
             onVoidBill: _voidBill,
             onDiscountBill: _discountBill,
             onCoupon: _coupon,
+            onDelivery: _delivery,
             onLineAction: _lineAction,
             onOpenOrder: _openOrder,
             onPark: _park,
@@ -1286,6 +1350,7 @@ class _Register extends ConsumerWidget {
     required this.onVoidBill,
     required this.onDiscountBill,
     required this.onCoupon,
+    required this.onDelivery,
     required this.onLineAction,
     required this.onOpenOrder,
     required this.onPark,
@@ -1322,6 +1387,11 @@ class _Register extends ConsumerWidget {
   /// the shop printed is not a cashier's decision, and the two are
   /// granted differently.
   final VoidCallback onCoupon;
+
+  /// Taking the address a bill is going to. On the same menu as the
+  /// voucher and the discount, because all three are things done to a
+  /// bill rather than to a line on it.
+  final VoidCallback onDelivery;
   final ValueChanged<Map<String, dynamic>> onLineAction;
   final ValueChanged<Map<String, dynamic>> onOpenOrder;
   final VoidCallback onPark;
@@ -1385,6 +1455,7 @@ class _Register extends ConsumerWidget {
           onVoidBill: onVoidBill,
           onDiscountBill: onDiscountBill,
           onCoupon: onCoupon,
+          onDelivery: onDelivery,
           onLineAction: onLineAction,
           onOpenOrder: onOpenOrder,
           onPark: onPark,
@@ -1592,6 +1663,7 @@ class _Basket extends ConsumerWidget {
     required this.onVoidBill,
     required this.onDiscountBill,
     required this.onCoupon,
+    required this.onDelivery,
     required this.onLineAction,
     required this.onOpenOrder,
     required this.onPark,
@@ -1617,6 +1689,11 @@ class _Basket extends ConsumerWidget {
   /// the shop printed is not a cashier's decision, and the two are
   /// granted differently.
   final VoidCallback onCoupon;
+
+  /// Taking the address a bill is going to. On the same menu as the
+  /// voucher and the discount, because all three are things done to a
+  /// bill rather than to a line on it.
+  final VoidCallback onDelivery;
   final ValueChanged<Map<String, dynamic>> onLineAction;
 
   /// A whole row rather than an id, because what the till does next
@@ -1727,6 +1804,14 @@ class _Basket extends ConsumerWidget {
           orElse: () => const <Map<String, dynamic>>[],
         );
 
+    // Empty when the bill is not going anywhere, which is most bills.
+    final delivery = ref
+        .watch(posDeliveryForProvider(id))
+        .maybeWhen(
+          data: (row) => row,
+          orElse: () => const <String, dynamic>{},
+        );
+
     final rows = lines.maybeWhen(
       data: (r) => r,
       orElse: () => const <Map<String, dynamic>>[],
@@ -1809,9 +1894,18 @@ class _Basket extends ConsumerWidget {
                     onSelected: (v) => switch (v) {
                       'discount' => onDiscountBill(),
                       'coupon' => onCoupon(),
+                      'delivery' => onDelivery(),
                       _ => onVoidBill(),
                     },
                     itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'delivery',
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(Icons.moped_outlined),
+                          title: Text('Where is it going?'),
+                        ),
+                      ),
                       PopupMenuItem(
                         value: 'coupon',
                         child: ListTile(
@@ -1963,6 +2057,34 @@ class _Basket extends ConsumerWidget {
                         ),
                       ],
                     ),
+                  const SizedBox(height: 4),
+                ],
+                // The ride, on its own row above the total. It is added
+                // rather than taken off, and a customer looking for
+                // "why is this six ringgit more" looks exactly here.
+                if (posNum(delivery['fee']) > 0) ...[
+                  _AmountRow(
+                    'Delivery'
+                    '${'${delivery['zone_name'] ?? ''}'.isEmpty ? '' : ' · ${delivery['zone_name']}'}',
+                    posNum(delivery['fee']),
+                  ),
+                  const SizedBox(height: 4),
+                ],
+                // The zone's minimum, while the customer can still add
+                // to the order. The till refuses it at the tender sheet
+                // either way, and finding out then is finding out too
+                // late.
+                if ((delivery['blocked_reason'] as String?) != null) ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '${delivery['blocked_reason']}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.colors.warning,
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 4),
                 ],
                 _AmountRow('Total', total, emphasise: true),

@@ -2157,3 +2157,36 @@ final ocrProviderCatalogProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
       (ref) => requireRepo(ref).ocrProviderCatalog(),
     );
+
+/// Every run at an outlet that has not landed yet. 0259.
+final posDeliveryBoardProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, outletId) => requireRepo(ref).posDeliveryBoard(outletId),
+    );
+
+/// Where one bill is going, what the ride costs and who has it. 0259.
+///
+/// An empty map when the bill is not a delivery, which is what the till
+/// reads to decide whether to offer the address sheet or the summary.
+final posDeliveryForProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, String>(
+      (ref, saleId) => requireRepo(ref).posDeliveryFor(saleId),
+    );
+
+/// How far each outlet will go and what it charges. 0259.
+final posDeliveryZonesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posDeliveryZones(),
+    );
+
+/// The people who carry the orders, with how many each has out. 0259.
+final posDriversProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posDrivers(),
+    );
+
+/// What each driver carried on one trading day. 0259.
+final posDriverRunsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, DateTime>(
+      (ref, date) => requireRepo(ref).posDriverRuns(date),
+    );
