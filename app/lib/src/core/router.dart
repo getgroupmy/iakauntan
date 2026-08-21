@@ -37,6 +37,7 @@ import '../features/property/site_editor.dart';
 import '../features/forecasting/forecast_screen.dart';
 import '../features/pos/diary_screen.dart';
 import '../features/pos/memberships_screen.dart';
+import '../features/pos/promotions_screen.dart';
 import '../features/pos/voids_screen.dart';
 import '../features/loyalty/loyalty_screen.dart';
 import '../features/pos/floor_plan_screen.dart';
@@ -394,6 +395,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const LoyaltyScreen(),
           ),
           GoRoute(path: '/voids', builder: (_, __) => const VoidsScreen()),
+          GoRoute(
+            path: '/promotions',
+            builder: (_, __) => const PromotionsScreen(),
+          ),
           GoRoute(
             path: '/takings',
             builder: (_, __) => const TakingsScreen(),

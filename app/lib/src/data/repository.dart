@@ -7713,6 +7713,96 @@ extension RepoPosControls on Repo {
     ),
   );
 
+  /// Every promotion a company has written, retired ones included.
+  Future<List<Map<String, dynamic>>> posPromotions() async => Repo.rows(
+    await callRpc('pos_promotions_admin', params: {'p_org': orgId}),
+  );
+
+  /// The rule and the three lists it is narrowed by, in one call.
+  ///
+  /// Null for a list leaves it alone; an empty list clears it, which is
+  /// how a promotion narrowed to one shop is widened back to all of
+  /// them. Saving the rule and its scope separately would let a shop
+  /// publish "ten per cent off drinks" as ten per cent off everything.
+  Future<String> savePosPromotion({
+    required String name,
+    required String kind,
+    String? id,
+    String? code,
+    double percent = 0,
+    double amount = 0,
+    int buy = 0,
+    int get = 0,
+    DateTime? startsOn,
+    DateTime? endsOn,
+    List<int>? weekdays,
+    String? startsAt,
+    String? endsAt,
+    double minSubtotal = 0,
+    int? maxUses,
+    int? maxPerCustomer,
+    List<String>? items,
+    List<String>? outlets,
+    List<String>? channels,
+    bool isActive = true,
+  }) async =>
+      (await callRpc(
+        'upsert_pos_promotion',
+        params: {
+          'p_org': orgId,
+          'p_name': name,
+          'p_kind': kind,
+          'p_code': code,
+          'p_percent': percent,
+          'p_amount': amount,
+          'p_buy': buy,
+          'p_get': get,
+          'p_starts_on': startsOn == null ? null : Fmt.iso(startsOn),
+          'p_ends_on': endsOn == null ? null : Fmt.iso(endsOn),
+          'p_weekdays': weekdays,
+          'p_starts_at': startsAt,
+          'p_ends_at': endsAt,
+          'p_min_subtotal': minSubtotal,
+          'p_max_uses': maxUses,
+          'p_max_per_customer': maxPerCustomer,
+          'p_items': items,
+          'p_outlets': outlets,
+          'p_channels': channels,
+          'p_id': id,
+          'p_is_active': isActive,
+        },
+      )).toString();
+
+  Future<void> retirePosPromotion(String id) async =>
+      await callRpc('retire_pos_promotion', params: {'p_promo': id});
+
+  /// What is on a bill and what each took off, including a voucher
+  /// currently qualifying for nothing and the reason why.
+  Future<List<Map<String, dynamic>>> posSalePromotions(String saleId) async =>
+      Repo.rows(
+        await callRpc('pos_sale_promotions_on', params: {'p_sale': saleId}),
+      );
+
+  /// Types a voucher onto a bill. The server refuses a code that does
+  /// not qualify rather than attaching it inert, so the error message
+  /// is the thing worth showing.
+  Future<void> applyPosCoupon(String saleId, String code) async =>
+      await callRpc(
+        'apply_pos_coupon',
+        params: {'p_sale': saleId, 'p_code': code},
+      );
+
+  Future<void> removePosSalePromotion(String rowId) async =>
+      await callRpc('remove_pos_sale_promotion', params: {'p_row': rowId});
+
+  /// Works the shop's own rules out again against the basket as it now
+  /// stands, and returns what the bill comes to. Called after anything
+  /// that changes the basket, because a rate on a bill that has shrunk
+  /// is no longer that rate.
+  Future<double> refreshPosSalePromotions(String saleId) async => Fmt.toDouble(
+    await callRpc('refresh_pos_sale_promotions', params: {'p_sale': saleId}),
+  );
+
   /// Takes one modifier back off a parked line.
   ///
   /// `add_line_modifier` has had a caller since the till was built and

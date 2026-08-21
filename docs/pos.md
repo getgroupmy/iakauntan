@@ -1060,6 +1060,75 @@ the bills", because a manager checking one is checking the other and a
 page named after voiding is not where anybody would look for a
 discount.
 
+## A price the shop decided in advance
+
+0255's discount button is the right control for "the steak was burnt"
+and the wrong mechanism for "teh tarik is two ringgit before eleven". A
+happy hour typed in by hand is wrong on the till nobody told, missing on
+the Tuesday the manager was off, and unreportable afterwards because
+every application looks like a cashier's judgement. 0256 lets the shop
+write the rule down once.
+
+**Three kinds.** A percentage, a flat amount, and buy-X-get-Y. The last
+one is done the way a supermarket does it: every qualifying unit at its
+own price, sorted dearest first, cut into blocks of (buy + get), and the
+cheapest `get` of each **complete** block discounted. Five units on a
+three-for-two frees one, not one and two thirds.
+
+**Every window is empty-means-always.** Dates, weekdays, an hours
+window, outlets, order channels, a minimum spend. A promotion with no
+conditions is a name and a number. `starts_at` later than `ends_at` is a
+window that crosses midnight, which is what a late bar means by "ten
+till two". All of it in Asia/Kuala_Lumpur, like every other POS day
+calculation.
+
+**A promotion never touches a line.** The obvious implementation —
+reprice the line — is a trap: once the line is rewritten there is no way
+back to what it cost, so removing a promotion means remembering the old
+price somewhere, and that somewhere is a second copy of live state.
+Instead each application is a row in `pos_sale_promotions` and
+`pos_sales.promo_discount` is the sum of those rows. Deleting the row is
+the whole of removing the promotion. The cost of this choice is that a
+promotion comes off the header rather than the line and so does not
+reduce that line's SST — already true of the loyalty redemption and the
+manual bill discount, and one rule applied three ways beats three rules.
+
+**Re-evaluated, not remembered.** `refresh_pos_promotions` throws away
+every automatic application and works them out again from the basket as
+it stands. Anything else rots within one order: ten per cent off a
+basket that has shrunk is no longer ten per cent, and "spend fifty, get
+five off" must stop the moment somebody takes the fiftieth ringgit back
+off. It runs from the till after a change and again inside
+`complete_pos_sale`, so a bill parked at ten to eleven and settled at
+five past is settled outside the happy hour — and a kiosk order or an
+offline sale landing hours later cannot miss a promotion because nobody
+refreshed a screen.
+
+**A coupon behaves differently on purpose.** Somebody typed it, so it
+stays attached even when it stops qualifying, carrying a
+`blocked_reason` the till prints: "Raya five needs 50.00 and this bill is
+43.00". A voucher that silently vanished would leave a cashier
+explaining something they cannot see. It comes back on its own when the
+basket goes back over the line, without being retyped.
+
+**Usage caps are counted, never incremented.** A counter has to decide
+whether parking a bill burns a use and whether voiding gives it back,
+and every answer is a bug waiting for the other case. Counting
+completed, un-voided sales answers both at once and cannot drift.
+
+**The header discount is load-bearing.** `post_sales_document_internal`
+derives the credit side from the lines less the header discount and
+checks it against the debit side. Leave a promotion out of
+`sales_documents.discount_amount` and the two disagree by exactly what
+it took off — the sale fails at the counter with *Journal does not
+balance: debits 55.00, credits 60.00*. The same field is what
+`prepare_einvoice` maps to the MyInvois total discount.
+
+**Not gated on `pos_discount`.** That grant is about a cashier deciding
+to reduce a price. Honouring a code the shop printed is the opposite —
+the decision was made in advance by whoever wrote the promotion, and a
+till that could not accept its own voucher cannot do its job.
+
 ## Not built yet
 
 - Submitting the consolidated e-Invoice to MyInvois (the rollup runs; the

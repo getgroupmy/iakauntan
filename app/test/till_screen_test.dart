@@ -92,6 +92,7 @@ void main() {
     Map<String, dynamic>? sale,
     List<Map<String, dynamic>> saleLines = const [],
     List<Map<String, dynamic>> saleMods = const [],
+    List<Map<String, dynamic>> salePromos = const [],
     Map<String, String> access = const {},
   }) => ProviderScope(
     overrides: [
@@ -116,6 +117,11 @@ void main() {
       posSaleProvider.overrideWith((_, __) async => sale),
       posSaleLinesProvider.overrideWith((_, __) async => saleLines),
       posSaleLineModifiersProvider.overrideWith((_, __) async => saleMods),
+      // The shop's own rules on this bill. Supplied even when empty:
+      // without an override this provider reaches for a repository,
+      // which forces the org to resolve and fail, and the failure then
+      // surfaces on the next unrelated read.
+      posSalePromotionsProvider.overrideWith((_, __) async => salePromos),
       myModuleAccessProvider.overrideWith((_) async => access),
     ],
     child: MaterialApp(theme: AppTheme.light(), home: const TillScreen()),
@@ -1062,6 +1068,101 @@ void main() {
 
       expect(find.text('Taking money off needs permission'), findsOneWidget);
       expect(find.text('Comes to RM 9.00'), findsNothing);
+    });
+
+    testWidgets('a promotion is named on the bill, not just netted off', (
+      tester,
+    ) async {
+      // "Less RM 6.00" and nothing else leaves a cashier unable to
+      // answer "what's this?" with the customer standing there.
+      await openParked(
+        tester,
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: {...parkedSale(), 'promo_discount': '6.00'},
+          saleLines: [
+            {
+              'id': 'l1',
+              'line_no': 1,
+              'description': 'Teh tarik',
+              'quantity': '6',
+              'unit_price': '3.00',
+              'line_total': '18.00',
+            },
+          ],
+          salePromos: [
+            {
+              'id': 'sp1',
+              'promotion_id': 'p1',
+              'name': 'Three for two',
+              'code': null,
+              'kind': 'buy_x_get_y',
+              'amount': '6.00',
+              'by_code': false,
+              'blocked_reason': null,
+            },
+          ],
+        ),
+      );
+
+      // On a phone the bill is behind a tap, so the sheet is where the
+      // totals live.
+      await tester.tap(find.text('6 items'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Three for two'), findsOneWidget);
+      expect(find.text('RM -6.00'), findsOneWidget);
+    });
+
+    testWidgets('a voucher that qualifies for nothing still says why', (
+      tester,
+    ) async {
+      // It was typed in. A voucher that silently vanished at forty-three
+      // ringgit would leave a cashier explaining something they cannot
+      // see, so it stays on the bill with the server's own sentence.
+      await openParked(
+        tester,
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          saleLines: [
+            {
+              'id': 'l1',
+              'line_no': 1,
+              'description': 'Mee goreng mamak',
+              'quantity': '1',
+              'unit_price': '9.00',
+              'line_total': '9.00',
+            },
+          ],
+          salePromos: [
+            {
+              'id': 'sp1',
+              'promotion_id': 'p1',
+              'name': 'Raya five',
+              'code': 'RAYA5',
+              'kind': 'amount_off',
+              'amount': '0',
+              'by_code': true,
+              'blocked_reason': 'Raya five needs 50.00 and this bill is 9.00.',
+            },
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('1 item'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Raya five needs 50.00'),
+        findsOneWidget,
+      );
+      // And it takes nothing off, so no money row appears for it.
+      expect(find.text('RM -0.00'), findsNothing);
     });
 
     testWidgets('what came off a line is said on the bill', (tester) async {

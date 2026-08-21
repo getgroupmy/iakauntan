@@ -2069,6 +2069,19 @@ final posVoidSummaryProvider = FutureProvider.autoDispose
       (ref, range) => requireRepo(ref).posVoidSummary(range.from, range.to),
     );
 
+/// Every promotion a company has written, with what each gave away. 0256.
+final posPromotionsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posPromotions(),
+    );
+
+/// What the shop's own rules have taken off this bill, and any voucher
+/// on it — including one qualifying for nothing, with the reason. 0256.
+final posSalePromotionsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, saleId) => requireRepo(ref).posSalePromotions(saleId),
+    );
+
 /// Who took money off which bills, over a range of days. 0255.
 ///
 /// The other half of the void report and read on the same screen: one

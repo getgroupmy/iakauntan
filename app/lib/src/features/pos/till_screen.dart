@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/theme.dart';
 import '../../core/widgets.dart';
 // The POS methods live in an extension on Repo, and a Dart extension is
 // only in scope where its declaring library is imported.
@@ -244,6 +245,86 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       ..invalidate(posSaleProvider(sale!))
       ..invalidate(posSaleLinesProvider(sale!))
       ..invalidate(posSaleLineModifiersProvider(sale!));
+    await _refreshPromotions(sale!);
+  }
+
+  /// The basket changed, so the shop's own rules have to be worked out
+  /// again.
+  ///
+  /// A rate on a bill that has grown is worth more and on one that has
+  /// shrunk is worth less, and "spend fifty, get five off" has to stop
+  /// applying the moment somebody takes the fiftieth ringgit back off.
+  ///
+  /// Best effort on purpose. `complete_pos_sale` refreshes again before
+  /// it works out what to charge, so a failure here costs a stale
+  /// number on a screen and never a wrong number in a drawer — and a
+  /// till that refused to add a plate because a promotion could not be
+  /// recalculated would be worse than either.
+  Future<void> _refreshPromotions(String saleId) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    try {
+      await repo.refreshPosSalePromotions(saleId);
+    } catch (_) {
+      // Deliberately swallowed. See above.
+    }
+    if (!mounted) return;
+    ref
+      ..invalidate(posSaleProvider(saleId))
+      ..invalidate(posSalePromotionsProvider(saleId));
+  }
+
+  /// Typing a voucher off a printed slip.
+  ///
+  /// The server refuses a code that does not qualify rather than
+  /// attaching it inert, so what matters here is showing what it said —
+  /// "Raya five needs 50.00 and this bill is 43.00" is an answer a
+  /// cashier can give the customer.
+  Future<void> _coupon() async {
+    final id = _saleId;
+    if (id == null) return;
+    final code = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: const Text('Voucher'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(
+              labelText: 'Code',
+              hintText: 'RAYA5',
+            ),
+            onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+              child: const Text('Apply'),
+            ),
+          ],
+        );
+      },
+    );
+    if (code == null || code.isEmpty || !mounted) return;
+
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Voucher applied',
+      action: () => repo.applyPosCoupon(id, code),
+    );
+    if (!ok || !mounted) return;
+    ref
+      ..invalidate(posSaleProvider(id))
+      ..invalidate(posSalePromotionsProvider(id));
   }
 
   Future<void> _tender() async {
@@ -1005,6 +1086,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       ..invalidate(posSaleProvider(id))
       ..invalidate(posSaleLinesProvider(id))
       ..invalidate(posSaleLineModifiersProvider(id));
+    await _refreshPromotions(id);
   }
 
   @override
@@ -1106,6 +1188,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
             onMerge: _merge,
             onVoidBill: _voidBill,
             onDiscountBill: _discountBill,
+            onCoupon: _coupon,
             onLineAction: _lineAction,
             onOpenOrder: _openOrder,
             onPark: _park,
@@ -1134,6 +1217,7 @@ class _Register extends ConsumerWidget {
     required this.onMerge,
     required this.onVoidBill,
     required this.onDiscountBill,
+    required this.onCoupon,
     required this.onLineAction,
     required this.onOpenOrder,
     required this.onPark,
@@ -1161,6 +1245,11 @@ class _Register extends ConsumerWidget {
   /// same menu, because they are the two things somebody does to a
   /// bill rather than to a line on it.
   final VoidCallback onDiscountBill;
+
+  /// Typing a voucher code. Separate from discounting: honouring a code
+  /// the shop printed is not a cashier's decision, and the two are
+  /// granted differently.
+  final VoidCallback onCoupon;
   final ValueChanged<Map<String, dynamic>> onLineAction;
   final ValueChanged<Map<String, dynamic>> onOpenOrder;
   final VoidCallback onPark;
@@ -1223,6 +1312,7 @@ class _Register extends ConsumerWidget {
           onMerge: onMerge,
           onVoidBill: onVoidBill,
           onDiscountBill: onDiscountBill,
+          onCoupon: onCoupon,
           onLineAction: onLineAction,
           onOpenOrder: onOpenOrder,
           onPark: onPark,
@@ -1421,6 +1511,7 @@ class _Basket extends ConsumerWidget {
     required this.onMerge,
     required this.onVoidBill,
     required this.onDiscountBill,
+    required this.onCoupon,
     required this.onLineAction,
     required this.onOpenOrder,
     required this.onPark,
@@ -1441,6 +1532,11 @@ class _Basket extends ConsumerWidget {
   /// same menu, because they are the two things somebody does to a
   /// bill rather than to a line on it.
   final VoidCallback onDiscountBill;
+
+  /// Typing a voucher code. Separate from discounting: honouring a code
+  /// the shop printed is not a cashier's decision, and the two are
+  /// granted differently.
+  final VoidCallback onCoupon;
   final ValueChanged<Map<String, dynamic>> onLineAction;
 
   /// A whole row rather than an id, because what the till does next
@@ -1540,6 +1636,16 @@ class _Basket extends ConsumerWidget {
       data: (row) => row?['bill_discount_reason'] as String?,
       orElse: () => null,
     );
+    // What the shop's own rules took off, one row each. Read as a list
+    // rather than only as `promo_discount`, because a bill showing
+    // "less RM 6.00" and nothing else leaves a cashier unable to say
+    // which promotion that was.
+    final promos = ref
+        .watch(posSalePromotionsProvider(id))
+        .maybeWhen(
+          data: (rows) => rows,
+          orElse: () => const <Map<String, dynamic>>[],
+        );
 
     final rows = lines.maybeWhen(
       data: (r) => r,
@@ -1620,9 +1726,20 @@ class _Basket extends ConsumerWidget {
                     tooltip: 'What to do with this bill',
                     icon: const Icon(Icons.more_vert, size: 18),
                     padding: EdgeInsets.zero,
-                    onSelected: (v) =>
-                        v == 'discount' ? onDiscountBill() : onVoidBill(),
+                    onSelected: (v) => switch (v) {
+                      'discount' => onDiscountBill(),
+                      'coupon' => onCoupon(),
+                      _ => onVoidBill(),
+                    },
                     itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'coupon',
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(Icons.confirmation_number_outlined),
+                          title: Text('Voucher'),
+                        ),
+                      ),
                       PopupMenuItem(
                         value: 'discount',
                         child: ListTile(
@@ -1707,6 +1824,7 @@ class _Basket extends ConsumerWidget {
                       rows: rows,
                       mods: mods,
                       total: total,
+                      promos: promos,
                       scrollable: true,
                       onLineAction: onLineAction,
                     ),
@@ -1742,6 +1860,29 @@ class _Basket extends ConsumerWidget {
                         : 'Less discount · $billDiscountReason',
                     -billDiscount,
                   ),
+                  const SizedBox(height: 4),
+                ],
+                // Named, one per row. A voucher taking nothing off is
+                // still shown, with the reason, because it was typed in
+                // and a cashier who cannot see it cannot explain it.
+                for (final p in promos) ...[
+                  if (posNum(p['amount']) > 0)
+                    _AmountRow('${p['name']}', -posNum(p['amount']))
+                  else
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${p['name']} · ${p['blocked_reason'] ?? ''}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: context.colors.warning,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   const SizedBox(height: 4),
                 ],
                 _AmountRow('Total', total, emphasise: true),
@@ -2395,6 +2536,7 @@ class _BasketLines extends StatelessWidget {
     required this.rows,
     required this.mods,
     required this.total,
+    this.promos = const [],
     this.scrollable = false,
     this.confirmLabel,
     this.onLineAction,
@@ -2403,6 +2545,11 @@ class _BasketLines extends StatelessWidget {
   final List<Map<String, dynamic>> rows;
   final List<Map<String, dynamic>> mods;
   final double total;
+
+  /// What the shop's own rules took off, one row each. On the phone's
+  /// sheet as well as the counter's panel: a promotion visible only on
+  /// a wide screen is a promotion a phone till cannot explain.
+  final List<Map<String, dynamic>> promos;
 
   /// True in the phone's sheet, where the list is the whole point and
   /// has to scroll however long the bill gets.
@@ -2507,6 +2654,22 @@ class _BasketLines extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
+                for (final p in promos) ...[
+                  if (posNum(p['amount']) > 0)
+                    _AmountRow('${p['name']}', -posNum(p['amount']))
+                  else
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '${p['name']} · ${p['blocked_reason'] ?? ''}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.colors.warning,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                ],
                 _AmountRow('Total', total, emphasise: true),
                 if (confirmLabel != null) ...[
                   const SizedBox(height: 12),

@@ -247,6 +247,15 @@ const _destinations = <_Dest>[
   // sits with the till and not in Reports: the person who needs it is
   // the person who runs the shop, and Reports is gated on accounting
   // that a food stall may not have bought.
+  // Beside the till rather than in Reports: writing a happy hour down
+  // is running a shop, not analysing one.
+  _Dest(
+    'Promotions',
+    Icons.local_offer_outlined,
+    Icons.local_offer,
+    '/promotions',
+    module: 'pos',
+  ),
   _Dest(
     // Not "Voids" since 0255: the screen carries the discount report
     // too, and a manager looking for where the price went would not

@@ -53,6 +53,8 @@ declare
   v_txt    text;
   v_board  record;
   v_line   uuid;
+  v_promo  uuid;
+  v_drink  uuid;
 begin
   -- ------------------------------------------------------------------
   -- The rounding rule, on its own
@@ -501,6 +503,159 @@ begin
     (select d.bill_value from public.pos_discount_summary(
        v_org, current_date, current_date) d),
     4.00);
+
+  -- ------------------------------------------------------------------
+  -- A price the shop decided in advance
+  -- ------------------------------------------------------------------
+  --
+  -- 0256's promotions. Four things are asserted because all four are
+  -- wrong in the obvious implementation:
+  --
+  --   * a rate is re-derived from the basket every time, so it follows
+  --     the bill up AND down,
+  --   * switching a promotion off leaves no row behind — nothing was
+  --     ever written into a line, so there is no price to restore,
+  --   * three-for-two discounts the cheapest of each COMPLETE block and
+  --     charges full price for the remainder,
+  --   * the invoice header carries it, which is not cosmetic: the
+  --     posting routine derives credits from the lines less the header
+  --     discount and refuses to post when the two disagree.
+  -- A second dish, built exactly like the fixture above so nothing
+  -- here is testing a different kind of item by accident.
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price, cost_price)
+  values (v_org, 'TEH', 'Teh tarik', 'stock', true, 'C62', 3.00, 1.00)
+  returning id into v_drink;
+
+  insert into public.pos_promotions (org_id, name, kind, percent)
+  values (v_org, 'Ten off', 'percent_off', 10) returning id into v_promo;
+
+  v_sale := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_sale, v_item, 2, 10.00);
+  perform public.refresh_pos_sale_promotions(v_sale);
+  perform pg_temp.check_eq('a tenth off a 20.00 basket is 2.00',
+    (select s.promo_discount from public.pos_sales s where s.id = v_sale), 2.00);
+  perform pg_temp.check_eq('so the bill comes to 18.00',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 18.00);
+
+  -- The case a stored amount gets wrong: another plate arrives.
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 10.00);
+  perform public.refresh_pos_sale_promotions(v_sale);
+  perform pg_temp.check_eq('and 3.00 once a third plate arrives',
+    (select s.promo_discount from public.pos_sales s where s.id = v_sale), 3.00);
+
+  -- Switching it off leaves nothing behind, because nothing was ever
+  -- written into a line.
+  update public.pos_promotions set is_active = false where id = v_promo;
+  perform public.refresh_pos_sale_promotions(v_sale);
+  perform pg_temp.check_eq('switching it off takes nothing off',
+    (select s.promo_discount from public.pos_sales s where s.id = v_sale), 0);
+  perform pg_temp.check_eq('and leaves no row on the bill',
+    (select count(*) from public.pos_sale_promotions sp
+      where sp.sale_id = v_sale), 0);
+  perform pg_temp.check_eq('and the bill is back to full price',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 30.00);
+
+  -- Three for two, on one dish only.
+  insert into public.pos_promotions
+    (org_id, name, kind, percent, buy_quantity, get_quantity)
+  values (v_org, 'Three for two', 'buy_x_get_y', 100, 2, 1)
+  returning id into v_promo;
+  insert into public.pos_promotion_items (promotion_id, item_id)
+  values (v_promo, v_drink);
+
+  v_sale := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_sale, v_drink, 6, 3.00);
+  perform public.add_pos_sale_line(v_sale, v_item, 3, 10.00);
+  perform public.refresh_pos_sale_promotions(v_sale);
+  -- Six qualifying units, two complete blocks, the cheapest of each
+  -- free. The 10.00 dish is not on the promotion and is not touched.
+  perform pg_temp.check_eq('three for two on six drinks frees two',
+    (select s.promo_discount from public.pos_sales s where s.id = v_sale), 6.00);
+
+  -- Five units is one complete block and two left over.
+  v_sale := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_sale, v_drink, 5, 3.00);
+  perform public.refresh_pos_sale_promotions(v_sale);
+  perform pg_temp.check_eq('an incomplete block pays full price',
+    (select s.promo_discount from public.pos_sales s where s.id = v_sale), 3.00);
+  update public.pos_promotions set is_active = false where id = v_promo;
+
+  -- A voucher, its minimum spend, and what it says when it is not met.
+  insert into public.pos_promotions
+    (org_id, code, name, kind, amount, min_subtotal, max_uses)
+  values (v_org, 'raya5', 'Raya five', 'amount_off', 5.00, 50.00, 1)
+  returning id into v_promo;
+
+  v_sale := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 10.00);
+  begin
+    perform public.apply_pos_coupon(v_sale, 'RAYA5');
+    raise exception 'FAIL a voucher was taken on a bill below its minimum';
+  exception when check_violation then
+    raise notice 'ok   a voucher below its minimum is refused';
+  end;
+
+  perform public.add_pos_sale_line(v_sale, v_item, 5, 10.00);
+  -- Typed the way a cashier types it, off a printed slip.
+  perform public.apply_pos_coupon(v_sale, '  RaYa5 ');
+  perform pg_temp.check_eq('a voucher takes its amount off',
+    (select s.promo_discount from public.pos_sales s where s.id = v_sale), 5.00);
+
+  -- The basket shrinks under the minimum. The voucher stays on the
+  -- bill saying why it is worth nothing, rather than vanishing and
+  -- leaving a cashier to explain something they cannot see.
+  perform public.remove_pos_sale_line(
+    (select l.id from public.pos_sale_lines l
+      where l.sale_id = v_sale order by l.line_no desc limit 1));
+  perform public.refresh_pos_sale_promotions(v_sale);
+  perform pg_temp.check_eq('shrinking the bill makes the voucher worth nothing',
+    (select sp.amount from public.pos_sale_promotions sp
+      where sp.sale_id = v_sale), 0);
+  perform pg_temp.check_true('and it says why, on the bill',
+    (select sp.blocked_reason like '%needs 50.00%'
+       from public.pos_sale_promotions sp where sp.sale_id = v_sale));
+  perform pg_temp.check_eq('and the customer is charged full price',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 10.00);
+
+  perform public.add_pos_sale_line(v_sale, v_item, 5, 10.00);
+  perform public.refresh_pos_sale_promotions(v_sale);
+  perform pg_temp.check_eq('putting it back brings the voucher back',
+    (select sp.amount from public.pos_sale_promotions sp
+      where sp.sale_id = v_sale), 5.00);
+
+  -- Settling it. The header discount is load-bearing: without it
+  -- post_sales_document_internal refuses, because the credit side is
+  -- the lines less the header discount and the debit side is the
+  -- total. This completing at all is that assertion.
+  perform public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 100.00)));
+  perform pg_temp.check_eq('the invoice header carries the promotion',
+    (select d.discount_amount from public.sales_documents d
+      join public.pos_sales s on s.invoice_id = d.id where s.id = v_sale),
+    5.00);
+  perform pg_temp.check_eq('and charges 60.00 of food at 55.00',
+    (select d.total_amount from public.sales_documents d
+      join public.pos_sales s on s.invoice_id = d.id where s.id = v_sale),
+    55.00);
+  perform pg_temp.check_true('and the ledger balances',
+    (select e.total_debit = e.total_credit and e.total_debit > 0
+       from public.gl_entries e
+       join public.pos_sales s on s.invoice_id = e.source_id
+      where s.id = v_sale and e.source_table = 'sales_documents'
+      limit 1));
+
+  -- One use, used up. Counted from completed sales rather than a
+  -- counter, so a parked bill never burns it and a written-off bill
+  -- gives it back.
+  v_sale := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_sale, v_item, 6, 10.00);
+  begin
+    perform public.apply_pos_coupon(v_sale, 'RAYA5');
+    raise exception 'FAIL a one-use voucher was taken twice';
+  exception when check_violation then
+    raise notice 'ok   a one-use voucher is used up once a bill settles';
+  end;
 
   raise notice 'point of sale: all assertions passed';
 end;
