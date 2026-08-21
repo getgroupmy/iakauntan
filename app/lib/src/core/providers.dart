@@ -2069,6 +2069,18 @@ final posVoidSummaryProvider = FutureProvider.autoDispose
       (ref, range) => requireRepo(ref).posVoidSummary(range.from, range.to),
     );
 
+/// When each group of dishes is offered, and whether it is on now. 0258.
+final posMenuSchedulesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posMenuSchedules(),
+    );
+
+/// What an outlet has run out of today. 0258.
+final posStoppedItemsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, outletId) => requireRepo(ref).posStoppedItems(outletId),
+    );
+
 /// Everyone still standing in the line at an outlet today. 0257.
 ///
 /// Minutes waited and the count ahead come back from the server, so two

@@ -248,6 +248,72 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     await _refreshPromotions(sale!);
   }
 
+  /// The kitchen has run out, or has some again.
+  ///
+  /// 0258 makes this a fact about one shop on one day, so there is no
+  /// end date for anybody to forget to clear — the row belongs to today
+  /// and today ends. What it does NOT do is stop the sale: a dish taken
+  /// off is greyed on the grid, and a bill that already has one on it,
+  /// or a van's sale landing an hour later, still goes through.
+  Future<void> _stock(Map<String, dynamic> row) async {
+    final outlet = _outletId;
+    final item = row['item_id'] as String?;
+    if (outlet == null || item == null) return;
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+
+    // Off for a rule rather than for stock. Putting it back is not this
+    // button's job, and pretending otherwise would have a cashier
+    // tapping at a timetable.
+    final scheduled = row['available'] == false &&
+        !'${row['off_reason'] ?? ''}'.toLowerCase().contains('sold out');
+
+    final off = row['available'] == false;
+    final go = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text('${row['name']}'),
+              subtitle: Text(
+                off ? '${row['off_reason'] ?? ''}' : 'On the menu',
+              ),
+            ),
+            const Divider(height: 1),
+            if (off)
+              ListTile(
+                leading: const Icon(Icons.restart_alt),
+                title: const Text('We have it again'),
+                subtitle: scheduled
+                    ? const Text('This one is off by its schedule, not by stock')
+                    : null,
+                onTap: () => Navigator.of(ctx).pop('resume'),
+              )
+            else
+              ListTile(
+                leading: const Icon(Icons.no_food_outlined),
+                title: const Text('Sold out for today'),
+                subtitle: const Text('Back on the menu tomorrow'),
+                onTap: () => Navigator.of(ctx).pop('stop'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (go == null || !mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      successMessage: go == 'stop' ? 'Taken off for today' : 'Back on',
+      action: () => go == 'stop'
+          ? repo.stopPosItem(outlet, item)
+          : repo.resumePosItem(outlet, item),
+    );
+    if (ok && mounted) ref.invalidate(posMenuProvider(outlet));
+  }
+
   /// The basket changed, so the shop's own rules have to be worked out
   /// again.
   ///
@@ -1179,6 +1245,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
             looking: _looking,
             onSearch: _look,
             onPick: _add,
+            onStock: _stock,
             onOpenShift: _openShift,
             onCloseShift: _closeShift,
             onTender: _tender,
@@ -1208,6 +1275,7 @@ class _Register extends ConsumerWidget {
     required this.looking,
     required this.onSearch,
     required this.onPick,
+    required this.onStock,
     required this.onOpenShift,
     required this.onCloseShift,
     required this.onTender,
@@ -1232,6 +1300,10 @@ class _Register extends ConsumerWidget {
   final bool looking;
   final ValueChanged<String> onSearch;
   final ValueChanged<Map<String, dynamic>> onPick;
+
+  /// Holding a menu tile takes the dish off for today, or puts it back.
+  final ValueChanged<Map<String, dynamic>>? onStock;
+
   final VoidCallback onOpenShift;
   final ValueChanged<String> onCloseShift;
   final VoidCallback onTender;
@@ -1319,6 +1391,7 @@ class _Register extends ConsumerWidget {
           compact: compact,
         );
         final finder = _Finder(
+          onStock: onStock,
           outletId: outletId,
           saleId: saleId,
           search: search,
@@ -1377,6 +1450,7 @@ class _Finder extends StatelessWidget {
     required this.looking,
     required this.onSearch,
     required this.onPick,
+    required this.onStock,
     required this.shiftId,
     required this.shiftNo,
     required this.onCloseShift,
@@ -1390,6 +1464,11 @@ class _Finder extends StatelessWidget {
   final bool looking;
   final ValueChanged<String> onSearch;
   final ValueChanged<Map<String, dynamic>> onPick;
+
+  /// Holding a menu tile takes the dish off for today, or puts it back.
+  /// The kitchen runs out; the counter is where somebody notices.
+  final ValueChanged<Map<String, dynamic>>? onStock;
+
   final String shiftId;
   final String shiftNo;
   final ValueChanged<String> onCloseShift;
@@ -1464,6 +1543,7 @@ class _Finder extends StatelessWidget {
               ? (outletId == null
                     ? const SizedBox.shrink()
                     : _Browse(
+                        onStock: onStock,
                         outletId: outletId!,
                         saleId: saleId,
                         onPick: onPick,
@@ -2087,6 +2167,7 @@ class _Browse extends StatefulWidget {
     required this.outletId,
     required this.saleId,
     required this.onPick,
+    this.onStock,
   });
 
   final String outletId;
@@ -2096,6 +2177,9 @@ class _Browse extends StatefulWidget {
   final String? saleId;
 
   final ValueChanged<Map<String, dynamic>> onPick;
+
+  /// Holding a tile takes the dish off for today, or puts it back.
+  final ValueChanged<Map<String, dynamic>>? onStock;
 
   @override
   State<_Browse> createState() => _BrowseState();
@@ -2198,7 +2282,13 @@ class _BrowseState extends State<_Browse> {
                                       posNum(r['unit_price']),
                                     ),
                                     count: onBill['${r['item_id']}'],
+                                    offReason: r['available'] == false
+                                        ? '${r['off_reason'] ?? 'Not on now'}'
+                                        : null,
                                     onTap: () => widget.onPick(r),
+                                    onLongPress: widget.onStock == null
+                                        ? null
+                                        : () => widget.onStock!(r),
                                   ),
                               ],
                             )
@@ -2253,11 +2343,26 @@ class _MenuTile extends StatelessWidget {
     required this.subtitle,
     required this.onTap,
     this.count,
+    this.offReason,
+    this.onLongPress,
   });
 
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+
+  /// Why this dish is not being offered right now, or null when it is.
+  ///
+  /// Greyed and explained rather than removed: a tile that vanishes
+  /// reads as a broken menu, and "From 07:00" is the only version a
+  /// cashier can answer a customer from. 0258 keeps the row in
+  /// `pos_menu` for exactly this.
+  final String? offReason;
+
+  /// Holding a tile takes the dish off for today, or puts it back. On a
+  /// long press rather than a button: the grid is tapped hundreds of
+  /// times an hour and eighty-sixing is a thing that happens twice.
+  final VoidCallback? onLongPress;
 
   /// How many of this are already on the bill, or null on a tile that
   /// is not an item. Zero is not drawn: a badge on every tile is a
@@ -2269,11 +2374,17 @@ class _MenuTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final n = count ?? 0;
+    final off = offReason != null;
     return Card(
       color: scheme.surfaceContainerHighest,
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
+      child: Opacity(
+        opacity: off ? 0.5 : 1,
+        child: InkWell(
+        // Still long-pressable when off, because putting a dish back is
+        // done from the same tile that took it away.
+        onTap: off ? null : onTap,
+        onLongPress: onLongPress,
         child: Padding(
           padding: const EdgeInsets.all(10),
           child: Column(
@@ -2323,11 +2434,21 @@ class _MenuTile extends StatelessWidget {
                 ],
               ),
               Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodySmall,
+                // The reason takes the price's place rather than
+                // sitting beside it: a dish nobody can order does not
+                // need its price read out, and it does need somebody to
+                // be told why.
+                off ? offReason! : subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: off ? context.colors.warning : null,
+                  fontWeight: off ? FontWeight.w600 : null,
+                ),
               ),
             ],
           ),
+        ),
         ),
       ),
     );

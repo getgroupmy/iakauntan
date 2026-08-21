@@ -255,6 +255,15 @@ const _destinations = <_Dest>[
     '/queue',
     module: 'pos',
   ),
+  // When each part of the menu is offered. Beside promotions, because
+  // both are a shop deciding in advance what the till may do.
+  _Dest(
+    'Menu times',
+    Icons.schedule_outlined,
+    Icons.schedule,
+    '/menu-times',
+    module: 'pos',
+  ),
   // Beside the till rather than in Reports: writing a happy hour down
   // is running a shop, not analysing one.
   _Dest(

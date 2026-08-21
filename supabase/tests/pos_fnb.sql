@@ -33,6 +33,10 @@ declare
   v_qc     uuid;
   v_qr     record;
   v_qday   record;
+  v_sched  uuid;
+  v_sched2 uuid;
+  v_clock  time;
+  v_dow    smallint;
   v_reg    uuid;
   v_reg2   uuid;
   v_reg3   uuid;
@@ -1367,6 +1371,128 @@ begin
     v_qday.still_waiting, 1);
   perform pg_temp.check_eq('and what the middle one waited',
     v_qday.median_wait, 20);
+
+  -- ------------------------------------------------------------------
+  -- Breakfast stops at eleven
+  -- ------------------------------------------------------------------
+  --
+  -- 0258's menu scheduler. Four things, and the first is the one a
+  -- naive implementation gets backwards:
+  --
+  --   * a window from ten at night to two in the morning is OPEN at one
+  --     in the morning. A BETWEEN says it is shut.
+  --   * a dish on no schedule is always on — empty means always, the
+  --     rule 0256 set for promotions,
+  --   * a dish on several is on when ANY of them is open, because
+  --     "breakfast, and also all day Sunday" is two rules and both say
+  --     yes,
+  --   * the kitchen running out beats the timetable, because "sold out"
+  --     is the more useful half for the customer to hear.
+  --
+  -- The window arithmetic is asserted against fixed instants rather
+  -- than against now(), so the test says the same thing at four in the
+  -- morning as it does at noon.
+  perform pg_temp.check_true('a late bar is open at half past one',
+    app.pos_window_open(null, time '22:00', time '02:00', null, null,
+                        timestamptz '2026-08-21 17:30:00+00'));
+  perform pg_temp.check_true('and shut in the afternoon',
+    not app.pos_window_open(null, time '22:00', time '02:00', null, null,
+                            timestamptz '2026-08-21 07:00:00+00'));
+  perform pg_temp.check_true('an ordinary window is open inside it',
+    app.pos_window_open(null, time '07:00', time '11:00', null, null,
+                        timestamptz '2026-08-21 01:00:00+00'));
+  perform pg_temp.check_true('and shut outside it',
+    not app.pos_window_open(null, time '07:00', time '11:00', null, null,
+                            timestamptz '2026-08-21 06:00:00+00'));
+  -- 21 August 2026 is a Friday, which is ISO weekday 5.
+  perform pg_temp.check_true('a Friday schedule runs on a Friday',
+    app.pos_window_open(array[5]::smallint[], null, null, null, null,
+                        timestamptz '2026-08-21 04:00:00+00'));
+  perform pg_temp.check_true('and not on the Saturday',
+    not app.pos_window_open(array[5]::smallint[], null, null, null, null,
+                            timestamptz '2026-08-22 04:00:00+00'));
+
+  perform pg_temp.check_true('a dish on no schedule is always on',
+    app.pos_item_off(v_item, v_outlet) is null);
+
+  -- A window that closed an hour ago, whatever time CI runs.
+  v_clock := (now() at time zone 'Asia/Kuala_Lumpur')::time;
+  v_dow := extract(isodow from (now() at time zone 'Asia/Kuala_Lumpur'))::smallint;
+  insert into public.pos_menu_schedules
+    (org_id, name, weekdays, starts_at, ends_at)
+  values (v_org, 'Breakfast', array[v_dow]::smallint[],
+          (v_clock - interval '3 hours')::time,
+          (v_clock - interval '1 hour')::time)
+  returning id into v_sched;
+  insert into public.pos_menu_schedule_items (schedule_id, item_id)
+  values (v_sched, v_item);
+
+  perform pg_temp.check_true('outside its hours the dish is off',
+    app.pos_item_off(v_item, v_outlet) is not null);
+  -- And says when it comes back, not merely that it is gone.
+  perform pg_temp.check_true('and says what time it comes back',
+    app.pos_item_off(v_item, v_outlet) like 'From %');
+
+  -- A second schedule that is open puts it back: any open one wins.
+  insert into public.pos_menu_schedules (org_id, name, starts_at, ends_at)
+  values (v_org, 'All day', (v_clock - interval '1 hour')::time,
+          (v_clock + interval '1 hour')::time)
+  returning id into v_sched2;
+  insert into public.pos_menu_schedule_items (schedule_id, item_id)
+  values (v_sched2, v_item);
+  perform pg_temp.check_true('a second open schedule puts it back on',
+    app.pos_item_off(v_item, v_outlet) is null);
+
+  update public.pos_menu_schedules set is_active = false where id = v_sched2;
+  perform pg_temp.check_true('and retiring that one takes it off again',
+    app.pos_item_off(v_item, v_outlet) is not null);
+
+  -- The kitchen's answer beats the timetable's.
+  perform public.stop_pos_item(v_outlet, v_item, 'Ayam habis');
+  perform pg_temp.check_eq('what the kitchen said wins',
+    app.pos_item_off(v_item, v_outlet), 'Ayam habis');
+  perform pg_temp.check_eq('and it is on the stopped list',
+    (select count(*) from public.pos_stopped_items(v_outlet)), 1);
+
+  -- Per outlet: the branch has plenty.
+  perform pg_temp.check_eq('the other shop is not out of it',
+    (select count(*) from public.pos_stopped_items(v_out2)), 0);
+
+  -- No reason given still says something a customer understands.
+  perform public.stop_pos_item(v_outlet, v_teh);
+  perform pg_temp.check_eq('a stop with no reason reads as sold out',
+    app.pos_item_off(v_teh, v_outlet), 'Sold out');
+
+  perform pg_temp.check_true('putting one back reports that it did',
+    public.resume_pos_item(v_outlet, v_teh));
+  perform pg_temp.check_true('and the dish is on again',
+    app.pos_item_off(v_teh, v_outlet) is null);
+  perform pg_temp.check_true('and doing it twice reports nothing to do',
+    not public.resume_pos_item(v_outlet, v_teh));
+
+  -- The menu still lists everything. A dish that vanished would read as
+  -- a broken menu; a greyed one saying why is the only version a
+  -- cashier can answer a customer from.
+  perform pg_temp.check_true('the menu still lists a dish that is off',
+    exists (select 1 from public.pos_menu(v_outlet) m
+             where m.item_id = v_item and not m.available));
+  perform pg_temp.check_eq('and carries the reason',
+    (select m.off_reason from public.pos_menu(v_outlet) m
+      where m.item_id = v_item), 'Ayam habis');
+
+  -- The screen a shop administers its schedules from.
+  perform pg_temp.check_eq('the editor lists both schedules',
+    (select count(*) from public.pos_menu_schedules_admin(v_org)), 2);
+  perform pg_temp.check_eq('and says how many dishes are on breakfast',
+    (select a.dishes from public.pos_menu_schedules_admin(v_org) a
+      where a.id = v_sched), 1);
+  perform pg_temp.check_true('and that breakfast is not open right now',
+    (select not a.open_now from public.pos_menu_schedules_admin(v_org) a
+      where a.id = v_sched));
+
+  -- Put the till back the way the rest of the file found it.
+  perform public.resume_pos_item(v_outlet, v_item);
+  update public.pos_menu_schedules set is_active = false where org_id = v_org;
 
   raise notice 'point of sale dining room: all assertions passed';
 end;

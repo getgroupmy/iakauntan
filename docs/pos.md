@@ -1175,6 +1175,56 @@ walked away, no-shows, still waiting, and the median and longest wait,
 per outlet. A shop that cannot say how long Saturday's wait was cannot
 decide whether to open another section.
 
+## Breakfast stops at eleven
+
+A kitchen that serves nasi lemak until eleven and burgers after it has
+one menu in its head and one on the till, and the till's does not know
+what time it is. The cashier remembers, until the Saturday somebody else
+is on the counter.
+
+**The schedule governs the menu, never the ledger.** This is the
+decision the rest of 0258 hangs off, and it is not the obvious one. The
+obvious implementation refuses the sale — a check in
+`add_pos_sale_line`, or beside the variant rule in the
+`pos_sale_line_sellable` trigger. It would lose real money: 0219 lets a
+van sell with no signal and land the batch later, *by calling
+`add_pos_sale_line`*. A breakfast set sold at half past ten from a gerai
+with no coverage, landing at two o'clock when the driver gets back into
+town, would be refused by a clock check — and the food is eaten, the
+cash is in the tin, and the till would be saying it never happened. The
+same holds for a bill parked at 10:55 and settled at 11:05. So a
+schedule decides what the shop *offers*; what was sold is what was sold.
+
+**Greyed and explained, not hidden.** `pos_menu` still returns a dish
+that is off, with `available` false and an `off_reason`. A tile that
+vanishes reads as a broken menu; one greyed out saying "From 07:00"
+reads as a shop with a breakfast menu, and is the only version a cashier
+can answer a customer from.
+
+**A schedule is a thing, not two columns on an item.** Times on each
+dish would mean typing 07:00–11:00 forty times and getting it wrong
+once. A schedule is named and dishes hang off it. A dish on no schedule
+is always on — the same empty-means-always rule the promotions use — and
+a dish on several is on when *any* of them is open, because "breakfast,
+and also all day Sunday" is two rules and both say yes.
+
+**Eighty-sixing is separate and wins.** `stop_pos_item` takes a dish off
+for today at one outlet: the branch that ran out of ayam is not the shop
+that has plenty, and tomorrow it is back. There is no end date to forget
+to clear — the row belongs to today, and today ends. When a dish is both
+out of hours and sold out, the kitchen's answer is the one shown,
+because "sold out" is the more useful half for the customer to hear. It
+is guarded on writing the till rather than configuring the company: the
+person who notices is the person on the counter, and on the grid it is a
+long press, because the tiles are tapped hundreds of times an hour and
+this happens twice.
+
+`app.pos_window_open` is where the recurring-window arithmetic now
+lives, in Asia/Kuala_Lumpur, nulls meaning always, and a start later
+than the end meaning the window crosses midnight — which is what a late
+bar means by "ten till two", and what a naive `BETWEEN` gets exactly
+backwards.
+
 ## Not built yet
 
 - Submitting the consolidated e-Invoice to MyInvois (the rollup runs; the

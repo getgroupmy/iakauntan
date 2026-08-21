@@ -7713,6 +7713,67 @@ extension RepoPosControls on Repo {
     ),
   );
 
+  /// Every menu schedule a company has written, with how many dishes
+  /// are on each and whether it is open right now.
+  Future<List<Map<String, dynamic>>> posMenuSchedules() async => Repo.rows(
+    await callRpc('pos_menu_schedules_admin', params: {'p_org': orgId}),
+  );
+
+  /// The rule and the dishes on it in one call. A schedule saved
+  /// without its dishes governs nothing, and the shop finds out at
+  /// eleven o'clock.
+  Future<String> savePosMenuSchedule({
+    required String name,
+    String? id,
+    List<int>? weekdays,
+    String? startsAt,
+    String? endsAt,
+    List<String>? items,
+    bool isActive = true,
+  }) async =>
+      (await callRpc(
+        'upsert_pos_menu_schedule',
+        params: {
+          'p_org': orgId,
+          'p_name': name,
+          'p_weekdays': weekdays,
+          'p_starts_at': startsAt,
+          'p_ends_at': endsAt,
+          'p_items': items,
+          'p_id': id,
+          'p_is_active': isActive,
+        },
+      )).toString();
+
+  Future<void> retirePosMenuSchedule(String id) async =>
+      await callRpc('retire_pos_menu_schedule', params: {'p_schedule': id});
+
+  /// Takes a dish off for today at one outlet — the kitchen has run
+  /// out. Guarded on working the till, because the person who notices
+  /// is the person on the counter.
+  Future<void> stopPosItem(
+    String outletId,
+    String itemId, {
+    String? reason,
+  }) async => await callRpc(
+    'stop_pos_item',
+    params: {'p_outlet': outletId, 'p_item': itemId, 'p_reason': reason},
+  );
+
+  /// Puts it back. True when there was something to put back.
+  Future<bool> resumePosItem(String outletId, String itemId) async =>
+      (await callRpc(
+        'resume_pos_item',
+        params: {'p_outlet': outletId, 'p_item': itemId},
+      )) ==
+      true;
+
+  /// What this outlet has run out of today, and who said so.
+  Future<List<Map<String, dynamic>>> posStoppedItems(String outletId) async =>
+      Repo.rows(
+        await callRpc('pos_stopped_items', params: {'p_outlet': outletId}),
+      );
+
   /// Puts a party in the line and hands back their number, what they
   /// were told to expect, and how many are in front of them.
   ///
