@@ -625,6 +625,9 @@ fewer lines. The kitchen docket survives untouched because 0215 made
 `pos_kitchen_ticket_lines.sale_line_id` `on delete set null`, with the
 comment that the food was cooked whatever the bill ends up saying.
 
+That decision is about a line, and the bill void below deliberately
+goes the other way — see "Writing a bill off".
+
 What the database does *not* do is invent a cashier role. It enforces
 that a sent line needs a reason and a name; where the action is
 offered — the till, not the floor plan — is the client's half of the
@@ -648,6 +651,105 @@ Every figure on the tender sheet — the total, the cash due, the change,
 the rounding — comes back from `complete_pos_sale()` rather than being
 recomputed in Dart. A till that does its own arithmetic is a till that
 can disagree with the receipt it just printed.
+
+## The card on the table, and the table itself
+
+A dine-in bill has to end up pointing at a table, and for a long time
+the only way to put it there was the floor plan — a second screen, a
+drawn room, a tap. That is right for a waiter crossing the floor and
+wrong for a cashier at a counter taking an order for table seven.
+
+**What a shop puts on the table is a card**, and every reader sold into
+this market for one — the tag readers, the barcode guns, the QR pads —
+presents to the device as a keyboard: it types what it read and presses
+enter. So the till needed no new hardware path, only a way to turn the
+string that arrives into a table. `pos_table_by_code()` does the
+normalisation, and it is deliberately not in the client: a bare `T7`, a
+URL `https://iakauntan.com/t/T7` for a sticker a customer might also
+point a phone at, and a `table:T7` token from a tag writer are all the
+same table, and a shop that changes its sticker printer must not need
+an app release. It also reports how many bills are already open on the
+table, because two on one is legitimate — a split leaves exactly that —
+and is a fact to show rather than a reason to refuse.
+
+**The cards are printed from the floor plan**, six to an A4 sheet. The
+QR holds the bare code, not a URL, which is worth writing down because
+the lookup would accept either: a short payload makes a coarser QR that
+survives being wiped down and read at an angle, and a URL is a promise
+this app does not keep — there is no page at `/t/T7`, and a customer who
+points a phone at one has been misled by us. The code is printed in
+plain text underneath too, because the fallback for every scanner that
+fails is somebody reading it and typing it, which the same sheet
+accepts.
+
+**A long table is two tables.** Two unrelated parties down one
+twelve-seater is the ordinary Friday in a warung, and the room had one
+place for them: one bill between strangers, or two bills on a table
+`seat_table` refuses to disambiguate on purpose. `split_pos_table()`
+turns T1 into T1-A and T1-B as *real rows* in `pos_tables`, which is
+the whole design — seating, moving a party, the floor plan, a scanned
+card and the printed sheet all work on them with nothing changed,
+where a virtual part would have had to be taught to every one.
+
+The whole table goes out of service while it is split, because it is
+not a place anybody can be seated at while two parties are in its
+halves; every read already filters `is_active`, so that is the entire
+mechanism. Merging deactivates the halves rather than deleting them:
+`pos_sales.table_id` is `on delete set null`, so deleting T1-A would
+erase which table last Tuesday's bills were served at, and a shop that
+splits its long table every Friday would lose a night of per-table
+history a week. It also means splitting again is the same T1-A, whose
+history accumulates. Split and merge are symmetric about the party in
+the middle — one party already sitting goes to the first half with
+their bill and comes back the same way; two parties are refused in
+both directions, which is the ambiguity the arrangement exists to
+avoid.
+
+## Writing a bill off
+
+Taking one line off is above. Taking the whole thing off is a different
+act and was missing entirely — a party walking out on six lines meant
+six voids, six reasons and six records for one event. `0206` had been
+assuming otherwise since long before it was true: it refuses to close a
+shift over a parked sale and tells the cashier to "finish or void" it.
+
+`void_pos_sale()` **keeps the lines and the total**, which is the
+opposite of the line void and for the opposite reason. A line void
+deletes because the bill carries on and has to re-total without it; a
+written-off bill stops there, and what was on it is the evidence.
+Deleting would leave a voided sale of nothing, and "RM 86.00 walked
+out" is the fact a manager needs. `status` becomes `voided`, which
+every aggregate here already excludes — expected cash, the floor plan,
+the open orders list, the consolidated e-Invoice, the channel report —
+so nothing had to learn to ignore it. Live dockets are cancelled so the
+kitchen stops; one already served stays served, because that food went
+out and rewriting it would make the pass disagree with the room.
+
+**It needs the `pos_void` grant every time.** The first cut asked only
+when the kitchen had cooked, on the reasoning that an uncooked bill is
+keystrokes the cashier could remove one at a time anyway. That is wrong
+about what the control is for: a shop that takes voids away has decided
+that making a bill *disappear* is a supervisor's act, and a bill that
+vanishes before the kitchen saw it is exactly the shape of an order
+rung up, paid in cash and quietly removed. Removing a single unsent
+line is untouched and still needs nothing — it leaves the bill, and the
+cashier still has to account for it.
+
+The cost is intended rather than incidental: a cashier without the
+grant who opens a bill by mistake cannot clear it and cannot close
+their own drawer. A shop avoids that by granting `pos_void` to whoever
+closes the till.
+
+**And it has to show somewhere.** `pos_void_summary()` reads line
+voids, so a bill written off before anything was cooked wrote nothing
+to it — the one case the grant was tightened for produced no value in
+any report. `pos_voided_bills()` lists them: which bill, what it came
+to, why, the note and who. Listed rather than grouped, which is
+deliberately the reverse of the line report — those are grouped because
+one is an accident and thirty is a conversation, while these are few,
+each is a whole order, and the question is which one and whose. The
+cooked count sits beside the line count, because food lost and an order
+that never existed are different facts.
 
 ## Every open bill in the shop, and whose drawer it lands in
 
@@ -778,3 +880,7 @@ for is therefore visible in the demo data, not only asserted in
   terminal
 - Cash drawer and receipt printer drivers. The receipt renders; opening a
   physical drawer is between the browser and the hardware
+- Reading a table card with the device's own camera. The wedge readers a
+  counter has — tag, barcode, QR pad — type and press enter, and that is
+  the whole interface; pointing a phone camera at the sticker is a
+  different thing and needs a scanner package the app does not carry

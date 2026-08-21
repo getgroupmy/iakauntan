@@ -3350,8 +3350,8 @@
     "semantic_hash": ""
   },
   "docs/pos.md": {
-    "mtime": 1787195315.5994883,
-    "ast_hash": "c7465e220c99d39d8c36fffbf5649344",
+    "mtime": 1787293771.1454034,
+    "ast_hash": "55625491706b94927705f8c6413c03eb",
     "semantic_hash": ""
   },
   "app/lib/src/core/export_log.dart": {
@@ -3595,8 +3595,8 @@
     "semantic_hash": ""
   },
   "docs/security.md": {
-    "mtime": 1787281104.1237874,
-    "ast_hash": "51dae5dbe6abb83abce4c5c1bff786ff",
+    "mtime": 1787293686.5296447,
+    "ast_hash": "2d68d9eb131d1d93e3ec068f83c15bc9",
     "semantic_hash": ""
   },
   "app/lib/src/features/loyalty/loyalty_screen.dart": {

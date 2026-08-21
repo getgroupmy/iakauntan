@@ -309,7 +309,7 @@ scoped by column for the same reason: a till writes to that row several
 times per sale, and what is worth keeping is what happened to a bill
 *after* it was a bill.
 
-## Voiding a sent line is a grant of its own (0244)
+## Voiding is a grant of its own (0244, 0246–0248)
 
 Taking food off a bill the kitchen already has is the oldest way to
 steal from a till: ring it up, take the customer's cash, void the line,
@@ -370,4 +370,62 @@ against the same access-type rows and by the same rule.
 `my_module_access` unions the permissions in through that same
 function, which is how the till learns whether to offer the button
 from the call the shell already makes. Hiding is still a courtesy; the
-refusal in `void_pos_sale_line` is the control.
+refusal in the database is the control.
+
+### The whole bill, not just a line (0246)
+
+0225 and 0244 between them covered one line at a time. A party walking
+out on six lines was six voids, six reasons and six records for one
+event, and there was no way to write a bill off at all — which 0206 had
+been assuming there was since long before it existed, since it refuses
+to close a shift over a parked sale and tells the cashier to "finish or
+void" it.
+
+`void_pos_sale` writes the bill off whole. It keeps the lines and the
+total: a line void deletes the line because the bill carries on and has
+to re-total, whereas a written-off bill stops there and what was on it
+is the evidence. `status` becomes `voided`, which every aggregate in
+the schema already excludes — expected cash, the floor plan, the open
+orders list, the consolidated e-Invoice and the channel report all
+filter `parked` or `completed` — so nothing had to be taught to ignore
+it. Live kitchen dockets are cancelled; a docket already served stays
+served, because that food went out.
+
+### Which needs the grant every time (0247)
+
+0246 asked for `pos_void` only when the kitchen had cooked from the
+bill, reasoning that a bill nobody cooked from is keystrokes the
+cashier could remove one at a time anyway.
+
+That was wrong about what the control is for, and it is worth keeping
+the correction visible. A shop that takes voids away from a cashier is
+not counting plates — it has decided that making a bill *disappear* is
+a supervisor's act. A bill that vanishes before anything reached the
+kitchen is precisely the shape of an order rung up, paid in cash and
+quietly removed. The line rule does not carry over: taking one unsent
+line off leaves the bill, and the cashier still has to account for it.
+
+So 0247 moved the guard ahead of any question about what was cooked.
+There is no path through `void_pos_sale` that does not need the grant.
+Removing a single unsent line is untouched and still needs nothing.
+
+The cost is real and intended: 0206 refuses to close a shift over a
+parked sale, so a cashier without `pos_void` who opens a bill by
+mistake cannot clear it and cannot close their own drawer. A shop
+avoids that by granting `pos_void` to whoever closes the till.
+
+### And a written-off bill has to show somewhere (0248)
+
+The two changes above left a hole exactly where the control was
+tightened. `pos_void_summary` reads `pos_sale_line_voids`, and a bill
+void only writes rows there for lines the kitchen cooked — so the case
+0247 exists to catch produced no void lines, no value, and appeared in
+no report at all. The only trace was a `voided` row nothing read.
+
+`pos_voided_bills` reads it: which bill, what it came to, why, the
+note, and who. Listed rather than grouped, which is deliberately the
+opposite of the line report — that one groups because one void is an
+accident and thirty "never came out" is a conversation, while these are
+few, each is a whole order, and the question is which one and whose.
+It reports the cooked count beside the line count, because food lost
+and an order that never existed are different facts.
