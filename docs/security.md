@@ -308,3 +308,50 @@ audit trail nobody reads is the same as no audit trail. `pos_sales` is
 scoped by column for the same reason: a till writes to that row several
 times per sale, and what is worth keeping is what happened to a bill
 *after* it was a bill.
+
+## Voiding a sent line is a grant of its own (0244)
+
+Taking food off a bill the kitchen already has is the oldest way to
+steal from a till: ring it up, take the customer's cash, void the line,
+keep the difference. Both books balance afterwards, which is why 0225
+writes a void record with a name on it.
+
+What 0225 did not decide is who may void. It asked
+`can_write_module(org, 'pos')` — the same question as "may this person
+work the till" — so every cashier could, and a shop that wanted
+otherwise had nowhere to say so.
+
+0244 makes it a permission in its own right, `pos_void`, enforced by
+`app.can_void_pos` = write on `pos` **and** write on `pos_void`.
+Working the till is the floor: a void grant does not let somebody into
+a module they were not given.
+
+### Where it changes behaviour, and where it does not
+
+`app.module_access` returns `write` for a member with **no access type
+assigned**, and always for owners and administrators. That is most
+members of most companies, so on those companies 0244 is inert — every
+cashier still voids exactly as before.
+
+It bites on companies that have already defined access types. Those
+members must now be granted `pos_void` explicitly, because an access
+type grants what it lists and nothing else — the rule 0127 set, and the
+reason an action can be added to the model later at all. That is a real
+change for those companies, and it is the point: defaulting an
+anti-theft control to on-for-everybody is not a control.
+
+### A permission is not a module
+
+`platform_modules` is the billing catalog — what a company bought, at
+what price, shown in the platform console. Nobody sells voiding. The
+new `access_permissions` table is a separate list of actions *inside* a
+module that a company can hand out itself, keyed to the module they
+live in so a company without pos is never offered one. Nothing writes
+it from the app: it is a catalog of what the product can enforce, so it
+changes with a migration, not with a company's mind.
+
+`app.module_access` never checked that its code was a module, so no
+enforcement machinery changed. `my_module_access` unions the
+permissions in, which is how the till learns whether to offer the
+button from the call the shell already makes. Hiding is still a
+courtesy; the refusal in `void_pos_sale_line` is the control.

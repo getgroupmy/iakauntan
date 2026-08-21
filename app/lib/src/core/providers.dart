@@ -713,6 +713,32 @@ bool moduleEnabledNow(WidgetRef ref, String code) {
   return (access?[code] ?? 'write') != 'none';
 }
 
+/// Whether this person holds a named permission inside a module — an
+/// action a company can hand out separately, like voiding a sent line.
+///
+/// Deliberately *not* [moduleEnabledNow]. That asks two questions and
+/// the first one is whether the company bought the module; a permission
+/// is not sold and never appears in the entitlement list, so asking
+/// would deny every one of them to everybody.
+///
+/// Missing means held, which is what the database answers for a member
+/// with no access type and what keeps the till usable while the answer
+/// is still in flight. Hiding is a courtesy either way: the refusal in
+/// `void_pos_sale_line` is the control.
+bool permissionHeldNow(WidgetRef ref, String code) {
+  final access = ref.read(myModuleAccessProvider).valueOrNull;
+  return (access?[code] ?? 'write') == 'write';
+}
+
+/// The actions a company can hand out inside the modules it holds.
+/// Read once for the screen that hands them out.
+final accessPermissionsProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+      final repo = ref.watch(repoProvider);
+      if (repo == null) return const [];
+      return repo.accessPermissions();
+    });
+
 /// Whether this person may change anything in a module, as opposed to
 /// only looking at it.
 bool moduleWritable(WidgetRef ref, String code) => ref

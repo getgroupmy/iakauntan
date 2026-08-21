@@ -198,6 +198,14 @@ class _AccessTypeSheetState extends ConsumerState<_AccessTypeSheet> {
     // permission that can never do anything.
     final modules = catalog.where((m) => entitled.contains(m.code)).toList();
 
+    // Actions inside those modules that a company can hand out on their
+    // own. Not sold and never in the entitlement list, so they are
+    // filtered by the module they live in instead.
+    final permissions = [
+      for (final p in ref.watch(accessPermissionsProvider).value ?? const [])
+        if (entitled.contains('${p['module_code']}')) p,
+    ];
+
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.85,
@@ -283,6 +291,56 @@ class _AccessTypeSheetState extends ConsumerState<_AccessTypeSheet> {
                     ],
                   ),
                 ),
+              if (permissions.isNotEmpty) ...[
+                const SizedBox(height: Space.md),
+                Text('Inside those modules',
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 4),
+                const Text(
+                  'Granted the same way and by the same rule: not listed '
+                  'is not allowed. Somebody with no access type at all '
+                  'still has all of these, which is how every company '
+                  'stands until it says otherwise.',
+                  style: TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: Space.sm),
+                for (final p in permissions)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('${p['name']}'),
+                              if (p['description'] != null)
+                                Text(
+                                  '${p['description']}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: Space.sm),
+                        // Two states, not three: an action is done or
+                        // it is not. "Read" would be a word with no
+                        // meaning here.
+                        Switch(
+                          key: ValueKey('permission-${p['code']}'),
+                          value: _modules['${p['code']}'] == 'write',
+                          onChanged: _busy
+                              ? null
+                              : (on) => _setModule(
+                                  '${p['code']}',
+                                  on ? 'write' : 'none',
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
               const Divider(height: Space.xl),
               Row(
                 children: [

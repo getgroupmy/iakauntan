@@ -92,6 +92,7 @@ void main() {
     Map<String, dynamic>? sale,
     List<Map<String, dynamic>> saleLines = const [],
     List<Map<String, dynamic>> saleMods = const [],
+    Map<String, String> access = const {},
   }) => ProviderScope(
     overrides: [
       posRegistersProvider.overrideWith((_) async => registers),
@@ -115,6 +116,7 @@ void main() {
       posSaleProvider.overrideWith((_, __) async => sale),
       posSaleLinesProvider.overrideWith((_, __) async => saleLines),
       posSaleLineModifiersProvider.overrideWith((_, __) async => saleMods),
+      myModuleAccessProvider.overrideWith((_) async => access),
     ],
     child: MaterialApp(theme: AppTheme.light(), home: const TillScreen()),
   );
@@ -892,6 +894,82 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Take off the bill'), findsOneWidget);
       expect(find.text('Not sent yet'), findsOneWidget);
+    });
+
+    testWidgets('a cashier without the grant is told, not ignored', (
+      tester,
+    ) async {
+      // Taking food off a bill the kitchen already has is the oldest
+      // way to steal from a till, so a shop can hand it out separately.
+      // The cashier tapped a line and is owed an answer: a sheet that
+      // silently does not open is a fault nobody can describe.
+      await openParked(
+        tester,
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          access: const {'pos': 'write', 'pos_void': 'none'},
+          saleLines: [
+            {
+              'id': 'l2',
+              'line_no': 1,
+              'description': 'Mee goreng mamak',
+              'quantity': '1',
+              'unit_price': '9.00',
+              'line_total': '9.00',
+              'sent_to_kitchen_at': '2026-08-19T12:00:00Z',
+            },
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('1 item'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mee goreng mamak'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Voiding needs permission'), findsOneWidget);
+      // And no way to do it anyway: the reason picker is the door, and
+      // it does not open.
+      expect(find.byType(VoidReasonSheet), findsNothing);
+    });
+
+    testWidgets('and a cashier who holds it still gets the reasons', (
+      tester,
+    ) async {
+      // The other half of the same grant, because a control that also
+      // stops the people who were given it is an outage.
+      await openParked(
+        tester,
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+          access: const {'pos': 'write', 'pos_void': 'write'},
+          saleLines: [
+            {
+              'id': 'l2',
+              'line_no': 1,
+              'description': 'Mee goreng mamak',
+              'quantity': '1',
+              'unit_price': '9.00',
+              'line_total': '9.00',
+              'sent_to_kitchen_at': '2026-08-19T12:00:00Z',
+            },
+          ],
+        ),
+      );
+
+      await tester.tap(find.text('1 item'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mee goreng mamak'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(VoidReasonSheet), findsOneWidget);
+      expect(find.text('Voiding needs permission'), findsNothing);
     });
 
     testWidgets('a sent line asks why before it comes off', (tester) async {

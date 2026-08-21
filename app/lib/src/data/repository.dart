@@ -3562,6 +3562,17 @@ extension RepoExtras on Repo {
     };
   }
 
+  /// The actions a company can hand out inside a module. A catalog of
+  /// what the product can enforce, so it changes with a migration and
+  /// not with a company's mind — which is why nothing writes it.
+  Future<List<Map<String, dynamic>>> accessPermissions() async => Repo._rows(
+    await client
+        .from('access_permissions')
+        .select()
+        .order('module_code')
+        .order('sort_order'),
+  );
+
   Future<void> inviteMember(String email, String role) => callRpc(
     'invite_member',
     params: {'p_org_id': orgId, 'p_email': email, 'p_role': role},

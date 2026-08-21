@@ -656,6 +656,36 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       }
       if (go != 'remove') return;
     } else {
+      // Taking food off a bill the kitchen already has is the oldest
+      // way to steal from a till, so a shop can hand it out separately.
+      // Said here rather than hidden: the cashier tapped a line and is
+      // owed an answer, and "nothing happened" is not one.
+      if (!permissionHeldNow(ref, 'pos_void')) {
+        await showModalBottomSheet<void>(
+          context: context,
+          builder: (ctx) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  title: Text('${line['description']}'),
+                  subtitle: const Text('Already with the kitchen'),
+                ),
+                const Divider(height: 1),
+                const ListTile(
+                  leading: Icon(Icons.lock_outline),
+                  title: Text('Voiding needs permission'),
+                  subtitle: Text(
+                    'This account has not been given it. A manager can, '
+                    'under Team.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        return;
+      }
       final answer = await showModalBottomSheet<({String reason, String note})>(
         context: context,
         isScrollControlled: true,
