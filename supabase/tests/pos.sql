@@ -52,6 +52,12 @@ declare
   v_pend   date;
   v_txt    text;
   v_board  record;
+  -- The trading day in the shop's own time. `current_date` is the
+  -- session's, which is UTC in CI: between 16:00 and midnight UTC it is
+  -- already tomorrow in Kuala Lumpur, the board finds no bills for the
+  -- day it is asked about, and the average-bill assertion divides by
+  -- zero. Every reader in the module uses this expression; so does this.
+  v_kl_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
   v_line   uuid;
   v_promo  uuid;
   v_drink  uuid;
@@ -367,7 +373,7 @@ begin
   -- about the trading day named except the open count, which is about
   -- now -- a parked bill has no day yet.
 
-  select * into v_board from public.pos_day_board(v_org, current_date);
+  select * into v_board from public.pos_day_board(v_org, v_kl_today);
   perform pg_temp.check_true('the shop is on the board',
     v_board.outlet_id = v_outlet);
   perform pg_temp.check_eq('with every bill it settled today',
@@ -375,13 +381,13 @@ begin
     (select count(*) from public.pos_sales s
       where s.org_id = v_org and s.status = 'completed'
         and (s.completed_at at time zone 'Asia/Kuala_Lumpur')::date
-            = current_date));
+            = v_kl_today));
   perform pg_temp.check_eq('and what they came to',
     v_board.gross,
     (select coalesce(sum(s.total_amount), 0) from public.pos_sales s
       where s.org_id = v_org and s.status = 'completed'
         and (s.completed_at at time zone 'Asia/Kuala_Lumpur')::date
-            = current_date));
+            = v_kl_today));
 
   -- Cash is net of change: the fifty handed over less the change given
   -- back, which is what should actually be in the drawer. It is the one
@@ -394,7 +400,7 @@ begin
       where s.org_id = v_org and s.status = 'completed'
         and t.kind = 'cash'
         and (s.completed_at at time zone 'Asia/Kuala_Lumpur')::date
-            = current_date));
+            = v_kl_today));
   perform pg_temp.check_eq('and cash plus the rest is the takings',
     v_board.cash + v_board.non_cash, v_board.gross);
   perform pg_temp.check_eq('the average is the takings over the bills',
@@ -402,7 +408,7 @@ begin
 
   -- A shop that sold nothing is still on the board. Its absence would
   -- read as "no problem" when it is the problem.
-  select * into v_board from public.pos_day_board(v_org, current_date - 400);
+  select * into v_board from public.pos_day_board(v_org, v_kl_today - 400);
   perform pg_temp.check_true('a shop with a quiet day is still listed',
     v_board.outlet_id = v_outlet);
   perform pg_temp.check_eq('with nothing against it', v_board.bills, 0);
@@ -501,7 +507,7 @@ begin
   -- The report the permission exists for.
   perform pg_temp.check_eq('the discount report names who gave it away',
     (select d.bill_value from public.pos_discount_summary(
-       v_org, current_date, current_date) d),
+       v_org, v_kl_today, v_kl_today) d),
     4.00);
 
   -- ------------------------------------------------------------------

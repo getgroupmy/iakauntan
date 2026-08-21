@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787323552.645663,
-    "ast_hash": "369788d1501a297a0a53a0276601ae9c",
+    "mtime": 1787332804.3917663,
+    "ast_hash": "077318308b4d6f003b69f3a6db88fa72",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787323869.0726304,
-    "ast_hash": "cb1686da28ed1df8851b4535b79e2529",
+    "mtime": 1787332992.6017885,
+    "ast_hash": "e96215452e75f8b5b9b78e9e44af29da",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787323552.632036,
-    "ast_hash": "93b9854176e17e4f774c321e8bef51e7",
+    "mtime": 1787332788.5037653,
+    "ast_hash": "c2e1c03dece47708c016675b0d470ef9",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787323869.0729346,
-    "ast_hash": "748d0c3a2913e996cf5acb4f33d97c07",
+    "mtime": 1787332992.6020865,
+    "ast_hash": "d466f7e73e4b7e49594ece8f82facabc",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787280184.800099,
-    "ast_hash": "46d7404ff67b1a525aeeae3c161843ad",
+    "mtime": 1787332675.9197564,
+    "ast_hash": "3f19a4f1535ae864c3bba37150d44b99",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -3175,8 +3175,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/till_screen.dart": {
-    "mtime": 1787323713.7675285,
-    "ast_hash": "97d997ee1f5415e5f89656eb9fbe6ffd",
+    "mtime": 1787333074.9755495,
+    "ast_hash": "ce6df423a9c798e1b6ce75300f6d54fe",
     "semantic_hash": ""
   },
   "app/test/diary_screen_test.dart": {
@@ -3205,8 +3205,8 @@
     "semantic_hash": ""
   },
   "app/test/till_screen_test.dart": {
-    "mtime": 1787320971.45973,
-    "ast_hash": "54c0400241a58360451110451546b818",
+    "mtime": 1787333383.5512927,
+    "ast_hash": "5bee61ccebfd431e906f4d97d932dad9",
     "semantic_hash": ""
   },
   "supabase/migrations/0202_forecast_to_purchase_order.sql": {
@@ -3315,8 +3315,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos.sql": {
-    "mtime": 1787321953.4272482,
-    "ast_hash": "842f1246e4ba36051dc173aaa3278c47",
+    "mtime": 1787331977.9885397,
+    "ast_hash": "a613e147a9f03b72453a679a1e909c82",
     "semantic_hash": ""
   },
   "supabase/tests/pos_fnb.sql": {
@@ -3350,8 +3350,8 @@
     "semantic_hash": ""
   },
   "docs/pos.md": {
-    "mtime": 1787324075.6391199,
-    "ast_hash": "b4cdc1853db73f8663cedfc2002e5da2",
+    "mtime": 1787333550.3298202,
+    "ast_hash": "61e8eef584b28f9b60ea32dbd9cbc6a9",
     "semantic_hash": ""
   },
   "app/lib/src/core/export_log.dart": {
@@ -3790,8 +3790,43 @@
     "semantic_hash": ""
   },
   "supabase/migrations/0258_breakfast_stops_at_eleven.sql": {
-    "mtime": 1787323362.4571517,
-    "ast_hash": "b2ced4dfabc6a32e67e6cb1153375f9d",
+    "mtime": 1787325692.2298996,
+    "ast_hash": "3fc4046b7b97c5e41fc23fc545390302",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/pos/deliveries_screen.dart": {
+    "mtime": 1787333136.096504,
+    "ast_hash": "ae584e3d644c2f5e8e2e5ae04aee7fbe",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/pos/delivery_setup_screen.dart": {
+    "mtime": 1787333136.0967507,
+    "ast_hash": "8095db082a561cae0b6c418e080ba76c",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/pos/delivery_sheet.dart": {
+    "mtime": 1787332866.9755826,
+    "ast_hash": "576fdfb6077ed25db33c2cbe0d148577",
+    "semantic_hash": ""
+  },
+  "app/test/delivery_test.dart": {
+    "mtime": 1787333194.1637895,
+    "ast_hash": "542806c2c8e8446f081ada2787c7bdb4",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0259_an_address_a_fee_and_a_driver.sql": {
+    "mtime": 1787332436.3841963,
+    "ast_hash": "2b3f9b39653aa004a8b9d2c78d7ce3a7",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0260_the_demo_that_only_worked_on_a_tuesday.sql": {
+    "mtime": 1787332354.7580223,
+    "ast_hash": "03c43a64e3b98cc639fa517632721946",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pos_delivery.sql": {
+    "mtime": 1787332653.5713127,
+    "ast_hash": "eaca26b0a9f10f30064de31588439ea8",
     "semantic_hash": ""
   }
 }
