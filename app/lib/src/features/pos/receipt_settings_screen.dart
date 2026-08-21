@@ -1,0 +1,331 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/providers.dart';
+import '../../core/widgets.dart';
+import '../../data/repository.dart';
+import 'receipt_view.dart';
+
+/// What goes on the paper, chosen by the shop.
+///
+/// The preview is the point of the screen. It renders through the same
+/// server function the printer uses, against the last bill this outlet
+/// actually settled — so what is on screen is the paper, not a mock-up
+/// of it. A shop that has sold nothing yet is told to ring one up
+/// rather than shown an invented basket that will not match.
+class ReceiptSettingsScreen extends ConsumerStatefulWidget {
+  const ReceiptSettingsScreen({super.key});
+
+  @override
+  ConsumerState<ReceiptSettingsScreen> createState() =>
+      _ReceiptSettingsScreenState();
+}
+
+class _ReceiptSettingsScreenState
+    extends ConsumerState<ReceiptSettingsScreen> {
+  String? _outletId;
+  final _header = TextEditingController();
+  final _footer = TextEditingController();
+
+  // Loaded once per outlet, then owned by the form. Re-reading the
+  // provider into the controllers on every rebuild would fight the
+  // person typing.
+  String? _loadedFor;
+  int _paperMm = 80;
+  int _copies = 1;
+  String _language = 'en';
+  bool _itemCodes = false;
+  bool _cashier = true;
+  bool _table = true;
+  bool _channel = false;
+  bool _tax = true;
+  bool _customer = true;
+  bool _points = true;
+  bool _qr = true;
+
+  @override
+  void dispose() {
+    _header.dispose();
+    _footer.dispose();
+    super.dispose();
+  }
+
+  void _load(Map<String, dynamic> row) {
+    _header.text = '${row['header'] ?? ''}';
+    _footer.text = '${row['footer'] ?? ''}';
+    _paperMm = (row['paper_mm'] as num?)?.toInt() ?? 80;
+    _copies = (row['copies'] as num?)?.toInt() ?? 1;
+    _language = '${row['language'] ?? 'en'}';
+    _itemCodes = row['show_item_codes'] == true;
+    _cashier = row['show_cashier'] != false;
+    _table = row['show_table'] != false;
+    _channel = row['show_channel'] == true;
+    _tax = row['show_tax_summary'] != false;
+    _customer = row['show_customer'] != false;
+    _points = row['show_points'] != false;
+    _qr = row['show_einvoice_qr'] != false;
+  }
+
+  Future<void> _save(String outletId) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Saved',
+      action: () => repo.savePosReceiptSettings(
+        outletId: outletId,
+        header: _header.text.trim().isEmpty ? null : _header.text.trim(),
+        footer: _footer.text.trim().isEmpty ? null : _footer.text.trim(),
+        paperMm: _paperMm,
+        copies: _copies,
+        language: _language,
+        itemCodes: _itemCodes,
+        cashier: _cashier,
+        table: _table,
+        channel: _channel,
+        tax: _tax,
+        customer: _customer,
+        points: _points,
+        qr: _qr,
+      ),
+    );
+    if (!ok || !mounted) return;
+    ref.invalidate(posReceiptSettingsProvider(outletId));
+    // The preview is the whole point, so it is re-rendered rather than
+    // left showing the paper from before the change.
+    final sale = await ref.read(posRecentSaleProvider(outletId).future);
+    if (sale != null && mounted) ref.invalidate(posReceiptTextProvider(sale));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final outlets = ref.watch(posOutletsProvider);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Receipt')),
+      body: AsyncView<List<Map<String, dynamic>>>(
+        value: outlets,
+        onRetry: () => ref.invalidate(posOutletsProvider),
+        builder: (shops) {
+          if (shops.isEmpty) {
+            return const EmptyState(
+              icon: Icons.storefront_outlined,
+              title: 'No outlets',
+              message: 'Set a shop up before deciding what its paper says.',
+            );
+          }
+          if (_outletId == null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                setState(() => _outletId = shops.first['id'] as String?);
+              }
+            });
+            return const Center(child: CircularProgressIndicator());
+          }
+          final outlet = _outletId!;
+          final settings = ref.watch(posReceiptSettingsProvider(outlet));
+
+          return AsyncView<Map<String, dynamic>>(
+            value: settings,
+            onRetry: () => ref.invalidate(posReceiptSettingsProvider(outlet)),
+            builder: (row) {
+              if (_loadedFor != outlet) {
+                _loadedFor = outlet;
+                _load(row);
+              }
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (shops.length > 1)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Wrap(
+                        spacing: 4,
+                        children: [
+                          for (final s in shops)
+                            ChoiceChip(
+                              label: Text('${s['name']}'),
+                              selected: s['id'] == outlet,
+                              onSelected: (_) => setState(() {
+                                _outletId = s['id'] as String?;
+                                _loadedFor = null;
+                              }),
+                            ),
+                        ],
+                      ),
+                    ),
+                  TextField(
+                    controller: _header,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Top of the receipt',
+                      helperText: 'One line each. Centred on the paper.',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _footer,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Bottom of the receipt',
+                      hintText: 'Terima kasih',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      // Millimetres, because that is what a shop buys.
+                      // The columns are the server's arithmetic.
+                      Expanded(
+                        child: SegmentedButton<int>(
+                          segments: const [
+                            ButtonSegment(value: 58, label: Text('58mm')),
+                            ButtonSegment(value: 80, label: Text('80mm')),
+                          ],
+                          selected: {_paperMm},
+                          onSelectionChanged: (v) =>
+                              setState(() => _paperMm = v.first),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: SegmentedButton<String>(
+                          segments: const [
+                            ButtonSegment(value: 'en', label: Text('English')),
+                            ButtonSegment(value: 'ms', label: Text('Melayu')),
+                          ],
+                          selected: {_language},
+                          onSelectionChanged: (v) =>
+                              setState(() => _language = v.first),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Text('Copies'),
+                      const SizedBox(width: 12),
+                      SegmentedButton<int>(
+                        segments: const [
+                          ButtonSegment(value: 1, label: Text('1')),
+                          ButtonSegment(value: 2, label: Text('2')),
+                          ButtonSegment(value: 3, label: Text('3')),
+                        ],
+                        selected: {_copies},
+                        onSelectionChanged: (v) =>
+                            setState(() => _copies = v.first),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 32),
+                  // Only the things a shop may leave off. There is no
+                  // switch here for a discount, a promotion, a delivery
+                  // fee or a tender: a receipt that can be configured
+                  // not to mention money that changed hands is a
+                  // receipt that can be used to hide it.
+                  const SectionHeader('What to put on it'),
+                  SwitchListTile(
+                    dense: true,
+                    value: _cashier,
+                    onChanged: (v) => setState(() => _cashier = v),
+                    title: const Text("Who served them"),
+                  ),
+                  SwitchListTile(
+                    dense: true,
+                    value: _table,
+                    onChanged: (v) => setState(() => _table = v),
+                    title: const Text('The table and how many were on it'),
+                  ),
+                  SwitchListTile(
+                    dense: true,
+                    value: _customer,
+                    onChanged: (v) => setState(() => _customer = v),
+                    title: const Text("The customer's name"),
+                  ),
+                  SwitchListTile(
+                    dense: true,
+                    value: _channel,
+                    onChanged: (v) => setState(() => _channel = v),
+                    title: const Text('How the order arrived'),
+                  ),
+                  SwitchListTile(
+                    dense: true,
+                    value: _itemCodes,
+                    onChanged: (v) => setState(() => _itemCodes = v),
+                    title: const Text('Item codes'),
+                  ),
+                  SwitchListTile(
+                    dense: true,
+                    value: _tax,
+                    onChanged: (v) => setState(() => _tax = v),
+                    title: const Text('The tax line'),
+                  ),
+                  SwitchListTile(
+                    dense: true,
+                    value: _points,
+                    onChanged: (v) => setState(() => _points = v),
+                    title: const Text('Points earned and the balance'),
+                  ),
+                  SwitchListTile(
+                    dense: true,
+                    value: _qr,
+                    onChanged: (v) => setState(() => _qr = v),
+                    title: const Text('The e-Invoice square'),
+                    subtitle: const Text(
+                      'Only printed when the company has e-Invoice on',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: () => _save(outlet),
+                    child: const Text('Save'),
+                  ),
+                  const Divider(height: 32),
+                  const SectionHeader('The paper'),
+                  _Preview(outletId: outlet),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _Preview extends ConsumerWidget {
+  const _Preview({required this.outletId});
+
+  final String outletId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sale = ref.watch(posRecentSaleProvider(outletId));
+    return AsyncView<String?>(
+      value: sale,
+      onRetry: () => ref.invalidate(posRecentSaleProvider(outletId)),
+      builder: (saleId) {
+        if (saleId == null) {
+          return const EmptyState(
+            icon: Icons.receipt_long_outlined,
+            title: 'Nothing to show yet',
+            message: 'Ring a sale up and its receipt appears here, rendered '
+                'exactly as the printer will produce it.',
+          );
+        }
+        final text = ref.watch(posReceiptTextProvider(saleId));
+        return AsyncView<String>(
+          value: text,
+          onRetry: () => ref.invalidate(posReceiptTextProvider(saleId)),
+          builder: (paper) => Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: ReceiptPaper(paper),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

@@ -2190,3 +2190,21 @@ final posDriverRunsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTime>(
       (ref, date) => requireRepo(ref).posDriverRuns(date),
     );
+
+/// The paper for one bill, rendered on the server. 0261.
+final posReceiptTextProvider = FutureProvider.autoDispose
+    .family<String, String>(
+      (ref, saleId) => requireRepo(ref).posReceiptText(saleId),
+    );
+
+/// What an outlet prints, defaults included. 0261.
+final posReceiptSettingsProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, String>(
+      (ref, outletId) => requireRepo(ref).posReceiptSettings(outletId),
+    );
+
+/// The last bill an outlet settled, for the settings screen's preview. 0261.
+final posRecentSaleProvider = FutureProvider.autoDispose
+    .family<String?, String>(
+      (ref, outletId) => requireRepo(ref).posRecentSale(outletId),
+    );

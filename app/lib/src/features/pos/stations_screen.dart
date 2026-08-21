@@ -5,6 +5,7 @@ import '../../core/providers.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'channels.dart';
+import 'receipt_settings_screen.dart';
 
 /// Setting a shop up: its counters, and how orders reach it.
 ///
@@ -164,7 +165,22 @@ class _StationsScreenState extends ConsumerState<StationsScreen> {
     final outlets = ref.watch(posOutletsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Outlet setup')),
+      appBar: AppBar(
+        title: const Text('Outlet setup'),
+        actions: [
+          // The third per-outlet question the same person asks at the
+          // same moment: what the paper says.
+          IconButton(
+            tooltip: 'Receipt',
+            icon: const Icon(Icons.receipt_long_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ReceiptSettingsScreen(),
+              ),
+            ),
+          ),
+        ],
+      ),
       floatingActionButton: _outletId == null
           ? null
           : FloatingActionButton.extended(

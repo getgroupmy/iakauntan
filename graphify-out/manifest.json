@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787332804.3917663,
-    "ast_hash": "077318308b4d6f003b69f3a6db88fa72",
+    "mtime": 1787334974.7052402,
+    "ast_hash": "d28aa783e27829f576428ba96b84d6ad",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787332788.5037653,
-    "ast_hash": "c2e1c03dece47708c016675b0d470ef9",
+    "mtime": 1787334974.7052402,
+    "ast_hash": "6b4bb794eadbd15174d64ff3a69605e5",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787332675.9197564,
-    "ast_hash": "3f19a4f1535ae864c3bba37150d44b99",
+    "mtime": 1787334901.8960464,
+    "ast_hash": "8e9d699cd2458c4698d98f5b6a1076d7",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -3170,13 +3170,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/tender_sheet.dart": {
-    "mtime": 1787227100.0638695,
-    "ast_hash": "9d8ac446cb6ed89235b5ab1ab6a47111",
+    "mtime": 1787335092.793433,
+    "ast_hash": "df0ef679f099d0370025cac323744c23",
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/till_screen.dart": {
-    "mtime": 1787333074.9755495,
-    "ast_hash": "ce6df423a9c798e1b6ce75300f6d54fe",
+    "mtime": 1787335092.807276,
+    "ast_hash": "d46cd78a238546f73f86e436f66c3344",
     "semantic_hash": ""
   },
   "app/test/diary_screen_test.dart": {
@@ -3350,8 +3350,8 @@
     "semantic_hash": ""
   },
   "docs/pos.md": {
-    "mtime": 1787333550.3298202,
-    "ast_hash": "61e8eef584b28f9b60ea32dbd9cbc6a9",
+    "mtime": 1787335529.67739,
+    "ast_hash": "76ba0688baa407bed342b5fd92ff68d2",
     "semantic_hash": ""
   },
   "app/lib/src/core/export_log.dart": {
@@ -3410,8 +3410,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/stations_screen.dart": {
-    "mtime": 1787151779.242881,
-    "ast_hash": "d7b15aa32d5d65d2878cb550133938de",
+    "mtime": 1787335066.3625135,
+    "ast_hash": "5f682b0c4dcda82e0f8636c48d140cde",
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/void_sheet.dart": {
@@ -3827,6 +3827,31 @@
   "supabase/tests/pos_delivery.sql": {
     "mtime": 1787332653.5713127,
     "ast_hash": "eaca26b0a9f10f30064de31588439ea8",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/pos/receipt_settings_screen.dart": {
+    "mtime": 1787335033.1358988,
+    "ast_hash": "7047115051ee9d795fa9bc43d73bcce2",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/pos/receipt_view.dart": {
+    "mtime": 1787334991.3838964,
+    "ast_hash": "e6d9d58da9d655c95772cae8f095c9c1",
+    "semantic_hash": ""
+  },
+  "app/test/receipt_test.dart": {
+    "mtime": 1787335169.0990772,
+    "ast_hash": "2935b1cf653988224ec92536e7e281e1",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0261_what_goes_on_the_receipt.sql": {
+    "mtime": 1787334731.5678809,
+    "ast_hash": "c5001f0648e12f61311a663f35364916",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pos_receipt.sql": {
+    "mtime": 1787334851.299888,
+    "ast_hash": "65afef7550c74927740d6e2caf4d1351",
     "semantic_hash": ""
   }
 }

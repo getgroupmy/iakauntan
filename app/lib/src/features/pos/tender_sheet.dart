@@ -8,6 +8,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import 'member_panel.dart';
+import 'receipt_view.dart';
 import 'till_screen.dart' show posNum;
 
 /// Taking the money.
@@ -91,6 +92,21 @@ class _TenderSheetState extends ConsumerState<_TenderSheet> {
         ],
       ),
       actions: [
+        // The paper, for the person on the other side of the counter.
+        // The numbers above are what the cashier needs; this is what
+        // the customer takes away, rendered by the same server function
+        // the printer will use.
+        TextButton(
+          onPressed: () async {
+            final text = await ref
+                .read(repoProvider)!
+                .posReceiptText(widget.saleId);
+            if (ctx.mounted) {
+              await showReceiptSheet(ctx, text: text, title: '${r['invoice_no']}');
+            }
+          },
+          child: const Text('Receipt'),
+        ),
         // Offered after the money, never before. `start_membership`
         // refuses a sale that has not completed, for the reason it
         // gives: a membership that starts first is an entitlement

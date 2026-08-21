@@ -8111,6 +8111,72 @@ extension RepoPosControls on Repo {
           params: {'p_org': orgId, 'p_date': Fmt.iso(date)},
         ),
       );
+
+  // ------------------------------------------------------------------
+  // The receipt
+  // ------------------------------------------------------------------
+
+  /// The paper, rendered on the server and wrapped to the outlet's own
+  /// width.
+  ///
+  /// Text rather than a widget tree on purpose: it is what a thermal
+  /// printer takes, and it means the counter, the phone, the kiosk and
+  /// a reprint an hour later all produce the same receipt.
+  Future<String> posReceiptText(String saleId) async =>
+      (await callRpc('pos_receipt_text', params: {'p_sale': saleId}))
+          ?.toString() ??
+      '';
+
+  /// What this outlet prints, defaults included.
+  Future<Map<String, dynamic>> posReceiptSettings(String outletId) async {
+    final rows = Repo.rows(
+      await callRpc('pos_receipt_settings_for', params: {'p_outlet': outletId}),
+    );
+    return rows.isEmpty ? const {} : rows.first;
+  }
+
+  /// Saves the header, the footer and the choices in one call, so a
+  /// shop is never left having saved half of what it typed.
+  Future<void> savePosReceiptSettings({
+    required String outletId,
+    String? header,
+    String? footer,
+    int paperMm = 80,
+    int copies = 1,
+    String language = 'en',
+    bool itemCodes = false,
+    bool cashier = true,
+    bool table = true,
+    bool channel = false,
+    bool tax = true,
+    bool customer = true,
+    bool points = true,
+    bool qr = true,
+  }) async => await callRpc(
+    'upsert_pos_receipt_settings',
+    params: {
+      'p_outlet': outletId,
+      'p_header': header,
+      'p_footer': footer,
+      'p_paper_mm': paperMm,
+      'p_copies': copies,
+      'p_language': language,
+      'p_item_codes': itemCodes,
+      'p_cashier': cashier,
+      'p_table': table,
+      'p_channel': channel,
+      'p_tax': tax,
+      'p_customer': customer,
+      'p_points': points,
+      'p_qr': qr,
+    },
+  );
+
+  /// The last bill this outlet settled, so the settings screen previews
+  /// a real receipt rather than an invented basket.
+  Future<String?> posRecentSale(String outletId) async =>
+      (await callRpc('pos_recent_sale', params: {'p_outlet': outletId}))
+          ?.toString();
 }
 
 

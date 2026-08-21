@@ -1292,6 +1292,48 @@ everything not yet landed, oldest first, with minutes waiting computed
 on the server and whether the driver is collecting the money — and its
 own screen behind it for zones and drivers.
 
+## What goes on the receipt
+
+`pos_outlets.receipt_header` and `receipt_footer` have existed since
+0206 and nothing ever read them. The till's "receipt" was a dialog with
+four numbers on it, and a customer had never been handed anything.
+
+**The paper is rendered on the server.** `pos_receipt_text` returns the
+receipt as plain text, wrapped to the outlet's own roll — 32 columns for
+58mm, 48 for 80mm. That is what a thermal printer takes, and it means
+the counter, the phone, the kiosk, the van that was offline this morning
+and a reprint an hour later all produce the same document. It also makes
+the choices assertable: "turn the cashier's name off and it is not on
+the paper" is a test, where "one fewer `Text` in the widget tree" would
+be a test of the wrong thing.
+
+**The choices are per outlet, and so is the text.** One row in
+`pos_receipt_settings`; the header and footer stay on `pos_outlets`
+where 0206 put them rather than being copied. `upsert_pos_receipt_settings`
+writes both in one call, so there is no moment where a shop has saved
+half of it. An outlet with no row prints the defaults — nothing about
+this makes a shop configure it before the till works.
+
+**Money is never optional.** The switches cover the cashier's name, the
+table, the customer, the channel, item codes, the tax line and the
+points balance. There is deliberately no switch for a discount, a
+promotion, a delivery fee or a tender, and `pos_receipt.sql` asserts
+that with everything switched off the discount, its reason and the total
+are all still on the paper. A receipt that can be configured not to
+mention money that changed hands is a receipt that can be used to hide
+it.
+
+A parked bill prints too — "bill please" is a print — and says
+`*** NOT PAID ***` where the change would be rather than showing a
+change of nothing, which reads like a settled sale at a glance. A voided
+one is marked on its own paper.
+
+On the screens: **Outlet setup → Receipt** carries the settings with a
+live preview rendered through the same function the printer uses,
+against the last bill the outlet actually settled. The till's bill menu
+has "Print the bill", and the tender sheet's "Receipt" opens the paper
+once the money is in.
+
 ## Not built yet
 
 - Submitting the consolidated e-Invoice to MyInvois (the rollup runs; the
@@ -1299,8 +1341,10 @@ own screen behind it for zones and drivers.
 - Card terminal integration. A tender records an authorisation code
   because somebody typed or pasted it; nothing talks to a payment
   terminal
-- Cash drawer and receipt printer drivers. The receipt renders; opening a
-  physical drawer is between the browser and the hardware
+- Cash drawer and receipt printer drivers. The receipt now renders as
+  the text a thermal printer takes, and the screen will hand it over;
+  pushing those bytes at a USB or Bluetooth printer, and opening a
+  physical drawer, is between the browser and the hardware
 - Reading a table card with the device's own camera. The wedge readers a
   counter has — tag, barcode, QR pad — type and press enter, and that is
   the whole interface; pointing a phone camera at the sticker is a

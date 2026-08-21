@@ -13,6 +13,7 @@ import 'assign_table.dart';
 import 'channels.dart';
 import 'delivery_sheet.dart';
 import 'discount_sheet.dart';
+import 'receipt_view.dart';
 import 'modifier_sheet.dart';
 import 'offline_controller.dart';
 import 'offline_till.dart';
@@ -347,6 +348,27 @@ class _TillScreenState extends ConsumerState<TillScreen> {
   /// attaching it inert, so what matters here is showing what it said —
   /// "Raya five needs 50.00 and this bill is 43.00" is an answer a
   /// cashier can give the customer.
+  /// The bill, on paper, before anybody has paid for it.
+  ///
+  /// "Bill please" is a print too, and it is the one a table asks for.
+  /// The same server function renders it, so what the customer reads at
+  /// the table and what comes out of the printer afterwards are the
+  /// same document — it just says it has not been paid yet.
+  Future<void> _printBill() async {
+    final id = _saleId;
+    if (id == null) return;
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    String text = '';
+    final ok = await runWithFeedback(
+      context,
+      successMessage: null,
+      action: () async => text = await repo.posReceiptText(id),
+    );
+    if (!ok || !mounted) return;
+    await showReceiptSheet(context, text: text, title: 'The bill');
+  }
+
   /// Where this bill is going, and what the ride costs.
   ///
   /// The fee is not asked for here. It comes from the zone the postcode
@@ -1320,6 +1342,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
             onDiscountBill: _discountBill,
             onCoupon: _coupon,
             onDelivery: _delivery,
+            onPrintBill: _printBill,
             onLineAction: _lineAction,
             onOpenOrder: _openOrder,
             onPark: _park,
@@ -1351,6 +1374,7 @@ class _Register extends ConsumerWidget {
     required this.onDiscountBill,
     required this.onCoupon,
     required this.onDelivery,
+    required this.onPrintBill,
     required this.onLineAction,
     required this.onOpenOrder,
     required this.onPark,
@@ -1392,6 +1416,10 @@ class _Register extends ConsumerWidget {
   /// voucher and the discount, because all three are things done to a
   /// bill rather than to a line on it.
   final VoidCallback onDelivery;
+
+  /// The bill on paper before the money. The same document the till
+  /// prints afterwards, marked as not paid.
+  final VoidCallback onPrintBill;
   final ValueChanged<Map<String, dynamic>> onLineAction;
   final ValueChanged<Map<String, dynamic>> onOpenOrder;
   final VoidCallback onPark;
@@ -1456,6 +1484,7 @@ class _Register extends ConsumerWidget {
           onDiscountBill: onDiscountBill,
           onCoupon: onCoupon,
           onDelivery: onDelivery,
+          onPrintBill: onPrintBill,
           onLineAction: onLineAction,
           onOpenOrder: onOpenOrder,
           onPark: onPark,
@@ -1664,6 +1693,7 @@ class _Basket extends ConsumerWidget {
     required this.onDiscountBill,
     required this.onCoupon,
     required this.onDelivery,
+    required this.onPrintBill,
     required this.onLineAction,
     required this.onOpenOrder,
     required this.onPark,
@@ -1694,6 +1724,10 @@ class _Basket extends ConsumerWidget {
   /// voucher and the discount, because all three are things done to a
   /// bill rather than to a line on it.
   final VoidCallback onDelivery;
+
+  /// The bill on paper before the money. The same document the till
+  /// prints afterwards, marked as not paid.
+  final VoidCallback onPrintBill;
   final ValueChanged<Map<String, dynamic>> onLineAction;
 
   /// A whole row rather than an id, because what the till does next
@@ -1895,9 +1929,18 @@ class _Basket extends ConsumerWidget {
                       'discount' => onDiscountBill(),
                       'coupon' => onCoupon(),
                       'delivery' => onDelivery(),
+                      'bill' => onPrintBill(),
                       _ => onVoidBill(),
                     },
                     itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'bill',
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(Icons.receipt_long_outlined),
+                          title: Text('Print the bill'),
+                        ),
+                      ),
                       PopupMenuItem(
                         value: 'delivery',
                         child: ListTile(
