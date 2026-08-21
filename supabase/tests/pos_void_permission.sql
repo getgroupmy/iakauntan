@@ -39,6 +39,10 @@ declare
   v_line   uuid;
   v_can    boolean;
   v_msg    text;
+  v_stn    uuid;
+  v_bill   uuid;
+  v_free   uuid;
+  v_lost   integer;
 begin
   v_org := pg_temp.test_org('Kedai Void Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
@@ -203,6 +207,138 @@ begin
   perform pg_temp.check_eq('and it answers for somebody with no access type',
     (select a.access from public.my_module_access(v_org) a
       where a.module_code = 'pos_void'), 'write');
+
+  -- ------------------------------------------------------------------
+  -- Writing off the whole bill
+  -- ------------------------------------------------------------------
+  --
+  -- A party walks out on six lines. Before 0246 that was six voids,
+  -- six reasons and six records for one event -- and 0206 had been
+  -- telling cashiers to "finish or void" a parked bill before closing
+  -- a shift since long before there was a way to void one.
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.pos_kitchen_stations
+    (org_id, outlet_id, code, name, is_default)
+  values (v_org, v_outlet, 'KIT', 'Kitchen', true) returning id into v_stn;
+
+  -- ------------------------------------------------------------------
+  -- A bill nobody cooked from costs nothing
+  -- ------------------------------------------------------------------
+  --
+  -- Keystrokes. The cashier could already take these off one at a time
+  -- with no grant at all, and a cashier who cannot clear a mis-tap
+  -- cannot close their own drawer at the end of a shift.
+  perform pg_temp.sign_in_as(v_owner);
+  update public.access_type_modules set access = 'none'
+   where access_type_id = v_type and module_code = 'pos_void';
+  v_free := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_free, v_item, 1, 8.00);
+
+  perform pg_temp.sign_in_as(v_limited);
+  perform pg_temp.check_true('a cashier without the grant does not hold it',
+    not app.can_void_pos(v_org));
+  perform pg_temp.check_eq('and can still write off a bill nothing was cooked for',
+    public.void_pos_sale(v_free, 'customer_cancelled'), 0);
+  perform pg_temp.check_eq('which is written off',
+    (select s.status::text from public.pos_sales s where s.id = v_free), 'voided');
+  -- Nothing became food, so nothing belongs in the report that exists
+  -- to answer "where is the food going".
+  perform pg_temp.check_eq('and left nothing in the void record',
+    (select count(*) from public.pos_sale_line_voids v where v.sale_id = v_free), 0);
+
+  -- ------------------------------------------------------------------
+  -- Once the kitchen has cooked, it is a write-off
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(v_owner);
+  v_bill := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_bill, v_item, 2, 8.00);
+  perform public.add_pos_sale_line(v_bill, v_item, 1, 8.00);
+  perform public.send_order_to_kitchen(v_bill);
+  perform pg_temp.check_eq('the kitchen has a docket',
+    (select count(*) from public.pos_kitchen_tickets k
+      where k.sale_id = v_bill and k.status = 'new'), 1);
+
+  perform pg_temp.sign_in_as(v_limited);
+  begin
+    perform public.void_pos_sale(v_bill, 'customer_cancelled');
+    raise exception 'FAIL wrote off cooked food without the grant';
+  exception when insufficient_privilege then
+    get stacked diagnostics v_msg = message_text;
+    raise notice 'ok   writing off cooked food is refused without the grant';
+  end;
+  perform pg_temp.check_true('and the refusal says who to ask',
+    v_msg like '%Ask a manager%');
+  perform pg_temp.check_eq('the bill is untouched',
+    (select s.status::text from public.pos_sales s where s.id = v_bill), 'parked');
+
+  -- ------------------------------------------------------------------
+  -- And with the grant
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(v_owner);
+  update public.access_type_modules set access = 'write'
+   where access_type_id = v_type and module_code = 'pos_void';
+
+  perform pg_temp.sign_in_as(v_limited);
+  -- Returns how many lines became a loss, which is how many were
+  -- cooked -- not how many were on the bill.
+  v_lost := public.void_pos_sale(v_bill, 'other', '  they walked out  ');
+  perform pg_temp.check_eq('both cooked lines are recorded as a loss', v_lost, 2);
+  perform pg_temp.check_eq('the bill is written off',
+    (select s.status::text from public.pos_sales s where s.id = v_bill), 'voided');
+  perform pg_temp.check_eq('with a reason on it',
+    (select s.void_reason from public.pos_sales s where s.id = v_bill), 'other');
+  -- Trimmed, so a note that is only spaces is no note at all.
+  perform pg_temp.check_eq('and what was said, tidied',
+    (select s.void_note from public.pos_sales s where s.id = v_bill),
+    'they walked out');
+  perform pg_temp.check_eq('and a name against it',
+    (select s.voided_by from public.pos_sales s where s.id = v_bill), v_limited);
+
+  -- The lines stay. They are what was written off, and a voided bill
+  -- of nothing tells a manager nothing.
+  perform pg_temp.check_eq('the lines are kept',
+    (select count(*) from public.pos_sale_lines l where l.sale_id = v_bill), 2);
+  perform pg_temp.check_eq('and so is what it came to',
+    (select s.total_amount from public.pos_sales s where s.id = v_bill), 24.00);
+
+  -- The kitchen is told to stop.
+  perform pg_temp.check_eq('the docket is cancelled',
+    (select count(*) from public.pos_kitchen_tickets k
+      where k.sale_id = v_bill and k.status = 'cancelled'), 1);
+
+  -- It falls out of everything that counts open bills, which is what
+  -- lets a shift close over it.
+  perform pg_temp.check_eq('and it is no longer an open order',
+    (select count(*) from public.pos_open_orders(v_outlet) o
+      where o.sale_id in (v_bill, v_free)), 0);
+
+  -- One event, one row per plate, in the report a manager already has.
+  perform pg_temp.check_eq('the loss reaches the void report',
+    (select v.lines from public.pos_void_summary(v_org) v
+      where v.reason = 'other'), 2);
+
+  -- ------------------------------------------------------------------
+  -- And it only happens once
+  -- ------------------------------------------------------------------
+  begin
+    perform public.void_pos_sale(v_bill, 'customer_cancelled');
+    raise exception 'FAIL wrote off a bill twice';
+  exception when check_violation then
+    raise notice 'ok   a bill already written off cannot be written off again';
+  end;
+
+  -- "Something else" that says nothing is not a reason. The same rule
+  -- 0225 set for one line, because the report is only worth having if
+  -- the catch-all is answerable.
+  perform pg_temp.sign_in_as(v_owner);
+  v_free := public.open_pos_sale(v_reg);
+  begin
+    perform public.void_pos_sale(v_free, 'other', '   ');
+    raise exception 'FAIL wrote off a bill with an empty explanation';
+  exception when check_violation then
+    raise notice 'ok   something else has to say what happened';
+  end;
+  perform public.void_pos_sale(v_free, 'wrong_item');
 
   raise notice 'point of sale voiding: all assertions passed';
 end;

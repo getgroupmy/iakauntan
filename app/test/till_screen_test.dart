@@ -1028,6 +1028,105 @@ void main() {
     });
   });
 
+  group('writing off a whole bill', () {
+    Map<String, dynamic> parkedSale() => {
+      'id': 'sale-1',
+      'sale_no': 'POS-2026-00001',
+      'total_amount': '21.00',
+      'status': 'parked',
+    };
+
+    // Before 0246 a party walking out on six lines meant six voids,
+    // six reasons and six records for one event — and the shift-close
+    // guard had been telling cashiers to "finish or void" a parked
+    // bill since long before there was a way to void one.
+    testWidgets('is offered on the open bill', (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('POS-2026-00001'));
+      await tester.pumpAndSettle();
+
+      // Behind a menu, not beside "Leave it open": the two are one tap
+      // apart and opposite in consequence.
+      expect(find.text('Write off this bill'), findsNothing);
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      expect(find.text('Write off this bill'), findsOneWidget);
+    });
+
+    testWidgets('and asks why, naming the bill', (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('POS-2026-00001'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Write off this bill'));
+      await tester.pumpAndSettle();
+
+      // The same reasons the kitchen reports, because a party that
+      // walked out cancelled whether it is one plate or all of them.
+      expect(find.text('Write off POS-2026-00001'), findsOneWidget);
+      expect(find.text('Customer changed their mind'), findsOneWidget);
+      expect(find.text('Write it off'), findsOneWidget);
+    });
+
+    testWidgets('and "something else" insists on words', (tester) async {
+      // The database's rule as well as this sheet's: a catch-all that
+      // says nothing makes the void report unanswerable.
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        harness(
+          registers: [register()],
+          openShift: shift(),
+          parked: [parkedSale()],
+          sale: parkedSale(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('POS-2026-00001'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Write off this bill'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Something else'));
+      await tester.pumpAndSettle();
+      final button = find.widgetWithText(FilledButton, 'Write it off');
+      expect(tester.widget<FilledButton>(button).onPressed, isNull);
+
+      await tester.enterText(find.byType(TextField).last, 'they walked out');
+      await tester.pumpAndSettle();
+      expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
+    });
+  });
+
   group('picking a bill out of a list', () {
     // Two parked bills for RM 34.00 are indistinguishable by amount.
     // The thing the cashier can see from where they are standing is

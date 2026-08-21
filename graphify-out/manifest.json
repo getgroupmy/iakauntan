@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787287425.7397642,
-    "ast_hash": "23fd120f6f50b44632bdfee29c2a7058",
+    "mtime": 1787289903.9974442,
+    "ast_hash": "93c26911c8932bf184c4731b4d713896",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -3175,8 +3175,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/till_screen.dart": {
-    "mtime": 1787287415.6925879,
-    "ast_hash": "7fc57c1004ec00a76878d53252eaf649",
+    "mtime": 1787290245.4374337,
+    "ast_hash": "58bff369fdf23f9382bdba639a85927c",
     "semantic_hash": ""
   },
   "app/test/diary_screen_test.dart": {
@@ -3205,8 +3205,8 @@
     "semantic_hash": ""
   },
   "app/test/till_screen_test.dart": {
-    "mtime": 1787287479.376197,
-    "ast_hash": "9f381a72cec2444cda9813a31578623d",
+    "mtime": 1787290197.2613063,
+    "ast_hash": "4464fa50fd2d504f0676b50489b47432",
     "semantic_hash": ""
   },
   "supabase/migrations/0202_forecast_to_purchase_order.sql": {
@@ -3415,8 +3415,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/void_sheet.dart": {
-    "mtime": 1787145854.5539653,
-    "ast_hash": "b616e765b6a6a5745d9a03ca3e948de6",
+    "mtime": 1787290011.28967,
+    "ast_hash": "b3fde40bbe5d386e3d62b0c9a25d3a34",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/security_screen.dart": {
@@ -3655,13 +3655,18 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_void_permission.sql": {
-    "mtime": 1787281646.6221592,
-    "ast_hash": "c80f0c28c9957c0ba54d109ad37c1792",
+    "mtime": 1787290099.7083123,
+    "ast_hash": "a6381f379c51e4bcdc54f1de2282e7cc",
     "semantic_hash": ""
   },
   "supabase/migrations/0245_a_long_table_is_two_tables.sql": {
     "mtime": 1787285780.61503,
     "ast_hash": "e877fc3ca42ad8fb3f8aa28cc9d96c4a",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0246_voiding_the_whole_bill.sql": {
+    "mtime": 1787289813.608897,
+    "ast_hash": "176a60e60eb7b63a19bbed1d94b87354",
     "semantic_hash": ""
   }
 }

@@ -11,10 +11,30 @@ import 'package:flutter/material.dart';
 /// what happened teaches people to pick the nearest wrong option — but
 /// it is the one choice that then insists on words, which is the
 /// database's rule as well as this sheet's.
+/// The same sheet serves one line and a whole bill. The reasons a
+/// kitchen reports are the reasons either way — a party that walked out
+/// cancelled, a tray that never arrived was never received — so the one
+/// thing that changes is the words around them.
 class VoidReasonSheet extends StatefulWidget {
-  const VoidReasonSheet({super.key, required this.description});
+  const VoidReasonSheet({
+    super.key,
+    required this.description,
+    this.title,
+    this.prompt,
+    this.confirmLabel,
+  });
 
   final String description;
+
+  /// Defaults to "Take off:" followed by [description], which is the
+  /// line case.
+  final String? title;
+
+  /// What the person is about to do, in one line.
+  final String? prompt;
+
+  /// The button. Defaults to "Take it off".
+  final String? confirmLabel;
 
   @override
   State<VoidReasonSheet> createState() => _VoidReasonSheetState();
@@ -58,7 +78,7 @@ class _VoidReasonSheetState extends State<VoidReasonSheet> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Take off: ${widget.description}',
+                      widget.title ?? 'Take off: ${widget.description}',
                       style: Theme.of(context).textTheme.titleLarge,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -75,7 +95,9 @@ class _VoidReasonSheetState extends State<VoidReasonSheet> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'The kitchen has already made this, so it needs a reason.',
+                  widget.prompt ??
+                      'The kitchen has already made this, so it needs a '
+                          'reason.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
@@ -111,7 +133,7 @@ class _VoidReasonSheetState extends State<VoidReasonSheet> {
                           (reason: _reason!, note: _note.text.trim()),
                         )
                       : null,
-                  child: const Text('Take it off'),
+                  child: Text(widget.confirmLabel ?? 'Take it off'),
                 ),
               ),
             ),

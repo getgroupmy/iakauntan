@@ -393,6 +393,80 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     _refreshOrders();
   }
 
+  /// Writing off the whole bill.
+  ///
+  /// The case it is for: a party walks out on six lines. Before this
+  /// they were voided one at a time — six reasons, six records, for one
+  /// event — and 0206 had been telling cashiers to "finish or void"
+  /// a parked bill before closing a shift since long before there was
+  /// a way to void one.
+  ///
+  /// The grant is not pre-checked here. `void_pos_sale` asks for it
+  /// only when the kitchen has cooked from the bill, so whether this
+  /// will be refused depends on a fact the server holds; letting it
+  /// answer means the screen cannot disagree with the database, and its
+  /// refusal already says who to ask.
+  Future<void> _voidBill() async {
+    final id = _saleId;
+    if (id == null) return;
+    // The question comes first and the repository second: asking why is
+    // a screen's job and needs nothing from the server, so a till that
+    // has lost its connection still gets as far as saying what it was
+    // about to do.
+    final no = '${ref.read(posSaleProvider(id)).valueOrNull?['sale_no'] ?? ''}';
+    final what = no.isEmpty ? 'this bill' : no;
+
+    final answer = await showModalBottomSheet<({String reason, String note})>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => VoidReasonSheet(
+        description: what,
+        title: 'Write off $what',
+        prompt:
+            'The whole bill comes off. What was on it is kept as the '
+            'record, and anything the kitchen cooked is counted as a '
+            'loss.',
+        confirmLabel: 'Write it off',
+      ),
+    );
+    if (answer == null || !mounted) return;
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+
+    var lost = 0;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: null,
+      action: () async {
+        lost = await repo.voidPosSale(id, answer.reason, note: answer.note);
+      },
+    );
+    if (!ok || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          // Said only when there is something to say. A bill nobody
+          // cooked from cost nothing, and announcing a loss of nought
+          // is noise on a busy counter.
+          lost == 0
+              ? '$what written off'
+              : '$what written off · $lost cooked '
+                    '${lost == 1 ? 'item' : 'items'} recorded as a loss',
+        ),
+      ),
+    );
+    final outlet = _outletId;
+    final reg = _registerId;
+    ref.invalidate(posSaleProvider(id));
+    if (reg != null) ref.invalidate(parkedPosSalesProvider(reg));
+    if (outlet != null) ref.invalidate(posFloorPlanProvider(outlet));
+    setState(() {
+      _saleId = null;
+      _results = const [];
+    });
+    _refreshOrders();
+  }
+
   /// Taking a line off, which is two different acts depending on one
   /// column. Before `sent_to_kitchen_at` the line is a keystroke and
   /// comes off free; after it, food exists and somebody has to say why
@@ -828,6 +902,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
             onSplit: _split,
             onEvenSplit: _evenSplit,
             onMerge: _merge,
+            onVoidBill: _voidBill,
             onLineAction: _lineAction,
             onOpenOrder: _openOrder,
             onPark: _park,
@@ -854,6 +929,7 @@ class _Register extends ConsumerWidget {
     required this.onSplit,
     required this.onEvenSplit,
     required this.onMerge,
+    required this.onVoidBill,
     required this.onLineAction,
     required this.onOpenOrder,
     required this.onPark,
@@ -875,6 +951,7 @@ class _Register extends ConsumerWidget {
   final VoidCallback onSplit;
   final VoidCallback onEvenSplit;
   final ValueChanged<Map<String, dynamic>> onMerge;
+  final VoidCallback onVoidBill;
   final ValueChanged<Map<String, dynamic>> onLineAction;
   final ValueChanged<Map<String, dynamic>> onOpenOrder;
   final VoidCallback onPark;
@@ -935,6 +1012,7 @@ class _Register extends ConsumerWidget {
           onSplit: onSplit,
           onEvenSplit: onEvenSplit,
           onMerge: onMerge,
+          onVoidBill: onVoidBill,
           onLineAction: onLineAction,
           onOpenOrder: onOpenOrder,
           onPark: onPark,
@@ -1131,6 +1209,7 @@ class _Basket extends ConsumerWidget {
     required this.onSplit,
     required this.onEvenSplit,
     required this.onMerge,
+    required this.onVoidBill,
     required this.onLineAction,
     required this.onOpenOrder,
     required this.onPark,
@@ -1145,6 +1224,7 @@ class _Basket extends ConsumerWidget {
   final VoidCallback onSplit;
   final VoidCallback onEvenSplit;
   final ValueChanged<Map<String, dynamic>> onMerge;
+  final VoidCallback onVoidBill;
   final ValueChanged<Map<String, dynamic>> onLineAction;
 
   /// A whole row rather than an id, because what the till does next
@@ -1306,6 +1386,27 @@ class _Basket extends ConsumerWidget {
                     onPressed: onPark,
                     icon: const Icon(Icons.arrow_back, size: 18),
                     label: const Text('Leave it open'),
+                  ),
+                  // Behind a menu rather than beside the button that
+                  // walks away from the bill. Writing one off and
+                  // leaving it open are one tap apart and opposite in
+                  // consequence, and a destructive action should not be
+                  // the thing a thumb finds by accident.
+                  PopupMenuButton<String>(
+                    tooltip: 'What to do with this bill',
+                    icon: const Icon(Icons.more_vert, size: 18),
+                    padding: EdgeInsets.zero,
+                    onSelected: (_) => onVoidBill(),
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'void',
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(Icons.block),
+                          title: Text('Write off this bill'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

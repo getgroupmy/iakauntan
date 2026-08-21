@@ -6600,6 +6600,26 @@ extension RepoPos on Repo {
           )
           as String;
 
+  /// Writes off a whole parked bill, and says how many lines the
+  /// kitchen had cooked from — which is how many became a loss, not how
+  /// many were on the bill.
+  ///
+  /// The lines are kept. They are what was written off, and a voided
+  /// sale of nothing tells a manager nothing.
+  Future<int> voidPosSale(String saleId, String reason, {String? note}) async =>
+      ((await callRpc(
+                'void_pos_sale',
+                params: {
+                  'p_sale': saleId,
+                  'p_reason': reason,
+                  if (note != null && note.trim().isNotEmpty)
+                    'p_note': note.trim(),
+                },
+              ))
+              as num?)
+          ?.toInt() ??
+      0;
+
   /// Turns a long table into T1-A, T1-B and so on, and returns the
   /// parts in order.
   ///
