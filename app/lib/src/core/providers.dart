@@ -725,9 +725,13 @@ bool moduleEnabledNow(WidgetRef ref, String code) {
 /// with no access type and what keeps the till usable while the answer
 /// is still in flight. Hiding is a courtesy either way: the refusal in
 /// `void_pos_sale_line` is the control.
-bool permissionHeldNow(WidgetRef ref, String code) {
-  final access = ref.read(myModuleAccessProvider).valueOrNull;
-  return (access?[code] ?? 'write') == 'write';
+Future<bool> permissionHeld(WidgetRef ref, String code) async {
+  // Awaited, not read. A provider nothing on the screen watches has no
+  // value yet, and a read would answer "held" from the fallback — which
+  // is the wrong answer to give quietly, because the database will then
+  // refuse and the person will have been walked into it.
+  final access = await ref.read(myModuleAccessProvider.future);
+  return (access[code] ?? 'write') == 'write';
 }
 
 /// The actions a company can hand out inside the modules it holds.

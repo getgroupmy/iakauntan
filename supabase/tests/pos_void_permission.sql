@@ -67,6 +67,18 @@ begin
   -- ------------------------------------------------------------------
   perform pg_temp.check_true('the owner may void',
     app.can_void_pos(v_org));
+  -- The trap this replaced, kept as an assertion so nobody walks back
+  -- into it: 0232 made `module_access` answer `none` for any code the
+  -- company has not bought, and nobody buys a permission. Routing the
+  -- grant through it denied every void in the product, including the
+  -- shop owner's.
+  perform pg_temp.check_true('a permission is not on the price list',
+    app.module_access(v_org, 'pos_void') = 'none'
+      and app.can_void_pos(v_org));
+  -- And an unknown code is not held, so a typo at a call site fails
+  -- closed rather than opening the thing it was guarding.
+  perform pg_temp.check_true('an invented permission is held by nobody',
+    not app.has_permission(v_org, 'pos_nonsense'));
   perform pg_temp.sign_in_as(v_plain);
   perform pg_temp.check_true('and so may a cashier with no access type',
     app.can_void_pos(v_org));

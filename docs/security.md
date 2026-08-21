@@ -350,8 +350,24 @@ live in so a company without pos is never offered one. Nothing writes
 it from the app: it is a catalog of what the product can enforce, so it
 changes with a migration, not with a company's mind.
 
-`app.module_access` never checked that its code was a module, so no
-enforcement machinery changed. `my_module_access` unions the
-permissions in, which is how the till learns whether to offer the
-button from the call the shell already makes. Hiding is still a
-courtesy; the refusal in `void_pos_sale_line` is the control.
+The *storage* is reused — `access_type_modules` is keyed on free text
+and never cared whether a code was a module — but the *reading* could
+not be, and the reason is worth writing down because it is invisible in
+0127. 0232 taught `app.module_access` to ask whether the company holds
+the module before anything else, and to answer `none` when it does
+not. A permission is not on the price list, so routing one through
+that function denies it to everybody, owners included. The first cut
+of 0244 did exactly that and CI caught it: the existing dining-room
+assertions could no longer void a line as the shop's own owner.
+
+`app.has_permission` asks the two questions of the two things they are
+about instead. The entitlement question goes to the module the
+permission lives in, via `can_write_module` — which doubles as the
+floor, since a permission inside a module somebody may not write is
+not a way in. The grant question goes to the permission itself,
+against the same access-type rows and by the same rule.
+
+`my_module_access` unions the permissions in through that same
+function, which is how the till learns whether to offer the button
+from the call the shell already makes. Hiding is still a courtesy; the
+refusal in `void_pos_sale_line` is the control.

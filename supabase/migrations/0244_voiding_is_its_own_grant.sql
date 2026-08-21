@@ -17,9 +17,10 @@
 --
 -- 0127 put a per-company access layer in: an *access type* naming the
 -- modules somebody may reach and whether they may write there. The
--- enforcement function, `app.module_access`, takes any code — it never
--- checked that the code was a module. So a permission finer than a
--- module needs no new machinery, only a name and somewhere to list it.
+-- rows it is stored in, `access_type_modules`, are keyed on free text
+-- and never checked that the code was a module — so a permission finer
+-- than a module needs no new storage, only a name and somewhere to
+-- list it.
 --
 -- That "somewhere" is not `platform_modules`. That table is the billing
 -- catalog: what a company bought, at what price, shown in the platform
@@ -28,13 +29,21 @@
 -- hand out on their own, and it hangs off the module it lives in so the
 -- editor can offer it under `pos` and only to companies that have pos.
 --
+-- The *reading* of those rows could not be reused, though, and the
+-- reason is worth writing down because it is not visible in 0127: 0232
+-- taught `app.module_access` to ask whether the company holds the
+-- module before anything else, and to answer `none` when it does not.
+-- A permission is not on the price list, so that path answers `none`
+-- for everybody. `app.has_permission` below asks the two questions of
+-- the two different things they are about instead.
+--
 -- ---------------------------------------------------------------------
 -- Nothing changes for a shop that has not asked for it
 --
--- `app.module_access` returns `write` for a member with no access type
--- assigned, which is every member of most companies, and always for
--- owners and administrators. So on those companies this is inert and
--- every cashier still voids exactly as before.
+-- A member with no access type assigned holds every permission, which
+-- is every member of most companies, and so does every owner and
+-- administrator. On those companies this is inert and every cashier
+-- still voids exactly as before.
 --
 -- Where it bites is the case it is for: a company that has already
 -- defined access types. Those members must now be granted `pos_void`
@@ -90,27 +99,99 @@ comment on table public.access_permissions is
   'Actions inside a module that a company can grant separately through an access type. Not the billing catalog: nothing here is sold, and a company with the module has every permission in it until an access type says otherwise.';
 
 -- ---------------------------------------------------------------------
--- May this person void
+-- Does this person hold a permission
 -- ---------------------------------------------------------------------
 --
--- Both, and in this order: working the till is the floor, and voiding
--- is a thing you do while working the till. Somebody who may not sell
--- has no business voiding whatever else they hold.
+-- Not `can_write_module(org, 'pos_void')`, which is the obvious thing
+-- and is wrong. 0232 taught `app.module_access` to ask whether the
+-- company holds the module *first*, and to answer `none` when it does
+-- not — so a code that is not on the price list answers `none` to
+-- everybody, owners included. Routing a permission through it would
+-- deny every void in the product.
+--
+-- So the two questions are asked of the two different things they are
+-- about. The entitlement question is asked about the module the
+-- permission lives in, through `can_write_module`, which is also the
+-- floor: a permission inside a module somebody may not write is not a
+-- way in. The grant question is asked about the permission itself,
+-- against the same access-type rows and by the same rule — not listed
+-- is not allowed, and no access type at all is everything, which is
+-- how every member of most companies stands.
+create or replace function app.has_permission(p_org_id uuid, p_code text)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public, app, pg_temp
+as $$
+declare
+  v_module text;
+  v_type   uuid;
+  v_access app.module_access;
+begin
+  if p_org_id is null or auth.uid() is null then
+    return false;
+  end if;
+  if not app.is_org_member(p_org_id) then
+    return false;
+  end if;
+
+  -- An unknown permission is not held. A typo in a call site must fail
+  -- closed, or the guard it was meant to be is decoration.
+  select ap.module_code into v_module
+    from public.access_permissions ap where ap.code = p_code;
+  if v_module is null then
+    return false;
+  end if;
+
+  if not app.can_write_module(p_org_id, v_module) then
+    return false;
+  end if;
+
+  -- The people who hand out access types cannot be shut out by one,
+  -- which is 0127's rule and the reason an owner never locks
+  -- themselves out of their own shop on a Friday night.
+  if app.can_admin(p_org_id) then
+    return true;
+  end if;
+
+  select m.access_type_id into v_type
+    from public.org_members m
+   where m.org_id = p_org_id and m.user_id = auth.uid();
+  if v_type is null then
+    return true;
+  end if;
+
+  select t.access into v_access
+    from public.access_type_modules t
+   where t.access_type_id = v_type and t.module_code = p_code;
+  return coalesce(v_access, 'none') = 'write';
+end;
+$$;
+
+revoke all on function app.has_permission(uuid, text) from public, anon;
+grant execute on function app.has_permission(uuid, text) to authenticated;
+
+comment on function app.has_permission(uuid, text) is
+  'Whether this member holds an action inside a module. Deliberately not module_access: 0232 made that answer none for any code the company has not bought, and nobody buys a permission.';
+
+-- ---------------------------------------------------------------------
+-- May this person void
+-- ---------------------------------------------------------------------
 create or replace function app.can_void_pos(p_org_id uuid)
 returns boolean
 language sql
 stable
 set search_path = public, app, pg_temp
 as $$
-  select app.can_write_module(p_org_id, 'pos')
-     and app.can_write_module(p_org_id, 'pos_void');
+  select app.has_permission(p_org_id, 'pos_void');
 $$;
 
 revoke all on function app.can_void_pos(uuid) from public, anon;
 grant execute on function app.can_void_pos(uuid) to authenticated;
 
 comment on function app.can_void_pos(uuid) is
-  'Whether this member may take a sent line off a bill. Working the till is the floor; voiding is granted on top of it.';
+  'Whether this member may take a sent line off a bill. Working the till is the floor, checked inside has_permission; voiding is granted on top of it.';
 
 -- ---------------------------------------------------------------------
 -- The enforcement
@@ -204,7 +285,8 @@ set search_path = public, app, pg_temp as $$
     from public.platform_modules m
    where app.is_org_member(p_org_id)
   union all
-  select p.code, app.module_access(p_org_id, p.code)::text
+  select p.code,
+         case when app.has_permission(p_org_id, p.code) then 'write' else 'none' end
     from public.access_permissions p
    where app.is_org_member(p_org_id)
    order by 1;

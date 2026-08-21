@@ -658,9 +658,16 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     } else {
       // Taking food off a bill the kitchen already has is the oldest
       // way to steal from a till, so a shop can hand it out separately.
-      // Said here rather than hidden: the cashier tapped a line and is
-      // owed an answer, and "nothing happened" is not one.
-      if (!permissionHeldNow(ref, 'pos_void')) {
+      // Said rather than hidden: the cashier tapped a line and is owed
+      // an answer, and "nothing happened" is not one.
+      //
+      // Awaited rather than read, because nothing else on this screen
+      // watches the access map: a read would find it unstarted, fall
+      // back to "held", and walk somebody into a refusal from the
+      // database. One round trip on the rarest action buys an answer
+      // that is true.
+      if (!await permissionHeld(ref, 'pos_void')) {
+        if (!mounted) return;
         await showModalBottomSheet<void>(
           context: context,
           builder: (ctx) => SafeArea(
@@ -1267,56 +1274,75 @@ class _Basket extends ConsumerWidget {
         // always meant, and what the shop-wide list is for.
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Text(
-                  sale.maybeWhen(
-                    data: (r) => '${r?['sale_no'] ?? 'Open bill'}',
-                    orElse: () => 'Open bill',
+              // Which bill, and the way out of it. These two are on
+              // their own line because they are the only two that must
+              // be reachable at any width — the basket panel is 344
+              // logical pixels on a counter terminal and narrower on a
+              // phone, and a row that also carried the chips ran off
+              // the end of it.
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      sale.maybeWhen(
+                        data: (r) => '${r?['sale_no'] ?? 'Open bill'}',
+                        orElse: () => 'Open bill',
+                      ),
+                      style: Theme.of(context).textTheme.titleSmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  style: Theme.of(context).textTheme.titleSmall,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                  TextButton.icon(
+                    onPressed: onPark,
+                    icon: const Icon(Icons.arrow_back, size: 18),
+                    label: const Text('Leave it open'),
+                  ),
+                ],
               ),
-              // How the order arrived, on the bill rather than in
-              // settings, because it is a fact about this order. Shown
-              // even when nobody chose it, so a cashier can see the
-              // till's assumption before it becomes what the day gets
-              // reported as.
-              sale.maybeWhen(
-                data: (r) => r == null
-                    ? const SizedBox.shrink()
-                    : SaleChannelChip(
-                        saleId: id,
-                        outletId: outletId,
-                        channel: r['order_channel'],
-                      ),
-                orElse: () => const SizedBox.shrink(),
-              ),
-              // Which table, next to how the order arrived, because
-              // for a dine-in bill they are one fact: it arrived at a
-              // table, and the bill has to say which. Only on dine-in
-              // — a bag over the counter has no table, and offering
-              // one would be asking a question with no answer.
-              sale.maybeWhen(
-                data: (r) => r == null || '${r['order_channel']}' != 'dine_in'
-                    ? const SizedBox.shrink()
-                    : Padding(
-                        padding: const EdgeInsets.only(left: 4),
-                        child: SaleTableChip(
-                          saleId: id,
-                          outletId: outletId,
-                          tableId: r['table_id'],
-                        ),
-                      ),
-                orElse: () => const SizedBox.shrink(),
-              ),
-              const SizedBox(width: 4),
-              TextButton.icon(
-                onPressed: onPark,
-                icon: const Icon(Icons.arrow_back, size: 18),
-                label: const Text('Leave it open'),
+              // And underneath, what is true about this order. A Wrap
+              // rather than a Row: there are two chips today and the
+              // second only sometimes, so the width they need is not
+              // something this layout can be built around.
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  // How the order arrived, on the bill rather than in
+                  // settings, because it is a fact about this order.
+                  // Shown even when nobody chose it, so a cashier can
+                  // see the till's assumption before it becomes what
+                  // the day gets reported as.
+                  sale.maybeWhen(
+                    data: (r) => r == null
+                        ? const SizedBox.shrink()
+                        : SaleChannelChip(
+                            saleId: id,
+                            outletId: outletId,
+                            channel: r['order_channel'],
+                          ),
+                    orElse: () => const SizedBox.shrink(),
+                  ),
+                  // Which table, beside how the order arrived, because
+                  // for a dine-in bill they are one fact: it arrived
+                  // at a table, and the bill has to say which. Only on
+                  // dine-in — a bag over the counter has no table, and
+                  // offering one would be asking a question with no
+                  // answer.
+                  sale.maybeWhen(
+                    data: (r) =>
+                        r == null || '${r['order_channel']}' != 'dine_in'
+                        ? const SizedBox.shrink()
+                        : SaleTableChip(
+                            saleId: id,
+                            outletId: outletId,
+                            tableId: r['table_id'],
+                          ),
+                    orElse: () => const SizedBox.shrink(),
+                  ),
+                ],
               ),
             ],
           ),
