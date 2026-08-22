@@ -8545,3 +8545,59 @@ extension RepoStockTransfers on Repo {
     return num.tryParse('$result') ?? 0;
   }
 }
+
+
+/// Things sold by weight, and the labels a counter scale prints.
+///
+/// 0266. Every quantity this system produced was a whole number — the
+/// till adds 1, a tile adds 1, a scan adds its pack quantity — so a
+/// deli, a fishmonger or anybody selling kuih by the kilogram could not
+/// ring a sale up at all.
+extension RepoWeighed on Repo {
+  /// Everything this shop sells by weight, and what its scale calls it.
+  Future<List<Map<String, dynamic>>> weighedItems() async =>
+      Repo.rows(await callRpc('weighed_items', params: {'p_org': orgId}));
+
+  /// Says an item is sold by weight, and gives it the number its scale
+  /// knows it by. Refused on an item counted in pieces.
+  Future<void> setItemWeighed(
+    String itemId, {
+    required bool weighed,
+    String? plu,
+  }) async => await callRpc(
+    'set_item_weighed',
+    params: {'p_item': itemId, 'p_weighed': weighed, 'p_plu': plu},
+  );
+
+  /// The label layouts this company's scales print.
+  Future<List<Map<String, dynamic>>> scaleFormats() async =>
+      Repo.rows(await callRpc('scale_formats_list', params: {'p_org': orgId}));
+
+  /// [kind] is one of `weight_grams`, `weight_kg_3dp`, `price_sen`.
+  Future<String> saveScaleFormat({
+    String? id,
+    required String name,
+    required String prefix,
+    required int codeDigits,
+    required int valueDigits,
+    required String kind,
+    bool checkDigit = true,
+    bool active = true,
+  }) async => (await callRpc(
+    'upsert_scale_format',
+    params: {
+      'p_id': id,
+      'p_org': orgId,
+      'p_name': name,
+      'p_prefix': prefix,
+      'p_code_digits': codeDigits,
+      'p_value_digits': valueDigits,
+      'p_kind': kind,
+      'p_check': checkDigit,
+      'p_active': active,
+    },
+  )).toString();
+
+  Future<void> deleteScaleFormat(String id) async =>
+      await callRpc('delete_scale_format', params: {'p_id': id});
+}

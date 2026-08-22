@@ -1604,6 +1604,77 @@ defined and run. The share total is checked as you type so a bad split
 is caught before the save, though the server's refusal is the one that
 counts.
 
+## Two hundred grams of it
+
+Every quantity this system produced was a whole number. The till adds 1,
+a grid tile adds 1, and a scan adds its barcode's pack quantity — also a
+whole number. `pos_sale_lines.quantity` has always been numeric, so half
+a kilogram would go in; nothing produced one. A deli, a fishmonger, or
+any of the thousands of Malaysian shops selling kuih by weight could not
+ring a sale up at all.
+
+`items.is_weighed` says an item is priced per its own unit rather than
+per piece. It is **refused unless that unit measures something** —
+0264's `ref_uom_factors` with a dimension of weight, volume or length. A
+piece and a box have no dimension; a "unit" has the dimension
+`quantity`, which is the one that looks like it would work and does not.
+A third of a piece is not a thing anybody can hand over.
+
+### The label a scale prints
+
+A counter scale prints an ordinary EAN-13 with the item and its weight
+hidden in the digits. GS1 reserves prefixes 02 and 20–29 for exactly
+this, and every make lays the rest out differently — two digits of
+prefix or one, five of PLU or four, five of weight in grams or of price
+in sen. There is no standard to hard-code, so the layout is a row the
+shop fills in once (`scale_barcode_formats`) and `app.parse_scale_barcode`
+is driven by it.
+
+**The check digit is verified, not skipped.** A misread label is five
+plausible digits of the right item at the wrong weight, and a shop would
+never notice — the customer is simply overcharged. Verifying costs one
+modulus and turns a silent overcharge into a scan that finds nothing and
+gets done again. `app.ean_check_digit` is GS1's modulo 10 weighted from
+the right, so it is the same arithmetic for EAN-8, UPC-A and EAN-13; the
+Dart copy on the settings screen is asserted against the same worked
+examples so a sample label the screen prints is one the parser accepts.
+
+A scale label answers on its own. `pos_lookup_item` tries it first and,
+when it matches, returns only that — offering a list beside it would be
+offering a choice between an answer and some guesses. It arrives as
+`matched_on = 'scale'` rather than `'barcode'` so a shop reading its own
+logs can tell the gun from the scale.
+
+### What the sticker says is what the customer pays
+
+A price-embedded label carries the ringgit, because the scale did the
+multiplication at the counter. The weight is then derived, and the
+derived weight times today's unit price almost never returns the sen the
+sticker shows — the scale rounded, an hour ago, at a price that may have
+changed since.
+
+**The sticker wins.** It is a price the shop printed, stuck on a package
+and handed to a customer, and a till that charges two sen more than the
+label is a till that argues with people at the counter. The line takes
+the label's total and its unit price is worked back from it. That is
+asserted, because it is the one place this feature could quietly
+overcharge.
+
+### No scale at all
+
+Most shops that sell by weight have a hanging scale and no printer.
+Tapping a weighed tile opens a dialog that asks for the weight and shows
+the running total as it is typed, because the number the customer is
+about to be charged is the thing being decided, and a cashier reading it
+back out loud is how a weight typo gets caught. `pos_menu` carries
+`is_weighed` so the grid knows which tiles have to ask.
+
+**Screens.** *Scales*, from the outlet setup screen, has two tabs: what
+this shop sells by weight and what its scale calls each one, and the
+label layouts themselves. A layout is easy to get wrong and impossible
+to check by reading, so the editor prints a sample barcode for the shop
+to scan.
+
 ## Not built yet
 
 - Submitting the consolidated e-Invoice to MyInvois (the rollup runs; the
@@ -1615,6 +1686,9 @@ counts.
   the text a thermal printer takes, and the screen will hand it over;
   pushing those bytes at a USB or Bluetooth printer, and opening a
   physical drawer, is between the browser and the hardware
+- Driving a counter scale directly. The label it prints is read; asking
+  the scale over a serial or network link for a live weight is a device
+  protocol per manufacturer and the browser cannot reach either
 - Reading a table card with the device's own camera. The wedge readers a
   counter has — tag, barcode, QR pad — type and press enter, and that is
   the whole interface; pointing a phone camera at the sticker is a

@@ -2293,3 +2293,15 @@ final itemConversionOutputsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, id) => requireRepo(ref).itemConversionOutputs(id),
     );
+
+/// Everything this shop sells by weight. 0266.
+final weighedItemsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).weighedItems(),
+    );
+
+/// The label layouts its scales print. 0266.
+final scaleFormatsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).scaleFormats(),
+    );

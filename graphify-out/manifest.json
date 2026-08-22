@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787364268.4296365,
-    "ast_hash": "44e942c3501151aca0c41e497488b401",
+    "mtime": 1787365860.393731,
+    "ast_hash": "b50c5723e6207d65d35cd4a93b605fc9",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787364268.4296365,
-    "ast_hash": "e2ceae4fa8b41394650030aeba729c6e",
+    "mtime": 1787365860.393731,
+    "ast_hash": "6d21aa4381495028c0cfda8c63a56b8e",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787364209.9337246,
-    "ast_hash": "52d35779e17e2010ee3e35059564b0a1",
+    "mtime": 1787365815.6818767,
+    "ast_hash": "fdc55c75e38f845adf9ab7926c38e33e",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -3175,8 +3175,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/till_screen.dart": {
-    "mtime": 1787362823.583822,
-    "ast_hash": "aa9e87ca9b434990b4bcd7f2450fd9d3",
+    "mtime": 1787365892.123613,
+    "ast_hash": "bccae9efaf2ae85b4d8ba69a87ad9a9b",
     "semantic_hash": ""
   },
   "app/test/diary_screen_test.dart": {
@@ -3350,8 +3350,8 @@
     "semantic_hash": ""
   },
   "docs/pos.md": {
-    "mtime": 1787364626.3549657,
-    "ast_hash": "0dabc7ac5323bf731b316892820ea338",
+    "mtime": 1787366221.262317,
+    "ast_hash": "ef80c2c4e999e10b8651039b116ea11e",
     "semantic_hash": ""
   },
   "app/lib/src/core/export_log.dart": {
@@ -3410,8 +3410,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/stations_screen.dart": {
-    "mtime": 1787349471.5165386,
-    "ast_hash": "73bdd31ad2f9f94333e2871b9ff593a4",
+    "mtime": 1787365979.3028107,
+    "ast_hash": "2beb49176db5884575336989cbc58dda",
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/void_sheet.dart": {
@@ -3937,6 +3937,26 @@
   "supabase/tests/stock_transfers.sql": {
     "mtime": 1787364198.6016324,
     "ast_hash": "1942a6d1ef69a45a05c1e669b7bdc9d9",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/pos/scales_screen.dart": {
+    "mtime": 1787366030.7793212,
+    "ast_hash": "6bd5d5a8c51bfe95d4cc9a7fa83fd0ea",
+    "semantic_hash": ""
+  },
+  "app/test/pos_weighed_test.dart": {
+    "mtime": 1787366030.7817414,
+    "ast_hash": "50e9c4b96cea514ac4c76985a4cd1be1",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0266_two_hundred_grams_of_it.sql": {
+    "mtime": 1787365776.1491475,
+    "ast_hash": "a1237093bb865b14e6680293e5b1a3c4",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pos_weighed.sql": {
+    "mtime": 1787365804.5615427,
+    "ast_hash": "25b6dc9f78f8a96db7acb2cf48648282",
     "semantic_hash": ""
   }
 }

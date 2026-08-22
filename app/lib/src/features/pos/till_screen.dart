@@ -163,7 +163,14 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       // A single barcode match is not a list to choose from — it is the
       // gun having done its job. Ring it up and clear the box, because
       // the next thing the cashier does is scan the next item.
-      if (rows.length == 1 && rows.first['matched_on'] == 'barcode') {
+      //
+      // A scale label is the same: it already names the item and the
+      // weight, so there is nothing left to ask. It arrives as its own
+      // `matched_on` rather than as 'barcode' so a shop reading its
+      // logs can tell the gun from the scale.
+      if (rows.length == 1 &&
+          (rows.first['matched_on'] == 'barcode' ||
+              rows.first['matched_on'] == 'scale')) {
         setState(() => _results = const []);
         await _add(rows.first);
         return;
@@ -180,6 +187,24 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     final repo = ref.read(repoProvider);
     if (repo == null) return;
     final itemId = hit['item_id'] as String;
+
+    // Sold by weight and rung up by hand: the hanging scale says a
+    // number and somebody types it. Asked before anything is written,
+    // and skipped entirely when the weight already came off a printed
+    // label — the scale did the asking at the counter.
+    num? weight;
+    if (hit['is_weighed'] == true && hit['matched_on'] != 'scale') {
+      weight = await showDialog<num>(
+        context: context,
+        builder: (_) => _WeightDialog(
+          name: '${hit['name']}',
+          uom: '${hit['uom_code'] ?? ''}',
+          unitPrice: posNum(hit['unit_price']),
+        ),
+      );
+      // Dismissed rather than answered. Nothing is written yet.
+      if (weight == null || !mounted) return;
+    }
 
     // Asked before anything is written, because the answer changes the
     // line rather than following it. Most items have no questions, and
@@ -218,7 +243,9 @@ class _TillScreenState extends ConsumerState<TillScreen> {
         final line = await repo.addPosSaleLine(
           sale!,
           itemId,
-          quantity: posNum(hit['quantity']) == 0 ? 1 : posNum(hit['quantity']),
+          quantity:
+              weight ??
+              (posNum(hit['quantity']) == 0 ? 1 : posNum(hit['quantity'])),
           price: posNum(hit['unit_price']),
         );
         // After the line, because a modifier is priced onto a line that
@@ -2501,6 +2528,92 @@ class _Grid extends StatelessWidget {
       children: children,
     );
   }
+}
+
+/// How much of it, for a shop with a hanging scale and no printer.
+///
+/// The running total is shown as it is typed, because the number a
+/// customer is about to be charged is the thing being decided and a
+/// cashier reading it back out loud is how a weight typo gets caught.
+class _WeightDialog extends StatefulWidget {
+  const _WeightDialog({
+    required this.name,
+    required this.uom,
+    required this.unitPrice,
+  });
+
+  final String name;
+  final String uom;
+  final num unitPrice;
+
+  @override
+  State<_WeightDialog> createState() => _WeightDialogState();
+}
+
+class _WeightDialogState extends State<_WeightDialog> {
+  final _weight = TextEditingController();
+
+  @override
+  void dispose() {
+    _weight.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final typed = num.tryParse(_weight.text.trim()) ?? 0;
+    return AlertDialog(
+      title: Text(widget.name),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _weight,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: 'How much',
+              suffixText: widget.uom,
+              helperText: '${Fmt.money(widget.unitPrice)} per ${widget.uom}',
+            ),
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) {
+              if (typed > 0) Navigator.of(context).pop(typed);
+            },
+          ),
+          const SizedBox(height: 12),
+          Text(
+            weighedLine(typed, widget.unitPrice),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: typed <= 0 ? null : () => Navigator.of(context).pop(typed),
+          child: const Text('Add'),
+        ),
+      ],
+    );
+  }
+}
+
+/// What a weight comes to, at the price per unit.
+///
+/// Pure and exported so the dialog and the tests agree. Rounded to the
+/// sen the same way the line will be, so the number a cashier reads out
+/// is the number the customer is charged rather than one that is close
+/// to it.
+String weighedLine(num weight, num unitPrice) {
+  if (weight <= 0) return '—';
+  return Fmt.money(
+    (weight * unitPrice * 100).round() / 100,
+  );
 }
 
 /// What goes under a dish's name on the grid.
