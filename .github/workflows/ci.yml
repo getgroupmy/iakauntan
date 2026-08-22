@@ -154,6 +154,7 @@ jobs:
                    supabase/tests/leads_and_onboarding.sql \
                    supabase/tests/document_share.sql \
                    supabase/tests/outbound_email.sql \
+                   supabase/tests/email_receipt.sql \
                    supabase/tests/aged_balances.sql \
                    supabase/tests/recurring_documents.sql \
                    supabase/tests/withholding.sql \
