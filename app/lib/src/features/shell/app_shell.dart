@@ -335,6 +335,16 @@ const _destinations = <_Dest>[
     '/counters',
     module: 'pos',
   ),
+  // What a plate is made of, and how many more of it the store can
+  // make. Beside the outlet setup because it is the kitchen's own
+  // configuration rather than a report about it.
+  _Dest(
+    'Recipes',
+    Icons.restaurant_menu_outlined,
+    Icons.restaurant_menu,
+    '/recipes',
+    module: 'pos',
+  ),
   // The other half of Takings: the questions we did not think of. Built
   // by whoever runs the shop, out of the same sales.
   _Dest(

@@ -1430,6 +1430,115 @@ has built, opens one to a table, and copies it out as comma-separated
 text, because what everybody does with a report is open it in a
 spreadsheet.
 
+## What the plate takes out of the store
+
+A dish is a `service` or `non_stock` item. It has to be — posting the
+invoice moves stock for anything with `track_inventory`, and nobody keeps
+a shelf of made-up nasi lemak. The consequence was that a shop could sell
+four hundred plates and its rice never moved: the purchase went through
+inventory, the sale did not, and the difference sat in the stock account
+until somebody counted the store by hand.
+
+**`pos_recipes` / `pos_recipe_lines`** close it. One recipe per dish,
+written per the pot the kitchen actually makes (`yield_quantity`), each
+line naming a component, a quantity, the unit it is written in, a wastage
+percentage and whether it is a garnish.
+
+### Units
+
+Recipes are written in grams and millilitres; stock is counted in
+kilograms and litres and delivered in cartons. `app.uom_qty` converts,
+by exactly three rules:
+
+- **`ref_uom_factors`** — how many base units of its dimension each code
+  is. A kilogram is a thousand grams for everybody, always.
+- **`item_uom_packs`** — one carton of *this* item is this many of its
+  own unit. Set by the shop, and it beats the reference table, because a
+  shop that has said what its own carton holds has said something more
+  specific than the standards body did.
+- **Refusal.** Grams into litres is a density. `app.uom_qty` raises and
+  names the item rather than invent one; a guessed density orders eight
+  times too much flour for a year.
+
+The packaging codes (box, carton, pack, bag, case, roll, pallet)
+deliberately have no reference factor. A box is only as big as whatever
+is in it.
+
+### Sub-recipes
+
+A component that keeps its own stock is a leaf: the sambal counted in the
+fridge comes out of the fridge, and its chillies were taken when it was
+made. A component that keeps no stock but has a recipe of its own is
+exploded further, so the central kitchen's sambal that nobody counts
+still resolves down to chilli, oil and belacan.
+
+That is the same rule as the one `upsert_pos_recipe` enforces at the
+other end: **a dish that keeps its own stock may not have a recipe**,
+because posting its invoice already moves it and a recipe would take the
+ingredients out a second time. A shop that genuinely batches should use
+the manufacturing module for the batch and a recipe for the plate.
+
+Wastage grosses up rather than marks up: 100g of usable onion from stock
+that is 10% skin needs 111g, which is dividing by (1 − w), not
+multiplying by 1.1. The difference compounds.
+
+### Depletion
+
+A trigger on `pos_sales.status` becoming `completed`, not a line inside
+`complete_pos_sale`. Ingredients leave because a sale completed, not
+because a particular function ran — and sales complete through the
+counter, the kiosk, a published menu and the offline batch lander.
+`complete_pos_sale` has already been re-created by five migrations; a
+trigger cannot be forgotten by the sixth.
+
+One `assembly_out` movement per component at the outlet's warehouse,
+priced at the current weighted average by 0009's trigger, and one journal
+for the lot: **Dr 5200 Cost of Goods Sold / Cr 1310 Inventory**. Modifier
+choices deplete too — `pos_modifiers.recipe_item_id` is what "extra egg"
+points at, and "no cucumber" points at nothing, because crediting stock
+back for an omission invents a cucumber.
+
+Depletion never refuses. By the time it runs the customer has paid; if
+the kitchen has less rice than the recipe says, the rice goes negative
+and the shop can see that it did.
+
+It runs one way only. `void_pos_sale` refuses a settled bill outright
+— "raise a credit note instead" — so a completed sale never becomes a
+voided one. A credit note against a counter sale does **not** put the
+ingredients back today: it returns the stock of whatever the invoice
+moved, which for a dish is nothing.
+
+### The countdown
+
+`pos_item_portions(outlet)` answers the one question a kitchen asks: how
+many more can I sell? The smallest number of portions any *required*
+ingredient can still make, **less what parked bills at that outlet have
+already promised**. Three plates on three open tables are three plates of
+rice that have not moved yet, and a till that ignores them promises food
+twice on a busy night. `on_hand_portions` is the gross figure, for a
+screen that wants both.
+
+`pos_menu` carries `portions` alongside `available`, so the tile and the
+guard behind it read the same source. Nothing is filtered out — a tile
+that vanishes reads as a broken menu.
+
+Blocking is off by default (`pos_settings.block_out_of_stock`). A
+supermarket counting to the gram wants the till to refuse; a warung that
+has never weighed its rice would find every sale blocked by a number
+nobody maintains.
+
+Two things always block, switch or no switch: 0258's stop list ("86 the
+fish") and its menu schedule. Both reached the published menu and neither
+reached the counter, so until now a cashier could ring up a dish the
+manager took off an hour ago. `add_pos_sale_line` asks `app.pos_item_off`
+before it asks about the count.
+
+**Screens.** *Recipes* (`/recipes`) lists every dish with a recipe, what
+one costs at today's weighted average, and how many are left; tapping one
+edits its lines. The till shows "RM 12.00 · 3 left" under a dish the
+kitchen counts, and greys it with "Out of telur" when the switch is on
+and it cannot be made.
+
 ## Not built yet
 
 - Submitting the consolidated e-Invoice to MyInvois (the rollup runs; the
@@ -1445,3 +1554,9 @@ spreadsheet.
   counter has — tag, barcode, QR pad — type and press enter, and that is
   the whole interface; pointing a phone camera at the sticker is a
   different thing and needs a scanner package the app does not carry
+- Returning a recipe's ingredients when a counter sale is credited. The
+  credit note returns whatever the invoice moved, which for a dish is
+  nothing, so the food cost stays charged
+- Central-kitchen transfers between outlets, and converting a bought unit
+  into a sold one on the way (a whole chicken into eight pieces). The
+  units and the recipes are in place; the transfer document is not

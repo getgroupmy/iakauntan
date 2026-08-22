@@ -8340,3 +8340,87 @@ extension RepoGroupContacts on Repo {
         params: {'p_contact_id': contactId, 'p_org_id': orgId},
       );
 }
+
+
+/// Recipes, the units they are written in, and what the kitchen can
+/// still make.
+///
+/// 0264's side of the till. The dish is a non-stock item — it has to
+/// be, or posting the invoice would move stock for a plate nobody keeps
+/// a shelf of — so nothing about selling one has ever reached the rice
+/// it was made from. A recipe is what closes that, and the countdown is
+/// what a kitchen actually asks: how many more can I sell?
+extension RepoPosRecipes on Repo {
+  /// One row per dish that has a recipe, with what one costs at today's
+  /// weighted average.
+  Future<List<Map<String, dynamic>>> posRecipes() async =>
+      Repo.rows(await callRpc('pos_recipes_list', params: {'p_org': orgId}));
+
+  /// The lines of one, in the order they were written.
+  Future<List<Map<String, dynamic>>> posRecipeLines(String recipeId) async =>
+      Repo.rows(
+        await callRpc('pos_recipe_lines_for', params: {'p_recipe': recipeId}),
+      );
+
+  /// What making [quantity] of a dish draws out of the store, with any
+  /// sub-recipes already exploded. This is the list that explains why
+  /// the countdown says four.
+  Future<List<Map<String, dynamic>>> posRecipeRequirement(
+    String itemId, {
+    num quantity = 1,
+  }) async => Repo.rows(
+    await callRpc(
+      'pos_recipe_requirement',
+      params: {'p_item': itemId, 'p_qty': quantity},
+    ),
+  );
+
+  /// Saves a recipe and all of its lines in one call. Each entry of
+  /// [lines] is `{item, quantity, uom, wastage, optional}`.
+  Future<String> savePosRecipe({
+    required String itemId,
+    required num yield_,
+    required List<Map<String, dynamic>> lines,
+    String? notes,
+    bool active = true,
+  }) async => (await callRpc(
+    'upsert_pos_recipe',
+    params: {
+      'p_org': orgId,
+      'p_item': itemId,
+      'p_yield': yield_,
+      'p_lines': lines,
+      'p_notes': notes,
+      'p_active': active,
+    },
+  )).toString();
+
+  Future<void> deletePosRecipe(String recipeId) async =>
+      await callRpc('delete_pos_recipe', params: {'p_recipe': recipeId});
+
+  /// How many more of each dish this outlet can make, and what runs out
+  /// first.
+  Future<List<Map<String, dynamic>>> posItemAvailability(
+    String outletId,
+  ) async => Repo.rows(
+    await callRpc('pos_item_availability', params: {'p_outlet': outletId}),
+  );
+
+  /// Every unit an item's quantities may be written in: the ones its
+  /// dimension converts to, plus whatever pack sizes the shop has set.
+  Future<List<Map<String, dynamic>>> itemUomOptions(String itemId) async =>
+      Repo.rows(await callRpc('item_uom_options', params: {'p_item': itemId}));
+
+  /// One [uom] of this item is [quantity] of the item's own unit.
+  Future<void> saveItemUomPack(String itemId, String uom, num quantity) async =>
+      await callRpc(
+        'upsert_item_uom_pack',
+        params: {'p_item': itemId, 'p_uom': uom, 'p_qty': quantity},
+      );
+
+  Future<void> deleteItemUomPack(String itemId, String uom) async =>
+      await callRpc(
+        'delete_item_uom_pack',
+        params: {'p_item': itemId, 'p_uom': uom},
+      );
+}

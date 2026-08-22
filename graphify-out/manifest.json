@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787352132.0897784,
-    "ast_hash": "507e2d0cb6568448a53383be967baa1b",
+    "mtime": 1787362496.3815312,
+    "ast_hash": "f3513792d112c9b87bc54b0e9e00e41d",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787352194.4204779,
-    "ast_hash": "56bd19a444560e4fbb01e6320fa2fc54",
+    "mtime": 1787362670.4650142,
+    "ast_hash": "14b5aebcba003265cc7ef93b3ea03b61",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787352132.0897784,
-    "ast_hash": "e4b1a9ee4dffcc05f1f2eff3909dc587",
+    "mtime": 1787362496.3788495,
+    "ast_hash": "31f6af8801e879da0b050cd65c033960",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787352194.4207382,
-    "ast_hash": "1ac67560a39da730ee64e8765389bba4",
+    "mtime": 1787362650.0672429,
+    "ast_hash": "87725096fec6f91ed945ce868965fd3c",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787352061.0840013,
-    "ast_hash": "61bbb8ed9c4dc982c35e63119aa78eb2",
+    "mtime": 1787362347.0873616,
+    "ast_hash": "0e5035b6b169bdd560ab7a4a31ce7d94",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -3175,8 +3175,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/till_screen.dart": {
-    "mtime": 1787335092.807276,
-    "ast_hash": "d46cd78a238546f73f86e436f66c3344",
+    "mtime": 1787362823.583822,
+    "ast_hash": "aa9e87ca9b434990b4bcd7f2450fd9d3",
     "semantic_hash": ""
   },
   "app/test/diary_screen_test.dart": {
@@ -3350,8 +3350,8 @@
     "semantic_hash": ""
   },
   "docs/pos.md": {
-    "mtime": 1787352777.8547323,
-    "ast_hash": "3d28c1e09d2ded2064727d8b81e617ba",
+    "mtime": 1787363020.8230126,
+    "ast_hash": "d03ce554a68abe849a0074f9c894f1bd",
     "semantic_hash": ""
   },
   "app/lib/src/core/export_log.dart": {
@@ -3897,6 +3897,26 @@
   "supabase/tests/pos_reports.sql": {
     "mtime": 1787352051.0248182,
     "ast_hash": "369e805483a1664fb1bb82cccdd6e92d",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/pos/recipes_screen.dart": {
+    "mtime": 1787362618.5217495,
+    "ast_hash": "453e5cc25c3845985dca8cba5da804e6",
+    "semantic_hash": ""
+  },
+  "app/test/pos_recipes_test.dart": {
+    "mtime": 1787362850.2498558,
+    "ast_hash": "a89084c88e40aaa28dba88b37cc46a84",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0264_what_the_plate_takes_out_of_the_store.sql": {
+    "mtime": 1787362757.7215466,
+    "ast_hash": "23861416f574e4b2a758a34e8b741c95",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pos_recipes.sql": {
+    "mtime": 1787362794.6887808,
+    "ast_hash": "e5196ae12453f7ac0975d8455bf5b7a2",
     "semantic_hash": ""
   }
 }

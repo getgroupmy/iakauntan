@@ -100,6 +100,7 @@ jobs:
                    supabase/tests/pos_receipt.sql \
                    supabase/tests/pos_public_menu.sql \
                    supabase/tests/pos_reports.sql \
+                   supabase/tests/pos_recipes.sql \
                    supabase/tests/pos_void_permission.sql \
                    supabase/tests/pos_service.sql \
                    supabase/tests/pos_offline.sql \

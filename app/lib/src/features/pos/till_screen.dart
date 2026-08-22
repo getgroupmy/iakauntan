@@ -2443,8 +2443,9 @@ class _BrowseState extends State<_Browse> {
                                 for (final r in shown)
                                   _MenuTile(
                                     title: '${r['name']}',
-                                    subtitle: Fmt.money(
-                                      posNum(r['unit_price']),
+                                    subtitle: tileSubtitle(
+                                      Fmt.money(posNum(r['unit_price'])),
+                                      r['portions'],
                                     ),
                                     count: onBill['${r['item_id']}'],
                                     offReason: r['available'] == false
@@ -2500,6 +2501,19 @@ class _Grid extends StatelessWidget {
       children: children,
     );
   }
+}
+
+/// What goes under a dish's name on the grid.
+///
+/// The price, and — when the kitchen keeps a recipe for it — how many
+/// more it can make. Pure so the till and its tests agree. Null
+/// portions is a dish nothing counted limits, and saying "unlimited"
+/// there would be a promise nobody made.
+String tileSubtitle(String price, Object? portions) {
+  if (portions == null) return price;
+  final n = num.tryParse('$portions');
+  if (n == null || n <= 0) return price;
+  return '$price · ${Fmt.qty(n)} left';
 }
 
 class _MenuTile extends StatelessWidget {

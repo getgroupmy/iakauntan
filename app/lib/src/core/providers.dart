@@ -2239,3 +2239,33 @@ final posReportHeadersProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, String>(
       (ref, id) => requireRepo(ref).posReportHeaders(id),
     );
+
+/// Every dish that has a recipe, with what one costs today. 0264.
+final posRecipesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).posRecipes(),
+    );
+
+/// The lines of one recipe. 0264.
+final posRecipeLinesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, recipeId) => requireRepo(ref).posRecipeLines(recipeId),
+    );
+
+/// What one of a dish actually draws, sub-recipes exploded. 0264.
+final posRecipeRequirementProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, itemId) => requireRepo(ref).posRecipeRequirement(itemId),
+    );
+
+/// How many more of each dish an outlet can make. 0264.
+final posItemAvailabilityProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, outletId) => requireRepo(ref).posItemAvailability(outletId),
+    );
+
+/// The units an item's quantities may be written in. 0264.
+final itemUomOptionsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, itemId) => requireRepo(ref).itemUomOptions(itemId),
+    );
