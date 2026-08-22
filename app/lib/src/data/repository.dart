@@ -9149,3 +9149,53 @@ extension RepoCashFlow on Repo {
   Future<void> retireCashForecastItem(String id) async =>
       await callRpc('retire_cash_forecast_item', params: {'p_id': id});
 }
+
+/// Item bundles: an item that is six other things. 0277.
+extension RepoBundles on Repo {
+  Future<List<Map<String, dynamic>>> itemBundles() async =>
+      Repo.rows(await callRpc('item_bundles_list', params: {'p_org': orgId}));
+
+  /// The parts, exploded through any sub-bundles, with what each costs.
+  Future<List<Map<String, dynamic>>> bundleParts(String itemId) async =>
+      Repo.rows(await callRpc('item_bundle_for', params: {'p_item': itemId}));
+
+  /// Price, cost and what that leaves — the number somebody needs
+  /// before deciding what to charge for the set.
+  Future<Map<String, dynamic>?> bundleMargin(String itemId) async {
+    final rows = Repo.rows(
+      await callRpc('bundle_margin', params: {'p_item': itemId}),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// How many can be sold out of what is on the shelf.
+  Future<Map<String, dynamic>?> bundleAvailability(
+    String itemId, {
+    String? warehouseId,
+  }) async {
+    final rows = Repo.rows(
+      await callRpc(
+        'bundle_availability',
+        params: {'p_item': itemId, 'p_warehouse': warehouseId},
+      ),
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// Each entry of [parts] is `{item, quantity, uom, wastage}`.
+  Future<String> saveItemBundle({
+    required String itemId,
+    required List<Map<String, dynamic>> parts,
+    String? notes,
+    bool active = true,
+  }) async => (await callRpc(
+    'upsert_item_bundle',
+    params: {
+      'p_org': orgId,
+      'p_item': itemId,
+      'p_lines': parts,
+      'p_notes': notes,
+      'p_active': active,
+    },
+  )).toString();
+}

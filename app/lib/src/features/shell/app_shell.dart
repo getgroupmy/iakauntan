@@ -218,6 +218,15 @@ const _destinations = <_Dest>[
     '/landed-cost',
     module: 'inventory',
   ),
+  // With the stock screens: what a bundle is made of is a question
+  // asked while looking at a shelf, and the answer is what leaves it.
+  _Dest(
+    'Bundles',
+    Icons.widgets_outlined,
+    Icons.widgets,
+    '/bundles',
+    module: 'inventory',
+  ),
   // With the ledger screens rather than the stock ones: a contra is
   // about two control accounts, and the person who strikes one is
   // looking at an aged listing, not at a shelf.

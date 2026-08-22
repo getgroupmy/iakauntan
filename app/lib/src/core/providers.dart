@@ -2270,6 +2270,28 @@ final itemUomOptionsProvider = FutureProvider.autoDispose
       (ref, itemId) => requireRepo(ref).itemUomOptions(itemId),
     );
 
+/// Every bundle a company sells. 0277.
+final itemBundlesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).itemBundles(),
+    );
+
+/// What one is made of, exploded through any sub-bundles.
+final bundlePartsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, itemId) => requireRepo(ref).bundleParts(itemId),
+    );
+
+final bundleMarginProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>(
+      (ref, itemId) => requireRepo(ref).bundleMargin(itemId),
+    );
+
+final bundleAvailabilityProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>(
+      (ref, itemId) => requireRepo(ref).bundleAvailability(itemId),
+    );
+
 /// Thirteen weeks of cash, or however many were asked for. 0276.
 final cashForecastProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, ({int weeks, bool useHistory})>(

@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787381612.11099,
-    "ast_hash": "22eb7f56818c0c8cb0a73173a2cfda5f",
+    "mtime": 1787382587.949899,
+    "ast_hash": "8bcc29e6ed785dcfab186d1fe33622bb",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787381612.1241422,
-    "ast_hash": "2ad1838c356cc7846fba54670ac6ac0f",
+    "mtime": 1787382645.3567452,
+    "ast_hash": "4c6e98b4dadb35a88aaf6ead830491be",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787381612.1098955,
-    "ast_hash": "1c432b43fd9317c8c8bb8390d84f6584",
+    "mtime": 1787382587.9347255,
+    "ast_hash": "1335c2f1e233225aa3c3d4e4672553d0",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787381538.3873756,
-    "ast_hash": "e4de16a8ceb501e4648ca9aa5b4fe895",
+    "mtime": 1787382645.357116,
+    "ast_hash": "a9b4282e6a67c4b19595e10d1e82319a",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787381731.2663229,
-    "ast_hash": "c4bfdc4411cb940aeef23816991e985b",
+    "mtime": 1787382722.291897,
+    "ast_hash": "4acfdf6f1c973049fc33480aeb6e92db",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1190,8 +1190,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-autocount.md": {
-    "mtime": 1787381731.2788393,
-    "ast_hash": "5651bb8557adcc9268ecf1db13115e12",
+    "mtime": 1787382722.3036344,
+    "ast_hash": "774532c03f9e075c26032111b724e3fa",
     "semantic_hash": ""
   },
   "docs/migrating-from-autocount.md": {
@@ -4142,6 +4142,26 @@
   "supabase/tests/cash_forecast.sql": {
     "mtime": 1787381612.1159143,
     "ast_hash": "40e8fc7ca32057107308ff2e35a3b156",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/stock/bundles_screen.dart": {
+    "mtime": 1787382645.3420367,
+    "ast_hash": "32472a8e6d429746d1786a8b207c3384",
+    "semantic_hash": ""
+  },
+  "app/test/bundles_test.dart": {
+    "mtime": 1787382680.1380756,
+    "ast_hash": "7a5d2450b17132ca424f79f14879a4d2",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0277_the_gift_set_that_is_six_other_things.sql": {
+    "mtime": 1787382514.4946637,
+    "ast_hash": "d2a8fdbbdada9e3a31d668e077147cb5",
+    "semantic_hash": ""
+  },
+  "supabase/tests/item_bundles.sql": {
+    "mtime": 1787382423.7949462,
+    "ast_hash": "695cfe8157b886ad75ab47b452059d7a",
     "semantic_hash": ""
   }
 }

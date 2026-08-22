@@ -19,6 +19,7 @@ import '../features/documents/contra_screen.dart';
 import '../features/documents/deposits_screen.dart';
 import '../features/reports/budgets_screen.dart';
 import '../features/reports/cash_forecast_screen.dart';
+import '../features/stock/bundles_screen.dart';
 import '../features/stock/landed_cost_screen.dart';
 import '../features/stock/transfers_screen.dart';
 import '../features/dashboard/dashboard_screen.dart';
@@ -361,6 +362,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/landed-cost',
             builder: (_, __) => const LandedCostScreen(),
           ),
+          GoRoute(path: '/bundles', builder: (_, __) => const BundlesScreen()),
           GoRoute(path: '/contra', builder: (_, __) => const ContraScreen()),
           GoRoute(
             path: '/deposits',

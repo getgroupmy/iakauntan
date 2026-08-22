@@ -120,14 +120,13 @@ be reachable.
 | Budgets and budget-vs-actual | `0274`. Per account per period against a fiscal year, optionally for one department, built from a previous year's actuals plus an uplift, and reported with the variance and whether it is favourable — which is not the same as whether it is positive |
 | Post-dated cheque register | `0275`. A cheque dated in the future takes the document off the aged listing and sits in 1140 (or 2115 for one we wrote) until it clears, so the bank balance never counts money that cannot be drawn. Deposit, clear, bounce and hand-back, with a maturity list that surfaces the one nobody banked |
 | Cash flow forecast | `0276`. Thirteen weeks by default from what the bank holds now, drawing on open invoices shifted by the lag each customer has actually taken, bills on their due date, post-dated cheques on theirs, recurring documents across the horizon, unpaid payroll, and the things only a person knows. `cash_runs_out_on` is the single number |
+| Item bundles | `0277`. A bundle is a `pos_recipes` row sold off an invoice rather than a till: selling one explodes it, takes the parts off the shelf at their own weighted average and books that as the cost of sale, and a credit note puts them back at what they left at |
 
 ### Half done, and the half that is missing matters
 
-**Item bundles.** `item_type` has had `bundle` since `0003`. It appears
-in that check constraint and in `0103`'s import validator, and **nowhere
-else** — no explosion, no pricing, no screen. This is the same
-dead-end shape the document-transfer finding was about: an enum value
-that implies a capability nobody built.
+Nothing. `0277` closed the last of these — `item_type = 'bundle'` had
+sat in a check constraint for two hundred and seventy migrations with
+no explosion, no pricing and no screen behind it.
 
 ### Still nothing at all
 
@@ -226,7 +225,6 @@ A gap here is a client who cannot move:
 Every row in this table said yes for the first time in `0270`. The three
 that changed — units, serial and batch, assembly — were the ones the
 first revision of this document called real projects, and they were.
-What is left is in "Still nothing at all" above: a bank feed, and item
-bundles in "Half done". None of them
+What is left is in "Still nothing at all" above: a bank feed. None of them
 stops a migration; each of them is a thing somebody has to keep doing by
 hand afterwards.
