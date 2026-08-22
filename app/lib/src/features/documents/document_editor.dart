@@ -24,6 +24,7 @@ import 'line_draft.dart';
 import 'line_editor.dart';
 import 'settlement_dialog.dart';
 import 'transfer.dart';
+import 'credit_dialog.dart';
 import 'transfer_dialog.dart';
 import 'repeat_dialog.dart';
 import 'withholding_dialog.dart';
@@ -723,6 +724,23 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     context.go('${_kind.routePrefix}/$targetType/$created');
   }
 
+  /// Crediting the invoice on screen. A method on the State rather than
+  /// a closure in `_actions`, because `_actions` is handed a
+  /// `BuildContext` of its own and the State's `mounted` says nothing
+  /// about that one.
+  Future<void> _credit() async {
+    if (widget.documentId == null) return;
+    final made = await showCreditDialog(
+      context,
+      ref,
+      invoiceId: widget.documentId!,
+      invoiceNo: _docNo,
+    );
+    if (made == null || !mounted) return;
+    _toast('Credit note created', success: true);
+    context.go('${_kind.routePrefix}/credit_note/$made');
+  }
+
   Future<void> _settle() async {
     await showSettlementDialog(
       context,
@@ -927,6 +945,20 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                   );
                   if (done == true && mounted) _load();
                 },
+        ),
+
+      // Crediting a posted invoice. Offered here rather than as a new
+      // blank credit note, because a credit note that names its invoice
+      // can be capped at what was actually sold — and, for a counter
+      // sale, can tell the recipe which ingredients came back. A
+      // hand-written one can do neither. See 0269.
+      if (!_isNew &&
+          widget.docType == 'invoice' &&
+          const {'posted', 'partial', 'completed'}.contains(_status))
+        IconButton(
+          tooltip: 'Credit this invoice',
+          icon: const Icon(Icons.assignment_return_outlined, size: 20),
+          onPressed: _saving || !canPost ? null : _credit,
         ),
 
       // Only an invoice or a bill repeats, and only one that exists:

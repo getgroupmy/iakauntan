@@ -2317,3 +2317,9 @@ final posStallSettlementsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, outletId) => requireRepo(ref).posStallSettlements(outletId),
     );
+
+/// What is left uncredited on an invoice. 0269.
+final invoiceCreditRemainingProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, invoiceId) => requireRepo(ref).invoiceCreditRemaining(invoiceId),
+    );

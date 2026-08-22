@@ -8685,3 +8685,44 @@ extension RepoFoodCourt on Repo {
     ),
   );
 }
+
+
+/// Crediting an invoice, and what that puts back.
+///
+/// 0269. `sales_documents.original_invoice_id` has existed since 0005
+/// and nothing ever wrote it — a credit note was a document typed by
+/// hand with no record of which invoice it credits. Without that link
+/// nothing can be capped at what was sold, and a credited plate cannot
+/// tell a recipe which ingredients to return.
+extension RepoCreditNotes on Repo {
+  /// What is left uncredited on each line of an invoice.
+  Future<List<Map<String, dynamic>>> invoiceCreditRemaining(
+    String invoiceId,
+  ) async => Repo.rows(
+    await callRpc(
+      'invoice_credit_remaining',
+      params: {'p_invoice': invoiceId},
+    ),
+  );
+
+  /// Raises and posts a credit note. [lines] is `{invoice line id:
+  /// quantity}`; null credits everything still uncredited. Returns the
+  /// credit note's id.
+  Future<String> creditSalesInvoice(
+    String invoiceId, {
+    Map<String, num>? lines,
+    String? reason,
+  }) async => (await callRpc(
+    'credit_sales_invoice',
+    params: {
+      'p_invoice': invoiceId,
+      'p_lines': lines == null
+          ? null
+          : [
+              for (final e in lines.entries)
+                {'line': e.key, 'quantity': e.value},
+            ],
+      'p_reason': reason,
+    },
+  )).toString();
+}

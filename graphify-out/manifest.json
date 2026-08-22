@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787369060.3059213,
-    "ast_hash": "c7f6aada41db32d7c0d57566e8e5c527",
+    "mtime": 1787372255.8661113,
+    "ast_hash": "4d142fa505d8737097284f3e847d5300",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787369060.3019214,
-    "ast_hash": "56050f6631ac376a5e90e5e2e983dffc",
+    "mtime": 1787372255.8661113,
+    "ast_hash": "19d7bad48aef5d556f0a48484c155ddb",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -150,8 +150,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1787201675.6619773,
-    "ast_hash": "89876acb41f499215c5bd50f9ab9836c",
+    "mtime": 1787372371.1900277,
+    "ast_hash": "7942b8e622e68b3443770e6b93853d46",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787369013.779744,
-    "ast_hash": "214ed30fcd0fbdadce88164b98a0a12b",
+    "mtime": 1787372213.3861089,
+    "ast_hash": "50fcc1e003919d212f5a9de87b0f9784",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -3350,8 +3350,8 @@
     "semantic_hash": ""
   },
   "docs/pos.md": {
-    "mtime": 1787369345.5425642,
-    "ast_hash": "30f712377e8494fb3e3568bf317b6470",
+    "mtime": 1787372549.6112514,
+    "ast_hash": "188aeee7f774c3185ed2797747cdf2da",
     "semantic_hash": ""
   },
   "app/lib/src/core/export_log.dart": {
@@ -3987,6 +3987,26 @@
   "supabase/tests/pos_food_court.sql": {
     "mtime": 1787369000.3564293,
     "ast_hash": "8c46fbf3d76706aa6c418f58ab057b7f",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/credit_dialog.dart": {
+    "mtime": 1787372332.1078286,
+    "ast_hash": "d3c9c13a1ba74f24d91f03e084bc3e23",
+    "semantic_hash": ""
+  },
+  "app/test/credit_note_test.dart": {
+    "mtime": 1787372393.3876917,
+    "ast_hash": "ee2a731b95bb7d9f6aae6b296661a395",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0269_crediting_a_counter_sale_puts_it_back.sql": {
+    "mtime": 1787372167.7694657,
+    "ast_hash": "bc13c396644854b6b194cc671c84f42d",
+    "semantic_hash": ""
+  },
+  "supabase/tests/credit_note_return.sql": {
+    "mtime": 1787372191.3583152,
+    "ast_hash": "67a13b90578cbf0a55d78e86df29f9f0",
     "semantic_hash": ""
   }
 }

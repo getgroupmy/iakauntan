@@ -1741,6 +1741,54 @@ and a settling tab that shows what each is owed for a chosen period
 before anything is posted, with the button dead when the period is open
 or already paid.
 
+## Crediting a counter sale puts the ingredients back
+
+0264's own header said the way back from a settled bill is a credit
+note, and then said a credit note does not put the ingredients back —
+it returns the stock of whatever the invoice moved, which for a dish is
+nothing. So a warung that credited one of two plates had 180g of rice
+missing and RM 4.70 of food cost charged against a sale it did not make.
+
+Building the return turned up the larger problem underneath it.
+**`sales_documents.original_invoice_id` has existed since 0005 and
+nothing has ever written it** — checked across every migration, the Dart
+and the edge functions. `transfer_document` cannot produce a credit note
+either: 0081's allow-map has no arm from `invoice`. A credit note was a
+document typed by hand in the generic editor with no record of which
+invoice it credits, so it could not be capped at what was sold, reported
+against the sale it reverses, or asked which plates came back.
+
+`credit_sales_invoice` builds that link: it copies the lines being
+credited, caps each at what is left uncredited on that invoice, sets
+`original_invoice_id`, and posts. Crediting more than was sold is
+refused rather than rounded away. `invoice_credit_remaining` answers
+what is left, per line — because two of the five shirts came back, not
+"forty per cent of the money".
+
+The invoice may be `posted`, `partial` **or** `completed`; a counter
+sale's invoice is completed the moment the till takes the money, so
+testing for `posted` alone would refuse to credit exactly the sales this
+exists for.
+
+On top of that, a trigger returns the ingredients:
+
+- **What the credit note says**, not a share of the money. Its lines are
+  exploded through the same recipe, so one nasi lemak returns one
+  plate's ingredients. A credit for a discount returns nothing, which is
+  correct — no food came back.
+- **At the price it left at**, read off the original consumption
+  movement. Today's average would book a gain or a loss on a plate
+  nobody ate, every time the price of rice moved.
+- **Never more than went out.** Capped at what that sale consumed less
+  what has already come back.
+- **To the batches it came from**, most recently taken first: the last
+  thing out of the pot is the first thing back into it.
+
+**Screens.** A posted invoice has a *Credit this invoice* action, which
+opens with every line pre-filled at what is still creditable — the
+common case is the customer brought the lot back — and shows what the
+credit comes to before anything posts.
+
 ## Not built yet
 
 - Submitting the consolidated e-Invoice to MyInvois (the rollup runs; the
@@ -1762,9 +1810,6 @@ or already paid.
   counter has — tag, barcode, QR pad — type and press enter, and that is
   the whole interface; pointing a phone camera at the sticker is a
   different thing and needs a scanner package the app does not carry
-- Returning a recipe's ingredients when a counter sale is credited. The
-  credit note returns whatever the invoice moved, which for a dish is
-  nothing, so the food cost stays charged
 - Choosing *which* batch by hand. A recipe, a transfer and a conversion
   all pick earliest-expiry-first without asking, because none of them
   has a screen at the moment it happens
