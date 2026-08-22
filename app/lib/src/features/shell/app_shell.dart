@@ -247,6 +247,16 @@ const _destinations = <_Dest>[
     '/budgets',
     module: 'accounting',
   ),
+  // With deposits and contra: all three are money that settles a
+  // document without a receipt, and all three are read while looking at
+  // an aged listing.
+  _Dest(
+    'Cheques',
+    Icons.event_note_outlined,
+    Icons.event_note,
+    '/cheques',
+    module: 'sales',
+  ),
   // With the stock screens, because the question it answers — what is
   // running out — is asked while looking at what is on the shelf.
   _Dest(

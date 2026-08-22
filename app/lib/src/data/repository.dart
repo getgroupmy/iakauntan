@@ -8992,3 +8992,79 @@ extension RepoBudgets on Repo {
   Future<void> archiveBudget(String id) async =>
       await callRpc('archive_budget', params: {'p_id': id});
 }
+
+/// Post-dated cheques: the register, and what happens when one matures.
+/// 0275.
+extension RepoPdc on Repo {
+  Future<List<Map<String, dynamic>>> postDatedCheques({
+    String? direction,
+    String? status,
+  }) async => Repo.rows(
+    await callRpc(
+      'pdc_list',
+      params: {'p_org': orgId, 'p_direction': direction, 'p_status': status},
+    ),
+  );
+
+  /// What is still outstanding and matures by [to], plus anything past
+  /// its date and not banked.
+  Future<List<Map<String, dynamic>>> pdcMaturing({
+    DateTime? from,
+    DateTime? to,
+  }) async => Repo.rows(
+    await callRpc(
+      'pdc_maturing',
+      params: {
+        'p_org': orgId,
+        'p_from': from?.toIso8601String().substring(0, 10),
+        'p_to': to?.toIso8601String().substring(0, 10),
+      },
+    ),
+  );
+
+  /// [direction] is 'incoming' or 'outgoing'. Each entry of [documents]
+  /// is `{document, amount}`, and they must come to the cheque.
+  Future<String> recordPdc({
+    required String direction,
+    required String contactId,
+    required String chequeNo,
+    required DateTime chequeDate,
+    required num amount,
+    List<Map<String, dynamic>> documents = const [],
+    String? bankAccountId,
+    String? bankName,
+    DateTime? receivedOn,
+    String? notes,
+  }) async => (await callRpc(
+    'record_pdc',
+    params: {
+      'p_org': orgId,
+      'p_direction': direction,
+      'p_contact': contactId,
+      'p_cheque_no': chequeNo,
+      'p_cheque_date': chequeDate.toIso8601String().substring(0, 10),
+      'p_amount': amount,
+      'p_documents': documents,
+      'p_bank': bankAccountId,
+      'p_bank_name': bankName,
+      'p_received': receivedOn?.toIso8601String().substring(0, 10),
+      'p_notes': notes,
+    },
+  )).toString();
+
+  Future<void> depositPdc(String id, {DateTime? on}) async => await callRpc(
+    'deposit_pdc',
+    params: {'p_id': id, 'p_on': on?.toIso8601String().substring(0, 10)},
+  );
+
+  Future<void> clearPdc(String id, {DateTime? on}) async => await callRpc(
+    'clear_pdc',
+    params: {'p_id': id, 'p_on': on?.toIso8601String().substring(0, 10)},
+  );
+
+  Future<void> bouncePdc(String id, String reason) async =>
+      await callRpc('bounce_pdc', params: {'p_id': id, 'p_reason': reason});
+
+  Future<void> cancelPdc(String id, String reason) async =>
+      await callRpc('cancel_pdc', params: {'p_id': id, 'p_reason': reason});
+}

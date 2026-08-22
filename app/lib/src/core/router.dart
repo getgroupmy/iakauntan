@@ -14,6 +14,7 @@ import '../features/assets/assets_screen.dart';
 import '../features/banking/reconciliation_screen.dart';
 import '../features/stock/lots_screen.dart';
 import '../features/stock/stock_take_screen.dart';
+import '../features/documents/cheques_screen.dart';
 import '../features/documents/contra_screen.dart';
 import '../features/documents/deposits_screen.dart';
 import '../features/reports/budgets_screen.dart';
@@ -365,6 +366,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const DepositsScreen(),
           ),
           GoRoute(path: '/budgets', builder: (_, __) => const BudgetsScreen()),
+          GoRoute(path: '/cheques', builder: (_, __) => const ChequesScreen()),
           GoRoute(path: '/chat', builder: (_, __) => const ChatScreen()),
           GoRoute(
             path: '/collections',

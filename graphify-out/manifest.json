@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787379476.2504115,
-    "ast_hash": "cff3bc463788bb51895b0194baf651dd",
+    "mtime": 1787380179.5364063,
+    "ast_hash": "56344a744fbcbb307006230f29f98983",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787379543.2065446,
-    "ast_hash": "9d707d8b738cdf4939c3de079469845f",
+    "mtime": 1787380247.3458862,
+    "ast_hash": "c036cd29e75a2ec60069aa7e63dc10ca",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787379476.2345405,
-    "ast_hash": "eae61a666d7e5282710fc1ca9251a98c",
+    "mtime": 1787380179.5185823,
+    "ast_hash": "65db7bb1ad1b73082f6aca1d9033b82a",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787379543.2105134,
-    "ast_hash": "911c1cf6cef1b2605c30f072c5ef364f",
+    "mtime": 1787380247.346209,
+    "ast_hash": "6f634dc7cb394a875784e74b814eedbe",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787379617.3773458,
-    "ast_hash": "ab3088a8a818b78fb2499c52419a9c15",
+    "mtime": 1787380340.7213275,
+    "ast_hash": "1fdb13bad2474a2b199af1ebcf00172c",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1190,8 +1190,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-autocount.md": {
-    "mtime": 1787379617.3893373,
-    "ast_hash": "6b8701c4dd6a42ead4ff76e3283b10d0",
+    "mtime": 1787380340.733645,
+    "ast_hash": "d4828f53456ade58d5a8920477d64dee",
     "semantic_hash": ""
   },
   "docs/migrating-from-autocount.md": {
@@ -4102,6 +4102,26 @@
   "supabase/tests/budgets.sql": {
     "mtime": 1787379382.3982403,
     "ast_hash": "9eb6c14ad71992dade923ef294dc9adb",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/cheques_screen.dart": {
+    "mtime": 1787380247.3353162,
+    "ast_hash": "648b709d222d4f476d0622ab1900faa6",
+    "semantic_hash": ""
+  },
+  "app/test/cheques_test.dart": {
+    "mtime": 1787380294.5410335,
+    "ast_hash": "daf9c9ff4fe43370a6aab4b788a58e75",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0275_the_cheque_dated_next_month.sql": {
+    "mtime": 1787380025.1025732,
+    "ast_hash": "6c19a488dd506f7951b1171c6e33c4a1",
+    "semantic_hash": ""
+  },
+  "supabase/tests/post_dated_cheques.sql": {
+    "mtime": 1787380117.9436393,
+    "ast_hash": "c2f74080413de02d5207029aedbcbdad",
     "semantic_hash": ""
   }
 }

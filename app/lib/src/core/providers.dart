@@ -2270,6 +2270,22 @@ final itemUomOptionsProvider = FutureProvider.autoDispose
       (ref, itemId) => requireRepo(ref).itemUomOptions(itemId),
     );
 
+/// The post-dated cheque register. 0275.
+final postDatedChequesProvider = FutureProvider.autoDispose
+    .family<
+      List<Map<String, dynamic>>,
+      ({String? direction, String? status})
+    >(
+      (ref, args) => requireRepo(ref)
+          .postDatedCheques(direction: args.direction, status: args.status),
+    );
+
+/// What matures in the next month, and anything already past its date.
+final pdcMaturingProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).pdcMaturing(),
+    );
+
 /// Every budget, newest year first. 0274.
 final budgetsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
   (ref) => requireRepo(ref).budgets(),

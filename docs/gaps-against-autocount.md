@@ -118,6 +118,7 @@ be reachable.
 | AR/AP contra | `0272`. A contra note settles outstanding invoices against outstanding bills for the same party through `payment_allocations`, so both subsidiary ledgers move and keep agreeing with their control accounts. Same contact, or two contacts carrying the same TIN |
 | Customer and supplier deposits | `0273`. A deposit note holds money before there is a document for it: a customer's is a liability in 2125, a supplier's an asset in 1235, drawn down through `payment_allocations` as invoices and bills appear, then refunded or forfeited. An unapplied receipt used to credit Accounts Receivable, which showed a depositing customer as a debtor in credit and never showed the money as owed to anybody |
 | Budgets and budget-vs-actual | `0274`. Per account per period against a fiscal year, optionally for one department, built from a previous year's actuals plus an uplift, and reported with the variance and whether it is favourable — which is not the same as whether it is positive |
+| Post-dated cheque register | `0275`. A cheque dated in the future takes the document off the aged listing and sits in 1140 (or 2115 for one we wrote) until it clears, so the bank balance never counts money that cannot be drawn. Deposit, clear, bounce and hand-back, with a maturity list that surfaces the one nobody banked |
 
 ### Half done, and the half that is missing matters
 
@@ -133,7 +134,6 @@ No table, no column, no function — verified by querying for them:
 
 | Missing | Who it stops |
 | --- | --- |
-| **Post-dated cheque register** | Traditional trading. `receipts.cheque_date` exists and there is no maturity handling |
 | **Cash flow forecast** | Everyone. The `forecast_*` tables are inventory replenishment and have nothing to do with cash |
 | **Bank feed** | AutoCount Cloud syncs Maybank SME and UOB Business directly. This has CSV import into bank reconciliation, which is a different promise |
 
@@ -161,7 +161,7 @@ build-from-nothing work:
 | ~~Serial and batch tracking~~ | Done — `0106`, extended by `0267` and `0269` to every movement source | Electronics, pharma |
 | ~~Stock assembly / BOM~~ | Done — `0133` manufacturing, `0265` conversions, `0264` recipes | Light manufacturing |
 | ~~Landed cost~~ | Done — `0271`, by value or by count, onto the stock that is still there | Importers |
-| **Post-dated cheques** | `receipts.cheque_date` exists; no PDC register, no maturity handling | Traditional trading |
+| ~~Post-dated cheques~~ | Done — `0275`. `receipts.cheque_date` had never been read by anything; the register is its own document now | Traditional trading |
 | **Document approval workflow** | AutoCount sells this as a plug-in; iAkauntan has role gates but no per-document approval step | Larger SMEs |
 
 ## What iAkauntan has that AutoCount does not
@@ -226,7 +226,7 @@ A gap here is a client who cannot move:
 Every row in this table said yes for the first time in `0270`. The three
 that changed — units, serial and batch, assembly — were the ones the
 first revision of this document called real projects, and they were.
-What is left is in "Still nothing at all" above: post-dated cheques,
-a cash flow forecast and a bank feed. None of them
+What is left is in "Still nothing at all" above: a cash flow forecast
+and a bank feed. None of them
 stops a migration; each of them is a thing somebody has to keep doing by
 hand afterwards.
