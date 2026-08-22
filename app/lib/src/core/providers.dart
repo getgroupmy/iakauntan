@@ -2270,6 +2270,26 @@ final itemUomOptionsProvider = FutureProvider.autoDispose
       (ref, itemId) => requireRepo(ref).itemUomOptions(itemId),
     );
 
+/// Every budget, newest year first. 0274.
+final budgetsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+  (ref) => requireRepo(ref).budgets(),
+);
+
+final budgetLinesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, id) => requireRepo(ref).budgetLines(id),
+    );
+
+/// What happened, what was supposed to, and the difference.
+final budgetVsActualProvider = FutureProvider.autoDispose
+    .family<
+      List<Map<String, dynamic>>,
+      ({String budget, int? from, int? to})
+    >(
+      (ref, args) => requireRepo(ref)
+          .budgetVsActual(args.budget, fromPeriod: args.from, toPeriod: args.to),
+    );
+
 /// Every deposit note, newest first. 0273.
 final depositNotesProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, ({String? kind, String? status})>(

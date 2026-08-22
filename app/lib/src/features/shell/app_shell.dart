@@ -237,6 +237,16 @@ const _destinations = <_Dest>[
     '/deposits',
     module: 'sales',
   ),
+  // With the ledger rather than the reports, because a budget is a
+  // thing somebody maintains all year and looks at monthly, not a
+  // report they run once.
+  _Dest(
+    'Budgets',
+    Icons.flag_outlined,
+    Icons.flag,
+    '/budgets',
+    module: 'accounting',
+  ),
   // With the stock screens, because the question it answers — what is
   // running out — is asked while looking at what is on the shelf.
   _Dest(

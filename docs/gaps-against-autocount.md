@@ -117,6 +117,7 @@ be reachable.
 | Landed cost | `0271`. A run spreads freight, duty and insurance across the goods lines of posted bills by value or by count, adds the money to stock through a movement that carries value and no quantity, and takes it back off the account each charge was coded to. What was already sold keeps its share in the profit and loss, because the sale that carried it is posted |
 | AR/AP contra | `0272`. A contra note settles outstanding invoices against outstanding bills for the same party through `payment_allocations`, so both subsidiary ledgers move and keep agreeing with their control accounts. Same contact, or two contacts carrying the same TIN |
 | Customer and supplier deposits | `0273`. A deposit note holds money before there is a document for it: a customer's is a liability in 2125, a supplier's an asset in 1235, drawn down through `payment_allocations` as invoices and bills appear, then refunded or forfeited. An unapplied receipt used to credit Accounts Receivable, which showed a depositing customer as a debtor in credit and never showed the money as owed to anybody |
+| Budgets and budget-vs-actual | `0274`. Per account per period against a fiscal year, optionally for one department, built from a previous year's actuals plus an uplift, and reported with the variance and whether it is favourable — which is not the same as whether it is positive |
 
 ### Half done, and the half that is missing matters
 
@@ -132,7 +133,6 @@ No table, no column, no function — verified by querying for them:
 
 | Missing | Who it stops |
 | --- | --- |
-| **Budgets** and budget-vs-actual | Anyone with a board |
 | **Post-dated cheque register** | Traditional trading. `receipts.cheque_date` exists and there is no maturity handling |
 | **Cash flow forecast** | Everyone. The `forecast_*` tables are inventory replenishment and have nothing to do with cash |
 | **Bank feed** | AutoCount Cloud syncs Maybank SME and UOB Business directly. This has CSV import into bank reconciliation, which is a different promise |
@@ -152,7 +152,7 @@ build-from-nothing work:
 | Missing | Why it matters | Who needs it |
 | --- | --- | --- |
 | ~~Fixed asset register and depreciation~~ | Done — `0084`. Capital allowances remain a separate exercise; this is the accounting charge | Everyone |
-| **Budgets** | AutoCount has Budget Maintenance and budget-vs-actual reporting; iAkauntan has no budget anywhere | Anyone with a board |
+| ~~Budgets~~ | Done — `0274`, per account per period, with the variance report and a build-from-last-year | Anyone with a board |
 | ~~AR/AP contra~~ | Done — `0272`. A journal between the control accounts was the only way before it, and a journal leaves both aged listings wrong | Trading |
 | ~~Credit control~~ | Done — `0086`. Off, warn or block, per company | Anyone extending credit |
 | ~~Customer/supplier deposits~~ | Done — `0273`, with the application, refund and forfeit flows, and the balance sheet presentation an unapplied receipt never had | Trading, projects |
@@ -226,7 +226,7 @@ A gap here is a client who cannot move:
 Every row in this table said yes for the first time in `0270`. The three
 that changed — units, serial and batch, assembly — were the ones the
 first revision of this document called real projects, and they were.
-What is left is in "Still nothing at all" above: budgets, post-dated
-cheques, a cash flow forecast and a bank feed. None of them
+What is left is in "Still nothing at all" above: post-dated cheques,
+a cash flow forecast and a bank feed. None of them
 stops a migration; each of them is a thing somebody has to keep doing by
 hand afterwards.

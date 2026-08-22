@@ -8915,3 +8915,80 @@ extension RepoDeposits on Repo {
   Future<void> voidDeposit(String id, String reason) async =>
       await callRpc('void_deposit', params: {'p_id': id, 'p_reason': reason});
 }
+
+/// Budgets, and the third column of a management account. 0274.
+extension RepoBudgets on Repo {
+  Future<List<Map<String, dynamic>>> budgets() async =>
+      Repo.rows(await callRpc('budgets_list', params: {'p_org': orgId}));
+
+  Future<List<Map<String, dynamic>>> budgetLines(String budgetId) async =>
+      Repo.rows(
+        await callRpc('budget_lines_for', params: {'p_budget': budgetId}),
+      );
+
+  /// Budget, actual and variance for a run of periods. [fromPeriod] and
+  /// [toPeriod] are period numbers within the budget's own year, so a
+  /// quarter is 1–3 rather than a date range that might cut a month in
+  /// half.
+  Future<List<Map<String, dynamic>>> budgetVsActual(
+    String budgetId, {
+    int? fromPeriod,
+    int? toPeriod,
+  }) async => Repo.rows(
+    await callRpc(
+      'report_budget_vs_actual',
+      params: {
+        'p_budget': budgetId,
+        'p_from_period': fromPeriod,
+        'p_to_period': toPeriod,
+      },
+    ),
+  );
+
+  Future<String> saveBudget({
+    String? id,
+    required String fiscalYearId,
+    required String name,
+    String? departmentCode,
+    String? notes,
+  }) async => (await callRpc(
+    'upsert_budget',
+    params: {
+      'p_id': id,
+      'p_org': orgId,
+      'p_year': fiscalYearId,
+      'p_name': name,
+      'p_department': departmentCode,
+      'p_notes': notes,
+    },
+  )).toString();
+
+  /// Each entry of [lines] is `{account, period, amount}`. Sent whole
+  /// and replacing what was there, the way document lines are.
+  Future<void> setBudgetLines(
+    String budgetId,
+    List<Map<String, dynamic>> lines,
+  ) async => await callRpc(
+    'set_budget_lines',
+    params: {'p_budget': budgetId, 'p_lines': lines},
+  );
+
+  Future<void> buildBudgetFromActual({
+    required String budgetId,
+    required String fromYearId,
+    num upliftPercent = 0,
+  }) async => await callRpc(
+    'build_budget_from_actual',
+    params: {
+      'p_budget': budgetId,
+      'p_from_year': fromYearId,
+      'p_uplift_percent': upliftPercent,
+    },
+  );
+
+  Future<void> approveBudget(String id) async =>
+      await callRpc('approve_budget', params: {'p_id': id});
+
+  Future<void> archiveBudget(String id) async =>
+      await callRpc('archive_budget', params: {'p_id': id});
+}
