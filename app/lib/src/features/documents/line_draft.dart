@@ -126,6 +126,58 @@ void applyItemToLine(LineDraft line, Item item, List<TaxCode> taxCodes) {
   }
 }
 
+/// How many of the item's own units one of [uom] is, from the rows
+/// `item_uom_options` returns.
+///
+/// Falls back to 1 for the item's own unit and for a unit that is not on
+/// the list — the same answer `app.uom_qty` gives when there is nothing
+/// to convert through, so the editor never disagrees with the ledger by
+/// guessing.
+double uomFactor(List<Map<String, dynamic>> options, String? uom) {
+  if (uom == null) return 1;
+  for (final o in options) {
+    if ('${o['uom_code']}' == uom) {
+      final q = o['qty_in_stock_uom'];
+      final v = q is num ? q.toDouble() : double.tryParse('$q') ?? 1;
+      return v > 0 ? v : 1;
+    }
+  }
+  return 1;
+}
+
+/// A price written per one unit, re-written per a different one.
+///
+/// The money on a line is per the line's own unit — that is the whole
+/// design, and the database agrees. So switching a line from tins to
+/// cartons of twenty-four without touching the price would sell a
+/// carton for the price of a tin. Rescaling keeps the line worth what it
+/// was worth a moment ago, and the number stays editable afterwards.
+double rescaleForUom(double price, double fromFactor, double toFactor) {
+  if (fromFactor <= 0 || toFactor <= 0) return price;
+  return price * toFactor / fromFactor;
+}
+
+/// What this line actually takes off the shelf, in the item's own unit,
+/// or null when the line is already written in it and there is nothing
+/// worth saying.
+///
+/// Shown under the quantity because the number the shop types and the
+/// number the stock moves by are no longer the same number, and the
+/// place to notice a wrong pack size is before the invoice is posted.
+String? baseQuantityHint({
+  required double quantity,
+  required String? uom,
+  required String baseUom,
+  required double factor,
+}) {
+  if (uom == null || uom == baseUom || factor == 1) return null;
+  final base = quantity * factor;
+  final text = base == base.roundToDouble()
+      ? base.toStringAsFixed(0)
+      : base.toStringAsFixed(3).replaceFirst(RegExp(r'0+$'), '');
+  return '= $text $baseUom';
+}
+
 /// Mirrors app.calc_document_line() so the editor can show live totals
 /// before a row is saved. The database remains the source of truth.
 ({double net, double tax, double total}) computeLine({

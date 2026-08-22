@@ -233,6 +233,29 @@ class _WideLineState extends State<_WideLine> {
     widget.onChanged();
   }
 
+
+  /// The item's own unit — what the shelf is counted in, and what the
+  /// picker converts to.
+  String get _baseUom {
+    for (final i in widget.items) {
+      if (i.id == widget.line.itemId) return i.uomCode;
+    }
+    return widget.line.uomCode ?? '';
+  }
+
+  /// A different unit on the same line. The quantity stays as typed —
+  /// two cartons is still two — and the price follows it, because the
+  /// price is per the line's own unit and a carton is not priced like a
+  /// tin.
+  void _unitChanged(double from, double to) {
+    setState(() {
+      widget.line.unitPrice = rescaleForUom(widget.line.unitPrice, from, to);
+      _price.text =
+          widget.line.unitPrice == 0 ? '' : widget.line.unitPrice.toString();
+    });
+    widget.onChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
     final totals = widget.line.totals;
@@ -258,13 +281,25 @@ class _WideLineState extends State<_WideLine> {
           const SizedBox(width: 8),
           Expanded(
             flex: 2,
-            child: _NumField(
-              controller: _quantity,
-              editable: widget.editable,
-              onChanged: (v) {
-                setState(() => widget.line.quantity = v);
-                widget.onChanged();
-              },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _NumField(
+                  controller: _quantity,
+                  editable: widget.editable,
+                  onChanged: (v) {
+                    setState(() => widget.line.quantity = v);
+                    widget.onChanged();
+                  },
+                ),
+                _UomField(
+                  line: widget.line,
+                  baseUom: _baseUom,
+                  editable: widget.editable,
+                  onUnitChanged: _unitChanged,
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 8),
@@ -413,6 +448,29 @@ class _NarrowLineState extends State<_NarrowLine> {
     widget.onChanged();
   }
 
+
+  /// The item's own unit — what the shelf is counted in, and what the
+  /// picker converts to.
+  String get _baseUom {
+    for (final i in widget.items) {
+      if (i.id == widget.line.itemId) return i.uomCode;
+    }
+    return widget.line.uomCode ?? '';
+  }
+
+  /// A different unit on the same line. The quantity stays as typed —
+  /// two cartons is still two — and the price follows it, because the
+  /// price is per the line's own unit and a carton is not priced like a
+  /// tin.
+  void _unitChanged(double from, double to) {
+    setState(() {
+      widget.line.unitPrice = rescaleForUom(widget.line.unitPrice, from, to);
+      _price.text =
+          widget.line.unitPrice == 0 ? '' : widget.line.unitPrice.toString();
+    });
+    widget.onChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
     final totals = widget.line.totals;
@@ -456,14 +514,26 @@ class _NarrowLineState extends State<_NarrowLine> {
           Row(
             children: [
               Expanded(
-                child: _NumField(
-                  controller: _quantity,
-                  label: 'Qty',
-                  editable: widget.editable,
-                  onChanged: (v) {
-                    setState(() => widget.line.quantity = v);
-                    widget.onChanged();
-                  },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _NumField(
+                      controller: _quantity,
+                      label: 'Qty',
+                      editable: widget.editable,
+                      onChanged: (v) {
+                        setState(() => widget.line.quantity = v);
+                        widget.onChanged();
+                      },
+                    ),
+                    _UomField(
+                      line: widget.line,
+                      baseUom: _baseUom,
+                      editable: widget.editable,
+                      onUnitChanged: _unitChanged,
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 10),
@@ -562,6 +632,94 @@ class _ItemField extends StatelessWidget {
                   ),
                 ),
             ],
+          ),
+      ],
+    );
+  }
+}
+
+/// The unit this line is written in, and what it comes to on the shelf.
+///
+/// `uom_code` has been a column on both line tables since 0005 and was
+/// only ever copied off the item, so a shop that buys by the carton and
+/// stocks by the tin had no way to say so. 0270 made the database
+/// convert; this is the half that lets somebody choose.
+///
+/// It renders nothing at all when there is nothing to choose between —
+/// no item on the line, one unit only, or an organization without the
+/// inventory module, whose read of `item_uom_options` is refused. That
+/// is the common case, and it should cost those businesses no pixels.
+class _UomField extends ConsumerWidget {
+  const _UomField({
+    required this.line,
+    required this.baseUom,
+    required this.editable,
+    required this.onUnitChanged,
+  });
+
+  final LineDraft line;
+  final String baseUom;
+  final bool editable;
+
+  /// Called with the factor the line was written in and the one it is
+  /// now written in, so the row can rescale the price it is showing.
+  final void Function(double from, double to) onUnitChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (line.itemId == null) return const SizedBox.shrink();
+    final options =
+        ref.watch(itemUomOptionsProvider(line.itemId!)).valueOrNull ??
+        const <Map<String, dynamic>>[];
+    if (options.length < 2) return const SizedBox.shrink();
+
+    final current = line.uomCode ?? baseUom;
+    final factor = uomFactor(options, current);
+    final hint = baseQuantityHint(
+      quantity: line.quantity,
+      uom: current,
+      baseUom: baseUom,
+      factor: factor,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        DropdownButtonFormField<String>(
+          value: options.any((o) => '${o['uom_code']}' == current)
+              ? current
+              : null,
+          isDense: true,
+          decoration: const InputDecoration(isDense: true),
+          style: Theme.of(context).textTheme.bodySmall,
+          items: [
+            for (final o in options)
+              DropdownMenuItem(
+                value: '${o['uom_code']}',
+                child: Text(
+                  '${o['uom_name']}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: !editable
+              ? null
+              : (v) {
+                  if (v == null || v == current) return;
+                  final to = uomFactor(options, v);
+                  line.uomCode = v;
+                  onUnitChanged(factor, to);
+                },
+        ),
+        if (hint != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              hint,
+              style: Theme.of(context).textTheme.bodySmall,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
       ],
     );

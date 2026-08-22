@@ -113,21 +113,9 @@ be reachable.
 | Sales agent | `salespeople`, reached from the document editor and the shell |
 | Document approval workflow | `approval_rules`, `approval_steps`, `approval_requests` |
 | What a credit note credits | `0269`. `original_invoice_id` had **0** references when this document was first written and still had 0 in August 2026; `credit_sales_invoice` is the first thing ever to write it |
+| Multi-UOM in the document cycles | `0270`. `sales_document_lines.base_quantity` and the purchase equivalent, written by `app.calc_document_line`, and read by both posting functions for the movement and the cost. The unit picker landed in the same commit |
 
 ### Half done, and the half that is missing matters
-
-**Multi-UOM.** `ref_uom_factors`, `item_uom_packs` and `app.uom_qty`
-landed in `0264`, and `0265`–`0267` use them for recipes, transfers and
-conversions. **Every caller is in the POS and stock code.** No sales or
-purchase document converts: `post_sales_document` moves `l.quantity`
-raw and never reads `l.uom_code`.
-
-That is not currently wrong, because `line_draft.dart` copies the item's
-own base unit onto every line and there is no unit picker — so the two
-always agree. It becomes wrong the moment a picker is added, which is
-exactly what "sell in cartons, stock in pieces" needs. The conversion
-machinery exists; wiring it into the two document cycles is the
-remaining work, and it must be done in the same commit as the picker.
 
 **Item bundles.** `item_type` has had `bundle` since `0003`. It appears
 in that check constraint and in `0103`'s import validator, and **nowhere
@@ -169,9 +157,9 @@ build-from-nothing work:
 | ~~Credit control~~ | Done — `0086`. Off, warn or block, per company | Anyone extending credit |
 | **Customer/supplier deposits** | `receipts.unapplied_amount` holds an advance, but there is no deposit entry, no forfeit, no application flow | Trading, projects |
 | **Cash flow forecast** | AutoCount's Advanced Financial Report module leads on this; iAkauntan has no forward view at all | Everyone |
-| **Multi-UOM** | `items` has a single `uom_code`. No conversion, so cartons and pieces cannot coexist | Distribution |
-| **Serial and batch tracking** | Nothing. No serialised business can migrate | Electronics, pharma |
-| **Stock assembly / BOM** | `stock_movement_type` has `assembly_in` and `assembly_out` and there is no assembly table to produce them | Light manufacturing |
+| ~~Multi-UOM~~ | Done — `0264` for the conversion, `0270` for the document cycles. A line is written in any unit its dimension reaches or any pack the shop has set; the money is per that unit and the stock converts to the item's own | Distribution |
+| ~~Serial and batch tracking~~ | Done — `0106`, extended by `0267` and `0269` to every movement source | Electronics, pharma |
+| ~~Stock assembly / BOM~~ | Done — `0133` manufacturing, `0265` conversions, `0264` recipes | Light manufacturing |
 | **Landed cost** | No apportionment of freight and duty onto item cost | Importers |
 | **Post-dated cheques** | `receipts.cheque_date` exists; no PDC register, no maturity handling | Traditional trading |
 | **Document approval workflow** | AutoCount sells this as a plug-in; iAkauntan has role gates but no per-document approval step | Larger SMEs |
@@ -215,8 +203,9 @@ Ranked by how many businesses each unblocks, not by size:
 6. ~~**Stock adjustment and warehouses.**~~ Done — `0087`.
 7. ~~**Price levels, project/department dimensions, recurring journal
    UI.**~~ Done — `0088`.
-8. **Multi-UOM, then serial/batch, then assembly.** Only if trading and
-   light manufacturing are the target. These are real projects.
+8. ~~**Multi-UOM, then serial/batch, then assembly.**~~ Done — `0264`
+   and `0270` for units, `0106` and `0267` for serial and batch, `0133`
+   and `0265` for assembly.
 
 ## Migration eligibility
 
@@ -229,11 +218,15 @@ A gap here is a client who cannot move:
 | Company invoicing in foreign currency | Yes |
 | Anyone with fixed assets to depreciate | Yes |
 | Anyone reconciling a bank account monthly | Yes |
-| Distribution with cartons and pieces | No — until multi-UOM |
-| Electronics, pharma, anything serialised | No — until serial tracking |
-| Light manufacturing with a BOM | No — until assembly |
-| Retail with a counter | No, and by choice |
+| Distribution with cartons and pieces | Yes — `0270` |
+| Electronics, pharma, anything serialised | Yes — `0106`, `0267` |
+| Light manufacturing with a BOM | Yes — `0133`, `0265` |
+| Retail with a counter | Yes — the POS, which AutoCount sells separately |
 
-The middle three rows are the change from the last revision of this
-document. They are not exotic requirements; they are ordinary
-bookkeeping, and each one is a company that cannot leave AutoCount.
+Every row in this table said yes for the first time in `0270`. The three
+that changed — units, serial and batch, assembly — were the ones the
+first revision of this document called real projects, and they were.
+What is left is in "Still nothing at all" above: budgets, contra,
+deposits, landed cost, post-dated cheques. None of them stops a
+migration; each of them is a thing somebody has to keep doing by hand
+afterwards.
