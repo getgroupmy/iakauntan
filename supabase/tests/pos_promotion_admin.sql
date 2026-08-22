@@ -41,6 +41,9 @@ declare
   v_roti   uuid;
   v_teh    uuid;
   v_promo  uuid;
+  v_open   uuid;
+  v_empty_sale uuid;
+  r2       record;
   v_again  uuid;
   v_sale   uuid;
   v_row    uuid;
@@ -268,6 +271,58 @@ begin
     (select count(*) from public.pos_sale_promotions where sale_id = v_done), 1);
 
   -- ==================================================================
+  -- The list the shop sets them up from
+  -- ==================================================================
+  --
+  -- `pos_promotions_admin` and `pos_sale_promotions_on` are the two
+  -- readers behind the promotions screen and the tender sheet, and
+  -- neither was called. The columns worth pinning are the two counts:
+  -- `times_used` and `given_away` are computed over **completed** bills
+  -- only, matching what the usage cap counts. A promotion sitting on a
+  -- parked bill has not been used, and a cap that counted it would stop
+  -- honouring a promotion because of baskets nobody has paid for.
+  perform pg_temp.check_eq('the paid bill counts as a use',
+    (select a.times_used from public.pos_promotions_admin(v_org) a
+      where a.id = v_promo), 1);
+  perform pg_temp.check_eq('and what it gave away is what came off it',
+    (select a.given_away from public.pos_promotions_admin(v_org) a
+      where a.id = v_promo), 1.50::numeric);
+
+  -- A basket somebody is still standing at the counter with.
+  v_open := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_open, v_roti, 4, 10.00);
+  perform public.refresh_pos_sale_promotions(v_open);
+  perform pg_temp.check_eq('the promotion is on the open bill',
+    (select count(*) from public.pos_sale_promotions where sale_id = v_open), 1);
+  perform pg_temp.check_eq('which is still not a use',
+    (select a.times_used from public.pos_promotions_admin(v_org) a
+      where a.id = v_promo), 1);
+  perform pg_temp.check_eq('nor given anything away yet',
+    (select a.given_away from public.pos_promotions_admin(v_org) a
+      where a.id = v_promo), 1.50::numeric);
+
+  -- What the tender sheet shows against that open bill.
+  select * into r2 from public.pos_sale_promotions_on(v_open);
+  perform pg_temp.check_eq('the sheet names the promotion',
+    r2.name, 'Ten off, everything');
+  perform pg_temp.check_eq('and what it took off', r2.amount, 6.00::numeric);
+  perform pg_temp.check_true('and that nobody typed a code for it',
+    not r2.by_code);
+  -- A bill with nothing on it at all, so the empty answer is an empty
+  -- answer rather than a bill this promotion happens to miss.
+  v_empty_sale := public.open_pos_sale(v_reg);
+  perform pg_temp.check_eq('a bill with none on it shows none',
+    (select count(*) from public.pos_sale_promotions_on(v_empty_sale)), 0);
+
+  -- The scope arrays, which the editor reads back to fill its form.
+  perform pg_temp.check_eq('the scope cleared earlier reads back as empty',
+    (select array_length(a.item_ids, 1) from public.pos_promotions_admin(v_org) a
+      where a.id = v_promo), null);
+
+  perform pg_temp.check_eq('and one shop''s promotions are not another''s',
+    (select count(*) from public.pos_promotions_admin(v_other)), 0);
+
+  -- ==================================================================
   -- Retiring one
   -- ==================================================================
   perform public.refresh_pos_sale_promotions(v_sale);
@@ -310,6 +365,15 @@ begin
   exception when sqlstate '42501' then v_took := false;
   end;
   perform pg_temp.check_true('nor retire one', not v_took);
+
+  -- Nor read them. A shop's promotions are its pricing strategy — what
+  -- it discounts, when, and by how much — and both readers answer about
+  -- a named organization rather than about the caller's own, so the
+  -- module check is the only thing between a stranger and it.
+  perform pg_temp.check_eq('nor see what this shop discounts',
+    (select count(*) from public.pos_promotions_admin(v_org)), 0);
+  perform pg_temp.check_eq('nor what came off a bill in it',
+    (select count(*) from public.pos_sale_promotions_on(v_open)), 0);
   perform pg_temp.sign_out();
 end $$;
 

@@ -32,6 +32,8 @@ declare
   v_bill   uuid;
   v_inv    uuid;
   v_run    uuid;
+  v_org2   uuid;
+  v_run2   uuid;
   v_entry  uuid;
   v_freight uuid;
   v_duty   uuid;
@@ -112,7 +114,84 @@ begin
     (select sum(p.amount) from public.landed_cost_preview(v_run) p),
     400::numeric);
 
+  -- ------------------------------------------------------------------
+  -- The register of runs
+  --
+  -- `landed_cost_runs_list` is the screen somebody opens to find last
+  -- month's container, and it was called by no test. Four of its columns
+  -- are counts and sums computed per run rather than stored, and the
+  -- pair that matters is `total` against `capitalised`: what the freight
+  -- cost against how much of it has actually reached the stock. They are
+  -- equal after posting and they are not before, which is the difference
+  -- between a run somebody prepared and a run somebody finished.
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq('a run appears while it is still a draft',
+    (select l.status from public.landed_cost_runs_list(v_org) l
+      where l.id = v_run), 'draft');
+  perform pg_temp.check_eq('with the bill it is spreading over',
+    (select l.bills from public.landed_cost_runs_list(v_org) l
+      where l.id = v_run), 1);
+  perform pg_temp.check_eq('and the charge it is spreading',
+    (select l.charges from public.landed_cost_runs_list(v_org) l
+      where l.id = v_run), 1);
+  perform pg_temp.check_eq('which comes to the freight',
+    (select l.total from public.landed_cost_runs_list(v_org) l
+      where l.id = v_run), 400::numeric);
+  perform pg_temp.check_eq('none of which is on the stock yet',
+    (select l.capitalised from public.landed_cost_runs_list(v_org) l
+      where l.id = v_run), 0::numeric);
+
   v_entry := public.post_landed_cost_run(v_run);
+
+  perform pg_temp.check_eq('once posted the whole charge is capitalised',
+    (select l.capitalised from public.landed_cost_runs_list(v_org) l
+      where l.id = v_run), 400::numeric);
+  perform pg_temp.check_eq('and the run says so',
+    (select l.status from public.landed_cost_runs_list(v_org) l
+      where l.id = v_run), 'posted');
+  perform pg_temp.check_eq('a status nothing is in comes back empty',
+    (select count(*) from public.landed_cost_runs_list(v_org, 'draft')), 0);
+  perform pg_temp.check_eq('and the one it is in does not',
+    (select count(*) from public.landed_cost_runs_list(v_org, 'posted')), 1);
+
+  -- A second importer, so that two things this list promises can be told
+  -- apart at all. Its run carries a charge and no bill, which is the one
+  -- shape where `bills` and `charges` are different numbers — everything
+  -- else in this file is one of each, and a list that counted the wrong
+  -- one would read correctly throughout.
+  --
+  -- It belongs to the same fixture user on purpose. If the caller were
+  -- not a member of it, dropping the org filter from the query would
+  -- change nothing here and the leak it would open could not be seen.
+  v_org2 := pg_temp.test_org('Pengimport Lain Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.landed_cost_runs (org_id, run_no, run_date, status)
+  values (v_org2, 'LC-OTHER', current_date, 'draft') returning id into v_run2;
+  insert into public.landed_cost_charges
+    (org_id, run_id, line_no, description, amount, basis, account_id)
+  values (v_org2, v_run2, 1, 'Ocean freight', 90, 'value',
+          (select id from public.accounts where org_id = v_org2 and code = '5400'));
+
+  perform pg_temp.check_eq('a charge with no bill behind it still counts',
+    (select l.charges from public.landed_cost_runs_list(v_org2) l
+      where l.id = v_run2), 1);
+  perform pg_temp.check_eq('and the bills it is spread over are none',
+    (select l.bills from public.landed_cost_runs_list(v_org2) l
+      where l.id = v_run2), 0);
+  perform pg_temp.check_eq('one company''s runs are not the other''s',
+    (select count(*) from public.landed_cost_runs_list(v_org)
+      where id = v_run2), 0);
+
+  -- What a container cost to bring in is what this company pays for its
+  -- goods, which is its margin written down.
+  perform pg_temp.sign_in_as(pg_temp.another_user('nosy@freight.test'));
+  begin
+    perform * from public.landed_cost_runs_list(v_org);
+    perform pg_temp.check_true('another importer''s runs are refused', false);
+  exception when sqlstate '42501' then
+    perform pg_temp.check_true('another importer''s runs are refused', true);
+  end;
+  perform pg_temp.sign_in_as(v_owner);
 
   perform pg_temp.check_eq(
     'a tile now costs eleven ringgit, which is what it cost',
