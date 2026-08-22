@@ -911,4 +911,169 @@ begin
     (select deleted_at is not null from public.chat_messages where id = v_other));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Withdrawing consent
+--
+-- `chat_revoke_link` is how a company that agreed to be talked to takes
+-- that back, and it was called by nothing. Neither were `chat_links_for`
+-- or `chat_access_list`, which are what the screen behind it reads.
+--
+-- What matters is not that the row comes back saying 'revoked'. It is
+-- that the door shuts: the two companies stop being linked, the other
+-- company leaves the directory, and nothing new can be started. And
+-- that the door shuts only that far — 0135 says "history stays; what
+-- stops is starting anything new", and a revocation that also blanked
+-- the thread would destroy a record both sides may need.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_ann  uuid := pg_temp.another_user('ann@revoke.test');
+  v_azmi uuid := pg_temp.another_user('azmi@revoke.test');
+  v_ben  uuid := pg_temp.another_user('ben@revoke.test');
+  v_a uuid; v_b uuid; v_link uuid; v_conv uuid; v_ok boolean; r record;
+begin
+  v_a := pg_temp.chat_org('Revoke A Sdn Bhd', v_ann);
+  v_b := pg_temp.chat_org('Revoke B Sdn Bhd', v_ben);
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_a, v_azmi, 'accountant', 'active', now());
+
+  perform pg_temp.sign_in_as(v_ann);
+  perform public.chat_set_access(v_a, v_ann, true);
+  perform public.chat_set_access(v_a, v_azmi, true);
+  perform pg_temp.sign_in_as(v_ben);
+  perform public.chat_set_access(v_b, v_ben, true);
+
+  -- -----------------------------------------------------------------
+  -- What each side is shown while it is pending
+  --
+  -- These two flags decide which button a screen draws. Backwards, and
+  -- the company that asked is invited to approve its own request — the
+  -- one thing the whole design exists to prevent, arriving as a button.
+  -- -----------------------------------------------------------------
+  perform pg_temp.sign_in_as(v_ann);
+  v_link := public.chat_request_link(v_a, v_b, 'We supply them');
+
+  select * into r from public.chat_links_for(v_a) where id = v_link;
+  perform pg_temp.check_true('the asking side is told it asked', r.we_asked);
+  perform pg_temp.check_true('and is not waiting on itself', not r.awaiting_us);
+  perform pg_temp.check_eq('and is shown the other company, not its own',
+    r.other_org_id, v_b);
+  perform pg_temp.check_eq('by name', r.other_org_name, 'Revoke B Sdn Bhd');
+  perform pg_temp.check_eq('as a request nobody has answered', r.status, 'pending');
+
+  perform pg_temp.sign_in_as(v_ben);
+  select * into r from public.chat_links_for(v_b) where id = v_link;
+  perform pg_temp.check_true('the asked side is told it did not ask',
+    not r.we_asked);
+  perform pg_temp.check_true('and that it is the one holding it up',
+    r.awaiting_us);
+  perform pg_temp.check_eq('and is shown the other company',
+    r.other_org_id, v_a);
+
+  perform public.chat_decide_link(v_link, true);
+  select * into r from public.chat_links_for(v_b) where id = v_link;
+  perform pg_temp.check_true('answering it stops it waiting on anybody',
+    not r.awaiting_us);
+  perform pg_temp.check_eq('and it says so', r.status, 'approved');
+
+  -- Something to have a history of.
+  perform pg_temp.sign_in_as(v_ann);
+  v_conv := public.chat_start_direct(v_a, v_ben, v_b);
+  insert into public.chat_messages
+    (conversation_id, sender_id, sender_org_id, body)
+  values (v_conv, v_ann, v_a, 'Invois bulan ini sudah dihantar');
+  perform pg_temp.check_eq('the two companies are talking',
+    (select count(*) from public.chat_thread(v_conv)), 1);
+
+  -- -----------------------------------------------------------------
+  -- Who may end it
+  -- -----------------------------------------------------------------
+  perform pg_temp.sign_in_as(v_azmi);
+  begin
+    perform public.chat_revoke_link(v_link);
+    v_ok := true;
+  exception when sqlstate '42501' then v_ok := false;
+  end;
+  perform pg_temp.sign_in_as(v_azmi);
+  perform pg_temp.check_true('an accountant may not end a company link',
+    not v_ok);
+  perform pg_temp.check_true('so it is still on',
+    app.chat_orgs_linked(v_a, v_b));
+
+  begin
+    perform public.chat_revoke_link(gen_random_uuid());
+    v_ok := true;
+  exception when sqlstate 'P0002' then v_ok := false;
+  end;
+  perform pg_temp.sign_in_as(v_ben);
+  perform pg_temp.check_true('a link that does not exist is refused', not v_ok);
+
+  -- Either side may, without asking. Here it is the side that agreed,
+  -- which is the case that matters: consent has to be withdrawable by
+  -- whoever gave it.
+  perform public.chat_revoke_link(v_link);
+
+  -- -----------------------------------------------------------------
+  -- What that closes, and what it leaves alone
+  -- -----------------------------------------------------------------
+  perform pg_temp.check_true('the companies are no longer linked',
+    not app.chat_orgs_linked(v_a, v_b));
+
+  perform pg_temp.sign_in_as(v_ann);
+  perform pg_temp.check_eq('the other company leaves the directory',
+    (select count(*) from public.chat_directory(v_a)), 1);
+
+  begin
+    perform public.chat_start_direct(v_a, v_ben, v_b);
+    v_ok := true;
+  exception when sqlstate '42501' then v_ok := false;
+  end;
+  perform pg_temp.sign_in_as(v_ann);
+  perform pg_temp.check_true('and nothing new can be started', not v_ok);
+
+  -- 0135's promise, and the reason `app.is_chat_participant` asks about
+  -- the person rather than about the link.
+  perform pg_temp.check_eq('but what was said is still there',
+    (select count(*) from public.chat_thread(v_conv)), 1);
+
+  -- -----------------------------------------------------------------
+  -- Asking again
+  -- -----------------------------------------------------------------
+  v_link := public.chat_request_link(v_a, v_b, 'Second time');
+  perform pg_temp.check_eq('a revoked link can be asked for again',
+    (select status from public.chat_links_for(v_a) where id = v_link), 'pending');
+  perform pg_temp.check_true('and asking is not agreeing',
+    not app.chat_orgs_linked(v_a, v_b));
+
+  -- -----------------------------------------------------------------
+  -- Who is switched on
+  -- -----------------------------------------------------------------
+  select * into r from public.chat_access_list(v_a) where user_id = v_azmi;
+  perform pg_temp.check_true('the list says who is switched on', r.is_enabled);
+  perform pg_temp.check_eq('and what they are here as', r.role, 'accountant');
+  perform pg_temp.check_eq('it covers everybody in the company',
+    (select count(*) from public.chat_access_list(v_a)), 2);
+
+  -- It is a company's own list of who may speak for it. An accountant
+  -- gets nothing rather than an error, because the screen asks this on
+  -- load and an error banner is the wrong answer to a question about
+  -- what to draw.
+  perform pg_temp.sign_in_as(v_azmi);
+  perform pg_temp.check_eq('and only an administrator sees it',
+    (select count(*) from public.chat_access_list(v_a)), 0);
+  perform pg_temp.sign_in_as(v_ann);
+  perform pg_temp.check_eq('nor does it leak another company''s',
+    (select count(*) from public.chat_access_list(v_b)), 0);
+
+  -- And the link list is the same shape of answer: a company's own
+  -- relationships, empty to anybody outside it. Both of these read a
+  -- named organization's rows, so the check is on the argument rather
+  -- than on the caller's own company — pass somebody else's id and it
+  -- has to come back with nothing.
+  perform pg_temp.check_eq('a company sees its own links',
+    (select count(*) from public.chat_links_for(v_a)), 1);
+  perform pg_temp.check_eq('and none of a company it does not belong to',
+    (select count(*) from public.chat_links_for(v_b)), 0);
+end $$;
+
 rollback;
