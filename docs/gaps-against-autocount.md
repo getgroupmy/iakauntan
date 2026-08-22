@@ -88,6 +88,74 @@ enums with no screen: `proforma`, `refund_note`, `purchase_request`,
 `purchase_debit_note`, and — the one that will be missed —
 `purchase_return`.
 
+## Revision, August 2026 — what has closed and what has not
+
+The AutoCount side of this document still could not be read. Every
+AutoCount domain is blocked by the network egress proxy in this
+environment, including `accounting.autocountcloud.com`,
+`help.accounting.autocountcloud.com`, `autocountsystem.com` and
+`autocountsoft.com`. What follows about their product is from
+search-engine snippets of those pages. **Confirm it from a machine that
+can reach them before promising anything to a customer.**
+
+The iAkauntan side is queried, not remembered: table and enum names from
+`information_schema` and `pg_enum` on a database built from these
+migrations, and a reference count in `app/lib` for anything claimed to
+be reachable.
+
+### Closed since the last revision
+
+| Was missing | Now |
+| --- | --- |
+| Multi-location | `warehouses` plus `stock_transfers` (`0265`), with goods in transit through 1320 and a receiving discrepancy |
+| Serial and batch tracking | `0106`, extended by `0267` and `0269` to every movement source — recipes, transfers, conversions, credit notes |
+| Stock assembly / BOM | `0133` manufacturing, plus `0265` conversions and `0264` recipes |
+| Sales agent | `salespeople`, reached from the document editor and the shell |
+| Document approval workflow | `approval_rules`, `approval_steps`, `approval_requests` |
+| What a credit note credits | `0269`. `original_invoice_id` had **0** references when this document was first written and still had 0 in August 2026; `credit_sales_invoice` is the first thing ever to write it |
+
+### Half done, and the half that is missing matters
+
+**Multi-UOM.** `ref_uom_factors`, `item_uom_packs` and `app.uom_qty`
+landed in `0264`, and `0265`–`0267` use them for recipes, transfers and
+conversions. **Every caller is in the POS and stock code.** No sales or
+purchase document converts: `post_sales_document` moves `l.quantity`
+raw and never reads `l.uom_code`.
+
+That is not currently wrong, because `line_draft.dart` copies the item's
+own base unit onto every line and there is no unit picker — so the two
+always agree. It becomes wrong the moment a picker is added, which is
+exactly what "sell in cartons, stock in pieces" needs. The conversion
+machinery exists; wiring it into the two document cycles is the
+remaining work, and it must be done in the same commit as the picker.
+
+**Item bundles.** `item_type` has had `bundle` since `0003`. It appears
+in that check constraint and in `0103`'s import validator, and **nowhere
+else** — no explosion, no pricing, no screen. This is the same
+dead-end shape the document-transfer finding was about: an enum value
+that implies a capability nobody built.
+
+### Still nothing at all
+
+No table, no column, no function — verified by querying for them:
+
+| Missing | Who it stops |
+| --- | --- |
+| **Budgets** and budget-vs-actual | Anyone with a board |
+| **AR/AP contra** | Trading, where a customer is also a supplier |
+| **Customer/supplier deposits** | Trading and projects. AutoCount has a Deposit Note document type; there is no equivalent here, and `receipts.unapplied_amount` is not a deposit flow |
+| **Landed cost** | Importers |
+| **Post-dated cheque register** | Traditional trading. `receipts.cheque_date` exists and there is no maturity handling |
+| **Cash flow forecast** | Everyone. The `forecast_*` tables are inventory replenishment and have nothing to do with cash |
+| **Bank feed** | AutoCount Cloud syncs Maybank SME and UOB Business directly. This has CSV import into bank reconciliation, which is a different promise |
+
+### Where the comparison stops being useful
+
+AutoCount Cloud's headline additions over their own desktop product —
+OCR document capture and direct e-Invoice submission — are both built
+here, the OCR since `0085` and e-Invoice since `0015`. The remaining
+overlap is ordinary bookkeeping depth, and the list above is all of it.
+
 ## Not in the schema at all
 
 These have no table, no column and no function. They are genuine
