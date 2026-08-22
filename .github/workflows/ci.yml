@@ -89,6 +89,7 @@ jobs:
           for f in supabase/tests/statutory.sql supabase/tests/ledger.sql \
                    supabase/tests/payroll_run.sql \
                    supabase/tests/sst_summary.sql \
+                   supabase/tests/payroll_periods.sql \
                    supabase/tests/secretarial.sql supabase/tests/attendance.sql \
                    supabase/tests/demo_accounts.sql \
                    supabase/tests/payroll_chart.sql \
