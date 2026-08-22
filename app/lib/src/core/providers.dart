@@ -2305,3 +2305,15 @@ final scaleFormatsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
       (ref) => requireRepo(ref).scaleFormats(),
     );
+
+/// The stalls in a food court. 0268.
+final posStallsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, outletId) => requireRepo(ref).posStalls(outletId),
+    );
+
+/// And what each has been paid. 0268.
+final posStallSettlementsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, outletId) => requireRepo(ref).posStallSettlements(outletId),
+    );

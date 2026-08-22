@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787365860.393731,
-    "ast_hash": "b50c5723e6207d65d35cd4a93b605fc9",
+    "mtime": 1787369060.3059213,
+    "ast_hash": "c7f6aada41db32d7c0d57566e8e5c527",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787364468.730599,
-    "ast_hash": "615e550cd95a4e7252583ab222694ebe",
+    "mtime": 1787369188.4850736,
+    "ast_hash": "7c85bb0d4d84a5141815405bff84f687",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787365860.393731,
-    "ast_hash": "6d21aa4381495028c0cfda8c63a56b8e",
+    "mtime": 1787369060.3019214,
+    "ast_hash": "56050f6631ac376a5e90e5e2e983dffc",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787364468.7308323,
-    "ast_hash": "96336c60edfb8bd7d14de6576214fac5",
+    "mtime": 1787369188.4853878,
+    "ast_hash": "f7e2a8fd40abb9d3f9c48103f586fb3d",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787367413.5398266,
-    "ast_hash": "e45c4e9f5cec247e2060f72850d4753d",
+    "mtime": 1787369013.779744,
+    "ast_hash": "214ed30fcd0fbdadce88164b98a0a12b",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -3350,8 +3350,8 @@
     "semantic_hash": ""
   },
   "docs/pos.md": {
-    "mtime": 1787366221.262317,
-    "ast_hash": "ef80c2c4e999e10b8651039b116ea11e",
+    "mtime": 1787369345.5425642,
+    "ast_hash": "30f712377e8494fb3e3568bf317b6470",
     "semantic_hash": ""
   },
   "app/lib/src/core/export_log.dart": {
@@ -3967,6 +3967,26 @@
   "supabase/tests/lots_across_the_new_sources.sql": {
     "mtime": 1787367370.9274683,
     "ast_hash": "9154dae057b3aac355e0678a6c7d6540",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/pos/stalls_screen.dart": {
+    "mtime": 1787369146.4681544,
+    "ast_hash": "7855303c6976aba008848dad6f7d1232",
+    "semantic_hash": ""
+  },
+  "app/test/pos_food_court_test.dart": {
+    "mtime": 1787369210.14,
+    "ast_hash": "3b019eda91f0e123f2db3a0f66b4193e",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0268_the_food_court_and_what_each_stall_is_owed.sql": {
+    "mtime": 1787368885.9007306,
+    "ast_hash": "150f4df24643e53278378a431c00941a",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pos_food_court.sql": {
+    "mtime": 1787369000.3564293,
+    "ast_hash": "8c46fbf3d76706aa6c418f58ab057b7f",
     "semantic_hash": ""
   }
 }

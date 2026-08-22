@@ -8601,3 +8601,87 @@ extension RepoWeighed on Repo {
   Future<void> deleteScaleFormat(String id) async =>
       await callRpc('delete_scale_format', params: {'p_id': id});
 }
+
+
+/// The food court: stalls under one outlet, and what each is owed.
+///
+/// 0268. A court is one room, one payment counter and a dozen
+/// businesses that are not the same business. Before this a court had
+/// to give every stall its own outlet and its own till, which makes the
+/// customer queue three times — precisely what a food court exists to
+/// avoid.
+extension RepoFoodCourt on Repo {
+  Future<List<Map<String, dynamic>>> posStalls(String outletId) async =>
+      Repo.rows(await callRpc('pos_stalls_list', params: {'p_outlet': outletId}));
+
+  Future<String> savePosStall({
+    String? id,
+    required String outletId,
+    required String code,
+    required String name,
+    required String operatorContactId,
+    num commission = 0,
+    bool active = true,
+  }) async => (await callRpc(
+    'upsert_pos_stall',
+    params: {
+      'p_id': id,
+      'p_outlet': outletId,
+      'p_code': code,
+      'p_name': name,
+      'p_operator': operatorContactId,
+      'p_commission': commission,
+      'p_active': active,
+    },
+  )).toString();
+
+  /// Whose dish this is. Null puts it back on the court itself.
+  Future<void> setItemStall(String itemId, String? stallId) async =>
+      await callRpc(
+        'set_item_stall',
+        params: {'p_item': itemId, 'p_stall': stallId},
+      );
+
+  /// What each stall sold over a period and what it is owed, with
+  /// whether any of those days have already been paid for.
+  Future<List<Map<String, dynamic>>> posStallTakings(
+    String outletId,
+    DateTime from,
+    DateTime to,
+  ) async => Repo.rows(
+    await callRpc(
+      'pos_stall_takings',
+      params: {
+        'p_outlet': outletId,
+        'p_from': from.toIso8601String().substring(0, 10),
+        'p_to': to.toIso8601String().substring(0, 10),
+      },
+    ),
+  );
+
+  /// Raises one posted purchase bill per stall. Refused for a period
+  /// that is not over, or one whose days have been settled already.
+  Future<List<Map<String, dynamic>>> settlePosStalls(
+    String outletId,
+    DateTime from,
+    DateTime to,
+  ) async => Repo.rows(
+    await callRpc(
+      'settle_pos_stalls',
+      params: {
+        'p_outlet': outletId,
+        'p_from': from.toIso8601String().substring(0, 10),
+        'p_to': to.toIso8601String().substring(0, 10),
+      },
+    ),
+  );
+
+  Future<List<Map<String, dynamic>>> posStallSettlements(
+    String outletId,
+  ) async => Repo.rows(
+    await callRpc(
+      'pos_stall_settlements_list',
+      params: {'p_outlet': outletId},
+    ),
+  );
+}

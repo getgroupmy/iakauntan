@@ -102,6 +102,7 @@ jobs:
                    supabase/tests/pos_reports.sql \
                    supabase/tests/pos_recipes.sql \
                    supabase/tests/pos_weighed.sql \
+                   supabase/tests/pos_food_court.sql \
                    supabase/tests/pos_void_permission.sql \
                    supabase/tests/pos_service.sql \
                    supabase/tests/pos_offline.sql \

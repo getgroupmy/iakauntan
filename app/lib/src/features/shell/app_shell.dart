@@ -355,6 +355,16 @@ const _destinations = <_Dest>[
     '/recipes',
     module: 'pos',
   ),
+  // A court is one room and a dozen businesses. Beside the recipes
+  // because both answer "whose food is this" — one for the store, one
+  // for the till.
+  _Dest(
+    'Stalls',
+    Icons.storefront_outlined,
+    Icons.storefront,
+    '/stalls',
+    module: 'pos',
+  ),
   // The other half of Takings: the questions we did not think of. Built
   // by whoever runs the shop, out of the same sales.
   _Dest(

@@ -1675,6 +1675,72 @@ label layouts themselves. A layout is easy to get wrong and impossible
 to check by reading, so the editor prints a sample barcode for the shop
 to scan.
 
+## The food court, and what each stall is owed
+
+A Malaysian food court is one room, one payment counter, and a dozen
+businesses that are not the same business. The customer takes nasi
+kandar from one stall and cendol from another, pays once, and at the end
+of the week the court hands each operator their takings less its cut.
+
+Nothing here could express that. `pos_outlets` is one shop with one
+owner, and a line on a bill had no idea whose food it was — so a court
+had to give every stall its own outlet and its own till, making the
+customer queue three times, which is precisely what a food court exists
+to avoid.
+
+`pos_stalls` sits under an outlet: a number, a name, the operator's
+contact, and that stall's commission. `items.stall_id` says whose dish
+it is, and `pos_sale_lines.stall_id` is **stamped from it when the line
+is rung up and never read again** — a stall that changes hands in March
+must not rewrite what February's settlement was based on.
+
+### The court is a principal here, and that is a judgement
+
+Two treatments are defensible under MFRS 15:
+
+- **Agent** — the court collects on the stall's behalf; only the
+  commission is its revenue and the rest is a liability from the moment
+  the till closes.
+- **Principal** — the court sells the food and buys it from the stall;
+  revenue is the whole ticket, the stall's share is a cost, the margin
+  is the commission.
+
+This takes the **principal** view, for a structural reason rather than a
+preference: `complete_pos_sale` has recognised the whole ticket as the
+court's revenue since 0209, on an invoice carrying the court's own SST
+number. Settling as an agent would mean that invoice was wrong, and a
+module that posts one treatment at the till and the other at settlement
+does not add up. A court that genuinely acts as an agent should give
+each stall its own outlet, which already works.
+
+### Settlement is a purchase bill
+
+The stall is a supplier. `settle_pos_stalls` raises one posted bill per
+stall against the operator's contact, so the payable is in the AP
+ageing, the stall is paid through the ordinary payment run, and none of
+it needs a parallel ledger to reconcile. **5150 Stall Purchases** keeps
+it out of the court's own food cost so the two margins can be told
+apart.
+
+Three rules the tests are built around:
+
+- **The commission.** A stall on 15% that sold RM 200 is owed RM 170.
+- **The discount.** A basket discount comes off each stall's share *in
+  proportion*, because the court did not collect it either. A court that
+  discounts and then settles on the undiscounted figure pays for its own
+  promotion twice. The delivery fee and the cash rounding are the
+  court's own and come off before the share is worked out.
+- **The period.** A day settled is a day closed. `pos_stall_settlements`
+  records what was covered and a GiST exclusion constraint refuses any
+  overlap — in the database, not in a function somebody might call twice
+  at the same moment. A period that has not finished yet cannot be
+  settled at all, or the last hour of trading is paid for twice.
+
+**Screens.** *Stalls* (`/stalls`) has the stalls and their commissions,
+and a settling tab that shows what each is owed for a chosen period
+before anything is posted, with the button dead when the period is open
+or already paid.
+
 ## Not built yet
 
 - Submitting the consolidated e-Invoice to MyInvois (the rollup runs; the
@@ -1686,6 +1752,9 @@ to scan.
   the text a thermal printer takes, and the screen will hand it over;
   pushing those bytes at a USB or Bluetooth printer, and opening a
   physical drawer, is between the browser and the hardware
+- A stall operator seeing their own takings. The settlement bill reaches
+  them through the ordinary supplier channels; a login scoped to one
+  stall is a different piece of work
 - Driving a counter scale directly. The label it prints is read; asking
   the scale over a serial or network link for a live weight is a device
   protocol per manufacturer and the browser cannot reach either
