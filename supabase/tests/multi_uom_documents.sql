@@ -227,6 +227,52 @@ begin
     (select round(i.quantity_on_hand, 4) from public.items i where i.id = v_tin),
     14::numeric);
 
+  -- ------------------------------------------------------------------
+  -- Taking a pack size away again
+  --
+  -- `delete_item_uom_pack` was called by nothing. It answers with
+  -- whether it removed anything rather than raising, because the screen
+  -- deletes a row somebody may already have deleted on another device,
+  -- and it resolves the company from the item so that a pack belonging
+  -- to another company's item cannot be reached by naming it.
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_true('the pack is there to start with',
+    exists (select 1 from public.item_uom_packs
+             where item_id = v_tin and uom_code = 'CT'));
+  perform pg_temp.check_true('deleting it says it deleted something',
+    public.delete_item_uom_pack(v_tin, 'CT'));
+  perform pg_temp.check_true('and it is gone',
+    not exists (select 1 from public.item_uom_packs
+                 where item_id = v_tin and uom_code = 'CT'));
+
+  -- Twice is not an error. It is the second device catching up.
+  perform pg_temp.check_true('deleting it again says it deleted nothing',
+    not public.delete_item_uom_pack(v_tin, 'CT'));
+  -- Same answer for an item nobody has, rather than a lookup failure
+  -- that reads like a bug to whoever is holding the phone.
+  perform pg_temp.check_true('and an item that does not exist is the same answer',
+    not public.delete_item_uom_pack(gen_random_uuid(), 'CT'));
+
+  -- The other pack is untouched, so the delete was the one named.
+  perform public.upsert_item_uom_pack(v_tin, 'CT', 24);
+  perform public.upsert_item_uom_pack(v_tin, 'BX', 6);
+  perform pg_temp.check_true('one pack size goes without taking the other',
+    public.delete_item_uom_pack(v_tin, 'BX'));
+  perform pg_temp.check_eq('leaving the one that was not named',
+    (select count(*) from public.item_uom_packs where item_id = v_tin), 1);
+
+  -- Somebody outside the company cannot reach it by naming the item.
+  perform pg_temp.sign_in_as(pg_temp.another_user('nosy@kotak.test'));
+  begin
+    perform public.delete_item_uom_pack(v_tin, 'CT');
+    perform pg_temp.check_true('a stranger cannot delete a pack size', false);
+  exception when sqlstate '42501' then
+    perform pg_temp.check_true('a stranger cannot delete a pack size', true);
+  end;
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.check_eq('and it is still there',
+    (select count(*) from public.item_uom_packs where item_id = v_tin), 1);
+
   raise notice 'ok   multi_uom_documents';
 end $$;
 

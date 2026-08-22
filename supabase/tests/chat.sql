@@ -176,6 +176,29 @@ begin
   perform pg_temp.check_eq('and sending cleared her typing flag',
     (select count(*) from public.chat_who_is_typing(v_conv)), 0);
 
+  -- Putting the phone down without sending.
+  --
+  -- `chat_typing_stop` clears the caller's own row and nobody else's,
+  -- which is the whole of it and also the only way it can be wrong: a
+  -- delete that forgot whose row it was would let one person switch off
+  -- another's indicator, or clear the room every time anybody stopped
+  -- typing.
+  perform pg_temp.sign_in_as(v_bina);
+  perform public.chat_typing_ping(v_conv, 30);
+  perform pg_temp.sign_in_as(v_alice);
+  perform pg_temp.check_eq('she starts typing again',
+    (select count(*) from public.chat_who_is_typing(v_conv)), 1);
+
+  perform public.chat_typing_stop(v_conv);
+  perform pg_temp.check_eq('somebody else stopping does not clear hers',
+    (select count(*) from public.chat_who_is_typing(v_conv)), 1);
+
+  perform pg_temp.sign_in_as(v_bina);
+  perform public.chat_typing_stop(v_conv);
+  perform pg_temp.sign_in_as(v_alice);
+  perform pg_temp.check_eq('and stopping her own does',
+    (select count(*) from public.chat_who_is_typing(v_conv)), 0);
+
   select other_state into v_state
     from public.chat_my_conversations(v_a) where conversation_id = v_conv;
   perform pg_temp.check_true('a recent heartbeat reads as online',
@@ -699,6 +722,52 @@ begin
   perform public.chat_expire_calls();
   perform pg_temp.check_true('the history says missed, not ringing',
     (select status from public.chat_calls where id = v_call) = 'missed');
+
+  -- ------------------------------------------------------------------
+  -- Hanging up
+  --
+  -- `chat_leave_call` was called by nothing, and it is the only one of
+  -- these that decides something on its own: the last person out ends
+  -- the call. Wrong in one direction it drops everybody when the first
+  -- person hangs up; wrong in the other it leaves a call live in every
+  -- window after the room is empty, with the next call refused by the
+  -- unique index because this one never closed.
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(v_u1);
+  v_call := public.chat_start_call(v_grp, 'voice');
+  perform pg_temp.sign_in_as(v_u2);
+  perform public.chat_join_call(v_call);
+  perform pg_temp.sign_in_as(v_u3);
+  perform public.chat_join_call(v_call);
+
+  perform pg_temp.sign_in_as(v_u2);
+  perform public.chat_leave_call(v_call);
+  perform pg_temp.check_true('one person hanging up leaves the call running',
+    (select status from public.chat_calls where id = v_call) = 'live');
+  perform pg_temp.check_true('and only that person is out of it',
+    (select state from public.chat_call_participants
+      where call_id = v_call and user_id = v_u2)::text = 'left');
+  perform pg_temp.check_true('with a time against it',
+    (select left_at is not null from public.chat_call_participants
+      where call_id = v_call and user_id = v_u2));
+  perform pg_temp.check_eq('the others are still in',
+    (select count(*) from public.chat_call_participants
+      where call_id = v_call and state in ('joined', 'ringing')), 2);
+
+  perform pg_temp.sign_in_as(v_u3);
+  perform public.chat_leave_call(v_call);
+  perform pg_temp.check_true('still running while anybody is left',
+    (select status from public.chat_calls where id = v_call) = 'live');
+
+  perform pg_temp.sign_in_as(v_u1);
+  perform public.chat_leave_call(v_call);
+  perform pg_temp.check_true('the last one out ends it',
+    (select status from public.chat_calls where id = v_call) = 'ended');
+  perform pg_temp.check_eq('and it says why', 
+    (select end_reason from public.chat_calls where id = v_call),
+    'everybody left');
+  perform pg_temp.check_eq('so nothing is live in the thread',
+    (select count(*) from public.chat_active_call(v_grp)), 0);
 end $$;
 
 -- ---------------------------------------------------------------------
