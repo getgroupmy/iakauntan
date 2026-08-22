@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787377265.8643756,
-    "ast_hash": "d725e3e1c102b8ef20f43befca5000d5",
+    "mtime": 1787378495.9237335,
+    "ast_hash": "989172de17ca93cb4b0cf1117577d515",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787377375.6888113,
-    "ast_hash": "f9a39087cb0857c76d753fc32c2f7d82",
+    "mtime": 1787378558.4813025,
+    "ast_hash": "d48020f5315097b2bfbdf50ce9fe4021",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787377265.8478372,
-    "ast_hash": "56448a3600749e21e3411eaeba55f8a8",
+    "mtime": 1787378495.9064822,
+    "ast_hash": "748777db7e251ee01168cd55d209c161",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787377375.6891701,
-    "ast_hash": "63ed5a84d79edd6207b57de218968c9c",
+    "mtime": 1787378558.4815776,
+    "ast_hash": "11b3eb6b80bfda23915a30107b253512",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787377265.8478372,
-    "ast_hash": "dd664848e493a73613ff5e68e8f49918",
+    "mtime": 1787378650.3435216,
+    "ast_hash": "8b1245c7235469beeefdf9e56c9d063e",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1190,8 +1190,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-autocount.md": {
-    "mtime": 1787377583.669623,
-    "ast_hash": "67942b15ce699d34391f9f3a5a36d384",
+    "mtime": 1787378650.33196,
+    "ast_hash": "196ca060af609bd164180b0eaaff37f4",
     "semantic_hash": ""
   },
   "docs/migrating-from-autocount.md": {
@@ -4062,6 +4062,26 @@
   "supabase/tests/contra.sql": {
     "mtime": 1787377154.3773816,
     "ast_hash": "12b927129203bd527f0375e12cd7d2ca",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/deposits_screen.dart": {
+    "mtime": 1787378558.4718716,
+    "ast_hash": "e10b0022a9fc499e5923c300e8b49941",
+    "semantic_hash": ""
+  },
+  "app/test/deposits_test.dart": {
+    "mtime": 1787378594.8184881,
+    "ast_hash": "25473f3353b20a7dcfe9ab42e09c48ff",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0273_money_before_there_is_anything_to_bill.sql": {
+    "mtime": 1787378401.9944978,
+    "ast_hash": "6c5c4820bc6ebaf4fd9e96390a419053",
+    "semantic_hash": ""
+  },
+  "supabase/tests/deposits.sql": {
+    "mtime": 1787378433.2951152,
+    "ast_hash": "5f18cabca0a21904e1276c0dd620b9d7",
     "semantic_hash": ""
   }
 }

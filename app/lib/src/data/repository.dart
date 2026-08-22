@@ -8832,3 +8832,86 @@ extension RepoContra on Repo {
   Future<void> voidContra(String id, String reason) async =>
       await callRpc('void_contra', params: {'p_id': id, 'p_reason': reason});
 }
+
+/// Deposits: money taken or paid before there is a document for it.
+/// 0273.
+extension RepoDeposits on Repo {
+  Future<List<Map<String, dynamic>>> depositNotes({
+    String? kind,
+    String? status,
+  }) async => Repo.rows(
+    await callRpc(
+      'deposit_notes_list',
+      params: {'p_org': orgId, 'p_kind': kind, 'p_status': status},
+    ),
+  );
+
+  /// What is still held for a party — the number somebody needs before
+  /// raising the invoice the deposit was taken for.
+  Future<List<Map<String, dynamic>>> depositsHeldFor(String contactId) async =>
+      Repo.rows(
+        await callRpc('deposits_held_for', params: {'p_contact': contactId}),
+      );
+
+  Future<List<Map<String, dynamic>>> depositHistory(String id) async =>
+      Repo.rows(await callRpc('deposit_history', params: {'p_id': id}));
+
+  /// [kind] is 'customer' or 'supplier'.
+  Future<String> createDeposit({
+    required String kind,
+    required String contactId,
+    required DateTime date,
+    required num amount,
+    String? bankAccountId,
+    String? mode,
+    String? reference,
+    String? notes,
+  }) async => (await callRpc(
+    'create_deposit',
+    params: {
+      'p_org': orgId,
+      'p_kind': kind,
+      'p_contact': contactId,
+      'p_date': date.toIso8601String().substring(0, 10),
+      'p_amount': amount,
+      'p_bank': bankAccountId,
+      'p_mode': mode,
+      'p_reference': reference,
+      'p_notes': notes,
+    },
+  )).toString();
+
+  Future<void> applyDeposit({
+    required String depositId,
+    required String documentId,
+    required num amount,
+  }) async => await callRpc(
+    'apply_deposit',
+    params: {
+      'p_deposit': depositId,
+      'p_document': documentId,
+      'p_amount': amount,
+    },
+  );
+
+  /// [kind] is 'refund' (give it back) or 'forfeit' (keep it).
+  Future<void> settleDeposit({
+    required String depositId,
+    required String kind,
+    required num amount,
+    String? reason,
+    String? bankAccountId,
+  }) async => await callRpc(
+    'settle_deposit',
+    params: {
+      'p_deposit': depositId,
+      'p_kind': kind,
+      'p_amount': amount,
+      'p_reason': reason,
+      'p_bank': bankAccountId,
+    },
+  );
+
+  Future<void> voidDeposit(String id, String reason) async =>
+      await callRpc('void_deposit', params: {'p_id': id, 'p_reason': reason});
+}

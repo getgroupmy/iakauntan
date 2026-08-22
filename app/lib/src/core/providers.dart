@@ -2270,6 +2270,24 @@ final itemUomOptionsProvider = FutureProvider.autoDispose
       (ref, itemId) => requireRepo(ref).itemUomOptions(itemId),
     );
 
+/// Every deposit note, newest first. 0273.
+final depositNotesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({String? kind, String? status})>(
+      (ref, args) =>
+          requireRepo(ref).depositNotes(kind: args.kind, status: args.status),
+    );
+
+/// What is still held for a party, either way.
+final depositsHeldForProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, contactId) => requireRepo(ref).depositsHeldFor(contactId),
+    );
+
+final depositHistoryProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, id) => requireRepo(ref).depositHistory(id),
+    );
+
 /// Every contra note, newest first. 0272.
 final contraNotesProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String?>(

@@ -228,6 +228,15 @@ const _destinations = <_Dest>[
     '/contra',
     module: 'sales',
   ),
+  // Beside contra, because both are money that settles a document
+  // without a receipt being written for it.
+  _Dest(
+    'Deposits',
+    Icons.savings_outlined,
+    Icons.savings,
+    '/deposits',
+    module: 'sales',
+  ),
   // With the stock screens, because the question it answers — what is
   // running out — is asked while looking at what is on the shelf.
   _Dest(
