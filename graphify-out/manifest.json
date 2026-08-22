@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787372255.8661113,
-    "ast_hash": "4d142fa505d8737097284f3e847d5300",
+    "mtime": 1787375569.4215233,
+    "ast_hash": "057680543de31300a1b9607a34bd3f1f",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787369188.4850736,
-    "ast_hash": "7c85bb0d4d84a5141815405bff84f687",
+    "mtime": 1787375723.699122,
+    "ast_hash": "cb5e18ae410c2b34bb76bbec33f13495",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787372255.8661113,
-    "ast_hash": "19d7bad48aef5d556f0a48484c155ddb",
+    "mtime": 1787375569.4063084,
+    "ast_hash": "2231edd6819be21c69451b29de37d4c5",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -160,13 +160,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/line_draft.dart": {
-    "mtime": 1786940830.0666032,
-    "ast_hash": "f5ff758b6e6e6835b85c6c1b63a204d2",
+    "mtime": 1787374421.6647153,
+    "ast_hash": "8409ebf669ffe712df76225ea2c9f407",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/line_editor.dart": {
-    "mtime": 1786785756.6144881,
-    "ast_hash": "1327ce91a3b912555e1641c3105ee550",
+    "mtime": 1787374482.0363379,
+    "ast_hash": "c5dd7e1fe83798f28d9131aafc2e9fd4",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/settlement_dialog.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787369188.4853878,
-    "ast_hash": "f7e2a8fd40abb9d3f9c48103f586fb3d",
+    "mtime": 1787375723.6993883,
+    "ast_hash": "89232bede293f4f2cd3e35994698c3a5",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787372213.3861089,
-    "ast_hash": "50fcc1e003919d212f5a9de87b0f9784",
+    "mtime": 1787375509.4612756,
+    "ast_hash": "b55a97e33771f25db1499ffe76ec8fff",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1190,8 +1190,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-autocount.md": {
-    "mtime": 1786524060.3156245,
-    "ast_hash": "15eec021b58fc4d6e2cfbef76797d988",
+    "mtime": 1787375912.3305418,
+    "ast_hash": "f0a3ea8d01e45885fd1146bf781c8c99",
     "semantic_hash": ""
   },
   "docs/migrating-from-autocount.md": {
@@ -4007,6 +4007,41 @@
   "supabase/tests/credit_note_return.sql": {
     "mtime": 1787372191.3583152,
     "ast_hash": "67a13b90578cbf0a55d78e86df29f9f0",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/stock/landed_cost_screen.dart": {
+    "mtime": 1787375694.460873,
+    "ast_hash": "b048a26c85e22f3f74bec9c4223ae8da",
+    "semantic_hash": ""
+  },
+  "app/test/landed_cost_test.dart": {
+    "mtime": 1787375750.1081562,
+    "ast_hash": "1ae344e62b2511910c5457c5b6907f06",
+    "semantic_hash": ""
+  },
+  "app/test/multi_uom_line_test.dart": {
+    "mtime": 1787374521.761038,
+    "ast_hash": "90d78789ae1699e616ac9ec933319dd3",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0270_sell_in_cartons_stock_in_pieces.sql": {
+    "mtime": 1787374307.4744487,
+    "ast_hash": "6ead4c3accca78e96df06a57077266ab",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0271_the_freight_is_part_of_what_it_cost.sql": {
+    "mtime": 1787375474.1887834,
+    "ast_hash": "88d5722969966d15631db3d928c7ea9e",
+    "semantic_hash": ""
+  },
+  "supabase/tests/landed_cost.sql": {
+    "mtime": 1787375386.729575,
+    "ast_hash": "f871eb23c790e9923acec3fc47ba6c92",
+    "semantic_hash": ""
+  },
+  "supabase/tests/multi_uom_documents.sql": {
+    "mtime": 1787374222.7000768,
+    "ast_hash": "479cdc3171e6620bb7a184f2157fcfb6",
     "semantic_hash": ""
   }
 }

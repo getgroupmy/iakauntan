@@ -209,6 +209,15 @@ const _destinations = <_Dest>[
     '/transfers',
     module: 'inventory',
   ),
+  // Next to transfers, because both are about stock that has moved and
+  // money that has to follow it.
+  _Dest(
+    'Landed cost',
+    Icons.anchor_outlined,
+    Icons.anchor,
+    '/landed-cost',
+    module: 'inventory',
+  ),
   // With the stock screens, because the question it answers — what is
   // running out — is asked while looking at what is on the shelf.
   _Dest(

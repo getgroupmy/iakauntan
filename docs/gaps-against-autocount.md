@@ -114,6 +114,7 @@ be reachable.
 | Document approval workflow | `approval_rules`, `approval_steps`, `approval_requests` |
 | What a credit note credits | `0269`. `original_invoice_id` had **0** references when this document was first written and still had 0 in August 2026; `credit_sales_invoice` is the first thing ever to write it |
 | Multi-UOM in the document cycles | `0270`. `sales_document_lines.base_quantity` and the purchase equivalent, written by `app.calc_document_line`, and read by both posting functions for the movement and the cost. The unit picker landed in the same commit |
+| Landed cost | `0271`. A run spreads freight, duty and insurance across the goods lines of posted bills by value or by count, adds the money to stock through a movement that carries value and no quantity, and takes it back off the account each charge was coded to. What was already sold keeps its share in the profit and loss, because the sale that carried it is posted |
 
 ### Half done, and the half that is missing matters
 
@@ -132,7 +133,6 @@ No table, no column, no function — verified by querying for them:
 | **Budgets** and budget-vs-actual | Anyone with a board |
 | **AR/AP contra** | Trading, where a customer is also a supplier |
 | **Customer/supplier deposits** | Trading and projects. AutoCount has a Deposit Note document type; there is no equivalent here, and `receipts.unapplied_amount` is not a deposit flow |
-| **Landed cost** | Importers |
 | **Post-dated cheque register** | Traditional trading. `receipts.cheque_date` exists and there is no maturity handling |
 | **Cash flow forecast** | Everyone. The `forecast_*` tables are inventory replenishment and have nothing to do with cash |
 | **Bank feed** | AutoCount Cloud syncs Maybank SME and UOB Business directly. This has CSV import into bank reconciliation, which is a different promise |
@@ -160,7 +160,7 @@ build-from-nothing work:
 | ~~Multi-UOM~~ | Done — `0264` for the conversion, `0270` for the document cycles. A line is written in any unit its dimension reaches or any pack the shop has set; the money is per that unit and the stock converts to the item's own | Distribution |
 | ~~Serial and batch tracking~~ | Done — `0106`, extended by `0267` and `0269` to every movement source | Electronics, pharma |
 | ~~Stock assembly / BOM~~ | Done — `0133` manufacturing, `0265` conversions, `0264` recipes | Light manufacturing |
-| **Landed cost** | No apportionment of freight and duty onto item cost | Importers |
+| ~~Landed cost~~ | Done — `0271`, by value or by count, onto the stock that is still there | Importers |
 | **Post-dated cheques** | `receipts.cheque_date` exists; no PDC register, no maturity handling | Traditional trading |
 | **Document approval workflow** | AutoCount sells this as a plug-in; iAkauntan has role gates but no per-document approval step | Larger SMEs |
 
@@ -227,6 +227,6 @@ Every row in this table said yes for the first time in `0270`. The three
 that changed — units, serial and batch, assembly — were the ones the
 first revision of this document called real projects, and they were.
 What is left is in "Still nothing at all" above: budgets, contra,
-deposits, landed cost, post-dated cheques. None of them stops a
+deposits, post-dated cheques. None of them stops a
 migration; each of them is a thing somebody has to keep doing by hand
 afterwards.

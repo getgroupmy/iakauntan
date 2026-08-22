@@ -2270,6 +2270,29 @@ final itemUomOptionsProvider = FutureProvider.autoDispose
       (ref, itemId) => requireRepo(ref).itemUomOptions(itemId),
     );
 
+/// Every landed cost run, newest first. 0271.
+final landedCostRunsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>(
+      (ref, status) => requireRepo(ref).landedCostRuns(status: status),
+    );
+
+/// What each goods line on a run would take, from the same function the
+/// posting uses.
+final landedCostPreviewProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, runId) => requireRepo(ref).landedCostPreview(runId),
+    );
+
+final landedCostChargesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, runId) => requireRepo(ref).landedCostCharges(runId),
+    );
+
+final landedCostTargetsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, runId) => requireRepo(ref).landedCostTargets(runId),
+    );
+
 /// Every stock transfer, newest first. 0265.
 final stockTransfersProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String?>(

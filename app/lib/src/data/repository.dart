@@ -8726,3 +8726,66 @@ extension RepoCreditNotes on Repo {
     },
   )).toString();
 }
+
+/// Landed cost: freight, duty and insurance onto what the goods cost.
+/// 0271.
+extension RepoLandedCost on Repo {
+  /// Every run, newest first, optionally narrowed to one state.
+  Future<List<Map<String, dynamic>>> landedCostRuns({String? status}) async =>
+      Repo.rows(
+        await callRpc(
+          'landed_cost_runs_list',
+          params: {'p_org': orgId, 'p_status': status},
+        ),
+      );
+
+  /// What each goods line would take, computed by the same function the
+  /// posting uses. Safe to call on a draft as often as the screen likes.
+  Future<List<Map<String, dynamic>>> landedCostPreview(String runId) async =>
+      Repo.rows(
+        await callRpc('landed_cost_preview', params: {'p_run': runId}),
+      );
+
+  Future<List<Map<String, dynamic>>> landedCostTargets(String runId) async =>
+      Repo.rows(
+        await client
+            .from('landed_cost_targets')
+            .select('bill_id, purchase_documents(doc_no, doc_date)')
+            .eq('run_id', runId),
+      );
+
+  Future<List<Map<String, dynamic>>> landedCostCharges(String runId) async =>
+      Repo.rows(
+        await client
+            .from('landed_cost_charges')
+            .select('*, accounts(code, name)')
+            .eq('run_id', runId)
+            .order('line_no'),
+      );
+
+  /// Saves a draft. [bills] is a list of posted bill ids; each entry of
+  /// [charges] is `{description, amount, basis, account}`.
+  Future<String> saveLandedCostRun({
+    String? id,
+    required DateTime date,
+    required List<String> bills,
+    required List<Map<String, dynamic>> charges,
+    String? notes,
+  }) async => (await callRpc(
+    'upsert_landed_cost_run',
+    params: {
+      'p_id': id,
+      'p_org': orgId,
+      'p_date': date.toIso8601String().substring(0, 10),
+      'p_bills': [for (final b in bills) {'bill': b}],
+      'p_charges': charges,
+      'p_notes': notes,
+    },
+  )).toString();
+
+  Future<void> postLandedCostRun(String id) async =>
+      await callRpc('post_landed_cost_run', params: {'p_run': id});
+
+  Future<void> cancelLandedCostRun(String id) async =>
+      await callRpc('cancel_landed_cost_run', params: {'p_run': id});
+}
