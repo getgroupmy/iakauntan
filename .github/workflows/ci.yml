@@ -88,6 +88,7 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           for f in supabase/tests/statutory.sql supabase/tests/ledger.sql \
                    supabase/tests/payroll_run.sql \
+                   supabase/tests/sst_summary.sql \
                    supabase/tests/secretarial.sql supabase/tests/attendance.sql \
                    supabase/tests/demo_accounts.sql \
                    supabase/tests/payroll_chart.sql \
