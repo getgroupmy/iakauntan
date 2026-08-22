@@ -1696,6 +1696,6 @@ to scan.
 - Returning a recipe's ingredients when a counter sale is credited. The
   credit note returns whatever the invoice moved, which for a dish is
   nothing, so the food cost stays charged
-- A transfer that carries batch or serial numbers with it. 0106 tracks
-  both and a transfer moves neither, so a transferred batch loses its
-  expiry at the door
+- Choosing *which* batch by hand. A recipe, a transfer and a conversion
+  all pick earliest-expiry-first without asking, because none of them
+  has a screen at the moment it happens

@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787365815.6818767,
-    "ast_hash": "fdc55c75e38f845adf9ab7926c38e33e",
+    "mtime": 1787367413.5398266,
+    "ast_hash": "e45c4e9f5cec247e2060f72850d4753d",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -3957,6 +3957,16 @@
   "supabase/tests/pos_weighed.sql": {
     "mtime": 1787365804.5615427,
     "ast_hash": "25b6dc9f78f8a96db7acb2cf48648282",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0267_the_batch_that_went_in_the_van.sql": {
+    "mtime": 1787367485.4536119,
+    "ast_hash": "5af2e0d1e144b4994a5ef3bf9611b0d5",
+    "semantic_hash": ""
+  },
+  "supabase/tests/lots_across_the_new_sources.sql": {
+    "mtime": 1787367370.9274683,
+    "ast_hash": "9154dae057b3aac355e0678a6c7d6540",
     "semantic_hash": ""
   }
 }

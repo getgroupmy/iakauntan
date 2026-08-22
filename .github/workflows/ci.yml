@@ -148,6 +148,7 @@ jobs:
                    supabase/tests/exchange_rate_feed.sql \
                    supabase/tests/salespeople.sql \
                    supabase/tests/serial_and_batch.sql \
+                   supabase/tests/lots_across_the_new_sources.sql \
                    supabase/tests/einvoice_credentials.sql \
                    supabase/tests/ocr_credit.sql \
                    supabase/tests/contact_numbering.sql \
