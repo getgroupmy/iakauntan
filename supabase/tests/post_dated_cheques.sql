@@ -352,4 +352,166 @@ begin
   raise notice 'ok   post_dated_cheques';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The register itself
+--
+-- `pdc_maturing` above is the Monday-morning list. `pdc_list` is the
+-- register behind it — every cheque either way, filtered by direction
+-- and by status — and it was called by nothing.
+--
+-- Its own work is not the listing. It is that a cheque's direction is
+-- gated on a different module from the other's: incoming cheques belong
+-- to sales, outgoing to purchases, and each row is tested separately
+-- against what the company actually bought. A company that has sales and
+-- not purchases must see what its customers handed over and nothing of
+-- what it wrote to its suppliers — the amounts, the bank, the payee. The
+-- guard at the top of the function is not that rule; it only asks
+-- whether the caller holds *either* module, and a company holding one of
+-- them passes it while still having no business seeing the other half.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_owner uuid := pg_temp.test_user();
+  v_cust uuid; v_sup uuid; v_bank_a uuid; v_bank uuid;
+  v_in uuid; v_out uuid; r record; v_ok boolean;
+  v_type uuid; v_type2 uuid; v_inv uuid;
+  v_buyer uuid := pg_temp.another_user('buyer@cek.test');
+begin
+  v_org := pg_temp.test_org('Daftar Cek Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['sales','purchases','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.sign_in_as(v_owner);
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CUST', 'Pembeli Bhd', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'SUP', 'Pembekal Bhd', 'supplier') returning id into v_sup;
+  select id into v_bank_a from public.accounts where org_id = v_org and code = '1120';
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, account_number, currency,
+     opening_balance, current_balance, is_default)
+  values (v_org, v_bank_a, 'Maybank', 'Maybank', '514011', 'MYR', 0, 0, true)
+  returning id into v_bank;
+
+  -- Dated relative to today on purpose: `days_to_go` is measured against
+  -- current_date, so a fixed date would make the assertion drift by a
+  -- day every day and fail on some future morning for no reason.
+  insert into public.post_dated_cheques
+    (org_id, pdc_no, direction, contact_id, cheque_no, cheque_date,
+     amount, received_on, bank_account_id, bank_name)
+  values (v_org, 'PDC-IN', 'incoming', v_cust, '900001', current_date + 10,
+          1500, current_date, v_bank, 'CIMB')
+  returning id into v_in;
+  insert into public.post_dated_cheques
+    (org_id, pdc_no, direction, contact_id, cheque_no, cheque_date,
+     amount, bank_account_id, bank_name)
+  values (v_org, 'PDC-OUT', 'outgoing', v_sup, '900002', current_date + 20,
+          900, v_bank, 'Maybank')
+  returning id into v_out;
+
+  perform pg_temp.check_eq('the register holds both directions',
+    (select count(*) from public.pdc_list(v_org)), 2);
+
+  select * into r from public.pdc_list(v_org) where id = v_in;
+  perform pg_temp.check_eq('a cheque names who handed it over', r.party, 'Pembeli Bhd');
+  perform pg_temp.check_eq('and which bank it is drawn on', r.bank_name, 'CIMB');
+  perform pg_temp.check_eq('and what it is for', r.amount, 1500);
+  -- Ten days out, counted from today rather than from anything stored.
+  perform pg_temp.check_eq('and how long until it can be banked',
+    r.days_to_go, 10);
+  perform pg_temp.check_eq('with nothing settled against it yet', r.settles, 0);
+
+  -- And the count is the cheque's own. A register that showed every
+  -- allocation in the company against every cheque would tell a
+  -- bookkeeper that a cheque covering one invoice covers eleven.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, subtotal, total_amount, balance_amount, status)
+  values (v_org, 'invoice', 'INV-PDC', current_date, current_date + 30,
+          v_cust, 'MYR', 1, 1500, 1500, 1500, 'draft')
+  returning id into v_inv;
+  insert into public.payment_allocations (org_id, invoice_id, amount, pdc_id)
+  values (v_org, v_inv, 1500, v_in);
+
+  perform pg_temp.check_eq('once it settles something, it says so',
+    (select settles from public.pdc_list(v_org) where id = v_in), 1);
+  perform pg_temp.check_eq('and the other cheque still settles nothing',
+    (select settles from public.pdc_list(v_org) where id = v_out), 0);
+
+  -- Both filters, and that they filter rather than merely being accepted.
+  perform pg_temp.check_eq('it can be asked for one direction',
+    (select count(*) from public.pdc_list(v_org, 'outgoing')), 1);
+  perform pg_temp.check_eq('and the one it returns is that direction',
+    (select direction from public.pdc_list(v_org, 'outgoing')), 'outgoing');
+  perform pg_temp.check_eq('and for one status',
+    (select count(*) from public.pdc_list(v_org, null, 'held')), 2);
+  perform pg_temp.check_eq('a status nothing is in comes back empty',
+    (select count(*) from public.pdc_list(v_org, null, 'bounced')), 0);
+
+  -- ------------------------------------------------------------------
+  -- One module, one half of the book
+  -- ------------------------------------------------------------------
+  update public.org_modules set is_enabled = false
+   where org_id = v_org and module_code = 'purchases';
+
+  perform pg_temp.check_eq('without purchases the register is sales only',
+    (select count(*) from public.pdc_list(v_org)), 1);
+  perform pg_temp.check_eq('and it is the incoming one',
+    (select pdc_no from public.pdc_list(v_org)), 'PDC-IN');
+  -- Asked for the half they may not see, they get nothing rather than an
+  -- error: the filter is per row, so the answer is an empty register.
+  perform pg_temp.check_eq('asking for the other half returns none of it',
+    (select count(*) from public.pdc_list(v_org, 'outgoing')), 0);
+
+  -- The mirror, so the assertion above is about the direction rather
+  -- than about `purchases` being the module that happens to matter.
+  --
+  -- It cannot be done by switching `sales` off. `sales` is a core module
+  -- — `platform_modules.is_core` — and `app.module_access` answers for a
+  -- core module before it ever looks at `org_modules`, so the row stays
+  -- readable however that table is edited. That is right: a company
+  -- cannot un-buy the thing it invoices with. It also means the guard at
+  -- the top of `pdc_list`, which asks whether the caller holds either
+  -- module, can never fire for a member of a company at all.
+  --
+  -- The half that can be withheld is withheld by an access type, which
+  -- is what access types are for, and that is the real mechanism behind
+  -- both halves of this rule.
+  update public.org_modules set is_enabled = true
+   where org_id = v_org and module_code = 'purchases';
+
+  insert into public.access_types (org_id, name)
+  values (v_org, 'Purchasing only') returning id into v_type;
+  insert into public.access_type_modules (access_type_id, module_code, access)
+  values (v_type, 'purchases', 'read');
+  insert into public.org_members (org_id, user_id, role, access_type_id)
+  values (v_org, v_buyer, 'purchaser', v_type);
+
+  perform pg_temp.sign_in_as(v_buyer);
+  perform pg_temp.check_eq('somebody let into purchasing only sees that half',
+    (select count(*) from public.pdc_list(v_org)), 1);
+  perform pg_temp.check_eq('and it is the outgoing one',
+    (select pdc_no from public.pdc_list(v_org)), 'PDC-OUT');
+
+  -- Neither, and now it is a refusal rather than an empty list, because
+  -- there is no register to show at all. This is the only route by which
+  -- that guard is reachable.
+  insert into public.access_types (org_id, name)
+  values (v_org, 'Contacts only') returning id into v_type2;
+  insert into public.access_type_modules (access_type_id, module_code, access)
+  values (v_type2, 'contacts', 'read');
+  update public.org_members set access_type_id = v_type2
+   where org_id = v_org and user_id = v_buyer;
+
+  v_ok := true;
+  begin
+    perform * from public.pdc_list(v_org);
+  exception when sqlstate '42501' then v_ok := false;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('and somebody let into neither is refused', not v_ok);
+end $$;
+
 rollback;
