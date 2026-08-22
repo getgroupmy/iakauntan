@@ -1351,10 +1351,24 @@ the shop from the link row. A static QR and a dynamic one are the same
 row with `expires_at` and `single_use` filled in or not, because the
 difference is a policy rather than a mechanism.
 
-**The price is the shop's.** `p_items` carries an item and a quantity
-and nothing else. A price arriving from a browser is a price somebody
-typed, and `pos_public_menu.sql` asserts that one sent anyway is
-ignored.
+**The price is the shop's.** `p_items` carries an item, a quantity and
+which modifiers were chosen — and no money at all. A price arriving from
+a browser is a price somebody typed, and that goes for a modifier's
+price delta as much as for the dish's; `pos_public_menu.sql` asserts
+that one sent anyway is ignored.
+
+**And the questions get asked.** `place_public_pos_order` has read
+`p_items -> 'modifiers'` since 0262, but the page sent none until it
+started calling `public_pos_menu_modifiers` — which had no caller at
+all. That was not a missing nicety: `send_to_kitchen` refuses an order
+while `pos_line_modifier_gaps` finds an unanswered required group, so a
+phone could order a dish with a "choose one" and the bill would sit on
+the till unable to reach the cooks until somebody opened it and answered
+for the customer. The sheet now asks before the dish goes in the basket
+and will not let it in until the required groups are answered — the same
+rule the server applies, said early enough to be useful. Two of the same
+dish with different answers are two basket lines, because they are two
+things a kitchen cooks differently.
 
 **Availability is checked when the customer taps**, not when the page
 loaded: 0258's scheduler and the sold-out list decide, so a menu left
