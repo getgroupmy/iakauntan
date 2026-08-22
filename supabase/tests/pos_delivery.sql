@@ -441,4 +441,184 @@ begin
   end;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The setup screen
+--
+-- Zones and drivers are created above and read back through the tables.
+-- The three functions the setup screen actually uses —
+-- `pos_delivery_zones_admin`, `pos_drivers_admin` and
+-- `retire_pos_delivery_zone` — were called by nothing, and each carries
+-- one number or one rule that is not obvious from the row.
+--
+-- The counts are what a manager decides on: how many runs a zone has
+-- taken, and how many a driver is out on right now. And retiring is not
+-- deleting — every delivery already made names the zone it was charged
+-- under, so the row has to stay, and the admin list has to keep showing
+-- it or there is no way to bring it back.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_owner uuid := pg_temp.test_user();
+  v_wh uuid; v_walkin uuid; v_outlet uuid; v_out2 uuid;
+  v_z_near uuid; v_z_far uuid; v_drv uuid; v_drv_off uuid;
+  v_sale uuid; v_reg uuid; v_cash uuid; v_shift uuid; v_item uuid; v_del uuid;
+  v_outsider uuid := pg_temp.another_user('outsider@hantar.test');
+  r record; v_ok boolean; v_names text[];
+begin
+  v_org := pg_temp.test_org('Kedai Setup Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['pos','inventory']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  perform pg_temp.sign_in_as(v_owner);
+
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'MAIN', 'Store') returning id into v_wh;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'WALK-IN', 'Counter sales', 'customer') returning id into v_walkin;
+  -- Two outlets, named so that the ordering by outlet name is not the
+  -- order they were created in.
+  insert into public.pos_outlets
+    (org_id, code, name, business_type, warehouse_id, walk_in_contact_id,
+     prices_include_tax)
+  values (v_org, 'ZED', 'Zed Street', 'food_beverage', v_wh, v_walkin, false)
+  returning id into v_out2;
+  insert into public.pos_outlets
+    (org_id, code, name, business_type, warehouse_id, walk_in_contact_id,
+     prices_include_tax)
+  values (v_org, 'ABBEY', 'Abbey Road', 'food_beverage', v_wh, v_walkin, false)
+  returning id into v_outlet;
+
+  -- Sort order reversed against the names, so "by sort_order then name"
+  -- and "by name" are different answers.
+  v_z_far  := public.upsert_pos_delivery_zone(
+    null, v_outlet, 'Zone Far', array['58000'], 8.00, 0, null, 45, 2, true);
+  v_z_near := public.upsert_pos_delivery_zone(
+    null, v_outlet, 'Zone Near', array['58200'], 5.00, 20.00, 60.00, 20, 1, true);
+  perform public.upsert_pos_delivery_zone(
+    null, v_out2, 'Branch zone', array['43000'], 6.00, 0, null, 30, 1, true);
+
+  select array_agg(z.name) into v_names
+    from public.pos_delivery_zones_admin(v_org) z;
+  perform pg_temp.check_eq('zones list by outlet, then by the order set',
+    array_to_string(v_names, ','), 'Zone Near,Zone Far,Branch zone');
+
+  select * into r from public.pos_delivery_zones_admin(v_org) z
+   where z.id = v_z_near;
+  perform pg_temp.check_eq('a zone says which shop it belongs to',
+    r.outlet_name, 'Abbey Road');
+  perform pg_temp.check_eq('what it charges', r.fee, 5.00);
+  perform pg_temp.check_eq('what it takes to order at all', r.min_order, 20.00);
+  perform pg_temp.check_eq('and what makes it free', r.free_above, 60.00);
+  perform pg_temp.check_eq('with the postcodes normalised on the way in',
+    array_to_string(r.postcodes, ','), '58200');
+  perform pg_temp.check_eq('and nothing has gone out on it yet', r.runs, 0);
+
+  -- ------------------------------------------------------------------
+  -- Drivers, and the number that decides who gets the next run
+  -- ------------------------------------------------------------------
+  v_drv := public.upsert_pos_driver(
+    null, v_org, 'Amin', '012-3456789', 'Honda EX5', 'WXY 1234', v_outlet,
+    null, true);
+  v_drv_off := public.upsert_pos_driver(
+    null, v_org, 'Adam', '012-9876543', 'Proton Saga', 'ABC 987', v_outlet,
+    null, false);
+
+  -- Adam is off today and sorts before Amin, so "working first, then by
+  -- name" and "by name" are different answers and the assertion is about
+  -- the first of them.
+  select array_agg(d.name) into v_names from public.pos_drivers_admin(v_org) d;
+  perform pg_temp.check_eq('the ones who are working come first',
+    array_to_string(v_names, ','), 'Amin,Adam');
+
+  select * into r from public.pos_drivers_admin(v_org) d where d.id = v_drv;
+  perform pg_temp.check_eq('a driver is reachable', r.phone, '012-3456789');
+  perform pg_temp.check_eq('on something with a plate', r.plate_no, 'WXY 1234');
+  perform pg_temp.check_eq('and something to ride', r.vehicle, 'Honda EX5');
+  perform pg_temp.check_eq('at a named shop', r.outlet_name, 'Abbey Road');
+  perform pg_temp.check_eq('and is out on nothing', r.out_now, 0);
+
+  -- Put one delivery on the road, and both counts move.
+  insert into public.pos_registers (org_id, outlet_id, code, name)
+  values (v_org, v_outlet, 'C1', 'Counter') returning id into v_reg;
+  insert into public.pos_settings (org_id, round_cash_to_5sen)
+  values (v_org, true) on conflict (org_id) do nothing;
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer,
+     gives_change, opens_drawer)
+  values (v_org, 'TUNAI', 'Tunai', 'cash', '01', true, true, true)
+  returning id into v_cash;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'NASI', 'Nasi', 'service', false, 'C62', 12.00)
+  returning id into v_item;
+  perform public.set_outlet_channel(v_outlet, 'delivery', true);
+  v_shift := public.open_pos_shift(v_reg, 100.00);
+  v_sale := public.open_pos_sale(v_reg);
+  perform public.set_pos_delivery(
+    v_sale, 'No 1 Jalan Satu', '012-1112222', null, 'Kuala Lumpur', 'WP',
+    '58200', 'Siti');
+  select d.id into v_del from public.pos_deliveries d where d.sale_id = v_sale;
+  perform public.assign_pos_delivery(v_del, v_drv);
+
+  perform pg_temp.check_eq('a zone counts what has gone out on it',
+    (select z.runs from public.pos_delivery_zones_admin(v_org) z
+      where z.id = v_z_near), 1);
+  perform pg_temp.check_eq('which is that zone''s, not the shop''s',
+    (select z.runs from public.pos_delivery_zones_admin(v_org) z
+      where z.id = v_z_far), 0);
+  perform pg_temp.check_eq('and a driver counts what he is holding',
+    (select d.out_now from public.pos_drivers_admin(v_org) d
+      where d.id = v_drv), 1);
+  perform pg_temp.check_eq('which is his own, not the shop''s',
+    (select d.out_now from public.pos_drivers_admin(v_org) d
+      where d.id = v_drv_off), 0);
+
+  -- What the till reads back for that sale.
+  select * into r from public.pos_delivery_for(v_sale);
+  perform pg_temp.check_eq('the sale knows where it is going',
+    r.address_line1, 'No 1 Jalan Satu');
+  perform pg_temp.check_eq('under which zone', r.zone_name, 'Zone Near');
+  perform pg_temp.check_eq('at what fee', r.fee, 5.00);
+  perform pg_temp.check_eq('and who has it', r.driver_name, 'Amin');
+  -- His number rather than the shop's: it is what the counter reads out
+  -- when the customer rings to ask where the food is.
+  perform pg_temp.check_eq('and his number', r.driver_phone, '012-3456789');
+
+  -- ------------------------------------------------------------------
+  -- Retiring a zone
+  -- ------------------------------------------------------------------
+  perform public.retire_pos_delivery_zone(v_z_far);
+  perform pg_temp.check_true('a retired zone is switched off, not removed',
+    exists (select 1 from public.pos_delivery_zones where id = v_z_far
+             and not is_active));
+  perform pg_temp.check_true('and stays on the setup list so it can come back',
+    exists (select 1 from public.pos_delivery_zones_admin(v_org) z
+             where z.id = v_z_far));
+  -- The reason it is a retirement: the delivery already taken still
+  -- names the zone it was charged under.
+  perform pg_temp.check_eq('the zone a past delivery was charged under survives',
+    (select z.zone_name from public.pos_delivery_for(v_sale) z), 'Zone Near');
+
+  begin
+    perform public.retire_pos_delivery_zone(gen_random_uuid());
+    v_ok := true;
+  exception when sqlstate 'P0002' then v_ok := false;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('a zone that does not exist is refused', not v_ok);
+
+  -- ------------------------------------------------------------------
+  -- Somebody else's shop
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(v_outsider);
+  perform pg_temp.check_eq('an outsider sees no zones',
+    (select count(*) from public.pos_delivery_zones_admin(v_org)), 0);
+  perform pg_temp.check_eq('and no drivers',
+    (select count(*) from public.pos_drivers_admin(v_org)), 0);
+  perform pg_temp.check_eq('and cannot read where a sale is going',
+    (select count(*) from public.pos_delivery_for(v_sale)), 0);
+  perform pg_temp.sign_in_as(v_owner);
+end $$;
+
 rollback;
