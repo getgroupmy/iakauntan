@@ -149,6 +149,7 @@ jobs:
                    supabase/tests/pricing_and_dimensions.sql \
                    supabase/tests/manual_journal.sql \
                    supabase/tests/expense_claims.sql \
+                   supabase/tests/expenses.sql \
                    supabase/tests/hr_reference.sql \
                    supabase/tests/contact_extras.sql \
                    supabase/tests/leads_and_onboarding.sql \
