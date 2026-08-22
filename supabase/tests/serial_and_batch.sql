@@ -463,4 +463,108 @@ begin
                    and column_name in ('batch_no', 'serial_no', 'expiry_date')));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Reading the lots back off a line
+--
+-- `set_line_lots` is called all through this file and `line_lots`, which
+-- is how the document editor reads the same rows back, was called by
+-- nothing. It is the screen's answer to "which batches went out on this
+-- line", and it is the first thing anybody opens when a recall notice
+-- names a batch.
+--
+-- Three things are its own: the order, which is what a person reads
+-- down; the fields a recall actually needs, which are the ones nobody
+-- looks at until they matter; and that the line belongs to a company the
+-- caller is in.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.stock_org('Recall Sdn Bhd');
+  v_out  uuid := pg_temp.stock_org('Outsider Sdn Bhd');
+  v_item uuid := pg_temp.item(v_org, 'vaccine', 'batch');
+  v_other_item uuid := pg_temp.item(v_out, 'vaccine', 'batch');
+  v_bill uuid; v_inv uuid; v_their_bill uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_stranger uuid := pg_temp.another_user('stranger@recall.test');
+  r record; v_ok boolean; v_refs text[];
+begin
+  v_bill := pg_temp.bill_line(v_org, v_item, 100, 10);
+  -- Named out of alphabetical order on purpose, and with everything a
+  -- recall asks for on the first one.
+  perform public.set_line_lots('purchase_document_lines', v_bill,
+    '[{"lot_ref":"B-ZULU","quantity":60,"expiry_date":"2027-01-31",
+        "manufactured_on":"2026-01-05","supplier_lot_ref":"MFR-99"},
+       {"lot_ref":"B-ALFA","quantity":40,"expiry_date":"2026-11-30"}]'::jsonb);
+
+  select array_agg(l.lot_ref) into v_refs
+    from public.line_lots('purchase_document_lines', v_bill) l;
+  perform pg_temp.check_eq('the lots come back in a stable order, not as entered',
+    array_to_string(v_refs, ','), 'B-ALFA,B-ZULU');
+
+  select * into r from public.line_lots('purchase_document_lines', v_bill) l
+   where l.lot_ref = 'B-ZULU';
+  -- The two lots are deliberately not in the same order by reference as
+  -- by size, so an ordering that happened to agree with the assertion
+  -- cannot pass for the one the function actually promises.
+  perform pg_temp.check_eq('with the quantity', r.quantity, 60);
+  perform pg_temp.check_eq('the expiry a recall works from',
+    r.expiry_date::text, '2027-01-31');
+  perform pg_temp.check_eq('the date it was made',
+    r.manufactured_on::text, '2026-01-05');
+  -- The number printed on the manufacturer's recall notice, which is
+  -- not the reference this company gave the batch.
+  perform pg_temp.check_eq('and the supplier''s own reference for it',
+    r.supplier_lot_ref, 'MFR-99');
+
+  -- The same line, asked for as the wrong kind of document. The three
+  -- id columns are distinct, so this is the table name doing work rather
+  -- than the id failing to match: drop the name check and a purchase
+  -- line answers as a sales line.
+  perform pg_temp.check_eq('a purchase line is not a sales line',
+    (select count(*) from public.line_lots('sales_document_lines', v_bill)), 0);
+  perform pg_temp.check_eq('nor a stock adjustment line',
+    (select count(*)
+       from public.line_lots('stock_adjustment_lines', v_bill)), 0);
+
+  -- A line that carries no lots, and one that does not exist, are both
+  -- an empty list rather than an error: the editor asks this for every
+  -- line it draws, including the ones for untracked items.
+  perform pg_temp.check_eq('a line nobody has named lots on comes back empty',
+    (select count(*)
+       from public.line_lots('purchase_document_lines', gen_random_uuid())), 0);
+
+  -- The issue side, so both directions of the same document_line_lots
+  -- table are read through this function.
+  perform pg_temp.post_bill(v_bill);
+  v_inv := pg_temp.invoice_line(v_org, v_item, 55, 25);
+  perform public.set_line_lots('sales_document_lines', v_inv,
+    '[{"lot_ref":"B-ALFA","quantity":40},{"lot_ref":"B-ZULU","quantity":15}]'::jsonb);
+  perform pg_temp.check_eq('what went out on a sales line reads back too',
+    (select sum(l.quantity) from public.line_lots('sales_document_lines', v_inv) l), 55);
+
+  -- ------------------------------------------------------------------
+  -- Somebody else's line
+  --
+  -- The function resolves the company from the lot row rather than from
+  -- the caller, so the guard is the only thing between a stranger and
+  -- another company's batch numbers — which name its supplier, its
+  -- volumes and its expiry profile.
+  -- ------------------------------------------------------------------
+  v_their_bill := pg_temp.bill_line(v_out, v_other_item, 10, 5);
+  perform public.set_line_lots('purchase_document_lines', v_their_bill,
+    '[{"lot_ref":"THEIRS-1","quantity":10}]'::jsonb);
+
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_stranger, 'accountant') on conflict do nothing;
+  perform pg_temp.sign_in_as(v_stranger);
+  v_ok := true;
+  begin
+    perform * from public.line_lots('purchase_document_lines', v_their_bill);
+  exception when sqlstate '42501' then v_ok := false;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('another company''s batch numbers are refused',
+    not v_ok);
+end $$;
+
 rollback;
