@@ -344,4 +344,111 @@ begin
     not (select response_breached from public.tickets where id = v_other));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Handing it to somebody
+--
+-- assign_ticket is the one function in this family the file never
+-- called, and it does three things of its own beyond writing a name
+-- into a column.
+--
+-- It opens a `new` ticket, the same way escalate_ticket does: a ticket
+-- somebody has been given is no longer waiting to be looked at, and
+-- every queue view in the module filters on status.
+--
+-- It refuses anybody whose membership is not active, which is the guard
+-- that stops a ticket being handed to somebody suspended or never here
+-- -- a queue of one, belonging to nobody who will ever open it.
+--
+-- And it writes the handover to the ticket's history with both ends of
+-- it, from and to, because "who had this before me" is the question
+-- asked when a ticket has been round the houses.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.desk_org();
+  v_tkt uuid;
+  v_alice uuid;
+  v_suspended uuid;
+  v_stranger uuid;
+  v_t public.tickets;
+  v_took boolean;
+  r record;
+begin
+  v_alice := pg_temp.another_user('alice@desk.test');
+  v_suspended := pg_temp.another_user('gone@desk.test');
+  v_stranger := pg_temp.another_user('nobody@desk.test');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_alice, 'accounts_clerk', 'active'),
+         (v_org, v_suspended, 'accounts_clerk', 'suspended')
+  on conflict do nothing;
+
+  v_tkt := public.create_ticket(v_org, 'The lift is stuck');
+  select * into v_t from public.tickets where id = v_tkt;
+  perform pg_temp.check_eq('a fresh ticket is new', v_t.status::text, 'new');
+  perform pg_temp.check_true('and is nobody''s yet', v_t.assignee_id is null);
+
+  perform public.assign_ticket(v_tkt, v_alice);
+  select * into v_t from public.tickets where id = v_tkt;
+  perform pg_temp.check_eq('assigning it hands it over', v_t.assignee_id, v_alice);
+  perform pg_temp.check_eq('and opens it, because somebody has it now',
+    v_t.status::text, 'open');
+
+  select * into r from public.ticket_events
+   where ticket_id = v_tkt and event_type = 'assigned';
+  perform pg_temp.check_eq('the handover is on the ticket''s history',
+    r.to_value, v_alice::text);
+  perform pg_temp.check_true('with nobody named as the previous holder',
+    r.from_value is null);
+
+  -- Handing it on records both ends, which is the point of keeping the
+  -- old value at all.
+  --
+  -- The row is found by what it records rather than by created_at:
+  -- now() is fixed for the transaction, so both handovers carry the
+  -- same timestamp and `order by created_at desc` picks between them
+  -- arbitrarily. Written that way this passed or failed depending on
+  -- which row the scan reached first.
+  perform public.assign_ticket(v_tkt, pg_temp.test_user());
+  select * into r from public.ticket_events
+   where ticket_id = v_tkt and event_type = 'assigned'
+     and to_value = pg_temp.test_user()::text;
+  perform pg_temp.check_eq('handing it on records who had it before',
+    r.from_value, v_alice::text);
+
+  -- Unassigning is allowed: a ticket can go back to the queue.
+  perform public.assign_ticket(v_tkt, null);
+  perform pg_temp.check_true('a ticket can be put back in the queue',
+    (select assignee_id is null from public.tickets where id = v_tkt));
+  perform pg_temp.check_eq('and stays open rather than reverting to new',
+    (select status::text from public.tickets where id = v_tkt), 'open');
+
+  -- Somebody who has left, and somebody who was never here.
+  begin
+    perform public.assign_ticket(v_tkt, v_suspended);
+    v_took := true;
+  exception when sqlstate '23503' then v_took := false;
+  end;
+  perform pg_temp.check_true('a ticket cannot be handed to a suspended member',
+    not v_took);
+
+  begin
+    perform public.assign_ticket(v_tkt, v_stranger);
+    v_took := true;
+  exception when sqlstate '23503' then v_took := false;
+  end;
+  perform pg_temp.check_true('nor to somebody who was never a member',
+    not v_took);
+
+  perform pg_temp.check_true('and it is still unassigned after both refusals',
+    (select assignee_id is null from public.tickets where id = v_tkt));
+
+  begin
+    perform public.assign_ticket(gen_random_uuid(), v_alice);
+    v_took := true;
+  exception when others then v_took := false;
+  end;
+  perform pg_temp.check_true('a ticket that does not exist is refused',
+    not v_took);
+end $$;
+
 rollback;
