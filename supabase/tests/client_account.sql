@@ -42,6 +42,7 @@ declare
   v_txn     uuid;
   v_entry   uuid;
   v_msg     text;
+  v_posted_twice boolean;
   r         record;
   v_n       numeric;
 begin
@@ -113,12 +114,20 @@ begin
     (select current_balance from public.bank_accounts where id = v_bank),
     50000.00);
 
+  -- A flag rather than `raise ... exception when others`: that shape
+  -- catches the FAIL it raises itself and can never fail. The refusal
+  -- carries no errcode, so there is no sqlstate to catch instead.
   begin
     perform public.post_client_transaction(v_txn);
-    raise exception 'FAIL: a posted transaction was posted twice';
-  exception when others then
-    raise notice 'ok   and it cannot be posted twice';
+    v_posted_twice := true;
+  exception when others then v_posted_twice := false;
   end;
+  perform pg_temp.check_true('and it cannot be posted twice',
+    not v_posted_twice);
+  perform pg_temp.check_eq('the ledger holds one entry for it, not two',
+    (select count(*) from public.gl_entries
+      where source_table = 'client_account_transactions'
+        and source_id = v_txn), 1);
 
   -- ==================================================================
   -- Money out, within what is held
