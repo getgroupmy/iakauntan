@@ -101,6 +101,7 @@ jobs:
                    supabase/tests/clock_out.sql \
                    supabase/tests/bank_balance_resync.sql \
                    supabase/tests/pos_promotion_admin.sql \
+                   supabase/tests/approval_state.sql \
                    supabase/tests/secretarial.sql supabase/tests/attendance.sql \
                    supabase/tests/demo_accounts.sql \
                    supabase/tests/payroll_chart.sql \
