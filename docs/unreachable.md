@@ -192,6 +192,17 @@ via the `corp_*` RPCs), `einvoice_lines`, `einvoice_logs`,
 
 ## Gaps, worst first
 
+Re-run at `6207faa`, against 286 migrations: 401 functions granted to
+`authenticated`, three of them named nowhere in `app/lib` or
+`supabase/functions`, and two of those three are false positives worth
+writing down so the next pass does not chase them again.
+
+- **`decide_claim_step`** is reached through `decide_expense_claim`,
+  which is a two-line wrapper the claims screen calls.
+- **`resync_bank_balance`** is called by `import_opening_balances`
+  server-side. It is granted to `authenticated` and no client calls it,
+  which is a surface question rather than a missing screen.
+
 ### 1. Smaller, but real
 
 - **`item_categories`** — no editor.
@@ -200,6 +211,9 @@ via the `corp_*` RPCs), `einvoice_lines`, `einvoice_logs`,
 - **Reference pickers**: `ref_countries`, `ref_msic_codes`,
   `ref_tax_types`, `ref_einvoice_types`, `ref_exemption_reasons` are
   typed by hand where they are used at all.
+- **`pos_item_portions`** — new since the last pass, from `0264`. A
+  kitchen's portions and what is left of them, asserted in
+  `pos_recipes.sql` and behind no screen.
 
 ## Why this keeps happening
 

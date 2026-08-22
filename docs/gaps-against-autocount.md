@@ -161,7 +161,7 @@ build-from-nothing work:
 | ~~Stock assembly / BOM~~ | Done — `0133` manufacturing, `0265` conversions, `0264` recipes | Light manufacturing |
 | ~~Landed cost~~ | Done — `0271`, by value or by count, onto the stock that is still there | Importers |
 | ~~Post-dated cheques~~ | Done — `0275`. `receipts.cheque_date` had never been read by anything; the register is its own document now | Traditional trading |
-| **Document approval workflow** | AutoCount sells this as a plug-in; iAkauntan has role gates but no per-document approval step | Larger SMEs |
+| ~~Document approval workflow~~ | Done — `0167`. `approval_rules`, `approval_steps` and `approval_requests`, with `approval_state` read by the document editor on every load. This row said "no table, no column, no function" while the closed table three sections above already named all three; corrected at `6207faa` after querying for them | Larger SMEs |
 
 ## What iAkauntan has that AutoCount does not
 

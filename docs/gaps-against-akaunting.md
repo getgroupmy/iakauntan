@@ -301,5 +301,15 @@ statutory statements, and so is bank transfer, and so is importing the
 master files — and so, now, is the whole opening position: the open
 invoices and bills, the trial balance that squares them off, and the
 stock behind the inventory figure. Together they are what makes moving
-onto this system mid-year possible at all. What is left: compound tax,
-granular permissions, and taking payment.
+onto this system mid-year possible at all. What is left: compound tax
+and taking payment.
+
+**Granular permissions closed** — `access_types` and
+`access_type_modules` in `0127`, who holds which one in `0129`, and the
+editor on the Team screen. `app.module_access` answers per person as
+well as per company, so a member can be let into purchasing and kept out
+of sales. This line listed it as open until `6207faa`.
+
+The other two are confirmed open by querying for them rather than by
+memory: there is no `is_compound` anywhere in 286 migrations, and no
+payment gateway of any kind — no Billplz, no ToyyibPay, no Stripe.
