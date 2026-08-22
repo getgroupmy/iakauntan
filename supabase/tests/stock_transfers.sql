@@ -41,6 +41,8 @@ declare
 
   v_t      uuid;
   v_conv   uuid;
+  v_l      record;
+  v_nosy   uuid;
   v_lines  jsonb;
   v_r      record;
   v_msg    text;
@@ -298,6 +300,40 @@ begin
     99::numeric);
 
   -- ------------------------------------------------------------------
+  -- What the receiving branch reads off the note
+  --
+  -- `stock_transfer_lines_for` is how the screen draws that van's
+  -- contents, and it was called by nothing. Two of its columns are the
+  -- whole point of the screen: what was sent against what arrived, which
+  -- is the discrepancy somebody has to explain, and the unit the item is
+  -- actually stocked in beside the unit it was sent in.
+  -- ------------------------------------------------------------------
+  select * into v_l from public.stock_transfer_lines_for(v_t)
+   where item_id = v_rice;
+  perform pg_temp.check_eq('the line names the item',
+    v_l.item_name, 'Beras');
+  perform pg_temp.check_eq('what was asked for', v_l.quantity, 10::numeric);
+  perform pg_temp.check_eq('what left the kitchen', v_l.sent_quantity, 10::numeric);
+  perform pg_temp.check_eq('and what arrived at the shop',
+    v_l.received_quantity, 9::numeric);
+  perform pg_temp.check_eq('at what it was carried out at',
+    v_l.sent_unit_cost, 4::numeric);
+  -- `base_uom` is deliberately not asserted here. Everything in this
+  -- fixture is sent in the unit it is stocked in, so the item's unit and
+  -- the line's are the same string and an assertion on either would hold
+  -- with the two columns swapped. The distinction belongs with a
+  -- multi-unit transfer, and there is not one in this file.
+  perform pg_temp.check_eq('one line, not every line in the company',
+    (select count(*) from public.stock_transfer_lines_for(v_t)), 1);
+
+  begin
+    perform * from public.stock_transfer_lines_for(gen_random_uuid());
+    perform pg_temp.check_true('a transfer that does not exist is refused', false);
+  exception when sqlstate 'P0002' then
+    perform pg_temp.check_true('a transfer that does not exist is refused', true);
+  end;
+
+  -- ------------------------------------------------------------------
   -- 5. The chicken
   -- ------------------------------------------------------------------
   -- Shares that do not add up are refused when they are written.
@@ -341,6 +377,68 @@ begin
 
   perform pg_temp.check_eq('two chickens at twelve is twenty-four of value',
     v_value, 24::numeric);
+
+  -- ------------------------------------------------------------------
+  -- What the recipe screen shows
+  --
+  -- `item_conversion_outputs_for` was called by nothing, and `cost_share`
+  -- is the only figure on it that is a decision rather than a fact: it
+  -- is how a twelve ringgit bird is split between the breast, the thigh
+  -- and the wing, and it is what every one of those three is then
+  -- costed at. The shares have to come back as they were set and in the
+  -- order they were set, because the screen edits them in place.
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq('the outputs come back in the order they were set',
+    -- Aggregated in the order the function returned them. Ordering by
+    -- line_no here would be the test doing the sorting and asserting
+    -- nothing about the function.
+    (select string_agg(o.item_name, ',')
+       from public.item_conversion_outputs_for(v_conv) o),
+    'Dada ayam,Peha ayam,Kepak ayam');
+  perform pg_temp.check_eq('with the share the breast was given',
+    (select o.cost_share from public.item_conversion_outputs_for(v_conv) o
+      where o.item_id = v_breast), 40::numeric);
+  perform pg_temp.check_eq('and the wing',
+    (select o.cost_share from public.item_conversion_outputs_for(v_conv) o
+      where o.item_id = v_wing), 25::numeric);
+  perform pg_temp.check_eq('which come to the whole bird and no more',
+    (select sum(o.cost_share) from public.item_conversion_outputs_for(v_conv) o),
+    100::numeric);
+  perform pg_temp.check_eq('and how many of each one bird makes',
+    (select o.quantity from public.item_conversion_outputs_for(v_conv) o
+      where o.item_id = v_thigh), 2::numeric);
+
+  begin
+    perform * from public.item_conversion_outputs_for(gen_random_uuid());
+    perform pg_temp.check_true('a conversion that does not exist is refused', false);
+  exception when sqlstate 'P0002' then
+    perform pg_temp.check_true('a conversion that does not exist is refused', true);
+  end;
+
+  -- A recipe is what this kitchen has worked out its yields to be, and
+  -- how it costs them. Both listers resolve the company from the parent
+  -- row, so the module check is all there is between a stranger and it.
+  --
+  -- Signed in again after each block on purpose: a caught exception
+  -- rolls back to a savepoint and takes `set_config(..., true)` with it,
+  -- so without this the second assertion would be made by the owner and
+  -- would fail against a function behaving correctly.
+  v_nosy := pg_temp.another_user('nosy@ayam.test');
+  perform pg_temp.sign_in_as(v_nosy);
+  begin
+    perform * from public.item_conversion_outputs_for(v_conv);
+    perform pg_temp.check_true('another kitchen''s recipe is refused', false);
+  exception when sqlstate '42501' then
+    perform pg_temp.check_true('another kitchen''s recipe is refused', true);
+  end;
+  perform pg_temp.sign_in_as(v_nosy);
+  begin
+    perform * from public.stock_transfer_lines_for(v_t);
+    perform pg_temp.check_true('and so is another shop''s van', false);
+  exception when sqlstate '42501' then
+    perform pg_temp.check_true('and so is another shop''s van', true);
+  end;
+  perform pg_temp.sign_in_as(v_owner);
   perform pg_temp.check_eq('two chickens leave the store',
     (select round(sl.quantity, 4) from public.stock_levels sl
       where sl.item_id = v_chicken and sl.warehouse_id = v_kitchen),
