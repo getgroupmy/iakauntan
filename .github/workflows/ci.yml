@@ -94,6 +94,7 @@ jobs:
                    supabase/tests/strata_preview.sql \
                    supabase/tests/client_account.sql \
                    supabase/tests/matter_billing.sql \
+                   supabase/tests/leave_requests.sql \
                    supabase/tests/secretarial.sql supabase/tests/attendance.sql \
                    supabase/tests/demo_accounts.sql \
                    supabase/tests/payroll_chart.sql \
