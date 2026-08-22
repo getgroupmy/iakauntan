@@ -8789,3 +8789,46 @@ extension RepoLandedCost on Repo {
   Future<void> cancelLandedCostRun(String id) async =>
       await callRpc('cancel_landed_cost_run', params: {'p_run': id});
 }
+
+/// AR/AP contra: offsetting what a party owes against what is owed to
+/// them. 0272.
+extension RepoContra on Repo {
+  Future<List<Map<String, dynamic>>> contraNotes({String? status}) async =>
+      Repo.rows(
+        await callRpc(
+          'contra_notes_list',
+          params: {'p_org': orgId, 'p_status': status},
+        ),
+      );
+
+  /// Everything outstanding on both sides for a party, found from either
+  /// of their contact records.
+  Future<List<Map<String, dynamic>>> contraCandidates(String contactId) async =>
+      Repo.rows(
+        await callRpc('contra_candidates', params: {'p_contact': contactId}),
+      );
+
+  Future<List<Map<String, dynamic>>> contraLines(String id) async =>
+      Repo.rows(await callRpc('contra_lines', params: {'p_id': id}));
+
+  /// Each entry of [invoices] and [bills] is `{document, amount}`, and
+  /// the two sides have to come to the same figure.
+  Future<String> createContra({
+    required DateTime date,
+    required List<Map<String, dynamic>> invoices,
+    required List<Map<String, dynamic>> bills,
+    String? notes,
+  }) async => (await callRpc(
+    'create_contra',
+    params: {
+      'p_org': orgId,
+      'p_date': date.toIso8601String().substring(0, 10),
+      'p_invoices': invoices,
+      'p_bills': bills,
+      'p_notes': notes,
+    },
+  )).toString();
+
+  Future<void> voidContra(String id, String reason) async =>
+      await callRpc('void_contra', params: {'p_id': id, 'p_reason': reason});
+}

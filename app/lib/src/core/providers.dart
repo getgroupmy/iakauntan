@@ -2270,6 +2270,23 @@ final itemUomOptionsProvider = FutureProvider.autoDispose
       (ref, itemId) => requireRepo(ref).itemUomOptions(itemId),
     );
 
+/// Every contra note, newest first. 0272.
+final contraNotesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>(
+      (ref, status) => requireRepo(ref).contraNotes(status: status),
+    );
+
+/// What a party has outstanding on both sides.
+final contraCandidatesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, contactId) => requireRepo(ref).contraCandidates(contactId),
+    );
+
+final contraLinesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, id) => requireRepo(ref).contraLines(id),
+    );
+
 /// Every landed cost run, newest first. 0271.
 final landedCostRunsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String?>(

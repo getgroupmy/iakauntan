@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787375569.4215233,
-    "ast_hash": "057680543de31300a1b9607a34bd3f1f",
+    "mtime": 1787377265.8643756,
+    "ast_hash": "d725e3e1c102b8ef20f43befca5000d5",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787375723.699122,
-    "ast_hash": "cb5e18ae410c2b34bb76bbec33f13495",
+    "mtime": 1787377375.6888113,
+    "ast_hash": "f9a39087cb0857c76d753fc32c2f7d82",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787375569.4063084,
-    "ast_hash": "2231edd6819be21c69451b29de37d4c5",
+    "mtime": 1787377265.8478372,
+    "ast_hash": "56448a3600749e21e3411eaeba55f8a8",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787375723.6993883,
-    "ast_hash": "89232bede293f4f2cd3e35994698c3a5",
+    "mtime": 1787377375.6891701,
+    "ast_hash": "63ed5a84d79edd6207b57de218968c9c",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787375509.4612756,
-    "ast_hash": "b55a97e33771f25db1499ffe76ec8fff",
+    "mtime": 1787377265.8478372,
+    "ast_hash": "dd664848e493a73613ff5e68e8f49918",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1190,8 +1190,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-autocount.md": {
-    "mtime": 1787375912.3305418,
-    "ast_hash": "f0a3ea8d01e45885fd1146bf781c8c99",
+    "mtime": 1787377583.669623,
+    "ast_hash": "67942b15ce699d34391f9f3a5a36d384",
     "semantic_hash": ""
   },
   "docs/migrating-from-autocount.md": {
@@ -4042,6 +4042,26 @@
   "supabase/tests/multi_uom_documents.sql": {
     "mtime": 1787374222.7000768,
     "ast_hash": "479cdc3171e6620bb7a184f2157fcfb6",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/contra_screen.dart": {
+    "mtime": 1787377403.973472,
+    "ast_hash": "538fcf980c899ae02f343f972cb7b14c",
+    "semantic_hash": ""
+  },
+  "app/test/contra_test.dart": {
+    "mtime": 1787377428.9526727,
+    "ast_hash": "4b00e7fa5be0486fcc4fa29fcc097114",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0272_the_customer_who_is_also_the_supplier.sql": {
+    "mtime": 1787377093.7910368,
+    "ast_hash": "1861d7578adf8a60141b55c0618ebe89",
+    "semantic_hash": ""
+  },
+  "supabase/tests/contra.sql": {
+    "mtime": 1787377154.3773816,
+    "ast_hash": "12b927129203bd527f0375e12cd7d2ca",
     "semantic_hash": ""
   }
 }

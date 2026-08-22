@@ -115,6 +115,7 @@ be reachable.
 | What a credit note credits | `0269`. `original_invoice_id` had **0** references when this document was first written and still had 0 in August 2026; `credit_sales_invoice` is the first thing ever to write it |
 | Multi-UOM in the document cycles | `0270`. `sales_document_lines.base_quantity` and the purchase equivalent, written by `app.calc_document_line`, and read by both posting functions for the movement and the cost. The unit picker landed in the same commit |
 | Landed cost | `0271`. A run spreads freight, duty and insurance across the goods lines of posted bills by value or by count, adds the money to stock through a movement that carries value and no quantity, and takes it back off the account each charge was coded to. What was already sold keeps its share in the profit and loss, because the sale that carried it is posted |
+| AR/AP contra | `0272`. A contra note settles outstanding invoices against outstanding bills for the same party through `payment_allocations`, so both subsidiary ledgers move and keep agreeing with their control accounts. Same contact, or two contacts carrying the same TIN |
 
 ### Half done, and the half that is missing matters
 
@@ -131,7 +132,6 @@ No table, no column, no function — verified by querying for them:
 | Missing | Who it stops |
 | --- | --- |
 | **Budgets** and budget-vs-actual | Anyone with a board |
-| **AR/AP contra** | Trading, where a customer is also a supplier |
 | **Customer/supplier deposits** | Trading and projects. AutoCount has a Deposit Note document type; there is no equivalent here, and `receipts.unapplied_amount` is not a deposit flow |
 | **Post-dated cheque register** | Traditional trading. `receipts.cheque_date` exists and there is no maturity handling |
 | **Cash flow forecast** | Everyone. The `forecast_*` tables are inventory replenishment and have nothing to do with cash |
@@ -153,7 +153,7 @@ build-from-nothing work:
 | --- | --- | --- |
 | ~~Fixed asset register and depreciation~~ | Done — `0084`. Capital allowances remain a separate exercise; this is the accounting charge | Everyone |
 | **Budgets** | AutoCount has Budget Maintenance and budget-vs-actual reporting; iAkauntan has no budget anywhere | Anyone with a board |
-| **AR/AP contra** | Offsetting a customer who is also a supplier. Common in Malaysian trading, and today it must be faked with a journal | Trading |
+| ~~AR/AP contra~~ | Done — `0272`. A journal between the control accounts was the only way before it, and a journal leaves both aged listings wrong | Trading |
 | ~~Credit control~~ | Done — `0086`. Off, warn or block, per company | Anyone extending credit |
 | **Customer/supplier deposits** | `receipts.unapplied_amount` holds an advance, but there is no deposit entry, no forfeit, no application flow | Trading, projects |
 | **Cash flow forecast** | AutoCount's Advanced Financial Report module leads on this; iAkauntan has no forward view at all | Everyone |
@@ -226,7 +226,7 @@ A gap here is a client who cannot move:
 Every row in this table said yes for the first time in `0270`. The three
 that changed — units, serial and batch, assembly — were the ones the
 first revision of this document called real projects, and they were.
-What is left is in "Still nothing at all" above: budgets, contra,
-deposits, post-dated cheques. None of them stops a
-migration; each of them is a thing somebody has to keep doing by hand
-afterwards.
+What is left is in "Still nothing at all" above: budgets, deposits,
+post-dated cheques, a cash flow forecast and a bank feed. None of them
+stops a migration; each of them is a thing somebody has to keep doing by
+hand afterwards.

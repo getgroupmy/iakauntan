@@ -218,6 +218,16 @@ const _destinations = <_Dest>[
     '/landed-cost',
     module: 'inventory',
   ),
+  // With the ledger screens rather than the stock ones: a contra is
+  // about two control accounts, and the person who strikes one is
+  // looking at an aged listing, not at a shelf.
+  _Dest(
+    'Contra',
+    Icons.swap_horiz_outlined,
+    Icons.swap_horiz,
+    '/contra',
+    module: 'sales',
+  ),
   // With the stock screens, because the question it answers — what is
   // running out — is asked while looking at what is on the shelf.
   _Dest(
