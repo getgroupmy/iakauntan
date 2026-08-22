@@ -119,6 +119,7 @@ be reachable.
 | Customer and supplier deposits | `0273`. A deposit note holds money before there is a document for it: a customer's is a liability in 2125, a supplier's an asset in 1235, drawn down through `payment_allocations` as invoices and bills appear, then refunded or forfeited. An unapplied receipt used to credit Accounts Receivable, which showed a depositing customer as a debtor in credit and never showed the money as owed to anybody |
 | Budgets and budget-vs-actual | `0274`. Per account per period against a fiscal year, optionally for one department, built from a previous year's actuals plus an uplift, and reported with the variance and whether it is favourable — which is not the same as whether it is positive |
 | Post-dated cheque register | `0275`. A cheque dated in the future takes the document off the aged listing and sits in 1140 (or 2115 for one we wrote) until it clears, so the bank balance never counts money that cannot be drawn. Deposit, clear, bounce and hand-back, with a maturity list that surfaces the one nobody banked |
+| Cash flow forecast | `0276`. Thirteen weeks by default from what the bank holds now, drawing on open invoices shifted by the lag each customer has actually taken, bills on their due date, post-dated cheques on theirs, recurring documents across the horizon, unpaid payroll, and the things only a person knows. `cash_runs_out_on` is the single number |
 
 ### Half done, and the half that is missing matters
 
@@ -134,7 +135,6 @@ No table, no column, no function — verified by querying for them:
 
 | Missing | Who it stops |
 | --- | --- |
-| **Cash flow forecast** | Everyone. The `forecast_*` tables are inventory replenishment and have nothing to do with cash |
 | **Bank feed** | AutoCount Cloud syncs Maybank SME and UOB Business directly. This has CSV import into bank reconciliation, which is a different promise |
 
 ### Where the comparison stops being useful
@@ -156,7 +156,7 @@ build-from-nothing work:
 | ~~AR/AP contra~~ | Done — `0272`. A journal between the control accounts was the only way before it, and a journal leaves both aged listings wrong | Trading |
 | ~~Credit control~~ | Done — `0086`. Off, warn or block, per company | Anyone extending credit |
 | ~~Customer/supplier deposits~~ | Done — `0273`, with the application, refund and forfeit flows, and the balance sheet presentation an unapplied receipt never had | Trading, projects |
-| **Cash flow forecast** | AutoCount's Advanced Financial Report module leads on this; iAkauntan has no forward view at all | Everyone |
+| ~~Cash flow forecast~~ | Done — `0276`, and it measures how late each customer actually pays rather than trusting the terms | Everyone |
 | ~~Multi-UOM~~ | Done — `0264` for the conversion, `0270` for the document cycles. A line is written in any unit its dimension reaches or any pack the shop has set; the money is per that unit and the stock converts to the item's own | Distribution |
 | ~~Serial and batch tracking~~ | Done — `0106`, extended by `0267` and `0269` to every movement source | Electronics, pharma |
 | ~~Stock assembly / BOM~~ | Done — `0133` manufacturing, `0265` conversions, `0264` recipes | Light manufacturing |
@@ -226,7 +226,7 @@ A gap here is a client who cannot move:
 Every row in this table said yes for the first time in `0270`. The three
 that changed — units, serial and batch, assembly — were the ones the
 first revision of this document called real projects, and they were.
-What is left is in "Still nothing at all" above: a cash flow forecast
-and a bank feed. None of them
+What is left is in "Still nothing at all" above: a bank feed, and item
+bundles in "Half done". None of them
 stops a migration; each of them is a thing somebody has to keep doing by
 hand afterwards.

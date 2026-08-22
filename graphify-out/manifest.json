@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787380179.5364063,
-    "ast_hash": "56344a744fbcbb307006230f29f98983",
+    "mtime": 1787381612.11099,
+    "ast_hash": "22eb7f56818c0c8cb0a73173a2cfda5f",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787380247.3458862,
-    "ast_hash": "c036cd29e75a2ec60069aa7e63dc10ca",
+    "mtime": 1787381612.1241422,
+    "ast_hash": "2ad1838c356cc7846fba54670ac6ac0f",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787380179.5185823,
-    "ast_hash": "65db7bb1ad1b73082f6aca1d9033b82a",
+    "mtime": 1787381612.1098955,
+    "ast_hash": "1c432b43fd9317c8c8bb8390d84f6584",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787380247.346209,
-    "ast_hash": "6f634dc7cb394a875784e74b814eedbe",
+    "mtime": 1787381538.3873756,
+    "ast_hash": "e4de16a8ceb501e4648ca9aa5b4fe895",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787380340.7213275,
-    "ast_hash": "1fdb13bad2474a2b199af1ebcf00172c",
+    "mtime": 1787381731.2663229,
+    "ast_hash": "c4bfdc4411cb940aeef23816991e985b",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1190,8 +1190,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-autocount.md": {
-    "mtime": 1787380340.733645,
-    "ast_hash": "d4828f53456ade58d5a8920477d64dee",
+    "mtime": 1787381731.2788393,
+    "ast_hash": "5651bb8557adcc9268ecf1db13115e12",
     "semantic_hash": ""
   },
   "docs/migrating-from-autocount.md": {
@@ -4122,6 +4122,26 @@
   "supabase/tests/post_dated_cheques.sql": {
     "mtime": 1787380117.9436393,
     "ast_hash": "c2f74080413de02d5207029aedbcbdad",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/reports/cash_forecast_screen.dart": {
+    "mtime": 1787381612.1111999,
+    "ast_hash": "6fc88f873e2fd485b5bcfcd4adb3184c",
+    "semantic_hash": ""
+  },
+  "app/test/cash_forecast_test.dart": {
+    "mtime": 1787381685.6786718,
+    "ast_hash": "cb73619947ab0f084a0d48c1c640813c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0276_the_week_the_money_runs_out.sql": {
+    "mtime": 1787381612.0912333,
+    "ast_hash": "851c2af762e05d8ea18b03b16a9be56f",
+    "semantic_hash": ""
+  },
+  "supabase/tests/cash_forecast.sql": {
+    "mtime": 1787381612.1159143,
+    "ast_hash": "40e8fc7ca32057107308ff2e35a3b156",
     "semantic_hash": ""
   }
 }

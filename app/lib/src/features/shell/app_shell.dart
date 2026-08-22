@@ -257,6 +257,15 @@ const _destinations = <_Dest>[
     '/cheques',
     module: 'sales',
   ),
+  // Next to the budget: both are forward-looking, and both are read by
+  // the person who has to decide something rather than record it.
+  _Dest(
+    'Cash flow',
+    Icons.show_chart_outlined,
+    Icons.show_chart,
+    '/cash-flow',
+    module: 'accounting',
+  ),
   // With the stock screens, because the question it answers — what is
   // running out — is asked while looking at what is on the shelf.
   _Dest(

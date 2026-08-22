@@ -2270,6 +2270,41 @@ final itemUomOptionsProvider = FutureProvider.autoDispose
       (ref, itemId) => requireRepo(ref).itemUomOptions(itemId),
     );
 
+/// Thirteen weeks of cash, or however many were asked for. 0276.
+final cashForecastProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, ({int weeks, bool useHistory})>(
+      (ref, args) => requireRepo(ref)
+          .cashForecast(weeks: args.weeks, useHistory: args.useHistory),
+    );
+
+/// The week the money runs out, or null when it does not.
+final cashRunsOutProvider = FutureProvider.autoDispose
+    .family<DateTime?, int>(
+      (ref, weeks) => requireRepo(ref).cashRunsOutOn(weeks: weeks),
+    );
+
+final cashForecastDetailProvider = FutureProvider.autoDispose
+    .family<
+      List<Map<String, dynamic>>,
+      ({DateTime from, DateTime to, bool useHistory})
+    >(
+      (ref, args) => requireRepo(ref).cashForecastDetail(
+        from: args.from,
+        to: args.to,
+        useHistory: args.useHistory,
+      ),
+    );
+
+final cashForecastItemsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).cashForecastItems(),
+    );
+
+final customerPaymentLagsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).customerPaymentLags(),
+    );
+
 /// The post-dated cheque register. 0275.
 final postDatedChequesProvider = FutureProvider.autoDispose
     .family<

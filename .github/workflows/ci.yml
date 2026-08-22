@@ -157,6 +157,7 @@ jobs:
                    supabase/tests/deposits.sql \
                    supabase/tests/budgets.sql \
                    supabase/tests/post_dated_cheques.sql \
+                   supabase/tests/cash_forecast.sql \
                    supabase/tests/einvoice_credentials.sql \
                    supabase/tests/ocr_credit.sql \
                    supabase/tests/contact_numbering.sql \

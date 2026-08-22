@@ -9068,3 +9068,84 @@ extension RepoPdc on Repo {
   Future<void> cancelPdc(String id, String reason) async =>
       await callRpc('cancel_pdc', params: {'p_id': id, 'p_reason': reason});
 }
+
+/// The forward view of cash. 0276.
+extension RepoCashFlow on Repo {
+  /// Weekly buckets with a running balance, thirteen weeks by default.
+  Future<List<Map<String, dynamic>>> cashForecast({
+    int weeks = 13,
+    bool useHistory = true,
+  }) async => Repo.rows(
+    await callRpc(
+      'report_cash_forecast',
+      params: {
+        'p_org': orgId,
+        'p_weeks': weeks,
+        'p_use_history': useHistory,
+      },
+    ),
+  );
+
+  /// The first week the balance goes below zero, or null when it does
+  /// not. The single number the rest of the report is context for.
+  Future<DateTime?> cashRunsOutOn({int weeks = 13}) async {
+    final v = await callRpc(
+      'cash_runs_out_on',
+      params: {'p_org': orgId, 'p_weeks': weeks},
+    );
+    return v == null ? null : DateTime.tryParse('$v');
+  }
+
+  Future<List<Map<String, dynamic>>> cashForecastDetail({
+    required DateTime from,
+    required DateTime to,
+    bool useHistory = true,
+  }) async => Repo.rows(
+    await callRpc(
+      'cash_forecast_detail',
+      params: {
+        'p_org': orgId,
+        'p_from': from.toIso8601String().substring(0, 10),
+        'p_to': to.toIso8601String().substring(0, 10),
+        'p_use_history': useHistory,
+      },
+    ),
+  );
+
+  /// What each customer has actually done, so somebody can see why the
+  /// forecast moved an invoice and argue with it.
+  Future<List<Map<String, dynamic>>> customerPaymentLags() async => Repo.rows(
+    await callRpc('customer_payment_lags', params: {'p_org': orgId}),
+  );
+
+  Future<List<Map<String, dynamic>>> cashForecastItems() async => Repo.rows(
+    await callRpc('cash_forecast_items_list', params: {'p_org': orgId}),
+  );
+
+  Future<String> saveCashForecastItem({
+    String? id,
+    required String direction,
+    required String description,
+    required num amount,
+    required DateTime expectedOn,
+    String recurrence = 'once',
+    DateTime? until,
+    String? notes,
+  }) async => (await callRpc(
+    'upsert_cash_forecast_item',
+    params: {
+      'p_id': id,
+      'p_org': orgId,
+      'p_direction': direction,
+      'p_description': description,
+      'p_amount': amount,
+      'p_expected_on': expectedOn.toIso8601String().substring(0, 10),
+      'p_recurrence': recurrence,
+      'p_until': until?.toIso8601String().substring(0, 10),
+      'p_notes': notes,
+    },
+  )).toString();
+
+  Future<void> retireCashForecastItem(String id) async =>
+      await callRpc('retire_cash_forecast_item', params: {'p_id': id});
+}
