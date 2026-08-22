@@ -1539,6 +1539,71 @@ edits its lines. The till shows "RM 12.00 · 3 left" under a dish the
 kitchen counts, and greys it with "Out of telur" when the switch is on
 and it cannot be made.
 
+## The van, and the chicken that becomes eight pieces
+
+Two things this schema described and never built. `transfer_in` and
+`transfer_out` have been movement types since 0006 and nothing ever
+wrote either; `1320 Goods in Transit` has been in the seeded chart since
+0071 for the same never. A chain with a central kitchen had to fake a
+transfer with two stock adjustments — losing the audit trail, losing the
+valuation, and posting two unexplained entries to 5900 instead of none.
+
+### A transfer is two events
+
+The van leaves at six and arrives at seven. A system that models that as
+one instant cannot answer "where is it" for the hour that matters, nor
+"we sent ten and nine arrived", which is the whole reason anybody counts
+a delivery in.
+
+- **`send_stock_transfer`** takes the stock out of the source at the
+  source's weighted average and parks the value in **1320 Goods in
+  Transit** (Dr 1320 / Cr 1310). It refuses to send what the store does
+  not have — unlike the till, nothing is lost by refusing, because the
+  van has not left.
+- **`receive_stock_transfer`** puts what arrived into the destination at
+  **the same unit cost it left at**, read back off the outbound movement
+  rather than recomputed. Taking it in at the destination's own average
+  would move profit between two of one company's warehouses.
+- A shortfall goes to **5900 Inventory Adjustment**, named and attached
+  to the transfer that lost it. Receiving *more* than was sent is
+  refused: either the count going out was wrong, or it is not this
+  transfer.
+- A line nobody counted is taken as having arrived in full, so a shop
+  with two short lines edits two fields.
+
+Quantities are written in any unit — bags, cartons — and resolved
+through 0264's `app.uom_qty` **at send time**, then stored. A pack size
+edited next month must not retrospectively change what left last
+Tuesday.
+
+Only a draft can be edited or cancelled. Once the stock has moved, the
+way back is another transfer the other way.
+
+### A conversion is one thing becoming several
+
+A kitchen buys whole chickens and sells breasts, thighs and wings; a
+grocer buys a 20kg sack and sells 500g packs. Neither is a recipe (no
+dish, no sale) and neither is worth a manufacturing order, which wants a
+plan and a work centre for something a cook does with a knife.
+
+`run_item_conversion` takes one item out and puts several in at the same
+total value. The split is `cost_share` per output, **and it must total
+exactly 100** — refused on save, not discovered at the year end. Shares
+rather than prices, because the input's cost changes every time the shop
+buys another one and the split does not: a breast is worth more of a
+chicken than a wing is, whatever the chicken cost.
+
+Neither leg posts a journal. Nothing left 1310 — the value moved between
+items inside one account — and a pair of entries that nets to zero is
+noise in a ledger somebody has to read. The stock card carries the whole
+story, which is where a stock question belongs.
+
+**Screens.** *Transfers* (`/transfers`) has two tabs: stores, where a
+draft is written, sent and counted in; and conversions, where one is
+defined and run. The share total is checked as you type so a bad split
+is caught before the save, though the server's refusal is the one that
+counts.
+
 ## Not built yet
 
 - Submitting the consolidated e-Invoice to MyInvois (the rollup runs; the
@@ -1557,6 +1622,6 @@ and it cannot be made.
 - Returning a recipe's ingredients when a counter sale is credited. The
   credit note returns whatever the invoice moved, which for a dish is
   nothing, so the food cost stays charged
-- Central-kitchen transfers between outlets, and converting a bought unit
-  into a sold one on the way (a whole chicken into eight pieces). The
-  units and the recipes are in place; the transfer document is not
+- A transfer that carries batch or serial numbers with it. 0106 tracks
+  both and a transfer moves neither, so a transferred batch loses its
+  expiry at the door

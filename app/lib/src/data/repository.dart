@@ -8424,3 +8424,124 @@ extension RepoPosRecipes on Repo {
         params: {'p_item': itemId, 'p_uom': uom},
       );
 }
+
+
+/// Moving stock between stores, and turning one thing into several.
+///
+/// 0265. `transfer_in` and `transfer_out` have been movement types
+/// since 0006 and nothing ever wrote either; `1320 Goods in Transit`
+/// has been in the chart since 0071 for the same never. A chain with a
+/// central kitchen had to fake a transfer with two stock adjustments,
+/// which loses the audit trail and posts two unexplained entries to
+/// 5900 instead of none.
+extension RepoStockTransfers on Repo {
+  /// Every transfer, newest first, optionally narrowed to one state.
+  Future<List<Map<String, dynamic>>> stockTransfers({String? status}) async =>
+      Repo.rows(
+        await callRpc(
+          'stock_transfers_list',
+          params: {'p_org': orgId, 'p_status': status},
+        ),
+      );
+
+  Future<List<Map<String, dynamic>>> stockTransferLines(String id) async =>
+      Repo.rows(
+        await callRpc('stock_transfer_lines_for', params: {'p_transfer': id}),
+      );
+
+  /// Saves a draft. Each entry of [lines] is `{item, quantity, uom, note}`.
+  Future<String> saveStockTransfer({
+    String? id,
+    required String fromWarehouse,
+    required String toWarehouse,
+    required DateTime date,
+    required List<Map<String, dynamic>> lines,
+    String? notes,
+  }) async => (await callRpc(
+    'upsert_stock_transfer',
+    params: {
+      'p_id': id,
+      'p_org': orgId,
+      'p_from': fromWarehouse,
+      'p_to': toWarehouse,
+      'p_date': date.toIso8601String().substring(0, 10),
+      'p_lines': lines,
+      'p_notes': notes,
+    },
+  )).toString();
+
+  /// Takes the stock out of the source and parks its value in transit.
+  Future<void> sendStockTransfer(String id) async =>
+      await callRpc('send_stock_transfer', params: {'p_id': id});
+
+  /// Counts it in. Each entry of [counts] is `{line, quantity}` in the
+  /// item's own unit; a line nobody counted is taken as having arrived
+  /// in full.
+  Future<void> receiveStockTransfer(
+    String id, {
+    List<Map<String, dynamic>> counts = const [],
+  }) async => await callRpc(
+    'receive_stock_transfer',
+    params: {'p_id': id, 'p_counts': counts},
+  );
+
+  Future<void> cancelStockTransfer(String id) async =>
+      await callRpc('cancel_stock_transfer', params: {'p_id': id});
+
+  /// The conversions a company keeps: a whole chicken into pieces, a
+  /// sack into packs.
+  Future<List<Map<String, dynamic>>> itemConversions() async => Repo.rows(
+    await callRpc('item_conversions_list', params: {'p_org': orgId}),
+  );
+
+  Future<List<Map<String, dynamic>>> itemConversionOutputs(String id) async =>
+      Repo.rows(
+        await callRpc(
+          'item_conversion_outputs_for',
+          params: {'p_conversion': id},
+        ),
+      );
+
+  /// Each entry of [outputs] is `{item, quantity, uom, share}`, and the
+  /// shares have to total 100 — the server refuses otherwise, because a
+  /// split that does not add up invents or destroys stock value.
+  Future<String> saveItemConversion({
+    String? id,
+    required String code,
+    required String name,
+    required String fromItem,
+    required num fromQuantity,
+    required String fromUom,
+    required List<Map<String, dynamic>> outputs,
+    bool active = true,
+  }) async => (await callRpc(
+    'upsert_item_conversion',
+    params: {
+      'p_id': id,
+      'p_org': orgId,
+      'p_code': code,
+      'p_name': name,
+      'p_item': fromItem,
+      'p_qty': fromQuantity,
+      'p_uom': fromUom,
+      'p_outputs': outputs,
+      'p_active': active,
+    },
+  )).toString();
+
+  Future<void> deleteItemConversion(String id) async =>
+      await callRpc('delete_item_conversion', params: {'p_id': id});
+
+  /// Runs one, returning the value that moved.
+  Future<num> runItemConversion(
+    String id, {
+    num times = 1,
+    String? warehouse,
+  }) async {
+    final result = await callRpc(
+      'run_item_conversion',
+      params: {'p_conversion': id, 'p_times': times, 'p_warehouse': warehouse},
+    );
+    return num.tryParse('$result') ?? 0;
+  }
+}

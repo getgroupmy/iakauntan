@@ -2269,3 +2269,27 @@ final itemUomOptionsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, itemId) => requireRepo(ref).itemUomOptions(itemId),
     );
+
+/// Every stock transfer, newest first. 0265.
+final stockTransfersProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>(
+      (ref, status) => requireRepo(ref).stockTransfers(status: status),
+    );
+
+/// The lines on one. 0265.
+final stockTransferLinesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, id) => requireRepo(ref).stockTransferLines(id),
+    );
+
+/// The conversions a company keeps. 0265.
+final itemConversionsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).itemConversions(),
+    );
+
+/// And what one of them produces. 0265.
+final itemConversionOutputsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, id) => requireRepo(ref).itemConversionOutputs(id),
+    );

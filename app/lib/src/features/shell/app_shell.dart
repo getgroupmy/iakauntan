@@ -199,6 +199,16 @@ const _destinations = <_Dest>[
     '/lots',
     module: 'inventory',
   ),
+  // Stock leaving one store for another, and stock becoming something
+  // else on the way. Beside the other stock screens because both
+  // questions are asked while looking at a shelf.
+  _Dest(
+    'Transfers',
+    Icons.local_shipping_outlined,
+    Icons.local_shipping,
+    '/transfers',
+    module: 'inventory',
+  ),
   // With the stock screens, because the question it answers — what is
   // running out — is asked while looking at what is on the shelf.
   _Dest(

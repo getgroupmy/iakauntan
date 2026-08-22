@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787362496.3815312,
-    "ast_hash": "f3513792d112c9b87bc54b0e9e00e41d",
+    "mtime": 1787364268.4296365,
+    "ast_hash": "44e942c3501151aca0c41e497488b401",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787362670.4650142,
-    "ast_hash": "14b5aebcba003265cc7ef93b3ea03b61",
+    "mtime": 1787364468.730599,
+    "ast_hash": "615e550cd95a4e7252583ab222694ebe",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1787362496.3788495,
-    "ast_hash": "31f6af8801e879da0b050cd65c033960",
+    "mtime": 1787364268.4296365,
+    "ast_hash": "e2ceae4fa8b41394650030aeba729c6e",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787362650.0672429,
-    "ast_hash": "87725096fec6f91ed945ce868965fd3c",
+    "mtime": 1787364468.7308323,
+    "ast_hash": "96336c60edfb8bd7d14de6576214fac5",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787362347.0873616,
-    "ast_hash": "0e5035b6b169bdd560ab7a4a31ce7d94",
+    "mtime": 1787364209.9337246,
+    "ast_hash": "52d35779e17e2010ee3e35059564b0a1",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -3350,8 +3350,8 @@
     "semantic_hash": ""
   },
   "docs/pos.md": {
-    "mtime": 1787363020.8230126,
-    "ast_hash": "d03ce554a68abe849a0074f9c894f1bd",
+    "mtime": 1787364626.3549657,
+    "ast_hash": "0dabc7ac5323bf731b316892820ea338",
     "semantic_hash": ""
   },
   "app/lib/src/core/export_log.dart": {
@@ -3917,6 +3917,26 @@
   "supabase/tests/pos_recipes.sql": {
     "mtime": 1787362794.6887808,
     "ast_hash": "e5196ae12453f7ac0975d8455bf5b7a2",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/stock/transfers_screen.dart": {
+    "mtime": 1787364417.8023627,
+    "ast_hash": "6e35240298e4a75aeb5cb0751c394ffc",
+    "semantic_hash": ""
+  },
+  "app/test/stock_transfers_test.dart": {
+    "mtime": 1787364468.7336485,
+    "ast_hash": "f95b65a9d420191c755d95375795813e",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0265_the_van_and_the_chicken_that_becomes_eight_pieces.sql": {
+    "mtime": 1787364098.9336264,
+    "ast_hash": "8fd9c1c19e8590fe77ef703e8220e291",
+    "semantic_hash": ""
+  },
+  "supabase/tests/stock_transfers.sql": {
+    "mtime": 1787364198.6016324,
+    "ast_hash": "1942a6d1ef69a45a05c1e669b7bdc9d9",
     "semantic_hash": ""
   }
 }
