@@ -255,7 +255,7 @@ end $$;
 do $$
 declare
   v_org uuid := pg_temp.test_org('Percubaan Sdn Bhd');
-  v_inv uuid; v_owner uuid; v_ok boolean; v_role text;
+  v_inv uuid; v_owner uuid; v_ok boolean; v_role text; v_seen integer;
 begin
   v_inv := pg_temp.an_invoice(v_org, 'PLT-0006', 250.00);
   perform public.begin_gateway_payment(
@@ -291,16 +291,43 @@ begin
     (select status from public.platform_invoices where id = v_inv), 'issued');
 
   -- Nor may they write the table directly, which is the same wall by
-  -- another door.
-  v_ok := false;
+  -- another door — but asserted by its effect rather than by an
+  -- exception, and that distinction is the point.
+  --
+  -- The first draft caught `insufficient_privilege`, which is what
+  -- happens here and is NOT what happens in production. Supabase ships
+  -- `alter default privileges in schema public grant all on tables to
+  -- authenticated`, so every table in `public` reaches the deployed
+  -- database with INSERT, UPDATE and DELETE already granted — checked
+  -- against the running project, where `platform_payments` carries all
+  -- four while this harness gives it only SELECT.
+  --
+  -- What refuses the write there is row level security: the table has
+  -- one policy and it is `for select`, so nothing permits an UPDATE and
+  -- the statement succeeds having changed nothing. An assertion that
+  -- waits for an exception would pass here for ever while saying
+  -- nothing at all about the system anybody actually uses — and would
+  -- go on passing the day somebody added a permissive write policy.
+  -- As a member of the company the payment belongs to, not a stranger.
+  -- The first version of this used the stranger above and passed for
+  -- the wrong reason: the read policy hid the row from them, so the
+  -- UPDATE matched nothing whatever the write rules said, and adding a
+  -- permissive write policy did not disturb it. Somebody who can see
+  -- the row is the only caller that tests whether they can change it.
+  perform pg_temp.sign_in_as(pg_temp.test_user());
   begin
     set local role authenticated;
+    select count(*) into v_seen from public.platform_payments
+     where provider_ref = 'W_grant';
     update public.platform_payments set state = 'paid'
      where provider_ref = 'W_grant';
-  exception when insufficient_privilege then v_ok := true;
+  exception when insufficient_privilege then null;
   end;
   reset role;
-  perform pg_temp.check_true('nor write the payments table by hand', v_ok);
+  perform pg_temp.check_eq('a member can see their own payment', v_seen, 1);
+  perform pg_temp.check_eq('and still cannot write the payments table by hand',
+    (select state from public.platform_payments
+      where provider_ref = 'W_grant'), 'pending');
   perform pg_temp.sign_out();
 end $$;
 
