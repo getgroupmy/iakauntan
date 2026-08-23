@@ -845,7 +845,7 @@ $$;
 --
 -- ## The fixture is built to produce exactly two filings
 --
--- Every date is relative to `current_date` — the clock
+-- Every date is relative to the Malaysian day — the clock
 -- `corp_upcoming_filings` windows on, which 0304's header argues for —
 -- so it cannot go stale. And both entities are left with no financial
 -- year end, because an entity that has one also generates a financial
@@ -873,6 +873,13 @@ do $$
 declare
   v_org uuid; v_late uuid; v_today_ent uuid; v_filing uuid;
   v_dash jsonb; v_sec jsonb;
+  -- The engine's day, not the session's. 0305 pinned
+  -- `corp_upcoming_filings` to Kuala Lumpur; a fixture still built on
+  -- `current_date` disagrees with it for the eight hours a day that
+  -- UTC is behind, which is a test that passes all morning and fails
+  -- after four. It did: this block was written before 0305 and went
+  -- red the first evening after it landed.
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
 begin
   v_org := pg_temp.test_org('Setiausaha Tepat Sdn Bhd', array['secretarial']);
 
@@ -890,13 +897,13 @@ begin
   insert into public.corp_entities
     (org_id, name, entity_type, incorporated_on, status)
   values (v_org, 'Sudah Lewat Sdn Bhd', 'sdn_bhd',
-          (current_date - interval '1 year' - interval '40 days')::date,
+          (v_today - interval '1 year' - interval '40 days')::date,
           'incorporated')
   returning id into v_late;
   insert into public.corp_entities
     (org_id, name, entity_type, incorporated_on, status)
   values (v_org, 'Hari Ini Sdn Bhd', 'sdn_bhd',
-          (current_date - interval '1 year' - interval '30 days')::date,
+          (v_today - interval '1 year' - interval '30 days')::date,
           'incorporated')
   returning id into v_today_ent;
 
@@ -919,7 +926,7 @@ begin
   -- open it would name the ten-days-late one, presenting a deadline
   -- already missed as the next one coming.
   perform pg_temp.check_eq('and the next one due is today',
-    (v_sec ->> 'next_due')::text, current_date::text);
+    (v_sec ->> 'next_due')::text, v_today::text);
   perform pg_temp.check_eq('both clients are counted',
     (v_sec ->> 'entities')::numeric, 2);
 
@@ -931,7 +938,7 @@ begin
   insert into public.corp_entities
     (org_id, name, entity_type, incorporated_on, status)
   values (v_org, 'Bulan Depan Sdn Bhd', 'sdn_bhd',
-          (current_date + interval '1 day' - interval '1 year')::date,
+          (v_today + interval '1 day' - interval '1 year')::date,
           'incorporated');
 
   v_sec := public.module_dashboard(v_org) -> 'secretarial';
@@ -960,7 +967,7 @@ begin
   perform pg_temp.check_eq('opening a row does not change what is owed',
     (v_sec ->> 'overdue')::numeric, 1);
 
-  update public.corp_filings set status = 'lodged', lodged_on = current_date
+  update public.corp_filings set status = 'lodged', lodged_on = v_today
    where id = v_filing;
   v_sec := public.module_dashboard(v_org) -> 'secretarial';
   perform pg_temp.check_eq('lodging it takes it off the overdue count',

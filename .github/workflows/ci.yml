@@ -155,6 +155,7 @@ jobs:
                    supabase/tests/stock_card.sql \
                    supabase/tests/pricing_and_dimensions.sql \
                    supabase/tests/manual_journal.sql \
+                   supabase/tests/idempotency.sql \
                    supabase/tests/expense_claims.sql \
                    supabase/tests/expenses.sql \
                    supabase/tests/hr_reference.sql \
