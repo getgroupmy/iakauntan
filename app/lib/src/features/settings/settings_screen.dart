@@ -732,8 +732,14 @@ class _PlatformInvoicesState extends ConsumerState<_PlatformInvoices> {
         SnackBar(content: Text('$e')),
       );
     } finally {
-      if (mounted) setState(() => _busyId = null);
-      ref.invalidate(creditInvoicesProvider);
+      // Both guarded. Somebody who taps Pay and immediately navigates
+      // away disposes this widget while the function call is still in
+      // flight, and `ref` after dispose throws — inside a `finally`,
+      // where it would replace whatever was actually being handled.
+      if (mounted) {
+        setState(() => _busyId = null);
+        ref.invalidate(creditInvoicesProvider);
+      }
     }
   }
 
