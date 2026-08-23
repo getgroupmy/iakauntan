@@ -258,14 +258,160 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------
--- A company with books gets neither card, and keeps its own dashboard
+-- A company gets the cards its modules make, and no others
+--
+-- This asserted an empty object until 0300, on a company that bought
+-- purchases and therefore had neither a service desk nor a till. That
+-- was right about the two and wrong as a statement about the whole
+-- answer: `app.seed_org_modules` hands every new company inventory
+-- switched on, so the moment stock got figures this company had a stock
+-- card coming — correctly, and with zeros in it, because that is what
+-- it holds and what it has.
+--
+-- Narrowed to what it was actually saying rather than deleted. The
+-- zeros are asserted too: a company entitled to a module and holding
+-- nothing should get the card and four noughts, not a missing key. The
+-- tab is the promise that the module is theirs; an absent one would say
+-- it is not.
 -- ---------------------------------------------------------------------
 do $$
-declare v_org uuid;
+declare v_org uuid; v_dash jsonb;
 begin
   v_org := pg_temp.test_org('Kedai Buku Sdn Bhd', array['purchases']);
-  perform pg_temp.check_eq('no module card for a company that bought neither',
-    public.module_dashboard(v_org)::text, '{}');
+  v_dash := public.module_dashboard(v_org);
+
+  perform pg_temp.check_true('no service desk card for a company without one',
+    not (v_dash ? 'ticketing'));
+  perform pg_temp.check_true('nor a till',
+    not (v_dash ? 'pos'));
+  perform pg_temp.check_true('but the stock card it is entitled to',
+    v_dash ? 'inventory');
+  perform pg_temp.check_eq('holding nothing, and saying so',
+    (v_dash -> 'inventory' ->> 'stock_value')::numeric, 0);
+  perform pg_temp.check_eq('with nothing to reorder',
+    (v_dash -> 'inventory' ->> 'to_reorder')::numeric, 0);
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- What the stock is worth, and what has run out
+--
+-- 0300's inventory figures. Three of them are counts and the fourth is
+-- money, and the counts are the ones worth being careful about: the
+-- view underneath has a row per item per warehouse, so a naive count
+-- says the same shirt twice for being low in two places.
+--
+-- The fixture is built to catch exactly that. One item is low in both
+-- warehouses; one is empty in one and stocked in the other; one is
+-- gone from everywhere.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_wh_a  uuid;
+  v_wh_b  uuid;
+  v_shirt uuid;
+  v_shoe  uuid;
+  v_hat   uuid;
+  v_dash  jsonb;
+begin
+  v_org := pg_temp.test_org('Kedai Stok Sdn Bhd', array['inventory']);
+
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'A', 'Gudang A') returning id into v_wh_a;
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'B', 'Gudang B') returning id into v_wh_b;
+
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code,
+     unit_price, cost_price, reorder_level)
+  values (v_org, 'SHIRT', 'Kemeja', 'stock', true, 'C62', 50, 20, 10)
+  returning id into v_shirt;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code,
+     unit_price, cost_price, reorder_level)
+  values (v_org, 'SHOE', 'Kasut', 'stock', true, 'C62', 90, 40, 5)
+  returning id into v_shoe;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code,
+     unit_price, cost_price, reorder_level)
+  values (v_org, 'HAT', 'Topi', 'stock', true, 'C62', 30, 10, 4)
+  returning id into v_hat;
+
+  -- The shirt is low in both warehouses: one item to reorder, not two.
+  insert into public.stock_levels
+    (org_id, item_id, warehouse_id, quantity, average_cost, value)
+  values (v_org, v_shirt, v_wh_a, 3, 20, 60),
+         (v_org, v_shirt, v_wh_b, 2, 20, 40),
+  -- The shoe is empty in A and well stocked in B: not out of stock,
+  -- because there are forty of them one warehouse over.
+         (v_org, v_shoe,  v_wh_a, 0, 40, 0),
+         (v_org, v_shoe,  v_wh_b, 40, 40, 1600),
+  -- The hat is gone from everywhere. This is the one that is out.
+         (v_org, v_hat,   v_wh_a, 0, 10, 0),
+         (v_org, v_hat,   v_wh_b, 0, 10, 0);
+
+  v_dash := public.module_dashboard(v_org);
+
+  perform pg_temp.check_true('a company holding stock gets a stock card',
+    v_dash ? 'inventory');
+  perform pg_temp.check_eq('the stock is worth what the ledger carries it at',
+    (v_dash -> 'inventory' ->> 'stock_value')::numeric, 1700);
+
+  -- The two assertions this block exists for.
+  --
+  -- The shirt holds 5 against a level of 10 and wants reordering once,
+  -- not once per warehouse. The hat holds nothing at all and wants
+  -- reordering too. The shoe is the one that matters: empty in warehouse
+  -- A, forty in warehouse B, and a buyer must not be sent to order it —
+  -- which the view's own per-warehouse `needs_reorder` would have done,
+  -- and did, until the first draft of 0300 was corrected.
+  perform pg_temp.check_eq('items are pooled across warehouses to reorder',
+    (v_dash -> 'inventory' ->> 'to_reorder')::numeric, 2);
+  perform pg_temp.check_eq('and one is out of stock, counted the same way',
+    (v_dash -> 'inventory' ->> 'out_of_stock')::numeric, 1);
+  perform pg_temp.check_eq('two items are actually held',
+    (v_dash -> 'inventory' ->> 'items_held')::numeric, 2);
+
+  -- The shoe again, named on its own, because it is the whole reason
+  -- the two counts pool rather than trusting the view.
+  perform pg_temp.check_eq(
+    'an empty shelf with a full pallet next door is not a reorder',
+    (select count(*) from public.v_stock_valuation v
+      where v.org_id = v_org and v.item_id = v_shoe and v.needs_reorder), 1);
+
+  -- An item whose total sits exactly on its level is at it, and wants
+  -- more. The boundary, because `<=` and `<` are one character apart and
+  -- the wrong one leaves somebody short.
+  update public.stock_levels set quantity = 5, value = 200
+   where item_id = v_shoe and warehouse_id = v_wh_b;
+  perform pg_temp.check_eq('an item sitting exactly on its level wants more',
+    (public.module_dashboard(v_org) -> 'inventory' ->> 'to_reorder')::numeric, 3);
+
+  -- A reorder level of nought means nobody set one, not "reorder always".
+  update public.items set reorder_level = 0 where id = v_shirt;
+  perform pg_temp.check_eq('and an item with no level set is not chased',
+    (public.module_dashboard(v_org) -> 'inventory' ->> 'to_reorder')::numeric, 2);
+
+  -- The shirt above proves nothing on its own: it holds five, so
+  -- `5 <= 0` is false and it drops out whether the guard exists or not.
+  -- Dropping `reorder_level > 0` from 0300 left every assertion here
+  -- green until this one was added. The case that needs the guard is an
+  -- item holding nothing with no level set — without it, `0 <= 0` is
+  -- true and every unstocked item nobody has a level for turns up on
+  -- somebody's list to reorder.
+  update public.items set reorder_level = 0 where id = v_hat;
+  perform pg_temp.check_eq(
+    'nor an item holding nothing that nobody set a level for',
+    (public.module_dashboard(v_org) -> 'inventory' ->> 'to_reorder')::numeric, 1);
+
+  -- The same gate every other block has.
+  perform public.set_module_hidden(v_org, 'inventory', true);
+  perform pg_temp.check_true('a company that put stock away gets no card',
+    not (public.module_dashboard(v_org) ? 'inventory'));
+  perform public.set_module_hidden(v_org, 'inventory', false);
+  perform pg_temp.check_true('and it comes back',
+    public.module_dashboard(v_org) ? 'inventory');
 end;
 $$;
 

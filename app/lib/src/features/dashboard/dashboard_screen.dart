@@ -283,6 +283,42 @@ List<Widget> moduleTiles(BuildContext context, String code,
 
     if (tiles.isEmpty) return const SizedBox.shrink();
 
+  if (code == 'inventory' && all.containsKey('inventory')) {
+    final i = block('inventory');
+    final reorder = n(i, 'to_reorder');
+    final out = n(i, 'out_of_stock');
+    tiles.addAll([
+      StatTile(
+        label: 'Stock value',
+        value: Fmt.money(n(i, 'stock_value')),
+        caption: '${n(i, 'items_held').toStringAsFixed(0)} items held',
+        icon: Icons.inventory_2_outlined,
+        onTap: () => context.go('/items'),
+      ),
+      StatTile(
+        label: 'To reorder',
+        value: reorder.toStringAsFixed(0),
+        // Pooled across warehouses by 0300, so this is a count of
+        // purchase orders somebody has to raise rather than of shelves
+        // that happen to be low.
+        caption: reorder > 0 ? 'At or under their level' : 'Nothing running low',
+        icon: Icons.add_shopping_cart_outlined,
+        accent: reorder > 0 ? context.colors.warning : null,
+        onTap: () => context.go('/items'),
+      ),
+      StatTile(
+        label: 'Out of stock',
+        value: out.toStringAsFixed(0),
+        caption: out > 0 ? 'None anywhere' : 'Everything in stock',
+        icon: Icons.remove_shopping_cart_outlined,
+        accent: out > 0 ? context.colors.danger : context.colors.success,
+        // The stock take rather than the item list: an item the system
+        // thinks is empty is a shelf somebody has to go and look at.
+        onTap: () => context.go('/stock-take'),
+      ),
+    ]);
+  }
+
   return tiles;
 }
 
