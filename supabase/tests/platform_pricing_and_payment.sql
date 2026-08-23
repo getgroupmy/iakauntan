@@ -433,6 +433,20 @@ begin
       select c from unnest(array['MY','SG','ID','TH','PH','VN']) c
        where not exists (select 1 from public.payment_gateways g
                           where c = any (g.countries))));
+
+  -- Named providers, asserted by name. A count alone would go on
+  -- passing if a later migration replaced the catalogue with forty
+  -- rows of something else, and these are the ones somebody asked for.
+  perform pg_temp.check_true(
+    'the providers asked for by name are in the catalogue',
+    not exists (
+      select c from unnest(array['billplz','toyyibpay','paydibs',
+                                 'ipay88','fiuu','curlec']) c
+       where not exists (select 1 from public.payment_gateways g
+                          where g.code = c)));
+  perform pg_temp.check_eq('and Paydibs sells where it says it does',
+    (select array_to_string(countries, ',') from public.payment_gateways
+      where code = 'paydibs'), 'MY');
 end $$;
 
 -- ---------------------------------------------------------------------
