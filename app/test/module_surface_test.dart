@@ -275,8 +275,12 @@ void main() {
     expect(find.text('Past their deadline'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
     expect(find.text('Lodge these first'), findsOneWidget);
-    expect(find.textContaining('Next on'), findsOneWidget);
-    expect(find.textContaining('2026'), findsOneWidget);
+    // The whole caption, formatted. An earlier version of this looked
+    // for a substring "2026", which also matched the greeting's own
+    // date at the top of the tab — a finder loose enough to be
+    // satisfied by the wrong widget is not asserting the thing it
+    // names. `Fmt.date` is dd/MM/yyyy.
+    expect(find.text('Next on 14/09/2026'), findsOneWidget);
     expect(find.text('31'), findsOneWidget);
   });
 
