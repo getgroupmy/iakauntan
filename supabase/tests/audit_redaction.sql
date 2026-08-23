@@ -169,6 +169,64 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- And the reasoning above has to stay true
+--
+-- The limit is defensible because of what the nested columns actually
+-- are: `custom_fields` and `variant_attributes`, which a company fills
+-- in itself, `attachments`, which is file metadata, `permissions`, and
+-- `settings`. Free-form or structural, all of them already readable to
+-- anybody who can read the row.
+--
+-- That argument is about which tables are audited, and nothing was
+-- checking it. Give the audit trigger to a table whose jsonb column
+-- holds something structured and confidential and the reasoning stops
+-- applying silently — the redaction would not have changed, but what it
+-- fails to reach would have.
+--
+-- So the list is the assertion, the way the anon allowlist is. Adding a
+-- name here should mean somebody looked at the column and decided a
+-- nested credential could not get into it.
+--
+-- Measured against the running project when this was written: every one
+-- of these columns was empty, so the gap is latent rather than open.
+-- The first company to name a custom field `password` is what makes it
+-- real, and that is the day to make redaction recursive.
+-- ---------------------------------------------------------------------
+do $$
+declare v_unexpected text;
+begin
+  select string_agg(c.relname || '.' || a.attname, ', ' order by c.relname, a.attname)
+    into v_unexpected
+    from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_attribute a on a.attrelid = c.oid
+                       and a.attnum > 0 and not a.attisdropped
+   where t.tgname = 'audit_changes'
+     and format_type(a.atttypid, null) in ('jsonb', 'json')
+     and (c.relname || '.' || a.attname) not in (
+       'contacts.custom_fields',
+       'employees.custom_fields',
+       'expenses.attachments',
+       'items.custom_fields',
+       'items.variant_attributes',
+       'org_members.permissions',
+       'organizations.settings',
+       'purchase_documents.attachments',
+       'purchase_documents.custom_fields',
+       'purchase_payments.attachments',
+       'receipts.attachments',
+       'sales_documents.attachments',
+       'sales_documents.custom_fields');
+
+  perform pg_temp.check_true(
+    'no audited table has grown a nested column nobody has looked at',
+    v_unexpected is null);
+  if v_unexpected is not null then
+    raise notice 'unlisted nested columns on audited tables: %', v_unexpected;
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------
 -- An attachment path names its own company
 --
 -- `app.attachment_path_ok` refuses anything that is not exactly
