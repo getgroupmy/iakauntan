@@ -362,10 +362,26 @@ class CorpFiling {
   final String? periodLabel;
   final String? filingId;
 
-  int get daysLeft =>
-      dueDate.difference(DateTime(DateTime.now().year, DateTime.now().month,
-              DateTime.now().day))
-          .inDays;
+  /// Days until this is due, counted in Malaysian days.
+  ///
+  /// Not the device's days. A statutory deadline under CA 2016 falls on
+  /// a date in Malaysia whether the person looking at it is in Kuala
+  /// Lumpur, London or on a plane, and 0305 pinned the server's half of
+  /// this to `Asia/Kuala_Lumpur` for the same reason. A client that
+  /// went on reading the device clock would disagree with the list it
+  /// is labelling, which is the defect 0305 fixed wearing a different
+  /// hat.
+  ///
+  /// The offset is hard-coded because Malaysia has had none of the
+  /// complications a time zone database exists for: a fixed UTC+8 with
+  /// no daylight saving since 1982. `toUtc()` first, so the arithmetic
+  /// does not pass through the device's own offset on the way.
+  static DateTime _malaysianToday() {
+    final kl = DateTime.now().toUtc().add(const Duration(hours: 8));
+    return DateTime(kl.year, kl.month, kl.day);
+  }
+
+  int get daysLeft => dueDate.difference(_malaysianToday()).inDays;
 
   bool get isOverdue => daysLeft < 0;
   bool get isUrgent => daysLeft >= 0 && daysLeft <= 14;

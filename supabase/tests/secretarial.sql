@@ -646,4 +646,105 @@ begin
   end;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The Registrar keeps Malaysian time
+--
+-- 0305 pinned `corp_upcoming_filings` to `Asia/Kuala_Lumpur`. Before
+-- it, the function read `current_date` — which in Postgres is not
+-- "today" but today *in the session's time zone*, and on Supabase the
+-- session is UTC. Malaysia is UTC+8, so for the eight hours between
+-- midnight in Kuala Lumpur and midnight in London the engine was a day
+-- behind the Act it implements, and the filing due this morning was
+-- reported as due tomorrow.
+--
+-- ## Why this asserts a property and not a date
+--
+-- The obvious test — compare the answer under UTC against the answer
+-- under Kuala Lumpur — can only fail during the eight hours they
+-- differ. It would pass every morning and fail every afternoon, which
+-- is worse than having no test at all, because the first person to see
+-- it red would assume the suite was flaky.
+--
+-- So what is asserted is the property that makes the bug impossible:
+-- **the answer must not depend on who connected.** The two zones below
+-- are twenty-six hours apart, so they are never on the same date — at
+-- any instant, on any day of the year. A `current_date` implementation
+-- therefore gives two different answers here always, and a pinned one
+-- gives the same answer always. No window, no flake.
+--
+-- The fixture dates the entity relative to the Malaysian day so the
+-- filing it generates sits near enough to the boundary for a one-day
+-- shift to move it between the counted buckets.
+--
+-- ## Mutants
+--
+-- Restoring 0063's `current_date` version verbatim fails the
+-- time-zone assertion below, at any hour. Making the engine return
+-- nothing fails the fixture control. Both checked.
+--
+-- One survives and is recorded rather than chased: pinning to the
+-- wrong zone — `America/New_York` instead of Kuala Lumpur — passes
+-- whenever the two happen to share a date, which is most of the day.
+-- No assertion can close that without reintroducing the flake this
+-- test exists to avoid, because any two zones agree for part of every
+-- day. What is deterministically nailed down is that the answer does
+-- not depend on the caller, which is the property the defect violated;
+-- that it is *Malaysia's* day is asserted below as well, and catches a
+-- wrong zone whenever the dates diverge.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_far_east jsonb; v_far_west jsonb;
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+begin
+  v_org := pg_temp.sec_org();
+
+  -- No financial year end: only the anniversary rule is in play, so the
+  -- entity generates exactly one filing and the comparison below is
+  -- about the clock rather than about how much else happens to be due.
+  insert into public.corp_entities
+    (org_id, name, entity_type, incorporated_on, status)
+  values (v_org, 'Tepat Masa Sdn Bhd', 'sdn_bhd',
+          (v_today - interval '1 year' - interval '30 days')::date,
+          'incorporated');
+
+  -- Kiritimati is UTC+14 and Etc/GMT+12 is UTC-12: twenty-six hours
+  -- apart, so `current_date` differs between them at every instant.
+  begin
+    set local time zone 'Pacific/Kiritimati';
+    select jsonb_agg(jsonb_build_object(
+             'type', f.filing_type, 'due', f.due_date, 'status', f.status)
+             order by f.due_date, f.filing_type)
+      into v_far_east
+      from public.corp_upcoming_filings(v_org, 120) f;
+
+    set local time zone 'Etc/GMT+12';
+    select jsonb_agg(jsonb_build_object(
+             'type', f.filing_type, 'due', f.due_date, 'status', f.status)
+             order by f.due_date, f.filing_type)
+      into v_far_west
+      from public.corp_upcoming_filings(v_org, 120) f;
+  end;
+  reset time zone;
+
+  -- The control. If the fixture produced nothing, the two would be
+  -- equal as nulls and this whole block would assert the absence of
+  -- data rather than the presence of a clock.
+  perform pg_temp.check_true(
+    'the fixture actually put a filing in front of the engine',
+    v_far_east is not null and jsonb_array_length(v_far_east) > 0);
+
+  perform pg_temp.check_true(
+    'a statutory deadline does not depend on the caller''s time zone',
+    v_far_east = v_far_west);
+
+  -- And it is Malaysia's day, not either extreme's. The Annual Return
+  -- falls thirty days after the anniversary, and the fixture placed the
+  -- anniversary thirty days before the Malaysian today — so the due
+  -- date is today in Kuala Lumpur, whoever is asking.
+  perform pg_temp.check_eq(
+    'and the day it uses is the Malaysian one',
+    (v_far_east -> 0 ->> 'due')::text, v_today::text);
+end $$;
+
 rollback;
