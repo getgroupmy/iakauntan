@@ -222,66 +222,64 @@ List<Widget> moduleTiles(BuildContext context, String code,
   final tiles = <Widget>[];
 
   if (code == 'ticketing' && all.containsKey('ticketing')) {
-      final t = block('ticketing');
-      final breaching = n(t, 'breaching');
-      final breached = n(t, 'breached');
-      tiles.addAll([
-        StatTile(
-          label: 'Open tickets',
-          value: n(t, 'open').toStringAsFixed(0),
-          caption: n(t, 'unassigned') > 0
-              ? '${n(t, 'unassigned').toStringAsFixed(0)} unassigned'
-              : 'All assigned',
-          icon: Icons.confirmation_number_outlined,
-          accent: context.colors.info,
-          onTap: () => context.go('/tickets'),
-        ),
-        StatTile(
-          label: 'Against the clock',
-          value: breaching.toStringAsFixed(0),
-          caption: breached > 0
-              ? '${breached.toStringAsFixed(0)} already past due'
-              : 'Due within four hours',
-          icon: Icons.timer_outlined,
-          accent: breaching > 0 ? context.colors.danger : null,
-          onTap: () => context.go('/tickets'),
-        ),
-        StatTile(
-          label: 'Resolved today',
-          value: n(t, 'resolved_today').toStringAsFixed(0),
-          caption: 'Closed off since midnight',
-          icon: Icons.task_alt,
-          accent: context.colors.success,
-          onTap: () => context.go('/tickets'),
-        ),
-      ]);
-    }
+    final t = block('ticketing');
+    final breaching = n(t, 'breaching');
+    final breached = n(t, 'breached');
+    tiles.addAll([
+      StatTile(
+        label: 'Open tickets',
+        value: n(t, 'open').toStringAsFixed(0),
+        caption: n(t, 'unassigned') > 0
+            ? '${n(t, 'unassigned').toStringAsFixed(0)} unassigned'
+            : 'All assigned',
+        icon: Icons.confirmation_number_outlined,
+        accent: context.colors.info,
+        onTap: () => context.go('/tickets'),
+      ),
+      StatTile(
+        label: 'Against the clock',
+        value: breaching.toStringAsFixed(0),
+        caption: breached > 0
+            ? '${breached.toStringAsFixed(0)} already past due'
+            : 'Due within four hours',
+        icon: Icons.timer_outlined,
+        accent: breaching > 0 ? context.colors.danger : null,
+        onTap: () => context.go('/tickets'),
+      ),
+      StatTile(
+        label: 'Resolved today',
+        value: n(t, 'resolved_today').toStringAsFixed(0),
+        caption: 'Closed off since midnight',
+        icon: Icons.task_alt,
+        accent: context.colors.success,
+        onTap: () => context.go('/tickets'),
+      ),
+    ]);
+  }
 
-    if (code == 'pos' && all.containsKey('pos')) {
-      final p = block('pos');
-      tiles.addAll([
-        StatTile(
-          label: 'Takings today',
-          value: Fmt.money(n(p, 'takings_today')),
-          caption: '${n(p, 'sales_today').toStringAsFixed(0)} sales rung up',
-          icon: Icons.point_of_sale_outlined,
-          accent: context.colors.success,
-          onTap: () => context.go('/till'),
-        ),
-        StatTile(
-          label: 'Bills still open',
-          value: n(p, 'open_bills').toStringAsFixed(0),
-          caption: n(p, 'open_shifts') > 0
-              ? '${n(p, 'open_shifts').toStringAsFixed(0)} shifts open'
-              : 'No shift open',
-          icon: Icons.receipt_long_outlined,
-          accent: n(p, 'open_bills') > 0 ? context.colors.warning : null,
-          onTap: () => context.go('/till'),
-        ),
-      ]);
-    }
-
-    if (tiles.isEmpty) return const SizedBox.shrink();
+  if (code == 'pos' && all.containsKey('pos')) {
+    final p = block('pos');
+    tiles.addAll([
+      StatTile(
+        label: 'Takings today',
+        value: Fmt.money(n(p, 'takings_today')),
+        caption: '${n(p, 'sales_today').toStringAsFixed(0)} sales rung up',
+        icon: Icons.point_of_sale_outlined,
+        accent: context.colors.success,
+        onTap: () => context.go('/till'),
+      ),
+      StatTile(
+        label: 'Bills still open',
+        value: n(p, 'open_bills').toStringAsFixed(0),
+        caption: n(p, 'open_shifts') > 0
+            ? '${n(p, 'open_shifts').toStringAsFixed(0)} shifts open'
+            : 'No shift open',
+        icon: Icons.receipt_long_outlined,
+        accent: n(p, 'open_bills') > 0 ? context.colors.warning : null,
+        onTap: () => context.go('/till'),
+      ),
+    ]);
+  }
 
   if (code == 'inventory' && all.containsKey('inventory')) {
     final i = block('inventory');
