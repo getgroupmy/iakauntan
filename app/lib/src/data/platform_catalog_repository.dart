@@ -1,11 +1,30 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/providers.dart';
 import 'repository.dart';
 
 /// The catalogue a platform operator sells from, and how a company pays
 /// for it.
-extension RepoPlatformCatalog on Repo {
+///
+/// Deliberately not an extension on [Repo]. A `Repo` is bound to one
+/// organization, and none of this is: `platform_modules`,
+/// `payment_gateways` and `platform_settings` are the platform's own
+/// tables and every RPC below takes no org argument. Hanging them off
+/// `Repo` cost a working console — `repoProvider` is null until an
+/// organization has been resolved, so a platform administrator with no
+/// company of their own, or anybody in the first second of a cold load,
+/// got `?? const []` and a screen with no modules on it and nothing to
+/// say why. The save paths were worse: `ref.read(repoProvider)!` threw
+/// on the null.
+///
+/// So these take a client. What they read has nothing to do with which
+/// company is open, and now the code says so.
+class PlatformCatalog {
+  const PlatformCatalog(this.client);
+
+  final SupabaseClient client;
+
   /// Every module, whatever its state.
   ///
   /// Read from `platform_modules` rather than from any list in the app,
@@ -13,7 +32,7 @@ extension RepoPlatformCatalog on Repo {
   /// without a release. Retired ones are included on purpose: the
   /// console is where a retired module is brought back, and a list that
   /// hid them would be a door that locks behind you.
-  Future<List<Map<String, dynamic>>> platformModules() async => Repo.rows(
+  Future<List<Map<String, dynamic>>> modules() async => Repo.rows(
     await client
         .from('platform_modules')
         .select(
@@ -24,7 +43,7 @@ extension RepoPlatformCatalog on Repo {
         .order('code'),
   );
 
-  Future<void> savePlatformModule(
+  Future<void> saveModule(
     String code, {
     String? name,
     String? description,
@@ -32,7 +51,7 @@ extension RepoPlatformCatalog on Repo {
     double? monthlyPrice,
     int? sortOrder,
     bool? isActive,
-  }) => callRpc(
+  }) => client.rpc(
     'platform_save_module',
     params: {
       'p_code': code,
@@ -47,8 +66,8 @@ extension RepoPlatformCatalog on Repo {
 
   /// Every gateway including the ones being set up, which the read
   /// policy withholds from a tenant.
-  Future<List<Map<String, dynamic>>> platformPaymentGateways() async =>
-      Repo.rows(await callRpc('platform_payment_gateways'));
+  Future<List<Map<String, dynamic>>> paymentGateways() async =>
+      Repo.rows(await client.rpc('platform_payment_gateways'));
 
   Future<void> savePaymentGateway(
     String code, {
@@ -61,7 +80,7 @@ extension RepoPlatformCatalog on Repo {
     String? instructions,
     bool? isActive,
     int? sortOrder,
-  }) => callRpc(
+  }) => client.rpc(
     'platform_save_payment_gateway',
     params: {
       'p_code': code,
@@ -90,7 +109,7 @@ extension RepoPlatformCatalog on Repo {
     return value is Map && value['mode'] == 'by_module';
   }
 
-  Future<void> setNavGrouping(bool grouped) => callRpc(
+  Future<void> setNavGrouping(bool grouped) => client.rpc(
     'platform_update_setting',
     params: {
       'p_key': 'nav_grouping',
@@ -99,15 +118,19 @@ extension RepoPlatformCatalog on Repo {
   );
 }
 
+/// The catalogue, bound to the session rather than to a company.
+final platformCatalogProvider = Provider<PlatformCatalog>(
+  (ref) => PlatformCatalog(ref.watch(supabaseProvider)),
+);
+
 final platformModulesAdminProvider =
     FutureProvider<List<Map<String, dynamic>>>(
-  (ref) async => await ref.watch(repoProvider)?.platformModules() ?? const [],
+  (ref) => ref.watch(platformCatalogProvider).modules(),
 );
 
 final platformGatewaysAdminProvider =
     FutureProvider<List<Map<String, dynamic>>>(
-  (ref) async =>
-      await ref.watch(repoProvider)?.platformPaymentGateways() ?? const [],
+  (ref) => ref.watch(platformCatalogProvider).paymentGateways(),
 );
 
 /// True when the side menu should be gathered under module headings.
@@ -115,7 +138,7 @@ final platformGatewaysAdminProvider =
 /// Watched by the shell as well as by the console, so switching it in
 /// one place changes the other without a reload.
 final navGroupingProvider = FutureProvider<bool>(
-  (ref) async => await ref.watch(repoProvider)?.navGrouping() ?? false,
+  (ref) => ref.watch(platformCatalogProvider).navGrouping(),
 );
 
 /// What each module is called and what heading it sits under, by code.
@@ -123,20 +146,20 @@ final navGroupingProvider = FutureProvider<bool>(
 /// The shell needs this to group the menu, and it comes from the
 /// database rather than from the destination list so that renaming a
 /// module in the console renames it in every company's menu.
-final moduleLabelsProvider = FutureProvider<Map<String, ({String name, String group})>>(
-  (ref) async {
-    final rows = Repo.rows(
-      await ref.watch(supabaseProvider)
-          .from('platform_modules')
-          .select('code, name, nav_group')
-          .order('sort_order'),
-    );
-    return {
-      for (final r in rows)
-        '${r['code']}': (
-          name: '${r['name']}',
-          group: '${r['nav_group'] ?? r['name']}',
-        ),
-    };
-  },
-);
+final moduleLabelsProvider =
+    FutureProvider<Map<String, ({String name, String group})>>((ref) async {
+  final rows = Repo.rows(
+    await ref
+        .watch(supabaseProvider)
+        .from('platform_modules')
+        .select('code, name, nav_group')
+        .order('sort_order'),
+  );
+  return {
+    for (final r in rows)
+      '${r['code']}': (
+        name: '${r['name']}',
+        group: '${r['nav_group'] ?? r['name']}',
+      ),
+  };
+});

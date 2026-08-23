@@ -2,11 +2,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
-// `RepoLanding` is an extension, and a Dart extension is only in scope
-// where its declaring library is imported.
 import '../../data/landing_repository.dart';
 
 /// The corporate landing page, edited rather than deployed.
@@ -136,7 +133,7 @@ class _PageFormState extends ConsumerState<_PageForm> {
     final ok = await runWithFeedback(
       context,
       successMessage: 'Landing page saved',
-      action: () => ref.read(repoProvider)!.saveLandingPage(patch),
+      action: () => ref.read(landingAdminProvider).saveLandingPage(patch),
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -158,7 +155,7 @@ class _PageFormState extends ConsumerState<_PageForm> {
       successMessage: 'Logo uploaded',
       action: () async {
         url = await ref
-            .read(repoProvider)!
+            .read(landingAdminProvider)
             .uploadLandingLogo(
               file.bytes!,
               field,
@@ -440,7 +437,7 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
     final ok = await runWithFeedback(
       context,
       successMessage: 'Saved',
-      action: () => ref.read(repoProvider)!.saveLandingSection(
+      action: () => ref.read(landingAdminProvider).saveLandingSection(
         id: widget.existing?['id'] as String?,
         title: _title.text.trim(),
         body: _body.text.trim(),
@@ -460,7 +457,7 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
       context,
       successMessage: 'Removed',
       action: () => ref
-          .read(repoProvider)!
+          .read(landingAdminProvider)
           .deleteLandingSection(widget.existing!['id'] as String),
     );
     if (!mounted) return;
@@ -678,7 +675,7 @@ class _AppLinkDialogState extends ConsumerState<_AppLinkDialog> {
     final ok = await runWithFeedback(
       context,
       successMessage: 'Saved',
-      action: () => ref.read(repoProvider)!.saveLandingAppLink(
+      action: () => ref.read(landingAdminProvider).saveLandingAppLink(
         storeCode: _code.text.trim(),
         label: _label.text.trim(),
         url: url,
@@ -697,7 +694,7 @@ class _AppLinkDialogState extends ConsumerState<_AppLinkDialog> {
       context,
       successMessage: 'Removed',
       action: () => ref
-          .read(repoProvider)!
+          .read(landingAdminProvider)
           .deleteLandingAppLink('${widget.existing!['store_code']}'),
     );
     if (!mounted) return;

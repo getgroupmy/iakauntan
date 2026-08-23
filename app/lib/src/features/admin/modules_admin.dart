@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
-import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/platform_catalog_repository.dart';
@@ -110,7 +109,7 @@ class _NavGroupingCard extends ConsumerWidget {
           final ok = await runWithFeedback(
             context,
             successMessage: v ? 'Menu grouped by module' : 'Menu shows one list',
-            action: () => ref.read(repoProvider)!.setNavGrouping(v),
+            action: () => ref.read(platformCatalogProvider).setNavGrouping(v),
           );
           if (ok) ref.invalidate(navGroupingProvider);
         },
@@ -183,7 +182,7 @@ class _ModuleDialogState extends ConsumerState<_ModuleDialog> {
     final ok = await runWithFeedback(
       context,
       successMessage: 'Module saved',
-      action: () => ref.read(repoProvider)!.savePlatformModule(
+      action: () => ref.read(platformCatalogProvider).saveModule(
         code,
         name: _changed(_name, 'name'),
         description: _changed(_description, 'description'),

@@ -12,7 +12,21 @@ import 'repository.dart';
 /// unpublished. The console reads the tables, because editing a draft is
 /// the whole point of it — that is why the select policies admit
 /// `authenticated` while the write path is platform-admin RPCs.
-extension RepoLanding on Repo {
+///
+/// Takes a client rather than a [Repo], because none of this belongs to
+/// an organization: there is one landing page for the whole platform and
+/// every RPC below takes no org argument. Hung off `Repo` it read as an
+/// empty page for anybody whose organization had not resolved yet — and
+/// a platform administrator with no company of their own never resolves
+/// one at all.
+class LandingAdmin {
+  const LandingAdmin(this.client);
+
+  final SupabaseClient client;
+
+  Future<dynamic> _rpc(String fn, {Map<String, dynamic>? params}) =>
+      client.rpc(fn, params: params);
+
   /// The single page row, or null before anybody has written one.
   Future<Map<String, dynamic>?> landingPage() async {
     final rows = Repo.rows(await client.from('landing_page').select());
@@ -41,7 +55,7 @@ extension RepoLanding on Repo {
   /// reason it takes a patch rather than a row: correcting the tagline
   /// must not blank the address somebody else set five minutes ago.
   Future<void> saveLandingPage(Map<String, dynamic> patch) =>
-      callRpc('platform_save_landing_page', params: {'p_patch': patch});
+      _rpc('platform_save_landing_page', params: {'p_patch': patch});
 
   Future<String> saveLandingSection({
     String? id,
@@ -51,7 +65,7 @@ extension RepoLanding on Repo {
     int? sortOrder,
     bool? isActive,
   }) async {
-    final out = await callRpc(
+    final out = await _rpc(
       'platform_save_landing_section',
       params: {
         if (id != null) 'p_id': id,
@@ -66,7 +80,7 @@ extension RepoLanding on Repo {
   }
 
   Future<void> deleteLandingSection(String id) =>
-      callRpc('platform_delete_landing_section', params: {'p_id': id});
+      _rpc('platform_delete_landing_section', params: {'p_id': id});
 
   Future<void> saveLandingAppLink({
     required String storeCode,
@@ -75,7 +89,7 @@ extension RepoLanding on Repo {
     String? badgeUrl,
     int? sortOrder,
     bool? isActive,
-  }) => callRpc(
+  }) => _rpc(
     'platform_save_landing_app_link',
     params: {
       'p_store_code': storeCode,
@@ -87,7 +101,7 @@ extension RepoLanding on Repo {
     },
   );
 
-  Future<void> deleteLandingAppLink(String storeCode) => callRpc(
+  Future<void> deleteLandingAppLink(String storeCode) => _rpc(
     'platform_delete_landing_app_link',
     params: {'p_store_code': storeCode},
   );
@@ -127,17 +141,22 @@ extension RepoLanding on Repo {
   }
 }
 
+/// The console's view of the landing page, bound to the session.
+final landingAdminProvider = Provider<LandingAdmin>(
+  (ref) => LandingAdmin(ref.watch(supabaseProvider)),
+);
+
 /// The page row as the console sees it, draft and all.
 final landingPageAdminProvider = FutureProvider<Map<String, dynamic>?>(
-  (ref) async => await ref.watch(repoProvider)?.landingPage(),
+  (ref) => ref.watch(landingAdminProvider).landingPage(),
 );
 
 final landingSectionsAdminProvider =
     FutureProvider<List<Map<String, dynamic>>>(
-  (ref) async => await ref.watch(repoProvider)?.landingSections() ?? const [],
+  (ref) => ref.watch(landingAdminProvider).landingSections(),
 );
 
 final landingAppLinksAdminProvider =
     FutureProvider<List<Map<String, dynamic>>>(
-  (ref) async => await ref.watch(repoProvider)?.landingAppLinks() ?? const [],
+  (ref) => ref.watch(landingAdminProvider).landingAppLinks(),
 );
