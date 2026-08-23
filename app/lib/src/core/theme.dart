@@ -121,19 +121,41 @@ extension AppColorsX on BuildContext {
 class AppTheme {
   const AppTheme._();
 
+  /// The colour the product is drawn in when nobody has chosen one.
+  ///
+  /// A platform operator can override it from the console — 0292 stores
+  /// the choice — and this stays the fallback, which is what every
+  /// screen uses before the choice has been fetched and if it never
+  /// arrives.
   static const seed = Color(0xFF0B7A6B);
+
+  /// Turn `#RRGGBB` into a colour, or null if it is not one.
+  ///
+  /// Null rather than a throw or a default: the caller decides what to
+  /// do without a colour, and a malformed one must not take down the
+  /// theme and with it every screen.
+  static Color? parseHex(String? hex) {
+    if (hex == null) return null;
+    final t = hex.trim();
+    if (t.length != 7 || !t.startsWith('#')) return null;
+    final v = int.tryParse(t.substring(1), radix: 16);
+    if (v == null) return null;
+    return Color(0xFF000000 | v);
+  }
 
   /// Bundled, not fetched. A web build that reached for Google Fonts at
   /// runtime drew its whole layout with no glyphs at all whenever that
   /// request was blocked.
   static const fontFamily = 'Plus Jakarta Sans';
 
-  static ThemeData light() => _build(Brightness.light);
-  static ThemeData dark() => _build(Brightness.dark);
+  static ThemeData light({Color? seedColor}) =>
+      _build(Brightness.light, seedColor);
+  static ThemeData dark({Color? seedColor}) =>
+      _build(Brightness.dark, seedColor);
 
-  static ThemeData _build(Brightness brightness) {
+  static ThemeData _build(Brightness brightness, [Color? seedColor]) {
     final scheme = ColorScheme.fromSeed(
-      seedColor: seed,
+      seedColor: seedColor ?? seed,
       brightness: brightness,
     );
     final isDark = brightness == Brightness.dark;

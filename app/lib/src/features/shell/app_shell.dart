@@ -5,12 +5,65 @@ import 'package:go_router/go_router.dart';
 import '../../core/format.dart';
 import '../../core/live_updates.dart';
 import '../../core/providers.dart';
+import '../../data/platform_catalog_repository.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../chat/call_incoming.dart';
 import '../chat/chat_live.dart';
 
 /// Navigation destination shared by the rail (wide) and bottom bar (narrow).
+/// One heading and the destinations beneath it.
+///
+/// A null heading is the ungrouped case: one flat list, which is what
+/// the menu did before 0293 and what it still does when a platform has
+/// not asked for grouping.
+typedef MenuSection<T> = ({String? heading, List<T> items});
+
+/// Gather menu entries under the headings their modules sit in.
+///
+/// Generic rather than typed to the destination, so the arrangement can
+/// be asserted without a widget — this decides what fifteen modules'
+/// worth of doors look like to somebody trying to find one, and
+/// getting it wrong is a menu nobody can read.
+///
+/// The order of the headings follows the order the entries arrive in,
+/// so the destination list stays the thing that decides what comes
+/// first. Entries belonging to no module — the workspace ones, Settings
+/// and Team and Import — gather at the end under no heading, because
+/// they are not part of any module and inventing a heading for them
+/// would be inventing a module.
+List<MenuSection<T>> groupByModule<T>(
+  List<T> items,
+  String? Function(T) moduleOf,
+  Map<String, String> groupNames,
+  bool grouped,
+) {
+  if (!grouped) return [(heading: null, items: items)];
+
+  final order = <String>[];
+  final byHeading = <String, List<T>>{};
+  final loose = <T>[];
+
+  for (final item in items) {
+    final code = moduleOf(item);
+    if (code == null) {
+      loose.add(item);
+      continue;
+    }
+    final heading = groupNames[code] ?? code;
+    if (!byHeading.containsKey(heading)) {
+      byHeading[heading] = <T>[];
+      order.add(heading);
+    }
+    byHeading[heading]!.add(item);
+  }
+
+  return [
+    for (final heading in order) (heading: heading, items: byHeading[heading]!),
+    if (loose.isNotEmpty) (heading: null, items: loose),
+  ];
+}
+
 class _Dest {
   const _Dest(
     this.label,
@@ -842,7 +895,15 @@ class AppShell extends ConsumerWidget {
           if (i < primary.length) {
             context.go(primary[i].path);
           } else {
-            _showMoreSheet(context, dests);
+            _showMoreSheet(
+              context,
+              dests,
+              groupNames: ref.read(moduleLabelsProvider).valueOrNull?.map(
+                    (code, m) => MapEntry(code, m.group),
+                  ) ??
+                  const {},
+              grouped: ref.read(navGroupingProvider).valueOrNull ?? false,
+            );
           }
         },
         destinations: [
@@ -869,7 +930,13 @@ class AppShell extends ConsumerWidget {
   /// that used to be here overflowed by about four hundred pixels and
   /// simply clipped — no scrollbar, no bounce, nothing to suggest the
   /// list continued. Sign out was the entry off the bottom.
-  void _showMoreSheet(BuildContext context, List<_Dest> dests) {
+  void _showMoreSheet(
+    BuildContext context,
+    List<_Dest> dests, {
+    required Map<String, String> groupNames,
+    required bool grouped,
+  }) {
+    final rest = dests.where((d) => !d.primary).toList();
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -886,15 +953,35 @@ class AppShell extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              for (final d in dests.where((d) => !d.primary))
-                ListTile(
-                  leading: Icon(d.icon),
-                  title: Text(d.label),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    context.go(d.path);
-                  },
-                ),
+              for (final entry in groupByModule<_Dest>(
+                rest,
+                (d) => d.module,
+                groupNames,
+                grouped,
+              )) ...[
+                if (entry.heading != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: Text(
+                      entry.heading!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
+                        color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                for (final d in entry.items)
+                  ListTile(
+                    leading: Icon(d.icon),
+                    title: Text(d.label),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      context.go(d.path);
+                    },
+                  ),
+              ],
               const Divider(),
               Consumer(
                 builder: (context, ref, _) => ListTile(

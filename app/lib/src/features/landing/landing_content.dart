@@ -26,6 +26,8 @@ class LandingContent {
     this.logoDarkUrl,
     this.wordmark = 'iAkauntan',
     this.tagline,
+    this.brandColour,
+    this.brandColourDark,
     this.heroHeadline =
         'Accounting, CRM, payroll and e-Invoice for Malaysian business',
     this.heroSubhead,
@@ -48,6 +50,8 @@ class LandingContent {
   final String? logoDarkUrl;
   final String wordmark;
   final String? tagline;
+  final String? brandColour;
+  final String? brandColourDark;
   final String heroHeadline;
   final String? heroSubhead;
   final String signInLabel;
@@ -129,6 +133,8 @@ LandingContent parseLandingContent(Object? raw) {
     logoDarkUrl: str('logo_dark_url'),
     wordmark: str('wordmark') ?? 'iAkauntan',
     tagline: str('tagline'),
+    brandColour: str('brand_colour'),
+    brandColourDark: str('brand_colour_dark'),
     heroHeadline: str('hero_headline') ??
         'Accounting, CRM, payroll and e-Invoice for Malaysian business',
     heroSubhead: str('hero_subhead'),

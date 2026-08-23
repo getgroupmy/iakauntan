@@ -65,6 +65,8 @@ class _PageFormState extends ConsumerState<_PageForm> {
   static const _fields = <String, String>{
     'wordmark': 'Wordmark',
     'tagline': 'Tagline',
+    'brand_colour': 'Brand colour (#RRGGBB)',
+    'brand_colour_dark': 'Brand colour on a dark background (#RRGGBB)',
     'hero_headline': 'Headline',
     'hero_subhead': 'Sub-heading',
     'sign_in_label': 'Sign-in button',
