@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787463837.5814242,
-    "ast_hash": "791dcd4bf454f2d8b6889f8f0d05b656",
+    "mtime": 1787464414.9866688,
+    "ast_hash": "86888208e9fd85fdd512ad2ec5adf614",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -4357,6 +4357,16 @@
   "supabase/tests/months_between.sql": {
     "mtime": 1787463786.9213672,
     "ast_hash": "6ec5820ea262065588307f140f179f3a",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0289_the_secretary_is_not_a_secret.sql": {
+    "mtime": 1787464188.8574164,
+    "ast_hash": "c195da511583252aff0bf3ef7f24da47",
+    "semantic_hash": ""
+  },
+  "supabase/tests/audit_redaction.sql": {
+    "mtime": 1787464399.511691,
+    "ast_hash": "a32d52394bd1bfafd6152a82bdacb0c6",
     "semantic_hash": ""
   }
 }

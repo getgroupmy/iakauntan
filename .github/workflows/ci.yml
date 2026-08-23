@@ -124,6 +124,7 @@ jobs:
                    supabase/tests/pos_kiosk.sql \
                    supabase/tests/module_surface.sql \
                    supabase/tests/security_audit.sql \
+                   supabase/tests/audit_redaction.sql \
                    supabase/tests/ledger_append_only.sql \
                    supabase/tests/demo_teardown.sql \
                    supabase/tests/demo_rebuild.sql \
