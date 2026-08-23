@@ -5,6 +5,28 @@ import '../../core/providers.dart';
 /// One block of copy on the landing page.
 typedef LandingSection = ({String? icon, String title, String? body});
 
+/// One thing a company can hold, and what it costs a month.
+typedef LandingModule = ({
+  String code,
+  String name,
+  String? description,
+  double monthlyPrice,
+  bool isCore,
+});
+
+/// What a chosen set of modules comes to a month.
+///
+/// Core modules are counted whether they were ticked or not — they are
+/// what keeping books is, not an add-on — and everything else only when
+/// it was. Pure, and exported, so the figure on the front page and the
+/// test agree; a quote a visitor works out for themselves and an invoice
+/// a month later must not disagree, and this is the half of that which
+/// runs in a browser.
+double monthlyTotal(List<LandingModule> modules, Set<String> chosen) =>
+    modules
+        .where((m) => m.isCore || chosen.contains(m.code))
+        .fold<double>(0, (sum, m) => sum + m.monthlyPrice);
+
 /// One shop the app can be downloaded from.
 typedef LandingAppLink = ({
   String storeCode,
@@ -41,8 +63,12 @@ class LandingContent {
     this.supportPhone,
     this.privacyUrl,
     this.termsUrl,
+    this.showPricing = false,
+    this.pricingHeading,
+    this.pricingNote,
     this.sections = const [],
     this.appLinks = const [],
+    this.modules = const [],
   });
 
   final bool published;
@@ -64,8 +90,12 @@ class LandingContent {
   final String? supportPhone;
   final String? privacyUrl;
   final String? termsUrl;
+  final bool showPricing;
+  final String? pricingHeading;
+  final String? pricingNote;
   final List<LandingSection> sections;
   final List<LandingAppLink> appLinks;
+  final List<LandingModule> modules;
 
   /// The page nobody has written yet.
   ///
@@ -127,6 +157,28 @@ LandingContent parseLandingContent(Object? raw) {
     ));
   }
 
+  final modules = <LandingModule>[];
+  for (final e in (raw['modules'] as List? ?? const [])) {
+    if (e is! Map) continue;
+    final code = e['code'];
+    final name = e['name'];
+    if (code is! String || name is! String) continue;
+    modules.add((
+      code: code,
+      name: name,
+      description:
+          e['description'] is String ? (e['description'] as String) : null,
+      // The price arrives as a JSON number or a string depending on the
+      // driver; either way an unparseable one is nothing rather than a
+      // crash, because a landing page that throws is a landing page
+      // nobody can sign in from.
+      monthlyPrice: e['monthly_price'] is num
+          ? (e['monthly_price'] as num).toDouble()
+          : double.tryParse('${e['monthly_price']}') ?? 0,
+      isCore: e['is_core'] == true,
+    ));
+  }
+
   return LandingContent(
     published: true,
     logoUrl: str('logo_url'),
@@ -150,8 +202,12 @@ LandingContent parseLandingContent(Object? raw) {
     supportPhone: str('support_phone'),
     privacyUrl: str('privacy_url'),
     termsUrl: str('terms_url'),
+    showPricing: page['show_pricing'] == true,
+    pricingHeading: str('pricing_heading'),
+    pricingNote: str('pricing_note'),
     sections: sections,
     appLinks: links,
+    modules: modules,
   );
 }
 

@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/safe_link.dart';
 import 'landing_content.dart';
+import 'landing_motion.dart';
+import 'landing_pricing.dart';
 
 /// The corporate landing page.
 ///
@@ -37,14 +39,24 @@ class LandingScreen extends ConsumerWidget {
                   children: [
                     _Masthead(content: content),
                     const SizedBox(height: 48),
-                    _Hero(content: content),
+                    RevealOnScroll(child: _Hero(content: content)),
                     if (content.sections.isNotEmpty) ...[
                       const SizedBox(height: 56),
                       _Sections(sections: content.sections),
                     ],
+                    if (content.showPricing &&
+                        content.modules.isNotEmpty) ...[
+                      const SizedBox(height: 64),
+                      RevealOnScroll(
+                        delay: const Duration(milliseconds: 60),
+                        child: LandingPricing(content: content),
+                      ),
+                    ],
                     if (content.appLinks.isNotEmpty) ...[
                       const SizedBox(height: 56),
-                      _AppLinks(links: content.appLinks),
+                      RevealOnScroll(
+                        child: _AppLinks(links: content.appLinks),
+                      ),
                     ],
                     const SizedBox(height: 56),
                     _Footer(content: content),
@@ -247,30 +259,69 @@ class _Sections extends StatelessWidget {
             for (final s in sections)
               SizedBox(
                 width: width,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(landingIcon(s.icon), color: scheme.primary, size: 26),
-                    const SizedBox(height: 12),
-                    Text(
-                      s.title,
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (s.body != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        s.body!,
-                        style: TextStyle(
-                          fontSize: 14,
-                          height: 1.5,
-                          color: scheme.onSurfaceVariant,
+                child: RevealOnScroll(
+                  // Staggered by position so a row arrives as a row.
+                  // Capped, or the last card on a long page waits a
+                  // second and a half to say anything.
+                  delay: Duration(
+                    milliseconds: 60 * (sections.indexOf(s) % 6),
+                  ),
+                  child: HoverLift(
+                    builder: (context, hovered) => AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: hovered
+                            ? scheme.surfaceContainerLowest
+                            : Colors.transparent,
+                        border: Border.all(
+                          color: hovered
+                              ? scheme.outlineVariant
+                              : Colors.transparent,
                         ),
                       ),
-                    ],
-                  ],
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 160),
+                            padding: const EdgeInsets.all(9),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              color: scheme.primary.withValues(
+                                alpha: hovered ? 0.16 : 0.09,
+                              ),
+                            ),
+                            child: Icon(
+                              landingIcon(s.icon),
+                              color: scheme.primary,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            s.title,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          if (s.body != null) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              s.body!,
+                              style: TextStyle(
+                                fontSize: 14,
+                                height: 1.5,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -334,10 +385,20 @@ class _AppLinks extends StatelessWidget {
           runSpacing: 12,
           children: [
             for (final l in links)
-              OutlinedButton.icon(
-                onPressed: () => launchExternal(l.url),
-                icon: Icon(storeIcon(l.storeCode)),
-                label: Text(l.label),
+              // The lift only; the button keeps the tap. Two things
+              // listening for the same tap is how a store link opens
+              // twice on the day somebody changes one of them.
+              HoverLift(
+                builder: (context, hovered) => OutlinedButton.icon(
+                  onPressed: () => launchExternal(l.url),
+                  icon: Icon(storeIcon(l.storeCode)),
+                  label: Text(l.label),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                      color: hovered ? scheme.primary : scheme.outlineVariant,
+                    ),
+                  ),
+                ),
               ),
           ],
         ),

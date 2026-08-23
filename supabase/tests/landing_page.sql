@@ -385,4 +385,150 @@ begin
     (select count(*) from public.landing_page), 1);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The price list, and the switch that keeps it off the front page
+--
+-- 0294 lets the landing page carry the catalogue so a visitor can tick
+-- what they need and watch the monthly figure add up. Two things have
+-- to hold, and neither is obvious from reading the function:
+--
+--   * publishing a rate card is a commercial decision. A platform that
+--     sells by conversation would find its whole price list on its front
+--     page the day this deployed, so `show_pricing` is off until
+--     somebody turns it on, and off means an empty list rather than a
+--     hidden section.
+--   * the figures are list prices and nothing else. `org_modules` says
+--     what a named company holds and what it was charged; none of that
+--     is a stranger's business, and the way to be sure is to assert the
+--     keys rather than to read the function and be satisfied.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_out jsonb; v_role text; v_entry jsonb;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+
+  perform public.platform_save_landing_page(jsonb_build_object(
+    'wordmark', 'iAkauntan', 'is_published', true));
+
+  -- Published, and the price list still not published.
+  perform pg_temp.sign_out();
+  begin
+    set local role anon;
+    v_out := public.landing_page();
+  end;
+  reset role;
+  perform pg_temp.check_true('a published page is a published page',
+    v_out -> 'page' <> 'null'::jsonb);
+  perform pg_temp.check_eq('and it carries no prices until somebody says so',
+    jsonb_array_length(v_out -> 'modules'), 0);
+
+  -- Turn it on.
+  perform pg_temp.sign_in_as(v_admin);
+  perform public.platform_save_landing_page(jsonb_build_object(
+    'show_pricing', true,
+    'pricing_heading', 'Bayar untuk apa yang anda guna',
+    'pricing_note', 'Harga sebulan, tidak termasuk SST.'));
+
+  perform pg_temp.sign_out();
+  begin
+    set local role anon;
+    v_role := current_user;
+    v_out := public.landing_page();
+  end;
+  reset role;
+
+  perform pg_temp.check_true('the price list was read as an anonymous visitor',
+    v_role = 'anon');
+  perform pg_temp.check_eq('the heading somebody wrote reaches them',
+    v_out -> 'page' ->> 'pricing_heading', 'Bayar untuk apa yang anda guna');
+  perform pg_temp.check_eq('and the small print under it',
+    v_out -> 'page' ->> 'pricing_note', 'Harga sebulan, tidak termasuk SST.');
+  perform pg_temp.check_eq('the catalogue is the one in platform_modules',
+    jsonb_array_length(v_out -> 'modules'),
+    (select count(*) from public.platform_modules where is_active));
+  perform pg_temp.check_true('and there is something in it',
+    jsonb_array_length(v_out -> 'modules') > 0);
+
+  -- Core first, because those are what keeping books is rather than an
+  -- add-on, and the picker counts them whether they were ticked or not.
+  perform pg_temp.check_true('what the price includes comes first',
+    (v_out -> 'modules' -> 0 ->> 'is_core')::boolean);
+
+  -- The list price, not what anybody negotiated.
+  select e into v_entry from jsonb_array_elements(v_out -> 'modules') e
+   where e ->> 'code' = 'einvoice';
+  perform pg_temp.check_eq('a module carries the price the billing reads',
+    (v_entry ->> 'monthly_price')::numeric,
+    (select monthly_price from public.platform_modules where code = 'einvoice'));
+
+  -- Five keys, and the list of them is the assertion. Adding a sixth
+  -- has to be a deliberate act, the same way adding a name to the anon
+  -- allowlist is: `org_modules` knows which company holds what and what
+  -- it actually paid, and none of that belongs on a front page.
+  perform pg_temp.check_eq('and nothing else about it',
+    (select string_agg(k, ',' order by k)
+       from jsonb_object_keys(v_out -> 'modules' -> 0) k),
+    'code,description,is_core,monthly_price,name');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Two switches, and the page one governs both
+--
+-- `show_pricing` is not a way to publish a price list on an unpublished
+-- page. A platform administrator drafting a rate card before launch
+-- would otherwise have the rates readable by anybody who called the
+-- function, while the page they belong to was still nobody's business.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_out jsonb; v_priced integer;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+
+  perform public.platform_save_landing_page(jsonb_build_object(
+    'wordmark', 'iAkauntan', 'show_pricing', true, 'is_published', false));
+
+  perform pg_temp.sign_out();
+  begin
+    set local role anon;
+    v_out := public.landing_page();
+  end;
+  reset role;
+  perform pg_temp.check_true('the page is withheld',
+    v_out -> 'page' = 'null'::jsonb);
+  perform pg_temp.check_eq('and the rates drafted for it with it',
+    jsonb_array_length(v_out -> 'modules'), 0);
+
+  -- A module switched off is off. The console keeps retired modules in
+  -- the table so the companies still holding one keep working; the
+  -- front page must not go on offering it.
+  perform pg_temp.sign_in_as(v_admin);
+  perform public.platform_save_landing_page(jsonb_build_object('is_published', true));
+  perform public.platform_save_module('einvoice', p_is_active => false);
+
+  perform pg_temp.sign_out();
+  begin
+    set local role anon;
+    v_out := public.landing_page();
+  end;
+  reset role;
+  select count(*) into v_priced from jsonb_array_elements(v_out -> 'modules') e
+   where e ->> 'code' = 'einvoice';
+  perform pg_temp.check_eq('a retired module is not sold on the front page',
+    v_priced, 0);
+
+  perform pg_temp.sign_in_as(v_admin);
+  perform public.platform_save_module('einvoice', p_is_active => true);
+end $$;
+
+
 rollback;

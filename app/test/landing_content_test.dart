@@ -143,4 +143,133 @@ void main() {
       expect(c.appLinks.single.label, 'appgallery');
     });
   });
+
+  group('the price list', () {
+    LandingContent priced(List<Object?> modules) => parseLandingContent({
+          'page': {'wordmark': 'x', 'show_pricing': true},
+          'modules': modules,
+        });
+
+    test('what the page says about showing it', () {
+      // Off unless the database said on. A parser that defaulted this to
+      // true would publish a rate card the platform never agreed to.
+      expect(parseLandingContent({'page': {'wordmark': 'x'}}).showPricing,
+          isFalse);
+      expect(priced(const []).showPricing, isTrue);
+    });
+
+    test('a module carries its price and whether it is included', () {
+      final c = priced([
+        {
+          'code': 'accounting',
+          'name': 'General Ledger',
+          'description': 'Double-entry books',
+          'monthly_price': 0,
+          'is_core': true,
+        },
+        {
+          'code': 'einvoice',
+          'name': 'LHDN e-Invoice',
+          'monthly_price': 49,
+          'is_core': false,
+        },
+      ]);
+      expect(c.modules.map((m) => m.code), ['accounting', 'einvoice']);
+      expect(c.modules.first.isCore, isTrue);
+      expect(c.modules.last.monthlyPrice, 49);
+      expect(c.modules.last.description, isNull);
+    });
+
+    test('a price that arrived as a string is still a price', () {
+      // numeric(18,2) comes back as a JSON string through some drivers
+      // and as a number through others. Both are the same 49 ringgit.
+      expect(
+        priced([
+          {'code': 'einvoice', 'name': 'e-Invoice', 'monthly_price': '49.00'},
+        ]).modules.single.monthlyPrice,
+        49,
+      );
+    });
+
+    test('an unparseable price is nothing rather than a crash', () {
+      final c = priced([
+        {'code': 'einvoice', 'name': 'e-Invoice', 'monthly_price': 'RM49'},
+        {'code': 'payroll', 'name': 'Payroll'},
+      ]);
+      expect(c.modules.map((m) => m.monthlyPrice), [0, 0]);
+    });
+
+    test('an entry with no code or no name is dropped', () {
+      final c = priced([
+        {'name': 'Nameless code'},
+        {'code': 'x'},
+        'not a map',
+        {'code': 'payroll', 'name': 'Payroll', 'monthly_price': 39},
+      ]);
+      expect(c.modules.map((m) => m.code), ['payroll']);
+    });
+  });
+
+  group('what a visitor is quoted', () {
+    const LandingModule core = (
+      code: 'accounting',
+      name: 'General Ledger',
+      description: null,
+      monthlyPrice: 0.0,
+      isCore: true,
+    );
+    const LandingModule paidCore = (
+      code: 'sales',
+      name: 'Sales & Invoicing',
+      description: null,
+      monthlyPrice: 79.0,
+      isCore: true,
+    );
+    const LandingModule einvoice = (
+      code: 'einvoice',
+      name: 'LHDN e-Invoice',
+      description: null,
+      monthlyPrice: 49.0,
+      isCore: false,
+    );
+    const LandingModule payroll = (
+      code: 'payroll',
+      name: 'Payroll',
+      description: null,
+      monthlyPrice: 39.0,
+      isCore: false,
+    );
+    const all = <LandingModule>[core, paidCore, einvoice, payroll];
+
+    test('nothing ticked still costs what the core costs', () {
+      // The figure a visitor sees before touching anything is not zero,
+      // because the core is not an add-on. Quoting zero and invoicing 79
+      // a month later is the disagreement this function exists to stop.
+      expect(monthlyTotal(all, const {}), 79);
+    });
+
+    test('ticking an add-on adds it', () {
+      expect(monthlyTotal(all, const {'einvoice'}), 128);
+      expect(monthlyTotal(all, const {'einvoice', 'payroll'}), 167);
+    });
+
+    test('a core module is counted whether it was ticked or not', () {
+      // Untickable on the screen, so the two have to agree; if a core
+      // module could be dropped from the sum by not appearing in the
+      // set, a stale set would quote a price nobody sells.
+      expect(monthlyTotal(all, const {'sales'}),
+          monthlyTotal(all, const {}));
+    });
+
+    test('a code nobody offers is not charged for', () {
+      // The set outlives the catalogue: somebody ticks a module, an
+      // administrator retires it, and the page reloads. The quote has to
+      // fall back to what is still on sale rather than keep charging.
+      expect(monthlyTotal(all, const {'einvoice', 'telepathy'}), 128);
+    });
+
+    test('an empty catalogue quotes nothing', () {
+      expect(monthlyTotal(const [], const {'einvoice'}), 0);
+    });
+  });
 }

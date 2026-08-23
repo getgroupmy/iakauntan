@@ -69,6 +69,8 @@ class _PageFormState extends ConsumerState<_PageForm> {
     'brand_colour_dark': 'Brand colour on a dark background (#RRGGBB)',
     'hero_headline': 'Headline',
     'hero_subhead': 'Sub-heading',
+    'pricing_heading': 'Pricing heading',
+    'pricing_note': 'Pricing note',
     'sign_in_label': 'Sign-in button',
     'register_label': 'Register button',
     'logo_url': 'Logo URL',
@@ -90,6 +92,7 @@ class _PageFormState extends ConsumerState<_PageForm> {
   };
   late bool _published = widget.existing?['is_published'] == true;
   late bool _register = widget.existing?['register_enabled'] != false;
+  late bool _pricing = widget.existing?['show_pricing'] == true;
   bool _busy = false;
 
   @override
@@ -114,6 +117,9 @@ class _PageFormState extends ConsumerState<_PageForm> {
     }
     if (_register != (widget.existing?['register_enabled'] != false)) {
       patch['register_enabled'] = _register;
+    }
+    if (_pricing != (widget.existing?['show_pricing'] == true)) {
+      patch['show_pricing'] = _pricing;
     }
     return patch;
   }
@@ -218,6 +224,17 @@ class _PageFormState extends ConsumerState<_PageForm> {
               subtitle: const Text(
                 'Off, and a visitor sees the copy the product was built '
                 'with rather than a half-written page.',
+              ),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _pricing,
+              onChanged: _busy ? null : (v) => setState(() => _pricing = v),
+              title: const Text('Publish the price list'),
+              subtitle: const Text(
+                'On, the landing page shows every module and lets a visitor '
+                'tick what they need and see the month add up. Off, it says '
+                'nothing about price at all.',
               ),
             ),
             SwitchListTile(
