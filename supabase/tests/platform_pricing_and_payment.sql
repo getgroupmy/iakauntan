@@ -271,10 +271,18 @@ begin
   perform pg_temp.check_eq('a company is offered the live gateway', v_live, 1);
   perform pg_temp.check_eq('and is not shown one being set up', v_draft, 0);
 
-  -- And the console sees both, which is what the reader function is for.
+  -- And the console sees the whole table, which is what the reader
+  -- function is for. Counted against the table rather than against a
+  -- number, because 0295 seeds the catalogue and a literal here would
+  -- have to be edited every time a provider is added — which is how a
+  -- test ends up asserting the seed's length instead of the rule.
   perform pg_temp.sign_in_as(pg_temp.as_platform_admin());
-  perform pg_temp.check_eq('while the console sees both',
-    (select count(*) from public.platform_payment_gateways()), 2);
+  perform pg_temp.check_eq('while the console sees every gateway there is',
+    (select count(*) from public.platform_payment_gateways()),
+    (select count(*) from public.payment_gateways));
+  perform pg_temp.check_true('which is more than a company is shown',
+    (select count(*) from public.platform_payment_gateways())
+      > (select count(*) from public.payment_gateways where is_active));
 
   -- A company owner calling the console's reader gets nothing rather
   -- than everything: the guard is inside the function, not on the call.
@@ -339,5 +347,233 @@ begin
   perform pg_temp.check_true(
     'and only a platform administrator decides which', v_ok);
 end $$;
+
+-- =====================================================================
+-- The catalogue, and the difference between a listing and a connection
+--
+-- 0295 seeds forty-odd real payment providers. Two things have to hold
+-- about that, and the second is the one worth a test file:
+--
+--   * a seeded row is a listing. Nothing can be charged through it: no
+--     gateway is active, none names a secret, and the read policy shows
+--     a tenant only what is active. A migration that shipped forty live
+--     gateways would be a migration that offered every company a way to
+--     pay that nobody had configured.
+--   * this table is readable by every signed-in user on the platform,
+--     which is the reason `secret_ref` names an Edge Function secret
+--     rather than holding one. Widening a table like that is exactly
+--     when somebody pastes a key into the new column, so the assertion
+--     is over every text column at once rather than over the ones that
+--     existed when this was written.
+--
+-- Two notes for whoever mutates this next, so they do not conclude the
+-- assertions are dead when they are not:
+--
+--   * these blocks share one transaction with the ones above, which
+--     configure `billplz` and `stripe`. By the time the scan runs those
+--     two rows carry whatever the fixture put in them, so a mutant
+--     planted in one of them is overwritten before it is looked for.
+--     Plant it in a row nothing touches -- `chip` will do -- and it dies
+--     twice over, on the scan and on the seeded-rows claim.
+--   * removing `where g.is_active` from `payment_gateways_for` changes
+--     nothing, because the read policy already withholds an inactive
+--     gateway from `authenticated` and that is who calls it. Redundant,
+--     and kept: a reader whose own text says what it returns is worth
+--     more than one leaning entirely on a policy defined elsewhere.
+-- =====================================================================
+do $$
+declare
+  v_admin uuid := pg_temp.as_platform_admin();
+  v_all integer; v_live integer; v_named integer; v_suspect integer;
+begin
+  select count(*) into v_all from public.payment_gateways;
+  perform pg_temp.check_true('the catalogue was seeded', v_all >= 40);
+
+  -- "As the migration left it" rather than "right now": these blocks
+  -- share one transaction and the ones above switch gateways on. A row
+  -- that has never been through `platform_save_payment_gateway` has a
+  -- null `updated_by`, which is exactly the set this claim is about.
+  select count(*) into v_live from public.payment_gateways
+   where is_active and updated_by is null;
+  perform pg_temp.check_eq('and not one of them arrived switched on',
+    v_live, 0);
+
+  select count(*) into v_named from public.payment_gateways
+   where updated_by is null
+     and (secret_ref is not null or publishable_key is not null);
+  perform pg_temp.check_eq('nor does a seeded row claim to be configured',
+    v_named, 0);
+
+  -- Every text column of every row, against the shapes a real credential
+  -- takes. Written over information_schema rather than over a list of
+  -- column names so that the next column added to this table is covered
+  -- by it without anybody remembering to come back here.
+  select count(*) into v_suspect from (
+    select (jsonb_each_text(to_jsonb(g))).value as v
+      from public.payment_gateways g
+  ) t
+   where v ~ '^(sk|rk|pk)_(live|test)_'
+      or v ~ '^(rzp|xnd|whsec)_'
+      or v ~ '^[A-Za-z0-9+/]{40,}={0,2}$'
+      or v ~ '^[0-9a-f]{32,}$';
+  perform pg_temp.check_eq(
+    'and nothing anywhere in the table is shaped like a credential',
+    v_suspect, 0);
+
+  -- Documentation links only, and absolute. A relative one would be a
+  -- link into this application from a table describing somebody else's.
+  perform pg_temp.check_eq('every documentation link is an absolute https one',
+    (select count(*) from public.payment_gateways
+      where docs_url is not null and docs_url !~* '^https://'), 0);
+
+  -- Worth having at all: the region the product sells into is covered.
+  perform pg_temp.check_true(
+    'every country the product sells into has a gateway listed',
+    not exists (
+      select c from unnest(array['MY','SG','ID','TH','PH','VN']) c
+       where not exists (select 1 from public.payment_gateways g
+                          where c = any (g.countries))));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A shop in Ipoh is not offered a Vietnamese wallet
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.as_platform_admin();
+  v_member uuid; v_role text;
+  v_my integer; v_vn integer; v_any integer;
+begin
+  perform public.platform_save_payment_gateway('billplz', p_is_active => true);
+  perform public.platform_save_payment_gateway('vnpay', p_is_active => true);
+
+  v_member := pg_temp.another_user('kedai@iakauntan.test');
+  perform pg_temp.sign_in_as(v_member);
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    select count(*) into v_my  from public.payment_gateways_for('MY');
+    select count(*) into v_vn  from public.payment_gateways_for('VN');
+    select count(*) into v_any from public.payment_gateways_for(null);
+  end;
+  reset role;
+
+  perform pg_temp.check_true('the reader ran under row level security',
+    v_role = 'authenticated');
+  perform pg_temp.check_eq('Malaysia is offered the Malaysian gateway', v_my, 1);
+  perform pg_temp.check_eq('Vietnam the Vietnamese one', v_vn, 1);
+  perform pg_temp.check_eq('and no country at all sees both', v_any, 2);
+  perform pg_temp.check_eq('the Malaysian one is the one it says',
+    (select code from public.payment_gateways_for('MY')), 'billplz');
+  -- Lower case out of a form, which is how a country code actually
+  -- arrives from a dropdown somebody typed the values of.
+  perform pg_temp.check_eq('and a lower case country still matches',
+    (select count(*) from public.payment_gateways_for('my')), 1);
+
+  -- The function is not security definer, so the policy is still what
+  -- decides. Switching a gateway off takes it out of the answer.
+  perform pg_temp.sign_in_as(v_admin);
+  perform public.platform_save_payment_gateway('billplz', p_is_active => false);
+  perform pg_temp.sign_in_as(v_member);
+  begin
+    set local role authenticated;
+    select count(*) into v_my from public.payment_gateways_for('MY');
+  end;
+  reset role;
+  perform pg_temp.check_eq('and switching it off takes it back out', v_my, 0);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The catalogue refreshes; the configuration does not
+--
+-- Re-running the seed has to bring the facts up to date without
+-- touching what an operator set, because a migration that reset
+-- somebody's live gateway to sandbox on a Tuesday afternoon is a
+-- migration that took a shop's payments down.
+--
+-- Said plainly, because it would be easy to read this block as more
+-- than it is: the upsert below is written here, not imported from the
+-- migration, so it asserts the shape a re-seed must have rather than
+-- proving 0295 has it. Migrations here are append-only and run once, so
+-- what this is really for is the next one -- whoever adds a provider in
+-- 0311 copies a clause, and this says which clause is the right one.
+-- ---------------------------------------------------------------------
+do $$
+declare v_admin uuid := pg_temp.as_platform_admin(); v_row record;
+begin
+  perform public.platform_save_payment_gateway(
+    'toyyibpay', p_mode => 'live', p_secret_ref => 'TOYYIBPAY_SECRET_KEY',
+    p_is_active => true, p_instructions => 'Ask Aida for the category code.');
+
+  -- The seed again, as a later migration or a re-run would apply it.
+  insert into public.payment_gateways
+    (code, name, currency, countries, methods, docs_url, sort_order)
+  values ('toyyibpay', 'toyyibPay (renamed upstream)', 'MYR', array['MY','SG'],
+          array['fpx','card','duitnow'], 'https://toyyibpay.com/apireference/', 25)
+  on conflict (code) do update set
+    name = excluded.name, countries = excluded.countries,
+    methods = excluded.methods, docs_url = excluded.docs_url,
+    sort_order = excluded.sort_order;
+
+  select * into v_row from public.payment_gateways where code = 'toyyibpay';
+  perform pg_temp.check_eq('the catalogue fact is refreshed',
+    v_row.name, 'toyyibPay (renamed upstream)');
+  perform pg_temp.check_eq('and so is where it sells',
+    array_to_string(v_row.countries, ','), 'MY,SG');
+  perform pg_temp.check_true('while the gateway stays live', v_row.is_active);
+  perform pg_temp.check_eq('in the mode somebody put it in', v_row.mode, 'live');
+  perform pg_temp.check_eq('still naming the secret they named',
+    v_row.secret_ref, 'TOYYIBPAY_SECRET_KEY');
+  perform pg_temp.check_eq('and keeping the note they left',
+    v_row.instructions, 'Ask Aida for the category code.');
+  perform public.platform_save_payment_gateway('toyyibpay', p_is_active => false);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The two lists mean something
+-- ---------------------------------------------------------------------
+do $$
+declare v_admin uuid := pg_temp.as_platform_admin(); v_ok boolean;
+begin
+  v_ok := false;
+  begin
+    update public.payment_gateways set countries = array['my']
+     where code = 'billplz';
+  exception when check_violation then v_ok := true;
+  end;
+  perform pg_temp.check_true(
+    'a lower case country code is refused, or the filter stops matching',
+    v_ok);
+
+  v_ok := false;
+  begin
+    update public.payment_gateways set countries = array['MYS']
+     where code = 'billplz';
+  exception when check_violation then v_ok := true;
+  end;
+  perform pg_temp.check_true('and a three letter one', v_ok);
+
+  v_ok := false;
+  begin
+    update public.payment_gateways set methods = array['telepathy']
+     where code = 'billplz';
+  exception when check_violation then v_ok := true;
+  end;
+  perform pg_temp.check_true('a rail nobody has heard of is refused', v_ok);
+
+  perform pg_temp.check_eq('none of which changed the row',
+    (select array_to_string(countries, ',') from public.payment_gateways
+      where code = 'billplz'), 'MY');
+
+  -- And a documentation link has to be a link.
+  v_ok := false;
+  begin
+    update public.payment_gateways set docs_url = 'billplz.com/api'
+     where code = 'billplz';
+  exception when check_violation then v_ok := true;
+  end;
+  perform pg_temp.check_true('a documentation link has to be absolute', v_ok);
+end $$;
+
 
 rollback;

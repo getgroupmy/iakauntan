@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/platform_catalog_repository.dart';
@@ -69,8 +68,16 @@ class PaymentGatewaysAdminTab extends ConsumerWidget {
                     [
                       '${r['code']}',
                       '${r['currency']}',
+                      // Where it sells, because 0295 seeds forty-odd
+                      // providers and a list of names alone is a list
+                      // nobody can find anything in.
+                      if (r['countries'] is List &&
+                          (r['countries'] as List).isNotEmpty)
+                        (r['countries'] as List).join(', '),
                       if (r['secret_ref'] != null)
-                        'secret in ${r['secret_ref']}',
+                        'secret in ${r['secret_ref']}'
+                      else
+                        'not configured',
                     ].join(' · '),
                     style: const TextStyle(fontSize: 12),
                   ),
@@ -165,7 +172,7 @@ class _GatewayDialogState extends ConsumerState<_GatewayDialog> {
     final ok = await runWithFeedback(
       context,
       successMessage: 'Gateway saved',
-      action: () => ref.read(repoProvider)!.savePaymentGateway(
+      action: () => ref.read(platformCatalogProvider).savePaymentGateway(
         code,
         name: _changed(_name, 'name'),
         mode: _mode != '${widget.existing?['mode'] ?? 'sandbox'}' ? _mode : null,
