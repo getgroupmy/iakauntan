@@ -137,6 +137,7 @@ jobs:
                    supabase/tests/search_path.sql \
                    supabase/tests/tenant_foreign_keys.sql \
                    supabase/tests/property.sql \
+                   supabase/tests/months_between.sql \
                    supabase/tests/timesheets.sql \
                    supabase/tests/collections.sql \
                    supabase/tests/approvals.sql \
