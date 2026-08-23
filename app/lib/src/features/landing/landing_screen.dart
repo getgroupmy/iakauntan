@@ -16,11 +16,11 @@ class LandingScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(landingContentProvider);
+    final fetched = ref.watch(landingContentProvider);
     // While it loads, and if it fails, show the built-in copy rather
     // than a spinner or an error: the sign-in button is on this page and
     // somebody may be trying to reach their books.
-    final content = async.valueOrNull ?? LandingContent.fallback;
+    final content = fetched.valueOrNull ?? LandingContent.fallback;
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
