@@ -343,6 +343,48 @@ List<Widget> moduleTiles(BuildContext context, String code,
     ]);
   }
 
+  if (code == 'secretarial' && all.containsKey('secretarial')) {
+    final f = block('secretarial');
+    final overdue = n(f, 'overdue');
+    final soon = n(f, 'due_soon');
+    // `next_due` is a date column, so it arrives as a string or not at
+    // all — the server returns null when nothing is coming.
+    final nextRaw = f['next_due'];
+    final next = nextRaw == null ? null : DateTime.tryParse('$nextRaw');
+    tiles.addAll([
+      StatTile(
+        label: 'Past their deadline',
+        value: overdue.toStringAsFixed(0),
+        // A late Annual Return is a compounding penalty and a charge
+        // registered late is void against the liquidator, so this is
+        // the one tile on the dashboard that should look alarming when
+        // it is not zero.
+        caption: overdue > 0 ? 'Lodge these first' : 'Nothing is late',
+        icon: Icons.gavel_outlined,
+        accent: overdue > 0 ? context.colors.danger : context.colors.success,
+        onTap: () => context.go('/secretarial'),
+      ),
+      StatTile(
+        label: 'Due within a month',
+        value: soon.toStringAsFixed(0),
+        // The date rather than a count of days: a secretary works to a
+        // calendar, and "14 Sep" is what goes in the diary.
+        caption: next != null
+            ? 'Next on ${Fmt.date(next)}'
+            : 'Nothing in the next month',
+        icon: Icons.event_note_outlined,
+        onTap: () => context.go('/secretarial'),
+      ),
+      StatTile(
+        label: 'Companies on the register',
+        value: n(f, 'entities').toStringAsFixed(0),
+        caption: 'Live clients, struck-off ones aside',
+        icon: Icons.apartment_outlined,
+        onTap: () => context.go('/secretarial'),
+      ),
+    ]);
+  }
+
   if (code == 'pos' && all.containsKey('pos')) {
     final p = block('pos');
     tiles.addAll([

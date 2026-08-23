@@ -140,8 +140,8 @@
     "semantic_hash": "4f623d1d57305b949d43f5b234458fed"
   },
   "app/lib/src/features/dashboard/dashboard_screen.dart": {
-    "mtime": 1787482529.8365018,
-    "ast_hash": "e7e1b88e122603cec05ba2c62b763d61",
+    "mtime": 1787483189.0046391,
+    "ast_hash": "e8037b7861b944a2ee37ce7d89bd38ea",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/doc_types.dart": {
@@ -3450,8 +3450,8 @@
     "semantic_hash": ""
   },
   "app/test/module_surface_test.dart": {
-    "mtime": 1787482547.6720269,
-    "ast_hash": "2609f028752611ec23bacbd7f7b3257a",
+    "mtime": 1787483206.6528838,
+    "ast_hash": "2113ad1ff46e50ebdd023ac2d3a75112",
     "semantic_hash": ""
   },
   "app/test/offline_store_test.dart": {
@@ -3580,8 +3580,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/module_surface.sql": {
-    "mtime": 1787482487.501237,
-    "ast_hash": "8273e1699a4abf6036cd19e8015e73b8",
+    "mtime": 1787483129.0277648,
+    "ast_hash": "b079abd591e2ff1c4c952857b393a540",
     "semantic_hash": ""
   },
   "supabase/tests/security_audit.sql": {
@@ -4557,6 +4557,11 @@
   "supabase/migrations/0303_the_deals_and_who_has_not_been_called.sql": {
     "mtime": 1787482301.2750928,
     "ast_hash": "8129cf829ad6cc38ed24e87ee4f2d5c9",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0304_what_the_practice_owes_the_registrar.sql": {
+    "mtime": 1787482871.4509969,
+    "ast_hash": "f7146d202a2a2aee216259c67faa2dd2",
     "semantic_hash": ""
   }
 }

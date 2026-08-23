@@ -824,4 +824,168 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------
+-- What the practice owes the Registrar
+--
+-- 0304 gave corporate secretarial its figures. The deadline arithmetic
+-- is *not* re-asserted here — `supabase/tests/secretarial.sql` already
+-- holds the anniversary rule, the leap-day case, 180 + 30 for financial
+-- statements and no AGM for a private company, and a second copy would
+-- be a second thing to keep in step with the Act. What is asserted here
+-- is what the dashboard does with those dates.
+--
+-- Three things, and each is a way the tile could be quietly wrong:
+--
+--   * it counts obligations, not rows. The filing that gets missed is
+--     the one nobody opened a row for, so counting `corp_filings` would
+--     report nothing for exactly the practice in trouble;
+--   * a filing due today is not late. Telling a secretary it is sends
+--     them to argue with SSM about a deadline they have not missed;
+--   * lodging one takes it off the count.
+--
+-- ## The fixture is built to produce exactly two filings
+--
+-- Every date is relative to `current_date` — the clock
+-- `corp_upcoming_filings` windows on, which 0304's header argues for —
+-- so it cannot go stale. And both entities are left with no financial
+-- year end, because an entity that has one also generates a financial
+-- statements filing whose distance from today drifts with the real
+-- calendar: it would wander in and out of the window and make this fail
+-- on dates nobody chose. A company whose year end has not been recorded
+-- yet is an ordinary state, and it leaves only the anniversary rule in
+-- play.
+--
+-- Each entity is incorporated a year and a few days ago, so exactly one
+-- Annual Return anniversary falls inside the window: the second is a
+-- year out and the incorporation date itself is excluded by the engine.
+-- One filing each, one of them ten days late and the other due today,
+-- and a third client added later whose deadline falls a day outside the
+-- month.
+--
+-- Six mutants, all dead at the assertion they were aimed at: counting
+-- today as late, letting `due_soon` swallow the overdue one, letting
+-- `next_due` look backwards, counting off `corp_filings` instead of the
+-- deadline engine, keeping a dissolved company on the client count, and
+-- stretching the month to ninety days. The fourth is the one that
+-- matters most — it reports nothing owed for the practice in trouble.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_late uuid; v_today_ent uuid; v_filing uuid;
+  v_dash jsonb; v_sec jsonb;
+begin
+  v_org := pg_temp.test_org('Setiausaha Tepat Sdn Bhd', array['secretarial']);
+
+  -- The control, before there is anything to owe.
+  v_sec := public.module_dashboard(v_org) -> 'secretarial';
+  perform pg_temp.check_true('a corp-sec practice gets a corp-sec block',
+    v_sec is not null);
+  perform pg_temp.check_eq('with nothing overdue',
+    (v_sec ->> 'overdue')::numeric, 0);
+  perform pg_temp.check_eq('and no clients yet',
+    (v_sec ->> 'entities')::numeric, 0);
+  perform pg_temp.check_true('and no next deadline to name',
+    (v_sec ->> 'next_due') is null);
+
+  insert into public.corp_entities
+    (org_id, name, entity_type, incorporated_on, status)
+  values (v_org, 'Sudah Lewat Sdn Bhd', 'sdn_bhd',
+          (current_date - interval '1 year' - interval '40 days')::date,
+          'incorporated')
+  returning id into v_late;
+  insert into public.corp_entities
+    (org_id, name, entity_type, incorporated_on, status)
+  values (v_org, 'Hari Ini Sdn Bhd', 'sdn_bhd',
+          (current_date - interval '1 year' - interval '30 days')::date,
+          'incorporated')
+  returning id into v_today_ent;
+
+  -- Nobody has opened a filing row for either of these. That is the
+  -- headline: the obligation exists because the Act says so, and a
+  -- figure counted off `corp_filings` would report nothing at all.
+  perform pg_temp.check_eq('no filing row has been opened',
+    (select count(*) from public.corp_filings
+      where org_id = v_org)::numeric, 0);
+
+  v_sec := public.module_dashboard(v_org) -> 'secretarial';
+  perform pg_temp.check_eq(
+    'a filing nobody opened a row for is still counted as overdue',
+    (v_sec ->> 'overdue')::numeric, 1);
+  -- And the one due today is in the other count, not this one. A
+  -- deadline is missed the day after it falls, not on it.
+  perform pg_temp.check_eq('a filing due today is not counted late',
+    (v_sec ->> 'due_soon')::numeric, 1);
+  -- `next_due` looks forward only. Were it the minimum of everything
+  -- open it would name the ten-days-late one, presenting a deadline
+  -- already missed as the next one coming.
+  perform pg_temp.check_eq('and the next one due is today',
+    (v_sec ->> 'next_due')::text, current_date::text);
+  perform pg_temp.check_eq('both clients are counted',
+    (v_sec ->> 'entities')::numeric, 2);
+
+  -- ---- the far edge of "soon" ----
+  --
+  -- A third client whose Annual Return falls thirty-one days out: one
+  -- day past the window. Without it, widening `due_soon` to ninety days
+  -- changes nothing and the boundary is asserted only on the near side.
+  insert into public.corp_entities
+    (org_id, name, entity_type, incorporated_on, status)
+  values (v_org, 'Bulan Depan Sdn Bhd', 'sdn_bhd',
+          (current_date + interval '1 day' - interval '1 year')::date,
+          'incorporated');
+
+  v_sec := public.module_dashboard(v_org) -> 'secretarial';
+  perform pg_temp.check_eq(
+    'a deadline a day outside the month is not due soon',
+    (v_sec ->> 'due_soon')::numeric, 1);
+  -- But it is still the practice's client, and still not overdue.
+  perform pg_temp.check_eq('though it is still a client',
+    (v_sec ->> 'entities')::numeric, 3);
+  perform pg_temp.check_eq('and nothing new is late',
+    (v_sec ->> 'overdue')::numeric, 1);
+
+  -- ---- lodging one takes it off ----
+  --
+  -- Through `corp_open_filing`, so the row is the shape the application
+  -- makes rather than one this fixture invented.
+  v_filing := public.corp_open_filing(
+    v_late, 'annual_return',
+    (select f.trigger_date from public.corp_upcoming_filings(v_org, 120) f
+      where f.entity_id = v_late and f.filing_type = 'annual_return'
+      order by f.due_date limit 1));
+  -- Opening one changes nothing: it is the same obligation, now with a
+  -- row against it. Asserted because a count that moved here would be
+  -- counting paperwork rather than what is owed.
+  v_sec := public.module_dashboard(v_org) -> 'secretarial';
+  perform pg_temp.check_eq('opening a row does not change what is owed',
+    (v_sec ->> 'overdue')::numeric, 1);
+
+  update public.corp_filings set status = 'lodged', lodged_on = current_date
+   where id = v_filing;
+  v_sec := public.module_dashboard(v_org) -> 'secretarial';
+  perform pg_temp.check_eq('lodging it takes it off the overdue count',
+    (v_sec ->> 'overdue')::numeric, 0);
+  perform pg_temp.check_eq('and leaves the one due today alone',
+    (v_sec ->> 'due_soon')::numeric, 1);
+
+  -- ---- a company that has been struck off owes nothing ----
+  update public.corp_entities set status = 'dissolved' where id = v_today_ent;
+  v_sec := public.module_dashboard(v_org) -> 'secretarial';
+  perform pg_temp.check_eq('a dissolved company is not a live client',
+    (v_sec ->> 'entities')::numeric, 2);
+  perform pg_temp.check_eq('and owes the Registrar nothing further',
+    (v_sec ->> 'due_soon')::numeric, 0);
+
+  -- ---- and the module gate ----
+  perform public.set_module_hidden(v_org, 'secretarial', true);
+  v_dash := public.module_dashboard(v_org);
+  perform pg_temp.check_true(
+    'a company that puts the practice away loses the block',
+    not (v_dash ? 'secretarial'));
+  perform public.set_module_hidden(v_org, 'secretarial', false);
+  perform pg_temp.check_true('and gets it back',
+    public.module_dashboard(v_org) ? 'secretarial');
+end;
+$$;
+
 rollback;

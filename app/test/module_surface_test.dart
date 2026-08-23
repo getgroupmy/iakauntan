@@ -251,6 +251,59 @@ void main() {
     expect(find.text('Nothing owed'), findsOneWidget);
   });
 
+  testWidgets('the Registrar tile names the date, not a count of days', (
+    tester,
+  ) async {
+    // A secretary works to a calendar. "14 Sep 2026" goes in the diary;
+    // "in 22 days" has to be converted before it is any use, and is
+    // wrong by one the moment the page has been open past midnight.
+    await onADesktop(
+      tester,
+      dashboard(
+        modules: const {'secretarial'},
+        figures: const {
+          'secretarial': {
+            'overdue': 2,
+            'due_soon': 4,
+            'next_due': '2026-09-14',
+            'entities': 31,
+          },
+        },
+      ),
+    );
+
+    expect(find.text('Past their deadline'), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('Lodge these first'), findsOneWidget);
+    expect(find.textContaining('Next on'), findsOneWidget);
+    expect(find.textContaining('2026'), findsOneWidget);
+    expect(find.text('31'), findsOneWidget);
+  });
+
+  testWidgets('and says so plainly when nothing is owed', (tester) async {
+    // The control, and the state most practices are in most of the
+    // time. Without it, every assertion above is also satisfied by a
+    // tile that shouts at a firm that is perfectly up to date.
+    await onADesktop(
+      tester,
+      dashboard(
+        modules: const {'secretarial'},
+        figures: const {
+          'secretarial': {
+            'overdue': 0,
+            'due_soon': 0,
+            'next_due': null,
+            'entities': 31,
+          },
+        },
+      ),
+    );
+
+    expect(find.text('Nothing is late'), findsOneWidget);
+    expect(find.text('Nothing in the next month'), findsOneWidget);
+    expect(find.textContaining('Next on'), findsNothing);
+  });
+
   testWidgets('a company with no module at all is told so, not left blank', (
     tester,
   ) async {
