@@ -8,6 +8,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../../data/platform_catalog_repository.dart';
 
 /// The dashboard a company gets is the one its modules make.
 ///
@@ -17,72 +18,124 @@ import '../../data/models.dart';
 /// accounting numbers, all of them zero, and had to go looking for the
 /// one screen it pays for.
 ///
-/// So the page is assembled rather than fixed. `module_dashboard`
-/// returns figures for the modules the company holds and has not put
-/// away, and those go at the top, because they are what the company
-/// does. The accounting half comes after and only when the ledger
-/// screens are on — hidden by 0234, or simply not what this company is
-/// here for.
+/// So the page is assembled rather than fixed, and since every module
+/// has its own tab rather than a share of one column, two people at the
+/// same company can open this screen and see different things. That is
+/// the point: a warehouse clerk and a bookkeeper hold different modules,
+/// and a dashboard that mixed both left each of them scrolling past the
+/// other's figures.
+///
+/// A tab exists for every module `moduleEnabled` admits — the company
+/// holds it, and this person's access type does not say `none`. Which
+/// is the same pair `module_dashboard` applies on the server, so a tab
+/// can be trusted to be theirs.
+///
+/// Only ticketing, point of sale and the ledger report figures today.
+/// The rest get a tab and an honest sentence rather than a blank panel,
+/// because a blank panel under a module's name reads as broken.
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final org = ref.watch(currentOrgProvider).value;
-    final modules = ref.watch(moduleDashboardProvider).valueOrNull ?? const {};
+    final labels = ref.watch(moduleLabelsProvider).valueOrNull ?? const {};
 
-    // `accounting` is core, so this is true for almost everybody. It is
-    // false for the company that has deliberately put the ledger screens
-    // away, and for the person whose access type does not reach them.
-    final books = moduleEnabled(ref, 'accounting');
+    // One tab per module this person actually reaches. `moduleEnabled`
+    // asks both halves — the company holds it, and their access type
+    // does not say `none` — which is the same pair `module_dashboard`
+    // applies on the server. Two people at the same company can open
+    // this screen and see different tabs, which is the point.
+    //
+    // Ordered by the platform's own `sort_order`, because that is the
+    // order `moduleLabelsProvider` reads them in and the order the menu
+    // uses; a dashboard whose tabs disagree with the menu is a dashboard
+    // somebody has to think about.
+    final codes = dashboardTabs(labels.keys, (c) => moduleEnabled(ref, c));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Dashboard'),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            onPressed: () {
-              refreshLedgerData(ref);
-              ref.invalidate(moduleDashboardProvider);
-            },
-            icon: const Icon(Icons.refresh),
+    if (codes.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Dashboard')),
+        body: PageBody(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Greeting(orgName: org?.name ?? ''),
+              const SizedBox(height: 24),
+              const EmptyState(
+                icon: Icons.dashboard_customize_outlined,
+                title: 'Nothing to show yet',
+                message: 'Every module is switched off for this company, or '
+                    'none of them is yours to see. Turn one back on under '
+                    'Settings › Modules.',
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          refreshLedgerData(ref);
-          ref.invalidate(moduleDashboardProvider);
-          await ref.read(moduleDashboardProvider.future);
-          if (books) await ref.read(dashboardProvider.future);
-        },
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: PageBody(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _Greeting(orgName: org?.name ?? ''),
-                const SizedBox(height: 20),
-                if (modules.isNotEmpty) ...[
-                  const _ModuleCards(),
-                  const SizedBox(height: 24),
-                ],
-                if (books)
-                  const _Books()
-                else if (modules.isEmpty)
-                  const EmptyState(
-                    icon: Icons.dashboard_customize_outlined,
-                    title: 'Nothing to show yet',
-                    message: 'Every module is switched off for this company. '
-                        'Turn one back on under Settings › Modules.',
-                  ),
-                const SizedBox(height: 32),
-              ],
+        ),
+      );
+    }
+
+    return DefaultTabController(
+      // Keyed on the codes themselves: the list arrives after the first
+      // frame and grows, and a controller built for one length throws
+      // when handed another.
+      key: ValueKey(codes.join(',')),
+      length: codes.length,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Dashboard'),
+          actions: [
+            IconButton(
+              tooltip: 'Refresh',
+              onPressed: () {
+                refreshLedgerData(ref);
+                ref.invalidate(moduleDashboardProvider);
+              },
+              icon: const Icon(Icons.refresh),
             ),
+            const SizedBox(width: 8),
+          ],
+          bottom: TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              for (final code in codes)
+                Tab(text: labels[code]?.name ?? code),
+            ],
           ),
+        ),
+        body: TabBarView(
+          children: [
+            for (final code in codes)
+              RefreshIndicator(
+                onRefresh: () async {
+                  refreshLedgerData(ref);
+                  ref.invalidate(moduleDashboardProvider);
+                  await ref.read(moduleDashboardProvider.future);
+                  if (code == 'accounting') {
+                    await ref.read(dashboardProvider.future);
+                  }
+                },
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: PageBody(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Only on the first tab. Repeating the greeting
+                        // under every one turns it into furniture.
+                        if (code == codes.first) ...[
+                          _Greeting(orgName: org?.name ?? ''),
+                          const SizedBox(height: 20),
+                        ],
+                        ModuleDashboardPane(code: code),
+                        const SizedBox(height: 32),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -130,34 +183,54 @@ class _Books extends ConsumerWidget {
 /// build of the app does not recognise is skipped rather than guessed
 /// at, so the server can start answering for a new module before the
 /// client knows how to draw it.
-class _ModuleCards extends ConsumerWidget {
-  const _ModuleCards();
+/// Which modules get a tab, and in what order.
+///
+/// Pure, and separate from the screen, so the rule can be asserted:
+/// `app/test/dashboard_tabs_test.dart`. What it must not do is reorder
+/// or duplicate — the tabs are read against the side menu, which is
+/// built from the same `sort_order`, and a dashboard whose tabs disagree
+/// with the menu is one somebody has to stop and think about.
+///
+/// [reaches] is asked once per module and answers the pair that matters:
+/// the company holds it and this person's access type does not say
+/// `none`.
+List<String> dashboardTabs(
+  Iterable<String> codes,
+  bool Function(String code) reaches,
+) =>
+    [
+      for (final code in codes)
+        if (reaches(code)) code,
+    ];
 
-  static Map<String, dynamic> _block(Map<String, dynamic> all, String key) {
+/// The tiles one module contributes, or an empty list.
+///
+/// Split out per module so a tab can ask for its own. The keys come
+/// from `module_dashboard`, which returns only what this company holds,
+/// has not put away, and this person may read — so an absent key means
+/// "not yours" or "nothing measured", and either way there is nothing
+/// to draw.
+List<Widget> moduleTiles(BuildContext context, String code,
+    Map<String, dynamic> all) {
+  Map<String, dynamic> block(String key) {
     final v = all[key];
     return v is Map ? Map<String, dynamic>.from(v) : const {};
   }
 
-  static num _n(Map<String, dynamic> m, String key) => Fmt.toDouble(m[key]);
+  num n(Map<String, dynamic> m, String key) => Fmt.toDouble(m[key]);
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final all = ref.watch(moduleDashboardProvider).valueOrNull ?? const {};
-    final width = MediaQuery.sizeOf(context).width;
-    final columns = width >= 1100 ? 4 : (width >= 700 ? 2 : 1);
+  final tiles = <Widget>[];
 
-    final tiles = <Widget>[];
-
-    if (all.containsKey('ticketing')) {
-      final t = _block(all, 'ticketing');
-      final breaching = _n(t, 'breaching');
-      final breached = _n(t, 'breached');
+  if (code == 'ticketing' && all.containsKey('ticketing')) {
+      final t = block('ticketing');
+      final breaching = n(t, 'breaching');
+      final breached = n(t, 'breached');
       tiles.addAll([
         StatTile(
           label: 'Open tickets',
-          value: _n(t, 'open').toStringAsFixed(0),
-          caption: _n(t, 'unassigned') > 0
-              ? '${_n(t, 'unassigned').toStringAsFixed(0)} unassigned'
+          value: n(t, 'open').toStringAsFixed(0),
+          caption: n(t, 'unassigned') > 0
+              ? '${n(t, 'unassigned').toStringAsFixed(0)} unassigned'
               : 'All assigned',
           icon: Icons.confirmation_number_outlined,
           accent: context.colors.info,
@@ -175,7 +248,7 @@ class _ModuleCards extends ConsumerWidget {
         ),
         StatTile(
           label: 'Resolved today',
-          value: _n(t, 'resolved_today').toStringAsFixed(0),
+          value: n(t, 'resolved_today').toStringAsFixed(0),
           caption: 'Closed off since midnight',
           icon: Icons.task_alt,
           accent: context.colors.success,
@@ -184,31 +257,66 @@ class _ModuleCards extends ConsumerWidget {
       ]);
     }
 
-    if (all.containsKey('pos')) {
-      final p = _block(all, 'pos');
+    if (code == 'pos' && all.containsKey('pos')) {
+      final p = block('pos');
       tiles.addAll([
         StatTile(
           label: 'Takings today',
-          value: Fmt.money(_n(p, 'takings_today')),
-          caption: '${_n(p, 'sales_today').toStringAsFixed(0)} sales rung up',
+          value: Fmt.money(n(p, 'takings_today')),
+          caption: '${n(p, 'sales_today').toStringAsFixed(0)} sales rung up',
           icon: Icons.point_of_sale_outlined,
           accent: context.colors.success,
           onTap: () => context.go('/till'),
         ),
         StatTile(
           label: 'Bills still open',
-          value: _n(p, 'open_bills').toStringAsFixed(0),
-          caption: _n(p, 'open_shifts') > 0
-              ? '${_n(p, 'open_shifts').toStringAsFixed(0)} shifts open'
+          value: n(p, 'open_bills').toStringAsFixed(0),
+          caption: n(p, 'open_shifts') > 0
+              ? '${n(p, 'open_shifts').toStringAsFixed(0)} shifts open'
               : 'No shift open',
           icon: Icons.receipt_long_outlined,
-          accent: _n(p, 'open_bills') > 0 ? context.colors.warning : null,
+          accent: n(p, 'open_bills') > 0 ? context.colors.warning : null,
           onTap: () => context.go('/till'),
         ),
       ]);
     }
 
     if (tiles.isEmpty) return const SizedBox.shrink();
+
+  return tiles;
+}
+
+/// A module's figures, laid out, or an honest word about there being
+/// none yet.
+///
+/// The empty state is the point of saying it out loud. Only ticketing,
+/// point of sale and the ledger produce figures today; every other
+/// module reaches this screen with nothing, and a blank panel under a
+/// tab with the module's name on it reads as something broken rather
+/// than as something not built.
+class ModuleDashboardPane extends ConsumerWidget {
+  const ModuleDashboardPane({super.key, required this.code});
+
+  final String code;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (code == 'accounting') return const _Books();
+
+    final all = ref.watch(moduleDashboardProvider).valueOrNull ?? const {};
+    final tiles = moduleTiles(context, code, all);
+
+    if (tiles.isEmpty) {
+      return const EmptyState(
+        icon: Icons.insights_outlined,
+        title: 'Nothing measured here yet',
+        message: 'This module does not report figures to the dashboard. '
+            'Its own screens have everything it records.',
+      );
+    }
+
+    final width = MediaQuery.sizeOf(context).width;
+    final columns = width >= 1100 ? 4 : (width >= 700 ? 2 : 1);
 
     return GridView.count(
       crossAxisCount: columns,
