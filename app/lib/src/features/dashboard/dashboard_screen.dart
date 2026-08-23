@@ -296,6 +296,53 @@ List<Widget> moduleTiles(BuildContext context, String code,
     ]);
   }
 
+  if (code == 'crm' && all.containsKey('crm')) {
+    final c = block('crm');
+    final other = n(c, 'other_currency');
+    final overdue = n(c, 'overdue_activities');
+    tiles.addAll([
+      StatTile(
+        label: 'Open deals',
+        value: n(c, 'open_deals').toStringAsFixed(0),
+        // The value is the company's own currency only — 0303 does not
+        // convert, because a rate lookup that raises would take the
+        // whole dashboard with it. So when there are deals it could not
+        // add up, the caption says so rather than showing a total that
+        // is quietly short.
+        caption: other > 0
+            ? '${Fmt.money(n(c, 'open_value'))} plus '
+                  '${other.toStringAsFixed(0)} in other currencies'
+            : Fmt.money(n(c, 'open_value')),
+        icon: Icons.handshake_outlined,
+        accent: context.colors.info,
+        onTap: () => context.go('/crm'),
+      ),
+      StatTile(
+        label: 'Closing this month',
+        value: n(c, 'closing_this_month').toStringAsFixed(0),
+        caption: 'Expected to land by month end',
+        icon: Icons.event_available_outlined,
+        onTap: () => context.go('/crm'),
+      ),
+      StatTile(
+        label: 'Won this month',
+        value: n(c, 'won_this_month').toStringAsFixed(0),
+        caption: 'By the date they closed',
+        icon: Icons.emoji_events_outlined,
+        accent: context.colors.success,
+        onTap: () => context.go('/crm'),
+      ),
+      StatTile(
+        label: 'Follow-ups overdue',
+        value: overdue.toStringAsFixed(0),
+        caption: overdue > 0 ? 'Somebody is waiting' : 'Nothing owed',
+        icon: Icons.phone_missed_outlined,
+        accent: overdue > 0 ? context.colors.danger : null,
+        onTap: () => context.go('/crm'),
+      ),
+    ]);
+  }
+
   if (code == 'pos' && all.containsKey('pos')) {
     final p = block('pos');
     tiles.addAll([

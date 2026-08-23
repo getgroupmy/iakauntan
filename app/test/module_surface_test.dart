@@ -190,6 +190,67 @@ void main() {
     expect(find.text('Open tickets'), findsOneWidget);
   });
 
+  testWidgets('the pipeline says when it could not add everything up', (
+    tester,
+  ) async {
+    // 0303 does not convert currencies, because the rate lookup raises
+    // when there is no rate and would take every other module's figures
+    // down with it. The consequence is that `open_value` can be short,
+    // and the tile has to say so — a total that silently leaves out the
+    // biggest deal in the pipeline is worse than no total.
+    await onADesktop(
+      tester,
+      dashboard(
+        modules: const {'crm'},
+        figures: const {
+          'crm': {
+            'open_deals': 5,
+            'open_value': 10000,
+            'other_currency': 2,
+            'closing_this_month': 3,
+            'won_this_month': 1,
+            'overdue_activities': 4,
+          },
+        },
+      ),
+    );
+
+    expect(find.text('Open deals'), findsOneWidget);
+    expect(find.text('5'), findsOneWidget);
+    expect(
+      find.textContaining('plus 2 in other currencies'),
+      findsOneWidget,
+    );
+    expect(find.text('Follow-ups overdue'), findsOneWidget);
+    expect(find.text('Somebody is waiting'), findsOneWidget);
+  });
+
+  testWidgets('and shows a plain total when there is nothing left out', (
+    tester,
+  ) async {
+    // The control. Without it the caption above is also satisfied by a
+    // tile that appends the warning to every company on the platform.
+    await onADesktop(
+      tester,
+      dashboard(
+        modules: const {'crm'},
+        figures: const {
+          'crm': {
+            'open_deals': 5,
+            'open_value': 10000,
+            'other_currency': 0,
+            'closing_this_month': 3,
+            'won_this_month': 1,
+            'overdue_activities': 0,
+          },
+        },
+      ),
+    );
+
+    expect(find.textContaining('other currencies'), findsNothing);
+    expect(find.text('Nothing owed'), findsOneWidget);
+  });
+
   testWidgets('a company with no module at all is told so, not left blank', (
     tester,
   ) async {

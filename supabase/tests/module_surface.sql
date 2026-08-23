@@ -635,4 +635,193 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------
+-- The pipeline, and the follow-ups nobody has made
+--
+-- 0303 gave CRM its own figures. Four of them, and three carry a
+-- decision that would pass unnoticed if it were wrong:
+--
+--   * the value is not summed across currencies, because
+--     `app.exchange_rate_for` raises when there is no rate and this
+--     function assembles every module's figures into one object — one
+--     unconvertible deal would empty the whole dashboard;
+--   * "overdue" is read off the clock, not off `activities.status`,
+--     which accepts the value `overdue` that nothing in this database
+--     ever writes;
+--   * the month is Kuala Lumpur's, and a won deal is dated by
+--     `actual_close_date` rather than by when somebody recorded it.
+--
+-- The fixture builds its own pipeline: `pg_temp.test_org` inserts the
+-- organization directly rather than through `create_organization`, so
+-- the default pipeline 0012 seeds is not there.
+--
+-- Nine mutants were run against these. Seven died at the assertion they
+-- were aimed at, and an eighth — replacing `open_value` with the
+-- obvious converting version, `sum(amount * app.exchange_rate_for(...))`
+-- — did not merely fail an assertion but aborted the whole call with
+-- "No exchange rate for USD to MYR". That is the concrete failure the
+-- design avoids, and the USD deal above is here to produce it: there is
+-- no USD rate anywhere in this database, which is what makes the
+-- assertion load-bearing rather than merely true.
+--
+-- Two survived, recorded rather than papered over:
+--
+--   * dropping `a.due_date is not null` changes nothing, because
+--     `null <= now()` is null and an unfiltered null is not counted
+--     either way. The clause is redundant against this schema. It stays
+--     because it says out loud that an activity with no date is not
+--     overdue, which is the question a reader asks;
+--   * computing the month in UTC rather than in Kuala Lumpur survives
+--     on every day but two per month, and on those two only during the
+--     eight hours the dates differ. A test that dies to it only in
+--     those hours is a test that fails at random, so this is left
+--     unasserted and the choice is argued in 0303's header instead.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_pipe uuid; v_stage uuid; v_deal uuid;
+  v_today date; v_dash jsonb;
+begin
+  v_org := pg_temp.test_org('Jualan Maju Sdn Bhd', array['crm']);
+  v_today := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+
+  insert into public.pipelines (org_id, name, is_default)
+  values (v_org, 'Standard', true) returning id into v_pipe;
+  insert into public.pipeline_stages
+    (org_id, pipeline_id, name, probability, sort_order)
+  values (v_org, v_pipe, 'Qualified', 50, 1) returning id into v_stage;
+
+  -- The control, first. Every refusal below is also satisfied by a
+  -- block that returns nothing at all.
+  v_dash := public.module_dashboard(v_org);
+  perform pg_temp.check_true('a CRM company gets a CRM block',
+    v_dash ? 'crm');
+  perform pg_temp.check_eq('with no deals in it yet',
+    (v_dash -> 'crm' ->> 'open_deals')::numeric, 0);
+  perform pg_temp.check_eq('and nothing in the pipeline',
+    (v_dash -> 'crm' ->> 'open_value')::numeric, 0);
+  perform pg_temp.check_eq('and nobody owed a call',
+    (v_dash -> 'crm' ->> 'overdue_activities')::numeric, 0);
+
+  -- Four deals in ringgit. One open, one won this month, one lost, one
+  -- abandoned — so `open_deals` has three ways to be wrong.
+  insert into public.opportunities
+    (org_id, opportunity_no, name, pipeline_id, stage_id, amount,
+     currency, status, expected_close_date)
+  values (v_org, 'OPP-1', 'Sistem baharu', v_pipe, v_stage, 10000,
+          'MYR', 'open', v_today)
+  returning id into v_deal;
+  insert into public.opportunities
+    (org_id, opportunity_no, name, pipeline_id, stage_id, amount,
+     currency, status, actual_close_date)
+  values (v_org, 'OPP-2', 'Sudah menang', v_pipe, v_stage, 7000,
+          'MYR', 'won', v_today),
+         (v_org, 'OPP-3', 'Kalah', v_pipe, v_stage, 5000,
+          'MYR', 'lost', v_today),
+         (v_org, 'OPP-4', 'Ditinggalkan', v_pipe, v_stage, 3000,
+          'MYR', 'abandoned', v_today);
+
+  v_dash := public.module_dashboard(v_org);
+  perform pg_temp.check_eq('only the open deal is open',
+    (v_dash -> 'crm' ->> 'open_deals')::numeric, 1);
+  perform pg_temp.check_eq('and only its money is in the pipeline',
+    (v_dash -> 'crm' ->> 'open_value')::numeric, 10000);
+  perform pg_temp.check_eq('the deal won this month is counted as won',
+    (v_dash -> 'crm' ->> 'won_this_month')::numeric, 1);
+
+  -- ---- the currency the total is honest about ----
+  --
+  -- A deal in dollars, with no exchange rate anywhere in this database
+  -- for it. If the figure converted, this is the row that would take
+  -- the whole dashboard down with it.
+  insert into public.opportunities
+    (org_id, opportunity_no, name, pipeline_id, stage_id, amount,
+     currency, status, expected_close_date)
+  values (v_org, 'OPP-5', 'Pelanggan luar negara', v_pipe, v_stage,
+          99000, 'USD', 'open', v_today);
+
+  v_dash := public.module_dashboard(v_org);
+  perform pg_temp.check_true(
+    'a deal in a currency with no rate does not empty the dashboard',
+    v_dash ? 'crm');
+  perform pg_temp.check_eq('it is counted as an open deal',
+    (v_dash -> 'crm' ->> 'open_deals')::numeric, 2);
+  perform pg_temp.check_eq(
+    'but its money is left out of a ringgit total',
+    (v_dash -> 'crm' ->> 'open_value')::numeric, 10000);
+  perform pg_temp.check_eq(
+    'and the total says so rather than being quietly short',
+    (v_dash -> 'crm' ->> 'other_currency')::numeric, 1);
+
+  -- ---- the month, in Kuala Lumpur ----
+  insert into public.opportunities
+    (org_id, opportunity_no, name, pipeline_id, stage_id, amount,
+     currency, status, expected_close_date)
+  values (v_org, 'OPP-6', 'Bulan depan', v_pipe, v_stage, 1000, 'MYR',
+          'open', (date_trunc('month', v_today)
+                    + interval '1 month')::date),
+         (v_org, 'OPP-7', 'Hujung bulan', v_pipe, v_stage, 1000, 'MYR',
+          'open', (date_trunc('month', v_today)
+                    + interval '1 month' - interval '1 day')::date),
+         (v_org, 'OPP-8', 'Tiada tarikh', v_pipe, v_stage, 1000, 'MYR',
+          'open', null);
+
+  v_dash := public.module_dashboard(v_org);
+  -- OPP-1 (today) and OPP-7 (the last day of this month). Not OPP-6,
+  -- which is the first of next; not OPP-5, whose date is today but
+  -- which is here to prove currency does not exclude a deal from a
+  -- count; not OPP-8, which has no date at all.
+  perform pg_temp.check_eq('closing this month is bounded at both ends',
+    (v_dash -> 'crm' ->> 'closing_this_month')::numeric, 3);
+
+  -- A deal won last month is not this month's, however recently
+  -- somebody got round to marking it.
+  insert into public.opportunities
+    (org_id, opportunity_no, name, pipeline_id, stage_id, amount,
+     currency, status, actual_close_date)
+  values (v_org, 'OPP-9', 'Menang bulan lalu', v_pipe, v_stage, 4000,
+          'MYR', 'won', (date_trunc('month', v_today)
+                          - interval '1 day')::date);
+  v_dash := public.module_dashboard(v_org);
+  perform pg_temp.check_eq(
+    'a deal won last month stays in last month',
+    (v_dash -> 'crm' ->> 'won_this_month')::numeric, 1);
+
+  -- ---- overdue is a clock ----
+  --
+  -- Six activities against the one deal. Only the first two are owed to
+  -- anybody now.
+  insert into public.activities
+    (org_id, activity_type, subject, opportunity_id, status, due_date)
+  values (v_org, 'call', 'Telefon semula', v_deal, 'pending',
+          now() - interval '2 days'),
+         -- The status nothing writes. In the set anyway, so that if
+         -- anything ever starts writing it the figure keeps working
+         -- rather than silently halving.
+         (v_org, 'call', 'Sudah lewat', v_deal, 'overdue',
+          now() - interval '1 day'),
+         (v_org, 'meeting', 'Minggu depan', v_deal, 'pending',
+          now() + interval '7 days'),
+         (v_org, 'call', 'Sudah dibuat', v_deal, 'completed',
+          now() - interval '3 days'),
+         (v_org, 'call', 'Dibatalkan', v_deal, 'cancelled',
+          now() - interval '3 days'),
+         (v_org, 'note', 'Tiada tarikh', v_deal, 'pending', null);
+
+  v_dash := public.module_dashboard(v_org);
+  perform pg_temp.check_eq(
+    'overdue counts what is still owed and past due, and only that',
+    (v_dash -> 'crm' ->> 'overdue_activities')::numeric, 2);
+
+  -- ---- and the module gate ----
+  perform public.set_module_hidden(v_org, 'crm', true);
+  v_dash := public.module_dashboard(v_org);
+  perform pg_temp.check_true('a company that puts CRM away loses the block',
+    not (v_dash ? 'crm'));
+  perform public.set_module_hidden(v_org, 'crm', false);
+  perform pg_temp.check_true('and gets it back when it comes out again',
+    public.module_dashboard(v_org) ? 'crm');
+end;
+$$;
+
 rollback;
