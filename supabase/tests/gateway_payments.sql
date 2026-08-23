@@ -328,6 +328,19 @@ begin
   perform pg_temp.check_eq('and still cannot write the payments table by hand',
     (select state from public.platform_payments
       where provider_ref = 'W_grant'), 'pending');
+
+  -- And the privilege itself is gone, which is 0299 rather than 0297:
+  -- Supabase's default privileges hand out insert, update and delete on
+  -- every new table in `public`, so a migration that grants only select
+  -- does not end up with only select. Asserted separately from the
+  -- effect above because they are two different walls, and the whole
+  -- point of 0299 is that there should be two.
+  perform pg_temp.check_true('and has not been left the privilege either',
+    not has_table_privilege('authenticated', 'public.platform_payments', 'update')
+    and not has_table_privilege('authenticated', 'public.platform_payments', 'insert')
+    and not has_table_privilege('authenticated', 'public.platform_payments', 'delete'));
+  perform pg_temp.check_true('while still being able to read their own',
+    has_table_privilege('authenticated', 'public.platform_payments', 'select'));
   perform pg_temp.sign_out();
 end $$;
 
