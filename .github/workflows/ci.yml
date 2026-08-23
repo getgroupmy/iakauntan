@@ -152,6 +152,7 @@ jobs:
                    supabase/tests/expense_claims.sql \
                    supabase/tests/expenses.sql \
                    supabase/tests/hr_reference.sql \
+                   supabase/tests/statutory_schedules.sql \
                    supabase/tests/contact_extras.sql \
                    supabase/tests/leads_and_onboarding.sql \
                    supabase/tests/document_share.sql \
