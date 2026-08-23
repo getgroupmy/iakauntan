@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787461024.9374886,
-    "ast_hash": "4c6e98b4dadb35a88aaf6ead830491be",
+    "mtime": 1787466121.1797168,
+    "ast_hash": "24cc8529955bd8c5d5deaeb07f114b9d",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -115,13 +115,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
-    "mtime": 1787233492.3545737,
-    "ast_hash": "00b8596ce8aa7be32c966f81e44f8fe7",
+    "mtime": 1787466389.871828,
+    "ast_hash": "0cdaa8f4ed2a57317c81ef12e8acb879",
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1787201618.6633403,
-    "ast_hash": "a819cfb4cd58001a20bcf4b95e716d70",
+    "mtime": 1787466136.0474193,
+    "ast_hash": "2a4adbbb7310a6f545a1ea2474a3fbf5",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -4382,6 +4382,31 @@
   "supabase/tests/landing_page.sql": {
     "mtime": 1787465727.4067588,
     "ast_hash": "17da754b0247e1fe3375d2eb9ce6d7f2",
+    "semantic_hash": ""
+  },
+  "app/lib/src/data/landing_repository.dart": {
+    "mtime": 1787466447.92801,
+    "ast_hash": "f08c9914d4921078c6333f1f6210c4de",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/admin/landing_cms.dart": {
+    "mtime": 1787466377.7871287,
+    "ast_hash": "f9840b92c9434f9f3d01b6db1f4fe8f7",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/landing/landing_content.dart": {
+    "mtime": 1787466037.0250487,
+    "ast_hash": "b7cf71974f49a3485c010f66cd7f4df9",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/landing/landing_screen.dart": {
+    "mtime": 1787466098.3199067,
+    "ast_hash": "a9f94fc30f51deb5246cd26206b05e89",
+    "semantic_hash": ""
+  },
+  "app/test/landing_content_test.dart": {
+    "mtime": 1787466170.0133517,
+    "ast_hash": "542897cee7748340fc5142ffd7e5fd03",
     "semantic_hash": ""
   }
 }

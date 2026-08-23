@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/reset_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
+import '../features/landing/landing_screen.dart';
 import '../features/chat/chat_screen.dart';
 import '../features/contacts/contact_editor.dart';
 import '../features/contacts/contacts_screen.dart';
@@ -122,7 +123,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       // to order a teh tarik.
       if (path.startsWith('/menu/')) return null;
 
-      if (!signedIn) return path == '/signin' ? null : '/signin';
+      // And the fourth, which is not about a token at all: the corporate
+      // landing page. Somebody who typed the address on a business card
+      // has not come to sign in — they have come to find out what this
+      // is — so a signed-out visitor lands there and reaches the
+      // password box by choosing to.
+      if (path == '/welcome') return signedIn ? '/' : null;
+
+      if (!signedIn) return path == '/signin' ? null : '/welcome';
 
       // Redeeming a reset link signs the user in, so this has to be
       // checked before anything else sends them to the dashboard —
@@ -178,7 +186,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(path: '/signin', builder: (_, __) => const SignInScreen()),
+      GoRoute(
+        path: '/signin',
+        builder: (_, state) => SignInScreen(
+          // The landing page's two buttons are the same screen in its
+          // two moods. Passed as a query parameter rather than as two
+          // routes, so /signin stays the one address anybody links to.
+          startOnRegister: state.uri.queryParameters['mode'] == 'register',
+        ),
+      ),
+      // Outside the shell and outside auth, like the signing and share
+      // pages: no navigation rail, no company switcher, nothing but the
+      // company's own front page.
+      GoRoute(path: '/welcome', builder: (_, __) => const LandingScreen()),
       GoRoute(path: '/onboarding', builder: (_, __) => const CreateOrgScreen()),
       // Reachable two ways on purpose: the router forces it after a
       // recovery event, and the reset e-mail links straight here. If the

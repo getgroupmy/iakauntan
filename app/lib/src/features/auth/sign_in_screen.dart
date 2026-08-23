@@ -8,7 +8,13 @@ import '../../core/theme.dart';
 import 'demo_accounts.dart';
 
 class SignInScreen extends ConsumerStatefulWidget {
-  const SignInScreen({super.key});
+  const SignInScreen({super.key, this.startOnRegister = false});
+
+  /// Whether to open on the sign-up form rather than the sign-in one.
+  ///
+  /// The landing page offers both, and somebody who pressed "Create an
+  /// account" should not have to find the toggle once they arrive.
+  final bool startOnRegister;
 
   @override
   ConsumerState<SignInScreen> createState() => _SignInScreenState();
@@ -20,7 +26,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _password = TextEditingController();
   final _fullName = TextEditingController();
 
-  bool _isSignUp = false;
+  late bool _isSignUp = widget.startOnRegister;
   bool _busy = false;
   String? _demoBusy;
   bool _obscure = true;
