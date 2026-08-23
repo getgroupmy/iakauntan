@@ -456,4 +456,85 @@ begin
     not has_table_privilege('authenticated', 'public.email_outbox', 'insert'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The token in the link, and the address it goes in
+--
+-- `app.corp_new_token()` is the credential that lets somebody who is
+-- not staff open a document: a signing link (0070), a shared invoice
+-- (0094), the link in an email (0095), a team invitation (0284). Four
+-- callers, and between them the existing files already assert that it
+-- is 64 characters and that what arrives in an email body is hex.
+--
+-- What none of them assert is that two of them differ. A token that was
+-- always the same would be 64 hex characters, would arrive in the
+-- email, would open the document it was made for — and would open every
+-- other document on the platform as well. Every assertion in this
+-- repository would still pass. That is the whole gap, and it is the
+-- kind that does not announce itself.
+--
+-- `app.share_url` has a quieter one. It reads `site_url` out of jsonb
+-- with `#>> '{}'`, which unwraps the string; `::text` would keep the
+-- quotes and put `"https://x"/#/share/tok` in every email the platform
+-- sends. The existing assertion looks for `/#/share/` in the body,
+-- which that broken address still contains.
+--
+-- Recorded from mutating it: a token that is always the same never
+-- reaches the assertion below. It takes the whole file down forty lines
+-- earlier, on `document_share_links_token_hash_key`, because the second
+-- share link issued in the same run collides with the first. So the
+-- property is already defended, by a unique index rather than by
+-- anything in the generator. The assertion is kept: an index refusing a
+-- duplicate says a row could not be written, not that the platform is
+-- handing the same key to everybody, and the day somebody adds a caller
+-- that does not go through that table this is the line that fires.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_a text := app.corp_new_token();
+  v_b text := app.corp_new_token();
+  v_distinct integer;
+  v_url text;
+begin
+  perform pg_temp.check_eq('a token is 64 characters', length(v_a), 64);
+  perform pg_temp.check_true('and hex, so it survives a URL unescaped',
+    v_a ~ '^[0-9a-f]{64}$');
+  perform pg_temp.check_true('two tokens are not the same token',
+    v_a <> v_b);
+
+  -- Two is a weak claim against a counter or a per-transaction cache.
+  -- Two hundred is not.
+  select count(distinct t) into v_distinct
+    from (select app.corp_new_token() as t
+            from generate_series(1, 200)) s;
+  perform pg_temp.check_eq('and two hundred of them are two hundred tokens',
+    v_distinct, 200);
+
+  -- ------------------------------------------------------------------
+  -- The address the token is put in
+  -- ------------------------------------------------------------------
+  delete from public.platform_settings where key = 'site_url';
+  v_url := app.share_url('abc123');
+  perform pg_temp.check_eq(
+    'with no site configured the link still goes somewhere real',
+    v_url, 'https://iakauntan.com/#/share/abc123');
+
+  insert into public.platform_settings (key, value)
+  values ('site_url', to_jsonb('https://books.contoh.my'::text))
+  on conflict (key) do update set value = excluded.value;
+
+  v_url := app.share_url('abc123');
+  perform pg_temp.check_eq('and the configured one is used when there is one',
+    v_url, 'https://books.contoh.my/#/share/abc123');
+  -- The assertion this block exists for. `value::text` on a jsonb
+  -- string keeps the quotes, and a quote in the middle of an address is
+  -- a link nobody can click in an email that has already been sent.
+  perform pg_temp.check_true('and it carries no quotes out of the jsonb',
+    position('"' in v_url) = 0);
+  perform pg_temp.check_true('nor any whitespace to break the href',
+    v_url !~ '\s');
+
+  delete from public.platform_settings where key = 'site_url';
+end $$;
+
+
 rollback;
