@@ -496,6 +496,58 @@ begin
     (select s.loyalty_points_earned from public.pos_sales s
       where s.id = v_sale), 125);
 
+  -- ------------------------------------------------------------------
+  -- The bill that crosses the line earns at the old rate
+  -- ------------------------------------------------------------------
+  --
+  -- 0253 and 0254 both say this in a comment above the same line: the
+  -- multiplier is read "before this sale's own points land", so "a bill
+  -- that crosses the threshold earns at the old rate and the next one
+  -- earns at the new", because "any other reading makes the rate depend
+  -- on the order two tills happened to settle in".
+  --
+  -- Nothing asserted it. Every band assertion above sits comfortably
+  -- inside its band, so a version that read the multiplier after the
+  -- earn entry was written would pass all of them, and would quietly
+  -- pay the crossing bill at the higher rate — for a member who was not
+  -- yet in that band when they handed the money over, on a scheme where
+  -- two tills settling in a different order would give two different
+  -- answers for the same basket.
+  select * into v_tier from public.loyalty_member_tier(v_acct);
+  perform public.upsert_loyalty_tier(
+    v_prog, 'TEMBAGA', 'Tembaga', v_tier.earned + 50, 2);
+
+  v_sale := public.open_pos_sale(v_reg, v_member);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 100.00);
+  perform public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 100.00)));
+  perform pg_temp.check_eq(
+    'the bill that carries a member over the line earns at the old rate',
+    (select s.loyalty_points_earned from public.pos_sales s
+      where s.id = v_sale), 125);
+
+  -- And it did carry them over, or the assertion above is about a
+  -- threshold nobody reached.
+  select * into v_tier from public.loyalty_member_tier(v_acct);
+  perform pg_temp.check_eq('and leaves them standing in the new band',
+    v_tier.tier_name, 'Tembaga');
+
+  v_sale := public.open_pos_sale(v_reg, v_member);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 100.00);
+  perform public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 100.00)));
+  perform pg_temp.check_eq('so the next bill is the one that earns double',
+    (select s.loyalty_points_earned from public.pos_sales s
+      where s.id = v_sale), 200);
+
+  -- Taken out rather than retired, because a retired band is still a
+  -- row and the block below counts the bands this file set up. A
+  -- fixture cleaning up after itself, not a claim about deletion —
+  -- `retire_loyalty_tier` is the real way to withdraw one and it is
+  -- asserted a few lines further down.
+  delete from public.loyalty_tiers t
+   where t.program_id = v_prog and t.code = 'TEMBAGA';
+
   -- Retiring a band drops its members to whichever is below it, and
   -- nothing is deleted.
   perform public.retire_loyalty_tier(
