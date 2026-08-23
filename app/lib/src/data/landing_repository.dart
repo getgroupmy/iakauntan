@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/providers.dart';
 import 'repository.dart';
@@ -91,18 +92,38 @@ extension RepoLanding on Repo {
     params: {'p_store_code': storeCode},
   );
 
-  /// Put a logo in the public bucket and hand back the address to store.
+  /// Put the platform's logo in the public bucket and hand back the
+  /// address to store.
   ///
   /// `logos` is already public, which is what makes this work at all: an
   /// unauthenticated visitor has to be able to fetch the image, and
-  /// nothing about a logo is private. The name carries a timestamp so a
-  /// replacement is not served from a cache of the old one.
-  Future<String> uploadLandingLogo(Uint8List bytes, String fileName) async {
-    final stamp = DateTime.now().millisecondsSinceEpoch;
-    final safe = fileName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '-');
-    final path = 'landing/$stamp-$safe';
-    await client.storage.from('logos').uploadBinary(path, bytes);
-    return client.storage.from('logos').getPublicUrl(path);
+  /// nothing about a logo is private.
+  ///
+  /// Two fixed paths rather than timestamped names, for the reason 0073
+  /// gives about the company logo: a bucket that keeps every logo
+  /// anybody ever uploaded is a bucket nobody ever tidies. A fixed path
+  /// makes the second upload an update, which is why 0291 gave the
+  /// landing prefix an update policy as well as an insert one, and the
+  /// browser cache is dealt with by the version parameter instead.
+  ///
+  /// The prefix is load-bearing: `landing/` is the only path a platform
+  /// administrator may write here, because every other path in this
+  /// bucket belongs to the organization named by its first segment.
+  Future<String> uploadLandingLogo(
+    Uint8List bytes,
+    String field, {
+    String? contentType,
+  }) async {
+    final path = field == 'logo_dark_url' ? 'landing/logo-dark' : 'landing/logo';
+    await client.storage
+        .from('logos')
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(upsert: true, contentType: contentType),
+        );
+    final url = client.storage.from('logos').getPublicUrl(path);
+    return '$url?v=${DateTime.now().millisecondsSinceEpoch}';
   }
 }
 

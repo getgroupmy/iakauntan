@@ -151,7 +151,11 @@ class _PageFormState extends ConsumerState<_PageForm> {
       action: () async {
         url = await ref
             .read(repoProvider)!
-            .uploadLandingLogo(file.bytes!, file.name);
+            .uploadLandingLogo(
+              file.bytes!,
+              field,
+              contentType: _mimeFor(file.extension),
+            );
       },
     );
     if (!mounted) return;
@@ -161,6 +165,27 @@ class _PageFormState extends ConsumerState<_PageForm> {
       // not publishing, and Save is still what commits it.
       if (ok && url != null) _c[field]!.text = url!;
     });
+  }
+
+  /// What to tell storage the bytes are.
+  ///
+  /// Guessed from the extension rather than trusted from the picker,
+  /// which reports nothing on some platforms. Wrong here means the
+  /// browser downloads the logo instead of drawing it.
+  static String? _mimeFor(String? extension) {
+    switch (extension?.toLowerCase()) {
+      case 'png':
+        return 'image/png';
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'webp':
+        return 'image/webp';
+      case 'svg':
+        return 'image/svg+xml';
+      default:
+        return null;
+    }
   }
 
   @override

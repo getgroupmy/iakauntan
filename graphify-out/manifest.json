@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787465803.768893,
-    "ast_hash": "eba6363ea9a7a9bec044ca044fe4b228",
+    "mtime": 1787471124.1280494,
+    "ast_hash": "d123e670afb7be903e9cd8d0dd9243c4",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -4385,13 +4385,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/landing_repository.dart": {
-    "mtime": 1787466447.92801,
-    "ast_hash": "f08c9914d4921078c6333f1f6210c4de",
+    "mtime": 1787471090.2601902,
+    "ast_hash": "d7a49092ef3059eab7665770721e93e2",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/landing_cms.dart": {
-    "mtime": 1787466377.7871287,
-    "ast_hash": "f9840b92c9434f9f3d01b6db1f4fe8f7",
+    "mtime": 1787471090.2726536,
+    "ast_hash": "d4816cf276ad1db4d68bfef052f5b5f7",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_content.dart": {
@@ -4400,13 +4400,23 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_screen.dart": {
-    "mtime": 1787466098.3199067,
-    "ast_hash": "a9f94fc30f51deb5246cd26206b05e89",
+    "mtime": 1787466728.054845,
+    "ast_hash": "320ac6b0f400e16d665727649ffe3b19",
     "semantic_hash": ""
   },
   "app/test/landing_content_test.dart": {
     "mtime": 1787466170.0133517,
     "ast_hash": "542897cee7748340fc5142ffd7e5fd03",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0291_the_logo_the_bucket_would_not_take.sql": {
+    "mtime": 1787470941.265907,
+    "ast_hash": "1b9b3c01154296bd271f1211d1962e64",
+    "semantic_hash": ""
+  },
+  "supabase/tests/logo_storage.sql": {
+    "mtime": 1787471038.8532596,
+    "ast_hash": "f0ce3498215d96d0deb21d76f625f3ae",
     "semantic_hash": ""
   }
 }

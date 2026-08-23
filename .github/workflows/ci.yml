@@ -191,6 +191,7 @@ jobs:
                    supabase/tests/claim_approval_chain.sql \
                    supabase/tests/table_grants.sql \
                    supabase/tests/attachment_lifecycle.sql \
+                   supabase/tests/logo_storage.sql \
                    supabase/tests/access_types.sql \
                    supabase/tests/branches_and_groups.sql \
                    supabase/tests/manufacturing.sql \
