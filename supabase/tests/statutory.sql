@@ -260,7 +260,7 @@ begin
       select 1 from pg_policies
        where tablename = 'payslip_access_requests' and cmd <> 'SELECT'));
 
-  -- Seven functions are deliberately open to an unauthenticated caller,
+  -- Eight functions are deliberately open to an unauthenticated caller,
   -- and each earned its place by someone who has no account needing to
   -- do exactly one thing: a director signing one resolution, a customer
   -- reading one invoice they were sent a link to, and — since 0262 — a
@@ -315,7 +315,24 @@ begin
            -- order can only be placed into an outlet with a shift open.
            'public_pos_menu',
            'public_pos_menu_modifiers',
-           'place_public_pos_order')));
+           'place_public_pos_order',
+           -- 0290, and the only one here that is not about a token.
+           --
+           -- It is the corporate landing page: the thing somebody sees
+           -- when they type the address on a business card, before they
+           -- have any reason to make an account. It takes no argument,
+           -- so there is nothing to vary and nothing to probe with, and
+           -- what it returns is marketing copy a platform administrator
+           -- chose to publish — no organization, no person, no
+           -- identifier of either. An unpublished page comes back empty
+           -- rather than as a draft.
+           --
+           -- The tables behind it are not merely policy-protected but
+           -- ungranted to anon entirely, so this function is the whole
+           -- of the public surface rather than the polite route to it.
+           -- `supabase/tests/landing_page.sql` asserts both, and that
+           -- only a platform administrator can change what it says.
+           'landing_page')));
 
   -- The other half of that allowlist, and it is not decoration.
   --
@@ -330,7 +347,7 @@ begin
   --
   -- So assert the exposure. A share link that has silently stopped
   -- working is found by a customer, not by us.
-  perform pg_temp.check_eq('and the seven that need anon still have it',
+  perform pg_temp.check_eq('and the eight that need anon still have it',
     (select count(*)
        from pg_proc p
        join pg_namespace n on n.oid = p.pronamespace
@@ -344,8 +361,12 @@ begin
                           -- phone at a table, which is worse than being
                           -- found by us.
                           'public_pos_menu', 'public_pos_menu_modifiers',
-                          'place_public_pos_order')),
-    7);
+                          'place_public_pos_order',
+                          -- A landing page that has silently stopped
+                          -- loading is found by somebody deciding not to
+                          -- buy the product.
+                          'landing_page')),
+    8);
 
   perform pg_temp.check_true('and the link tables stay shut to anon',
     not exists (

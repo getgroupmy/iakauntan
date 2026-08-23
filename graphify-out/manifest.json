@@ -740,8 +740,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory.sql": {
-    "mtime": 1787461025.8654885,
-    "ast_hash": "1a20ab044e576c282f044793ab9da23d",
+    "mtime": 1787465744.1202137,
+    "ast_hash": "642d1e4dd23dba1b6bab659a9ec2edee",
     "semantic_hash": ""
   },
   ".claude/CLAUDE.md": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787464966.5868936,
-    "ast_hash": "e4d83fe921fac2d6b4e058df8705a406",
+    "mtime": 1787465803.768893,
+    "ast_hash": "eba6363ea9a7a9bec044ca044fe4b228",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -4372,6 +4372,16 @@
   "supabase/tests/profile_visibility.sql": {
     "mtime": 1787464946.996083,
     "ast_hash": "0b260c7b554dafdb3b7ed79d516c461a",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0290_a_front_door_for_the_company.sql": {
+    "mtime": 1787465674.685595,
+    "ast_hash": "ab3d5d082ea4faf76cf1a97b9f5007f9",
+    "semantic_hash": ""
+  },
+  "supabase/tests/landing_page.sql": {
+    "mtime": 1787465727.4067588,
+    "ast_hash": "17da754b0247e1fe3375d2eb9ce6d7f2",
     "semantic_hash": ""
   }
 }
