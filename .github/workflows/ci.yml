@@ -156,6 +156,7 @@ jobs:
                    supabase/tests/pricing_and_dimensions.sql \
                    supabase/tests/manual_journal.sql \
                    supabase/tests/idempotency.sql \
+                   supabase/tests/revenue_recognition.sql \
                    supabase/tests/expense_claims.sql \
                    supabase/tests/expenses.sql \
                    supabase/tests/hr_reference.sql \
