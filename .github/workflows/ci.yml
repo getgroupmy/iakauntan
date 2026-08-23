@@ -145,6 +145,7 @@ jobs:
                    supabase/tests/mbrs.sql \
                    supabase/tests/fs_export.sql \
                    supabase/tests/view_security.sql \
+                   supabase/tests/profile_visibility.sql \
                    supabase/tests/credit_control.sql \
                    supabase/tests/stock_adjustments.sql \
                    supabase/tests/stock_transfers.sql \
