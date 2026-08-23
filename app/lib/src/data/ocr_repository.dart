@@ -437,6 +437,45 @@ extension RepoOcr on Repo {
           .eq('org_id', orgId)
           .order('issue_date', ascending: false));
 
+  /// Where to send somebody to pay one of them.
+  ///
+  /// The function raises a bill with Billplz and records it; what comes
+  /// back is Billplz's own page, which is where the card details are
+  /// typed. None of that touches this app — the whole point of a hosted
+  /// checkout is that a card number never reaches our origin.
+  ///
+  /// Nothing here decides whether the invoice is payable, or for how
+  /// much. `billplz-checkout` reads the invoice through the caller's own
+  /// token so RLS decides whether it is theirs, and 0297 decides the
+  /// rest. A button that checked first would only be a second opinion.
+  Future<String> startInvoiceCheckout(String invoiceId) async {
+    final res = await client.functions.invoke(
+      'billplz-checkout',
+      body: {'invoice_id': invoiceId},
+    );
+    final data = res.data;
+    if (data is Map && data['error'] != null) {
+      throw Exception(data['error'].toString());
+    }
+    final url = (data as Map)['url'];
+    if (url is! String || url.isEmpty) {
+      throw Exception('The gateway did not say where to send you.');
+    }
+    return url;
+  }
+
+  /// What has been tried against those invoices, and how it went.
+  ///
+  /// A company can read its own payments — 0297's policy — so a bill
+  /// somebody started and abandoned shows as pending rather than as
+  /// nothing at all.
+  Future<List<Map<String, dynamic>>> invoicePayments() async => Repo.rows(
+      await client
+          .from('platform_payments')
+          .select('invoice_id, state, amount, paid_amount, checkout_url, created_at')
+          .eq('org_id', orgId)
+          .order('created_at', ascending: false));
+
   /// Files a scanned capture against the record it turned out to be for.
   ///
   /// A receipt is photographed before the expense exists — that is the
