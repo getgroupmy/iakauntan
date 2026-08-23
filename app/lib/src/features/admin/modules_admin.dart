@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/platform_live.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/platform_catalog_repository.dart';
@@ -85,7 +86,10 @@ class ModulesAdminTab extends ConsumerWidget {
       context: context,
       builder: (_) => _ModuleDialog(existing: existing),
     );
-    if (saved == true) ref.invalidate(platformModulesAdminProvider);
+    // Everything the catalogue feeds, not only this list: the rename
+    // has to reach the rail's headings and the dashboard's tabs in
+    // this session too, not just in everybody else's over the wire.
+    if (saved == true) invalidatePlatformTable(ref, 'platform_modules');
   }
 }
 
@@ -111,7 +115,7 @@ class _NavGroupingCard extends ConsumerWidget {
             successMessage: v ? 'Menu grouped by module' : 'Menu shows one list',
             action: () => ref.read(platformCatalogProvider).setNavGrouping(v),
           );
-          if (ok) ref.invalidate(navGroupingProvider);
+          if (ok) invalidatePlatformTable(ref, 'platform_settings');
         },
       ),
     );

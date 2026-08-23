@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/live_updates.dart';
+import '../../core/platform_live.dart';
 import '../../core/providers.dart';
 import '../../data/platform_catalog_repository.dart';
 import '../../core/theme.dart';
@@ -730,6 +731,12 @@ class AppShell extends ConsumerWidget {
     // updating. It follows the organization by itself — switching
     // company tears the subscription down and opens the right one.
     ref.watch(liveUpdatesProvider);
+
+    // And the platform's own tables, which belong to no company and so
+    // need no organization to follow. A module renamed in the console,
+    // the menu grouped or ungrouped, a logo replaced: all of it lands
+    // here rather than waiting for the next sign-in.
+    ref.watch(platformLiveProvider);
 
     final dests = _visible(ref);
 

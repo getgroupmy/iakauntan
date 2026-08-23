@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/platform_live.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/landing_repository.dart';
@@ -137,7 +138,9 @@ class _PageFormState extends ConsumerState<_PageForm> {
     );
     if (!mounted) return;
     setState(() => _busy = false);
-    if (ok) ref.invalidate(landingPageAdminProvider);
+    // Including the brand: `landingContentProvider` is where the
+    // signed-in app reads the product name and the logo from.
+    if (ok) invalidatePlatformTable(ref, 'landing_page');
   }
 
   Future<void> _uploadLogo(String field) async {
@@ -374,7 +377,7 @@ class _SectionsCard extends ConsumerWidget {
       context: context,
       builder: (_) => _SectionDialog(existing: existing),
     );
-    if (saved == true) ref.invalidate(landingSectionsAdminProvider);
+    if (saved == true) invalidatePlatformTable(ref, 'landing_sections');
   }
 }
 
@@ -621,7 +624,7 @@ class _AppLinksCard extends ConsumerWidget {
       context: context,
       builder: (_) => _AppLinkDialog(existing: existing),
     );
-    if (saved == true) ref.invalidate(landingAppLinksAdminProvider);
+    if (saved == true) invalidatePlatformTable(ref, 'landing_app_links');
   }
 }
 

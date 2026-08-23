@@ -50,7 +50,12 @@ begin
     -- there and nowhere else, so without it an approval queue would
     -- update at the end of a claim's life and never in the middle.
     'expense_claims', 'claim_approvals',
-    'org_credits'
+    'org_credits',
+    -- 0302. What the platform console edits. These belong to no company
+    -- and so carry no `org_id` to filter on; what decides who is sent a
+    -- row is the policy on the table, which is asserted below.
+    'platform_modules', 'platform_settings',
+    'landing_page', 'landing_sections', 'landing_app_links'
   ]
   loop
     select exists (
@@ -115,9 +120,17 @@ begin
   -- Keys, one person's pay, and the platform's own books. None of these
   -- change often enough for live updates to be worth widening what
   -- leaves the database.
+  --
+  -- `platform_settings` was on this list until 0302 and is not any more.
+  -- The reason is the same one that let 0124 publish `expense_claims`:
+  -- Realtime asks row level security who may be sent a row, and 0298
+  -- already narrows this table to one key for anybody who is not a
+  -- platform admin. An admin receives what an admin could already
+  -- select. That argument is only worth as much as the policy holding,
+  -- so the policy is asserted below rather than assumed.
   foreach v_table in array array[
     'einvoice_credentials', 'org_ocr_credentials', 'org_ocr_settings',
-    'payslips', 'payroll_runs', 'platform_settings', 'platform_invoices',
+    'payslips', 'payroll_runs', 'platform_invoices',
     'profiles'
   ]
   loop
@@ -208,6 +221,133 @@ begin
   -- would read as a policy doing its job.
   perform pg_temp.check_true(
     'while the claimant still gets their own', v_claimant_sees = 1);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Publishing the platform's settings does not publish the platform's
+-- settings
+--
+-- 0302 put `platform_settings` on the wire so that grouping the side
+-- menu regroups it for everybody rather than for whoever reloads first.
+-- That is only safe because Realtime asks row level security which rows
+-- a subscriber may be sent, and 0298 narrowed this table to a single
+-- key for anybody who is not a platform admin.
+--
+-- So this is the load-bearing assertion under that decision, and it is
+-- deliberately behavioural rather than a reading of the policy text: a
+-- policy can be rewritten a dozen ways that all still say
+-- `is_platform_admin() or key = 'nav_grouping'`, and one way that does
+-- not. What must stay true is that an ordinary member selecting this
+-- table gets `nav_grouping` and nothing else — because whatever they can
+-- select is what the socket will send them.
+--
+-- Run as `authenticated`. The connection is a superuser and a superuser
+-- bypasses row level security entirely, which would make the whole
+-- thing pass while proving nothing.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Biasa Sdn Bhd');
+  v_member uuid := pg_temp.another_user('member@biasa.test');
+  v_role text;
+  v_rows int;
+  v_grouping int;
+  v_secretish int;
+begin
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_member, 'employee')
+  on conflict do nothing;
+
+  -- A key that is none of an ordinary member's business, standing in
+  -- for whatever gets added to this table next. The check below is
+  -- worth nothing without a row that ought to be refused.
+  insert into public.platform_settings (key, value, description)
+  values ('billing_provider',
+          '{"account": "acct_live_should_not_travel"}',
+          'Stand-in for a setting that is not everybody''s')
+  on conflict (key) do update set value = excluded.value;
+
+  perform pg_temp.sign_in_as(v_member);
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    select count(*) into v_rows from public.platform_settings;
+    select count(*) into v_grouping
+      from public.platform_settings where key = 'nav_grouping';
+    select count(*) into v_secretish
+      from public.platform_settings where key = 'billing_provider';
+  end;
+  reset role;
+
+  perform pg_temp.check_true(
+    'the settings test ran under row level security',
+    v_role = 'authenticated');
+
+  -- The control first. A policy that hid every row would satisfy every
+  -- refusal below while breaking the feature 0302 exists for.
+  perform pg_temp.check_eq(
+    'a member is sent the menu grouping switch', v_grouping::numeric, 1);
+  perform pg_temp.check_eq(
+    'and nothing else from the platform settings',
+    v_secretish::numeric, 0);
+  perform pg_temp.check_eq(
+    'so one row is all that can reach them over the socket',
+    v_rows::numeric, 1);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The console's other tables are readable by everybody on purpose
+--
+-- The check further up — published tables have RLS on and at least one
+-- policy — passes a policy of `using (true)`, and for these that is the
+-- right policy: the module catalogue and the landing page are the same
+-- for every company on the platform. Asserted anyway, because "public by
+-- design" and "somebody forgot to write a policy" look identical in
+-- `pg_policies`, and only one of them is a decision.
+--
+-- Each table gets a row written first. Counting what a member can see
+-- without knowing there is anything to see would pass against a table
+-- that is simply empty, which is the shape of assertion this file
+-- exists to avoid.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_user uuid := pg_temp.another_user('reader@biasa.test');
+  v_role text;
+  v_modules int;
+  v_sections int;
+  v_links int;
+begin
+  insert into public.landing_sections (title, body, sort_order)
+  values ('Kept in the open', 'Every company sees the same page.', 900);
+  insert into public.landing_app_links (store_code, label, url, sort_order)
+  values ('play', 'Android', 'https://example.test/android', 900);
+
+  perform pg_temp.sign_in_as(v_user);
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    select count(*) into v_modules from public.platform_modules;
+    select count(*) into v_sections
+      from public.landing_sections where sort_order = 900;
+    select count(*) into v_links
+      from public.landing_app_links where sort_order = 900;
+  end;
+  reset role;
+
+  perform pg_temp.check_true(
+    'the catalogue test ran under row level security',
+    v_role = 'authenticated');
+
+  -- The catalogue is seeded by 0018 and added to by every module since,
+  -- so "more than nothing" is the honest assertion; naming a count here
+  -- would break on the next module rather than on a policy change.
+  perform pg_temp.check_true(
+    'a signed-in member is sent the module catalogue', v_modules > 0);
+  perform pg_temp.check_eq(
+    'and the landing sections', v_sections::numeric, 1);
+  perform pg_temp.check_eq(
+    'and the store links', v_links::numeric, 1);
 end $$;
 
 rollback;

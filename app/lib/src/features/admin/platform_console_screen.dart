@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/platform_live.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -413,7 +414,7 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
       successMessage: 'Saved',
     );
     if (mounted) setState(() => _dirty = false);
-    ref.invalidate(platformSettingsProvider);
+    invalidatePlatformTable(ref, 'platform_settings');
   }
 
   @override
