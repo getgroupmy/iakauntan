@@ -398,6 +398,98 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- The rule that keeps the allowlist short
+--
+-- The allowlist above asserts what is exposed to anon right now. What
+-- keeps it short is 0165's event trigger, which strips PUBLIC and anon
+-- from every function created in `public` or `app` — because Supabase
+-- ships `alter default privileges ... grant all on functions to anon`,
+-- so without it a new function arrives reachable by strangers and
+-- somebody has to notice.
+--
+-- Nothing asserted the trigger itself, only its accumulated output. On
+-- a from-scratch build that is nearly enough — remove the trigger and
+-- the next definer function added in `public` lights the allowlist up.
+-- Nearly, because it depends on a later migration happening to add one,
+-- and because the allowlist reports the symptom rather than the cause:
+-- "something you did not expect is exposed" is a worse morning than
+-- "the thing that stops that is switched off".
+--
+-- The third assertion is the one this file most needed. A replace
+-- strips anon too, which is not obvious and is the reason 0290 and 0294
+-- both re-grant anon immediately after re-creating `landing_page()`.
+-- Those lines read as redundant. They are not, and the day somebody
+-- tidies them away the landing page goes dark for everybody who has not
+-- signed in.
+-- ---------------------------------------------------------------------
+do $$
+declare v_enabled "char";
+begin
+  select evtenabled into v_enabled
+    from pg_event_trigger where evtname = 'revoke_public_execute';
+  perform pg_temp.check_true('the trigger that shuts new functions is armed',
+    v_enabled is not null and v_enabled <> 'D');
+
+  -- A function made here and rolled back with the rest of the file.
+  create function public.zz_trigger_probe()
+  returns integer language sql security definer as 'select 1';
+
+  perform pg_temp.check_true(
+    'a new function is not born reachable by a stranger',
+    not has_function_privilege('anon', 'public.zz_trigger_probe()', 'execute'));
+  perform pg_temp.check_true('nor by PUBLIC',
+    not has_function_privilege('public', 'public.zz_trigger_probe()', 'execute'));
+
+  -- Grant it deliberately, then replace it. This is the behaviour every
+  -- re-grant in this repository depends on.
+  grant execute on function public.zz_trigger_probe() to anon;
+  perform pg_temp.check_true('an anon grant can still be given on purpose',
+    has_function_privilege('anon', 'public.zz_trigger_probe()', 'execute'));
+
+  create or replace function public.zz_trigger_probe()
+  returns integer language sql security definer as 'select 2';
+  perform pg_temp.check_true(
+    'and replacing the function takes it away again',
+    not has_function_privilege('anon', 'public.zz_trigger_probe()', 'execute'));
+
+  -- The other half, and the reason the trigger is safe to leave on: a
+  -- grant to `authenticated` survives, so re-creating an ordinary
+  -- function does not lock out every signed-in user on the platform.
+  grant execute on function public.zz_trigger_probe() to authenticated;
+  create or replace function public.zz_trigger_probe()
+  returns integer language sql security definer as 'select 3';
+  perform pg_temp.check_true(
+    'while a signed-in user keeps theirs',
+    has_function_privilege('authenticated', 'public.zz_trigger_probe()', 'execute'));
+
+  drop function public.zz_trigger_probe();
+
+  -- And the same in `app`, because the trigger names two schemas and an
+  -- assertion that only probes one is an assertion that passes while
+  -- half the rule is gone. Narrowing the trigger to `public` alone
+  -- survived every check above until this was added.
+  --
+  -- `app` never had Supabase's default anon grant to begin with, so the
+  -- interesting half here is the replace: a deliberate anon grant on an
+  -- `app` function is stripped the same way, which is what keeps a
+  -- SECURITY DEFINER helper from quietly becoming a public entry point
+  -- the next time somebody edits it.
+  create function app.zz_trigger_probe()
+  returns integer language sql security definer as 'select 1';
+  perform pg_temp.check_true('an app function is shut to PUBLIC too',
+    not has_function_privilege('public', 'app.zz_trigger_probe()', 'execute'));
+
+  grant execute on function app.zz_trigger_probe() to anon;
+  create or replace function app.zz_trigger_probe()
+  returns integer language sql security definer as 'select 2';
+  perform pg_temp.check_true(
+    'and replacing one in app takes anon away as well',
+    not has_function_privilege('anon', 'app.zz_trigger_probe()', 'execute'));
+  drop function app.zz_trigger_probe();
+end $$;
+
+
+-- ---------------------------------------------------------------------
 -- The change history
 -- ---------------------------------------------------------------------
 do $$
