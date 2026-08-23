@@ -99,6 +99,7 @@ jobs:
                    supabase/tests/platform_console.sql \
                    supabase/tests/landing_page.sql \
                    supabase/tests/platform_pricing_and_payment.sql \
+                   supabase/tests/gateway_payments.sql \
                    supabase/tests/invitations.sql \
                    supabase/tests/clock_out.sql \
                    supabase/tests/bank_balance_resync.sql \
@@ -413,6 +414,18 @@ jobs:
       # working notification system that delivers nothing.
       - run: deno check supabase/functions/_shared/web_push_test.ts
       - run: deno test --allow-read supabase/functions/_shared/web_push_test.ts
+
+      # Billplz, and the one thing that has to be right.
+      #
+      # `billplz-callback` is the only function deployed without
+      # `verify_jwt` — Billplz's servers hold no session with us — so an
+      # HMAC over the callback's own fields is the entire credential. It
+      # runs here, with no permission flags, for the same reason the two
+      # above do: logic that decides whether a stranger may mark an
+      # invoice paid belongs on the side that is executed, not the side
+      # that is only type-checked.
+      - run: deno check supabase/functions/_shared/billplz_test.ts
+      - run: deno test supabase/functions/_shared/billplz_test.ts
 
       # The functions themselves, type-checked but not run. They cannot
       # be unit tested here — every one of them exists to call somebody

@@ -51,6 +51,20 @@ enable_confirmations = false
 #   send-push    makes other people's phones ring, so it has to
 #                establish that the caller is in that conversation
 #                before it will.
+#   billplz-checkout
+#                reads the invoice through the caller's own token, so
+#                RLS decides whether it is theirs to pay.
+#
+# And one that is not, which is the only one in the project:
+#
+#   billplz-callback  verify_jwt = false, necessarily. Billplz's servers
+#                hold no session with us, so a payment confirmation that
+#                could only arrive with a JWT would never arrive. Its
+#                credential is an HMAC over the callback's own fields,
+#                keyed by BILLPLZ_XSIGNATURE_KEY — implemented in
+#                `_shared/billplz.ts` and asserted in
+#                `_shared/billplz_test.ts`, which CI runs. An unverified
+#                request is told nothing and settles nothing.
 [functions.myinvois]
 verify_jwt = true
 
@@ -68,3 +82,12 @@ verify_jwt = true
 
 [functions.send-push]
 verify_jwt = true
+
+[functions.billplz-checkout]
+verify_jwt = true
+
+# The exception. See the note above; do not "tidy" this to true, or
+# every payment confirmation Billplz sends will be rejected at the door
+# and no invoice will ever be marked paid.
+[functions.billplz-callback]
+verify_jwt = false
