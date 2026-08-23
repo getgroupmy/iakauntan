@@ -40,6 +40,8 @@ declare
   v_run     uuid;
   v_req     uuid;
   v_req2    uuid;
+  v_run2    uuid;
+  v_slip_c  uuid;
   v_slip_a  uuid;
   v_slip_b  uuid;
   j         jsonb;
@@ -395,6 +397,106 @@ begin
     raise exception 'FAIL: an expired grant still opened a payslip';
   exception when sqlstate '42501' then
     raise notice 'ok   and an expired grant opens nothing';
+  end;
+
+  -- ==================================================================
+  -- A grant is one person's, for one run, over one stretch of dates
+  -- ==================================================================
+  --
+  -- `app.covering_grant` narrows on four things beyond being approved
+  -- and unexpired, and three of them were asserted nowhere. Mutating
+  -- each clause away left the whole file green:
+  --
+  --   * `requested_by = auth.uid()` — without it, one approved grant
+  --     opens payslips for every member of the organization. The person
+  --     who asked, the approval that names them, and the log that says
+  --     who looked would all still be right; anybody else would simply
+  --     be let in beside them.
+  --   * `run_id` — a grant given for January's run opens every run
+  --     there has ever been.
+  --   * `period_from` / `period_to` — a grant bounded to a stretch of
+  --     dates opens payslips outside it.
+  --
+  -- Salary is the most private thing this database holds, and the whole
+  -- design of these grants is that they are narrow. Nothing was
+  -- checking that they were.
+
+  -- A second auditor, with no grant of their own, while the first one's
+  -- is live.
+  perform pg_temp.sign_in_as(v_owner);
+  update public.payslip_access_requests
+     set expires_at = now() + interval '30 days' where id = v_req2;
+  -- The second auditor this file already has. They are an active
+  -- member with every right an auditor gets — what they do not have is
+  -- a grant, and that is the only thing between them and somebody's
+  -- salary.
+  perform pg_temp.sign_in_as(v_other);
+  perform pg_temp.check_true(
+    'somebody else''s grant is not a grant of your own',
+    not public.my_payslip_access(v_org));
+  begin
+    perform public.audit_view_payslip(v_slip_a);
+    raise exception 'FAIL: another auditor rode in on a grant they never asked for';
+  exception when sqlstate '42501' then
+    raise notice 'ok   and does not open a payslip for you';
+  end;
+
+  -- Scoped to one run, then asked about another.
+  perform pg_temp.sign_in_as(v_owner);
+  v_run2 := public.create_payroll_run(
+    v_org, public.ensure_pay_period(v_org, 2026, 2), 'February');
+  perform public.calculate_payroll_run(v_run2);
+  select id into v_slip_c from public.payslips
+   where run_id = v_run2 and employee_id = v_anwar;
+
+  update public.payslip_access_requests
+     set run_id = v_run where id = v_req2;
+  perform pg_temp.sign_in_as(v_auditor);
+  perform pg_temp.check_eq('a grant for one run still opens that run',
+    public.audit_view_payslip(v_slip_a) ->> 'employee_name', 'Anwar');
+  begin
+    perform public.audit_view_payslip(v_slip_c);
+    raise exception 'FAIL: a grant for January opened February';
+  exception when sqlstate '42501' then
+    raise notice 'ok   and opens no other run';
+  end;
+
+  -- Scoped to a stretch of dates, then asked about a pay date outside
+  -- it. The bound is on the payslip's own pay date, which is why 0047
+  -- takes it as an argument rather than reading the run.
+  perform pg_temp.sign_in_as(v_owner);
+  update public.payslip_access_requests
+     set run_id = null,
+         period_from = date '2026-01-01',
+         period_to = date '2026-01-31'
+   where id = v_req2;
+  perform pg_temp.sign_in_as(v_auditor);
+  perform pg_temp.check_eq('a grant for January opens a January payslip',
+    public.audit_view_payslip(v_slip_a) ->> 'employee_name', 'Anwar');
+  begin
+    perform public.audit_view_payslip(v_slip_c);
+    raise exception 'FAIL: a January grant opened a February payslip';
+  exception when sqlstate '42501' then
+    raise notice 'ok   and nothing paid after them';
+  end;
+
+  -- Both ends, separately. The first draft of this only pushed past
+  -- `period_to`, so removing `period_from` altogether changed nothing
+  -- and the mutant lived: a grant bounded to February would have opened
+  -- every payslip ever paid before it. Turning the window around is
+  -- what makes the lower bound load-bearing.
+  perform pg_temp.sign_in_as(v_owner);
+  update public.payslip_access_requests
+     set period_from = date '2026-02-01', period_to = date '2026-02-28'
+   where id = v_req2;
+  perform pg_temp.sign_in_as(v_auditor);
+  perform pg_temp.check_eq('a grant for February opens a February payslip',
+    public.audit_view_payslip(v_slip_c) ->> 'employee_name', 'Anwar');
+  begin
+    perform public.audit_view_payslip(v_slip_a);
+    raise exception 'FAIL: a February grant opened a January payslip';
+  exception when sqlstate '42501' then
+    raise notice 'ok   nor anything paid before them';
   end;
 
   -- ==================================================================
