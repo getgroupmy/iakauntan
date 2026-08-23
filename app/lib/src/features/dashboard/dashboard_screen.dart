@@ -317,6 +317,70 @@ List<Widget> moduleTiles(BuildContext context, String code,
     ]);
   }
 
+  if (code == 'hr' && all.containsKey('hr')) {
+    final h = block('hr');
+    final leave = n(h, 'leave_to_approve');
+    final claims = n(h, 'claims_to_approve');
+    tiles.addAll([
+      StatTile(
+        label: 'Headcount',
+        value: n(h, 'headcount').toStringAsFixed(0),
+        // Probation and notice are employment and both get paid, so
+        // both are in the figure. 0301 says why at length.
+        caption: '${n(h, 'on_leave_today').toStringAsFixed(0)} away today',
+        icon: Icons.badge_outlined,
+        onTap: () => context.go('/hr/people'),
+      ),
+      StatTile(
+        label: 'Leave to approve',
+        value: leave.toStringAsFixed(0),
+        caption: leave > 0 ? 'Waiting on somebody' : 'Nothing waiting',
+        icon: Icons.beach_access_outlined,
+        accent: leave > 0 ? context.colors.warning : null,
+        onTap: () => context.go('/hr/leave'),
+      ),
+      StatTile(
+        label: 'Claims to approve',
+        value: claims.toStringAsFixed(0),
+        caption: claims > 0 ? 'Waiting on somebody' : 'Nothing waiting',
+        icon: Icons.receipt_outlined,
+        accent: claims > 0 ? context.colors.warning : null,
+        onTap: () => context.go('/hr/claims'),
+      ),
+    ]);
+  }
+
+  if (code == 'payroll' && all.containsKey('payroll')) {
+    final r = block('payroll');
+    final approve = n(r, 'to_approve');
+    final pay = n(r, 'to_pay');
+    tiles.addAll([
+      StatTile(
+        label: 'Runs open',
+        value: n(r, 'open_runs').toStringAsFixed(0),
+        caption: 'Not yet paid',
+        icon: Icons.payments_outlined,
+        onTap: () => context.go('/hr/payroll'),
+      ),
+      StatTile(
+        label: 'To approve',
+        value: approve.toStringAsFixed(0),
+        caption: approve > 0 ? 'Calculated, awaiting sign-off' : 'None waiting',
+        icon: Icons.fact_check_outlined,
+        accent: approve > 0 ? context.colors.warning : null,
+        onTap: () => context.go('/hr/payroll'),
+      ),
+      StatTile(
+        label: 'To pay',
+        value: pay.toStringAsFixed(0),
+        caption: pay > 0 ? 'Signed off, not paid' : 'Nothing outstanding',
+        icon: Icons.account_balance_outlined,
+        accent: pay > 0 ? context.colors.info : null,
+        onTap: () => context.go('/hr/payroll'),
+      ),
+    ]);
+  }
+
   return tiles;
 }
 

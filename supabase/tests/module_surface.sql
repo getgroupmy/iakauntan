@@ -415,4 +415,224 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------
+-- The people, and the payroll they are on
+--
+-- 0301. Two modules, so two blocks, and a company holding one without
+-- the other is the case that says they really are separate.
+--
+-- The headcount boundary is the one worth the fixture: somebody serving
+-- notice is employed and is about to be paid, and a dashboard that
+-- dropped them would disagree with the payroll run.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_away  uuid;
+  v_here  uuid;
+  v_notice uuid;
+  v_gone  uuid;
+  v_dash  jsonb;
+begin
+  v_org := pg_temp.test_org('Kilang Orang Sdn Bhd', array['hr', 'payroll']);
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, residency_status, employment_status)
+  values (v_org, 'E1', 'Aminah', date '2020-01-01', 5000,
+          date '1990-01-01', 'citizen', 'active')
+  returning id into v_away;
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, residency_status, employment_status)
+  values (v_org, 'E2', 'Bakri', date '2021-01-01', 4000,
+          date '1992-01-01', 'citizen', 'probation')
+  returning id into v_here;
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, residency_status, employment_status)
+  values (v_org, 'E3', 'Chandra', date '2019-01-01', 6000,
+          date '1988-01-01', 'citizen', 'notice')
+  returning id into v_notice;
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, residency_status, employment_status)
+  values (v_org, 'E4', 'Devi', date '2018-01-01', 7000,
+          date '1985-01-01', 'citizen', 'resigned')
+  returning id into v_gone;
+
+  v_dash := public.module_dashboard(v_org);
+
+  -- Three on the books: active, probation and notice. Devi has left.
+  perform pg_temp.check_eq(
+    'probation and notice are employment, and resignation is not',
+    (v_dash -> 'hr' ->> 'headcount')::numeric, 3);
+
+  perform pg_temp.check_eq('nobody is away yet',
+    (v_dash -> 'hr' ->> 'on_leave_today')::numeric, 0);
+  perform pg_temp.check_eq('and nothing is waiting to be approved',
+    (v_dash -> 'hr' ->> 'leave_to_approve')::numeric, 0);
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Who is away today, counted as people
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_p1 uuid; v_p2 uuid; v_type uuid; v_today date;
+begin
+  v_org := pg_temp.test_org('Kilang Cuti Sdn Bhd', array['hr']);
+  v_today := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, residency_status, employment_status)
+  values (v_org, 'E1', 'Farah', date '2020-01-01', 5000,
+          date '1990-01-01', 'citizen', 'active')
+  returning id into v_p1;
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, residency_status, employment_status)
+  values (v_org, 'E2', 'Ghani', date '2020-01-01', 5000,
+          date '1991-01-01', 'citizen', 'active')
+  returning id into v_p2;
+
+  insert into public.leave_types (org_id, code, name, is_paid)
+  values (v_org, 'AL', 'Annual leave', true) returning id into v_type;
+
+  -- `submit_leave_request` refuses a request the balance will not
+  -- cover, which is right and is why the fixture has to grant one.
+  insert into public.leave_balances
+    (org_id, employee_id, leave_type_id, leave_year, entitled_days)
+  values (v_org, v_p1, v_type,
+          extract(year from v_today)::integer, 20),
+         (v_org, v_p2, v_type,
+          extract(year from v_today)::integer, 20);
+
+  -- Through the real RPC rather than by hand: `request_no` is required
+  -- and has no default, and a fixture that invents its own rows is a
+  -- fixture that stops resembling the thing it is testing.
+  perform public.submit_leave_request(
+    v_org, v_type, v_today - 2, v_today, 3, 'Balik kampung',
+    false, null, v_p1);
+  perform public.submit_leave_request(
+    v_org, v_type, v_today, v_today + 2, 3, 'Balik kampung lagi',
+    false, null, v_p1);
+  perform public.submit_leave_request(
+    v_org, v_type, v_today, v_today, 1, 'Demam', false, null, v_p2);
+  perform public.submit_leave_request(
+    v_org, v_type, v_today, v_today, 1, 'Ditolak', false, null, v_p2);
+
+  -- Farah's two are approved and meet across today: one person away,
+  -- not two, which is the whole reason the figure counts employees
+  -- rather than rows. Ghani has one still asking and one refused, and
+  -- is at their desk either way.
+  update public.leave_requests set status = 'approved'
+   where org_id = v_org and employee_id = v_p1;
+  update public.leave_requests set status = 'rejected'
+   where org_id = v_org and employee_id = v_p2 and reason = 'Ditolak';
+
+  perform pg_temp.check_eq('two approved requests are one person away',
+    (public.module_dashboard(v_org) -> 'hr' ->> 'on_leave_today')::numeric, 1);
+  perform pg_temp.check_eq('and the one still asking is waiting',
+    (public.module_dashboard(v_org) -> 'hr' ->> 'leave_to_approve')::numeric, 1);
+
+  -- Leave that ended yesterday is somebody back at work.
+  update public.leave_requests set start_date = v_today - 5,
+         end_date = v_today - 1
+   where employee_id = v_p1;
+  perform pg_temp.check_eq('leave that has ended is not leave today',
+    (public.module_dashboard(v_org) -> 'hr' ->> 'on_leave_today')::numeric, 0);
+end;
+$$;
+
+-- ---------------------------------------------------------------------
+-- A run on its way through, and two modules that come apart
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_period uuid; v_run uuid; v_dash jsonb;
+begin
+  v_org := pg_temp.test_org('Kilang Gaji Sdn Bhd', array['hr', 'payroll']);
+  -- Posting a run reaches the ledger, and the ledger will not take a
+  -- date no fiscal period covers.
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, residency_status)
+  values (v_org, 'E1', 'Hafiz', date '2020-01-01', 5000,
+          date '1990-01-01', 'citizen');
+
+  v_period := public.ensure_pay_period(v_org, 2026, 1);
+  v_run := public.create_payroll_run(v_org, v_period, 'January');
+
+  perform pg_temp.check_eq('a draft run is open',
+    (public.module_dashboard(v_org) -> 'payroll' ->> 'open_runs')::numeric, 1);
+  perform pg_temp.check_eq('and is not yet anybody''s to approve',
+    (public.module_dashboard(v_org) -> 'payroll' ->> 'to_approve')::numeric, 0);
+
+  perform public.calculate_payroll_run(v_run);
+  v_dash := public.module_dashboard(v_org);
+  perform pg_temp.check_eq('once calculated it is waiting for approval',
+    (v_dash -> 'payroll' ->> 'to_approve')::numeric, 1);
+  perform pg_temp.check_eq('and still open',
+    (v_dash -> 'payroll' ->> 'open_runs')::numeric, 1);
+  perform pg_temp.check_eq('with nothing to pay yet',
+    (v_dash -> 'payroll' ->> 'to_pay')::numeric, 0);
+
+  -- Posted, which moves it off the approver's desk and onto the one
+  -- that pays. Without this the run never leaves `calculated`, and
+  -- widening `to_approve` to count approved runs as well changed
+  -- nothing and the mutant lived.
+  perform public.post_payroll_run(v_run);
+  v_dash := public.module_dashboard(v_org);
+  perform pg_temp.check_eq('a posted run is nobody''s to approve',
+    (v_dash -> 'payroll' ->> 'to_approve')::numeric, 0);
+  perform pg_temp.check_eq('a posted run is waiting to be paid',
+    (v_dash -> 'payroll' ->> 'to_pay')::numeric, 1);
+  perform pg_temp.check_eq('and is still open until it is',
+    (v_dash -> 'payroll' ->> 'open_runs')::numeric, 1);
+
+  -- `approved` sits between calculated and posted in the enum and no
+  -- RPC produces it: `create_payroll_run` writes draft,
+  -- `calculate_payroll_run` writes calculated, and the only other
+  -- writers set posted and paid. 0301 handles the state anyway, and
+  -- this is the only way to reach it — set directly, because the point
+  -- is to pin which side of the line it falls on rather than to pretend
+  -- somebody can get there.
+  --
+  -- Without this the state is untestable and a mutant that counted an
+  -- approved run as still needing approval lived through everything
+  -- above.
+  update public.payroll_runs set status = 'approved' where id = v_run;
+  v_dash := public.module_dashboard(v_org);
+  perform pg_temp.check_eq('an approved run is past the approver',
+    (v_dash -> 'payroll' ->> 'to_approve')::numeric, 0);
+  perform pg_temp.check_eq('and is waiting to be paid',
+    (v_dash -> 'payroll' ->> 'to_pay')::numeric, 1);
+
+  -- Paid is finished, and void never happened. Neither is open.
+  update public.payroll_runs set status = 'paid' where id = v_run;
+  perform pg_temp.check_eq('a paid run is closed',
+    (public.module_dashboard(v_org) -> 'payroll' ->> 'open_runs')::numeric, 0);
+  update public.payroll_runs set status = 'void' where id = v_run;
+  perform pg_temp.check_eq('and a voided one was never open',
+    (public.module_dashboard(v_org) -> 'payroll' ->> 'open_runs')::numeric, 0);
+
+  -- The two modules are priced apart and shown apart. A company that
+  -- keeps its people here and its payroll elsewhere gets one tab.
+  perform public.set_module_hidden(v_org, 'payroll', true);
+  v_dash := public.module_dashboard(v_org);
+  perform pg_temp.check_true('putting payroll away leaves HR standing',
+    v_dash ? 'hr' and not (v_dash ? 'payroll'));
+  perform public.set_module_hidden(v_org, 'payroll', false);
+  perform public.set_module_hidden(v_org, 'hr', true);
+  v_dash := public.module_dashboard(v_org);
+  perform pg_temp.check_true('and putting HR away leaves payroll',
+    v_dash ? 'payroll' and not (v_dash ? 'hr'));
+end;
+$$;
+
 rollback;
