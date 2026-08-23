@@ -131,7 +131,12 @@ begin
       v_wrote := true;
     exception when insufficient_privilege then v_wrote := false;
     end;
-    select count(*) into v_read from public.platform_settings;
+    -- Everything except the one key a member's own menu is drawn
+    -- from. 0298 opened `nav_grouping` deliberately and narrowly; this
+    -- counts what is left, so the assertion below still says what it
+    -- always said — the platform's own business stays the platform's.
+    select count(*) into v_read from public.platform_settings
+     where key <> 'nav_grouping';
   end;
   reset role;
 
@@ -139,7 +144,8 @@ begin
     v_role, 'authenticated');
   perform pg_temp.check_true('nobody signs themselves up as an operator',
     not v_wrote);
-  perform pg_temp.check_eq('and platform settings are not theirs to read',
+  perform pg_temp.check_eq(
+    'and the platform''s own settings are not theirs to read',
     v_read, 0);
 
   -- ==================================================================

@@ -590,4 +590,65 @@ begin
 end $$;
 
 
+-- ---------------------------------------------------------------------
+-- The setting a user's own menu depends on
+--
+-- 0293 stored the grouping choice in `platform_settings`, whose read
+-- policy is platform-administrators-only. So the switch worked for the
+-- one person who set it and did nothing for anybody else: `navGrouping()`
+-- read no rows and fell back to flat, with no error anywhere.
+--
+-- 0298 names the one key rather than opening the table, and this is the
+-- pair of assertions that keeps it that way — the setting is reachable,
+-- and nothing else in there became reachable with it.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.as_platform_admin();
+  v_member uuid; v_role text; v_mine integer; v_others integer;
+begin
+  perform public.platform_update_setting('nav_grouping',
+    jsonb_build_object('mode', 'by_module'));
+  insert into public.platform_settings (key, value)
+  values ('trial_days', to_jsonb(30))
+  on conflict (key) do update set value = excluded.value;
+
+  v_member := pg_temp.another_user('ahli@iakauntan.test');
+  perform pg_temp.sign_in_as(v_member);
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    select count(*) into v_mine from public.platform_settings
+     where key = 'nav_grouping';
+    select count(*) into v_others from public.platform_settings
+     where key <> 'nav_grouping';
+  end;
+  reset role;
+
+  perform pg_temp.check_true('the test ran under row level security',
+    v_role = 'authenticated');
+  perform pg_temp.check_eq(
+    'an ordinary member can read how their own menu is grouped', v_mine, 1);
+  perform pg_temp.check_eq(
+    'and nothing else the platform keeps in that table', v_others, 0);
+
+  -- Reading it is not writing it. The grouping is the platform's choice
+  -- to make for everybody, not a per-user preference, and the write
+  -- policy is what says so. Asserted by its effect rather than by an
+  -- exception, because that is how it actually refuses: `authenticated`
+  -- holds the UPDATE grant, so row level security filters the statement
+  -- to nothing and it succeeds having changed nothing.
+  begin
+    set local role authenticated;
+    update public.platform_settings
+       set value = jsonb_build_object('mode', 'flat')
+     where key = 'nav_grouping';
+  end;
+  reset role;
+  perform pg_temp.check_eq('but cannot change it for everybody',
+    (select value ->> 'mode' from public.platform_settings
+      where key = 'nav_grouping'), 'by_module');
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

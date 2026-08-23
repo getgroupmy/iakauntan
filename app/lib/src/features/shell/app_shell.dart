@@ -678,7 +678,10 @@ class AppShell extends ConsumerWidget {
 
   /// Material's own defaults for the rail, named here because the header
   /// sits beside the rail rather than inside it and has to match.
-  static const _extendedWidth = 256.0;
+  // Named without the underscore because `_GroupedRail` measures
+  // itself against the rail it stands in for, and a private static is
+  // not visible from another class even in the same file.
+  static const extendedWidth = 256.0;
   static const _collapsedWidth = 80.0;
 
   /// Destinations this user can actually reach: modules the company
@@ -807,6 +810,23 @@ class AppShell extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final extended = MediaQuery.sizeOf(context).width >= 1200;
 
+    // Watched, not read: the setting and the module names arrive after
+    // the first frame, and a menu that only regroups when something
+    // else happens to rebuild it is a menu that looks like the switch
+    // did nothing.
+    //
+    // Headings need room for words, so grouping applies to the extended
+    // rail only. Collapsed, the rail is a column of icons with no space
+    // to say what they have in common — 0293's switch is about a menu
+    // somebody can read, and a heading over a 72-pixel column is not
+    // one.
+    final grouped = extended &&
+        (ref.watch(navGroupingProvider).valueOrNull ?? false);
+    final groupNames = ref.watch(moduleLabelsProvider).valueOrNull?.map(
+              (code, m) => MapEntry(code, m.group),
+            ) ??
+        const <String, String>{};
+
     return Scaffold(
       body: Row(
         children: [
@@ -825,7 +845,7 @@ class AppShell extends ConsumerWidget {
             // this subtree and an intrinsic pass offers unbounded width.
             // The company switcher is a Row that fills its line, and a
             // Row cannot size itself against unbounded width at all.
-            width: extended ? _extendedWidth : _collapsedWidth,
+            width: extended ? extendedWidth : _collapsedWidth,
             child: Column(
               children: [
                 // Outside the scroll view: the company you are looking at
@@ -840,30 +860,44 @@ class AppShell extends ConsumerWidget {
                           minHeight: constraints.maxHeight,
                         ),
                         child: IntrinsicHeight(
-                          child: NavigationRail(
-                            extended: extended,
-                            minExtendedWidth: _extendedWidth,
-                            selectedIndex: _selectedIndexIn(dests),
-                            onDestinationSelected: (i) =>
-                                context.go(dests[i].path),
-                            trailing: Expanded(
-                              child: Align(
-                                alignment: Alignment.bottomCenter,
-                                child: Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: _AccountButton(),
+                          // `NavigationRail` takes a flat list of
+                          // destinations and has nowhere to put a
+                          // heading, which is why 0293's switch changed
+                          // nothing here however it was set: the
+                          // grouping reached the More sheet on a phone
+                          // and never reached the side menu at all.
+                          child: grouped
+                              ? _GroupedRail(
+                                  dests: dests,
+                                  selected: _selectedIndexIn(dests),
+                                  groupNames: groupNames,
+                                  onSelected: (i) => context.go(dests[i].path),
+                                )
+                              : NavigationRail(
+                                  extended: extended,
+                                  minExtendedWidth: extendedWidth,
+                                  selectedIndex: _selectedIndexIn(dests),
+                                  onDestinationSelected: (i) =>
+                                      context.go(dests[i].path),
+                                  trailing: Expanded(
+                                    child: Align(
+                                      alignment: Alignment.bottomCenter,
+                                      child: Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 12),
+                                        child: _AccountButton(),
+                                      ),
+                                    ),
+                                  ),
+                                  destinations: [
+                                    for (final d in dests)
+                                      NavigationRailDestination(
+                                        icon: Icon(d.icon),
+                                        selectedIcon: Icon(d.selectedIcon),
+                                        label: Text(d.label),
+                                      ),
+                                  ],
                                 ),
-                              ),
-                            ),
-                            destinations: [
-                              for (final d in dests)
-                                NavigationRailDestination(
-                                  icon: Icon(d.icon),
-                                  selectedIcon: Icon(d.selectedIcon),
-                                  label: Text(d.label),
-                                ),
-                            ],
-                          ),
                         ),
                       ),
                     ),
@@ -1001,6 +1035,144 @@ class AppShell extends ConsumerWidget {
     );
   }
 }
+
+/// The side menu with headings in it.
+///
+/// Stands in for `NavigationRail` when a platform operator has asked for
+/// the menu to be grouped by module. The rail cannot do this itself —
+/// its `destinations` is a flat list of `NavigationRailDestination` and
+/// there is nowhere to put a heading between two of them — so the
+/// grouped form is drawn here instead of bending the rail into a shape
+/// it does not have.
+///
+/// Deliberately the same measurements as the extended rail it replaces,
+/// so switching the setting moves the headings in and out without the
+/// menu changing width or the destinations moving sideways.
+class _GroupedRail extends StatelessWidget {
+  const _GroupedRail({
+    required this.dests,
+    required this.selected,
+    required this.groupNames,
+    required this.onSelected,
+  });
+
+  final List<_Dest> dests;
+  final int selected;
+  final Map<String, String> groupNames;
+  final void Function(int index) onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return SizedBox(
+      // The same width as the extended rail this replaces, so turning
+      // the setting on moves headings in without the menu resizing.
+      width: AppShell.extendedWidth,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 8),
+          for (final section in groupByModule<_Dest>(
+            dests,
+            (d) => d.module,
+            groupNames,
+            true,
+          )) ...[
+            if (section.heading != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 12, 6),
+                child: Text(
+                  section.heading!.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            for (final d in section.items)
+              _GroupedRailTile(
+                dest: d,
+                // The index the caller knows this destination by. The
+                // sections reorder them, so the position within a
+                // section says nothing about which route it is — reading
+                // the index off the section would navigate somewhere
+                // else entirely.
+                selected: dests.indexOf(d) == selected,
+                onTap: () => onSelected(dests.indexOf(d)),
+              ),
+          ],
+          const Spacer(),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _AccountButton(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupedRailTile extends StatelessWidget {
+  const _GroupedRailTile({
+    required this.dest,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _Dest dest;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 1),
+      child: Material(
+        color: selected ? scheme.secondaryContainer : Colors.transparent,
+        borderRadius: BorderRadius.circular(100),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(100),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                Icon(
+                  selected ? dest.selectedIcon : dest.icon,
+                  size: 22,
+                  color: selected
+                      ? scheme.onSecondaryContainer
+                      : scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    dest.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                      color: selected
+                          ? scheme.onSecondaryContainer
+                          : scheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 
 class _RailHeader extends ConsumerWidget {
   const _RailHeader({required this.extended});
