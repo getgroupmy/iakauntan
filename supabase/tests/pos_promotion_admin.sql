@@ -377,4 +377,145 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- =====================================================================
+-- What a promotion is worth against a plate the shop already reduced
+--
+-- 0256 splits the gate from the arithmetic: `pos_promo_blocked` says
+-- whether a promotion applies and `pos_promo_amount` says what it takes
+-- off, "kept apart so the reason a voucher was refused never depends on
+-- what it would have been worth". pos.sql asserts the arithmetic's main
+-- lines — a percentage re-derived from the basket, three-for-two
+-- discounting the cheapest of each complete block, an incomplete block
+-- paying full price.
+--
+-- Two claims the code makes about itself are not asserted anywhere, and
+-- both of them are money:
+--
+--   * the voucher is capped at what qualifies. "A five-ringgit voucher
+--     against three ringgit of qualifying food is not two ringgit of
+--     change." Uncapped, a shop hands over the difference.
+--   * line totals are read rather than unit prices, "so a manual
+--     discount already taken off a plate is respected: a shop cannot be
+--     made to give ten per cent off a price it already reduced."
+--     Compounding, quietly, on every discounted plate in the shop.
+--
+-- Neither shows up as an error. Both show up in the till at the end of
+-- the day, which is the wrong place to find them.
+--
+-- ## Why no single mutant kills these
+--
+-- Recorded because the next person to mutate this will find the same
+-- thing and assume the assertions are dead. They are not; the code
+-- enforces each claim twice.
+--
+--   * `v_out := least(v_p.amount, v_base)` in the amount_off branch is
+--     redundant. The function's last line already returns
+--     `least(greatest(v_out, 0), v_base)`, so removing the inner cap
+--     leaves the voucher capped anyway. Removing the outer clamp leaves
+--     the inner one. Either alone holds the line; both have to go before
+--     a five ringgit voucher pays out against three ringgit of drink.
+--     Two locks on one door, and worth keeping — the outer clamp is what
+--     the percent and buy_x_get_y branches rely on, and the inner one is
+--     what says out loud that a voucher is capped.
+--   * reading `line_subtotal` instead of `line_total` changes nothing
+--     here, because a line's subtotal is already net of the manual
+--     discount. The claim being asserted is still the one that matters —
+--     ten per cent of a reduced plate is sixty sen — and it would fail
+--     the moment either column started meaning the price before the
+--     manager touched it.
+-- =====================================================================
+do $$
+declare
+  v_org    uuid;
+  v_wh     uuid;
+  v_walkin uuid;
+  v_outlet uuid;
+  v_reg    uuid;
+  v_roti   uuid;
+  v_teh    uuid;
+  v_promo  uuid;
+  v_sale   uuid;
+  v_line   uuid;
+begin
+  v_org := pg_temp.test_org('Kedai Baucar Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['pos','inventory']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'MAIN', 'Shop floor') returning id into v_wh;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'WALK-IN', 'Counter sales', 'customer') returning id into v_walkin;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price, cost_price)
+  values (v_org, 'ROTI', 'Roti', 'stock', true, 'C62', 10.00, 4.00)
+  returning id into v_roti;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price, cost_price)
+  values (v_org, 'TEH', 'Teh tarik', 'stock', true, 'C62', 3.00, 1.00)
+  returning id into v_teh;
+  insert into public.pos_outlets
+    (org_id, code, name, business_type, warehouse_id, walk_in_contact_id,
+     prices_include_tax)
+  values (v_org, 'SHOP', 'The shop', 'retail', v_wh, v_walkin, false)
+  returning id into v_outlet;
+  insert into public.pos_registers (org_id, outlet_id, code, name)
+  values (v_org, v_outlet, 'T1', 'Counter') returning id into v_reg;
+  perform public.open_pos_shift(v_reg, 100.00);
+
+  -- ------------------------------------------------------------------
+  -- A five-ringgit voucher against three ringgit of drink
+  -- ------------------------------------------------------------------
+  insert into public.pos_promotions (org_id, name, kind, amount)
+  values (v_org, 'Five off the drinks', 'amount_off', 5.00)
+  returning id into v_promo;
+  insert into public.pos_promotion_items (promotion_id, item_id)
+  values (v_promo, v_teh);
+
+  v_sale := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_sale, v_teh, 1, 3.00);
+  perform public.add_pos_sale_line(v_sale, v_roti, 1, 10.00);
+  perform public.refresh_pos_sale_promotions(v_sale);
+
+  perform pg_temp.check_eq(
+    'a five ringgit voucher against three ringgit of drink takes off three',
+    (select s.promo_discount from public.pos_sales s where s.id = v_sale), 3.00);
+  -- The other way of putting the same thing, and the one the shop
+  -- would notice: 13.00 of food less 3.00, not less 5.00.
+  perform pg_temp.check_eq('so the bill is 10.00 and not 8.00',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 10.00);
+
+  -- And it is capped rather than clamped at the end: nothing qualifying
+  -- at all is nought, not a negative that some later greatest() rescues.
+  v_sale := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_sale, v_roti, 1, 10.00);
+  perform public.refresh_pos_sale_promotions(v_sale);
+  perform pg_temp.check_eq('and takes nothing off a bill with no drink on it',
+    (select coalesce(s.promo_discount, 0) from public.pos_sales s
+      where s.id = v_sale), 0);
+  update public.pos_promotions set is_active = false where id = v_promo;
+
+  -- ------------------------------------------------------------------
+  -- A tenth off a price the manager already reduced
+  -- ------------------------------------------------------------------
+  insert into public.pos_promotions (org_id, name, kind, percent)
+  values (v_org, 'Ten off everything', 'percent_off', 10)
+  returning id into v_promo;
+
+  v_sale := public.open_pos_sale(v_reg);
+  -- A 10.00 plate sold for 6.00, the way a manager takes four ringgit
+  -- off a dish that has been under the light too long.
+  v_line := public.add_pos_sale_line(v_sale, v_roti, 1, 10.00, 4.00);
+  perform pg_temp.check_eq('the plate went out at six ringgit',
+    (select l.line_total from public.pos_sale_lines l where l.id = v_line), 6.00);
+
+  perform public.refresh_pos_sale_promotions(v_sale);
+  perform pg_temp.check_eq(
+    'a tenth off a reduced plate is sixty sen, not a ringgit',
+    (select s.promo_discount from public.pos_sales s where s.id = v_sale), 0.60);
+  perform pg_temp.check_eq('and the customer pays 5.40',
+    (select s.total_amount from public.pos_sales s where s.id = v_sale), 5.40);
+end $$;
+
 rollback;
