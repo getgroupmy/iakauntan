@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787462550.8144608,
-    "ast_hash": "5c30a36537c73479f8bb003cb9fb6266",
+    "mtime": 1787463360.5230534,
+    "ast_hash": "f64061316b5dc87f4de00bfe21767e58",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -4342,6 +4342,11 @@
   "brand/iakauntan-mark.svg": {
     "mtime": 1787461024.951859,
     "ast_hash": "6dc5355176b9176c3e7f082e2367c239",
+    "semantic_hash": ""
+  },
+  "supabase/tests/einvoice_statutory.sql": {
+    "mtime": 1787463327.962242,
+    "ast_hash": "e2b2db2e2f1f6f84f7fc1cf4437bf2cd",
     "semantic_hash": ""
   }
 }
