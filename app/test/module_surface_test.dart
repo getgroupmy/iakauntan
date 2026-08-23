@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/data/models.dart';
+import 'package:iakauntan/src/data/platform_catalog_repository.dart';
 import 'package:iakauntan/src/features/dashboard/dashboard_screen.dart';
 import 'package:iakauntan/src/features/shell/app_shell.dart';
 
@@ -52,9 +53,18 @@ void main() {
     ),
   );
 
+  /// The dashboard with the entitlements known and the platform
+  /// catalogue deliberately left out.
+  ///
+  /// That is not laziness — it is the state the screen is actually in
+  /// for the first frames of every sign-in, and it used to render the
+  /// "every module is switched off" empty state over a company that
+  /// held three. Leaving [labels] null here keeps a widget-level guard
+  /// on that; pass one to assert what the tabs are called.
   Widget dashboard({
     required Set<String> modules,
     required Map<String, dynamic> figures,
+    Map<String, ({String name, String group})>? labels,
   }) => ProviderScope(
     overrides: [
       currentUserProvider.overrideWithValue(null),
@@ -69,6 +79,8 @@ void main() {
       ),
       enabledModulesProvider.overrideWith((_) async => modules),
       moduleDashboardProvider.overrideWith((_) async => figures),
+      if (labels != null)
+        moduleLabelsProvider.overrideWith((_) async => labels),
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
@@ -151,6 +163,31 @@ void main() {
     expect(find.text('Revenue this month'), findsNothing);
     expect(find.text('Bank balance'), findsNothing);
     expect(find.text('Receivables'), findsNothing);
+  });
+
+  testWidgets('the tabs are named by the platform, not by their codes', (
+    tester,
+  ) async {
+    // The other half. Above, the catalogue is missing and the company
+    // still gets its dashboard; here it has arrived and the tab carries
+    // the name the console gave the module rather than `ticketing`.
+    await onADesktop(
+      tester,
+      dashboard(
+        modules: const {'ticketing'},
+        figures: const {
+          'ticketing': {'open': 7, 'unassigned': 2, 'breaching': 5,
+                        'breached': 3, 'resolved_today': 4},
+        },
+        labels: const {
+          'ticketing': (name: 'Service desk', group: 'Service desk'),
+        },
+      ),
+    );
+
+    expect(find.text('Service desk'), findsOneWidget);
+    expect(find.text('ticketing'), findsNothing);
+    expect(find.text('Open tickets'), findsOneWidget);
   });
 
   testWidgets('a company with no module at all is told so, not left blank', (

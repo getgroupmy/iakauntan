@@ -47,13 +47,24 @@ class DashboardScreen extends ConsumerWidget {
     // applies on the server. Two people at the same company can open
     // this screen and see different tabs, which is the point.
     //
-    // Ordered by the platform's own `sort_order`, because that is the
-    // order `moduleLabelsProvider` reads them in and the order the menu
-    // uses; a dashboard whose tabs disagree with the menu is a dashboard
-    // somebody has to think about.
-    final codes = dashboardTabs(labels.keys, (c) => moduleEnabled(ref, c));
+    // Membership comes from the entitlements and the order from the
+    // catalogue, because the two reads land at different times and only
+    // one of them is allowed to empty the screen. Ordering by the
+    // platform's own `sort_order` keeps the tabs agreeing with the side
+    // menu, which is built from the same column.
+    final held = ref.watch(enabledModulesProvider);
+    final codes = dashboardTabs(
+      labels.keys,
+      held.valueOrNull,
+      (c) => moduleEnabled(ref, c),
+    );
 
     if (codes.isEmpty) {
+      // Nothing to draw, and two quite different reasons for it. Saying
+      // "every module is switched off" to somebody whose entitlements
+      // simply have not arrived yet sends them to a settings screen to
+      // fix something that is not broken.
+      final settled = held.hasValue || held.hasError;
       return Scaffold(
         appBar: AppBar(title: const Text('Dashboard')),
         body: PageBody(
@@ -62,13 +73,16 @@ class DashboardScreen extends ConsumerWidget {
             children: [
               _Greeting(orgName: org?.name ?? ''),
               const SizedBox(height: 24),
-              const EmptyState(
-                icon: Icons.dashboard_customize_outlined,
-                title: 'Nothing to show yet',
-                message: 'Every module is switched off for this company, or '
-                    'none of them is yours to see. Turn one back on under '
-                    'Settings › Modules.',
-              ),
+              if (!settled)
+                const Center(child: CircularProgressIndicator())
+              else
+                const EmptyState(
+                  icon: Icons.dashboard_customize_outlined,
+                  title: 'Nothing to show yet',
+                  message: 'Every module is switched off for this company, or '
+                      'none of them is yours to see. Turn one back on under '
+                      'Settings › Modules.',
+                ),
             ],
           ),
         ),
@@ -176,13 +190,6 @@ class _Books extends ConsumerWidget {
   }
 }
 
-/// A tile for each module that has figures worth one.
-///
-/// The keys come from `module_dashboard`, which returns only what this
-/// company holds, has not put away, and this person may read. A key this
-/// build of the app does not recognise is skipped rather than guessed
-/// at, so the server can start answering for a new module before the
-/// client knows how to draw it.
 /// Which modules get a tab, and in what order.
 ///
 /// Pure, and separate from the screen, so the rule can be asserted:
@@ -191,17 +198,49 @@ class _Books extends ConsumerWidget {
 /// built from the same `sort_order`, and a dashboard whose tabs disagree
 /// with the menu is one somebody has to stop and think about.
 ///
+/// Two lists, because they answer different questions and fail
+/// differently. [platformOrder] is the catalogue — every module the
+/// platform sells, in `sort_order`; it decides the order and nothing
+/// else. [held] is what this company actually bought, and it decides
+/// membership. An earlier version took the catalogue for both, which
+/// meant a company whose entitlements had arrived but whose catalogue
+/// had not was told every module was switched off — a lockout produced
+/// by a slow read, on the one screen that opens first.
+///
+/// [held] is null when the entitlements are not known yet — still
+/// loading, or the read failed. Then the catalogue stands in, which
+/// keeps this as permissive as [moduleEnabled]: showing a tab to
+/// somebody who turns out not to hold the module costs an empty panel,
+/// hiding one from somebody who does costs them the product.
+///
+/// A held module the catalogue has never heard of still gets a tab,
+/// after the ordered ones and in code order so the result is stable.
+/// The alternative is a company that bought something and cannot see
+/// it because a catalogue row is missing.
+///
 /// [reaches] is asked once per module and answers the pair that matters:
 /// the company holds it and this person's access type does not say
 /// `none`.
 List<String> dashboardTabs(
-  Iterable<String> codes,
+  Iterable<String> platformOrder,
+  Set<String>? held,
   bool Function(String code) reaches,
-) =>
-    [
-      for (final code in codes)
+) {
+  final ordered = platformOrder.toList();
+  if (held == null) {
+    return [
+      for (final code in ordered)
         if (reaches(code)) code,
     ];
+  }
+  final known = ordered.toSet();
+  return [
+    for (final code in ordered)
+      if (held.contains(code) && reaches(code)) code,
+    for (final code in held.where((c) => !known.contains(c)).toList()..sort())
+      if (reaches(code)) code,
+  ];
+}
 
 /// The tiles one module contributes, or an empty list.
 ///
