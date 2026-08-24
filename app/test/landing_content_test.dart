@@ -318,4 +318,96 @@ void main() {
       expect(themeModeFor('Dark'), ThemeMode.system);
     });
   });
+
+  /// 0316: the brand is not gated on publishing.
+  ///
+  /// The bug this replaces was found in production. The console saved a
+  /// logo, a colour and an icon correctly, and none of them reached the
+  /// app, because `landing_page()` returned the row only when the page
+  /// was published — so branding your own accounting system required
+  /// putting a marketing site on the internet.
+  group('brand without a published page', () {
+    LandingContent parse(Map<String, dynamic> page) =>
+        parseLandingContent({'page': page, 'sections': const []});
+
+    LandingContent unpublished(Map<String, dynamic> brand) =>
+        parseLandingContent({'page': null, 'brand': brand});
+
+    final brand = <String, dynamic>{
+      'wordmark': 'Akaun Saya',
+      'logo_url': 'https://x/logo.png',
+      'logo_dark_url': 'https://x/logo-dark.png',
+      'brand_colour': '#BE123C',
+      'brand_colour_dark': '#7F1D1D',
+      'theme_mode': 'dark',
+      'app_icon_url': 'https://x/icon.png',
+    };
+
+    test('every brand field survives an unpublished page', () {
+      final c = parseLandingContent({'page': null, 'brand': brand});
+      expect(c.wordmark, 'Akaun Saya');
+      expect(c.logoUrl, 'https://x/logo.png');
+      expect(c.logoDarkUrl, 'https://x/logo-dark.png');
+      expect(c.brandColour, '#BE123C');
+      expect(c.brandColourDark, '#7F1D1D');
+      expect(c.themeMode, 'dark');
+      expect(c.appIconUrl, 'https://x/icon.png');
+    });
+
+    // The site is still not published, and that has to stay true — the
+    // fix must not put anybody's draft front page up.
+    test('and the page is still not published', () {
+      expect(parseLandingContent({'page': null, 'brand': brand}).published,
+          isFalse);
+      expect(parse({'wordmark': 'x'}).published, isTrue);
+    });
+
+    test('an unbranded platform falls back to what shipped', () {
+      final c = unpublished(const {});
+      expect(c.wordmark, 'iAkauntan');
+      expect(c.themeMode, 'system');
+      expect(c.logoUrl, isNull);
+      expect(c.brandColour, isNull);
+    });
+
+    test('and so does one with no brand key at all', () {
+      final c = parseLandingContent({'page': null});
+      expect(c.wordmark, 'iAkauntan');
+      expect(c.themeMode, 'system');
+      expect(c.published, isFalse);
+    });
+
+    // A published payload written before 0316 carried these on the page.
+    test('a payload from before 0316 still reads', () {
+      final c = parse({'wordmark': 'Lama', 'brand_colour': '#0B7A6B'});
+      expect(c.wordmark, 'Lama');
+      expect(c.brandColour, '#0B7A6B');
+    });
+
+    test('and the brand key wins when both carry it', () {
+      final c = parseLandingContent({
+        'page': {'wordmark': 'Stale', 'brand_colour': '#000000'},
+        'brand': {'wordmark': 'Akaun Saya', 'brand_colour': '#BE123C'},
+      });
+      expect(c.wordmark, 'Akaun Saya');
+      expect(c.brandColour, '#BE123C');
+    });
+
+    test('a published page keeps its own copy', () {
+      final c = parseLandingContent({
+        'page': {'hero_headline': 'Real headline'},
+        'brand': brand,
+      });
+      expect(c.heroHeadline, 'Real headline');
+      expect(c.wordmark, 'Akaun Saya');
+      expect(c.published, isTrue);
+    });
+
+    test('rubbish in the brand key is not a crash', () {
+      expect(parseLandingContent({'page': null, 'brand': 'nope'}).wordmark,
+          'iAkauntan');
+      expect(parseLandingContent({'page': null, 'brand': 42}).themeMode,
+          'system');
+    });
+  });
 }

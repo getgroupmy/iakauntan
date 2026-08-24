@@ -127,15 +127,44 @@ class LandingContent {
 /// nobody can sign in from.
 LandingContent parseLandingContent(Object? raw) {
   if (raw is! Map) return LandingContent.fallback;
-  final page = raw['page'];
-  if (page is! Map) return LandingContent.fallback;
 
-  String? str(String key) {
-    final v = page[key];
+  final page = raw['page'];
+
+  // `0316`. The brand arrives in its own key and is never gated on
+  // publishing: putting your own logo on your own accounting system
+  // should not require putting a marketing site on the internet. Read
+  // before the early return below, because that return is exactly the
+  // unpublished case the brand still has to survive.
+  final brand = raw['brand'] is Map ? raw['brand'] as Map : const {};
+
+  String? from(Map m, String key) {
+    final v = m[key];
     if (v is! String) return null;
     final t = v.trim();
     return t.isEmpty ? null : t;
   }
+
+  // Brand first, then the page. The fallback is for a payload written
+  // before 0316, where these fields only ever lived on the page.
+  String? brandStr(String key) =>
+      from(brand, key) ?? (page is Map ? from(page, key) : null);
+
+  if (page is! Map) {
+    return LandingContent(
+      // Nobody has published a site, and that is still true — what
+      // changed is that it no longer costs the operator their colours.
+      published: false,
+      logoUrl: brandStr('logo_url'),
+      logoDarkUrl: brandStr('logo_dark_url'),
+      wordmark: brandStr('wordmark') ?? 'iAkauntan',
+      brandColour: brandStr('brand_colour'),
+      brandColourDark: brandStr('brand_colour_dark'),
+      appIconUrl: brandStr('app_icon_url'),
+      themeMode: brandStr('theme_mode') ?? 'system',
+    );
+  }
+
+  String? str(String key) => from(page, key);
 
   final sections = <LandingSection>[];
   for (final e in (raw['sections'] as List? ?? const [])) {
@@ -194,14 +223,14 @@ LandingContent parseLandingContent(Object? raw) {
 
   return LandingContent(
     published: true,
-    logoUrl: str('logo_url'),
-    logoDarkUrl: str('logo_dark_url'),
-    wordmark: str('wordmark') ?? 'iAkauntan',
+    logoUrl: brandStr('logo_url'),
+    logoDarkUrl: brandStr('logo_dark_url'),
+    wordmark: brandStr('wordmark') ?? 'iAkauntan',
     tagline: str('tagline'),
-    brandColour: str('brand_colour'),
-    brandColourDark: str('brand_colour_dark'),
-    appIconUrl: str('app_icon_url'),
-    themeMode: str('theme_mode') ?? 'system',
+    brandColour: brandStr('brand_colour'),
+    brandColourDark: brandStr('brand_colour_dark'),
+    appIconUrl: brandStr('app_icon_url'),
+    themeMode: brandStr('theme_mode') ?? 'system',
     heroHeadline: str('hero_headline') ??
         'Accounting, CRM, payroll and e-Invoice for Malaysian business',
     heroSubhead: str('hero_subhead'),

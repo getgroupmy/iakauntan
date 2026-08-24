@@ -14,6 +14,14 @@ try:
 except Exception:
     payload = None
 
-page = (payload or {}).get("page") if isinstance(payload, dict) else None
-url = (page or {}).get("app_icon_url") if isinstance(page, dict) else None
+def field(container, key):
+    return container.get(key) if isinstance(container, dict) else None
+
+
+# `brand` since 0316, and it is not gated on the page being published —
+# an operator who has not put a marketing site up still gets their own
+# favicon. `page` is the fallback for a project whose database predates
+# that migration.
+url = field(field(payload, "brand"), "app_icon_url") or \
+      field(field(payload, "page"), "app_icon_url")
 print(url if isinstance(url, str) else "")

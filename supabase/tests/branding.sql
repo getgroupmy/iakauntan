@@ -266,4 +266,75 @@ begin
     v_update ~* '\swhere\s');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Branding a product is not publishing a website
+--
+-- `0316`. The bug this file exists to prevent, found in production after
+-- the console had already saved everything correctly: `landing_page()`
+-- returned the row only `where p.is_published`, so an operator who
+-- uploaded a logo and picked a colour got nothing — the app fell back to
+-- the shipped copy and CI kept the shipped favicon.
+--
+-- The two halves are asserted separately because they are two different
+-- promises: the brand always comes back, and the marketing copy still
+-- does not until somebody publishes it.
+-- ---------------------------------------------------------------------
+do $$
+declare v_out jsonb;
+begin
+  perform pg_temp.brand_admin();
+  perform public.platform_save_landing_page(jsonb_build_object(
+    'wordmark',     'Akaun Saya',
+    'logo_url',     'https://example.test/logo.png',
+    'brand_colour', '#BE123C',
+    'theme_mode',   'dark',
+    'app_icon_url', 'https://example.test/icon.png',
+    'hero_headline', 'A headline nobody has published',
+    'is_published', false));
+
+  v_out := public.landing_page();
+
+  -- Unpublished, and the brand is there anyway.
+  perform pg_temp.check_eq('an unpublished platform still has a wordmark',
+    v_out -> 'brand' ->> 'wordmark', 'Akaun Saya');
+  perform pg_temp.check_eq('and a logo',
+    v_out -> 'brand' ->> 'logo_url', 'https://example.test/logo.png');
+  perform pg_temp.check_eq('and its colour',
+    v_out -> 'brand' ->> 'brand_colour', '#BE123C');
+  perform pg_temp.check_eq('and the scheme it chose',
+    v_out -> 'brand' ->> 'theme_mode', 'dark');
+  perform pg_temp.check_eq('and the icon CI builds the favicon from',
+    v_out -> 'brand' ->> 'app_icon_url', 'https://example.test/icon.png');
+
+  -- And the site is still not published.
+  perform pg_temp.check_true('while the page itself is still withheld',
+    v_out -> 'page' = 'null'::jsonb);
+  perform pg_temp.check_true(
+    'so the draft hero copy has not leaked into anything',
+    v_out::text not like '%A headline nobody has published%');
+
+  -- Published, and both halves arrive.
+  perform public.platform_save_landing_page('{"is_published": true}');
+  v_out := public.landing_page();
+  perform pg_temp.check_true('publishing releases the page',
+    v_out -> 'page' <> 'null'::jsonb);
+  perform pg_temp.check_eq('and the brand is unchanged by it',
+    v_out -> 'brand' ->> 'brand_colour', '#BE123C');
+  perform pg_temp.check_eq('the hero copy arrives only now',
+    v_out -> 'page' ->> 'hero_headline', 'A headline nobody has published');
+end $$;
+
+-- With no row at all, `brand` is an empty object rather than null, so a
+-- client reads it the same way whether or not anybody has ever opened
+-- the console.
+do $$
+declare v_out jsonb;
+begin
+  perform pg_temp.brand_admin();
+  delete from public.landing_page;
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('a platform nobody has branded yet returns {}',
+    (v_out -> 'brand')::text, '{}');
+end $$;
+
 rollback;
