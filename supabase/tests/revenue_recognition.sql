@@ -606,6 +606,112 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- The schedule an auditor asks for
+--
+-- 0313 answers "2127 says this — show me what it is". The property that
+-- makes it a report rather than a listing is that its balance column and
+-- the account's own posted balance are the same number, so both are
+-- checked against each other at every point in a contract's life.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_doc uuid; v_acct uuid;
+  v_start date := date_trunc('year', current_date)::date;
+  v_end   date := (date_trunc('year', current_date)
+                   + interval '1 year' - interval '1 day')::date;
+  v_feb   date := (date_trunc('year', current_date)
+                   + interval '2 months' - interval '1 day')::date;
+  v_r     record;
+begin
+  v_org := pg_temp.rev_org('Audit Jadual Sdn Bhd');
+  v_doc := pg_temp.service_invoice(v_org, 'INV-AUD', 1200, v_start, v_end);
+  perform public.post_sales_document(v_doc);
+
+  -- Nothing released yet: the whole invoice is a liability.
+  select * into v_r from public.report_deferred_revenue(v_org, v_start);
+  perform pg_temp.check_eq('the whole invoice is deferred on day one',
+    v_r.balance, 1200);
+  perform pg_temp.check_eq('with nothing recognised', v_r.recognised, 0);
+  perform pg_temp.check_eq('and the ledger says the same',
+    v_r.ledger_balance, 1200);
+  perform pg_temp.check_eq('one line, one row',
+    (select count(*) from public.report_deferred_revenue(v_org, v_start))::numeric,
+    1);
+
+  -- Two months released. Both figures must move together.
+  perform public.recognise_revenue(v_org, v_feb);
+  select * into v_r from public.report_deferred_revenue(v_org, v_feb);
+  perform pg_temp.check_true('two months out of the liability',
+    v_r.recognised > 0 and v_r.recognised < 1200);
+  perform pg_temp.check_eq('and what is left still reconciles',
+    v_r.balance, v_r.ledger_balance);
+  perform pg_temp.check_eq('the three columns still add to the invoice',
+    v_r.recognised + v_r.cancelled + v_r.balance, 1200);
+
+  -- Asked as at a date before the release, the release has not happened.
+  -- This is the assertion that catches a report quietly using today.
+  select * into v_r from public.report_deferred_revenue(v_org, v_start);
+  perform pg_temp.check_eq(
+    'and asked for an earlier date, nothing had been released yet',
+    v_r.recognised, 0);
+  perform pg_temp.check_eq('with the ledger agreeing at that date too',
+    v_r.balance, v_r.ledger_balance);
+
+  -- Released in full, and the line leaves the schedule: this is a
+  -- balance report, and a contract fully earned is not a balance.
+  perform public.recognise_revenue(v_org, v_end);
+  perform pg_temp.check_eq('a fully earned contract is off the schedule',
+    (select count(*) from public.report_deferred_revenue(v_org, v_end))::numeric,
+    0);
+
+  select id into v_acct from public.accounts
+   where org_id = v_org and code = '2127';
+  perform pg_temp.check_eq('and the account it emptied is empty',
+    (select coalesce(sum(l.credit - l.debit), 0)
+       from public.gl_lines l
+       join public.gl_entries e on e.id = l.entry_id
+      where l.account_id = v_acct and e.entry_date <= v_end), 0);
+end $$;
+
+-- A credit note comes out of the schedule as well as out of the ledger,
+-- and on its own date. 0310 dates the cancelling journal on the credit
+-- note, not on the period it cancelled, so a report that dated it any
+-- other way would disagree with 2127 for as long as the two differed.
+do $$
+declare
+  v_org uuid; v_inv uuid; v_cn uuid; v_r record;
+  v_start date := date_trunc('year', current_date)::date;
+  v_end   date := (date_trunc('year', current_date)
+                   + interval '1 year' - interval '1 day')::date;
+  v_mar   date := (date_trunc('year', current_date)
+                   + interval '3 months' - interval '1 day')::date;
+begin
+  v_org := pg_temp.rev_org('Audit Kredit Sdn Bhd');
+  v_inv := pg_temp.service_invoice(v_org, 'INV-AUDCN', 1200, v_start, v_end);
+  perform public.post_sales_document(v_inv);
+
+  v_cn := pg_temp.credit_note(v_org, 'CN-AUD', 600, v_inv, v_mar);
+  perform public.post_sales_document(v_cn);
+
+  -- Before the credit note, it had not happened.
+  select * into v_r from public.report_deferred_revenue(v_org, v_start);
+  perform pg_temp.check_eq('a credit note has not happened before its date',
+    v_r.cancelled, 0);
+  perform pg_temp.check_eq('and the ledger has not felt it either',
+    v_r.balance, v_r.ledger_balance);
+
+  -- After it, both the schedule and the account are lighter, by the
+  -- same amount.
+  select * into v_r from public.report_deferred_revenue(v_org, v_mar);
+  perform pg_temp.check_true('after it, the schedule is lighter',
+    v_r.cancelled > 0);
+  perform pg_temp.check_eq('and the ledger by exactly as much',
+    v_r.balance, v_r.ledger_balance);
+  perform pg_temp.check_eq('the three columns still add to the invoice',
+    v_r.recognised + v_r.cancelled + v_r.balance, 1200);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- And it is not readable by somebody who is not in the company
 --
 -- Last, because it leaves a signed-in role behind.

@@ -212,7 +212,10 @@ agreed on a quotation reaches the invoice that actually defers it.
 The editor shows a service-period strip under any sales line that could
 carry one, and `0312` plus a deferred revenue card in settings show what
 each month is about to release and post it — so both halves are reachable
-by somebody who is not writing SQL. The card renders nothing at all until
+by somebody who is not writing SQL. `0313` adds the third thing an
+accountant needs, a Deferred Revenue report: what is sitting in 2127 at a
+date, which invoice lines it belongs to, and whether the schedule and the
+account agree. The card renders nothing at all until
 a company has deferred something, which is what keeps it off the screens
 of the shops that never will. The wording and the month count are
 asserted in

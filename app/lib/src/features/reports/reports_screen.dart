@@ -41,7 +41,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 8, vsync: this);
+    _tabs = TabController(length: 9, vsync: this);
     // The download button belongs to whichever report is on screen, so
     // it has to rebuild when the tab changes.
     _tabs.addListener(() => setState(() {}));
@@ -130,9 +130,12 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
       case 6:
         final rows = ref.watch(_equityProvider(_range)).valueOrNull;
         return rows == null ? null : changesInEquitySpec(rows, _range);
-      default:
+      case 7:
         final rows = ref.watch(_sstProvider(_range)).valueOrNull;
         return rows == null ? null : sstSummarySpec(rows, _range);
+      default:
+        final rows = ref.watch(_deferredProvider(_range.end)).valueOrNull;
+        return rows == null ? null : deferredRevenueSpec(rows, _range.end);
     }
   }
 
@@ -256,6 +259,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
             Tab(text: 'Cash Flows'),
             Tab(text: 'Changes in Equity'),
             Tab(text: 'SST Summary'),
+            Tab(text: 'Deferred Revenue'),
           ],
         ),
       ),
@@ -343,6 +347,19 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               icon: Icons.receipt_outlined,
               title: 'No taxable transactions',
               message: 'SST figures appear once you post documents with tax.',
+            ),
+          ),
+          _Report(
+            provider: _deferredProvider(_range.end),
+            spec: (rows) => deferredRevenueSpec(rows, _range.end),
+            wide: true,
+            empty: const EmptyState(
+              icon: Icons.event_repeat,
+              title: 'Nothing deferred',
+              message:
+                  'Give an invoice line a service period and it is earned '
+                  'across that period rather than on the day, and appears '
+                  'here until it has been.',
             ),
           ),
         ],
@@ -669,4 +686,11 @@ final _cashFlowProvider = FutureProvider.autoDispose
 final _equityProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTimeRange>((ref, range) {
       return requireRepo(ref).changesInEquity(from: range.start, to: range.end);
+    });
+
+/// The deferred revenue schedule is as at a date, like the aged
+/// listings: it takes the end of the chosen range and ignores the start.
+final _deferredProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, DateTime>((ref, asAt) {
+      return requireRepo(ref).deferredRevenue(asAt: asAt);
     });

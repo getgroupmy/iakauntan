@@ -237,6 +237,17 @@ class Repo {
     return _rows(data);
   }
 
+  /// What is sitting in deferred revenue at a date, one row per invoice
+  /// line, with the account's own posted balance repeated on each so the
+  /// schedule and the ledger are read from one moment.
+  Future<List<Map<String, dynamic>>> deferredRevenue({DateTime? asAt}) async {
+    final data = await callRpc(
+      'report_deferred_revenue',
+      params: {'p_org_id': orgId, 'p_as_at': Fmt.iso(asAt ?? DateTime.now())},
+    );
+    return _rows(data);
+  }
+
   Future<List<Map<String, dynamic>>> sstSummary({
     required DateTime from,
     required DateTime to,
