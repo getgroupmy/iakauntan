@@ -30,7 +30,12 @@ Future<Uint8List> buildReportPdf({
 
   pdf.addPage(
     pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
+      // The spec decides, because the spec is the thing that knows how
+      // many columns it has. Everything that does not ask stays
+      // portrait, which is every report that existed before this.
+      pageFormat: spec.landscape
+          ? PdfPageFormat.a4.landscape
+          : PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(42, 42, 42, 36),
       theme: kit.theme,
       footer: (context) => kit.footer(context,

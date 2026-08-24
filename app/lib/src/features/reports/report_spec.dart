@@ -16,6 +16,7 @@ class ReportSpec {
     required this.subtitle,
     required this.blocks,
     this.note,
+    this.landscape = false,
   });
 
   final String title;
@@ -28,6 +29,16 @@ class ReportSpec {
 
   /// A caveat printed under the report — the balance-sheet check uses it.
   final String? note;
+
+  /// Print this one on its side.
+  ///
+  /// Opt in, and false everywhere it is not asked for, so no existing
+  /// report changes shape. A financial statement is three columns and
+  /// belongs on a portrait page; a schedule that identifies a contract
+  /// by customer, invoice and period before it gets to any money does
+  /// not fit on one, and the columns that lose the argument are the
+  /// names — which are the columns somebody reads first.
+  final bool landscape;
 }
 
 sealed class ReportBlock {
@@ -782,6 +793,10 @@ ReportSpec deferredRevenueSpec(
   return ReportSpec(
     title: 'Deferred Revenue',
     subtitle: 'As at ${Fmt.date(asAt)}',
+    // Three identifying columns and four of money. On a portrait page
+    // the customer names wrap into ribbons and the schedule stops being
+    // something anybody can read down.
+    landscape: true,
     note: difference.abs() < 0.005
         ? 'Agrees with account 2127 at this date. Periods that have '
               'matured but have not been released are still counted as '
