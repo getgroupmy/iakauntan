@@ -225,4 +225,45 @@ begin
     'somebody who does not run the platform cannot rebrand it', v_refused);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The statement is scoped
+--
+-- `0315`. Structural, not behavioural, and the distinction is the point:
+-- `landing_page` can hold one row — `id boolean` with `check (id)` — so a
+-- scoped UPDATE and an unscoped one touch the same row and no
+-- observation tells them apart.
+--
+-- What does tell them apart is production, which loads `pg_safeupdate`
+-- for the client roles and refuses an UPDATE with no WHERE outright. That
+-- extension cannot be installed on this harness, so the twenty-three
+-- assertions above all passed against a saver that raised
+-- `21000 UPDATE requires a WHERE clause` the moment a real person pressed
+-- Save.
+--
+-- So this reads the statement instead of running it. Narrow, and worth
+-- having: it is the only form of the check available here, and the thing
+-- it guards is a whole tab that does not work.
+-- ---------------------------------------------------------------------
+do $$
+declare v_src text; v_update text;
+begin
+  select p.prosrc into v_src
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname = 'platform_save_landing_page';
+
+  perform pg_temp.check_true('the saver is still there', v_src is not null);
+
+  -- From the update to the returning that closes it, comments stripped
+  -- so prose about WHERE clauses cannot satisfy the check.
+  v_update := substring(
+    regexp_replace(v_src, '--[^\n]*', '', 'g'),
+    'update\s+public\.landing_page.*?returning');
+
+  perform pg_temp.check_true(
+    'and it updates landing_page exactly once', v_update is not null);
+  perform pg_temp.check_true(
+    'with a where clause, which pg_safeupdate requires in production',
+    v_update ~* '\swhere\s');
+end $$;
+
 rollback;
