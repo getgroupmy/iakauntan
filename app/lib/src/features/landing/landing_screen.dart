@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/safe_link.dart';
 import 'landing_content.dart';
+import 'landing_dark_band.dart';
 import 'landing_motion.dart';
 import 'landing_pricing.dart';
 import 'landing_tokens.dart';
@@ -124,6 +125,16 @@ class LandingPage extends StatelessWidget {
                   // is the correct page for a platform that has not
                   // made a claim rather than a gap to fill with
                   // invented ones.
+                  // The catalogue, on its own dark band.
+                  //
+                  // Present only when `show_pricing` is on, because
+                  // that is what `app.landing_payload` gates `modules`
+                  // behind. Arguably the names of what is for sale and
+                  // the prices of it are two decisions rather than one,
+                  // but they are one today and this band does not get
+                  // to route around an operator's switch.
+                  if (content.modules.isNotEmpty)
+                    LandingDarkBand(modules: content.modules),
                   if (content.stats.isNotEmpty)
                     _Band(
                       child: RevealOnScroll(
@@ -271,6 +282,17 @@ class _Masthead extends StatelessWidget {
                   LandingMark(content: content, size: 32),
                   const Spacer(),
                   if (wide) ...[
+                    // The products link opens a panel of the blocks
+                    // themselves rather than scrolling blindly: on a
+                    // page with eight product areas, "what does it do"
+                    // is answerable from the bar.
+                    if (content.sections.isNotEmpty &&
+                        anchors['Features'] != null)
+                      _MegaMenu(
+                        label: 'Products',
+                        sections: content.sections,
+                        onPick: () => _scrollTo(anchors['Features']!),
+                      ),
                     for (final entry in anchors.entries)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1488,7 +1510,7 @@ class _Stats extends StatelessWidget {
                       // string in the database for this reason: nobody
                       // has to guess whether "240,000" wanted a
                       // thousands separator.
-                      Text(
+                      CountUp(
                         s.value,
                         style: Land.display(scheme).copyWith(
                           fontSize: 38,
@@ -1672,6 +1694,224 @@ class _Logos extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// The panel that drops from the bar.
+///
+/// Opened on hover with a short grace period on the way out, because a
+/// menu that closes the instant the pointer leaves the label is a menu
+/// nobody can reach the contents of — the pointer has to cross the gap
+/// between the label and the panel to get there.
+///
+/// Its contents are the feature blocks, so it is the console's rows
+/// rather than a second list to keep in step. Picking one closes the
+/// panel and scrolls to the band, which is the honest behaviour for a
+/// site with no other pages: this is a table of contents, not
+/// navigation, and a menu item that looked like a link to a page that
+/// does not exist would be worse than no menu.
+class _MegaMenu extends StatefulWidget {
+  const _MegaMenu({
+    required this.label,
+    required this.sections,
+    required this.onPick,
+  });
+
+  final String label;
+  final List<LandingSection> sections;
+  final VoidCallback onPick;
+
+  @override
+  State<_MegaMenu> createState() => _MegaMenuState();
+}
+
+class _MegaMenuState extends State<_MegaMenu> {
+  final _link = LayerLink();
+  OverlayEntry? _entry;
+  bool _overLabel = false;
+  bool _overPanel = false;
+
+  @override
+  void dispose() {
+    _entry?.remove();
+    _entry = null;
+    super.dispose();
+  }
+
+  void _sync() {
+    // A beat later, so a pointer travelling from the label into the
+    // panel is never counted as being over neither.
+    Future<void>.delayed(const Duration(milliseconds: 130), () {
+      if (!mounted) return;
+      final wanted = _overLabel || _overPanel;
+      if (wanted && _entry == null) {
+        _entry = _build();
+        Overlay.of(context).insert(_entry!);
+      } else if (!wanted && _entry != null) {
+        _entry!.remove();
+        _entry = null;
+      }
+    });
+  }
+
+  void _close() {
+    _entry?.remove();
+    _entry = null;
+    _overLabel = false;
+    _overPanel = false;
+  }
+
+  OverlayEntry _build() {
+    final scheme = Theme.of(context).colorScheme;
+    return OverlayEntry(
+      builder: (context) => Positioned(
+        width: 640,
+        child: CompositedTransformFollower(
+          link: _link,
+          targetAnchor: Alignment.bottomLeft,
+          followerAnchor: Alignment.topLeft,
+          offset: const Offset(-40, 10),
+          child: MouseRegion(
+            onEnter: (_) {
+              _overPanel = true;
+              _sync();
+            },
+            onExit: (_) {
+              _overPanel = false;
+              _sync();
+            },
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(Land.radius),
+                  color: scheme.surface,
+                  border: Border.all(color: Land.border(scheme)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: scheme.shadow.withValues(alpha: 0.13),
+                      blurRadius: 28,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final s in widget.sections)
+                      SizedBox(
+                        width: 296,
+                        child: HoverLift(
+                          builder: (context, hovered) => InkWell(
+                            borderRadius: BorderRadius.circular(
+                              Land.radiusTight,
+                            ),
+                            onTap: () {
+                              setState(_close);
+                              widget.onPick();
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 140),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(
+                                  Land.radiusTight,
+                                ),
+                                color: hovered
+                                    ? scheme.surfaceContainerLowest
+                                    : Colors.transparent,
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    landingIcon(s.icon),
+                                    size: 18,
+                                    color: scheme.primary,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          s.title,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: scheme.onSurface,
+                                          ),
+                                        ),
+                                        if (s.body != null) ...[
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            s.body!,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Land.small(
+                                              scheme,
+                                            ).copyWith(height: 1.45),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CompositedTransformTarget(
+      link: _link,
+      child: MouseRegion(
+        onEnter: (_) {
+          _overLabel = true;
+          _sync();
+        },
+        onExit: (_) {
+          _overLabel = false;
+          _sync();
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: TextButton(
+            onPressed: () {
+              setState(_close);
+              widget.onPick();
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(widget.label, style: TextStyle(color: scheme.onSurface)),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 17,
+                  color: Land.muted(scheme),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

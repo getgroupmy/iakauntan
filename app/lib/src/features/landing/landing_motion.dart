@@ -235,3 +235,79 @@ class _ParallaxState extends State<Parallax> {
     );
   }
 }
+
+/// Count a figure up to itself when it scrolls into view.
+///
+/// The band of numbers on a page like this conventionally animates, and
+/// the reason is not decoration: a figure that arrives at rest is read
+/// as a label, and one that counts up is read as a measurement.
+///
+/// [text] is whatever the console typed — "240,000", "1,200+", "RM4b".
+/// The digits inside it are found and scaled together; everything that
+/// is not a digit is left exactly where it was, so a currency prefix, a
+/// thousands separator and a trailing plus all survive. A value with no
+/// digits at all is simply drawn, which is the correct behaviour for a
+/// figure somebody wrote as a word.
+///
+/// Once, like [RevealOnScroll], and not at all for a viewer who has
+/// asked their system to reduce motion — for whom the final value is
+/// the only honest thing to show.
+class CountUp extends StatefulWidget {
+  const CountUp(this.text, {super.key, this.style, this.duration});
+
+  final String text;
+  final TextStyle? style;
+  final Duration? duration;
+
+  @override
+  State<CountUp> createState() => _CountUpState();
+}
+
+class _CountUpState extends State<CountUp>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: widget.duration ?? const Duration(milliseconds: 1100),
+  );
+  bool _started = false;
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  /// The value at [t], with every run of digits scaled and re-padded to
+  /// the width it will finish at — so "240,000" does not shuffle left
+  /// and right as it climbs, which reads as a glitch rather than as a
+  /// count.
+  String _at(double t) => widget.text.replaceAllMapped(
+    RegExp(r'\d+'),
+    (m) {
+      final full = m[0]!;
+      final scaled = (int.parse(full) * t).round().toString();
+      return scaled.padLeft(full.length, '0');
+    },
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+      return Text(widget.text, style: widget.style);
+    }
+    return _VisibilityProbe(
+      onVisible: (fraction) {
+        if (_started || fraction <= 0) return;
+        _started = true;
+        _c.forward();
+      },
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) => Text(
+          _at(Curves.easeOutCubic.transform(_c.value)),
+          style: widget.style,
+        ),
+      ),
+    );
+  }
+}
