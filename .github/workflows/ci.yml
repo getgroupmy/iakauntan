@@ -254,8 +254,8 @@ jobs:
             exit 0
           fi
 
-          supabase link --project-ref "$SUPABASE_PROJECT_REF"
-          supabase migration list --linked | tee /tmp/level.txt
+          scripts/ci/retry.sh supabase link --project-ref "$SUPABASE_PROJECT_REF"
+          scripts/ci/retry.sh -o /tmp/level.txt supabase migration list --linked
 
           # The gate that stops this crying wolf. This job runs *before*
           # `migrate`, so on any commit that adds a migration the hosted
@@ -311,7 +311,7 @@ jobs:
           # half is slow: one is a container on this runner, the other is
           # the network.
           time supabase db dump --local -f /tmp/schema-local.sql
-          time supabase db dump --linked -f /tmp/schema-hosted.sql
+          time scripts/ci/retry.sh supabase db dump --linked -f /tmp/schema-hosted.sql
           wc -l /tmp/schema-local.sql /tmp/schema-hosted.sql
 
       # Red, deliberately. Softening this to a warning would mean a drift
@@ -593,7 +593,7 @@ jobs:
 
       - name: Link
         if: steps.creds.outputs.ready == 'true'
-        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+        run: scripts/ci/retry.sh supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
       # Read-only, and printed whether or not anything is applied. This
       # is the part that ends the drift: a run whose summary says three
@@ -603,7 +603,7 @@ jobs:
         id: state
         run: |
           set -euo pipefail
-          supabase migration list --linked | tee /tmp/migration-list.txt
+          scripts/ci/retry.sh -o /tmp/migration-list.txt supabase migration list --linked
 
           # A local migration with no remote row is one this commit would
           # apply. Best-effort parsing of a table meant for a human — if
@@ -654,7 +654,7 @@ jobs:
         id: snapshot
         if: steps.creds.outputs.ready == 'true'
         continue-on-error: true
-        run: supabase db dump --linked -f /tmp/schema-before.sql
+        run: scripts/ci/retry.sh supabase db dump --linked -f /tmp/schema-before.sql
 
       - uses: actions/upload-artifact@v4
         if: steps.creds.outputs.ready == 'true' && steps.snapshot.outcome == 'success'
@@ -675,7 +675,7 @@ jobs:
           if [ -n "${{ steps.state.outputs.pending }}" ]; then
             echo "::notice::Applying to the hosted project: ${{ steps.state.outputs.pending }}"
           fi
-          supabase db push --linked
+          scripts/ci/retry.sh supabase db push --linked
           {
             echo
             if [ -n "${{ steps.state.outputs.pending }}" ]; then
@@ -699,7 +699,7 @@ jobs:
         if: steps.creds.outputs.ready == 'true' && env.AUTOPUSH == 'true'
         run: |
           set -euo pipefail
-          supabase migration list --linked | tee /tmp/after.txt
+          scripts/ci/retry.sh -o /tmp/after.txt supabase migration list --linked
           norm() { sed 's/│/|/g' /tmp/after.txt; }
           still="$(norm | awk -F'|' 'NF>=3 && $1 ~ /[0-9]/ && $2 !~ /[0-9]/ {print $1}' \
                      | tr -d ' ' | tr '\n' ' ')"
