@@ -156,6 +156,10 @@ void main() {
       platformLiveProviders('landing_sections'),
       contains(landingReasonsAdminProvider),
     );
+    expect(
+      platformLiveProviders('landing_sections'),
+      contains(landingBadgesAdminProvider),
+    );
   });
 
   test('and does not refresh the other two editors', () {

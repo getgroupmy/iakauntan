@@ -1188,4 +1188,78 @@ begin
 end $$;
 
 
+-- ---------------------------------------------------------------------
+-- 0319: a third kind, and what it may say
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_out jsonb; v_ok boolean;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true));
+
+  perform public.platform_save_landing_section(
+    null, 'MyInvois', null, 'receipt', 10, null, 'badge');
+  perform public.platform_save_landing_section(
+    null, 'Double entry', 'A ledger that balances.', 'payments', 10);
+  perform public.platform_save_landing_section(
+    null, 'Local support', 'In Bahasa Melayu.', 'support', 10, null, 'reason');
+
+  v_out := public.landing_page();
+  -- Three kinds, three keys, one row in each. The failure this catches
+  -- is a badge landing in the feature grid, where it would render as a
+  -- card with no body and read as unfinished copy.
+  perform pg_temp.check_eq('a badge is a badge',
+    jsonb_array_length(v_out -> 'badges'), 1);
+  perform pg_temp.check_eq('and does not join the features',
+    jsonb_array_length(v_out -> 'sections'), 1);
+  perform pg_temp.check_eq('nor the reasons',
+    jsonb_array_length(v_out -> 'reasons'), 1);
+  perform pg_temp.check_eq('and it is the one that was written',
+    v_out -> 'badges' -> 0 ->> 'title', 'MyInvois');
+
+  -- Withheld with everything else while the page is a draft.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', false));
+  perform pg_temp.sign_out();
+  begin
+    set local role anon;
+    v_out := public.landing_page();
+  end;
+  reset role;
+  perform pg_temp.check_eq('a drafted badge is withheld too',
+    jsonb_array_length(v_out -> 'badges'), 0);
+
+  -- And an administrator can see it, which is 0318's shared body doing
+  -- its job: `badges` was added once and both doors carry it.
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_eq('while the preview shows it',
+    jsonb_array_length(public.platform_landing_preview() -> 'badges'), 1);
+
+  -- A fourth kind renders nowhere, so it is refused rather than stored.
+  v_ok := false;
+  begin
+    perform public.platform_save_landing_section(
+      null, 'Something', null, null, null, null, 'banner');
+  exception when sqlstate '22023' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_true('a fourth kind is refused', v_ok);
+
+  -- And the two 0317 knew about still work, which is what recreating
+  -- the saver could have broken.
+  perform pg_temp.check_true('a feature still saves',
+    public.platform_save_landing_section(
+      null, 'Payroll', null, null, null, null, 'feature') is not null);
+  perform pg_temp.check_true('and a reason',
+    public.platform_save_landing_section(
+      null, 'Fast', null, null, null, null, 'reason') is not null);
+end $$;
+
+
 rollback;

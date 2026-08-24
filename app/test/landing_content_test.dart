@@ -464,6 +464,7 @@ void main() {
     test('every default names an icon the screen knows', () {
       const known = {
         'receipt',
+        'expenses',
         'payments',
         'people',
         'inventory',
@@ -527,6 +528,87 @@ void main() {
         expect(known, contains(r.icon), reason: '${r.title} uses ${r.icon}');
         expect(r.body, isNotNull);
         expect(r.body!.trim(), isNotEmpty);
+      }
+    });
+  });
+
+  group('what it files under', () {
+    test('an unwritten page still says what it files under', () {
+      expect(parseLandingContent(null).badges, defaultBadges);
+      expect(LandingContent.fallback.badges, defaultBadges);
+    });
+
+    test('one row in the console replaces all of them', () {
+      final c = parseLandingContent({
+        'page': {'wordmark': 'x'},
+        'badges': [
+          {'title': 'ISO 27001', 'icon': 'shield'},
+        ],
+      });
+      expect(c.badges.single.title, 'ISO 27001');
+    });
+
+    test('the three kinds do not leak into one another', () {
+      final c = parseLandingContent({
+        'page': {'wordmark': 'x'},
+        'sections': [
+          {'title': 'Payroll'},
+        ],
+        'reasons': [
+          {'title': 'Local support'},
+        ],
+        'badges': [
+          {'title': 'SST'},
+        ],
+      });
+      expect(c.sections.map((s) => s.title), ['Payroll']);
+      expect(c.reasons.map((s) => s.title), ['Local support']);
+      expect(c.badges.map((s) => s.title), ['SST']);
+    });
+
+    // The line this band must not cross. Every shipped badge names a
+    // Malaysian statutory regime this repository implements — a claim
+    // about the code, checkable from it. A certification is a claim
+    // that an auditor examined a company and passed it, which nobody
+    // here is in a position to make, and which would be a lie on a page
+    // asking for money rather than a stretch.
+    test('nothing shipped claims a certification nobody holds', () {
+      const audits = [
+        'iso',
+        'soc 2',
+        'soc2',
+        'pci',
+        'hipaa',
+        'gdpr certified',
+        'certified',
+        'accredited',
+      ];
+      for (final b in defaultBadges) {
+        final t = b.title.toLowerCase();
+        for (final a in audits) {
+          expect(
+            t.contains(a),
+            isFalse,
+            reason: '"${b.title}" reads as a certification claim',
+          );
+        }
+      }
+    });
+
+    test('and every one names an icon the screen knows', () {
+      const known = {
+        'receipt',
+        'gavel',
+        'people',
+        'calculate',
+        'shield',
+        'insights',
+      };
+      for (final b in defaultBadges) {
+        expect(known, contains(b.icon), reason: '${b.title} uses ${b.icon}');
+        // The strip draws an icon and a line. A body would be stored
+        // and never rendered.
+        expect(b.body, isNull);
       }
     });
   });

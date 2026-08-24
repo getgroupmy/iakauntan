@@ -297,6 +297,11 @@ final landingReasonsAdminProvider =
   (ref) => ref.watch(landingAdminProvider).landingSections(kind: 'reason'),
 );
 
+final landingBadgesAdminProvider =
+    FutureProvider<List<Map<String, dynamic>>>(
+  (ref) => ref.watch(landingAdminProvider).landingSections(kind: 'badge'),
+);
+
 final landingStatsAdminProvider = FutureProvider<List<Map<String, dynamic>>>(
   (ref) => ref.watch(landingAdminProvider).landingStats(),
 );

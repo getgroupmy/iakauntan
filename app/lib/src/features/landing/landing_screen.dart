@@ -92,10 +92,17 @@ class LandingPage extends StatelessWidget {
                       child: _Hero(content: content, preview: preview),
                     ),
                   ),
+                  // Directly under the hero, answering the first
+                  // question anybody asks of accounting software here.
+                  if (content.badges.isNotEmpty)
+                    _Band(
+                      tinted: true,
+                      tight: true,
+                      child: _Badges(badges: content.badges),
+                    ),
                   if (content.sections.isNotEmpty)
                     _Band(
                       key: features,
-                      tinted: true,
                       child: _Sections(sections: content.sections),
                     ),
                   // Somewhere to press, for a visitor who has read
@@ -109,7 +116,7 @@ class LandingPage extends StatelessWidget {
                   if (content.reasons.isNotEmpty)
                     _Band(
                       key: why,
-                      tinted: content.ctaHeadline == null,
+                      tinted: true,
                       child: _Reasons(reasons: content.reasons),
                     ),
                   // The three that ship empty. Each renders nothing
@@ -539,47 +546,203 @@ class _HeroArt extends StatelessWidget {
   }
 }
 
+/// A drawing of the product, for the slot a screenshot has not filled.
+///
+/// The frame used to be empty. An empty rectangle in the half of the
+/// hero that is meant to show the software says the software has
+/// nothing to show, which is the opposite of what a hero is for.
+///
+/// So it draws the shape of the thing: a rail, a header, three summary
+/// tiles, a chart and a few rows of a table. **Every value in it is a
+/// grey block, and there is not one digit anywhere.** That is the whole
+/// design constraint. A mocked-up dashboard reading "Revenue RM
+/// 284,320 ▲ 12%" is a picture of results no customer of this platform
+/// has had, on a page asking people for money — the same objection that
+/// keeps `landing_stats` empty. Shapes describe the product; numbers
+/// would describe an outcome.
+///
+/// Replaced entirely the moment `hero_image_url` is set, which is what
+/// an operator should do: a screenshot of their own books beats a
+/// drawing of anybody's.
 class _HeroPlaceholder extends StatelessWidget {
   const _HeroPlaceholder();
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final line = Land.border(scheme);
+    final block = scheme.onSurface.withValues(alpha: 0.10);
+
+    Widget bar(double w, double h, {Color? c}) => Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        color: c ?? block,
+        borderRadius: BorderRadius.circular(3),
+      ),
+    );
+
     return AspectRatio(
       aspectRatio: 16 / 10,
       child: Column(
         children: [
-          // The bar of an application window, and nothing under it.
+          // The bar of an application window.
           Container(
-            height: 34,
+            height: 30,
             decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: Land.border(scheme))),
+              border: Border(bottom: BorderSide(color: line)),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
                 for (var i = 0; i < 3; i++)
                   Padding(
-                    padding: const EdgeInsets.only(right: 7),
+                    padding: const EdgeInsets.only(right: 6),
                     child: Container(
-                      width: 9,
-                      height: 9,
+                      width: 8,
+                      height: 8,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Land.border(scheme),
+                        color: line,
                       ),
                     ),
                   ),
+                const Spacer(),
+                bar(60, 6),
               ],
             ),
           ),
           Expanded(
-            child: Center(
-              child: Icon(
-                Icons.insert_chart_outlined,
-                size: 44,
-                color: Land.border(scheme),
-              ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // The side rail.
+                Container(
+                  width: 54,
+                  decoration: BoxDecoration(
+                    border: Border(right: BorderSide(color: line)),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 12,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      bar(20, 20, c: scheme.primary.withValues(alpha: 0.85)),
+                      const SizedBox(height: 14),
+                      for (var i = 0; i < 5; i++) ...[
+                        bar(i == 1 ? 30 : 22, 5),
+                        const SizedBox(height: 9),
+                      ],
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        bar(70, 7),
+                        const SizedBox(height: 12),
+                        // Three summary tiles, each a label and a value
+                        // that is a block rather than a figure.
+                        Row(
+                          children: [
+                            for (var i = 0; i < 3; i++) ...[
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(9),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: line),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      bar(28, 4),
+                                      const SizedBox(height: 7),
+                                      bar(
+                                        40,
+                                        9,
+                                        c: scheme.primary
+                                            .withValues(alpha: 0.55),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              if (i < 2) const SizedBox(width: 8),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // A chart, as columns of no stated height.
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: line),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                for (final h in const [
+                                  0.45,
+                                  0.7,
+                                  0.35,
+                                  0.85,
+                                  0.6,
+                                  0.95,
+                                  0.5,
+                                  0.75,
+                                ]) ...[
+                                  Expanded(
+                                    child: FractionallySizedBox(
+                                      heightFactor: h,
+                                      alignment: Alignment.bottomCenter,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: scheme.primary.withValues(
+                                            alpha: 0.28 + h * 0.4,
+                                          ),
+                                          borderRadius:
+                                              const BorderRadius.vertical(
+                                            top: Radius.circular(3),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        // And the top of a ledger.
+                        for (var i = 0; i < 3; i++)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 7),
+                            child: Row(
+                              children: [
+                                bar(i.isEven ? 54 : 44, 5),
+                                const Spacer(),
+                                bar(30, 5),
+                                const SizedBox(width: 12),
+                                bar(22, 5),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -588,286 +751,197 @@ class _HeroPlaceholder extends StatelessWidget {
   }
 }
 
-/// What the product does, one area at a time.
+/// The strip under the hero: what it files under.
 ///
-/// A strip of tabs across the top and one pane under it, rather than
-/// eight cards a visitor scrolls past. The tabs are the section titles
-/// the console wrote, so a platform that has written its own blocks
-/// gets its own tabs and one that has not gets the eight this
-/// repository ships with.
+/// A row of short pills rather than cards. Each names a Malaysian
+/// statutory regime the software actually implements — see
+/// [defaultBadges] for why these ship filled when the stats band does
+/// not, and for why none of them is a certification claim.
+class _Badges extends StatelessWidget {
+  const _Badges({required this.badges});
+
+  final List<LandingSection> badges;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          'Files what a Malaysian business has to file',
+          textAlign: TextAlign.center,
+          style: Land.small(scheme).copyWith(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: Land.gap),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (final b in badges)
+              HoverLift(
+                builder: (context, hovered) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 11,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    color: scheme.surface,
+                    border: Border.all(
+                      color: hovered
+                          ? Land.borderHover(scheme)
+                          : Land.border(scheme),
+                    ),
+                    boxShadow: Land.lift(scheme, hovered: hovered),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        landingIcon(b.icon),
+                        size: 16,
+                        color: scheme.primary,
+                      ),
+                      const SizedBox(width: 9),
+                      Text(
+                        b.title,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// What the product does, as a grid.
 ///
-/// Under 720 logical pixels the strip becomes a stack of cards: a row
-/// of eight tabs on a phone is a row of eight tabs nobody can read.
-class _Sections extends StatefulWidget {
+/// Three columns above 900 logical pixels, two above 560, one below —
+/// the collapse is by available width rather than by device, because
+/// the same page is a phone, a tablet held either way, and a browser
+/// somebody has dragged to half a screen.
+///
+/// This was briefly a tab strip. A grid is the better call and the
+/// reason is scanning: somebody deciding whether an accounting package
+/// covers what they need wants every area in front of them at once, not
+/// eight areas of which they can see one. Tabs hide seven eighths of
+/// the answer behind a click.
+class _Sections extends StatelessWidget {
   const _Sections({required this.sections});
 
   final List<LandingSection> sections;
 
   @override
-  State<_Sections> createState() => _SectionsState();
-}
-
-class _SectionsState extends State<_Sections> {
-  int _selected = 0;
-
-  @override
-  void didUpdateWidget(_Sections old) {
-    super.didUpdateWidget(old);
-    // The console can shorten the list while somebody is looking at
-    // it — the page is live — and a selection past the end would throw
-    // on the next build.
-    if (_selected >= widget.sections.length) _selected = 0;
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth <= 720) {
-          return _SectionCards(sections: widget.sections);
-        }
-        final current = widget.sections[_selected];
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const LandingSectionHeader(
-              kicker: 'Product',
-              title: 'What it does',
-              subtitle: 'One ledger under all of it. Pick an area to see '
-                  'what it covers.',
-            ),
-            const SizedBox(height: Land.gapLg),
-            // Scrollable, because the number of tabs is whatever the
-            // console wrote and a fixed row would clip the last one.
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (var i = 0; i < widget.sections.length; i++)
-                    _Tab(
-                      label: widget.sections[i].title,
-                      icon: landingIcon(widget.sections[i].icon),
-                      selected: i == _selected,
-                      onTap: () => setState(() => _selected = i),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: Land.gap),
-            // Keyed by index so the pane animates when the tab moves
-            // rather than mutating text in place.
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              child: _SectionPane(
-                key: ValueKey(_selected),
-                section: current,
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _Tab extends StatelessWidget {
-  const _Tab({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: HoverLift(
-        builder: (context, hovered) => InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(Land.radiusTight),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(Land.radiusTight),
-              color: selected
-                  ? scheme.primary
-                  : hovered
-                      ? scheme.surface
-                      : Colors.transparent,
-              border: Border.all(
-                color: selected ? scheme.primary : Land.border(scheme),
-              ),
-              boxShadow: selected ? Land.lift(scheme, hovered: true) : null,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  size: 18,
-                  color: selected ? scheme.onPrimary : scheme.primary,
-                ),
-                const SizedBox(width: 9),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: selected ? scheme.onPrimary : scheme.onSurface,
-                  ),
-                ),
-              ],
-            ),
-          ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const LandingSectionHeader(
+          kicker: 'Product',
+          title: 'Everything the books need, in one place',
+          subtitle: 'One ledger underneath all of it, so a sale at the '
+              'counter and a payroll run land in the same accounts.',
         ),
-      ),
+        const SizedBox(height: Land.gapLg),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth > 900
+                ? 3
+                : constraints.maxWidth > 560
+                    ? 2
+                    : 1;
+            final width =
+                (constraints.maxWidth - (columns - 1) * Land.gap) / columns;
+            return Wrap(
+              spacing: Land.gap,
+              runSpacing: Land.gap,
+              children: [
+                for (final s in sections)
+                  SizedBox(
+                    width: width,
+                    child: RevealOnScroll(
+                      // Staggered by position so a row arrives as a
+                      // row. Capped, or the last card on a long page
+                      // waits a second and a half to say anything.
+                      delay: Duration(
+                        milliseconds: 60 * (sections.indexOf(s) % 6),
+                      ),
+                      child: _FeatureCard(section: s),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 }
 
-/// The pane under the tabs: the block's copy, and the same empty window
-/// frame the hero uses beside it.
-class _SectionPane extends StatelessWidget {
-  const _SectionPane({super.key, required this.section});
+class _FeatureCard extends StatelessWidget {
+  const _FeatureCard({required this.section});
 
   final LandingSection section;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(Land.gapLg),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(Land.radiusLarge),
-        color: scheme.surface,
-        border: Border.all(color: Land.border(scheme)),
-        boxShadow: Land.lift(scheme),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final copy = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(11),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(Land.radius),
-                  color: scheme.primary.withValues(alpha: 0.10),
-                ),
-                child: Icon(
-                  landingIcon(section.icon),
-                  color: scheme.primary,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                section.title,
-                style: Land.cardTitle(scheme).copyWith(fontSize: 22),
-              ),
-              if (section.body != null) ...[
-                const SizedBox(height: 12),
-                Text(section.body!, style: Land.body(scheme)),
-              ],
-            ],
-          );
-          if (constraints.maxWidth <= 820) return copy;
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(flex: 5, child: copy),
-              const SizedBox(width: 40),
-              Expanded(
-                flex: 4,
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(Land.radius),
-                    color: scheme.surfaceContainerLowest,
-                    border: Border.all(color: Land.border(scheme)),
-                  ),
-                  child: const _HeroPlaceholder(),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// The same blocks stacked, for a screen too narrow for a tab strip.
-class _SectionCards extends StatelessWidget {
-  const _SectionCards({required this.sections});
-
-  final List<LandingSection> sections;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const LandingSectionHeader(kicker: 'Product', title: 'What it does'),
-        const SizedBox(height: Land.gapLg),
-        for (final s in sections)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: Container(
-              padding: const EdgeInsets.all(18),
+    return HoverLift(
+      builder: (context, hovered) => AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.all(Land.gapLg - 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(Land.radius),
+          color: scheme.surface,
+          border: Border.all(
+            color: hovered ? Land.borderHover(scheme) : Land.border(scheme),
+          ),
+          boxShadow: Land.lift(scheme, hovered: hovered),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(Land.radius),
-                color: scheme.surface,
-                border: Border.all(color: Land.border(scheme)),
-                boxShadow: Land.lift(scheme),
+                borderRadius: BorderRadius.circular(Land.radiusTight),
+                color: scheme.primary.withValues(
+                  alpha: hovered ? 0.16 : 0.09,
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        landingIcon(s.icon),
-                        color: scheme.primary,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          s.title,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (s.body != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      s.body!,
-                      style: TextStyle(
-                        fontSize: 14,
-                        height: 1.5,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ],
+              child: Icon(
+                landingIcon(section.icon),
+                color: scheme.primary,
+                size: 22,
               ),
             ),
-          ),
-      ],
+            const SizedBox(height: 16),
+            Text(section.title, style: Land.cardTitle(scheme)),
+            if (section.body != null) ...[
+              const SizedBox(height: Land.gapSm),
+              Text(
+                section.body!,
+                style: Land.body(scheme).copyWith(
+                  fontSize: 14,
+                  height: 1.55,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -882,6 +956,10 @@ IconData landingIcon(String? name) {
   switch (name) {
     case 'receipt':
       return Icons.receipt_long;
+    // A different glyph from `receipt`, which the e-Invoice block has
+    // held since 0290 and should keep.
+    case 'expenses':
+      return Icons.receipt;
     case 'payments':
       return Icons.payments;
     case 'people':
@@ -1265,10 +1343,11 @@ class _Cta extends StatelessWidget {
 
 /// Why choose this one, as against what it does.
 ///
-/// The grid the feature blocks used to be, now that those are a tab
-/// strip: three columns of plain white cards on a crisp border, small
-/// icon, one line and a sentence. Same rows from `landing_sections`
-/// split by `kind`, so one console card fills both bands.
+/// A two-column list of icon, line and sentence, rather than a second
+/// grid of cards. The feature band above is the grid; repeating that
+/// shape here would make the page read as one long grid interrupted by
+/// headings, and a reader skimming would not register that the second
+/// band is answering a different question.
 class _Reasons extends StatelessWidget {
   const _Reasons({required this.reasons});
 
@@ -1289,62 +1368,60 @@ class _Reasons extends StatelessWidget {
         const SizedBox(height: Land.gapLg),
         LayoutBuilder(
           builder: (context, constraints) {
-            final columns = constraints.maxWidth > 900
-                ? 3
-                : constraints.maxWidth > 560
-                    ? 2
-                    : 1;
+            final columns = constraints.maxWidth > 760 ? 2 : 1;
             final width =
-                (constraints.maxWidth - (columns - 1) * Land.gap) / columns;
+                (constraints.maxWidth - (columns - 1) * Land.gapLg) / columns;
             return Wrap(
-              spacing: Land.gap,
-              runSpacing: Land.gap,
+              spacing: Land.gapLg,
+              runSpacing: Land.gapLg - 6,
               children: [
                 for (final r in reasons)
                   SizedBox(
                     width: width,
                     child: RevealOnScroll(
-                      // Staggered by position so a row arrives as a
-                      // row. Capped, or the last card on a long page
-                      // waits a second and a half to say anything.
                       delay: Duration(
                         milliseconds: 60 * (reasons.indexOf(r) % 6),
                       ),
-                      child: HoverLift(
-                        builder: (context, hovered) => AnimatedContainer(
-                          duration: const Duration(milliseconds: 160),
-                          padding: const EdgeInsets.all(Land.gapLg - 8),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(Land.radius),
-                            color: scheme.surface,
-                            border: Border.all(
-                              color: hovered
-                                  ? Land.borderHover(scheme)
-                                  : Land.border(scheme),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              borderRadius:
+                                  BorderRadius.circular(Land.radiusTight),
+                              color: scheme.primary.withValues(alpha: 0.09),
                             ),
-                            boxShadow: Land.lift(scheme, hovered: hovered),
+                            child: Icon(
+                              landingIcon(r.icon),
+                              color: scheme.primary,
+                              size: 18,
+                            ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                landingIcon(r.icon),
-                                color: scheme.primary,
-                                size: 24,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(r.title, style: Land.cardTitle(scheme)),
-                              if (r.body != null) ...[
-                                const SizedBox(height: Land.gapSm),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Text(
-                                  r.body!,
-                                  style: Land.body(scheme)
-                                      .copyWith(fontSize: 14, height: 1.55),
+                                  r.title,
+                                  style: Land.cardTitle(scheme)
+                                      .copyWith(fontSize: 16),
                                 ),
+                                if (r.body != null) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    r.body!,
+                                    style: Land.body(scheme).copyWith(
+                                      fontSize: 14,
+                                      height: 1.55,
+                                    ),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ),

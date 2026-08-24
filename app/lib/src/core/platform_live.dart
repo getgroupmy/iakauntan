@@ -82,6 +82,7 @@ final Map<String, List<ProviderOrFamily>> _watchers = {
   'landing_sections': [
     landingSectionsAdminProvider,
     landingReasonsAdminProvider,
+    landingBadgesAdminProvider,
     landingContentProvider,
   ],
   'landing_app_links': [landingAppLinksAdminProvider, landingContentProvider],

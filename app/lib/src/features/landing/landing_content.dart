@@ -102,6 +102,13 @@ const defaultSections = <LandingSection>[
         'file the payroll run exports.',
   ),
   (
+    icon: 'expenses',
+    title: 'Expenses and claims',
+    body: 'Photograph a receipt and let it read itself, or key it in. '
+        'Staff claims route through an approval chain and post to the '
+        'ledger once approved, against the account they belong to.',
+  ),
+  (
     icon: 'store',
     title: 'Point of sale',
     body: 'Retail, food and beverage, and service businesses, on a '
@@ -197,6 +204,33 @@ const defaultReasons = <LandingSection>[
   ),
 ];
 
+/// What it files under, said directly beneath the hero.
+///
+/// The first question anybody asks of accounting software here is
+/// whether it handles what they actually have to submit, and the page
+/// used to answer it eight blocks down inside feature copy.
+///
+/// Every entry is a claim about this repository rather than about the
+/// world, which is why these ship filled while [LandingContent.stats]
+/// and [LandingContent.testimonials] ship empty. MyInvois submission is
+/// in `supabase/functions`; the EPF, SOCSO, EIS and PCB arithmetic is
+/// asserted in `supabase/tests/statutory.sql` and fails CI if a figure
+/// moves; the SSM deadlines are computed in the corporate secretarial
+/// engine on the Malaysian calendar.
+///
+/// **None of these is a certification.** A trust strip on a SaaS page
+/// usually means ISO 27001 or SOC 2 — audits a company either passed or
+/// did not. Nothing here asserts one, and nothing here should until
+/// somebody has actually been audited and adds it themselves.
+const defaultBadges = <LandingSection>[
+  (icon: 'receipt', title: 'LHDN MyInvois e-Invoice', body: null),
+  (icon: 'gavel', title: 'SST', body: null),
+  (icon: 'people', title: 'EPF · SOCSO · EIS', body: null),
+  (icon: 'calculate', title: 'PCB / MTD', body: null),
+  (icon: 'shield', title: 'SSM filing deadlines', body: null),
+  (icon: 'insights', title: 'MFRS-shaped statements', body: null),
+];
+
 class LandingContent {
   const LandingContent({
     required this.published,
@@ -227,6 +261,7 @@ class LandingContent {
     this.pricingNote,
     this.sections = defaultSections,
     this.reasons = defaultReasons,
+    this.badges = defaultBadges,
     this.appLinks = const [],
     this.modules = const [],
     this.stats = const [],
@@ -282,6 +317,9 @@ class LandingContent {
   final String? pricingNote;
   final List<LandingSection> sections;
   final List<LandingSection> reasons;
+
+  /// The strip under the hero. Ships filled — see [defaultBadges].
+  final List<LandingSection> badges;
   final List<LandingAppLink> appLinks;
   final List<LandingModule> modules;
 
@@ -389,6 +427,7 @@ LandingContent parseLandingContent(Object? raw) {
 
   final sections = blocks('sections');
   final reasons = blocks('reasons');
+  final badges = blocks('badges');
 
   // The three that ship empty. No defaults to fall back to and none
   // wanted: an absent band is the correct rendering of "the operator
@@ -519,6 +558,7 @@ LandingContent parseLandingContent(Object? raw) {
     // three plus five they did not ask for.
     sections: sections.isEmpty ? defaultSections : sections,
     reasons: reasons.isEmpty ? defaultReasons : reasons,
+    badges: badges.isEmpty ? defaultBadges : badges,
     appLinks: links,
     modules: modules,
     // Not `?? default`: there is no default, and that is the design.

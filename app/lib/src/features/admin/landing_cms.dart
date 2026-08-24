@@ -49,6 +49,8 @@ class LandingCmsTab extends ConsumerWidget {
           const SizedBox(height: Space.lg),
           const _SectionsCard(kind: 'reason'),
           const SizedBox(height: Space.lg),
+          const _SectionsCard(kind: 'badge'),
+          const SizedBox(height: Space.lg),
           const _StatsCard(),
           const SizedBox(height: Space.lg),
           const _TestimonialsCard(),
@@ -434,12 +436,15 @@ class _SectionsCard extends ConsumerWidget {
   final String kind;
 
   bool get _reasons => kind == 'reason';
+  bool get _badges => kind == 'badge';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sections = ref.watch(
-      _reasons ? landingReasonsAdminProvider : landingSectionsAdminProvider,
-    );
+    final sections = ref.watch(switch (kind) {
+      'reason' => landingReasonsAdminProvider,
+      'badge' => landingBadgesAdminProvider,
+      _ => landingSectionsAdminProvider,
+    });
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(Space.md),
@@ -450,7 +455,11 @@ class _SectionsCard extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    _reasons ? 'Why choose it' : 'What the page says',
+                    _badges
+                        ? 'What it files under'
+                        : _reasons
+                            ? 'Why choose it'
+                            : 'What the page says',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -475,12 +484,16 @@ class _SectionsCard extends ConsumerWidget {
                 }
                 if (rows.isEmpty) {
                   return EmptyState(
-                    icon: _reasons
-                        ? Icons.thumb_up_outlined
-                        : Icons.article_outlined,
-                    title: _reasons
-                        ? 'No reasons written yet'
-                        : 'No blocks of copy yet',
+                    icon: _badges
+                        ? Icons.verified_outlined
+                        : _reasons
+                            ? Icons.thumb_up_outlined
+                            : Icons.article_outlined,
+                    title: _badges
+                        ? 'No badges written yet'
+                        : _reasons
+                            ? 'No reasons written yet'
+                            : 'No blocks of copy yet',
                     // Neither band is ever empty on the page: both fall
                     // back to the copy the product ships with, which
                     // describes what this repository actually does.
@@ -571,6 +584,7 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
   static const _icons = [
     'check',
     'receipt',
+    'expenses',
     'payments',
     'people',
     'inventory',
@@ -642,9 +656,14 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(
-        widget.existing == null
-            ? (widget.kind == 'reason' ? 'Add a reason' : 'Add a block')
-            : (widget.kind == 'reason' ? 'Edit the reason' : 'Edit the block'),
+        switch ((widget.existing == null, widget.kind)) {
+          (true, 'reason') => 'Add a reason',
+          (true, 'badge') => 'Add a badge',
+          (true, _) => 'Add a block',
+          (false, 'reason') => 'Edit the reason',
+          (false, 'badge') => 'Edit the badge',
+          (false, _) => 'Edit the block',
+        },
       ),
       content: SizedBox(
         width: 520,
@@ -661,7 +680,15 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
               TextField(
                 controller: _body,
                 maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Body'),
+                decoration: InputDecoration(
+                  labelText: 'Body',
+                  // The strip draws an icon and a line and nothing
+                  // else. A field that is stored and never rendered is
+                  // worse than an absent one.
+                  helperText: widget.kind == 'badge'
+                      ? 'Not shown on the badge strip.'
+                      : null,
+                ),
               ),
               const SizedBox(height: Space.sm),
               DropdownButtonFormField<String>(
