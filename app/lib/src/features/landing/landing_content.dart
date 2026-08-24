@@ -41,6 +41,84 @@ typedef LandingAppLink = ({
 /// page yet. The screen shows its built-in copy in that case rather than
 /// an error: a visitor who arrives before anybody has written the site
 /// should still be able to sign in.
+/// What the page says about the product before anybody has written
+/// anything.
+///
+/// The page shipped with a hero and a footer and nothing between them:
+/// `sections` defaulted to an empty list, and the feature blocks only
+/// existed once somebody had added rows in the console. So a platform
+/// that had not been through the CMS had a front page that said what the
+/// product was called and nothing about what it does.
+///
+/// These are that missing middle. They are replaced wholesale the moment
+/// `landing_sections` holds anything — one row in the console and none of
+/// this is used — so they are a starting point rather than something to
+/// work around.
+///
+/// Written from what this repository actually implements, and no further.
+/// A landing page that claims a feature the product does not have costs
+/// more than an empty one: the first person to look for it is a customer
+/// who has already paid.
+const defaultSections = <LandingSection>[
+  (
+    icon: 'receipt',
+    title: 'LHDN e-Invoice',
+    body: 'Submit to MyInvois from the invoice screen and keep the '
+        'validated document, its UUID and its QR against the invoice it '
+        'came from. Consolidated submission for the counter sales nobody '
+        'asked a receipt for.',
+  ),
+  (
+    icon: 'payments',
+    title: 'Double-entry accounting',
+    body: 'Sales, purchases, banking and a general ledger that balances '
+        'by construction. Multi-currency with realised and unrealised '
+        'gain posted where it belongs, and fiscal periods that close.',
+  ),
+  (
+    icon: 'people',
+    title: 'Payroll and HR',
+    body: 'EPF, SOCSO, EIS and PCB computed to the statutory tables, '
+        'leave and claims that post themselves to the ledger, and a bank '
+        'file the payroll run exports.',
+  ),
+  (
+    icon: 'store',
+    title: 'Point of sale',
+    body: 'Retail, food and beverage, and service businesses, on a '
+        'counter, a tablet or a phone. Keeps selling when the connection '
+        'drops and lands the batch when it returns.',
+  ),
+  (
+    icon: 'inventory',
+    title: 'Stock that ties to the ledger',
+    body: 'Serial numbers and batches, several warehouses, landed cost, '
+        'and units that differ between how you buy and how you sell. '
+        'Reordering off measured demand rather than a guess.',
+  ),
+  (
+    icon: 'shield',
+    title: 'Corporate secretarial',
+    body: 'Registers, resolutions and the SSM deadlines a company '
+        'actually owes, counted on the Malaysian calendar rather than '
+        'the server\'s.',
+  ),
+  (
+    icon: 'insights',
+    title: 'The statements an auditor asks for',
+    body: 'Profit and loss, balance sheet, cash flow, changes in equity, '
+        'aged receivables and payables, SST summary and deferred '
+        'revenue — on screen, as PDF, and as CSV you can add up.',
+  ),
+  (
+    icon: 'cloud',
+    title: 'One place, every device',
+    body: 'The same books in a browser, on Android and on iOS. Roles '
+        'down to the individual permission, and an audit trail of who '
+        'changed what.',
+  ),
+];
+
 class LandingContent {
   const LandingContent({
     required this.published,
@@ -68,7 +146,7 @@ class LandingContent {
     this.showPricing = false,
     this.pricingHeading,
     this.pricingNote,
-    this.sections = const [],
+    this.sections = defaultSections,
     this.appLinks = const [],
     this.modules = const [],
   });
@@ -249,7 +327,11 @@ LandingContent parseLandingContent(Object? raw) {
     showPricing: page['show_pricing'] == true,
     pricingHeading: str('pricing_heading'),
     pricingNote: str('pricing_note'),
-    sections: sections,
+    // The console's rows win outright when there are any; the shipped
+    // copy fills the page until somebody writes their own. Not merged:
+    // an operator who has written three blocks means three blocks, not
+    // three plus five they did not ask for.
+    sections: sections.isEmpty ? defaultSections : sections,
     appLinks: links,
     modules: modules,
   );

@@ -41,7 +41,17 @@ void main() {
       expect(c.published, isFalse);
       // And the draft does not leak in through the lists. The database
       // withholds them too; this is the second lock on the same door.
-      expect(c.sections, isEmpty);
+      //
+      // What fills the gap changed when the shipped sections arrived:
+      // an unpublished page shows those rather than nothing. The
+      // property being guarded is unchanged and is the one that
+      // matters — the operator's unpublished draft is not on screen.
+      expect(
+        c.sections.map((s) => s.title),
+        isNot(contains('Draft')),
+        reason: 'an unpublished draft block must not render',
+      );
+      expect(c.sections, equals(defaultSections));
       expect(c.appLinks, isEmpty);
     });
 
@@ -408,6 +418,66 @@ void main() {
           'iAkauntan');
       expect(parseLandingContent({'page': null, 'brand': 42}).themeMode,
           'system');
+    });
+  });
+
+  /// The page has something to say before anybody writes anything.
+  ///
+  /// `sections` used to default to an empty list, so a platform that had
+  /// not been through the console had a front page with a hero, a footer
+  /// and nothing in between.
+  group('default sections', () {
+    test('an unwritten page still describes the product', () {
+      final c = parseLandingContent({'page': null, 'brand': const {}});
+      expect(c.sections, isNotEmpty);
+      expect(c.sections.length, defaultSections.length);
+    });
+
+    test('and so does the offline fallback', () {
+      expect(LandingContent.fallback.sections, isNotEmpty);
+    });
+
+    // Replaced wholesale, not merged. An operator who wrote three blocks
+    // means three blocks — not three plus five they never asked for.
+    test('one row in the console replaces all of them', () {
+      final c = parseLandingContent({
+        'page': {'wordmark': 'Akaun Saya'},
+        'sections': [
+          {'icon': 'receipt', 'title': 'Only this', 'body': 'One block.'},
+        ],
+      });
+      expect(c.sections.length, 1);
+      expect(c.sections.single.title, 'Only this');
+    });
+
+    test('and an empty list in the payload is still the defaults', () {
+      final c = parseLandingContent({
+        'page': {'wordmark': 'Akaun Saya'},
+        'sections': const [],
+      });
+      expect(c.sections.length, defaultSections.length);
+    });
+
+    // Every default has to render: the grid draws an icon for each, and
+    // an unknown name silently becomes a generic tick, which is how a
+    // typo survives review.
+    test('every default names an icon the screen knows', () {
+      const known = {
+        'receipt',
+        'payments',
+        'people',
+        'inventory',
+        'store',
+        'insights',
+        'shield',
+        'cloud',
+      };
+      for (final s in defaultSections) {
+        expect(known, contains(s.icon), reason: '${s.title} uses ${s.icon}');
+        expect(s.title.trim(), isNotEmpty);
+        expect(s.body, isNotNull);
+        expect(s.body!.trim(), isNotEmpty);
+      }
     });
   });
 }
