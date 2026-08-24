@@ -279,6 +279,16 @@ class _Masthead extends StatelessWidget {
               final wide = constraints.maxWidth > 760;
               return Row(
                 children: [
+                  // On a phone the menu is on the left and the mark is
+                  // centred, which is where a thumb and an eye expect
+                  // them. On a desktop the mark leads.
+                  if (!wide)
+                    _Burger(
+                      content: content,
+                      anchors: anchors,
+                      preview: preview,
+                      onPick: _scrollTo,
+                    ),
                   LandingMark(content: content, size: 32),
                   const Spacer(),
                   if (wide) ...[
@@ -306,10 +316,11 @@ class _Masthead extends StatelessWidget {
                       ),
                     const SizedBox(width: 16),
                   ],
-                  TextButton(
-                    onPressed: preview ? null : () => context.go('/signin'),
-                    child: Text(content.signInLabel),
-                  ),
+                  if (wide)
+                    TextButton(
+                      onPressed: preview ? null : () => context.go('/signin'),
+                      child: Text(content.signInLabel),
+                    ),
                   if (content.registerEnabled) ...[
                     const SizedBox(width: 8),
                     FilledButton(
@@ -1531,13 +1542,17 @@ class _Stats extends StatelessWidget {
   }
 }
 
-/// What customers say, with a name against it.
+/// What customers say, in a speech bubble with a name under it.
 ///
-/// Ships empty and stays empty until somebody writes one. A testimonial
-/// nobody said is a fabricated endorsement whatever else it is, so
-/// there is no built-in copy here to fall back to and the author is
-/// rendered every time — an unattributed quote on a page selling
-/// software is exactly the shape an invented one takes.
+/// The shape the reference page uses, and the right one: a quote set as
+/// a bubble is unmistakably somebody talking, where a quote in a
+/// bordered card reads as more product copy in the product's own voice.
+///
+/// Ships empty and stays empty until somebody writes one. There is no
+/// built-in copy to fall back on and the author is rendered every time
+/// — a testimonial nobody said is a fabricated endorsement whatever
+/// else it is, and an unattributed quote on a page selling software is
+/// exactly the shape an invented one takes.
 class _Testimonials extends StatelessWidget {
   const _Testimonials({required this.testimonials});
 
@@ -1545,7 +1560,6 @@ class _Testimonials extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1556,7 +1570,7 @@ class _Testimonials extends StatelessWidget {
         const SizedBox(height: Land.gapLg),
         LayoutBuilder(
           builder: (context, constraints) {
-            final columns = constraints.maxWidth > 860
+            final columns = constraints.maxWidth > 900
                 ? 3
                 : constraints.maxWidth > 560
                     ? 2
@@ -1565,80 +1579,16 @@ class _Testimonials extends StatelessWidget {
                 (constraints.maxWidth - (columns - 1) * Land.gap) / columns;
             return Wrap(
               spacing: Land.gap,
-              runSpacing: Land.gap,
+              runSpacing: Land.gapLg,
               children: [
                 for (final t in testimonials)
                   SizedBox(
                     width: width,
                     child: RevealOnScroll(
                       delay: Duration(
-                        milliseconds:
-                            60 * (testimonials.indexOf(t) % 6),
+                        milliseconds: 60 * (testimonials.indexOf(t) % 6),
                       ),
-                      child: Container(
-                        padding: const EdgeInsets.all(Land.gapLg - 8),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(Land.radius),
-                          color: scheme.surface,
-                          border: Border.all(color: Land.border(scheme)),
-                          boxShadow: Land.lift(scheme),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(
-                              Icons.format_quote,
-                              color: scheme.primary.withValues(alpha: 0.6),
-                              size: 26,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              t.quote,
-                              style: Land.body(scheme)
-                                  .copyWith(color: scheme.onSurface),
-                            ),
-                            const SizedBox(height: 14),
-                            Row(
-                              children: [
-                                if (t.avatarUrl != null) ...[
-                                  ClipOval(
-                                    child: Image.network(
-                                      t.avatarUrl!,
-                                      width: 32,
-                                      height: 32,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) =>
-                                          const SizedBox.shrink(),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                ],
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        t.author,
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      if (t.company != null)
-                                        Text(
-                                          t.company!,
-                                          style: Land.small(scheme)
-                                              .copyWith(fontSize: 12),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
+                      child: _Bubble(testimonial: t),
                     ),
                   ),
               ],
@@ -1648,6 +1598,101 @@ class _Testimonials extends StatelessWidget {
       ],
     );
   }
+}
+
+class _Bubble extends StatelessWidget {
+  const _Bubble({required this.testimonial});
+
+  final LandingTestimonial testimonial;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(Land.gapLg - 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(Land.radius),
+            color: scheme.primary,
+          ),
+          child: Text(
+            testimonial.quote,
+            style: TextStyle(
+              fontSize: 15,
+              height: 1.6,
+              color: scheme.onPrimary,
+            ),
+          ),
+        ),
+        // The tail, under the left edge, so the bubble points at the
+        // person named below it rather than at nothing.
+        Padding(
+          padding: const EdgeInsets.only(left: 28),
+          child: CustomPaint(
+            size: const Size(22, 12),
+            painter: _TailPainter(scheme.primary),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            if (testimonial.avatarUrl != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(Land.radiusTight),
+                child: Image.network(
+                  testimonial.avatarUrl!,
+                  width: 40,
+                  height: 40,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    testimonial.author,
+                    style: Land.cardTitle(scheme).copyWith(fontSize: 15),
+                  ),
+                  if (testimonial.company != null)
+                    Text(
+                      testimonial.company!,
+                      style: Land.small(scheme).copyWith(fontSize: 13),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _TailPainter extends CustomPainter {
+  const _TailPainter(this.colour);
+
+  final Color colour;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(path, Paint()..color = colour);
+  }
+
+  @override
+  bool shouldRepaint(_TailPainter old) => old.colour != colour;
 }
 
 /// The wall of customer marks.
@@ -1909,6 +1954,110 @@ class _MegaMenuState extends State<_MegaMenu> {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The menu button, and the sheet it opens.
+///
+/// Every frame of the reference on a phone shows this: a burger on the
+/// left, the mark centred, and nothing else on the bar. The page has
+/// four or five anchors and two ways in, which is two rows of controls
+/// at 390 logical pixels and one row at 1200 — so on a phone they go
+/// behind the button.
+///
+/// A bottom sheet rather than a side drawer. A drawer needs a Scaffold
+/// with one attached, and this page is drawn inside the console's
+/// preview as well as at the front door; a sheet works in both without
+/// either caring.
+class _Burger extends StatelessWidget {
+  const _Burger({
+    required this.content,
+    required this.anchors,
+    required this.preview,
+    required this.onPick,
+  });
+
+  final LandingContent content;
+  final Map<String, GlobalKey> anchors;
+  final bool preview;
+  final void Function(GlobalKey) onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      icon: const Icon(Icons.menu),
+      color: scheme.onSurface,
+      tooltip: 'Menu',
+      onPressed: () => showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        backgroundColor: scheme.surface,
+        builder: (sheet) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final entry in anchors.entries)
+                ListTile(
+                  title: Text(entry.key, style: Land.cardTitle(scheme)),
+                  trailing: Icon(
+                    Icons.arrow_downward,
+                    size: 18,
+                    color: Land.muted(scheme),
+                  ),
+                  onTap: () {
+                    Navigator.of(sheet).pop();
+                    onPick(entry.value);
+                  },
+                ),
+              Divider(color: Land.border(scheme), height: 1),
+              Padding(
+                padding: const EdgeInsets.all(Land.gap),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: preview
+                            ? null
+                            : () {
+                                Navigator.of(sheet).pop();
+                                context.go('/signin');
+                              },
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          side: BorderSide(color: Land.border(scheme)),
+                        ),
+                        child: Text(content.signInLabel),
+                      ),
+                    ),
+                    if (content.registerEnabled) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: preview
+                              ? null
+                              : () {
+                                  Navigator.of(sheet).pop();
+                                  context.go('/signin?mode=register');
+                                },
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                          ),
+                          child: Text(content.registerLabel),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),

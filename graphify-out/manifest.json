@@ -4400,8 +4400,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_screen.dart": {
-    "mtime": 1787575079.3183768,
-    "ast_hash": "5320bbb9887b578e462308933d3e5bcf",
+    "mtime": 1787585336.653997,
+    "ast_hash": "98d50a942c6d3213a176db725b17abb3",
     "semantic_hash": ""
   },
   "app/test/landing_content_test.dart": {
@@ -4755,8 +4755,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_dark_band.dart": {
-    "mtime": 1787574795.7032993,
-    "ast_hash": "97884cda47e3fc589d96c8fc490c137e",
+    "mtime": 1787585194.9335282,
+    "ast_hash": "c2ee094c36cecac4b7fdeac52937f040",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/landing/landing_carousel.dart": {
+    "mtime": 1787585162.2020035,
+    "ast_hash": "63c172b3fc45b585a0f5059b15fe325a",
     "semantic_hash": ""
   }
 }

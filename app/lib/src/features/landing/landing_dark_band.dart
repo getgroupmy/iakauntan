@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'landing_carousel.dart';
 import 'landing_content.dart';
 import 'landing_motion.dart';
 import 'landing_tokens.dart';
@@ -91,36 +92,31 @@ class LandingDarkBand extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: Land.gapLg),
+              // Paged rather than wrapped. Twenty-five modules in a
+              // grid is a wall a reader skips; four at a time with
+              // arrows is a thing they page through.
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final columns = constraints.maxWidth > 980
+                  final perPage = constraints.maxWidth > 980
                       ? 4
                       : constraints.maxWidth > 700
                           ? 3
                           : constraints.maxWidth > 460
                               ? 2
                               : 1;
-                  final width =
-                      (constraints.maxWidth - (columns - 1) * 16) / columns;
-                  return Wrap(
-                    spacing: 16,
-                    runSpacing: 16,
-                    children: [
-                      for (final m in modules)
-                        SizedBox(
-                          width: width,
-                          child: RevealOnScroll(
-                            delay: Duration(
-                              milliseconds: 45 * (modules.indexOf(m) % 8),
-                            ),
-                            child: _ModuleCard(
-                              module: m,
-                              ink: inkSoft,
-                              onInk: onInk,
-                            ),
-                          ),
-                        ),
-                    ],
+                  return RevealOnScroll(
+                    child: LandingCarousel(
+                      perPage: perPage,
+                      // Tall enough for the longest description at the
+                      // narrowest card, since a PageView cannot size
+                      // itself to its children.
+                      height: perPage == 1 ? 168 : 196,
+                      onInk: true,
+                      items: [
+                        for (final m in modules)
+                          _ModuleCard(module: m, ink: inkSoft, onInk: onInk),
+                      ],
+                    ),
                   );
                 },
               ),
