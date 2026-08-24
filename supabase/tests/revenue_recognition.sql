@@ -522,4 +522,122 @@ begin
        from public.revenue_schedule_periods where document_id = v_inv), 0);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- What the screen shows before anybody presses the button
+--
+-- 0312's `revenue_schedule_due` is the preview the recognition card
+-- reads. The property worth asserting is that it and the run agree:
+-- every row it offers becomes a journal, and it offers nothing the run
+-- would decline to write.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_doc uuid; v_n integer;
+  v_rows integer; v_total numeric;
+  v_start date := date_trunc('year', current_date)::date;
+  v_end   date := (date_trunc('year', current_date)
+                   + interval '1 year' - interval '1 day')::date;
+begin
+  v_org := pg_temp.rev_org('Papar Jadual Sdn Bhd');
+  v_doc := pg_temp.service_invoice(v_org, 'INV-DUE', 1200, v_start, v_end);
+  perform public.post_sales_document(v_doc);
+
+  select count(*), sum(amount) into v_rows, v_total
+    from public.revenue_schedule_due(v_org);
+
+  perform pg_temp.check_eq('a year is twelve releases waiting',
+    v_rows::numeric, 12);
+  perform pg_temp.check_eq('and they add to the invoice', v_total, 1200);
+  perform pg_temp.check_eq('each one line on one invoice',
+    (select count(*) from public.revenue_schedule_due(v_org)
+      where lines <> 1 or documents <> 1)::numeric, 0);
+
+  -- One journal per row offered, and the rows go once they are posted.
+  v_n := public.recognise_revenue(
+    v_org, (v_start + interval '2 months' - interval '1 day')::date);
+  perform pg_temp.check_eq('two months released', v_n::numeric, 2);
+  perform pg_temp.check_eq('and they leave the list',
+    (select count(*) from public.revenue_schedule_due(v_org))::numeric, 10);
+
+  -- Not a fixed figure: 1200 over a year is not 100 a month, because
+  -- the months are not the same length. What must hold is that nothing
+  -- has gone missing between the two halves.
+  perform pg_temp.check_eq('with what is left plus what was posted still 1200',
+    (select coalesce(sum(amount), 0) from public.revenue_schedule_due(v_org))
+    + (select coalesce(sum(amount), 0) from public.revenue_schedule_periods
+        where org_id = v_org and gl_entry_id is not null), 1200);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A period worth nothing is not offered
+--
+-- `recognise_revenue` skips a group totalling zero — there is no
+-- journal to write. Left in the preview those groups would show as
+-- nothing to release that pressing the button never clears, forever,
+-- because nothing about them ever changes.
+--
+-- They are reachable, which is why this is asserted rather than argued:
+-- one sen over a year is eleven months of nothing and one month of a
+-- sen.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_doc uuid;
+  v_start date := date_trunc('year', current_date)::date;
+  v_end   date := (date_trunc('year', current_date)
+                   + interval '1 year' - interval '1 day')::date;
+begin
+  v_org := pg_temp.rev_org('Sen Sahaja Sdn Bhd');
+  v_doc := pg_temp.service_invoice(v_org, 'INV-SEN', 0.01, v_start, v_end);
+  perform public.post_sales_document(v_doc);
+
+  perform pg_temp.check_eq('a sen over a year is still twelve periods',
+    (select count(*) from public.revenue_schedule_periods
+      where document_id = v_doc)::numeric, 12);
+  perform pg_temp.check_eq('eleven of them worth nothing',
+    (select count(*) from public.revenue_schedule_periods
+      where document_id = v_doc and amount = 0)::numeric, 11);
+  perform pg_temp.check_eq('and only the one that pays is offered',
+    (select count(*) from public.revenue_schedule_due(v_org))::numeric, 1);
+
+  perform public.recognise_revenue(v_org, v_end);
+  perform pg_temp.check_eq('after the run nothing is left showing as due',
+    (select count(*) from public.revenue_schedule_due(v_org))::numeric, 0);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And it is not readable by somebody who is not in the company
+--
+-- Last, because it leaves a signed-in role behind.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_doc uuid; v_user uuid; v_role text; v_refused boolean := false;
+  v_start date := date_trunc('year', current_date)::date;
+  v_end   date := (date_trunc('year', current_date)
+                   + interval '1 year' - interval '1 day')::date;
+begin
+  v_org := pg_temp.rev_org('Sulit Papar Sdn Bhd');
+  v_doc := pg_temp.service_invoice(v_org, 'INV-SULIT', 1200, v_start, v_end);
+  perform public.post_sales_document(v_doc);
+
+  v_user := pg_temp.another_user('luar@papar.test');
+  perform pg_temp.sign_in_as(v_user);
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    begin
+      perform 1 from public.revenue_schedule_due(v_org);
+    exception when sqlstate '42501' then
+      v_refused := true;
+    end;
+  end;
+  reset role;
+
+  perform pg_temp.check_true('the privilege test ran as authenticated',
+    v_role = 'authenticated');
+  perform pg_temp.check_true(
+    'a stranger cannot see what a company owes its own P&L', v_refused);
+end $$;
+
 rollback;

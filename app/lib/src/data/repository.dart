@@ -1623,6 +1623,32 @@ class Repo {
     return data as String?;
   }
 
+  /// Deferred revenue that has not been released yet, one row per
+  /// period end — the shape `recognise_revenue` posts in.
+  ///
+  /// Everything unposted, not only what is due today: the card splits
+  /// the list on whichever date is chosen, so moving that date costs
+  /// nothing and what is still to come stays visible beside what is
+  /// about to post.
+  Future<List<RevenueDue>> revenueScheduleDue() async {
+    final data = await callRpc(
+      'revenue_schedule_due',
+      params: {'p_org_id': orgId},
+    );
+    return _rows(data).map(RevenueDue.fromJson).toList();
+  }
+
+  /// Releases what has been earned up to a date, returning how many
+  /// journals were posted. Safe to press twice: a period already
+  /// carrying an entry is skipped.
+  Future<int> recogniseRevenue(DateTime upto) async {
+    final data = await callRpc(
+      'recognise_revenue',
+      params: {'p_org_id': orgId, 'p_upto': Fmt.iso(upto)},
+    );
+    return (data as num?)?.toInt() ?? 0;
+  }
+
   /// Every currency this organization could use, with the rate that is
   /// actually in force and where it came from.
   ///

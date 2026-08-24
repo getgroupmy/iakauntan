@@ -393,6 +393,62 @@ class FxRevaluation {
   );
 }
 
+/// One month of deferred revenue waiting to be released.
+///
+/// The shape `recognise_revenue` posts in: one journal per period end,
+/// carrying every line that matures on it. So a row here is a journal
+/// that is about to exist, not an internal grouping the ledger will
+/// disagree with.
+class RevenueDue {
+  const RevenueDue({
+    required this.periodEnd,
+    required this.amount,
+    required this.lines,
+    required this.documents,
+  });
+
+  final DateTime periodEnd;
+  final double amount;
+
+  /// How many invoice lines mature on this date, and across how many
+  /// documents. Both, because "3 lines" and "3 invoices" are different
+  /// numbers and the second is the one somebody recognises.
+  final int lines;
+  final int documents;
+
+  factory RevenueDue.fromJson(Map<String, dynamic> j) => RevenueDue(
+    periodEnd: Fmt.parseDate(j['period_end']) ?? DateTime.now(),
+    amount: Fmt.toDouble(j['amount']),
+    lines: (j['lines'] as num?)?.toInt() ?? 0,
+    documents: (j['documents'] as num?)?.toInt() ?? 0,
+  );
+}
+
+/// Which of [rows] a release dated [upto] would post, and which it
+/// would leave.
+///
+/// Inclusive of the date itself, because `recognise_revenue` filters on
+/// `period_end <= p_upto`. A month ending exactly on the date chosen is
+/// earned by it, and being off by one here would leave a month behind
+/// every single time — the date anybody picks for a release is a month
+/// end, so the boundary is not an edge case, it is the case.
+///
+/// Out here rather than in the card so the boundary can be asserted
+/// without a Flutter binding, the same split `servicePeriodLabel` has.
+({List<RevenueDue> ready, List<RevenueDue> later}) splitRevenueDue(
+  List<RevenueDue> rows,
+  DateTime upto,
+) => (
+  ready: [
+    for (final r in rows)
+      if (!r.periodEnd.isAfter(upto)) r,
+  ],
+  later: [
+    for (final r in rows)
+      if (r.periodEnd.isAfter(upto)) r,
+  ],
+);
+
 /// One line of the fixed asset register.
 class FixedAsset {
   const FixedAsset({

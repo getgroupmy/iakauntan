@@ -475,6 +475,17 @@ final fxRevaluationPreviewProvider = FutureProvider.autoDispose
       return requireRepo(ref).fxRevaluationPreview(asAt);
     });
 
+/// Deferred revenue not yet released, one row per period end.
+///
+/// No date family, unlike the FX preview beside it. The function
+/// returns everything unposted and the card splits it on whichever date
+/// is chosen, so dragging the date around is not a round trip each
+/// time — and what is still to come stays on screen next to what is
+/// about to post.
+final revenueDueProvider = FutureProvider.autoDispose<List<RevenueDue>>((ref) {
+  return requireRepo(ref).revenueScheduleDue();
+});
+
 final expensesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
   (ref) {
     return requireRepo(ref).expenses();

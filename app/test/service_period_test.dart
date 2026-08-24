@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/features/documents/line_draft.dart';
 
 /// What a service period reads as on the line it belongs to.
@@ -143,6 +144,63 @@ void main() {
       ).toJson();
       expect(json.containsKey('service_start'), isFalse);
       expect(json.containsKey('service_end'), isFalse);
+    });
+  });
+
+  /// Which months a release dated X would post.
+  ///
+  /// `recognise_revenue` filters on `period_end <= p_upto`. The date
+  /// anybody picks for a release is a month end, and every schedule
+  /// period ends on a month end, so the boundary is not an edge case
+  /// here — it is the case. Off by one and every run silently leaves
+  /// the month it was asked for behind.
+  group('splitRevenueDue', () {
+    RevenueDue on(int y, int m, int d, [double amount = 100]) => RevenueDue(
+      periodEnd: DateTime(y, m, d),
+      amount: amount,
+      lines: 1,
+      documents: 1,
+    );
+
+    test('a period ending on the date is released by it', () {
+      final rows = [on(2026, 1, 31), on(2026, 2, 28), on(2026, 3, 31)];
+      final split = splitRevenueDue(rows, DateTime(2026, 2, 28));
+      expect(split.ready.length, 2);
+      expect(split.later.length, 1);
+      expect(split.later.single.periodEnd, DateTime(2026, 3, 31));
+    });
+
+    test('a period ending the day after is not', () {
+      final split = splitRevenueDue(
+        [on(2026, 2, 28)],
+        DateTime(2026, 2, 27),
+      );
+      expect(split.ready, isEmpty);
+      expect(split.later.length, 1);
+    });
+
+    test('every row lands in exactly one half', () {
+      final rows = [
+        on(2026, 1, 31),
+        on(2026, 2, 28),
+        on(2026, 3, 31),
+        on(2026, 4, 30),
+      ];
+      for (final upto in [
+        DateTime(2025, 12, 31),
+        DateTime(2026, 2, 28),
+        DateTime(2026, 4, 30),
+        DateTime(2027, 1, 1),
+      ]) {
+        final split = splitRevenueDue(rows, upto);
+        expect(split.ready.length + split.later.length, rows.length);
+      }
+    });
+
+    test('nothing due is two empty halves, not a crash', () {
+      final split = splitRevenueDue(const [], DateTime(2026, 2, 28));
+      expect(split.ready, isEmpty);
+      expect(split.later, isEmpty);
     });
   });
 }

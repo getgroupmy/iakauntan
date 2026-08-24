@@ -210,8 +210,12 @@ it releasing revenue for a contract nobody is delivering.
 agreed on a quotation reaches the invoice that actually defers it.
 
 The editor shows a service-period strip under any sales line that could
-carry one, so the columns are reachable by somebody who is not writing
-SQL. The wording and the month count are asserted in
+carry one, and `0312` plus a deferred revenue card in settings show what
+each month is about to release and post it — so both halves are reachable
+by somebody who is not writing SQL. The card renders nothing at all until
+a company has deferred something, which is what keeps it off the screens
+of the shops that never will. The wording and the month count are
+asserted in
 `app/test/service_period_test.dart`; the carry-through in
 `supabase/tests/transfer.sql`; the arithmetic in
 `supabase/tests/revenue_recognition.sql`.
