@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/env.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
+import '../landing/landing_content.dart';
 
 /// Where a password reset link lands.
 ///
@@ -27,6 +28,9 @@ class ResetPasswordScreen extends ConsumerStatefulWidget {
 }
 
 class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
+  String get _wordmark =>
+      ref.watch(landingContentProvider).valueOrNull?.wordmark ?? Env.appName;
+
   final _formKey = GlobalKey<FormState>();
   final _password = TextEditingController();
   final _confirm = TextEditingController();
@@ -106,7 +110,10 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                       const SizedBox(height: Space.xs),
                       Text(
                         user?.email == null
-                            ? 'Set a new password for your ${Env.appName} account.'
+                            // The platform's own name, not the one the
+                            // product was compiled with. `Env.appName` is
+                            // a constant and cannot know it was rebranded.
+                            ? 'Set a new password for your $_wordmark account.'
                             : 'Set a new password for ${user!.email}.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: context.scheme.onSurfaceVariant,

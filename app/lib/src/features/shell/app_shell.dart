@@ -9,6 +9,7 @@ import '../../core/providers.dart';
 import '../../data/platform_catalog_repository.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
+import '../landing/landing_content.dart';
 import '../chat/call_incoming.dart';
 import '../chat/chat_live.dart';
 
@@ -1196,7 +1197,10 @@ class _RailHeader extends ConsumerWidget {
       child: extended
           ? _OrgSwitcher(org: org)
           : Tooltip(
-              message: org?.name ?? 'iAkauntan',
+              // The company wins when there is one — this is their
+              // workspace, not the platform's. The fallback is the only
+              // place the platform's own name belongs here.
+              message: org?.name ?? platformWordmark(ref),
               child: CircleAvatar(
                 backgroundColor: scheme.primary,
                 child: Text(
@@ -1280,7 +1284,7 @@ class _OrgSwitcher extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      org?.name ?? 'iAkauntan',
+                      org?.name ?? platformWordmark(ref),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1357,3 +1361,13 @@ class _AccountButton extends ConsumerWidget {
     );
   }
 }
+
+/// What this platform calls itself, for the handful of places that have
+/// no company to name yet.
+///
+/// Not a replacement for the organization's name anywhere: an accountant
+/// working inside "Sinar Teknologi" should see Sinar Teknologi, and the
+/// operator's brand belongs on the way in and on the front page rather
+/// than over the top of their customer's own identity.
+String platformWordmark(WidgetRef ref) =>
+    ref.watch(landingContentProvider).valueOrNull?.wordmark ?? 'iAkauntan';

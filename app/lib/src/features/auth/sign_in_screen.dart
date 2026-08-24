@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/providers.dart';
 import '../../core/theme.dart';
+import '../landing/landing_content.dart';
 import 'demo_accounts.dart';
 
 class SignInScreen extends ConsumerStatefulWidget {
@@ -21,6 +22,12 @@ class SignInScreen extends ConsumerStatefulWidget {
 }
 
 class _SignInScreenState extends ConsumerState<SignInScreen> {
+  /// What this platform calls itself, or what the product shipped as.
+  /// Named rather than inlined because it appears in two sentences and
+  /// they must not disagree.
+  String get _wordmark =>
+      ref.watch(landingContentProvider).valueOrNull?.wordmark ?? 'iAkauntan';
+
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
@@ -209,7 +216,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 Text(
                   _isSignUp
                       ? 'Set up your books in a couple of minutes.'
-                      : 'Sign in to continue to iAkauntan.',
+                      : 'Sign in to continue to $_wordmark.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 28),
@@ -306,7 +313,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   child: Text(
                     _isSignUp
                         ? 'Already have an account? Sign in'
-                        : "New to iAkauntan? Create an account",
+                        : 'New to $_wordmark? Create an account',
                   ),
                 ),
                 // Not offered halfway through creating an account: the
@@ -347,33 +354,73 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   }
 }
 
-class _Brand extends StatelessWidget {
-  const _Brand({this.onDark = false});
+/// The platform's mark, on the way in.
+///
+/// Reads the same brand the landing page does. Before this it was a
+/// hardcoded wallet icon and the literal string "iAkauntan", so an
+/// operator who uploaded a logo saw it on the front page and then signed
+/// in to somebody else's product.
+///
+/// Falls back to exactly what was here before whenever no logo is set,
+/// which is every platform that has not opened the console — so nothing
+/// changes for them.
+/// What the sign-in screen showed before anybody uploaded anything.
+class _Wallet extends StatelessWidget {
+  const _Wallet({required this.onDark});
 
   final bool onDark;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(9),
+      decoration: BoxDecoration(
+        color: onDark ? scheme.onPrimary : scheme.primary,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(
+        Icons.account_balance_wallet,
+        color: onDark ? scheme.primary : scheme.onPrimary,
+        size: 22,
+      ),
+    );
+  }
+}
+
+class _Brand extends ConsumerWidget {
+  const _Brand({this.onDark = false});
+
+  /// Sitting on the primary colour rather than on the page, which is
+  /// where the dark variant of a logo earns its keep.
+  final bool onDark;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
     final color = onDark ? scheme.onPrimary : scheme.primary;
+    final brand = ref.watch(landingContentProvider).valueOrNull;
+
+    // On the primary panel the light logo is the wrong one: same rule
+    // the landing page uses, for the same reason.
+    final url = (onDark ? brand?.logoDarkUrl : null) ?? brand?.logoUrl;
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: const EdgeInsets.all(9),
-          decoration: BoxDecoration(
-            color: onDark ? scheme.onPrimary : scheme.primary,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(
-            Icons.account_balance_wallet,
-            color: onDark ? scheme.primary : scheme.onPrimary,
-            size: 22,
-          ),
-        ),
+        if (url != null)
+          Image.network(
+            url,
+            height: 40,
+            // A logo that will not load must not take the sign-in form
+            // with it — this is the one screen nobody can route around.
+            errorBuilder: (_, _, _) => _Wallet(onDark: onDark),
+          )
+        else
+          _Wallet(onDark: onDark),
         const SizedBox(width: 12),
         Text(
-          'iAkauntan',
+          brand?.wordmark ?? 'iAkauntan',
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w700,
