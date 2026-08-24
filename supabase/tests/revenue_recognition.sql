@@ -343,4 +343,183 @@ begin
       where document_id = v_doc)::numeric, 12);
 end $$;
 
+-- A credit note against an invoice, carrying the same customer.
+create or replace function pg_temp.credit_note(
+  p_org uuid, p_no text, p_amount numeric, p_invoice uuid, p_on date,
+  p_from date default null, p_to date default null)
+returns uuid language plpgsql as $$
+declare v_cn uuid; v_cust uuid;
+begin
+  select contact_id into v_cust from public.sales_documents where id = p_invoice;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status, original_invoice_id)
+  values (p_org, 'credit_note', p_no, p_on, v_cust, 'MYR', 1,
+          p_amount, p_amount, p_amount, 'draft', p_invoice)
+  returning id into v_cn;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, line_subtotal, line_total, service_start, service_end)
+  values (p_org, v_cn, 1, 'item', 'Cancelled', 1, p_amount, p_amount,
+          p_amount, p_from, p_to);
+  return v_cn;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A credit note stops the schedule it cancels
+--
+-- 0309 got this wrong, and the first block here is the shape of what it
+-- did: a credit note carrying a service period opened a *second*
+-- twelve-month schedule of its own, so the cancelled invoice would have
+-- gone on earning. Deferred revenue went negative the moment the note
+-- was posted.
+--
+-- The numbers below are the ones from that scenario, kept because they
+-- are what makes the fix checkable: RM 1,200 over a year, three months
+-- recognised at RM 295.89, RM 904.11 still owed as service.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_inv uuid; v_cn uuid; v_def uuid; v_rev uuid;
+  v_start date := date_trunc('year', current_date)::date;
+  v_third date; v_earned numeric;
+begin
+  v_org := pg_temp.rev_org('Batal Sdn Bhd');
+  v_inv := pg_temp.service_invoice(v_org, 'INV-CN', 1200, v_start,
+             (v_start + interval '1 year' - interval '1 day')::date);
+  perform public.post_sales_document(v_inv);
+
+  v_third := (v_start + interval '3 months' - interval '1 day')::date;
+  perform public.recognise_revenue(v_org, v_third);
+
+  select id into v_def from public.accounts where org_id=v_org and code='2127';
+  select id into v_rev from public.accounts where org_id=v_org and code='4100';
+  select coalesce(sum(amount), 0) into v_earned
+    from public.revenue_schedule_periods
+   where document_id = v_inv and period_end <= v_third;
+
+  -- The note carries a service period, which is what a user copying the
+  -- invoice would produce, and is exactly what broke it.
+  v_cn := pg_temp.credit_note(v_org, 'CN-1', 1200, v_inv,
+            (v_start + interval '3 months')::date,
+            v_start, (v_start + interval '1 year' - interval '1 day')::date);
+  perform public.post_sales_document(v_cn);
+
+  perform pg_temp.check_eq('a credit note opens no schedule of its own',
+    (select count(*) from public.revenue_schedule_periods
+      where org_id = v_org)::numeric, 12);
+  perform pg_temp.check_eq('the liability is cleared to nothing',
+    (select coalesce(sum(g.credit - g.debit), 0) from public.gl_lines g
+      where g.account_id = v_def), 0);
+  -- Revenue nets to nil: what was earned, then taken back.
+  perform pg_temp.check_eq('and the revenue earned is reversed exactly',
+    (select coalesce(sum(g.credit - g.debit), 0) from public.gl_lines g
+      where g.account_id = v_rev), 0);
+  perform pg_temp.check_eq('nothing is left to release',
+    (select count(*) from public.revenue_schedule_periods
+      where document_id = v_inv and gl_entry_id is null
+        and amount > cancelled_amount)::numeric, 0);
+  -- And the monthly run finds nothing, however far ahead it is asked.
+  perform pg_temp.check_eq('a later run releases nothing',
+    public.recognise_revenue(v_org, (v_start + interval '2 years')::date)::numeric, 0);
+
+  -- The control on all of it. Had the note simply been ignored, the
+  -- three months already earned would still be sitting in revenue.
+  perform pg_temp.check_true('the three months really had been earned',
+    v_earned > 0);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Credited in part
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_inv uuid; v_cn uuid; v_def uuid;
+  v_start date := date_trunc('year', current_date)::date;
+  v_third date; v_left_before numeric; v_left_after numeric; v_cancelled numeric;
+begin
+  v_org := pg_temp.rev_org('Separuh Sdn Bhd');
+  v_inv := pg_temp.service_invoice(v_org, 'INV-HALF', 1200, v_start,
+             (v_start + interval '1 year' - interval '1 day')::date);
+  perform public.post_sales_document(v_inv);
+  v_third := (v_start + interval '3 months' - interval '1 day')::date;
+  perform public.recognise_revenue(v_org, v_third);
+
+  select coalesce(sum(amount - cancelled_amount), 0) into v_left_before
+    from public.revenue_schedule_periods
+   where document_id = v_inv and gl_entry_id is null;
+
+  -- Half the invoice.
+  v_cn := pg_temp.credit_note(v_org, 'CN-HALF', 600, v_inv,
+            (v_start + interval '3 months')::date);
+  perform public.post_sales_document(v_cn);
+
+  select coalesce(sum(amount - cancelled_amount), 0) into v_left_after
+    from public.revenue_schedule_periods
+   where document_id = v_inv and gl_entry_id is null;
+  select coalesce(sum(cancelled_amount), 0) into v_cancelled
+    from public.revenue_schedule_periods where document_id = v_inv;
+
+  -- Half of each remaining period, not half of the total. The
+  -- difference is real: nine periods rounded individually came to
+  -- 452.08 where half the total is 452.06. Rounding per period is the
+  -- deliberate choice, because the journal has to equal the sum of what
+  -- actually came off each row or it does not balance — so the
+  -- assertion is that it is half to within the rounding of the periods
+  -- involved, and exact where exactness matters, below.
+  perform pg_temp.check_true('about half of what was left is taken back',
+    abs(v_cancelled - v_left_before / 2) <= 0.05);
+  perform pg_temp.check_eq('and the rest survives, to the sen',
+    v_left_after, v_left_before - v_cancelled);
+  -- The journal is the sum of the reductions, so the liability falls by
+  -- exactly what came off the schedule.
+  select id into v_def from public.accounts where org_id=v_org and code='2127';
+  perform pg_temp.check_eq('the liability falls by what was cancelled',
+    (select coalesce(sum(g.credit - g.debit), 0) from public.gl_lines g
+      where g.account_id = v_def),
+    1200 - (select coalesce(sum(amount), 0) from public.revenue_schedule_periods
+             where document_id = v_inv and period_end <= v_third) - v_cancelled);
+
+  -- `amount` is never rewritten, so the schedule still adds to the
+  -- invoice for the life of the row.
+  perform pg_temp.check_eq('the schedule still sums to the invoice',
+    (select coalesce(sum(amount), 0) from public.revenue_schedule_periods
+      where document_id = v_inv), 1200);
+
+  -- And the rest keeps running.
+  perform pg_temp.check_true('the remaining half still releases',
+    public.recognise_revenue(v_org, (v_start + interval '1 year')::date) > 0);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A credit note that names no invoice leaves every schedule alone
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_inv uuid; v_cn uuid; v_cust uuid;
+  v_start date := date_trunc('year', current_date)::date;
+begin
+  v_org := pg_temp.rev_org('Bebas Sdn Bhd');
+  v_inv := pg_temp.service_invoice(v_org, 'INV-FREE', 1200, v_start,
+             (v_start + interval '1 year' - interval '1 day')::date);
+  perform public.post_sales_document(v_inv);
+
+  select contact_id into v_cust from public.sales_documents where id = v_inv;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status)
+  values (v_org, 'credit_note', 'CN-FREE', v_start, v_cust, 'MYR', 1,
+          100, 100, 100, 'draft')
+  returning id into v_cn;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, line_subtotal, line_total)
+  values (v_org, v_cn, 1, 'item', 'Goodwill', 1, 100, 100, 100);
+  perform public.post_sales_document(v_cn);
+
+  perform pg_temp.check_eq('an unlinked credit note cancels nothing',
+    (select coalesce(sum(cancelled_amount), 0)
+       from public.revenue_schedule_periods where document_id = v_inv), 0);
+end $$;
+
 rollback;
