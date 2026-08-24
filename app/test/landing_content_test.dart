@@ -480,4 +480,227 @@ void main() {
       }
     });
   });
+
+  // ---- 0317 ----
+
+  group('reasons', () {
+    test('an unwritten page still says why to choose it', () {
+      expect(parseLandingContent(null).reasons, defaultReasons);
+      expect(LandingContent.fallback.reasons, defaultReasons);
+    });
+
+    test('one row in the console replaces all of them', () {
+      final c = parseLandingContent({
+        'page': {'wordmark': 'x'},
+        'reasons': [
+          {'title': 'Local support', 'body': 'In KL.', 'icon': 'support'},
+        ],
+      });
+      expect(c.reasons.length, 1);
+      expect(c.reasons.first.title, 'Local support');
+    });
+
+    test('features and reasons do not leak into one another', () {
+      final c = parseLandingContent({
+        'page': {'wordmark': 'x'},
+        'sections': [
+          {'title': 'Payroll'},
+        ],
+        'reasons': [
+          {'title': 'Local support'},
+        ],
+      });
+      expect(c.sections.map((s) => s.title), ['Payroll']);
+      expect(c.reasons.map((s) => s.title), ['Local support']);
+    });
+
+    test('every default names an icon the screen knows', () {
+      const known = {
+        'gavel',
+        'calculate',
+        'lock',
+        'devices',
+        'sync_alt',
+        'payments',
+      };
+      for (final r in defaultReasons) {
+        expect(known, contains(r.icon), reason: '${r.title} uses ${r.icon}');
+        expect(r.body, isNotNull);
+        expect(r.body!.trim(), isNotEmpty);
+      }
+    });
+  });
+
+  group('the three that ship empty', () {
+    // The assertion this group exists for. A default added here later —
+    // a sample stat, an example quote, a placeholder logo — is a claim
+    // about the world that nobody made, on a page that asks people for
+    // money. Unlike the copy above, which describes what this
+    // repository does and is checkable from the source.
+    test('nothing is invented when the console has written nothing', () {
+      for (final c in [
+        parseLandingContent(null),
+        LandingContent.fallback,
+        parseLandingContent({'page': <String, dynamic>{}}),
+      ]) {
+        expect(c.stats, isEmpty);
+        expect(c.testimonials, isEmpty);
+        expect(c.logos, isEmpty);
+      }
+    });
+
+    test('an empty list stays an empty list', () {
+      final c = parseLandingContent({
+        'page': {'wordmark': 'x'},
+        'stats': const [],
+        'testimonials': const [],
+        'logos': const [],
+      });
+      expect(c.stats, isEmpty);
+      expect(c.testimonials, isEmpty);
+      expect(c.logos, isEmpty);
+    });
+
+    test('a figure keeps the formatting it was given', () {
+      final c = parseLandingContent({
+        'page': {'wordmark': 'x'},
+        'stats': [
+          {'value': '240,000', 'label': 'Businesses', 'icon': 'store'},
+        ],
+      });
+      expect(c.stats.single.value, '240,000');
+      expect(c.stats.single.label, 'Businesses');
+    });
+
+    test('a figure with no label is dropped, and the rest survive', () {
+      final c = parseLandingContent({
+        'page': {'wordmark': 'x'},
+        'stats': [
+          {'value': '30'},
+          {'value': '12', 'label': 'Outlets'},
+        ],
+      });
+      expect(c.stats.map((s) => s.label), ['Outlets']);
+    });
+
+    test('a quote with nobody against it is dropped, not shown', () {
+      // Not rendered anonymously. An unattributed testimonial is the
+      // shape a fabricated one takes, and the database refuses to store
+      // one; a row that arrived without an author anyway is not
+      // something to put on the page and attribute to nobody.
+      final c = parseLandingContent({
+        'page': {'wordmark': 'x'},
+        'testimonials': [
+          {'quote': 'Best software ever.'},
+          {'quote': 'It works.', 'author': '  '},
+          {'quote': 'Payroll takes an hour.', 'author': 'Lim Wei Jian'},
+        ],
+      });
+      expect(c.testimonials.map((t) => t.author), ['Lim Wei Jian']);
+    });
+
+    test('a testimonial carries the company when there is one', () {
+      final c = parseLandingContent({
+        'page': {'wordmark': 'x'},
+        'testimonials': [
+          {'quote': 'q', 'author': 'a', 'company': '  '},
+          {'quote': 'q', 'author': 'b', 'company': 'Kedai Besi Maju'},
+        ],
+      });
+      expect(c.testimonials.first.company, isNull);
+      expect(c.testimonials.last.company, 'Kedai Besi Maju');
+    });
+
+    test('a logo the browser cannot fetch is dropped', () {
+      final c = parseLandingContent({
+        'page': {'wordmark': 'x'},
+        'logos': [
+          {'name': 'Relative', 'logo_url': '/assets/a.png'},
+          {'logo_url': 'https://cdn.test/b.png'},
+          {'name': 'Sinar', 'logo_url': 'https://cdn.test/sinar.png'},
+        ],
+      });
+      expect(c.logos.map((l) => l.name), ['Sinar']);
+    });
+
+    // Not only the three: `as List?` threw on a string, and every list
+    // on this page went through it. A front page that will not open
+    // because one key came back malformed is a front page nobody can
+    // sign in from, which is the one thing this parser exists to
+    // prevent.
+    test('a list key that is not a list is no rows, not a crash', () {
+      final c = parseLandingContent({
+        'page': {'wordmark': 'x'},
+        'sections': 'nope',
+        'reasons': 42,
+        'app_links': {'not': 'a list'},
+        'modules': 'nope',
+      });
+      expect(c.published, isTrue);
+      // Empty means the shipped copy, which is what an absent key does.
+      expect(c.sections, defaultSections);
+      expect(c.reasons, defaultReasons);
+      expect(c.appLinks, isEmpty);
+      expect(c.modules, isEmpty);
+    });
+
+    test('rubbish in any of the three is not a crash', () {
+      final c = parseLandingContent({
+        'page': {'wordmark': 'x'},
+        'stats': 'nope',
+        'testimonials': [42, null],
+        'logos': {'not': 'a list'},
+      });
+      expect(c.published, isTrue);
+      expect(c.stats, isEmpty);
+      expect(c.testimonials, isEmpty);
+      expect(c.logos, isEmpty);
+    });
+  });
+
+  group('the hero picture and the call to action', () {
+    test('the hero image is read', () {
+      // A column on `landing_page` since 0290 that nothing read until
+      // the hero became two columns: the CMS wrote it and the page
+      // ignored it.
+      final c = parseLandingContent({
+        'page': {'hero_image_url': 'https://cdn.test/hero.png'},
+      });
+      expect(c.heroImageUrl, 'https://cdn.test/hero.png');
+    });
+
+    test('and is null when nobody has uploaded one', () {
+      final c = parseLandingContent({
+        'page': {'hero_image_url': '   '},
+      });
+      // The hero draws its empty window frame rather than collapsing,
+      // so null is a layout the page has rather than a gap in it.
+      expect(c.heroImageUrl, isNull);
+    });
+
+    test('the call to action arrives whole', () {
+      final c = parseLandingContent({
+        'page': {
+          'cta_headline': 'Mula hari ini',
+          'cta_body': 'Percubaan 30 hari.',
+          'cta_label': 'Cuba percuma',
+          'cta_url': 'https://iakauntan.test/daftar',
+        },
+      });
+      expect(c.ctaHeadline, 'Mula hari ini');
+      expect(c.ctaBody, 'Percubaan 30 hari.');
+      expect(c.ctaLabel, 'Cuba percuma');
+      expect(c.ctaUrl, 'https://iakauntan.test/daftar');
+    });
+
+    test('and there is none until somebody writes a headline', () {
+      // The band renders on `ctaHeadline` alone, so an unwritten one
+      // has to be null rather than an empty string.
+      expect(parseLandingContent(null).ctaHeadline, isNull);
+      expect(
+        parseLandingContent({'page': <String, dynamic>{}}).ctaHeadline,
+        isNull,
+      );
+    });
+  });
 }

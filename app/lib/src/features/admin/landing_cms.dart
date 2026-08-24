@@ -75,8 +75,16 @@ class _PageFormState extends ConsumerState<_PageForm> {
     'brand_colour_dark': 'Brand colour on a dark background (#RRGGBB)',
     'hero_headline': 'Headline',
     'hero_subhead': 'Sub-heading',
+    // Present on the table since 0290 and read by nothing until the
+    // hero became two columns. A dead column in a CMS is a field an
+    // operator fills in and then cannot find on the page.
+    'hero_image_url': 'Hero image URL',
     'pricing_heading': 'Pricing heading',
     'pricing_note': 'Pricing note',
+    'cta_headline': 'Call to action headline',
+    'cta_body': 'Call to action sub-line',
+    'cta_label': 'Call to action button',
+    'cta_url': 'Call to action link',
     'sign_in_label': 'Sign-in button',
     'register_label': 'Register button',
     'logo_url': 'Logo URL',
@@ -265,6 +273,7 @@ class _PageFormState extends ConsumerState<_PageForm> {
                       controller: _c[entry.key],
                       maxLines: entry.key == 'address' ||
                               entry.key == 'hero_subhead' ||
+                              entry.key == 'cta_body' ||
                               entry.key == 'meta_description'
                           ? 3
                           : 1,

@@ -211,6 +211,7 @@ class LandingContent {
     this.heroHeadline =
         'Accounting, CRM, payroll and e-Invoice for Malaysian business',
     this.heroSubhead,
+    this.heroImageUrl,
     this.signInLabel = 'Sign in',
     this.registerLabel = 'Create an account',
     this.registerEnabled = true,
@@ -257,6 +258,15 @@ class LandingContent {
   final String themeMode;
   final String heroHeadline;
   final String? heroSubhead;
+
+  /// The picture beside the hero copy.
+  ///
+  /// A column on `landing_page` since 0290 that nothing read until the
+  /// hero became two columns — the CMS wrote it and the page ignored
+  /// it. Null is not a gap: the hero draws a plain panel in its place,
+  /// so the two-column shape holds before anybody has a screenshot to
+  /// put there.
+  final String? heroImageUrl;
   final String signInLabel;
   final String registerLabel;
   final bool registerEnabled;
@@ -351,11 +361,20 @@ LandingContent parseLandingContent(Object? raw) {
 
   String? str(String key) => from(page, key);
 
+  // A key that arrived as something other than a list is no rows, not
+  // a crash. `as List?` throws on a string, and the whole point of this
+  // function is that the front page survives whatever comes back — it
+  // is the only route a signed-out visitor has to the sign-in button.
+  List<Object?> listAt(String key) {
+    final v = raw[key];
+    return v is List ? v : const [];
+  }
+
   // `sections` and `reasons` are the same shape from the same table,
   // split by `landing_sections.kind`, so they are read the same way.
   List<LandingSection> blocks(String key) {
     final out = <LandingSection>[];
-    for (final e in (raw[key] as List? ?? const [])) {
+    for (final e in listAt(key)) {
       if (e is! Map) continue;
       final title = e['title'];
       if (title is! String || title.trim().isEmpty) continue;
@@ -376,7 +395,7 @@ LandingContent parseLandingContent(Object? raw) {
   // has not said", and anything else here would be this file inventing
   // a customer count.
   final stats = <LandingStat>[];
-  for (final e in (raw['stats'] as List? ?? const [])) {
+  for (final e in listAt('stats')) {
     if (e is! Map) continue;
     final value = e['value'];
     final label = e['label'];
@@ -390,7 +409,7 @@ LandingContent parseLandingContent(Object? raw) {
   }
 
   final testimonials = <LandingTestimonial>[];
-  for (final e in (raw['testimonials'] as List? ?? const [])) {
+  for (final e in listAt('testimonials')) {
     if (e is! Map) continue;
     final quote = e['quote'];
     final author = e['author'];
@@ -411,7 +430,7 @@ LandingContent parseLandingContent(Object? raw) {
   }
 
   final logos = <LandingLogo>[];
-  for (final e in (raw['logos'] as List? ?? const [])) {
+  for (final e in listAt('logos')) {
     if (e is! Map) continue;
     final name = e['name'];
     final url = e['logo_url'];
@@ -423,7 +442,7 @@ LandingContent parseLandingContent(Object? raw) {
   }
 
   final links = <LandingAppLink>[];
-  for (final e in (raw['app_links'] as List? ?? const [])) {
+  for (final e in listAt('app_links')) {
     if (e is! Map) continue;
     final url = e['url'];
     final code = e['store_code'];
@@ -444,7 +463,7 @@ LandingContent parseLandingContent(Object? raw) {
   }
 
   final modules = <LandingModule>[];
-  for (final e in (raw['modules'] as List? ?? const [])) {
+  for (final e in listAt('modules')) {
     if (e is! Map) continue;
     final code = e['code'];
     final name = e['name'];
@@ -478,6 +497,7 @@ LandingContent parseLandingContent(Object? raw) {
     heroHeadline: str('hero_headline') ??
         'Accounting, CRM, payroll and e-Invoice for Malaysian business',
     heroSubhead: str('hero_subhead'),
+    heroImageUrl: str('hero_image_url'),
     signInLabel: str('sign_in_label') ?? 'Sign in',
     registerLabel: str('register_label') ?? 'Create an account',
     registerEnabled: page['register_enabled'] is bool
