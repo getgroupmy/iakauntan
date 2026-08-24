@@ -43,6 +43,14 @@ class LandingCmsTab extends ConsumerWidget {
           const SizedBox(height: Space.lg),
           const _SectionsCard(),
           const SizedBox(height: Space.lg),
+          const _SectionsCard(kind: 'reason'),
+          const SizedBox(height: Space.lg),
+          const _StatsCard(),
+          const SizedBox(height: Space.lg),
+          const _TestimonialsCard(),
+          const SizedBox(height: Space.lg),
+          const _LogosCard(),
+          const SizedBox(height: Space.lg),
           const _AppLinksCard(),
         ],
       ),
@@ -291,12 +299,24 @@ class _PageFormState extends ConsumerState<_PageForm> {
   }
 }
 
+/// The blocks of copy, of one kind.
+///
+/// Features and reasons are the same rows in `landing_sections` split
+/// by `kind`, so this is one card shown twice rather than two cards to
+/// keep in step. The saver defaults `kind` to `feature`, which is what
+/// every row written before 0317 is.
 class _SectionsCard extends ConsumerWidget {
-  const _SectionsCard();
+  const _SectionsCard({this.kind = 'feature'});
+
+  final String kind;
+
+  bool get _reasons => kind == 'reason';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sections = ref.watch(landingSectionsAdminProvider);
+    final sections = ref.watch(
+      _reasons ? landingReasonsAdminProvider : landingSectionsAdminProvider,
+    );
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(Space.md),
@@ -305,10 +325,13 @@ class _SectionsCard extends ConsumerWidget {
           children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'What the page says',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                    _reasons ? 'Why choose it' : 'What the page says',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 TextButton.icon(
@@ -328,10 +351,18 @@ class _SectionsCard extends ConsumerWidget {
                   );
                 }
                 if (rows.isEmpty) {
-                  return const EmptyState(
-                    icon: Icons.article_outlined,
-                    title: 'No blocks of copy yet',
-                    message: 'The page shows its hero and nothing under it.',
+                  return EmptyState(
+                    icon: _reasons
+                        ? Icons.thumb_up_outlined
+                        : Icons.article_outlined,
+                    title: _reasons
+                        ? 'No reasons written yet'
+                        : 'No blocks of copy yet',
+                    // Neither band is ever empty on the page: both fall
+                    // back to the copy the product ships with, which
+                    // describes what this repository actually does.
+                    message: 'The page shows the copy iAkauntan ships '
+                        'with until you write your own.',
                   );
                 }
                 return Column(
@@ -375,16 +406,21 @@ class _SectionsCard extends ConsumerWidget {
   ) async {
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => _SectionDialog(existing: existing),
+      builder: (_) => _SectionDialog(existing: existing, kind: kind),
     );
     if (saved == true) invalidatePlatformTable(ref, 'landing_sections');
   }
 }
 
 class _SectionDialog extends ConsumerStatefulWidget {
-  const _SectionDialog({required this.existing});
+  const _SectionDialog({required this.existing, required this.kind});
 
   final Map<String, dynamic>? existing;
+
+  /// `feature` or `reason`. Sent on every save, including an edit, so
+  /// a block cannot be moved between the two bands by accident and can
+  /// be moved deliberately by editing it from the other tab.
+  final String kind;
 
   @override
   ConsumerState<_SectionDialog> createState() => _SectionDialogState();
@@ -419,6 +455,16 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
     'insights',
     'shield',
     'cloud',
+    'gavel',
+    'calculate',
+    'lock',
+    'devices',
+    'sync_alt',
+    'support',
+    'schedule',
+    'star',
+    'trending_up',
+    'handshake',
   ];
 
   @override
@@ -447,6 +493,7 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
         icon: _icon,
         sortOrder: int.tryParse(_order.text.trim()),
         isActive: _active,
+        kind: widget.kind,
       ),
     );
     if (!mounted) return;
@@ -471,7 +518,11 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.existing == null ? 'Add a block' : 'Edit the block'),
+      title: Text(
+        widget.existing == null
+            ? (widget.kind == 'reason' ? 'Add a reason' : 'Add a block')
+            : (widget.kind == 'reason' ? 'Edit the reason' : 'Edit the block'),
+      ),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
@@ -756,6 +807,753 @@ class _AppLinkDialogState extends ConsumerState<_AppLinkDialog> {
       ),
       actions: [
         if (!isNew)
+          TextButton(
+            onPressed: _busy ? null : _delete,
+            child: const Text('Remove'),
+          ),
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// The band of figures on the front page.
+///
+/// Ships empty and the page skips the band entirely until somebody
+/// writes rows. That is deliberate: a number like "8,000 businesses" is
+/// a claim about the world, and the only person in a position to make
+/// it is the operator who can stand behind it. Nothing here seeds an
+/// example, because an example left in is a false claim on a page that
+/// asks people for money.
+class _StatsCard extends ConsumerWidget {
+  const _StatsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stats = ref.watch(landingStatsAdminProvider);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'The numbers',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _edit(context, ref, null),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add'),
+                ),
+              ],
+            ),
+            Builder(
+              builder: (context) {
+                final rows = stats.valueOrNull ?? const [];
+                if (stats.isLoading) {
+                  return const Padding(
+                    padding: EdgeInsets.all(Space.md),
+                    child: LinearProgressIndicator(),
+                  );
+                }
+                if (rows.isEmpty) {
+                  return const EmptyState(
+                    icon: Icons.trending_up,
+                    title: 'No figures yet',
+                    message: 'The page shows no band of numbers. Add one only '
+                        'for a figure you can stand behind.',
+                  );
+                }
+                return Column(
+                  children: [
+                    for (final r in rows)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Text('${r['sort_order']}'),
+                        title: Row(
+                          children: [
+                            Flexible(child: Text('${r['value']}')),
+                            if (r['is_active'] != true) ...[
+                              const SizedBox(width: Space.sm),
+                              const StatusChip('off', compact: true),
+                            ],
+                          ],
+                        ),
+                        subtitle: Text('${r['label']}'),
+                        onTap: () => _edit(context, ref, r),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _edit(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic>? existing,
+  ) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _StatDialog(existing: existing),
+    );
+    if (saved == true) invalidatePlatformTable(ref, 'landing_stats');
+  }
+}
+
+class _StatDialog extends ConsumerStatefulWidget {
+  const _StatDialog({required this.existing});
+
+  final Map<String, dynamic>? existing;
+
+  @override
+  ConsumerState<_StatDialog> createState() => _StatDialogState();
+}
+
+class _StatDialogState extends ConsumerState<_StatDialog> {
+  late final _value = TextEditingController(
+    text: '${widget.existing?['value'] ?? ''}',
+  );
+  late final _label = TextEditingController(
+    text: '${widget.existing?['label'] ?? ''}',
+  );
+  late final _order = TextEditingController(
+    text: '${widget.existing?['sort_order'] ?? ''}',
+  );
+  late String _icon = '${widget.existing?['icon'] ?? 'trending_up'}';
+  late bool _active = widget.existing?['is_active'] != false;
+  bool _busy = false;
+
+  static const _icons = [
+    'trending_up',
+    'people',
+    'store',
+    'schedule',
+    'star',
+    'handshake',
+    'insights',
+    'check',
+  ];
+
+  @override
+  void dispose() {
+    _value.dispose();
+    _label.dispose();
+    _order.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_value.text.trim().isEmpty || _label.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('A figure needs both the number and what it counts.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Saved',
+      action: () => ref.read(landingAdminProvider).saveLandingStat(
+        id: widget.existing?['id'] as String?,
+        value: _value.text.trim(),
+        label: _label.text.trim(),
+        icon: _icon,
+        sortOrder: int.tryParse(_order.text.trim()),
+        isActive: _active,
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) Navigator.of(context).pop(true);
+  }
+
+  Future<void> _delete() async {
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Removed',
+      action: () => ref
+          .read(landingAdminProvider)
+          .deleteLandingStat(widget.existing!['id'] as String),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.existing == null ? 'Add a figure' : 'Edit the figure'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _value,
+                decoration: const InputDecoration(
+                  labelText: 'The number',
+                  // Text, not a number field: the page prints this
+                  // exactly as typed and nothing ever adds it up.
+                  helperText: 'Shown exactly as you type it — 240,000, '
+                      '1,200+, RM4b.',
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                controller: _label,
+                decoration: const InputDecoration(
+                  labelText: 'What it counts',
+                  helperText: 'Businesses, outlets, years.',
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              DropdownButtonFormField<String>(
+                value: _icons.contains(_icon) ? _icon : 'trending_up',
+                decoration: const InputDecoration(labelText: 'Icon'),
+                items: [
+                  for (final i in _icons)
+                    DropdownMenuItem(value: i, child: Text(i)),
+                ],
+                onChanged: (v) => setState(() => _icon = v ?? 'trending_up'),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                controller: _order,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Order',
+                  helperText: 'Lower comes first. Leave blank to put it last.',
+                ),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _active,
+                onChanged: (v) => setState(() => _active = v),
+                title: const Text('Show on the page'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        if (widget.existing != null)
+          TextButton(
+            onPressed: _busy ? null : _delete,
+            child: const Text('Remove'),
+          ),
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// What customers say.
+///
+/// Ships empty, and the database refuses a quote with nobody's name
+/// against it. An unattributed testimonial is exactly the shape an
+/// invented one takes, and the software cannot check that a person said
+/// a thing — only that somebody is named as having said it, and that
+/// the operator is the one who put the name there.
+class _TestimonialsCard extends ConsumerWidget {
+  const _TestimonialsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final quotes = ref.watch(landingTestimonialsAdminProvider);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'What customers say',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _edit(context, ref, null),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add'),
+                ),
+              ],
+            ),
+            Builder(
+              builder: (context) {
+                final rows = quotes.valueOrNull ?? const [];
+                if (quotes.isLoading) {
+                  return const Padding(
+                    padding: EdgeInsets.all(Space.md),
+                    child: LinearProgressIndicator(),
+                  );
+                }
+                if (rows.isEmpty) {
+                  return const EmptyState(
+                    icon: Icons.format_quote,
+                    title: 'No testimonials yet',
+                    message: 'The page shows none. Add only what a customer '
+                        'actually said, with their name against it.',
+                  );
+                }
+                return Column(
+                  children: [
+                    for (final r in rows)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Text('${r['sort_order']}'),
+                        title: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                r['company'] == null
+                                    ? '${r['author']}'
+                                    : '${r['author']} — ${r['company']}',
+                              ),
+                            ),
+                            if (r['is_active'] != true) ...[
+                              const SizedBox(width: Space.sm),
+                              const StatusChip('off', compact: true),
+                            ],
+                          ],
+                        ),
+                        subtitle: Text(
+                          '${r['quote']}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () => _edit(context, ref, r),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _edit(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic>? existing,
+  ) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _TestimonialDialog(existing: existing),
+    );
+    if (saved == true) invalidatePlatformTable(ref, 'landing_testimonials');
+  }
+}
+
+class _TestimonialDialog extends ConsumerStatefulWidget {
+  const _TestimonialDialog({required this.existing});
+
+  final Map<String, dynamic>? existing;
+
+  @override
+  ConsumerState<_TestimonialDialog> createState() =>
+      _TestimonialDialogState();
+}
+
+class _TestimonialDialogState extends ConsumerState<_TestimonialDialog> {
+  late final _quote = TextEditingController(
+    text: '${widget.existing?['quote'] ?? ''}',
+  );
+  late final _author = TextEditingController(
+    text: '${widget.existing?['author'] ?? ''}',
+  );
+  late final _company = TextEditingController(
+    text: '${widget.existing?['company'] ?? ''}',
+  );
+  late final _order = TextEditingController(
+    text: '${widget.existing?['sort_order'] ?? ''}',
+  );
+  late bool _active = widget.existing?['is_active'] != false;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _quote.dispose();
+    _author.dispose();
+    _company.dispose();
+    _order.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_quote.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A testimonial needs a quote.')),
+      );
+      return;
+    }
+    // Said here as well as in the database, so somebody typing it finds
+    // out before they press Save rather than after.
+    if (_author.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('A quote needs the name of whoever said it.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Saved',
+      action: () => ref.read(landingAdminProvider).saveLandingTestimonial(
+        id: widget.existing?['id'] as String?,
+        quote: _quote.text.trim(),
+        author: _author.text.trim(),
+        company: _company.text.trim(),
+        sortOrder: int.tryParse(_order.text.trim()),
+        isActive: _active,
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) Navigator.of(context).pop(true);
+  }
+
+  Future<void> _delete() async {
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Removed',
+      action: () => ref
+          .read(landingAdminProvider)
+          .deleteLandingTestimonial(widget.existing!['id'] as String),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        widget.existing == null ? 'Add a testimonial' : 'Edit the testimonial',
+      ),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _quote,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'What they said',
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                controller: _author,
+                decoration: const InputDecoration(
+                  labelText: 'Who said it',
+                  helperText: 'Required. A quote with no name against it is '
+                      'not something to put on a front page.',
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                controller: _company,
+                decoration: const InputDecoration(
+                  labelText: 'Their company',
+                  helperText: 'Optional.',
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                controller: _order,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Order',
+                  helperText: 'Lower comes first. Leave blank to put it last.',
+                ),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _active,
+                onChanged: (v) => setState(() => _active = v),
+                title: const Text('Show on the page'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        if (widget.existing != null)
+          TextButton(
+            onPressed: _busy ? null : _delete,
+            child: const Text('Remove'),
+          ),
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// The wall of customer logos.
+///
+/// Ships empty. Putting a company's mark on a page says they are a
+/// customer, which is theirs to agree to.
+class _LogosCard extends ConsumerWidget {
+  const _LogosCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final logos = ref.watch(landingLogosAdminProvider);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Customer logos',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _edit(context, ref, null),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add'),
+                ),
+              ],
+            ),
+            Builder(
+              builder: (context) {
+                final rows = logos.valueOrNull ?? const [];
+                if (logos.isLoading) {
+                  return const Padding(
+                    padding: EdgeInsets.all(Space.md),
+                    child: LinearProgressIndicator(),
+                  );
+                }
+                if (rows.isEmpty) {
+                  return const EmptyState(
+                    icon: Icons.workspaces_outline,
+                    title: 'No customer logos yet',
+                    message: 'The page shows no logo wall. Add a mark only '
+                        'with that company\'s agreement.',
+                  );
+                }
+                return Column(
+                  children: [
+                    for (final r in rows)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Text('${r['sort_order']}'),
+                        title: Row(
+                          children: [
+                            Flexible(child: Text('${r['name']}')),
+                            if (r['is_active'] != true) ...[
+                              const SizedBox(width: Space.sm),
+                              const StatusChip('off', compact: true),
+                            ],
+                          ],
+                        ),
+                        subtitle: Text(
+                          '${r['logo_url']}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () => _edit(context, ref, r),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _edit(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic>? existing,
+  ) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _LogoDialog(existing: existing),
+    );
+    if (saved == true) invalidatePlatformTable(ref, 'landing_logos');
+  }
+}
+
+class _LogoDialog extends ConsumerStatefulWidget {
+  const _LogoDialog({required this.existing});
+
+  final Map<String, dynamic>? existing;
+
+  @override
+  ConsumerState<_LogoDialog> createState() => _LogoDialogState();
+}
+
+class _LogoDialogState extends ConsumerState<_LogoDialog> {
+  late final _name = TextEditingController(
+    text: '${widget.existing?['name'] ?? ''}',
+  );
+  late final _url = TextEditingController(
+    text: '${widget.existing?['logo_url'] ?? ''}',
+  );
+  late final _order = TextEditingController(
+    text: '${widget.existing?['sort_order'] ?? ''}',
+  );
+  late bool _active = widget.existing?['is_active'] != false;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _url.dispose();
+    _order.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_name.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A logo needs the name of whose it is.')),
+      );
+      return;
+    }
+    if (!_url.text.trim().startsWith('http')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('A logo needs a full https address.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Saved',
+      action: () => ref.read(landingAdminProvider).saveLandingLogo(
+        id: widget.existing?['id'] as String?,
+        name: _name.text.trim(),
+        logoUrl: _url.text.trim(),
+        sortOrder: int.tryParse(_order.text.trim()),
+        isActive: _active,
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) Navigator.of(context).pop(true);
+  }
+
+  Future<void> _delete() async {
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Removed',
+      action: () => ref
+          .read(landingAdminProvider)
+          .deleteLandingLogo(widget.existing!['id'] as String),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.existing == null ? 'Add a logo' : 'Edit the logo'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _name,
+                decoration: const InputDecoration(
+                  labelText: 'Whose logo it is',
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                controller: _url,
+                decoration: const InputDecoration(
+                  labelText: 'Image address',
+                  helperText: 'A full https address. Shown as their name if '
+                      'the image will not load.',
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              TextField(
+                controller: _order,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Order',
+                  helperText: 'Lower comes first. Leave blank to put it last.',
+                ),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _active,
+                onChanged: (v) => setState(() => _active = v),
+                title: const Text('Show on the page'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        if (widget.existing != null)
           TextButton(
             onPressed: _busy ? null : _delete,
             child: const Text('Remove'),

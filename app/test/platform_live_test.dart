@@ -26,6 +26,9 @@ void main() {
       'landing_page',
       'landing_sections',
       'landing_app_links',
+      'landing_stats',
+      'landing_testimonials',
+      'landing_logos',
     });
   });
 
@@ -104,6 +107,9 @@ void main() {
       'landing_page',
       'landing_sections',
       'landing_app_links',
+      'landing_stats',
+      'landing_testimonials',
+      'landing_logos',
     ]) {
       expect(
         platformLiveProviders(table),
@@ -125,6 +131,30 @@ void main() {
     expect(
       platformLiveProviders('landing_app_links'),
       contains(landingAppLinksAdminProvider),
+    );
+    expect(
+      platformLiveProviders('landing_stats'),
+      contains(landingStatsAdminProvider),
+    );
+    expect(
+      platformLiveProviders('landing_testimonials'),
+      contains(landingTestimonialsAdminProvider),
+    );
+    expect(
+      platformLiveProviders('landing_logos'),
+      contains(landingLogosAdminProvider),
+    );
+  });
+
+  test('and a block of either kind refreshes both console lists', () {
+    // Features and reasons are one table split by `kind`, so a save of
+    // either arrives as a change to `landing_sections`. Refreshing only
+    // the list the admin happened to be looking at is how a reason
+    // typed into the console appears on the public page and not in the
+    // tab it was typed into.
+    expect(
+      platformLiveProviders('landing_sections'),
+      contains(landingReasonsAdminProvider),
     );
   });
 

@@ -77,8 +77,20 @@ final Map<String, List<ProviderOrFamily>> _watchers = {
   // is what `app.dart` reads the product's name and logo from, so a
   // logo replaced in the console changes the signed-in app too.
   'landing_page': [landingPageAdminProvider, landingContentProvider],
-  'landing_sections': [landingSectionsAdminProvider, landingContentProvider],
+  // Both kinds of block live in `landing_sections`, so a change to
+  // either has to refresh both console lists as well as the page.
+  'landing_sections': [
+    landingSectionsAdminProvider,
+    landingReasonsAdminProvider,
+    landingContentProvider,
+  ],
   'landing_app_links': [landingAppLinksAdminProvider, landingContentProvider],
+  'landing_stats': [landingStatsAdminProvider, landingContentProvider],
+  'landing_testimonials': [
+    landingTestimonialsAdminProvider,
+    landingContentProvider,
+  ],
+  'landing_logos': [landingLogosAdminProvider, landingContentProvider],
 };
 
 /// The platform tables listened to.

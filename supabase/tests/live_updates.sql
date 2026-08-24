@@ -55,7 +55,11 @@ begin
     -- and so carry no `org_id` to filter on; what decides who is sent a
     -- row is the policy on the table, which is asserted below.
     'platform_modules', 'platform_settings',
-    'landing_page', 'landing_sections', 'landing_app_links'
+    'landing_page', 'landing_sections', 'landing_app_links',
+    -- 0317. The three that ship empty. A testimonial withdrawn is a
+    -- delete, which is the change most worth delivering and the one
+    -- `replica identity full` exists for.
+    'landing_stats', 'landing_testimonials', 'landing_logos'
   ]
   loop
     select exists (

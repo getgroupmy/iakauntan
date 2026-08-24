@@ -5,6 +5,25 @@ import '../../core/providers.dart';
 /// One block of copy on the landing page.
 typedef LandingSection = ({String? icon, String title, String? body});
 
+/// One figure in the band of numbers.
+///
+/// [value] is a string rather than a number on purpose: "240,000", "30",
+/// "1,200+" and "RM4b" are all things a band like this carries, and the
+/// moment it is numeric somebody has to decide how to format it for a
+/// page that only ever displays it.
+typedef LandingStat = ({String value, String label, String? icon});
+
+/// Something a customer said, and who said it.
+typedef LandingTestimonial = ({
+  String quote,
+  String author,
+  String? company,
+  String? avatarUrl,
+});
+
+/// One mark on the customer wall.
+typedef LandingLogo = ({String name, String logoUrl});
+
 /// One thing a company can hold, and what it costs a month.
 typedef LandingModule = ({
   String code,
@@ -119,6 +138,65 @@ const defaultSections = <LandingSection>[
   ),
 ];
 
+/// Why choose this one, as against what it does.
+///
+/// The same shape as a feature block and a different place on the page:
+/// `landing_sections.kind` is `feature` or `reason`, and the database
+/// splits them. Replaced wholesale the moment somebody writes a reason
+/// of their own in the console.
+///
+/// Every line here is checkable against this repository, which is the
+/// only test a claim on a front page can be held to. What is not here
+/// is anything about how many customers there are, how long the company
+/// has been trading, or what any of them think — those are
+/// [LandingStat] and [LandingTestimonial], they ship empty, and they
+/// stay empty until an operator writes figures they can stand behind.
+const defaultReasons = <LandingSection>[
+  (
+    icon: 'gavel',
+    title: 'Built for Malaysian rules',
+    body: 'e-Invoice to MyInvois, SST, EPF, SOCSO, EIS, PCB and the SSM '
+        'filing calendar. Not a foreign package with a Malaysian tax '
+        'code bolted on the side.',
+  ),
+  (
+    icon: 'calculate',
+    title: 'The arithmetic is tested',
+    body: 'Every statutory figure the software works out has an '
+        'assertion behind it that fails if the number moves. The rate '
+        'tables are dated, so last year is still computed last year\'s '
+        'way.',
+  ),
+  (
+    icon: 'lock',
+    title: 'Your books are yours',
+    body: 'Every company\'s data is separated in the database itself, '
+        'not by a filter the application remembers to apply. Roles go '
+        'down to the individual permission.',
+  ),
+  (
+    icon: 'devices',
+    title: 'One system, not five',
+    body: 'Accounting, CRM, payroll, point of sale, stock and corporate '
+        'secretarial share one ledger. A payroll run posts itself; a '
+        'sale at the counter is in the accounts before the shift ends.',
+  ),
+  (
+    icon: 'sync_alt',
+    title: 'Nothing is locked in',
+    body: 'Statements, ledgers and registers export as CSV and PDF, and '
+        'a customer or item list imports the same way. Leaving is a '
+        'download rather than a negotiation.',
+  ),
+  (
+    icon: 'payments',
+    title: 'Pay for what you use',
+    body: 'The books are the core. Everything else — payroll, POS, '
+        'corporate secretarial, ticketing — is a module a company turns '
+        'on when it needs it and not before.',
+  ),
+];
+
 class LandingContent {
   const LandingContent({
     required this.published,
@@ -147,8 +225,16 @@ class LandingContent {
     this.pricingHeading,
     this.pricingNote,
     this.sections = defaultSections,
+    this.reasons = defaultReasons,
     this.appLinks = const [],
     this.modules = const [],
+    this.stats = const [],
+    this.testimonials = const [],
+    this.logos = const [],
+    this.ctaHeadline,
+    this.ctaBody,
+    this.ctaLabel,
+    this.ctaUrl,
   });
 
   final bool published;
@@ -185,8 +271,29 @@ class LandingContent {
   final String? pricingHeading;
   final String? pricingNote;
   final List<LandingSection> sections;
+  final List<LandingSection> reasons;
   final List<LandingAppLink> appLinks;
   final List<LandingModule> modules;
+
+  /// The band of figures, and the two collections that go with it.
+  ///
+  /// Empty by default and empty until an operator writes rows in the
+  /// console — no built-in copy, unlike [sections] and [reasons]. A
+  /// customer count, a quote with somebody's name on it and another
+  /// company's mark are claims about the world rather than descriptions
+  /// of the software, and inventing them would put fabricated evidence
+  /// on a page that asks people for money. The screen renders nothing
+  /// where they are empty.
+  final List<LandingStat> stats;
+  final List<LandingTestimonial> testimonials;
+  final List<LandingLogo> logos;
+
+  /// The band partway down, for somebody who has read enough. Nothing
+  /// renders unless [ctaHeadline] is set.
+  final String? ctaHeadline;
+  final String? ctaBody;
+  final String? ctaLabel;
+  final String? ctaUrl;
 
   /// The page nobody has written yet.
   ///
@@ -244,16 +351,75 @@ LandingContent parseLandingContent(Object? raw) {
 
   String? str(String key) => from(page, key);
 
-  final sections = <LandingSection>[];
-  for (final e in (raw['sections'] as List? ?? const [])) {
+  // `sections` and `reasons` are the same shape from the same table,
+  // split by `landing_sections.kind`, so they are read the same way.
+  List<LandingSection> blocks(String key) {
+    final out = <LandingSection>[];
+    for (final e in (raw[key] as List? ?? const [])) {
+      if (e is! Map) continue;
+      final title = e['title'];
+      if (title is! String || title.trim().isEmpty) continue;
+      out.add((
+        icon: e['icon'] is String ? e['icon'] as String : null,
+        title: title.trim(),
+        body: e['body'] is String ? (e['body'] as String).trim() : null,
+      ));
+    }
+    return out;
+  }
+
+  final sections = blocks('sections');
+  final reasons = blocks('reasons');
+
+  // The three that ship empty. No defaults to fall back to and none
+  // wanted: an absent band is the correct rendering of "the operator
+  // has not said", and anything else here would be this file inventing
+  // a customer count.
+  final stats = <LandingStat>[];
+  for (final e in (raw['stats'] as List? ?? const [])) {
     if (e is! Map) continue;
-    final title = e['title'];
-    if (title is! String || title.trim().isEmpty) continue;
-    sections.add((
+    final value = e['value'];
+    final label = e['label'];
+    if (value is! String || value.trim().isEmpty) continue;
+    if (label is! String || label.trim().isEmpty) continue;
+    stats.add((
+      value: value.trim(),
+      label: label.trim(),
       icon: e['icon'] is String ? e['icon'] as String : null,
-      title: title.trim(),
-      body: e['body'] is String ? (e['body'] as String).trim() : null,
     ));
+  }
+
+  final testimonials = <LandingTestimonial>[];
+  for (final e in (raw['testimonials'] as List? ?? const [])) {
+    if (e is! Map) continue;
+    final quote = e['quote'];
+    final author = e['author'];
+    // Dropped rather than shown anonymously. The saver refuses to store
+    // a quote with nobody against it; a row that arrived without one
+    // anyway is not something to put on the page and attribute to
+    // nobody.
+    if (quote is! String || quote.trim().isEmpty) continue;
+    if (author is! String || author.trim().isEmpty) continue;
+    testimonials.add((
+      quote: quote.trim(),
+      author: author.trim(),
+      company: e['company'] is String && (e['company'] as String).trim().isNotEmpty
+          ? (e['company'] as String).trim()
+          : null,
+      avatarUrl: e['avatar_url'] is String ? e['avatar_url'] as String : null,
+    ));
+  }
+
+  final logos = <LandingLogo>[];
+  for (final e in (raw['logos'] as List? ?? const [])) {
+    if (e is! Map) continue;
+    final name = e['name'];
+    final url = e['logo_url'];
+    // A broken image on a wall of customer marks reads as a customer
+    // who left, so an address the browser cannot fetch is no row.
+    if (name is! String || name.trim().isEmpty) continue;
+    if (url is! String || !url.startsWith('http')) continue;
+    logos.add((name: name.trim(), logoUrl: url));
   }
 
   final links = <LandingAppLink>[];
@@ -332,8 +498,17 @@ LandingContent parseLandingContent(Object? raw) {
     // an operator who has written three blocks means three blocks, not
     // three plus five they did not ask for.
     sections: sections.isEmpty ? defaultSections : sections,
+    reasons: reasons.isEmpty ? defaultReasons : reasons,
     appLinks: links,
     modules: modules,
+    // Not `?? default`: there is no default, and that is the design.
+    stats: stats,
+    testimonials: testimonials,
+    logos: logos,
+    ctaHeadline: str('cta_headline'),
+    ctaBody: str('cta_body'),
+    ctaLabel: str('cta_label'),
+    ctaUrl: str('cta_url'),
   );
 }
 

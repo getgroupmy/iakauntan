@@ -752,3 +752,42 @@ $$;
 
 grant execute on function public.platform_save_landing_page(jsonb)
   to authenticated;
+
+-- ---------------------------------------------------------------------
+-- And the three new tables go on the wire
+--
+-- `0302` publishes the platform's own tables so a change made in the
+-- console reaches everybody else's browser without a reload. A table
+-- listed in `platform_live.dart` and not published here subscribes to
+-- nothing and says so nowhere, which is the failure
+-- `app/test/platform_live_test.dart` exists to name.
+--
+-- `replica identity full` for the same reason `0302` gives: a delete
+-- carries only the primary key otherwise, Realtime cannot run the
+-- policy against it, and the event is dropped rather than delivered —
+-- so a testimonial withdrawn would be the one change that never
+-- arrived.
+-- ---------------------------------------------------------------------
+do $$
+declare v_table text;
+begin
+  foreach v_table in array
+    array['landing_stats', 'landing_testimonials', 'landing_logos']
+  loop
+    execute format('alter table public.%I replica identity full', v_table);
+
+    if not exists (
+      select 1
+        from pg_publication_rel pr
+        join pg_publication p on p.oid = pr.prpubid
+        join pg_class c on c.oid = pr.prrelid
+        join pg_namespace n on n.oid = c.relnamespace
+       where p.pubname = 'supabase_realtime'
+         and n.nspname = 'public'
+         and c.relname = v_table
+    ) then
+      execute format(
+        'alter publication supabase_realtime add table public.%I', v_table);
+    end if;
+  end loop;
+end $$;

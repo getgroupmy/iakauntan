@@ -44,6 +44,33 @@ class LandingScreen extends ConsumerWidget {
                       const SizedBox(height: 56),
                       _Sections(sections: content.sections),
                     ],
+                    // Somewhere to press, for a visitor who has read
+                    // the feature grid and does not need the rest.
+                    if (content.ctaHeadline != null) ...[
+                      const SizedBox(height: 64),
+                      RevealOnScroll(child: _Cta(content: content)),
+                    ],
+                    if (content.reasons.isNotEmpty) ...[
+                      const SizedBox(height: 64),
+                      _Reasons(reasons: content.reasons),
+                    ],
+                    // The three that ship empty. Each renders nothing
+                    // at all until an operator has written rows, which
+                    // is the correct page for a platform that has not
+                    // made a claim rather than a gap to fill with
+                    // invented ones.
+                    if (content.stats.isNotEmpty) ...[
+                      const SizedBox(height: 56),
+                      RevealOnScroll(child: _Stats(stats: content.stats)),
+                    ],
+                    if (content.testimonials.isNotEmpty) ...[
+                      const SizedBox(height: 64),
+                      _Testimonials(testimonials: content.testimonials),
+                    ],
+                    if (content.logos.isNotEmpty) ...[
+                      const SizedBox(height: 56),
+                      RevealOnScroll(child: _Logos(logos: content.logos)),
+                    ],
                     if (content.showPricing &&
                         content.modules.isNotEmpty) ...[
                       const SizedBox(height: 64),
@@ -355,6 +382,27 @@ IconData landingIcon(String? name) {
       return Icons.verified_user;
     case 'cloud':
       return Icons.cloud_done;
+    // 0317's reasons, and what a stats band tends to ask for.
+    case 'gavel':
+      return Icons.gavel;
+    case 'calculate':
+      return Icons.calculate;
+    case 'lock':
+      return Icons.lock;
+    case 'devices':
+      return Icons.devices;
+    case 'sync_alt':
+      return Icons.sync_alt;
+    case 'support':
+      return Icons.support_agent;
+    case 'schedule':
+      return Icons.schedule;
+    case 'star':
+      return Icons.star;
+    case 'trending_up':
+      return Icons.trending_up;
+    case 'handshake':
+      return Icons.handshake;
     default:
       return Icons.check_circle;
   }
@@ -474,6 +522,433 @@ class _Footer extends StatelessWidget {
             ],
           ),
         ],
+      ],
+    );
+  }
+}
+
+/// The band partway down, for somebody who has read enough.
+///
+/// One line, a sentence under it, and a button. Rendered only when a
+/// headline is set; the button only when there is both a label and
+/// somewhere for it to go, because a button that does nothing reads as
+/// a broken page rather than as a missing setting.
+class _Cta extends StatelessWidget {
+  const _Cta({required this.content});
+
+  final LandingContent content;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final hasButton = content.ctaLabel != null && content.ctaUrl != null;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: scheme.primary,
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 24,
+        runSpacing: 20,
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 620),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  content.ctaHeadline!,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    height: 1.25,
+                    color: scheme.onPrimary,
+                  ),
+                ),
+                if (content.ctaBody != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    content.ctaBody!,
+                    style: TextStyle(
+                      fontSize: 15,
+                      height: 1.5,
+                      color: scheme.onPrimary.withValues(alpha: 0.86),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (hasButton)
+            FilledButton(
+              onPressed: () => launchExternal(content.ctaUrl),
+              style: FilledButton.styleFrom(
+                backgroundColor: scheme.onPrimary,
+                foregroundColor: scheme.primary,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 18,
+                ),
+              ),
+              child: Text(content.ctaLabel!),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Why choose this one, as against what it does.
+///
+/// Two columns of short reasons rather than the feature grid's cards:
+/// the same rows from `landing_sections`, split by `kind`, laid out so
+/// the two bands do not read as the same band twice.
+class _Reasons extends StatelessWidget {
+  const _Reasons({required this.reasons});
+
+  final List<LandingSection> reasons;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Why iAkauntan',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: scheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: 20),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth > 720 ? 2 : 1;
+            final width =
+                (constraints.maxWidth - (columns - 1) * 28) / columns;
+            return Wrap(
+              spacing: 28,
+              runSpacing: 24,
+              children: [
+                for (final r in reasons)
+                  SizedBox(
+                    width: width,
+                    child: RevealOnScroll(
+                      delay: Duration(
+                        milliseconds: 60 * (reasons.indexOf(r) % 6),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            landingIcon(r.icon),
+                            color: scheme.primary,
+                            size: 22,
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  r.title,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                if (r.body != null) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    r.body!,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      height: 1.5,
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// The band of figures.
+///
+/// Empty unless a platform administrator has written rows: how many
+/// businesses use a platform is a claim about the world, and this file
+/// is in no position to make it. [LandingContent.stats] ships empty and
+/// the whole band is skipped, rather than showing a row of zeroes or a
+/// placeholder somebody forgets to replace.
+class _Stats extends StatelessWidget {
+  const _Stats({required this.stats});
+
+  final List<LandingStat> stats;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: scheme.surfaceContainerLowest,
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth > 760
+              ? (stats.length < 4 ? stats.length : 4)
+              : constraints.maxWidth > 420
+                  ? 2
+                  : 1;
+          final width = (constraints.maxWidth - (columns - 1) * 24) / columns;
+          return Wrap(
+            spacing: 24,
+            runSpacing: 24,
+            children: [
+              for (final s in stats)
+                SizedBox(
+                  width: width,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (s.icon != null) ...[
+                        Icon(
+                          landingIcon(s.icon),
+                          color: scheme.primary,
+                          size: 22,
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      // The figure exactly as it was typed. A stat is a
+                      // string in the database for this reason: nobody
+                      // has to guess whether "240,000" wanted a
+                      // thousands separator.
+                      Text(
+                        s.value,
+                        style: TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w800,
+                          height: 1.1,
+                          color: scheme.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        s.label,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// What customers say, with a name against it.
+///
+/// Ships empty and stays empty until somebody writes one. A testimonial
+/// nobody said is a fabricated endorsement whatever else it is, so
+/// there is no built-in copy here to fall back to and the author is
+/// rendered every time — an unattributed quote on a page selling
+/// software is exactly the shape an invented one takes.
+class _Testimonials extends StatelessWidget {
+  const _Testimonials({required this.testimonials});
+
+  final List<LandingTestimonial> testimonials;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'What customers say',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: scheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: 20),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth > 860
+                ? 3
+                : constraints.maxWidth > 560
+                    ? 2
+                    : 1;
+            final width =
+                (constraints.maxWidth - (columns - 1) * 20) / columns;
+            return Wrap(
+              spacing: 20,
+              runSpacing: 20,
+              children: [
+                for (final t in testimonials)
+                  SizedBox(
+                    width: width,
+                    child: RevealOnScroll(
+                      delay: Duration(
+                        milliseconds:
+                            60 * (testimonials.indexOf(t) % 6),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          color: scheme.surfaceContainerLowest,
+                          border: Border.all(color: scheme.outlineVariant),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.format_quote,
+                              color: scheme.primary.withValues(alpha: 0.6),
+                              size: 26,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              t.quote,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                height: 1.55,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Row(
+                              children: [
+                                if (t.avatarUrl != null) ...[
+                                  ClipOval(
+                                    child: Image.network(
+                                      t.avatarUrl!,
+                                      width: 32,
+                                      height: 32,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) =>
+                                          const SizedBox.shrink(),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                ],
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        t.author,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      if (t.company != null)
+                                        Text(
+                                          t.company!,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: scheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// The wall of customer marks.
+///
+/// Ships empty. Putting a company's logo on a page says they are a
+/// customer, which is theirs to agree to and not this file's to assume.
+class _Logos extends StatelessWidget {
+  const _Logos({required this.logos});
+
+  final List<LandingLogo> logos;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Businesses running on iAkauntan',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 18),
+        Wrap(
+          spacing: 32,
+          runSpacing: 20,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            for (final l in logos)
+              // The name is the tooltip and the fallback both: an image
+              // that will not load leaves the customer named rather
+              // than leaving a broken box on a wall of customers.
+              Tooltip(
+                message: l.name,
+                child: Image.network(
+                  l.logoUrl,
+                  height: 34,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, _, __) => Text(
+                    l.name,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ],
     );
   }

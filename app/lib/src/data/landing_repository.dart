@@ -33,12 +33,42 @@ class LandingAdmin {
     return rows.isEmpty ? null : rows.first;
   }
 
-  Future<List<Map<String, dynamic>>> landingSections() async => Repo.rows(
+  /// The blocks of one kind — `feature` for the grid of what the
+  /// product does, `reason` for the short list of why to choose it.
+  /// One table, because they are the same shape and a second would be
+  /// two savers and two tabs to keep in step.
+  Future<List<Map<String, dynamic>>> landingSections({
+    String kind = 'feature',
+  }) async => Repo.rows(
     await client
         .from('landing_sections')
-        .select('id, sort_order, icon, title, body, is_active')
+        .select('id, sort_order, icon, title, body, is_active, kind')
+        .eq('kind', kind)
         .order('sort_order')
         .order('title'),
+  );
+
+  Future<List<Map<String, dynamic>>> landingStats() async => Repo.rows(
+    await client
+        .from('landing_stats')
+        .select('id, sort_order, value, label, icon, is_active')
+        .order('sort_order')
+        .order('label'),
+  );
+
+  Future<List<Map<String, dynamic>>> landingTestimonials() async => Repo.rows(
+    await client
+        .from('landing_testimonials')
+        .select('id, sort_order, quote, author, company, avatar_url, is_active')
+        .order('sort_order'),
+  );
+
+  Future<List<Map<String, dynamic>>> landingLogos() async => Repo.rows(
+    await client
+        .from('landing_logos')
+        .select('id, sort_order, name, logo_url, is_active')
+        .order('sort_order')
+        .order('name'),
   );
 
   Future<List<Map<String, dynamic>>> landingAppLinks() async => Repo.rows(
@@ -64,6 +94,7 @@ class LandingAdmin {
     String? icon,
     int? sortOrder,
     bool? isActive,
+    String? kind,
   }) async {
     final out = await _rpc(
       'platform_save_landing_section',
@@ -74,6 +105,7 @@ class LandingAdmin {
         if (icon != null) 'p_icon': icon,
         if (sortOrder != null) 'p_sort_order': sortOrder,
         if (isActive != null) 'p_is_active': isActive,
+        if (kind != null) 'p_kind': kind,
       },
     );
     return '$out';
@@ -81,6 +113,92 @@ class LandingAdmin {
 
   Future<void> deleteLandingSection(String id) =>
       _rpc('platform_delete_landing_section', params: {'p_id': id});
+
+  /// One figure in the band of numbers.
+  ///
+  /// [value] is a string all the way down — "240,000", "1,200+", "RM4b".
+  /// Nothing adds these up, and making them numeric would only move the
+  /// question of how to format them somewhere less obvious.
+  Future<String> saveLandingStat({
+    String? id,
+    String? value,
+    String? label,
+    String? icon,
+    int? sortOrder,
+    bool? isActive,
+  }) async {
+    final out = await _rpc(
+      'platform_save_landing_stat',
+      params: {
+        if (id != null) 'p_id': id,
+        if (value != null) 'p_value': value,
+        if (label != null) 'p_label': label,
+        if (icon != null) 'p_icon': icon,
+        if (sortOrder != null) 'p_sort_order': sortOrder,
+        if (isActive != null) 'p_is_active': isActive,
+      },
+    );
+    return '$out';
+  }
+
+  Future<void> deleteLandingStat(String id) =>
+      _rpc('platform_delete_landing_stat', params: {'p_id': id});
+
+  /// Something a customer said, and who said it.
+  ///
+  /// The database refuses a quote with no name against it. That is not
+  /// a form-validation nicety: an unattributed testimonial is exactly
+  /// the shape a fabricated one takes, and the operator putting it on
+  /// their front page is the one who has to stand behind it.
+  Future<String> saveLandingTestimonial({
+    String? id,
+    String? quote,
+    String? author,
+    String? company,
+    String? avatarUrl,
+    int? sortOrder,
+    bool? isActive,
+  }) async {
+    final out = await _rpc(
+      'platform_save_landing_testimonial',
+      params: {
+        if (id != null) 'p_id': id,
+        if (quote != null) 'p_quote': quote,
+        if (author != null) 'p_author': author,
+        if (company != null) 'p_company': company,
+        if (avatarUrl != null) 'p_avatar_url': avatarUrl,
+        if (sortOrder != null) 'p_sort_order': sortOrder,
+        if (isActive != null) 'p_is_active': isActive,
+      },
+    );
+    return '$out';
+  }
+
+  Future<void> deleteLandingTestimonial(String id) =>
+      _rpc('platform_delete_landing_testimonial', params: {'p_id': id});
+
+  Future<String> saveLandingLogo({
+    String? id,
+    String? name,
+    String? logoUrl,
+    int? sortOrder,
+    bool? isActive,
+  }) async {
+    final out = await _rpc(
+      'platform_save_landing_logo',
+      params: {
+        if (id != null) 'p_id': id,
+        if (name != null) 'p_name': name,
+        if (logoUrl != null) 'p_logo_url': logoUrl,
+        if (sortOrder != null) 'p_sort_order': sortOrder,
+        if (isActive != null) 'p_is_active': isActive,
+      },
+    );
+    return '$out';
+  }
+
+  Future<void> deleteLandingLogo(String id) =>
+      _rpc('platform_delete_landing_logo', params: {'p_id': id});
 
   Future<void> saveLandingAppLink({
     required String storeCode,
@@ -162,6 +280,24 @@ final landingPageAdminProvider = FutureProvider<Map<String, dynamic>?>(
 final landingSectionsAdminProvider =
     FutureProvider<List<Map<String, dynamic>>>(
   (ref) => ref.watch(landingAdminProvider).landingSections(),
+);
+
+final landingReasonsAdminProvider =
+    FutureProvider<List<Map<String, dynamic>>>(
+  (ref) => ref.watch(landingAdminProvider).landingSections(kind: 'reason'),
+);
+
+final landingStatsAdminProvider = FutureProvider<List<Map<String, dynamic>>>(
+  (ref) => ref.watch(landingAdminProvider).landingStats(),
+);
+
+final landingTestimonialsAdminProvider =
+    FutureProvider<List<Map<String, dynamic>>>(
+  (ref) => ref.watch(landingAdminProvider).landingTestimonials(),
+);
+
+final landingLogosAdminProvider = FutureProvider<List<Map<String, dynamic>>>(
+  (ref) => ref.watch(landingAdminProvider).landingLogos(),
 );
 
 final landingAppLinksAdminProvider =
