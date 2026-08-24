@@ -973,6 +973,24 @@ jobs:
           channel: stable
           cache: true
 
+      # Before the build, because the favicon and the PWA icons are
+      # files the build copies — so this is the only moment they can
+      # change, and the reason the console's branding tab says an upload
+      # takes effect on the next deploy rather than on save.
+      #
+      # Never fails the deploy. The icons are decoration and the deploy
+      # is the product; the script reports which of "no icon set" and
+      # "could not ask" happened, because both keep the shipped icons and
+      # only one of them is fine.
+      - name: Put the platform's own icon on the build
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: |
+          (cd app && flutter pub get)
+          scripts/ci/branding_icon.sh
+
       - name: Build the web bundle
         if: steps.creds.outputs.ready == 'true'
         working-directory: app
