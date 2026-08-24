@@ -6,6 +6,8 @@ import '../../core/platform_live.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/landing_repository.dart';
+import '../landing/landing_content.dart';
+import '../landing/landing_screen.dart';
 
 /// The corporate landing page, edited rather than deployed.
 ///
@@ -39,6 +41,8 @@ class LandingCmsTab extends ConsumerWidget {
       builder: (row) => ListView(
         padding: const EdgeInsets.all(Space.md),
         children: [
+          _PreviewBar(published: row?['is_published'] == true),
+          const SizedBox(height: Space.lg),
           _PageForm(existing: row),
           const SizedBox(height: Space.lg),
           const _SectionsCard(),
@@ -53,6 +57,116 @@ class LandingCmsTab extends ConsumerWidget {
           const SizedBox(height: Space.lg),
           const _AppLinksCard(),
         ],
+      ),
+    );
+  }
+}
+
+/// Look at the draft without publishing it.
+///
+/// `0290` gated everything the page returns on `is_published`, which is
+/// right — a CMS whose half-written sentence is on the internet the
+/// moment it is typed is worse than no CMS. What it left out was any
+/// state in which the person writing the draft could see it: between
+/// typing a testimonial and publishing the site there was nothing to
+/// look at. The two ways to see a band were to publish invented copy to
+/// the open internet or to unpublish and see nothing.
+///
+/// So `0318` added `platform_landing_preview`, which returns the same
+/// payload `landing_page()` will return once published, refused to
+/// anybody who is not a platform administrator. This draws it with the
+/// page's own widgets.
+class _PreviewBar extends ConsumerWidget {
+  const _PreviewBar({required this.published});
+
+  final bool published;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.md),
+        child: Row(
+          children: [
+            Icon(
+              published ? Icons.public : Icons.visibility_off_outlined,
+              size: 20,
+              color: published ? scheme.primary : scheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: Space.sm),
+            Expanded(
+              child: Text(
+                published
+                    ? 'This page is live. Anybody who visits the address '
+                        'sees what is below.'
+                    : 'This page is a draft. Visitors see the copy the '
+                        'product ships with, not yours.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            const SizedBox(width: Space.sm),
+            FilledButton.icon(
+              onPressed: () => _open(context, ref),
+              icon: const Icon(Icons.visibility, size: 16),
+              label: const Text('Preview'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _open(BuildContext context, WidgetRef ref) {
+    // Invalidated first, so pressing Preview after an edit shows the
+    // edit. The provider is a future that would otherwise hold whatever
+    // the draft looked like when the tab was opened.
+    ref.invalidate(landingPreviewProvider);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => const _PreviewScreen(),
+      ),
+    );
+  }
+}
+
+class _PreviewScreen extends ConsumerWidget {
+  const _PreviewScreen();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final preview = ref.watch(landingPreviewProvider);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Preview'),
+        // Said on the screen itself rather than only in the tab behind
+        // it: somebody looking at a finished-looking front page should
+        // not have to remember whether they published it.
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(28),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: Space.sm),
+            child: Text(
+              'The draft, as it will look once published.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ),
+      body: AsyncView<LandingContent>(
+        value: preview,
+        onRetry: () => ref.invalidate(landingPreviewProvider),
+        // The page's own widgets, with the ways in inert. A preview
+        // built from a second set of widgets would drift from the page
+        // it claims to preview.
+        builder: (content) => LandingPage(content: content, preview: true),
       ),
     );
   }

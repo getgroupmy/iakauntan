@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/providers.dart';
+import '../features/landing/landing_content.dart';
 import 'repository.dart';
 
 /// The landing page, from the platform console's side.
@@ -78,6 +79,15 @@ class LandingAdmin {
         .order('sort_order')
         .order('store_code'),
   );
+
+  /// The page as it will look once published, draft and all.
+  ///
+  /// `platform_landing_preview` returns the same payload
+  /// `landing_page()` will return after publishing — same body, two
+  /// doors — so what the console draws here is the page rather than an
+  /// approximation of it. Refused to anybody who is not a platform
+  /// administrator, because it is the one route to an ungated draft.
+  Future<dynamic> landingPreview() => _rpc('platform_landing_preview');
 
   /// Save only what the form changed.
   ///
@@ -298,6 +308,17 @@ final landingTestimonialsAdminProvider =
 
 final landingLogosAdminProvider = FutureProvider<List<Map<String, dynamic>>>(
   (ref) => ref.watch(landingAdminProvider).landingLogos(),
+);
+
+/// The draft, parsed by the same function the live page is parsed by.
+///
+/// Deliberately `parseLandingContent` and not a second parser: the
+/// preview is worth having only if it cannot disagree with the page,
+/// and that holds end to end — one payload from the database, one
+/// parser here, one set of widgets to draw it.
+final landingPreviewProvider = FutureProvider<LandingContent>(
+  (ref) async =>
+      parseLandingContent(await ref.watch(landingAdminProvider).landingPreview()),
 );
 
 final landingAppLinksAdminProvider =

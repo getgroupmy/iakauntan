@@ -1022,4 +1022,170 @@ begin
 end $$;
 
 
+-- ---------------------------------------------------------------------
+-- 0318: a draft somebody can look at
+--
+-- The gate `0290` put on this page is right and stays. What it never
+-- had was a way for the person writing the draft to see it, so the only
+-- ways to look at a stats band were to publish invented copy to the
+-- open internet or to unpublish and see nothing.
+--
+-- The property that matters is not "the preview shows the draft" — that
+-- is easy and would pass with a function that returns anything. It is
+-- that the preview shows *what the page will show once published*. A
+-- preview that drifts from the page is worse than none, because it is
+-- believed. Both doors call `app.landing_payload`, and the assertion
+-- below is the two payloads being equal once publishing is the only
+-- difference left.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_draft jsonb; v_public jsonb; v_published jsonb;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+
+  -- A whole site, written and not published.
+  perform public.platform_save_landing_page(jsonb_build_object(
+    'wordmark', 'iAkauntan',
+    'hero_headline', 'Perakaunan untuk perniagaan Malaysia',
+    'cta_headline', 'Mula hari ini',
+    'is_published', false));
+  perform public.platform_save_landing_section(
+    null, 'e-Invoice', 'To MyInvois.', 'receipt', 10);
+  perform public.platform_save_landing_section(
+    null, 'Support', 'In Bahasa Melayu.', 'support', 10, null, 'reason');
+  perform public.platform_save_landing_stat(null, '30', 'Years', 'schedule', 10);
+  perform public.platform_save_landing_testimonial(
+    null, 'The payroll run stopped being a week of my month.',
+    'Lim Wei Jian', 'Kedai Besi Maju');
+  perform public.platform_save_landing_logo(
+    null, 'Sinar Teknologi', 'https://cdn.iakauntan.test/logos/sinar.png');
+  perform public.platform_save_landing_app_link(
+    'play_store', 'Google Play', 'https://play.google.com/store/apps/details?id=a');
+
+  v_draft := public.platform_landing_preview();
+
+  -- The point of the whole migration.
+  perform pg_temp.check_true('an administrator can see the unpublished page',
+    v_draft -> 'page' <> 'null'::jsonb);
+  perform pg_temp.check_eq('and the figures drafted for it',
+    jsonb_array_length(v_draft -> 'stats'), 1);
+  perform pg_temp.check_eq('and the testimonials',
+    jsonb_array_length(v_draft -> 'testimonials'), 1);
+  perform pg_temp.check_eq('and the customer logos',
+    jsonb_array_length(v_draft -> 'logos'), 1);
+  perform pg_temp.check_eq('and the reasons',
+    jsonb_array_length(v_draft -> 'reasons'), 1);
+  perform pg_temp.check_eq('and the feature blocks',
+    jsonb_array_length(v_draft -> 'sections'), 1);
+  perform pg_temp.check_eq('and the store buttons',
+    jsonb_array_length(v_draft -> 'app_links'), 1);
+
+  -- While the same site is still nobody else's business.
+  perform pg_temp.sign_out();
+  begin
+    set local role anon;
+    v_public := public.landing_page();
+  end;
+  reset role;
+  perform pg_temp.check_true('and a visitor still gets nothing',
+    v_public -> 'page' = 'null'::jsonb);
+  perform pg_temp.check_eq('nor the figures',
+    jsonb_array_length(v_public -> 'stats'), 0);
+  perform pg_temp.check_eq('nor the testimonials',
+    jsonb_array_length(v_public -> 'testimonials'), 0);
+  perform pg_temp.check_eq('nor the logos',
+    jsonb_array_length(v_public -> 'logos'), 0);
+
+  -- Now publish, change nothing else, and read it as a stranger. What
+  -- they get has to be exactly what the administrator was shown — the
+  -- one assertion that makes the preview worth having.
+  perform pg_temp.sign_in_as(v_admin);
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true));
+
+  perform pg_temp.sign_out();
+  begin
+    set local role anon;
+    v_published := public.landing_page();
+  end;
+  reset role;
+
+  -- `is_published` itself is the one field that moved, so it is taken
+  -- out of both sides rather than the comparison being loosened to the
+  -- handful of keys somebody remembered to list.
+  perform pg_temp.check_eq(
+    'what the preview showed is what publishing published',
+    (v_published #- '{page,is_published}')::text,
+    (v_draft     #- '{page,is_published}')::text);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The draft is a platform administrator's alone
+--
+-- The preview is the only route to an ungated payload, so it is the
+-- only thing standing between a half-written site and anybody who can
+-- call an RPC. `app.landing_payload` takes the flag but is granted to
+-- nobody: both callers are SECURITY DEFINER and run as the definer, so
+-- no client role needs to reach it and none can.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_owner uuid;
+  v_org uuid := pg_temp.test_org('Syarikat Ketiga');
+  v_admin uuid := pg_temp.test_user();
+  v_ok boolean; v_role text;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+  perform public.platform_save_landing_page(jsonb_build_object(
+    'wordmark', 'Draf', 'hero_headline', 'Belum siap',
+    'is_published', false));
+
+  -- An ordinary company owner.
+  v_owner := pg_temp.test_user();
+  delete from public.platform_admins where user_id = v_owner;
+  perform pg_temp.sign_in_as(v_owner);
+  v_ok := false;
+  begin
+    perform public.platform_landing_preview();
+  exception when sqlstate '42501' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('an ordinary owner cannot read the draft', v_ok);
+
+  -- And a stranger, who cannot even execute it.
+  perform pg_temp.sign_out();
+  set local role anon;
+  v_role := current_user;
+  v_ok := false;
+  begin
+    perform public.platform_landing_preview();
+  exception when insufficient_privilege then v_ok := true;
+  end;
+  reset role;
+  perform pg_temp.check_true('the refusal was measured against anon',
+    v_role = 'anon');
+  perform pg_temp.check_true('a stranger may not even call it', v_ok);
+
+  perform pg_temp.check_true('and the payload itself is granted to nobody',
+    not has_function_privilege('anon', 'app.landing_payload(boolean)', 'execute')
+    and not has_function_privilege(
+      'authenticated', 'app.landing_payload(boolean)', 'execute'));
+
+  -- The public function takes no argument, so there is no value a
+  -- caller can pass to reach the draft body. Asserted structurally
+  -- because no observation of a well-behaved caller could show it.
+  perform pg_temp.check_eq('landing_page() takes no argument to abuse',
+    (select count(*)::int from pg_proc
+      where oid = 'public.landing_page()'::regprocedure and pronargs = 0), 1);
+end $$;
+
+
 rollback;

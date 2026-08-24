@@ -658,6 +658,62 @@ void main() {
     });
   });
 
+  // ---- 0318 ----
+
+  group('the draft preview', () {
+    // The preview's whole value is that it cannot disagree with the
+    // page. The database half of that is asserted in
+    // `supabase/tests/landing_page.sql`, where the two payloads are
+    // compared field for field. This is the client half: one parser,
+    // so a payload that came from `platform_landing_preview` becomes
+    // the same LandingContent a payload from `landing_page()` would.
+    test('a draft payload parses exactly as a published one does', () {
+      const payload = {
+        'page': {
+          'wordmark': 'iAkauntan',
+          'hero_headline': 'Perakaunan untuk perniagaan Malaysia',
+          'cta_headline': 'Mula hari ini',
+        },
+        'sections': [
+          {'title': 'e-Invoice', 'body': 'To MyInvois.', 'icon': 'receipt'},
+        ],
+        'reasons': [
+          {'title': 'Support', 'body': 'In Bahasa Melayu.', 'icon': 'support'},
+        ],
+        'stats': [
+          {'value': '30', 'label': 'Years', 'icon': 'schedule'},
+        ],
+        'testimonials': [
+          {'quote': 'It works.', 'author': 'Lim Wei Jian'},
+        ],
+        'logos': [
+          {'name': 'Sinar', 'logo_url': 'https://cdn.test/sinar.png'},
+        ],
+      };
+      final c = parseLandingContent(payload);
+
+      // `published` is true because a page came back, which is what the
+      // preview hands over — the draft is drawn as the finished page,
+      // because that is the question the operator is asking.
+      expect(c.published, isTrue);
+      expect(c.heroHeadline, 'Perakaunan untuk perniagaan Malaysia');
+      expect(c.ctaHeadline, 'Mula hari ini');
+      expect(c.sections.single.title, 'e-Invoice');
+      expect(c.reasons.single.title, 'Support');
+      expect(c.stats.single.value, '30');
+      expect(c.testimonials.single.author, 'Lim Wei Jian');
+      expect(c.logos.single.name, 'Sinar');
+    });
+
+    test('and a refused preview does not take the console down', () {
+      // The provider catches nothing itself; what it must not do is
+      // produce a shape the parser chokes on. An admin whose session
+      // expired mid-edit gets the fallback page, not an exception.
+      expect(parseLandingContent(null).published, isFalse);
+      expect(parseLandingContent('42501').published, isFalse);
+    });
+  });
+
   group('the hero picture and the call to action', () {
     test('the hero image is read', () {
       // A column on `landing_page` since 0290 that nothing read until

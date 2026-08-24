@@ -22,7 +22,37 @@ class LandingScreen extends ConsumerWidget {
     // While it loads, and if it fails, show the built-in copy rather
     // than a spinner or an error: the sign-in button is on this page and
     // somebody may be trying to reach their books.
-    final content = fetched.valueOrNull ?? LandingContent.fallback;
+    return Scaffold(
+      body: SafeArea(
+        child: LandingPage(
+          content: fetched.valueOrNull ?? LandingContent.fallback,
+        ),
+      ),
+    );
+  }
+}
+
+/// The page itself, given its content.
+///
+/// Split from [LandingScreen] so the console can draw the same widgets
+/// against `platform_landing_preview` — the draft. A preview built from
+/// a second set of widgets would drift from the page it claims to
+/// preview, and a preview that drifts is worse than none because it is
+/// believed. One payload, one parser, one set of widgets.
+class LandingPage extends StatelessWidget {
+  const LandingPage({super.key, required this.content, this.preview = false});
+
+  final LandingContent content;
+
+  /// Drawn inside the console rather than at the front door.
+  ///
+  /// The only difference is that the ways in do nothing: a platform
+  /// administrator checking their copy should not be thrown to the
+  /// sign-in screen by tapping the button they are looking at.
+  final bool preview;
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
     // Anchors for the masthead's links. A landing page whose navigation
@@ -34,95 +64,102 @@ class LandingScreen extends ConsumerWidget {
     final pricing = GlobalKey();
     final apps = GlobalKey();
 
-    return Scaffold(
-      backgroundColor: scheme.surface,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Pinned rather than scrolled away with the hero. The way
-            // in is the point of this page and it should not require
-            // scrolling back to the top to find.
-            _Masthead(
-              content: content,
-              anchors: {
-                'Features': features,
-                if (content.reasons.isNotEmpty) 'Why us': why,
-                if (content.showPricing && content.modules.isNotEmpty)
-                  'Pricing': pricing,
-                if (content.appLinks.isNotEmpty) 'Apps': apps,
-              },
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    _Band(
-                      child: RevealOnScroll(child: _Hero(content: content)),
+    return Container(
+      color: scheme.surface,
+      child: Column(
+        children: [
+          // Pinned rather than scrolled away with the hero. The way
+          // in is the point of this page and it should not require
+          // scrolling back to the top to find.
+          _Masthead(
+            content: content,
+            preview: preview,
+            anchors: {
+              'Features': features,
+              if (content.reasons.isNotEmpty) 'Why us': why,
+              if (content.showPricing && content.modules.isNotEmpty)
+                'Pricing': pricing,
+              if (content.appLinks.isNotEmpty) 'Apps': apps,
+            },
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  _Band(
+                    child: RevealOnScroll(
+                      child: _Hero(content: content, preview: preview),
                     ),
-                    if (content.sections.isNotEmpty)
-                      _Band(
-                        key: features,
-                        tinted: true,
-                        child: _Sections(sections: content.sections),
+                  ),
+                  if (content.sections.isNotEmpty)
+                    _Band(
+                      key: features,
+                      tinted: true,
+                      child: _Sections(sections: content.sections),
+                    ),
+                  // Somewhere to press, for a visitor who has read
+                  // the feature panel and does not need the rest.
+                  if (content.ctaHeadline != null)
+                    _Band(
+                      child: RevealOnScroll(
+                        child: _Cta(content: content, preview: preview),
                       ),
-                    // Somewhere to press, for a visitor who has read
-                    // the feature panel and does not need the rest.
-                    if (content.ctaHeadline != null)
-                      _Band(
-                        child: RevealOnScroll(child: _Cta(content: content)),
+                    ),
+                  if (content.reasons.isNotEmpty)
+                    _Band(
+                      key: why,
+                      tinted: content.ctaHeadline == null,
+                      child: _Reasons(reasons: content.reasons),
+                    ),
+                  // The three that ship empty. Each renders nothing
+                  // at all until an operator has written rows, which
+                  // is the correct page for a platform that has not
+                  // made a claim rather than a gap to fill with
+                  // invented ones.
+                  if (content.stats.isNotEmpty)
+                    _Band(
+                      child: RevealOnScroll(
+                        child: _Stats(stats: content.stats),
                       ),
-                    if (content.reasons.isNotEmpty)
-                      _Band(
-                        key: why,
-                        tinted: content.ctaHeadline == null,
-                        child: _Reasons(reasons: content.reasons),
+                    ),
+                  if (content.testimonials.isNotEmpty)
+                    _Band(
+                      tinted: true,
+                      child: _Testimonials(
+                        testimonials: content.testimonials,
                       ),
-                    // The three that ship empty. Each renders nothing
-                    // at all until an operator has written rows, which
-                    // is the correct page for a platform that has not
-                    // made a claim rather than a gap to fill with
-                    // invented ones.
-                    if (content.stats.isNotEmpty)
-                      _Band(
-                        child: RevealOnScroll(
-                          child: _Stats(stats: content.stats),
+                    ),
+                  if (content.logos.isNotEmpty)
+                    _Band(
+                      child: RevealOnScroll(
+                        child: _Logos(logos: content.logos),
+                      ),
+                    ),
+                  if (content.showPricing && content.modules.isNotEmpty)
+                    _Band(
+                      key: pricing,
+                      tinted: true,
+                      child: RevealOnScroll(
+                        delay: const Duration(milliseconds: 60),
+                        child: LandingPricing(content: content),
+                      ),
+                    ),
+                  if (content.appLinks.isNotEmpty)
+                    _Band(
+                      key: apps,
+                      child: RevealOnScroll(
+                        child: _AppLinks(
+                          links: content.appLinks,
+                          preview: preview,
                         ),
                       ),
-                    if (content.testimonials.isNotEmpty)
-                      _Band(
-                        tinted: true,
-                        child:
-                            _Testimonials(testimonials: content.testimonials),
-                      ),
-                    if (content.logos.isNotEmpty)
-                      _Band(
-                        child: RevealOnScroll(
-                          child: _Logos(logos: content.logos),
-                        ),
-                      ),
-                    if (content.showPricing && content.modules.isNotEmpty)
-                      _Band(
-                        key: pricing,
-                        tinted: true,
-                        child: RevealOnScroll(
-                          delay: const Duration(milliseconds: 60),
-                          child: LandingPricing(content: content),
-                        ),
-                      ),
-                    if (content.appLinks.isNotEmpty)
-                      _Band(
-                        key: apps,
-                        child: RevealOnScroll(
-                          child: _AppLinks(links: content.appLinks),
-                        ),
-                      ),
-                    _Footer(content: content),
-                  ],
-                ),
+                    ),
+                  _Footer(content: content, preview: preview),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -171,9 +208,17 @@ class _Band extends StatelessWidget {
 /// already visible below it is a menu that costs a tap and saves
 /// nothing, and this product has no other pages to point one at.
 class _Masthead extends StatelessWidget {
-  const _Masthead({required this.content, required this.anchors});
+  const _Masthead({
+    required this.content,
+    required this.anchors,
+    this.preview = false,
+  });
 
   final LandingContent content;
+
+  /// In the console the ways in are shown and do nothing. The anchors
+  /// still work — scrolling the preview is the point of it.
+  final bool preview;
 
   /// Label to the band it scrolls to. Built by the caller from what is
   /// actually on the page, so a link never points at nothing.
@@ -215,13 +260,15 @@ class _Masthead extends StatelessWidget {
                     const SizedBox(width: 16),
                   ],
                   TextButton(
-                    onPressed: () => context.go('/signin'),
+                    onPressed: preview ? null : () => context.go('/signin'),
                     child: Text(content.signInLabel),
                   ),
                   if (content.registerEnabled) ...[
                     const SizedBox(width: 8),
                     FilledButton(
-                      onPressed: () => context.go('/signin?mode=register'),
+                      onPressed: preview
+                          ? null
+                          : () => context.go('/signin?mode=register'),
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 20,
@@ -328,16 +375,17 @@ class _FallbackMark extends StatelessWidget {
 ///
 /// One column under 900 logical pixels, picture last.
 class _Hero extends StatelessWidget {
-  const _Hero({required this.content});
+  const _Hero({required this.content, this.preview = false});
 
   final LandingContent content;
+  final bool preview;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final split = constraints.maxWidth > 900;
-        final copy = _HeroCopy(content: content);
+        final copy = _HeroCopy(content: content, preview: preview);
         final art = _HeroArt(content: content);
         if (!split) {
           return Column(
@@ -359,9 +407,10 @@ class _Hero extends StatelessWidget {
 }
 
 class _HeroCopy extends StatelessWidget {
-  const _HeroCopy({required this.content});
+  const _HeroCopy({required this.content, this.preview = false});
 
   final LandingContent content;
+  final bool preview;
 
   @override
   Widget build(BuildContext context) {
@@ -413,9 +462,13 @@ class _HeroCopy extends StatelessWidget {
           runSpacing: 12,
           children: [
             FilledButton(
-              onPressed: () => context.go(
-                content.registerEnabled ? '/signin?mode=register' : '/signin',
-              ),
+              onPressed: preview
+                  ? null
+                  : () => context.go(
+                        content.registerEnabled
+                            ? '/signin?mode=register'
+                            : '/signin',
+                      ),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 28,
@@ -429,7 +482,7 @@ class _HeroCopy extends StatelessWidget {
               ),
             ),
             OutlinedButton(
-              onPressed: () => context.go('/signin'),
+              onPressed: preview ? null : () => context.go('/signin'),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 28,
@@ -887,9 +940,10 @@ IconData landingIcon(String? name) {
 }
 
 class _AppLinks extends StatelessWidget {
-  const _AppLinks({required this.links});
+  const _AppLinks({required this.links, this.preview = false});
 
   final List<LandingAppLink> links;
+  final bool preview;
 
   @override
   Widget build(BuildContext context) {
@@ -916,7 +970,7 @@ class _AppLinks extends StatelessWidget {
               // twice on the day somebody changes one of them.
               HoverLift(
                 builder: (context, hovered) => OutlinedButton.icon(
-                  onPressed: () => launchExternal(l.url),
+                  onPressed: preview ? null : () => launchExternal(l.url),
                   icon: Icon(storeIcon(l.storeCode)),
                   label: Text(l.label),
                   style: OutlinedButton.styleFrom(
@@ -964,9 +1018,10 @@ IconData storeIcon(String storeCode) {
 /// with nothing behind them looks like a bigger company and behaves
 /// like a broken one, so a column with nothing in it is not rendered.
 class _Footer extends StatelessWidget {
-  const _Footer({required this.content});
+  const _Footer({required this.content, this.preview = false});
 
   final LandingContent content;
+  final bool preview;
 
   @override
   Widget build(BuildContext context) {
@@ -1032,12 +1087,14 @@ class _Footer extends StatelessWidget {
                     children: [
                       _FooterLink(
                         label: content.signInLabel,
-                        onTap: () => context.go('/signin'),
+                        onTap: preview ? null : () => context.go('/signin'),
                       ),
                       if (content.registerEnabled)
                         _FooterLink(
                           label: content.registerLabel,
-                          onTap: () => context.go('/signin?mode=register'),
+                          onTap: preview
+                              ? null
+                              : () => context.go('/signin?mode=register'),
                         ),
                     ],
                   ),
@@ -1053,7 +1110,9 @@ class _Footer extends StatelessWidget {
                                 )
                               : _FooterLink(
                                   label: label,
-                                  onTap: () => launchExternal(url),
+                                  onTap: preview
+                                      ? null
+                                      : () => launchExternal(url),
                                 ),
                       ],
                     ),
@@ -1064,7 +1123,8 @@ class _Footer extends StatelessWidget {
                         for (final (label, url) in legal)
                           _FooterLink(
                             label: label,
-                            onTap: () => launchExternal(url),
+                            onTap:
+                                preview ? null : () => launchExternal(url),
                           ),
                       ],
                     ),
@@ -1122,7 +1182,9 @@ class _FooterLink extends StatelessWidget {
   const _FooterLink({required this.label, required this.onTap});
 
   final String label;
-  final VoidCallback onTap;
+
+  /// Null in the console's preview: the link is drawn and inert.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1153,9 +1215,10 @@ class _FooterLink extends StatelessWidget {
 /// somewhere for it to go, because a button that does nothing reads as
 /// a broken page rather than as a missing setting.
 class _Cta extends StatelessWidget {
-  const _Cta({required this.content});
+  const _Cta({required this.content, this.preview = false});
 
   final LandingContent content;
+  final bool preview;
 
   @override
   Widget build(BuildContext context) {
@@ -1205,7 +1268,8 @@ class _Cta extends StatelessWidget {
           ),
           if (hasButton)
             FilledButton(
-              onPressed: () => launchExternal(content.ctaUrl),
+              onPressed:
+                  preview ? null : () => launchExternal(content.ctaUrl),
               style: FilledButton.styleFrom(
                 backgroundColor: scheme.onPrimary,
                 foregroundColor: scheme.primary,
