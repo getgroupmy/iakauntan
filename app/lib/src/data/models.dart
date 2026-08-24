@@ -936,6 +936,8 @@ class DocumentLine {
     this.sourceLineId,
     this.projectCode,
     this.departmentCode,
+    this.serviceStart,
+    this.serviceEnd,
   });
 
   final String? id;
@@ -969,6 +971,18 @@ class DocumentLine {
   /// put there.
   final String? departmentCode;
 
+  /// The period this line is earned over, or null for a line earned on
+  /// the invoice date. 0309 defers a line that carries one: it credits
+  /// deferred revenue instead of revenue, and a schedule releases it
+  /// month by month.
+  final DateTime? serviceStart;
+  final DateTime? serviceEnd;
+
+  /// True when this line will be deferred rather than earned at once.
+  /// The two dates are set and cleared together — the database refuses
+  /// one without the other — so either answers the question.
+  bool get isDeferred => serviceStart != null;
+
   factory DocumentLine.fromJson(Map<String, dynamic> j) => DocumentLine(
     id: j['id'] as String?,
     lineNo: Fmt.toInt(j['line_no']),
@@ -990,6 +1004,8 @@ class DocumentLine {
     sourceLineId: j['source_line_id'] as String?,
     projectCode: j['project_code'] as String?,
     departmentCode: j['department_code'] as String?,
+    serviceStart: Fmt.parseDate(j['service_start']),
+    serviceEnd: Fmt.parseDate(j['service_end']),
   );
 }
 

@@ -21,6 +21,7 @@ class LineEditorCard extends ConsumerWidget {
     required this.onAdd,
     required this.onRemove,
     this.receiving = false,
+    this.defers = false,
     this.priceFor,
   });
 
@@ -40,6 +41,11 @@ class LineEditorCard extends ConsumerWidget {
   /// is for: typing numbers off the boxes, or choosing from what is on
   /// hand.
   final bool receiving;
+
+  /// Whether a line on this document can be earned over a period rather
+  /// than on the day. True for sales documents, false for purchases:
+  /// 0309 defers revenue, and a bill is not revenue.
+  final bool defers;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -105,12 +111,37 @@ class LineEditorCard extends ConsumerWidget {
                   receiving: receiving,
                   onChanged: onChanged,
                 ),
+              // Offered where it could plausibly be wanted — a line
+              // whose item is not stock, which is what a service is —
+              // and always where one is already set, so a period stays
+              // visible if the item is later changed. On every line of
+              // every invoice it would be a tax on the shops that sell
+              // things off a shelf and will never defer anything.
+              if (defers &&
+                  (lines[i].serviceStart != null ||
+                      _isService(items, lines[i])))
+                _ServicePeriodStrip(
+                  line: lines[i],
+                  editable: editable,
+                  onChanged: onChanged,
+                ),
                 ],
               ),
           ],
         ),
       ),
     );
+  }
+
+  /// A line worth offering a service period on: one that is not stock.
+  /// A line with no item at all counts — a typed-in "Annual support"
+  /// with no item behind it is the commonest deferred line there is.
+  static bool _isService(List<Item> items, LineDraft line) {
+    if (line.itemId == null) return true;
+    for (final i in items) {
+      if (i.id == line.itemId) return !i.trackInventory;
+    }
+    return false;
   }
 
   static String _trackingOf(List<Item> items, LineDraft line) {
@@ -873,6 +904,216 @@ class _LotStrip extends StatelessWidget {
             child: Text(line.lots.isEmpty ? 'Name them' : 'Change'),
           ),
       ]),
+    );
+  }
+}
+
+
+/// The period this line is earned over, under the line itself.
+///
+/// Quiet by design, unlike `_LotStrip` above it. A missing lot stops a
+/// document posting; a missing service period only means the line is
+/// earned on the invoice date, which is the right answer for almost
+/// every line ever typed. So this states what will happen rather than
+/// warning that something is wrong.
+class _ServicePeriodStrip extends StatelessWidget {
+  const _ServicePeriodStrip({
+    required this.line,
+    required this.editable,
+    required this.onChanged,
+  });
+
+  final LineDraft line;
+  final bool editable;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final deferred = line.serviceStart != null;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Row(children: [
+        Icon(
+          deferred ? Icons.event_repeat : Icons.today_outlined,
+          size: 16,
+          color: deferred
+              ? context.colors.info
+              : Theme.of(context).hintColor,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            servicePeriodLabel(line.serviceStart, line.serviceEnd),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: deferred ? null : Theme.of(context).hintColor,
+                  fontWeight: deferred ? FontWeight.w600 : null,
+                ),
+          ),
+        ),
+        if (editable)
+          TextButton(
+            onPressed: () async {
+              final picked = await showDialog<({DateTime? from, DateTime? to})>(
+                context: context,
+                builder: (_) => _ServicePeriodDialog(
+                  from: line.serviceStart,
+                  to: line.serviceEnd,
+                ),
+              );
+              if (picked == null) return;
+              line
+                ..serviceStart = picked.from
+                ..serviceEnd = picked.to;
+              onChanged();
+            },
+            child: Text(deferred ? 'Change' : 'Spread it'),
+          ),
+      ]),
+    );
+  }
+}
+
+/// Two dates, or neither.
+///
+/// The pair is the unit: `sales_document_lines` has a check constraint
+/// refusing one without the other, so Save stays disabled until both
+/// are set and Clear returns both together. Whoever half-fills this
+/// finds out here rather than at the posting button.
+class _ServicePeriodDialog extends StatefulWidget {
+  const _ServicePeriodDialog({required this.from, required this.to});
+
+  final DateTime? from;
+  final DateTime? to;
+
+  @override
+  State<_ServicePeriodDialog> createState() => _ServicePeriodDialogState();
+}
+
+class _ServicePeriodDialogState extends State<_ServicePeriodDialog> {
+  DateTime? _from;
+  DateTime? _to;
+
+  @override
+  void initState() {
+    super.initState();
+    _from = widget.from;
+    _to = widget.to;
+  }
+
+  Future<void> _pick(bool isFrom) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: (isFrom ? _from : (_to ?? _from)) ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isFrom) {
+        _from = picked;
+        // A start after the end is somebody moving the period, not
+        // asking for a negative one. Carry the end along rather than
+        // making them fix a complaint we could have avoided.
+        if (_to != null && _to!.isBefore(picked)) _to = picked;
+      } else {
+        _to = picked;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final complete = _from != null && _to != null;
+    final backwards = complete && _to!.isBefore(_from!);
+
+    return AlertDialog(
+      title: const Text('Earned over'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'A line with a period is not income on the day you invoice '
+            'it. It is held as deferred revenue and released month by '
+            'month across the period, in proportion to the days in each.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: Space.md),
+          _DateField(
+            label: 'From',
+            value: _from,
+            onTap: () => _pick(true),
+          ),
+          const SizedBox(height: Space.sm),
+          _DateField(
+            label: 'To',
+            value: _to,
+            onTap: () => _pick(false),
+          ),
+          const SizedBox(height: Space.md),
+          Text(
+            backwards
+                ? 'The period ends before it starts.'
+                : complete
+                    ? servicePeriodLabel(_from, _to)
+                    : 'Pick both dates, or clear the period.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: backwards ? context.colors.danger : null,
+                ),
+          ),
+        ],
+      ),
+      actions: [
+        if (widget.from != null || _from != null || _to != null)
+          TextButton(
+            onPressed: () => Navigator.pop<({DateTime? from, DateTime? to})>(
+              context,
+              (from: null, to: null),
+            ),
+            child: const Text('Earn it on the invoice date'),
+          ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: complete && !backwards
+              ? () => Navigator.pop<({DateTime? from, DateTime? to})>(
+                    context,
+                    (from: _from, to: _to),
+                  )
+              : null,
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DateField extends StatelessWidget {
+  const _DateField({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+  final DateTime? value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          isDense: true,
+          suffixIcon: const Icon(Icons.calendar_today, size: 18),
+        ),
+        child: Text(value == null ? 'Not set' : Fmt.date(value)),
+      ),
     );
   }
 }

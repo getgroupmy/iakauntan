@@ -1,3 +1,4 @@
+import '../../core/format.dart';
 import '../../data/models.dart';
 
 /// Mutable working copy of a document line while it is being edited.
@@ -18,6 +19,8 @@ class LineDraft {
     this.sourceLineId,
     this.projectCode,
     this.departmentCode,
+    this.serviceStart,
+    this.serviceEnd,
     this.lots = const [],
   });
 
@@ -56,6 +59,16 @@ class LineDraft {
   /// that column is the entire input to the by-department P&L.
   String? departmentCode;
 
+  /// The period this line is earned over. Null on both means earned on
+  /// the invoice date, which is what almost every line is. Set, and 0309
+  /// credits deferred revenue instead and releases it month by month.
+  ///
+  /// The two are set and cleared together — `sales_document_lines` has
+  /// a check constraint refusing one without the other — so the editor
+  /// never writes a half-open period.
+  DateTime? serviceStart;
+  DateTime? serviceEnd;
+
   ({double net, double tax, double total}) get totals => computeLine(
     quantity: quantity,
     unitPrice: unitPrice,
@@ -81,6 +94,16 @@ class LineDraft {
     'source_line_id': sourceLineId,
     'project_code': projectCode,
     'department_code': departmentCode,
+    // Only when set, and only then. `saveDocument` inserts this map
+    // straight into `sales_document_lines` or `purchase_document_lines`,
+    // and the purchase table has no such columns — sending the keys as
+    // nulls would have PostgREST reject every bill. Omitting them is
+    // also how a period is cleared: the save path deletes and reinserts
+    // every line, so an absent key lands as null.
+    if (serviceStart != null && serviceEnd != null) ...{
+      'service_start': Fmt.iso(serviceStart!),
+      'service_end': Fmt.iso(serviceEnd!),
+    },
   };
 
   factory LineDraft.fromLine(DocumentLine l) => LineDraft(
@@ -98,6 +121,8 @@ class LineDraft {
     sourceLineId: l.sourceLineId,
     projectCode: l.projectCode,
     departmentCode: l.departmentCode,
+    serviceStart: l.serviceStart,
+    serviceEnd: l.serviceEnd,
   );
 }
 
@@ -206,3 +231,54 @@ String? baseQuantityHint({
 }
 
 double _r(double v) => (v * 100).roundToDouble() / 100;
+
+/// How a service period reads on the line it belongs to.
+///
+/// Pure, and out here rather than in the widget, so the wording and the
+/// month count can be asserted without a Flutter binding — the same
+/// split `dashboardTabs` and `groupByModule` have.
+///
+/// The count is what somebody checks the contract against: "12 months"
+/// is the thing they can compare with what they sold. It is claimed
+/// only when the period is exactly that many whole months and falls
+/// back to a day count otherwise, because a month count that is one day
+/// out is worse on an invoice than a plain "365 days".
+String servicePeriodLabel(DateTime? from, DateTime? to) {
+  if (from == null || to == null) return 'Earned on the invoice date';
+  final days = to.difference(from).inDays + 1;
+  final months = (to.year - from.year) * 12 +
+      (to.month - from.month) +
+      (to.day >= from.day ? 1 : 0);
+  final span = months > 0 && _wholeMonths(from, to, months)
+      ? '$months month${months == 1 ? '' : 's'}'
+      : '$days day${days == 1 ? '' : 's'}';
+  return '${Fmt.date(from)} – ${Fmt.date(to)} · $span';
+}
+
+/// True when [from]..[to] inclusive is exactly [months] whole months.
+///
+/// Asked at the exclusive boundary — the day after the period ends —
+/// because that is the only place the answer is unambiguous. A year
+/// from 1 January ends the day before 1 January, whatever the months in
+/// between were worth.
+bool _wholeMonths(DateTime from, DateTime to, int months) =>
+    _addMonths(from, months) ==
+    DateTime(to.year, to.month, to.day).add(const Duration(days: 1));
+
+/// [d] moved on by [months], clamped to the end of the month it lands
+/// in, because `DateTime(2026, 2, 31)` is quietly 3 March.
+///
+/// The clamp is defensive and cannot be reached from
+/// `servicePeriodLabel` as it stands: the rollover only bites when the
+/// target month is short and the start day is past its end, and the
+/// `months` that would put it there is always one more than the one the
+/// count produces. Removing it therefore breaks no test. It stays
+/// because it is the correct meaning of "a month later" and the count
+/// above it is the kind of expression that gets adjusted.
+DateTime _addMonths(DateTime d, int months) {
+  final total = d.month - 1 + months;
+  final year = d.year + (total ~/ 12);
+  final month = total % 12 + 1;
+  final last = DateTime(year, month + 1, 0).day;
+  return DateTime(year, month, d.day < last ? d.day : last);
+}

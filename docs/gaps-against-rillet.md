@@ -125,6 +125,12 @@ exactly the operations that should require a person.
 
 ## Functional gaps that are real
 
+> **Since this was written, two of these have been closed.** Idempotency
+> keys landed in `0307`–`0308` and revenue recognition in `0309`–`0311`,
+> with the editor UI for service periods. The analysis below is left as
+> it was written, because what it argued is why they were built; the
+> "What has been built since" section at the end says where each stands.
+
 **Revenue recognition. iAkauntan has none.** No `deferred_revenue`, no
 recognition schedules, no `revenue_recognition` anything. `0097` gives
 recurring documents, which raise an invoice on a schedule — that is
@@ -178,3 +184,38 @@ An MCP server is deliberately not on this list. It is the fashionable
 item and the least useful until (1) and (2) exist, because an agent
 calling undescribed, non-idempotent write functions is the worst
 version of this.
+
+## What has been built since
+
+**1. Idempotency keys — done.** `0307` adds `public.idempotency_keys`,
+`app.idempotency_begin/end` and a fingerprint of the arguments, and
+wraps `post_manual_journal`, `create_contra`, `create_deposit` and
+`record_pdc` as overloads that take a key. `0308` sweeps keys older
+than a day from `app.run_daily_jobs`. A retry with the same key returns
+the first call's answer; the same key with different arguments is
+refused rather than quietly answered.
+
+**3. Revenue recognition — done.** `0309` puts `service_start` and
+`service_end` on `sales_document_lines`. A line that carries them
+credits deferred revenue rather than revenue when the document posts,
+and `public.revenue_schedule_periods` holds the month-by-month release,
+allocated on a running total so the periods sum to the invoice exactly.
+`public.recognise_revenue(p_org_id, p_upto)` posts what is due.
+
+`0310` closes the hole a credit note left: a credit note posts with
+sign −1, which now cancels the schedule it credits instead of leaving
+it releasing revenue for a contract nobody is delivering.
+
+`0311` carries the period through `transfer_document`, so a period
+agreed on a quotation reaches the invoice that actually defers it.
+
+The editor shows a service-period strip under any sales line that could
+carry one, so the columns are reachable by somebody who is not writing
+SQL. The wording and the month count are asserted in
+`app/test/service_period_test.dart`; the carry-through in
+`supabase/tests/transfer.sql`; the arithmetic in
+`supabase/tests/revenue_recognition.sql`.
+
+**2 and 4 are untouched.** The API surface is still undescribed, and
+contracts and usage billing are still a product decision nobody has
+made.

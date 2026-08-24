@@ -360,6 +360,68 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- The service period goes forward with the line
+--
+-- 0309 defers a line that carries `service_start` and `service_end`: it
+-- credits deferred revenue and releases it month by month. The period is
+-- usually agreed at the quotation and only becomes money at the invoice,
+-- so a transfer that drops it turns a twelve-month contract into income
+-- earned on the day — silently, with no error and a line that still
+-- looks right. 0311 carries it; this is what says so.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.test_org('Deferred Transfer Sdn Bhd');
+  v_quote uuid := pg_temp.quote_for(v_org);
+  v_order uuid;
+  v_inv   uuid;
+  v_line  public.sales_document_lines;
+begin
+  update public.sales_document_lines
+     set service_start = date '2026-01-01',
+         service_end   = date '2026-12-31'
+   where document_id = v_quote;
+
+  v_order := public.transfer_document(v_quote, 'sales_order');
+  select * into v_line
+    from public.sales_document_lines where document_id = v_order;
+
+  perform pg_temp.check_eq('the period reaches the order start',
+    v_line.service_start::text, '2026-01-01');
+  perform pg_temp.check_eq('and the order end',
+    v_line.service_end::text, '2026-12-31');
+
+  -- Two steps, because the period has to survive the whole cycle and
+  -- not just the first hop. The invoice is the document that defers.
+  v_inv := public.transfer_document(v_order, 'invoice');
+  select * into v_line
+    from public.sales_document_lines where document_id = v_inv;
+
+  perform pg_temp.check_eq('and the invoice start',
+    v_line.service_start::text, '2026-01-01');
+  perform pg_temp.check_eq('and the invoice end',
+    v_line.service_end::text, '2026-12-31');
+end $$;
+
+-- A line with no period must arrive with no period. Carrying the
+-- columns must not invent a value for the lines — almost all of them —
+-- that are earned on the day they are invoiced.
+do $$
+declare
+  v_org   uuid := pg_temp.test_org('Undeferred Transfer Sdn Bhd');
+  v_quote uuid := pg_temp.quote_for(v_org);
+  v_order uuid;
+  v_line  public.sales_document_lines;
+begin
+  v_order := public.transfer_document(v_quote, 'sales_order');
+  select * into v_line
+    from public.sales_document_lines where document_id = v_order;
+
+  perform pg_temp.check_true('a line with no period keeps none',
+    v_line.service_start is null and v_line.service_end is null);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Neither function is reachable without a key, and the definer helpers
 -- are not reachable at all
 -- ---------------------------------------------------------------------
