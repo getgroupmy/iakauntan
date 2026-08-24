@@ -128,7 +128,15 @@ class LandingAdmin {
     String field, {
     String? contentType,
   }) async {
-    final path = field == 'logo_dark_url' ? 'landing/logo-dark' : 'landing/logo';
+    final path = switch (field) {
+      'logo_dark_url' => 'landing/logo-dark',
+      // The square source CI generates the favicon and the PWA icons
+      // from. A fixed name, like the logos: `landing/` is the prefix
+      // only a platform admin may write, and one file per role means
+      // the bucket does not accumulate a copy per upload.
+      'app_icon_url' => 'landing/app-icon',
+      _ => 'landing/logo',
+    };
     await client.storage
         .from('logos')
         .uploadBinary(
