@@ -1,5 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:flutter/material.dart' show ThemeMode;
+
+import 'package:iakauntan/src/app.dart' show themeModeFor;
 import 'package:iakauntan/src/features/landing/landing_content.dart';
 
 /// The landing page, on the screen side.
@@ -270,6 +273,49 @@ void main() {
 
     test('an empty catalogue quotes nothing', () {
       expect(monthlyTotal(const [], const {'einvoice'}), 0);
+    });
+  });
+
+  /// The two fields 0314 added.
+  ///
+  /// Both ride in on `landing_page()`'s `to_jsonb(p)`, so nothing had to
+  /// be taught they exist — which is exactly why the parser needs a test
+  /// saying it reads them, and what it does when they are absent.
+  group('branding', () {
+    LandingContent parse(Map<String, dynamic> page) =>
+        parseLandingContent({'page': page, 'sections': const []});
+
+    test('the scheme is read', () {
+      expect(parse({'theme_mode': 'dark'}).themeMode, 'dark');
+      expect(parse({'theme_mode': 'light'}).themeMode, 'light');
+    });
+
+    // Every page written before 0314 has no such column, and neither
+    // does the fallback the app uses when the network is down.
+    test('and defaults to system when it is not there', () {
+      expect(parse(const {}).themeMode, 'system');
+      expect(LandingContent.fallback.themeMode, 'system');
+    });
+
+    test('the icon source is read, and is null when unset', () {
+      expect(parse({'app_icon_url': 'https://x/icon.png'}).appIconUrl,
+          'https://x/icon.png');
+      expect(parse(const {}).appIconUrl, isNull);
+    });
+
+    test('the stored scheme becomes the Flutter one', () {
+      expect(themeModeFor('light'), ThemeMode.light);
+      expect(themeModeFor('dark'), ThemeMode.dark);
+      expect(themeModeFor('system'), ThemeMode.system);
+    });
+
+    // A database column reaching a switch expression. The front page is
+    // not worth throwing away over a value nobody implemented.
+    test('and anything else is the visitor\'s own preference', () {
+      expect(themeModeFor(null), ThemeMode.system);
+      expect(themeModeFor(''), ThemeMode.system);
+      expect(themeModeFor('midnight'), ThemeMode.system);
+      expect(themeModeFor('Dark'), ThemeMode.system);
     });
   });
 }

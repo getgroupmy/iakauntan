@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,6 +9,7 @@ import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'report_csv.dart';
 import 'report_pdf.dart';
 import 'report_spec.dart';
 
@@ -41,7 +43,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 8, vsync: this);
+    _tabs = TabController(length: 9, vsync: this);
     // The download button belongs to whichever report is on screen, so
     // it has to rebuild when the tab changes.
     _tabs.addListener(() => setState(() {}));
@@ -130,9 +132,12 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
       case 6:
         final rows = ref.watch(_equityProvider(_range)).valueOrNull;
         return rows == null ? null : changesInEquitySpec(rows, _range);
-      default:
+      case 7:
         final rows = ref.watch(_sstProvider(_range)).valueOrNull;
         return rows == null ? null : sstSummarySpec(rows, _range);
+      default:
+        final rows = ref.watch(_deferredProvider(_range.end)).valueOrNull;
+        return rows == null ? null : deferredRevenueSpec(rows, _range.end);
     }
   }
 
@@ -156,14 +161,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
           : LetterheadMode.printed,
     );
 
-    // Named for the report and the date it covers, because a folder of
-    // files called "profit-loss.pdf" is a folder of one usable file.
-    final stem = spec.title
-        .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')
-        .toLowerCase();
     final saved = await exportBytesFile(
       ref,
-      '$stem-${Fmt.iso(_range.end)}.pdf',
+      '${_stem(spec)}.pdf',
       'application/pdf',
       bytes,
       what: 'Report',
@@ -179,6 +179,40 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
       ),
     );
   }
+
+  /// The same report, as something a spreadsheet can add up.
+  ///
+  /// Needs no organization and no logo: a CSV carries no letterhead, so
+  /// unlike the PDF this cannot be blocked by a slow read of the company
+  /// record.
+  Future<void> _downloadCsv(ReportSpec spec) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final csv = reportCsv(spec);
+    final saved = await exportTextFile(
+      ref,
+      '${_stem(spec)}.csv',
+      'text/csv',
+      csv,
+      what: 'Report',
+      detail: '${spec.title} to ${Fmt.iso(_range.end)}, as CSV',
+    );
+    if (!saved) {
+      // Nothing downloads on a phone, so leave it somewhere it can be
+      // pasted rather than pretending the export happened.
+      await Clipboard.setData(ClipboardData(text: csv));
+    }
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(saved ? 'Downloaded' : 'Copied to the clipboard'),
+      ),
+    );
+  }
+
+  /// Named for the report and the date it covers, because a folder of
+  /// files called "profit-loss.pdf" is a folder of one usable file.
+  String _stem(ReportSpec spec) =>
+      '${spec.title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase()}'
+      '-${Fmt.iso(_range.end)}';
 
   @override
   Widget build(BuildContext context) {
@@ -206,6 +240,11 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
             tooltip: 'Download PDF',
             icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
             onPressed: spec == null ? null : () => _download(spec),
+          ),
+          IconButton(
+            tooltip: 'Download CSV',
+            icon: const Icon(Icons.table_chart_outlined, size: 20),
+            onPressed: spec == null ? null : () => _downloadCsv(spec),
           ),
           // Only on the P&L, and only once something in the ledger
           // actually carries a project code — an empty dropdown on every
@@ -256,6 +295,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
             Tab(text: 'Cash Flows'),
             Tab(text: 'Changes in Equity'),
             Tab(text: 'SST Summary'),
+            Tab(text: 'Deferred Revenue'),
           ],
         ),
       ),
@@ -343,6 +383,19 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               icon: Icons.receipt_outlined,
               title: 'No taxable transactions',
               message: 'SST figures appear once you post documents with tax.',
+            ),
+          ),
+          _Report(
+            provider: _deferredProvider(_range.end),
+            spec: (rows) => deferredRevenueSpec(rows, _range.end),
+            wide: true,
+            empty: const EmptyState(
+              icon: Icons.event_repeat,
+              title: 'Nothing deferred',
+              message:
+                  'Give an invoice line a service period and it is earned '
+                  'across that period rather than on the day, and appears '
+                  'here until it has been.',
             ),
           ),
         ],
@@ -669,4 +722,11 @@ final _cashFlowProvider = FutureProvider.autoDispose
 final _equityProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTimeRange>((ref, range) {
       return requireRepo(ref).changesInEquity(from: range.start, to: range.end);
+    });
+
+/// The deferred revenue schedule is as at a date, like the aged
+/// listings: it takes the end of the chosen range and ignores the start.
+final _deferredProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, DateTime>((ref, asAt) {
+      return requireRepo(ref).deferredRevenue(asAt: asAt);
     });

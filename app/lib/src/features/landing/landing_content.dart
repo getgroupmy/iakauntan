@@ -50,6 +50,8 @@ class LandingContent {
     this.tagline,
     this.brandColour,
     this.brandColourDark,
+    this.appIconUrl,
+    this.themeMode = 'system',
     this.heroHeadline =
         'Accounting, CRM, payroll and e-Invoice for Malaysian business',
     this.heroSubhead,
@@ -78,6 +80,17 @@ class LandingContent {
   final String? tagline;
   final String? brandColour;
   final String? brandColourDark;
+
+  /// The square source image the favicon and PWA icons are built from.
+  /// Not rendered by the app itself — the built bundle already carries
+  /// the generated icons — but the console shows it, and it is what CI
+  /// reads at build time.
+  final String? appIconUrl;
+
+  /// Which scheme a visitor gets before they have chosen one: `system`,
+  /// `light` or `dark`. Anything else is treated as `system`, because a
+  /// theme is not worth throwing a front page away over.
+  final String themeMode;
   final String heroHeadline;
   final String? heroSubhead;
   final String signInLabel;
@@ -187,6 +200,8 @@ LandingContent parseLandingContent(Object? raw) {
     tagline: str('tagline'),
     brandColour: str('brand_colour'),
     brandColourDark: str('brand_colour_dark'),
+    appIconUrl: str('app_icon_url'),
+    themeMode: str('theme_mode') ?? 'system',
     heroHeadline: str('hero_headline') ??
         'Accounting, CRM, payroll and e-Invoice for Malaysian business',
     heroSubhead: str('hero_subhead'),

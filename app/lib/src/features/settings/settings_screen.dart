@@ -92,6 +92,11 @@ class SettingsScreen extends ConsumerWidget {
                     if (organization.baseCurrency.isNotEmpty)
                       _ForeignBalancesCard(org: organization, canPost: canPost),
                     const SizedBox(height: 16),
+                    // No module gate and no entitlement: any company can
+                    // sell something delivered over time. The card shows
+                    // nothing at all until one of them has, which is why
+                    // it costs the shops that never will nothing.
+                    _DeferredRevenueCard(org: organization, canPost: canPost),
                     if (moduleEnabled(ref, 'inventory')) ...[
                       const WarehousesCard(),
                       const SizedBox(height: 16),
@@ -1298,6 +1303,195 @@ class _ForeignBalancesCardState extends ConsumerState<_ForeignBalancesCard> {
       ref.invalidate(fxRevaluationPreviewProvider);
       refreshLedgerData(ref);
     }
+  }
+}
+
+/// Releasing revenue that has been earned.
+///
+/// The other half of `0309`. A deferred line credits a liability when
+/// the invoice posts and nothing moves it to revenue until somebody
+/// runs the release — so without this card the money sits in 2127
+/// forever and the P&L is wrong in the safe direction, which is the
+/// direction nobody notices.
+///
+/// Sits with the foreign balances and the fiscal years for the same
+/// reason they sit together: it is one of the things that has to happen
+/// before a month can be called closed.
+///
+/// Renders nothing when there is nothing deferred. Most companies will
+/// never defer a line, and a permanent empty card telling them so is a
+/// tax on them for a feature they do not use.
+class _DeferredRevenueCard extends ConsumerStatefulWidget {
+  const _DeferredRevenueCard({required this.org, required this.canPost});
+
+  final Organization org;
+  final bool canPost;
+
+  @override
+  ConsumerState<_DeferredRevenueCard> createState() =>
+      _DeferredRevenueCardState();
+}
+
+class _DeferredRevenueCardState extends ConsumerState<_DeferredRevenueCard> {
+  /// End of last month, which is when a release is almost always dated
+  /// — the same default the depreciation and revaluation runs take.
+  late DateTime _upto = DateTime(DateTime.now().year, DateTime.now().month, 0);
+
+  @override
+  Widget build(BuildContext context) {
+    final due = ref.watch(revenueDueProvider);
+
+    // Nothing deferred, still loading, or the read failed: no card. A
+    // spinner and an error box here would be noise on a settings screen
+    // for a company that has never deferred anything, and the failure
+    // is not one anybody can act on from here.
+    final rows = due.value;
+    if (rows == null || rows.isEmpty) return const SizedBox.shrink();
+
+    final split = splitRevenueDue(rows, _upto);
+    final ready = split.ready;
+    final later = split.later;
+    final readyTotal = ready.fold<double>(0, (s, r) => s + r.amount);
+    final laterTotal = later.fold<double>(0, (s, r) => s + r.amount);
+
+    return Column(
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(Space.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SectionHeader(
+                  'Deferred revenue',
+                  subtitle: 'Release what has been earned',
+                  action: TextButton.icon(
+                    onPressed: _pickDate,
+                    icon: const Icon(Icons.calendar_today, size: 16),
+                    label: Text('Up to ${Fmt.date(_upto)}'),
+                  ),
+                ),
+                if (ready.isEmpty)
+                  Text(
+                    'Nothing earned by ${Fmt.date(_upto)}. The next '
+                    'release is ${Fmt.date(later.first.periodEnd)}.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  )
+                else ...[
+                  for (final row in ready) _DueRow(row: row, base: _base),
+                  const Divider(height: 20),
+                  Row(children: [
+                    const Expanded(
+                      child: Text(
+                        'To release',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    Money(readyTotal, currency: _base, bold: true),
+                  ]),
+                ],
+                if (later.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '${Fmt.money(laterTotal, currency: _base)} still to '
+                    'come, through ${Fmt.date(later.last.periodEnd)}.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+                if (widget.canPost && ready.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton.icon(
+                      onPressed: () => _post(ready.length, readyTotal),
+                      icon: const Icon(Icons.published_with_changes, size: 18),
+                      label: const Text('Recognise'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  /// The ledger's own currency. `0309` posts in `app.base_currency`,
+  /// which always resolves, so an empty string here is a gap in the row
+  /// this screen read rather than a real second currency — falling back
+  /// to the formatter's default beats printing a bare space.
+  String get _base =>
+      widget.org.baseCurrency.isEmpty ? 'MYR' : widget.org.baseCurrency;
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _upto,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) setState(() => _upto = picked);
+  }
+
+  Future<void> _post(int journals, double total) async {
+    final ok = await confirm(
+      context,
+      title: 'Release the revenue?',
+      // Says how many journals, because that is what will appear in the
+      // ledger and one entry per month is the part people are surprised
+      // by. Each is dated on its own period end, not on today, so a
+      // closed month refuses it rather than landing in the wrong one.
+      message:
+          'This posts $journals journal${journals == 1 ? '' : 's'} — one '
+          'per month — moving '
+          '${Fmt.money(total, currency: _base)} out of deferred revenue '
+          'and into income, each dated on the month it was earned.',
+      confirmLabel: 'Recognise',
+    );
+    if (!ok || !mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.recogniseRevenue(_upto),
+      successMessage: 'Revenue recognised',
+      pendingMessage: 'Posting…',
+    );
+    if (mounted) {
+      ref.invalidate(revenueDueProvider);
+      refreshLedgerData(ref);
+    }
+  }
+}
+
+class _DueRow extends StatelessWidget {
+  const _DueRow({required this.row, required this.base});
+
+  final RevenueDue row;
+  final String base;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(Fmt.date(row.periodEnd)),
+              Text(
+                '${row.lines} line${row.lines == 1 ? '' : 's'} on '
+                '${row.documents} invoice${row.documents == 1 ? '' : 's'}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+        Money(row.amount, currency: base),
+      ]),
+    );
   }
 }
 

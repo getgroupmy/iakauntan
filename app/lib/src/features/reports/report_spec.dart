@@ -16,6 +16,7 @@ class ReportSpec {
     required this.subtitle,
     required this.blocks,
     this.note,
+    this.landscape = false,
   });
 
   final String title;
@@ -28,6 +29,16 @@ class ReportSpec {
 
   /// A caveat printed under the report — the balance-sheet check uses it.
   final String? note;
+
+  /// Print this one on its side.
+  ///
+  /// Opt in, and false everywhere it is not asked for, so no existing
+  /// report changes shape. A financial statement is three columns and
+  /// belongs on a portrait page; a schedule that identifies a contract
+  /// by customer, invoice and period before it gets to any money does
+  /// not fit on one, and the columns that lose the argument are the
+  /// names — which are the columns somebody reads first.
+  final bool landscape;
 }
 
 sealed class ReportBlock {
@@ -751,4 +762,109 @@ ReportSpec consolidatedSpec(
       ),
     ],
   );
+}
+
+/// What is sitting in deferred revenue, and which invoice lines it is.
+///
+/// The report an auditor asks for at a year end: 2127 says a number,
+/// show me what that number is made of.
+///
+/// Its note is the only thing that makes it worth printing. A schedule
+/// of contracts is a listing; a schedule that says out loud whether it
+/// agrees with the account it is supposed to support is a reconciliation,
+/// and a difference found here is found before the audit rather than
+/// during it.
+ReportSpec deferredRevenueSpec(
+  List<Map<String, dynamic>> rows,
+  DateTime asAt,
+) {
+  double column(String key) =>
+      rows.fold(0, (s, r) => s + Fmt.toDouble(r[key]));
+
+  final balance = column('balance');
+
+  // Repeated on every row by `report_deferred_revenue`, deliberately, so
+  // the schedule and the account are read from one moment rather than
+  // two. With no rows there is nothing to reconcile and nothing to say.
+  final ledger =
+      rows.isEmpty ? 0.0 : Fmt.toDouble(rows.first['ledger_balance']);
+  final difference = balance - ledger;
+
+  return ReportSpec(
+    title: 'Deferred Revenue',
+    subtitle: 'As at ${Fmt.date(asAt)}',
+    // Three identifying columns and four of money. On a portrait page
+    // the customer names wrap into ribbons and the schedule stops being
+    // something anybody can read down.
+    landscape: true,
+    note: difference.abs() < 0.005
+        ? 'Agrees with account 2127 at this date. Periods that have '
+              'matured but have not been released are still counted as '
+              'deferred here, because the ledger still holds them — run '
+              'the release in Settings to move them to income.'
+        : 'This does not agree with account 2127, which holds '
+              '${Fmt.money(ledger)} at this date — a difference of '
+              '${Fmt.money(difference.abs())}. The usual cause is a '
+              'journal posted to 2127 by hand, which has no schedule '
+              'behind it and so cannot appear above. Check the general '
+              'ledger for that account before relying on either figure.',
+    blocks: [
+      ReportGrid(
+        title: null,
+        headers: const [
+          'Customer',
+          'Invoice',
+          'Earned over',
+          'Deferred',
+          'Recognised',
+          'Cancelled',
+          'Balance',
+        ],
+        rows: [
+          for (final r in rows)
+            [
+              TextCell(r['contact_name']?.toString() ?? '—'),
+              TextCell(
+                [
+                  r['doc_no']?.toString() ?? '',
+                  r['description']?.toString() ?? '',
+                ].where((s) => s.isNotEmpty).join(' · '),
+              ),
+              TextCell(_servicePeriod(r)),
+              MoneyCell(Fmt.toDouble(r['deferred'])),
+              MoneyCell(Fmt.toDouble(r['recognised'])),
+              MoneyCell(Fmt.toDouble(r['cancelled'])),
+              MoneyCell(Fmt.toDouble(r['balance'])),
+            ],
+        ],
+        total: [
+          const TextCell('Total'),
+          const TextCell(''),
+          const TextCell(''),
+          MoneyCell(column('deferred')),
+          MoneyCell(column('recognised')),
+          MoneyCell(column('cancelled')),
+          MoneyCell(balance),
+        ],
+      ),
+      ReportHighlight(
+        label: 'Deferred revenue at ${Fmt.date(asAt)}',
+        value: balance,
+        emphasise: true,
+      ),
+    ],
+  );
+}
+
+/// The period a deferred line is earned over, as it reads in a cell.
+///
+/// Both dates are always present — `sales_document_lines` has a check
+/// constraint refusing one without the other — so a row missing either
+/// is a row that should not have been scheduled, and an em dash says so
+/// rather than printing half a period.
+String _servicePeriod(Map<String, dynamic> r) {
+  final from = Fmt.parseDate(r['service_start']);
+  final to = Fmt.parseDate(r['service_end']);
+  if (from == null || to == null) return '—';
+  return '${Fmt.date(from)} – ${Fmt.date(to)}';
 }

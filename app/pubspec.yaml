@@ -116,6 +116,13 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  # Build-time only, for `tool/make_icons.dart`: it turns the square
+  # source the console uploads into the favicon and the PWA icons before
+  # the web bundle is built. Already resolved as a transitive dependency,
+  # so this pins nothing new — it just says out loud that something now
+  # imports it directly. Deliberately a dev dependency: no shipped code
+  # decodes a PNG at runtime.
+  image: ^4.5.4
 
 flutter:
   uses-material-design: true

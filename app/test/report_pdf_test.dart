@@ -47,6 +47,22 @@ void main() {
     },
   ], range);
 
+  final deferred = <Map<String, dynamic>>[
+    {
+      'contact_name': 'Pelanggan Yang Namanya Cukup Panjang Sdn Bhd',
+      'doc_no': 'INV-2026-0001',
+      'doc_date': '2026-01-01',
+      'description': 'Annual support and maintenance',
+      'service_start': '2026-01-01',
+      'service_end': '2026-12-31',
+      'deferred': 12000.0,
+      'recognised': 7000.0,
+      'cancelled': 0.0,
+      'balance': 5000.0,
+      'ledger_balance': 5000.0,
+    },
+  ];
+
   test('every report shape renders', () async {
     final specs = [
       pl,
@@ -71,6 +87,10 @@ void main() {
           'tax_amount': 80.0,
         }
       ], range),
+      // Seven columns, printed on its side. The widest thing the report
+      // builder is asked to lay out, and the only spec that turns the
+      // page — so it is the one most likely to be the shape that throws.
+      deferredRevenueSpec(deferred, range.end),
     ];
 
     for (final spec in specs) {
@@ -118,5 +138,32 @@ void main() {
       mode: LetterheadMode.stationery,
     );
     expect(onPaper.length, greaterThan(anonymous.length));
+  });
+
+  test('the deferred revenue schedule turns the page', () {
+    // Asserted on the spec rather than on the page box in the bytes.
+    // The orientation reaches the PDF through one `spec.landscape`
+    // read in `buildReportPdf`, and digging a MediaBox out of a
+    // compressed document to prove it would be testing the pdf
+    // package. What can go wrong here is somebody deciding this report
+    // fits on a portrait page after all, and that is what this catches.
+    expect(deferredRevenueSpec(deferred, range.end).landscape, isTrue);
+    expect(
+      pl.landscape,
+      isFalse,
+      reason: 'turning the page is opt-in — nothing else changes shape',
+    );
+  });
+
+  test('a deferred revenue schedule with nothing on it still renders',
+      () async {
+    // Empty is the ordinary case for most companies, and an empty grid
+    // is what a table helper throws on.
+    final bytes = await buildReportPdf(
+        org: org,
+        spec: deferredRevenueSpec(const [], range.end),
+        generatedAt: generatedAt);
+    expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+    expect(String.fromCharCodes(bytes.skip(bytes.length - 6)).trim(), '%%EOF');
   });
 }

@@ -401,4 +401,99 @@ void main() {
       );
     });
   });
+
+  /// The deferred revenue schedule.
+  ///
+  /// Its note is the reason it is worth printing. A schedule that agrees
+  /// with 2127 is a reconciliation; one that quietly disagrees is a
+  /// listing that will be believed. So what is asserted is that it says
+  /// which of the two it is, and never the wrong one.
+  group('deferred revenue', () {
+    Map<String, dynamic> line(
+      String customer,
+      String docNo,
+      double deferred,
+      double recognised,
+      double cancelled,
+      double ledger,
+    ) => {
+      'contact_name': customer,
+      'doc_no': docNo,
+      'doc_date': '2026-01-01',
+      'description': 'Annual support',
+      'service_start': '2026-01-01',
+      'service_end': '2026-12-31',
+      'deferred': deferred,
+      'recognised': recognised,
+      'cancelled': cancelled,
+      'balance': deferred - recognised - cancelled,
+      'ledger_balance': ledger,
+    };
+
+    final asAt = DateTime(2026, 6, 30);
+
+    test('totals the balance column and leads with it', () {
+      final spec = deferredRevenueSpec([
+        line('Ali Sdn Bhd', 'INV-1', 1200, 600, 0, 1500),
+        line('Baba Sdn Bhd', 'INV-2', 1800, 900, 0, 1500),
+      ], asAt);
+
+      final highlight =
+          spec.blocks.whereType<ReportHighlight>().single;
+      expect(highlight.value, 1500);
+      expect(highlight.label, contains('30/06/2026'));
+
+      final grid = spec.blocks.whereType<ReportGrid>().single;
+      expect(grid.rows.length, 2);
+      expect((grid.total!.last as MoneyCell).value, 1500);
+    });
+
+    test('says so when it agrees with 2127', () {
+      final spec = deferredRevenueSpec([
+        line('Ali Sdn Bhd', 'INV-1', 1200, 600, 0, 600),
+      ], asAt);
+      expect(spec.note, contains('Agrees with account 2127'));
+    });
+
+    // The failure this report exists to catch. A schedule of 600
+    // against an account holding 900 is 300 nobody has explained, and
+    // the note has to name the number rather than leaving it to be
+    // worked out from two totals on different pages.
+    test('and names the difference when it does not', () {
+      final spec = deferredRevenueSpec([
+        line('Ali Sdn Bhd', 'INV-1', 1200, 600, 0, 900),
+      ], asAt);
+      expect(spec.note, isNot(contains('Agrees')));
+      expect(spec.note, contains('does not agree'));
+      expect(spec.note, contains('900'));
+      expect(spec.note, contains('300'));
+    });
+
+    // Rounding, not exactness: the schedule is rounded per period and
+    // the ledger is the sum of those roundings, so insisting on
+    // identical doubles would report a difference of nothing at all.
+    test('a fraction of a sen is not a difference', () {
+      final spec = deferredRevenueSpec([
+        line('Ali Sdn Bhd', 'INV-1', 1200, 600, 0, 600.001),
+      ], asAt);
+      expect(spec.note, contains('Agrees with account 2127'));
+    });
+
+    test('a cancelled contract still adds across', () {
+      final spec = deferredRevenueSpec([
+        line('Ali Sdn Bhd', 'INV-1', 1200, 300, 400, 500),
+      ], asAt);
+      final grid = spec.blocks.whereType<ReportGrid>().single;
+      expect((grid.total![3] as MoneyCell).value, 1200);
+      expect((grid.total![4] as MoneyCell).value, 300);
+      expect((grid.total![5] as MoneyCell).value, 400);
+      expect((grid.total![6] as MoneyCell).value, 500);
+    });
+
+    test('nothing deferred is a zero balance, not a crash', () {
+      final spec = deferredRevenueSpec(const [], asAt);
+      expect(spec.blocks.whereType<ReportHighlight>().single.value, 0);
+      expect(spec.blocks.whereType<ReportGrid>().single.rows, isEmpty);
+    });
+  });
 }

@@ -1143,6 +1143,17 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         editable: editable,
                         currency: _currency,
                         receiving: !_kind.isSales,
+                        // Sales, and not a credit note. A bill is not
+                        // revenue, so 0309 has nothing to defer on the
+                        // purchase side; a credit note posts with sign
+                        // -1, which 0310 makes cancel a schedule rather
+                        // than start one. Everything else on the sales
+                        // side qualifies — a debit note posts with sign
+                        // 1 and defers like an invoice, and quotations
+                        // and orders carry the period 0311 takes
+                        // forward to the document that will defer it.
+                        defers: _kind.isSales &&
+                            widget.docType != 'credit_note',
                         // Sales only: a price level is what we charge a
                         // customer, not what a supplier charges us.
                         priceFor: _kind.isSales && _contactId != null

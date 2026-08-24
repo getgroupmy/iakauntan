@@ -31,7 +31,24 @@ class IAkauntanApp extends ConsumerWidget {
         seedColor: AppTheme.parseHex(brand?.brandColourDark) ??
             AppTheme.parseHex(brand?.brandColour),
       ),
+      // Which of the two a visitor gets before they have chosen. The
+      // default is `system`, which is what `MaterialApp` does anyway —
+      // the point of the setting is that a platform that wants to look
+      // the same to everybody can now say so, which it could not before.
+      themeMode: themeModeFor(brand?.themeMode),
       routerConfig: ref.watch(routerProvider),
     );
   }
 }
+
+/// The stored scheme as Flutter's enum.
+///
+/// Anything unrecognised is `system`, deliberately: the value arrives
+/// from a database column, and a front page that throws because somebody
+/// typed a fourth scheme into it is a worse outcome than a front page in
+/// the visitor's own preference.
+ThemeMode themeModeFor(String? stored) => switch (stored) {
+  'light' => ThemeMode.light,
+  'dark' => ThemeMode.dark,
+  _ => ThemeMode.system,
+};
