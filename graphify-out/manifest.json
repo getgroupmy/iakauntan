@@ -4400,8 +4400,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_screen.dart": {
-    "mtime": 1787571277.140446,
-    "ast_hash": "67028e9d927deed3bbbc1397ed178fd2",
+    "mtime": 1787571797.0298407,
+    "ast_hash": "8d398e6677bed30276669921bc7877d1",
     "semantic_hash": ""
   },
   "app/test/landing_content_test.dart": {
@@ -4460,8 +4460,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_motion.dart": {
-    "mtime": 1787560086.5231545,
-    "ast_hash": "004b301e45c493f664d078d52d40fada",
+    "mtime": 1787571662.1465034,
+    "ast_hash": "9f96a7393e62e0becb136a0ccb570448",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_pricing.dart": {
@@ -4742,6 +4742,11 @@
   "supabase/migrations/0318_a_draft_nobody_could_look_at.sql": {
     "mtime": 1787571126.2065232,
     "ast_hash": "6746315ad0596a5b1cb4a4528b66300f",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/landing/landing_tokens.dart": {
+    "mtime": 1787571642.801788,
+    "ast_hash": "8eec615d93aa82edd329cab3a3a2a9e6",
     "semantic_hash": ""
   }
 }

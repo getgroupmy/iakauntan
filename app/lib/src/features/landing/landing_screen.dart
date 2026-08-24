@@ -6,6 +6,7 @@ import '../../core/safe_link.dart';
 import 'landing_content.dart';
 import 'landing_motion.dart';
 import 'landing_pricing.dart';
+import 'landing_tokens.dart';
 
 /// The corporate landing page.
 ///
@@ -131,6 +132,7 @@ class LandingPage extends StatelessWidget {
                     ),
                   if (content.logos.isNotEmpty)
                     _Band(
+                      tight: true,
                       child: RevealOnScroll(
                         child: _Logos(logos: content.logos),
                       ),
@@ -173,7 +175,12 @@ class LandingPage extends StatelessWidget {
 /// inside them does not, which is the whole difference between a page
 /// that reads as sections and a page that reads as a list.
 class _Band extends StatelessWidget {
-  const _Band({super.key, required this.child, this.tinted = false});
+  const _Band({
+    super.key,
+    required this.child,
+    this.tinted = false,
+    this.tight = false,
+  });
 
   final Widget child;
 
@@ -183,16 +190,24 @@ class _Band extends StatelessWidget {
   /// operator has written.
   final bool tinted;
 
+  /// Bands that carry one row rather than a grid — the logo wall, the
+  /// store buttons — get the shorter rhythm, or the page grows a hole
+  /// around them.
+  final bool tight;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       color: tinted ? scheme.surfaceContainerLowest : scheme.surface,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 64),
+      padding: EdgeInsets.symmetric(
+        horizontal: Land.gutter,
+        vertical: tight ? Land.bandYTight : Land.bandY,
+      ),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1160),
+          constraints: const BoxConstraints(maxWidth: Land.maxWidth),
           child: child,
         ),
       ),
@@ -230,12 +245,15 @@ class _Masthead extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: scheme.surface,
-        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+        border: Border(bottom: BorderSide(color: Land.border(scheme))),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Land.gutter,
+        vertical: 12,
+      ),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1160),
+          constraints: const BoxConstraints(maxWidth: Land.maxWidth),
           child: LayoutBuilder(
             builder: (context, constraints) {
               // The links go before the buttons do. On a phone the way
@@ -421,38 +439,17 @@ class _HeroCopy extends StatelessWidget {
       children: [
         if (content.tagline != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Text(
-              content.tagline!.toUpperCase(),
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.4,
-                color: scheme.primary,
-              ),
-            ),
+            padding: const EdgeInsets.only(bottom: Land.gap),
+            child: LandingKicker(content.tagline!),
           ),
-        Text(
-          content.heroHeadline,
-          style: TextStyle(
-            fontSize: 46,
-            height: 1.1,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -1.2,
-            color: scheme.onSurface,
-          ),
-        ),
+        Text(content.heroHeadline, style: Land.display(scheme)),
         if (content.heroSubhead != null) ...[
           const SizedBox(height: 20),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
             child: Text(
               content.heroSubhead!,
-              style: TextStyle(
-                fontSize: 17,
-                height: 1.6,
-                color: scheme.onSurfaceVariant,
-              ),
+              style: Land.body(scheme).copyWith(fontSize: 17),
             ),
           ),
         ],
@@ -488,7 +485,7 @@ class _HeroCopy extends StatelessWidget {
                   horizontal: 28,
                   vertical: 20,
                 ),
-                side: BorderSide(color: scheme.outlineVariant),
+                side: BorderSide(color: Land.border(scheme)),
               ),
               child: Text(content.signInLabel),
             ),
@@ -515,23 +512,30 @@ class _HeroArt extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final frame = BoxDecoration(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(Land.radiusLarge),
       color: scheme.surfaceContainerLowest,
-      border: Border.all(color: scheme.outlineVariant),
+      border: Border.all(color: Land.border(scheme)),
+      boxShadow: Land.lift(scheme, hovered: true),
     );
-    if (content.heroImageUrl != null) {
-      return Container(
-        decoration: frame,
-        clipBehavior: Clip.antiAlias,
-        child: Image.network(
-          content.heroImageUrl!,
-          fit: BoxFit.cover,
-          // A hero that will not load must not take the page with it.
-          errorBuilder: (context, _, __) => const _HeroPlaceholder(),
-        ),
-      );
-    }
-    return Container(decoration: frame, child: const _HeroPlaceholder());
+    // Drifts against the copy beside it as the page moves. Small
+    // enough to read as depth rather than as the two columns
+    // disagreeing about where they are.
+    return Parallax(
+      factor: 0.06,
+      child: content.heroImageUrl != null
+          ? Container(
+              decoration: frame,
+              clipBehavior: Clip.antiAlias,
+              child: Image.network(
+                content.heroImageUrl!,
+                fit: BoxFit.cover,
+                // A hero that will not load must not take the page
+                // with it.
+                errorBuilder: (context, _, __) => const _HeroPlaceholder(),
+              ),
+            )
+          : Container(decoration: frame, child: const _HeroPlaceholder()),
+    );
   }
 }
 
@@ -549,9 +553,7 @@ class _HeroPlaceholder extends StatelessWidget {
           Container(
             height: 34,
             decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: scheme.outlineVariant),
-              ),
+              border: Border(bottom: BorderSide(color: Land.border(scheme))),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: Row(
@@ -564,7 +566,7 @@ class _HeroPlaceholder extends StatelessWidget {
                       height: 9,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: scheme.outlineVariant,
+                        color: Land.border(scheme),
                       ),
                     ),
                   ),
@@ -576,7 +578,7 @@ class _HeroPlaceholder extends StatelessWidget {
               child: Icon(
                 Icons.insert_chart_outlined,
                 size: 44,
-                color: scheme.outlineVariant,
+                color: Land.border(scheme),
               ),
             ),
           ),
@@ -619,7 +621,6 @@ class _SectionsState extends State<_Sections> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth <= 720) {
@@ -629,16 +630,13 @@ class _SectionsState extends State<_Sections> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'What it does',
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
-                color: scheme.onSurface,
-              ),
+            const LandingSectionHeader(
+              kicker: 'Product',
+              title: 'What it does',
+              subtitle: 'One ledger under all of it. Pick an area to see '
+                  'what it covers.',
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: Land.gapLg),
             // Scrollable, because the number of tabs is whatever the
             // console wrote and a fixed row would clip the last one.
             SingleChildScrollView(
@@ -655,7 +653,7 @@ class _SectionsState extends State<_Sections> {
                 ],
               ),
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: Land.gap),
             // Keyed by index so the pane animates when the tab moves
             // rather than mutating text in place.
             AnimatedSwitcher(
@@ -693,20 +691,21 @@ class _Tab extends StatelessWidget {
       child: HoverLift(
         builder: (context, hovered) => InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(Land.radiusTight),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(Land.radiusTight),
               color: selected
                   ? scheme.primary
                   : hovered
-                      ? scheme.surfaceContainerLowest
+                      ? scheme.surface
                       : Colors.transparent,
               border: Border.all(
-                color: selected ? scheme.primary : scheme.outlineVariant,
+                color: selected ? scheme.primary : Land.border(scheme),
               ),
+              boxShadow: selected ? Land.lift(scheme, hovered: true) : null,
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -745,11 +744,12 @@ class _SectionPane extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.all(Land.gapLg),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Land.radiusLarge),
         color: scheme.surface,
-        border: Border.all(color: scheme.outlineVariant),
+        border: Border.all(color: Land.border(scheme)),
+        boxShadow: Land.lift(scheme),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -760,7 +760,7 @@ class _SectionPane extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(11),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(Land.radius),
                   color: scheme.primary.withValues(alpha: 0.10),
                 ),
                 child: Icon(
@@ -772,22 +772,11 @@ class _SectionPane extends StatelessWidget {
               const SizedBox(height: 18),
               Text(
                 section.title,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: scheme.onSurface,
-                ),
+                style: Land.cardTitle(scheme).copyWith(fontSize: 22),
               ),
               if (section.body != null) ...[
                 const SizedBox(height: 12),
-                Text(
-                  section.body!,
-                  style: TextStyle(
-                    fontSize: 15,
-                    height: 1.65,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
+                Text(section.body!, style: Land.body(scheme)),
               ],
             ],
           );
@@ -801,9 +790,9 @@ class _SectionPane extends StatelessWidget {
                 flex: 4,
                 child: Container(
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(Land.radius),
                     color: scheme.surfaceContainerLowest,
-                    border: Border.all(color: scheme.outlineVariant),
+                    border: Border.all(color: Land.border(scheme)),
                   ),
                   child: const _HeroPlaceholder(),
                 ),
@@ -828,24 +817,18 @@ class _SectionCards extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'What it does',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            color: scheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 20),
+        const LandingSectionHeader(kicker: 'Product', title: 'What it does'),
+        const SizedBox(height: Land.gapLg),
         for (final s in sections)
           Padding(
             padding: const EdgeInsets.only(bottom: 14),
             child: Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(Land.radius),
                 color: scheme.surface,
-                border: Border.all(color: scheme.outlineVariant),
+                border: Border.all(color: Land.border(scheme)),
+                boxShadow: Land.lift(scheme),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -951,15 +934,11 @@ class _AppLinks extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Get the app',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-            color: scheme.onSurface,
-          ),
+        const LandingSectionHeader(
+          kicker: 'Download',
+          title: 'Get the app',
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: Land.gapLg),
         Wrap(
           spacing: 12,
           runSpacing: 12,
@@ -975,7 +954,9 @@ class _AppLinks extends StatelessWidget {
                   label: Text(l.label),
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(
-                      color: hovered ? scheme.primary : scheme.outlineVariant,
+                      color: hovered
+                          ? Land.borderHover(scheme)
+                          : Land.border(scheme),
                     ),
                   ),
                 ),
@@ -1026,11 +1007,7 @@ class _Footer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final small = TextStyle(
-      fontSize: 13,
-      height: 1.7,
-      color: scheme.onSurfaceVariant,
-    );
+    final small = Land.small(scheme);
 
     final company = <String>[
       if (content.companyName != null)
@@ -1052,10 +1029,13 @@ class _Footer extends StatelessWidget {
     return Container(
       width: double.infinity,
       color: scheme.surfaceContainerLowest,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Land.gutter,
+        vertical: Land.bandYTight,
+      ),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1160),
+          constraints: const BoxConstraints(maxWidth: Land.maxWidth),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1131,7 +1111,7 @@ class _Footer extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 40),
-              Divider(color: scheme.outlineVariant, height: 1),
+              Divider(color: Land.border(scheme), height: 1),
               const SizedBox(height: 20),
               Text(
                 '© ${DateTime.now().year} '
@@ -1226,10 +1206,11 @@ class _Cta extends StatelessWidget {
     final hasButton = content.ctaLabel != null && content.ctaUrl != null;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 44),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Land.radiusLarge),
         color: scheme.primary,
+        boxShadow: Land.lift(scheme, hovered: true),
       ),
       child: Wrap(
         alignment: WrapAlignment.spaceBetween,
@@ -1245,10 +1226,8 @@ class _Cta extends StatelessWidget {
               children: [
                 Text(
                   content.ctaHeadline!,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    height: 1.25,
+                  style: Land.heading(scheme).copyWith(
+                    fontSize: 27,
                     color: scheme.onPrimary,
                   ),
                 ),
@@ -1256,9 +1235,7 @@ class _Cta extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     content.ctaBody!,
-                    style: TextStyle(
-                      fontSize: 15,
-                      height: 1.5,
+                    style: Land.body(scheme).copyWith(
                       color: scheme.onPrimary.withValues(alpha: 0.86),
                     ),
                   ),
@@ -1303,16 +1280,13 @@ class _Reasons extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Why iAkauntan',
-          style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.5,
-            color: scheme.onSurface,
-          ),
+        const LandingSectionHeader(
+          kicker: 'Why us',
+          title: 'Built for the rules you actually file under',
+          subtitle: 'Not a foreign package with a Malaysian tax code bolted '
+              'on the side.',
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: Land.gapLg),
         LayoutBuilder(
           builder: (context, constraints) {
             final columns = constraints.maxWidth > 900
@@ -1321,10 +1295,10 @@ class _Reasons extends StatelessWidget {
                     ? 2
                     : 1;
             final width =
-                (constraints.maxWidth - (columns - 1) * 20) / columns;
+                (constraints.maxWidth - (columns - 1) * Land.gap) / columns;
             return Wrap(
-              spacing: 20,
-              runSpacing: 20,
+              spacing: Land.gap,
+              runSpacing: Land.gap,
               children: [
                 for (final r in reasons)
                   SizedBox(
@@ -1339,15 +1313,16 @@ class _Reasons extends StatelessWidget {
                       child: HoverLift(
                         builder: (context, hovered) => AnimatedContainer(
                           duration: const Duration(milliseconds: 160),
-                          padding: const EdgeInsets.all(24),
+                          padding: const EdgeInsets.all(Land.gapLg - 8),
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(Land.radius),
                             color: scheme.surface,
                             border: Border.all(
                               color: hovered
-                                  ? scheme.primary
-                                  : scheme.outlineVariant,
+                                  ? Land.borderHover(scheme)
+                                  : Land.border(scheme),
                             ),
+                            boxShadow: Land.lift(scheme, hovered: hovered),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1358,22 +1333,13 @@ class _Reasons extends StatelessWidget {
                                 size: 24,
                               ),
                               const SizedBox(height: 16),
-                              Text(
-                                r.title,
-                                style: const TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                              Text(r.title, style: Land.cardTitle(scheme)),
                               if (r.body != null) ...[
-                                const SizedBox(height: 8),
+                                const SizedBox(height: Land.gapSm),
                                 Text(
                                   r.body!,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    height: 1.55,
-                                    color: scheme.onSurfaceVariant,
-                                  ),
+                                  style: Land.body(scheme)
+                                      .copyWith(fontSize: 14, height: 1.55),
                                 ),
                               ],
                             ],
@@ -1408,11 +1374,11 @@ class _Stats extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 40),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Land.radiusLarge),
         color: scheme.surfaceContainerLowest,
-        border: Border.all(color: scheme.outlineVariant),
+        border: Border.all(color: Land.border(scheme)),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -1421,10 +1387,11 @@ class _Stats extends StatelessWidget {
               : constraints.maxWidth > 420
                   ? 2
                   : 1;
-          final width = (constraints.maxWidth - (columns - 1) * 24) / columns;
+          final width =
+              (constraints.maxWidth - (columns - 1) * Land.gapLg) / columns;
           return Wrap(
-            spacing: 24,
-            runSpacing: 24,
+            spacing: Land.gapLg,
+            runSpacing: Land.gapLg,
             children: [
               for (final s in stats)
                 SizedBox(
@@ -1446,21 +1413,14 @@ class _Stats extends StatelessWidget {
                       // thousands separator.
                       Text(
                         s.value,
-                        style: TextStyle(
-                          fontSize: 30,
-                          fontWeight: FontWeight.w800,
-                          height: 1.1,
+                        style: Land.display(scheme).copyWith(
+                          fontSize: 38,
+                          letterSpacing: -1.6,
                           color: scheme.primary,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        s.label,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
+                      const SizedBox(height: 6),
+                      Text(s.label, style: Land.small(scheme)),
                     ],
                   ),
                 ),
@@ -1490,15 +1450,11 @@ class _Testimonials extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'What customers say',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            color: scheme.onSurface,
-          ),
+        const LandingSectionHeader(
+          kicker: 'Customers',
+          title: 'What customers say',
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: Land.gapLg),
         LayoutBuilder(
           builder: (context, constraints) {
             final columns = constraints.maxWidth > 860
@@ -1507,10 +1463,10 @@ class _Testimonials extends StatelessWidget {
                     ? 2
                     : 1;
             final width =
-                (constraints.maxWidth - (columns - 1) * 20) / columns;
+                (constraints.maxWidth - (columns - 1) * Land.gap) / columns;
             return Wrap(
-              spacing: 20,
-              runSpacing: 20,
+              spacing: Land.gap,
+              runSpacing: Land.gap,
               children: [
                 for (final t in testimonials)
                   SizedBox(
@@ -1521,11 +1477,12 @@ class _Testimonials extends StatelessWidget {
                             60 * (testimonials.indexOf(t) % 6),
                       ),
                       child: Container(
-                        padding: const EdgeInsets.all(20),
+                        padding: const EdgeInsets.all(Land.gapLg - 8),
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          color: scheme.surfaceContainerLowest,
-                          border: Border.all(color: scheme.outlineVariant),
+                          borderRadius: BorderRadius.circular(Land.radius),
+                          color: scheme.surface,
+                          border: Border.all(color: Land.border(scheme)),
+                          boxShadow: Land.lift(scheme),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1538,10 +1495,8 @@ class _Testimonials extends StatelessWidget {
                             const SizedBox(height: 8),
                             Text(
                               t.quote,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                height: 1.55,
-                              ),
+                              style: Land.body(scheme)
+                                  .copyWith(color: scheme.onSurface),
                             ),
                             const SizedBox(height: 14),
                             Row(
@@ -1574,10 +1529,8 @@ class _Testimonials extends StatelessWidget {
                                       if (t.company != null)
                                         Text(
                                           t.company!,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: scheme.onSurfaceVariant,
-                                          ),
+                                          style: Land.small(scheme)
+                                              .copyWith(fontSize: 12),
                                         ),
                                     ],
                                   ),
@@ -1613,15 +1566,8 @@ class _Logos extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Businesses running on iAkauntan',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            color: scheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 18),
+        const LandingKicker('Trusted by'),
+        const SizedBox(height: Land.gap),
         Wrap(
           spacing: 32,
           runSpacing: 20,
@@ -1639,10 +1585,9 @@ class _Logos extends StatelessWidget {
                   fit: BoxFit.contain,
                   errorBuilder: (context, _, __) => Text(
                     l.name,
-                    style: TextStyle(
+                    style: Land.small(scheme).copyWith(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: scheme.onSurfaceVariant,
                     ),
                   ),
                 ),

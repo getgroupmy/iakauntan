@@ -164,3 +164,74 @@ class _HoverLiftState extends State<HoverLift> {
     );
   }
 }
+
+/// Move a thing at a fraction of the scroll speed.
+///
+/// The depth effect a scrolling marketing page gets from parallax, done
+/// with the scroll position Flutter already has rather than a library
+/// that drives DOM transforms — there are no DOM nodes here to drive.
+///
+/// [factor] is how far it moves against the page: 0 is pinned to the
+/// content, 1 would be a second scroll view. Small numbers only. Past
+/// about 0.15 the element visibly disagrees with the text beside it,
+/// which reads as a rendering fault rather than as depth.
+///
+/// Clamped, so an element near the top of a long page cannot be dragged
+/// out of its own band by a large scroll offset.
+class Parallax extends StatefulWidget {
+  const Parallax({
+    super.key,
+    required this.child,
+    this.factor = 0.08,
+    this.maxOffset = 40,
+  });
+
+  final Widget child;
+  final double factor;
+
+  /// The furthest it will travel, in logical pixels, either way.
+  final double maxOffset;
+
+  @override
+  State<Parallax> createState() => _ParallaxState();
+}
+
+class _ParallaxState extends State<Parallax> {
+  double _offset = 0;
+
+  /// Where this widget sat when the page had not been scrolled, so the
+  /// displacement is measured from its own position rather than from
+  /// the top of the document. Without it every element below the fold
+  /// starts already displaced.
+  double? _anchor;
+
+  bool _onScroll(ScrollNotification n) {
+    if (n.metrics.axis != Axis.vertical) return false;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return false;
+    final y = box.localToGlobal(Offset.zero).dy;
+    _anchor ??= y + _offset;
+
+    final travelled = (_anchor! - y);
+    final next = (travelled * widget.factor)
+        .clamp(-widget.maxOffset, widget.maxOffset);
+    if ((next - _offset).abs() > 0.5) setState(() => _offset = next);
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Motion is a preference. Somebody who has asked their system to
+    // reduce it gets the element where the layout put it.
+    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+      return widget.child;
+    }
+    return NotificationListener<ScrollNotification>(
+      onNotification: _onScroll,
+      child: Transform.translate(
+        offset: Offset(0, _offset),
+        child: widget.child,
+      ),
+    );
+  }
+}
