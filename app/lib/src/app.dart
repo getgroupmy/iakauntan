@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/env.dart';
+import 'core/favicon.dart';
 import 'core/router.dart';
 import 'core/theme.dart';
 import 'features/landing/landing_content.dart';
@@ -20,6 +21,17 @@ class IAkauntanApp extends ConsumerWidget {
     // network is a white screen, and the fallback is the colour the
     // product shipped in rather than an absence.
     final brand = ref.watch(landingContentProvider).valueOrNull;
+
+    // The tab icon, repointed at the uploaded image as soon as the brand
+    // is known — the built favicon is a file and cannot change until the
+    // next deploy, which reads as broken to somebody who has just
+    // uploaded one and is watching the tab.
+    //
+    // In `build` rather than an initState because this is the widget that
+    // already watches the brand, and `applyFavicon` is idempotent: it
+    // sets an attribute to a value it may already hold. On anything that
+    // is not a browser it does nothing at all.
+    applyFavicon(brand?.appIconUrl);
 
     return MaterialApp.router(
       title: Env.appName,
