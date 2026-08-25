@@ -16,8 +16,8 @@ import 'scan_result_dialog.dart';
 
 final attachmentsProvider = FutureProvider.autoDispose
     .family<List<Attachment>, ({String table, String id})>((ref, key) {
-  return requireRepo(ref).attachments(key.table, key.id);
-});
+      return requireRepo(ref).attachments(key.table, key.id);
+    });
 
 /// Files filed against one record — a receipt on a claim, an identity
 /// document on a person, the instrument creating a charge.
@@ -80,6 +80,18 @@ class _AttachmentsCardState extends ConsumerState<AttachmentsCard> {
     // this would guess.
     final bool canWrite = widget.canAttach ?? ref.watch(canWriteProvider);
 
+    // 0323. Attachments are a module. `app.can_attach_to` refuses every
+    // write without it — the row, the file, and deleting either — so a
+    // shutter button that stayed would be a button that fails.
+    //
+    // Reading is deliberately not gated, in the database and here: the
+    // list below still draws whatever was filed before. A company that
+    // does not take the module cannot add another document; it does not
+    // lose the ones it has, and neither does the auditor asking for
+    // them.
+    final module = moduleEnabled(ref, 'attachments');
+    final canAdd = canWrite && module;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(Space.lg),
@@ -89,39 +101,48 @@ class _AttachmentsCardState extends ConsumerState<AttachmentsCard> {
             SectionHeader(
               widget.title,
               subtitle: widget.subtitle,
-              action: canWrite
-                  ? Row(mainAxisSize: MainAxisSize.min, children: [
-                      // The scanner where there is one, then the plain
-                      // shutter. Both, rather than one replacing the
-                      // other: the scanner insists on finding a document
-                      // in the frame, and somebody photographing a
-                      // damaged label or a whiteboard needs the camera.
-                      if (docScannerLikely)
-                        IconButton(
-                          tooltip: 'Scan a document',
-                          onPressed: _busy ? null : _scanDocument,
-                          icon: const Icon(Icons.document_scanner_outlined,
-                              size: 20),
+              action: canAdd
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // The scanner where there is one, then the plain
+                        // shutter. Both, rather than one replacing the
+                        // other: the scanner insists on finding a document
+                        // in the frame, and somebody photographing a
+                        // damaged label or a whiteboard needs the camera.
+                        if (docScannerLikely)
+                          IconButton(
+                            tooltip: 'Scan a document',
+                            onPressed: _busy ? null : _scanDocument,
+                            icon: const Icon(
+                              Icons.document_scanner_outlined,
+                              size: 20,
+                            ),
+                          ),
+                        if (cameraLikely)
+                          IconButton(
+                            tooltip: 'Photograph it',
+                            onPressed: _busy ? null : _photograph,
+                            icon: const Icon(
+                              Icons.photo_camera_outlined,
+                              size: 20,
+                            ),
+                          ),
+                        OutlinedButton.icon(
+                          onPressed: _busy ? null : _pick,
+                          icon: _busy
+                              ? const SizedBox(
+                                  height: 16,
+                                  width: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.attach_file, size: 18),
+                          label: const Text('Attach'),
                         ),
-                      if (cameraLikely)
-                        IconButton(
-                          tooltip: 'Photograph it',
-                          onPressed: _busy ? null : _photograph,
-                          icon: const Icon(Icons.photo_camera_outlined,
-                              size: 20),
-                        ),
-                      OutlinedButton.icon(
-                        onPressed: _busy ? null : _pick,
-                        icon: _busy
-                            ? const SizedBox(
-                                height: 16,
-                                width: 16,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.attach_file, size: 18),
-                        label: const Text('Attach'),
-                      ),
-                    ])
+                      ],
+                    )
                   : null,
             ),
             AsyncView(
@@ -131,23 +152,24 @@ class _AttachmentsCardState extends ConsumerState<AttachmentsCard> {
               builder: (list) => list.isEmpty
                   ? Text(
                       'Nothing attached.',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: context.scheme.onSurfaceVariant),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: context.scheme.onSurfaceVariant,
+                      ),
                     )
-                  : Column(children: [
-                      for (var i = 0; i < list.length; i++) ...[
-                        if (i > 0) const Divider(height: 1),
-                        _FileRow(
-                          file: list[i],
-                          canWrite: canWrite,
-                          onChanged: () =>
-                              ref.invalidate(attachmentsProvider(_key)),
-                          onExtracted: widget.onExtracted,
-                        ),
+                  : Column(
+                      children: [
+                        for (var i = 0; i < list.length; i++) ...[
+                          if (i > 0) const Divider(height: 1),
+                          _FileRow(
+                            file: list[i],
+                            canWrite: canAdd,
+                            onChanged: () =>
+                                ref.invalidate(attachmentsProvider(_key)),
+                            onExtracted: widget.onExtracted,
+                          ),
+                        ],
                       ],
-                    ]),
+                    ),
             ),
           ],
         ),
@@ -168,7 +190,9 @@ class _AttachmentsCardState extends ConsumerState<AttachmentsCard> {
     setState(() => _busy = true);
     await runWithFeedback(
       context,
-      action: () => ref.read(repoProvider)!.uploadAttachment(
+      action: () => ref
+          .read(repoProvider)!
+          .uploadAttachment(
             table: widget.table,
             recordId: widget.recordId,
             fileName: file.name,
@@ -232,48 +256,52 @@ class _FileRowState extends ConsumerState<_FileRow> {
       leading: Icon(_icon, size: 22, color: context.scheme.onSurfaceVariant),
       title: Text(file.fileName),
       subtitle: Text(
-        [Fmt.dateTime(file.createdAt), file.sizeLabel]
-            .where((s) => s.isNotEmpty)
-            .join(' · '),
+        [
+          Fmt.dateTime(file.createdAt),
+          file.sizeLabel,
+        ].where((s) => s.isNotEmpty).join(' · '),
         style: const TextStyle(fontSize: 12),
       ),
-      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        // Not offered where the chosen reader cannot run: an
-        // organization on the on-device reader has no scan button in a
-        // browser, because pressing it could only ever explain itself.
-        if (ocr.enabled && _readable && widget.canWrite && _readerHere(ocr))
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Not offered where the chosen reader cannot run: an
+          // organization on the on-device reader has no scan button in a
+          // browser, because pressing it could only ever explain itself.
+          if (ocr.enabled && _readable && widget.canWrite && _readerHere(ocr))
+            IconButton(
+              icon: _scanning
+                  ? const SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.document_scanner_outlined, size: 18),
+              // Says what it costs before it is pressed, because it is
+              // the one button on this screen that spends money.
+              tooltip: ocr.keySource == 'platform' && ocr.price > 0
+                  ? 'Read this document (${Fmt.money(ocr.price)})'
+                  : 'Read this document',
+              onPressed: _scanning ? null : _scan,
+            ),
           IconButton(
-            icon: _scanning
-                ? const SizedBox(
-                    height: 16,
-                    width: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.document_scanner_outlined, size: 18),
-            // Says what it costs before it is pressed, because it is
-            // the one button on this screen that spends money.
-            tooltip: ocr.keySource == 'platform' && ocr.price > 0
-                ? 'Read this document (${Fmt.money(ocr.price)})'
-                : 'Read this document',
-            onPressed: _scanning ? null : _scan,
+            icon: const Icon(Icons.open_in_new, size: 18),
+            tooltip: 'Open',
+            onPressed: _open,
           ),
-        IconButton(
-          icon: const Icon(Icons.open_in_new, size: 18),
-          tooltip: 'Open',
-          onPressed: _open,
-        ),
-        if (widget.canWrite)
-          IconButton(
-            icon: const Icon(Icons.delete_outline, size: 18),
-            tooltip: 'Remove',
-            onPressed: _remove,
-          ),
-      ]),
+          if (widget.canWrite)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 18),
+              tooltip: 'Remove',
+              onPressed: _remove,
+            ),
+        ],
+      ),
     );
   }
 
   /// Whether the reader this organization chose exists on this device.
-  bool _readerHere(OcrSettings ocr) =>
-      !ocr.onDevice || onDeviceReaderAvailable;
+  bool _readerHere(OcrSettings ocr) => !ocr.onDevice || onDeviceReaderAvailable;
 
   Future<void> _scan() async {
     setState(() => _scanning = true);
@@ -307,9 +335,13 @@ class _FileRowState extends ConsumerState<_FileRow> {
       // The database's own refusals — scanning switched off, no credit,
       // a provider that would not read it — arrive already written for
       // somebody to read, so they are shown rather than summarised.
-      messenger.showSnackBar(SnackBar(
-        content: Text(e is OcrException ? e.message : 'Could not read it: $e'),
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            e is OcrException ? e.message : 'Could not read it: $e',
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _scanning = false);
     }

@@ -295,8 +295,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
-    "mtime": 1786785756.622488,
-    "ast_hash": "4d6fce4a5c34cf4d5f18548d0b196288",
+    "mtime": 1787672351.7374382,
+    "ast_hash": "ff8991f8e8aea4354262d02b664c7b89",
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787669638.0321858,
-    "ast_hash": "3ccbd3ae846bfd8eda70b0c00831fe8c",
+    "mtime": 1787672351.7374382,
+    "ast_hash": "124a874e00724471070e02158b0f6eab",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -4802,6 +4802,16 @@
   "app/test/router_redirect_test.dart": {
     "mtime": 1787671396.7642903,
     "ast_hash": "827bb7244615edbf5cd7f336388a5b16",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0323_attachments_become_a_module.sql": {
+    "mtime": 1787672351.7434711,
+    "ast_hash": "c3abd98859ba859df1beaf2dc1ff29e2",
+    "semantic_hash": ""
+  },
+  "supabase/tests/attachments_module.sql": {
+    "mtime": 1787672351.7434711,
+    "ast_hash": "cb1d9cb956b16a87616ab4e5b182788f",
     "semantic_hash": ""
   }
 }
