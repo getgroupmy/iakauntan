@@ -166,7 +166,6 @@ class _VisibilityProbeState extends State<_VisibilityProbe> {
   Widget build(BuildContext context) => widget.child;
 }
 
-
 /// A card that lifts under the pointer.
 ///
 /// The affordance is the point rather than the shadow: on a page whose
@@ -275,8 +274,10 @@ class _ParallaxState extends State<Parallax> {
     _anchor ??= y + _offset;
 
     final travelled = _anchor! - y;
-    final next = (travelled * widget.factor)
-        .clamp(-widget.maxOffset, widget.maxOffset);
+    final next = (travelled * widget.factor).clamp(
+      -widget.maxOffset,
+      widget.maxOffset,
+    );
     if ((next - _offset).abs() > 0.5) setState(() => _offset = next);
   }
 
@@ -287,10 +288,7 @@ class _ParallaxState extends State<Parallax> {
     if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
       return widget.child;
     }
-    return Transform.translate(
-      offset: Offset(0, _offset),
-      child: widget.child,
-    );
+    return Transform.translate(offset: Offset(0, _offset), child: widget.child);
   }
 }
 
@@ -321,8 +319,7 @@ class CountUp extends StatefulWidget {
   State<CountUp> createState() => _CountUpState();
 }
 
-class _CountUpState extends State<CountUp>
-    with SingleTickerProviderStateMixin {
+class _CountUpState extends State<CountUp> with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
     duration: widget.duration ?? const Duration(milliseconds: 1100),

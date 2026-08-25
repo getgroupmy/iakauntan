@@ -4,10 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:iakauntan/src/features/landing/landing_content.dart';
 import 'package:iakauntan/src/features/landing/landing_screen.dart';
 
-/// How many ways in the page draws, and that none of them is a
-/// duplicate.
+/// Which ways in the page draws, where, and at what width.
 ///
-/// Two bugs this pins, both found on a phone rather than here.
+/// Three reports from a phone are pinned here.
 ///
 /// The hero drew a filled button and an outlined one unconditionally,
 /// and the filled one fell back to the sign-in label when
@@ -22,11 +21,23 @@ import 'package:iakauntan/src/features/landing/landing_screen.dart';
 /// closed, and then a phone gets a bar with a burger, a logo and
 /// nothing to press at all.
 ///
+/// And then: "split into mobile and desktop, also split sign in and
+/// create an account". `0321` makes that eight switches, and what is
+/// asserted below is that each one moves exactly the button it names at
+/// exactly the width it names.
+///
 /// Asserted on what a visitor can see and reach, not on which widget
 /// draws it, so the layout stays free to change.
 void main() {
-  Future<void> pump(WidgetTester tester, LandingContent content) async {
-    tester.view.physicalSize = const Size(420, 3200);
+  /// [wide] is the side of `Land.wide` — 760 — the page is drawn at.
+  /// A phone and a desktop are two different pages here, so every
+  /// assertion has to say which one it is about.
+  Future<void> pump(
+    WidgetTester tester,
+    LandingContent content, {
+    bool wide = false,
+  }) async {
+    tester.view.physicalSize = Size(wide ? 1280 : 420, 3600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
@@ -58,122 +69,220 @@ void main() {
   int labelled(WidgetTester tester, String label) =>
       find.text(label).evaluate().length;
 
+  /// Every way-in button on the page, named by where it sits.
+  ///
+  /// `bar:Sign in`, `hero:Create an account`, and so on. By position
+  /// rather than by widget, because the point of these switches is what
+  /// a visitor sees at a given width — the bar is the strip across the
+  /// top, the hero is the band around the headline, and anything below
+  /// that is the footer, which these switches deliberately do not
+  /// touch.
+  Set<String> drawn(WidgetTester tester) {
+    final headline = tester.getRect(find.textContaining('Accounting').first);
+    final out = <String>{};
+    for (final label in ['Sign in', 'Create an account']) {
+      for (final e in find.text(label).evaluate()) {
+        final dy = tester.getTopLeft(find.byWidget(e.widget)).dy;
+        if (dy < headline.top) {
+          out.add('bar:$label');
+        } else if (dy < headline.bottom + 1000) {
+          out.add('hero:$label');
+        }
+      }
+    }
+    return out;
+  }
+
   testWidgets('registration closed: one way in, and it is not doubled', (
     tester,
   ) async {
-    await pump(
-      tester,
-      const LandingContent(published: true, registerEnabled: false),
-    );
+    for (final wide in [true, false]) {
+      await pump(
+        tester,
+        const LandingContent(published: true, registerEnabled: false),
+        wide: wide,
+      );
 
-    // Nothing anywhere invites somebody to register when they cannot.
-    expect(labelled(tester, 'Create an account'), 0);
+      // Nothing anywhere invites somebody to register when they cannot.
+      expect(labelled(tester, 'Create an account'), 0, reason: 'wide: $wide');
 
-    // And there is at least one way in on the page.
-    expect(labelled(tester, 'Sign in'), greaterThan(0));
+      // And there is at least one way in on the page.
+      expect(labelled(tester, 'Sign in'), greaterThan(0));
+    }
   });
 
   testWidgets('registration open: both ways in are offered', (tester) async {
-    await pump(
-      tester,
-      const LandingContent(published: true, registerEnabled: true),
-    );
-    expect(labelled(tester, 'Sign in'), greaterThan(0));
-    expect(labelled(tester, 'Create an account'), greaterThan(0));
-  });
-
-  testWidgets('the bar on a phone always has something to press', (
-    tester,
-  ) async {
-    // The masthead half of the same report. The sign-in link was drawn
-    // only on wide screens, on the reasoning that a phone has the
-    // register button instead — true right up until registration is
-    // closed, and then the bar is a burger, a logo and nothing else.
-    //
-    // Asserted by position rather than by widget: whatever draws it,
-    // something a visitor can press to get in has to sit in the bar
-    // across the top, not four screens down the page.
-    for (final registerEnabled in [true, false]) {
+    for (final wide in [true, false]) {
       await pump(
         tester,
-        LandingContent(published: true, registerEnabled: registerEnabled),
+        const LandingContent(published: true, registerEnabled: true),
+        wide: wide,
       );
+      expect(labelled(tester, 'Sign in'), greaterThan(0));
+      expect(labelled(tester, 'Create an account'), greaterThan(0));
+    }
+  });
 
-      final inTheBar = <String>[];
-      for (final label in ['Sign in', 'Create an account']) {
-        for (final e in find.text(label).evaluate()) {
-          if (tester.getTopLeft(find.byWidget(e.widget)).dy < 96) {
-            inTheBar.add(label);
-          }
-        }
+  testWidgets('the bar and the hero each offer both, by default', (
+    tester,
+  ) async {
+    // The shipped page, at both widths. Everything below turns one of
+    // these off; this is what it is turned off from.
+    for (final wide in [true, false]) {
+      await pump(tester, const LandingContent(published: true), wide: wide);
+      expect(drawn(tester), {
+        'bar:Sign in',
+        'bar:Create an account',
+        'hero:Sign in',
+        'hero:Create an account',
+      }, reason: 'wide: $wide');
+    }
+  });
+
+  testWidgets('each switch moves its own button, at its own width', (
+    tester,
+  ) async {
+    // The whole point of there being eight. A switch that also moved
+    // the phone's button, or the hero's, would look right in the
+    // console and wrong on the page — and the operator would have no
+    // way to tell which of the two was lying.
+    const cases = <String, String>{
+      'bar_sign_in_desktop': 'bar:Sign in',
+      'bar_register_desktop': 'bar:Create an account',
+      'hero_sign_in_desktop': 'hero:Sign in',
+      'hero_register_desktop': 'hero:Create an account',
+      'bar_sign_in_mobile': 'bar:Sign in',
+      'bar_register_mobile': 'bar:Create an account',
+      'hero_sign_in_mobile': 'hero:Sign in',
+      'hero_register_mobile': 'hero:Create an account',
+    };
+    const all = {
+      'bar:Sign in',
+      'bar:Create an account',
+      'hero:Sign in',
+      'hero:Create an account',
+    };
+
+    for (final entry in cases.entries) {
+      final desktopSwitch = entry.key.endsWith('_desktop');
+      for (final wide in [true, false]) {
+        await pump(
+          tester,
+          parseLandingContent({
+            'page': {'is_published': true, entry.key: false},
+          }),
+          wide: wide,
+        );
+        // A desktop switch does nothing on a phone, and the other way
+        // round. That is the half of this nobody would notice missing.
+        final gone = desktopSwitch == wide ? {entry.value} : <String>{};
+        expect(
+          drawn(tester),
+          all.difference(gone),
+          reason: '${entry.key} off, wide: $wide',
+        );
       }
-      expect(
-        inTheBar,
-        isNotEmpty,
-        reason: 'registerEnabled: $registerEnabled — no way in on the bar',
-      );
     }
   });
 
   testWidgets('the hero never draws the same label twice', (tester) async {
-    // The exact shape of the defect: within one Wrap — the hero's row
-    // of calls to action — no two buttons may read the same.
+    // The exact shape of the defect that started this: within one Wrap
+    // — the hero's row of calls to action — no two buttons may read the
+    // same.
     for (final registerEnabled in [true, false]) {
-      await pump(
-        tester,
-        LandingContent(published: true, registerEnabled: registerEnabled),
-      );
-
-      final wraps = find.byType(Wrap).evaluate().toList();
-      for (var i = 0; i < wraps.length; i++) {
-        final labels = tester
-            .widgetList<Text>(
-              find.descendant(
-                of: find.byWidget(wraps[i].widget),
-                matching: find.byType(Text),
-              ),
-            )
-            .map((t) => t.data)
-            .whereType<String>()
-            .where((t) => t == 'Sign in' || t == 'Create an account')
-            .toList();
-        expect(
-          labels.length,
-          labels.toSet().length,
-          reason: 'a row offers the same way in twice: $labels',
+      for (final wide in [true, false]) {
+        await pump(
+          tester,
+          LandingContent(published: true, registerEnabled: registerEnabled),
+          wide: wide,
         );
+
+        final wraps = find.byType(Wrap).evaluate().toList();
+        for (var i = 0; i < wraps.length; i++) {
+          final labels = tester
+              .widgetList<Text>(
+                find.descendant(
+                  of: find.byWidget(wraps[i].widget),
+                  matching: find.byType(Text),
+                ),
+              )
+              .map((t) => t.data)
+              .whereType<String>()
+              .where((t) => t == 'Sign in' || t == 'Create an account')
+              .toList();
+          expect(
+            labels.length,
+            labels.toSet().length,
+            reason: 'a row offers the same way in twice: $labels',
+          );
+        }
       }
     }
   });
 
-  // ---- and the switches that take them away ----
-  //
-  // Asked for from the same phone: wanting a quieter top of the page,
-  // or a front page that is a brochure rather than a door, is an
-  // ordinary thing to want, and until `0320` there was no way to say
-  // so. Two switches, because the bar and the hero are two decisions.
-
-  testWidgets('the bar button off empties the bar, and the menu with it', (
+  testWidgets('one button left is the filled one, not a lone outline', (
     tester,
   ) async {
+    // Whichever survives alone becomes the primary. An outlined button
+    // by itself under a headline reads as the secondary half of a pair
+    // whose other half failed to load.
     await pump(
       tester,
-      const LandingContent(published: true, showMastheadButton: false),
+      parseLandingContent({
+        'page': {
+          'is_published': true,
+          'hero_register_mobile': false,
+          'bar_register_mobile': false,
+        },
+      }),
+    );
+    expect(drawn(tester), {'bar:Sign in', 'hero:Sign in'});
+    expect(find.widgetWithText(FilledButton, 'Sign in'), findsWidgets);
+    expect(find.widgetWithText(OutlinedButton, 'Sign in'), findsNothing);
+  });
+
+  testWidgets('all eight off still leaves a way in at the bottom', (
+    tester,
+  ) async {
+    // Deliberate. Somebody who has read to the bottom and wants in
+    // should not have to guess the address, and a footer link is not a
+    // button competing for attention at the top of the page.
+    await pump(
+      tester,
+      parseLandingContent({
+        'page': {
+          'is_published': true,
+          'bar_sign_in_desktop': false,
+          'bar_sign_in_mobile': false,
+          'bar_register_desktop': false,
+          'bar_register_mobile': false,
+          'hero_sign_in_desktop': false,
+          'hero_sign_in_mobile': false,
+          'hero_register_desktop': false,
+          'hero_register_mobile': false,
+        },
+      }),
+    );
+    expect(drawn(tester), isEmpty);
+    expect(labelled(tester, 'Sign in'), greaterThan(0));
+  });
+
+  testWidgets('the menu on a phone follows the bar it folds up', (
+    tester,
+  ) async {
+    // Hiding a button on the bar and leaving it one tap away behind the
+    // menu would be hiding it from nobody.
+    await pump(
+      tester,
+      parseLandingContent({
+        'page': {
+          'is_published': true,
+          'bar_sign_in_mobile': false,
+          'bar_register_mobile': false,
+        },
+      }),
     );
 
-    for (final label in ['Sign in', 'Create an account']) {
-      for (final e in find.text(label).evaluate()) {
-        expect(
-          tester.getTopLeft(find.byWidget(e.widget)).dy,
-          greaterThan(96),
-          reason: '"$label" is still on the bar',
-        );
-      }
-    }
-
-    // The sheet is the bar folded up, so it has to follow: a button
-    // hidden on the bar and left one tap behind the menu is hidden
-    // from nobody.
     await tester.tap(find.byTooltip('Menu'));
     await tester.pumpAndSettle();
     for (final label in ['Sign in', 'Create an account']) {
@@ -188,56 +297,29 @@ void main() {
     }
   });
 
-  testWidgets('the hero buttons off leave the headline and nothing to press', (
-    tester,
-  ) async {
+  testWidgets('and keeps whichever of the two the bar keeps', (tester) async {
     await pump(
       tester,
-      const LandingContent(published: true, showHeroButtons: false),
+      parseLandingContent({
+        'page': {'is_published': true, 'bar_register_mobile': false},
+      }),
     );
 
-    // The headline is still there — this switch takes away buttons,
-    // not the hero.
-    expect(find.textContaining('Accounting'), findsWidgets);
-
-    // Nothing to press between the headline and the bands below it.
-    // Measured against the headline rather than a fixed offset, so the
-    // assertion survives the hero changing height: the buttons sit a
-    // little over a hundred pixels under it, and the next way in — the
-    // footer — is thousands.
-    final headline = tester.getRect(find.textContaining('Accounting').first);
-    for (final label in ['Sign in', 'Create an account']) {
-      for (final e in find.text(label).evaluate()) {
-        final dy = tester.getTopLeft(find.byWidget(e.widget)).dy;
-        expect(
-          dy < headline.top || dy > headline.bottom + 1000,
-          isTrue,
-          reason: '"$label" is still under the headline, at $dy',
-        );
-      }
-    }
-  });
-
-  testWidgets('both off still leaves a way in at the bottom', (tester) async {
-    // Deliberate. Somebody who has read to the bottom and wants in
-    // should not have to guess the address, and a footer link is not a
-    // button competing for attention at the top of the page.
-    await pump(
-      tester,
-      const LandingContent(
-        published: true,
-        showMastheadButton: false,
-        showHeroButtons: false,
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text('Sign in'),
       ),
+      findsOneWidget,
     );
-    expect(labelled(tester, 'Sign in'), greaterThan(0));
-  });
-
-  testWidgets('and by default both are on', (tester) async {
-    // The switches ship on, so a platform that never opens the console
-    // has the page it had before them.
-    const content = LandingContent(published: true);
-    expect(content.showMastheadButton, isTrue);
-    expect(content.showHeroButtons, isTrue);
+    expect(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text('Create an account'),
+      ),
+      findsNothing,
+    );
   });
 }

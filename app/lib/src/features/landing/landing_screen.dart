@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/platform_live.dart';
 import '../../core/safe_link.dart';
 import 'landing_content.dart';
 import 'landing_dark_band.dart';
@@ -20,6 +21,16 @@ class LandingScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Opens the socket for a visitor who is not signed in, so an edit
+    // in the console reaches this page while it is open. The signed-in
+    // shell watches the same provider; this is the half of the platform
+    // that had nobody watching it, which is why the front page was the
+    // one screen that needed a reload to change.
+    //
+    // Watched rather than read so the subscription lives exactly as
+    // long as the page does, and cannot outlive it holding a channel.
+    ref.watch(platformLiveProvider);
+
     final fetched = ref.watch(landingContentProvider);
     // While it loads, and if it fails, show the built-in copy rather
     // than a spinner or an error: the sign-in button is on this page and
@@ -281,7 +292,9 @@ class _Masthead extends StatelessWidget {
             builder: (context, constraints) {
               // The links go before the buttons do. On a phone the way
               // in is the only thing on this bar that has to survive.
-              final wide = constraints.maxWidth > 760;
+              final wide = constraints.maxWidth > Land.wide;
+              final barSignIn = content.barSignIn(wide: wide);
+              final barRegister = content.barRegister(wide: wide);
               return Row(
                 children: [
                   // On a phone the menu is on the left and the mark is
@@ -321,36 +334,37 @@ class _Masthead extends StatelessWidget {
                       ),
                     const SizedBox(width: 16),
                   ],
-                  // One primary way in, always drawn, and on a phone
-                  // that is the only control on the bar — everything
-                  // else is in the sheet behind the menu button.
+                  // 0321. Each button is its own switch in the console,
+                  // by place and by width — a platform can offer
+                  // Create an account on a desktop bar and only Sign in
+                  // on a phone, which is what the two switches `0320`
+                  // shipped could not say.
                   //
-                  // Two bugs met here. The sign-in link used to be
-                  // gated on `wide` alone, so a phone whose platform
-                  // had registration closed got a bar with a burger, a
-                  // logo and nothing to press. And once a button was
-                  // always drawn, a long register label ran the row off
-                  // the right of a narrow screen — hence `Flexible`
-                  // and an ellipsis rather than a fixed row that
-                  // assumes the words are short.
-                  // 0320. The whole way in is a switch in the console.
-                  // Off leaves the bar with the logo and the menu,
-                  // which is what a platform that signs its customers
-                  // up by hand wants at the top of its front page.
-                  if (content.showMastheadButton) ...[
-                    if (wide && content.registerEnabled)
-                      TextButton(
-                        onPressed: preview ? null : () => context.go('/signin'),
-                        child: Text(content.signInLabel),
-                      ),
-                    if (wide && content.registerEnabled)
-                      const SizedBox(width: 8),
+                  // Whichever survives alone becomes the filled one, so
+                  // a bar with a single button never looks half-drawn.
+                  // With both up the register button leads, because the
+                  // new visitor is who the page is for.
+                  //
+                  // `registerEnabled` still decides whether there is a
+                  // register button to place at all: a switch cannot
+                  // conjure a way in the platform has closed.
+                  //
+                  // `Flexible` and the ellipsis because a long register
+                  // label ran the row off the right of a narrow screen
+                  // once a button was drawn there unconditionally.
+                  if (barSignIn && barRegister)
+                    TextButton(
+                      onPressed: preview ? null : () => context.go('/signin'),
+                      child: Text(content.signInLabel),
+                    ),
+                  if (barSignIn && barRegister) const SizedBox(width: 8),
+                  if (barSignIn || barRegister)
                     Flexible(
                       child: FilledButton(
                         onPressed: preview
                             ? null
                             : () => context.go(
-                                content.registerEnabled
+                                barRegister
                                     ? '/signin?mode=register'
                                     : '/signin',
                               ),
@@ -361,7 +375,7 @@ class _Masthead extends StatelessWidget {
                           ),
                         ),
                         child: Text(
-                          content.registerEnabled
+                          barRegister
                               ? content.registerLabel
                               : content.signInLabel,
                           maxLines: 1,
@@ -369,7 +383,6 @@ class _Masthead extends StatelessWidget {
                         ),
                       ),
                     ),
-                  ],
                 ],
               );
             },
@@ -492,7 +505,11 @@ class _Hero extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final split = constraints.maxWidth > 900;
-        final copy = _HeroCopy(content: content, preview: preview);
+        final copy = _HeroCopy(
+          content: content,
+          wide: constraints.maxWidth > Land.wide,
+          preview: preview,
+        );
         final art = _HeroArt(content: content);
         if (!split) {
           return Column(
@@ -533,36 +550,49 @@ class _HeroFullBleed extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth > 760;
-        return SizedBox(
-          height: wide ? 620 : 560,
-          width: double.infinity,
+        // A floor, not a fixed height. The band was `SizedBox(height:)`,
+        // which is right until the copy is taller than the number —
+        // and on a narrow phone, with a headline that wraps to five
+        // lines and two buttons under it, it is. That overflowed by
+        // four pixels and hid the bottom of the hero, which is exactly
+        // the content the band exists to show.
+        //
+        // The picture and the scrim fill whatever the copy asks for.
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: wide ? 620 : 560,
+            minWidth: double.infinity,
+          ),
           child: Stack(
-            fit: StackFit.expand,
             children: [
-              Image.network(
-                content.heroImageUrl!,
-                fit: BoxFit.cover,
-                // A hero that will not load must not leave white text
-                // on white. The ink stands in until it does.
-                errorBuilder: (context, _, __) =>
-                    Container(color: const Color(0xFF0F172A)),
-                loadingBuilder: (context, child, progress) => progress == null
-                    ? child
-                    : Container(color: const Color(0xFF0F172A)),
+              Positioned.fill(
+                child: Image.network(
+                  content.heroImageUrl!,
+                  fit: BoxFit.cover,
+                  // A hero that will not load must not leave white text
+                  // on white. The ink stands in until it does.
+                  errorBuilder: (context, _, __) =>
+                      Container(color: const Color(0xFF0F172A)),
+                  loadingBuilder: (context, child, progress) => progress == null
+                      ? child
+                      : Container(color: const Color(0xFF0F172A)),
+                ),
               ),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: [
-                      const Color(0xFF0F172A).withValues(alpha: 0.88),
-                      const Color(0xFF0F172A).withValues(alpha: 0.62),
-                      const Color(
-                        0xFF0F172A,
-                      ).withValues(alpha: wide ? 0.2 : 0.5),
-                    ],
-                    stops: const [0, 0.55, 1],
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        const Color(0xFF0F172A).withValues(alpha: 0.88),
+                        const Color(0xFF0F172A).withValues(alpha: 0.62),
+                        const Color(
+                          0xFF0F172A,
+                        ).withValues(alpha: wide ? 0.2 : 0.5),
+                      ],
+                      stops: const [0, 0.55, 1],
+                    ),
                   ),
                 ),
               ),
@@ -579,6 +609,7 @@ class _HeroFullBleed extends StatelessWidget {
                         constraints: const BoxConstraints(maxWidth: 640),
                         child: _HeroCopy(
                           content: content,
+                          wide: wide,
                           preview: preview,
                           onInk: true,
                         ),
@@ -598,11 +629,18 @@ class _HeroFullBleed extends StatelessWidget {
 class _HeroCopy extends StatelessWidget {
   const _HeroCopy({
     required this.content,
+    required this.wide,
     this.preview = false,
     this.onInk = false,
   });
 
   final LandingContent content;
+
+  /// Passed in rather than measured here: the copy sits inside a
+  /// column narrower than the page, and the console's switches are
+  /// about the visitor's screen, not about the box this text landed in.
+  final bool wide;
+
   final bool preview;
 
   /// Drawn over the photograph, where every colour has to come from the
@@ -612,6 +650,8 @@ class _HeroCopy extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final heroSignIn = content.heroSignIn(wide: wide);
+    final heroRegister = content.heroRegister(wide: wide);
     final ink = onInk ? Colors.white : scheme.onSurface;
     final inkSoft = onInk
         ? Colors.white.withValues(alpha: 0.82)
@@ -639,33 +679,26 @@ class _HeroCopy extends StatelessWidget {
             ),
           ),
         ],
-        // 0320. The hero's buttons are a switch in the console. Off
-        // means the headline and the picture and nothing to press —
-        // the shape a platform wants when its front page is a
-        // brochure rather than a door. The gap goes with them, or the
-        // hero ends in a band of empty space.
-        if (content.showHeroButtons) ...[
+        // 0321. Each hero button is its own switch, by width and by
+        // way in. All four off means the headline and the picture and
+        // nothing to press — the shape a platform wants when its front
+        // page is a brochure rather than a door — and the gap goes with
+        // them, or the hero ends in a band of empty space.
+        //
+        // Whichever survives alone is drawn filled, for the same reason
+        // the bar's is: one outlined button under a headline reads as
+        // the secondary half of a pair whose other half failed to load.
+        if (heroSignIn || heroRegister) ...[
           const SizedBox(height: 32),
           Wrap(
             spacing: 12,
             runSpacing: 12,
             children: [
-              // Registration open: the new visitor's button leads and
-              // the returning one's follows. Registration closed: there
-              // is one way in, so there is one button.
-              //
-              // This drew both regardless, and with `register_enabled`
-              // off the primary fell back to the sign-in label — two
-              // buttons, same words, same destination, side by side. A
-              // pair of identical buttons is not a smaller call to
-              // action, it is a page that looks broken.
               FilledButton(
                 onPressed: preview
                     ? null
                     : () => context.go(
-                        content.registerEnabled
-                            ? '/signin?mode=register'
-                            : '/signin',
+                        heroRegister ? '/signin?mode=register' : '/signin',
                       ),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
@@ -674,12 +707,16 @@ class _HeroCopy extends StatelessWidget {
                   ),
                 ),
                 child: Text(
-                  content.registerEnabled
-                      ? content.registerLabel
-                      : content.signInLabel,
+                  heroRegister ? content.registerLabel : content.signInLabel,
                 ),
               ),
-              if (content.registerEnabled)
+              // Only when both are up. It drew regardless once, and
+              // with registration closed the filled one fell back to
+              // the sign-in label — two buttons, same words, same
+              // destination, side by side. A pair of identical buttons
+              // is not a smaller call to action, it is a page that
+              // looks broken.
+              if (heroSignIn && heroRegister)
                 OutlinedButton(
                   onPressed: preview ? null : () => context.go('/signin'),
                   style: OutlinedButton.styleFrom(
@@ -2174,35 +2211,40 @@ class _Burger extends StatelessWidget {
                     onPick(entry.value);
                   },
                 ),
-              // 0320. The sheet is the bar folded up, so it follows the
-              // bar's switch — hiding the button in the bar and leaving
-              // it one tap away behind the menu would be hiding
-              // nothing. The rule above it goes too, or the sheet ends
-              // in a line with nothing under it.
-              if (content.showMastheadButton) ...[
+              // 0321. The sheet is the bar folded up, so it follows the
+              // bar's mobile pair — the sheet only ever opens on a
+              // phone, and hiding a button in the bar while leaving it
+              // one tap away behind the menu would be hiding it from
+              // nobody. The rule above goes when both do, or the sheet
+              // ends in a line with nothing under it.
+              if (content.barSignIn(wide: false) ||
+                  content.barRegister(wide: false)) ...[
                 Divider(color: Land.border(scheme), height: 1),
                 Padding(
                   padding: const EdgeInsets.all(Land.gap),
                   child: Column(
                     children: [
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: preview
-                              ? null
-                              : () {
-                                  Navigator.of(sheet).pop();
-                                  context.go('/signin');
-                                },
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                            side: BorderSide(color: Land.border(scheme)),
+                      if (content.barSignIn(wide: false))
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: preview
+                                ? null
+                                : () {
+                                    Navigator.of(sheet).pop();
+                                    context.go('/signin');
+                                  },
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 18),
+                              side: BorderSide(color: Land.border(scheme)),
+                            ),
+                            child: Text(content.signInLabel),
                           ),
-                          child: Text(content.signInLabel),
                         ),
-                      ),
-                      if (content.registerEnabled) ...[
+                      if (content.barSignIn(wide: false) &&
+                          content.barRegister(wide: false))
                         const SizedBox(height: 10),
+                      if (content.barRegister(wide: false))
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton(
@@ -2218,7 +2260,6 @@ class _Burger extends StatelessWidget {
                             child: Text(content.registerLabel),
                           ),
                         ),
-                      ],
                     ],
                   ),
                 ),

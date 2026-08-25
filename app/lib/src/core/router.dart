@@ -434,8 +434,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: ':id',
                 parentNavigatorKey: _rootKey,
-                builder: (_, st) =>
-                    TicketScreen(id: st.pathParameters['id']!),
+                builder: (_, st) => TicketScreen(id: st.pathParameters['id']!),
               ),
             ],
           ),
@@ -444,23 +443,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const ForecastScreen(),
           ),
           GoRoute(path: '/till', builder: (_, __) => const TillScreen()),
-          GoRoute(
-            path: '/floor',
-            builder: (_, __) => const FloorPlanScreen(),
-          ),
-          GoRoute(
-            path: '/kitchen',
-            builder: (_, __) => const KitchenScreen(),
-          ),
+          GoRoute(path: '/floor', builder: (_, __) => const FloorPlanScreen()),
+          GoRoute(path: '/kitchen', builder: (_, __) => const KitchenScreen()),
           GoRoute(path: '/diary', builder: (_, __) => const DiaryScreen()),
           GoRoute(
             path: '/memberships',
             builder: (_, __) => const MembershipsScreen(),
           ),
-          GoRoute(
-            path: '/loyalty',
-            builder: (_, __) => const LoyaltyScreen(),
-          ),
+          GoRoute(path: '/loyalty', builder: (_, __) => const LoyaltyScreen()),
           GoRoute(path: '/voids', builder: (_, __) => const VoidsScreen()),
           GoRoute(
             path: '/promotions',
@@ -479,15 +469,9 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/pos-reports',
             builder: (_, __) => const PosReportsScreen(),
           ),
-          GoRoute(
-            path: '/recipes',
-            builder: (_, __) => const RecipesScreen(),
-          ),
+          GoRoute(path: '/recipes', builder: (_, __) => const RecipesScreen()),
           GoRoute(path: '/stalls', builder: (_, __) => const StallsScreen()),
-          GoRoute(
-            path: '/takings',
-            builder: (_, __) => const TakingsScreen(),
-          ),
+          GoRoute(path: '/takings', builder: (_, __) => const TakingsScreen()),
           GoRoute(path: '/kiosk', builder: (_, __) => const KioskScreen()),
           GoRoute(
             path: '/counters',

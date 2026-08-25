@@ -59,6 +59,20 @@ typedef LandingAppLink = ({
 /// page yet. The screen shows its built-in copy in that case rather than
 /// an error: a visitor who arrives before anybody has written the site
 /// should still be able to sign in.
+/// The picture the hero shows when nobody has chosen one.
+///
+/// `app/web/hero-dashboard.png`, served from the same origin as the
+/// page: a screenshot of the real dashboard, rendered from the real
+/// widgets by `screenshots/dashboard_shot.dart` rather than drawn to
+/// look like one. Same-origin so it survives a strict connect policy
+/// and does not hand a third party the referrer of every visitor to
+/// the front page.
+///
+/// `0321` sets the same value as the column default, so the database
+/// and the offline fallback agree about what an unconfigured platform
+/// looks like.
+const defaultHeroImageUrl = 'https://iakauntan.com/hero-dashboard.png';
+
 /// What the page says about the product before anybody has written
 /// anything.
 ///
@@ -259,12 +273,18 @@ class LandingContent {
     this.heroHeadline =
         'Accounting, CRM, payroll and e-Invoice for Malaysian business',
     this.heroSubhead,
-    this.heroImageUrl,
+    this.heroImageUrl = defaultHeroImageUrl,
     this.signInLabel = 'Sign in',
     this.registerLabel = 'Create an account',
     this.registerEnabled = true,
-    this.showMastheadButton = true,
-    this.showHeroButtons = true,
+    this.barSignInDesktop = true,
+    this.barSignInMobile = true,
+    this.barRegisterDesktop = true,
+    this.barRegisterMobile = true,
+    this.heroSignInDesktop = true,
+    this.heroSignInMobile = true,
+    this.heroRegisterDesktop = true,
+    this.heroRegisterMobile = true,
     this.companyName,
     this.companyRegNo,
     this.address,
@@ -310,38 +330,69 @@ class LandingContent {
   final String heroHeadline;
   final String? heroSubhead;
 
-  /// The picture beside the hero copy.
+  /// The picture behind the hero copy.
   ///
   /// A column on `landing_page` since 0290 that nothing read until the
   /// hero became two columns — the CMS wrote it and the page ignored
-  /// it. Null is not a gap: the hero draws a plain panel in its place,
-  /// so the two-column shape holds before anybody has a screenshot to
-  /// put there.
+  /// it. It shipped null, and null drew a plain panel: the right answer
+  /// for a platform that has not chosen an image, and the wrong one for
+  /// this platform, which has. `0321` makes the rendered dashboard the
+  /// default in the database and here, so a page nobody has configured
+  /// still shows the product.
+  ///
+  /// Still nullable, because it can still be cleared — and because a
+  /// payload from before the default has to parse. The hero falls back
+  /// to the drawn panel when it is null and to a flat ink field when
+  /// the address will not load, so neither leaves white text on white.
   final String? heroImageUrl;
   final String signInLabel;
   final String registerLabel;
   final bool registerEnabled;
 
-  /// Whether the top bar draws a way in, and whether the hero does.
+  /// One switch per button a visitor can actually see.
   ///
-  /// `registerEnabled` chooses *which* way in a place offers; these two
-  /// choose whether the place offers one at all. Separate switches
-  /// because the bar and the hero are separate decisions — a bar button
-  /// with no hero buttons reads as a product site, hero buttons with a
-  /// bare bar read as a landing page, and a platform that onboards its
-  /// customers by hand may want neither.
+  /// A button is three decisions, not one: where it sits (the top bar
+  /// or under the headline), how wide the screen is when it is drawn,
+  /// and which way in it offers. `0320` had two switches and could not
+  /// express "Create an account on the desktop bar, only Sign in on a
+  /// phone", which is an ordinary thing to want.
   ///
-  /// The bar's switch governs the phone's menu sheet too: the sheet is
-  /// where the bar's controls go when the screen is too narrow to draw
-  /// them, so leaving it there would be hiding nothing. The footer's
-  /// links stay either way — somebody who has read to the bottom and
-  /// wants in should not have to guess the address.
+  /// The bar's mobile pair governs the menu sheet as well as the bar:
+  /// the sheet is where the bar's controls go when the screen is too
+  /// narrow to draw them, so hiding a button in one and leaving it in
+  /// the other would be hiding it from nobody.
   ///
-  /// Both default true here as well as in the database, so a payload
-  /// that predates the columns, or the shipped fallback content, still
-  /// gives a visitor a way in.
-  final bool showMastheadButton;
-  final bool showHeroButtons;
+  /// `registerEnabled` still decides whether the platform takes
+  /// registrations at all; these say where its button is drawn. The
+  /// footer's links stay whatever is set here — somebody who has read
+  /// to the bottom and wants in should not have to guess the address.
+  ///
+  /// All eight default true here as well as in the database, so a
+  /// payload that predates the columns, or the shipped fallback
+  /// content, still gives a visitor a way in.
+  final bool barSignInDesktop;
+  final bool barSignInMobile;
+  final bool barRegisterDesktop;
+  final bool barRegisterMobile;
+  final bool heroSignInDesktop;
+  final bool heroSignInMobile;
+  final bool heroRegisterDesktop;
+  final bool heroRegisterMobile;
+
+  /// Which way in each place offers at this width.
+  ///
+  /// Four questions rather than eight fields at every call site, and
+  /// the one place `registerEnabled` is folded in: a register button is
+  /// only ever drawn where the platform is actually taking
+  /// registrations, so no caller has to remember to ask twice.
+  bool barSignIn({required bool wide}) =>
+      wide ? barSignInDesktop : barSignInMobile;
+  bool barRegister({required bool wide}) =>
+      registerEnabled && (wide ? barRegisterDesktop : barRegisterMobile);
+  bool heroSignIn({required bool wide}) =>
+      wide ? heroSignInDesktop : heroSignInMobile;
+  bool heroRegister({required bool wide}) =>
+      registerEnabled && (wide ? heroRegisterDesktop : heroRegisterMobile);
   final String? companyName;
   final String? companyRegNo;
   final String? address;
@@ -576,17 +627,35 @@ LandingContent parseLandingContent(Object? raw) {
         str('hero_headline') ??
         'Accounting, CRM, payroll and e-Invoice for Malaysian business',
     heroSubhead: str('hero_subhead'),
-    heroImageUrl: str('hero_image_url'),
+    heroImageUrl: str('hero_image_url') ?? defaultHeroImageUrl,
     signInLabel: str('sign_in_label') ?? 'Sign in',
     registerLabel: str('register_label') ?? 'Create an account',
     registerEnabled: page['register_enabled'] is bool
         ? page['register_enabled'] as bool
         : true,
-    showMastheadButton: page['show_masthead_button'] is bool
-        ? page['show_masthead_button'] as bool
+    barSignInDesktop: page['bar_sign_in_desktop'] is bool
+        ? page['bar_sign_in_desktop'] as bool
         : true,
-    showHeroButtons: page['show_hero_buttons'] is bool
-        ? page['show_hero_buttons'] as bool
+    barSignInMobile: page['bar_sign_in_mobile'] is bool
+        ? page['bar_sign_in_mobile'] as bool
+        : true,
+    barRegisterDesktop: page['bar_register_desktop'] is bool
+        ? page['bar_register_desktop'] as bool
+        : true,
+    barRegisterMobile: page['bar_register_mobile'] is bool
+        ? page['bar_register_mobile'] as bool
+        : true,
+    heroSignInDesktop: page['hero_sign_in_desktop'] is bool
+        ? page['hero_sign_in_desktop'] as bool
+        : true,
+    heroSignInMobile: page['hero_sign_in_mobile'] is bool
+        ? page['hero_sign_in_mobile'] as bool
+        : true,
+    heroRegisterDesktop: page['hero_register_desktop'] is bool
+        ? page['hero_register_desktop'] as bool
+        : true,
+    heroRegisterMobile: page['hero_register_mobile'] is bool
+        ? page['hero_register_mobile'] as bool
         : true,
     companyName: str('company_name'),
     companyRegNo: str('company_reg_no'),

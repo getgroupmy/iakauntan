@@ -10,6 +10,9 @@ Future<bool> saveTextFile(String filename, String mimeType, String text) async {
 }
 
 Future<bool> saveBytesFile(
-    String filename, String mimeType, Uint8List bytes) async {
+  String filename,
+  String mimeType,
+  Uint8List bytes,
+) async {
   return false;
 }

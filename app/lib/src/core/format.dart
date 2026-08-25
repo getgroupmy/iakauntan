@@ -42,7 +42,10 @@ class Fmt {
     // Drop trailing zeros so 2.0000 shows as 2 but 2.5 stays 2.5.
     return v == v.roundToDouble()
         ? v.toStringAsFixed(0)
-        : v.toString().replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+        : v
+              .toString()
+              .replaceAll(RegExp(r'0+$'), '')
+              .replaceAll(RegExp(r'\.$'), '');
   }
 
   /// Share counts. Whole numbers are the norm and "340.00 shares" reads
@@ -58,7 +61,8 @@ class Fmt {
     return '${v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2)}%';
   }
 
-  static String date(DateTime? value) => value == null ? '—' : _date.format(value);
+  static String date(DateTime? value) =>
+      value == null ? '—' : _date.format(value);
 
   static String longDate(DateTime? value) =>
       value == null ? '—' : _longDate.format(value);
@@ -82,8 +86,18 @@ class Fmt {
   static String monthName(int month) => _monthNames[(month - 1) % 12];
 
   static const _monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
 
   static String monthYear(DateTime? value) =>

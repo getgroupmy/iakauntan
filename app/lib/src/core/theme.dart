@@ -83,15 +83,14 @@ class AppColors extends ThemeExtension<AppColors> {
     Color? info,
     Color? moneyIn,
     Color? moneyOut,
-  }) =>
-      AppColors(
-        success: success ?? this.success,
-        warning: warning ?? this.warning,
-        danger: danger ?? this.danger,
-        info: info ?? this.info,
-        moneyIn: moneyIn ?? this.moneyIn,
-        moneyOut: moneyOut ?? this.moneyOut,
-      );
+  }) => AppColors(
+    success: success ?? this.success,
+    warning: warning ?? this.warning,
+    danger: danger ?? this.danger,
+    info: info ?? this.info,
+    moneyIn: moneyIn ?? this.moneyIn,
+    moneyOut: moneyOut ?? this.moneyOut,
+  );
 
   @override
   AppColors lerp(AppColors? other, double t) {
@@ -170,8 +169,9 @@ class AppTheme {
       colorScheme: scheme,
       fontFamily: fontFamily,
       extensions: [colors],
-      scaffoldBackgroundColor:
-          isDark ? scheme.surface : const Color(0xFFF6F8F8),
+      scaffoldBackgroundColor: isDark
+          ? scheme.surface
+          : const Color(0xFFF6F8F8),
       visualDensity: VisualDensity.compact,
       hoverColor: hover,
       focusColor: focus,
@@ -229,10 +229,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(Radii.md),
           ),
-        ).copyWith(
-          mouseCursor: _clickable,
-          side: _focusRing(scheme.onSurface),
-        ),
+        ).copyWith(mouseCursor: _clickable, side: _focusRing(scheme.onSurface)),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
@@ -248,10 +245,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(Radii.md),
           ),
-        ).copyWith(
-          mouseCursor: _clickable,
-          side: _focusRing(scheme.primary),
-        ),
+        ).copyWith(mouseCursor: _clickable, side: _focusRing(scheme.primary)),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
@@ -260,10 +254,7 @@ class AppTheme {
             fontWeight: FontWeight.w600,
             fontSize: 14,
           ),
-        ).copyWith(
-          mouseCursor: _clickable,
-          side: _focusRing(scheme.primary),
-        ),
+        ).copyWith(mouseCursor: _clickable, side: _focusRing(scheme.primary)),
       ),
       chipTheme: ChipThemeData(
         side: BorderSide.none,
@@ -344,24 +335,40 @@ class AppTheme {
     const tabular = [FontFeature.tabularFigures()];
     final base = ThemeData(brightness: brightness).textTheme;
 
-    TextStyle? t(TextStyle? s, {double? size, FontWeight? weight, double? ls}) =>
-        s?.copyWith(
-          fontFamily: fontFamily,
-          fontFeatures: tabular,
-          fontSize: size,
-          fontWeight: weight,
-          letterSpacing: ls,
-        );
+    TextStyle? t(
+      TextStyle? s, {
+      double? size,
+      FontWeight? weight,
+      double? ls,
+    }) => s?.copyWith(
+      fontFamily: fontFamily,
+      fontFeatures: tabular,
+      fontSize: size,
+      fontWeight: weight,
+      letterSpacing: ls,
+    );
 
     return base.copyWith(
       displaySmall: t(base.displaySmall, weight: FontWeight.w800, ls: -0.8),
       headlineMedium: t(base.headlineMedium, weight: FontWeight.w700, ls: -0.6),
-      headlineSmall: t(base.headlineSmall,
-          size: 22, weight: FontWeight.w700, ls: -0.4),
-      titleLarge:
-          t(base.titleLarge, size: 19, weight: FontWeight.w700, ls: -0.3),
-      titleMedium:
-          t(base.titleMedium, size: 15, weight: FontWeight.w600, ls: -0.1),
+      headlineSmall: t(
+        base.headlineSmall,
+        size: 22,
+        weight: FontWeight.w700,
+        ls: -0.4,
+      ),
+      titleLarge: t(
+        base.titleLarge,
+        size: 19,
+        weight: FontWeight.w700,
+        ls: -0.3,
+      ),
+      titleMedium: t(
+        base.titleMedium,
+        size: 15,
+        weight: FontWeight.w600,
+        ls: -0.1,
+      ),
       titleSmall: t(base.titleSmall, size: 13, weight: FontWeight.w600),
       bodyLarge: t(base.bodyLarge, size: 15),
       bodyMedium: t(base.bodyMedium, size: 13.5),
@@ -372,20 +379,21 @@ class AppTheme {
     );
   }
 
-  static final _clickable =
-      WidgetStateProperty.resolveWith<MouseCursor?>((states) =>
-          states.contains(WidgetState.disabled)
-              ? SystemMouseCursors.basic
-              : SystemMouseCursors.click);
+  static final _clickable = WidgetStateProperty.resolveWith<MouseCursor?>(
+    (states) => states.contains(WidgetState.disabled)
+        ? SystemMouseCursors.basic
+        : SystemMouseCursors.click,
+  );
 
   /// A ring, not just a tint. The default focused overlay is a wash of the
   /// button's own colour, which on a filled button is nearly invisible —
   /// and keyboard users are the ones who cannot see where they are.
   static WidgetStateProperty<BorderSide?> _focusRing(Color color) =>
-      WidgetStateProperty.resolveWith((states) =>
-          states.contains(WidgetState.focused)
-              ? BorderSide(color: color, width: 2)
-              : null);
+      WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.focused)
+            ? BorderSide(color: color, width: 2)
+            : null,
+      );
 
   static OutlineInputBorder _border(Color color, {double width = 1}) =>
       OutlineInputBorder(

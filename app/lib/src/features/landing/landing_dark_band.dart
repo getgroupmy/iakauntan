@@ -100,10 +100,10 @@ class LandingDarkBand extends StatelessWidget {
                   final perPage = constraints.maxWidth > 980
                       ? 4
                       : constraints.maxWidth > 700
-                          ? 3
-                          : constraints.maxWidth > 460
-                              ? 2
-                              : 1;
+                      ? 3
+                      : constraints.maxWidth > 460
+                      ? 2
+                      : 1;
                   return RevealOnScroll(
                     child: LandingCarousel(
                       perPage: perPage,

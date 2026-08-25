@@ -116,8 +116,10 @@ class _LandingCarouselState extends State<LandingCarousel> {
                   itemCount: _pages,
                   itemBuilder: (context, page) {
                     final start = page * widget.perPage;
-                    final end =
-                        (start + widget.perPage).clamp(0, widget.items.length);
+                    final end = (start + widget.perPage).clamp(
+                      0,
+                      widget.items.length,
+                    );
                     final slice = widget.items.sublist(start, end);
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -131,8 +133,7 @@ class _LandingCarouselState extends State<LandingCarousel> {
                                 ? slice[i]
                                 : const SizedBox.shrink(),
                           ),
-                          if (i < widget.perPage - 1)
-                            const SizedBox(width: 16),
+                          if (i < widget.perPage - 1) const SizedBox(width: 16),
                         ],
                       ],
                     );

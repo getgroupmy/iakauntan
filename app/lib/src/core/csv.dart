@@ -86,7 +86,7 @@ CsvTable parseCsvTable(String text, String? Function(String) fieldFor) {
       rows: const [],
       problems: [
         'None of these columns were recognised: ${raw.join(', ')}. '
-            'The first row has to be a header.'
+            'The first row has to be a header.',
       ],
     );
   }
@@ -125,8 +125,7 @@ CsvTable parseCsvTable(String text, String? Function(String) fieldFor) {
 /// answers to. Comparison ignores case, spaces and underscores, so
 /// "Credit Limit", "credit_limit" and "creditlimit" are one column.
 String? Function(String) headerMapper(Map<String, List<String>> aliases) {
-  String key(String s) =>
-      s.toLowerCase().replaceAll(RegExp(r'[\s_\-\.]'), '');
+  String key(String s) => s.toLowerCase().replaceAll(RegExp(r'[\s_\-\.]'), '');
 
   final lookup = <String, String>{};
   aliases.forEach((field, names) {

@@ -188,8 +188,11 @@ void main() {
     // refreshed, because the first person to notice would not be
     // believed.
     for (final table in platformLiveTables) {
-      expect(platformLiveProviders(table), isNotEmpty,
-          reason: '$table is subscribed to and refreshes nothing');
+      expect(
+        platformLiveProviders(table),
+        isNotEmpty,
+        reason: '$table is subscribed to and refreshes nothing',
+      );
     }
   });
 
@@ -207,17 +210,66 @@ void main() {
     }
   });
 
-  test('the channel is inert until somebody is signed in', () {
-    // Every policy on these tables is granted to `authenticated`, so a
-    // channel opened without a user can only ever receive nothing. It
-    // matters that this is checked before the Supabase client is
-    // reached for, or reading the provider on a signed-out app — or in
-    // this test — would need a Supabase that has been initialised.
+  test('the channel is inert where there is no Supabase to open one', () {
+    // A widget test renders real screens against overridden providers
+    // and never calls `Supabase.initialize`. The provider has to answer
+    // that before it reaches for the client — and before it reads the
+    // user, which goes through the same client — or every shell test
+    // fails on a socket the shell only wanted to listen to.
     final container = ProviderContainer(
       overrides: [currentUserProvider.overrideWithValue(null)],
     );
     addTearDown(container.dispose);
 
     expect(container.read(platformLiveProvider).connected, isFalse);
+  });
+
+  test('a signed-out visitor is no longer a reason not to connect', () {
+    // It used to be. Postgres changes are delivered per subscriber
+    // under RLS and every policy on these tables is granted to
+    // `authenticated`, so a channel opened without a user received
+    // nothing — and the front page, the one screen read by people who
+    // are not signed in, was the one screen that never updated.
+    //
+    // `0322` gives it something to receive that carries no rows: a
+    // nudge naming the table that changed, which the page answers by
+    // asking `landing_page()` again. So being signed out is a reason to
+    // subscribe to less, not a reason to subscribe to nothing.
+    //
+    // Asserted on the map rather than on a live socket, which needs a
+    // server: every landing table the nudge names has to be a table
+    // this file knows what to refresh for, or the message arrives and
+    // nothing happens.
+    for (final table in [
+      'landing_page',
+      'landing_sections',
+      'landing_app_links',
+      'landing_stats',
+      'landing_testimonials',
+      'landing_logos',
+      'platform_modules',
+    ]) {
+      expect(
+        platformLiveProviders(table),
+        isNotEmpty,
+        reason: '$table nudges the front page and refreshes nothing',
+      );
+      expect(platformLiveProviders(table), contains(anything), reason: table);
+    }
+    // And the landing page itself is what a landing nudge refreshes.
+    for (final table in [
+      'landing_page',
+      'landing_sections',
+      'landing_app_links',
+      'landing_stats',
+      'landing_testimonials',
+      'landing_logos',
+    ]) {
+      expect(
+        platformLiveProviders(table),
+        contains(landingContentProvider),
+        reason: '$table changes and the page does not',
+      );
+    }
   });
 }

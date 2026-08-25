@@ -126,21 +126,31 @@ const _settle = Duration(milliseconds: 300);
 /// Watched by the shell, beside `liveUpdatesProvider`. Unlike that one
 /// this needs no organization — the brand and the module catalogue are
 /// read before anybody has chosen a company, and on the landing page
-/// there is no company to choose. It needs a signed-in user, because
-/// every policy on these tables is granted to `authenticated` and a
-/// channel opened without one can only ever receive nothing.
+/// there is no company to choose.
+///
+/// It used to need a signed-in user, and returned a channel-less object
+/// without one, because every policy on these tables is granted to
+/// `authenticated` and Postgres changes are delivered per subscriber
+/// under RLS. True, and it made the front page — the one screen read by
+/// people who are not signed in — the one screen that never updated. It
+/// connects either way now: a stranger receives no rows and does
+/// receive `0322`'s nudges, which carry no rows to withhold.
+///
+/// Rebuilt on sign-in and sign-out, which is what watching the user is
+/// for: the socket has to be reopened with the new token before the
+/// table subscriptions mean anything.
 final platformLiveProvider = Provider<PlatformLive>((ref) {
-  final user = ref.watch(currentUserProvider);
-
   final live = PlatformLive(ref);
   ref.onDispose(live.dispose);
 
-  // Checked before the client is reached for, so this can be read on a
-  // signed-out app — and in a test — without a Supabase that has been
-  // initialised.
-  if (user == null) return live;
+  // Asked before the client is reached for — and before the user is,
+  // since reading them goes through the same client. A widget test
+  // renders real screens without a Supabase, and a screen that opened a
+  // socket anyway would fail there and nowhere else.
+  if (!ref.watch(supabaseReadyProvider)) return live;
 
-  live._connect(ref.watch(supabaseProvider));
+  final user = ref.watch(currentUserProvider);
+  live._connect(ref.watch(supabaseProvider), signedIn: user != null);
   return live;
 });
 
@@ -156,7 +166,7 @@ class PlatformLive {
   /// Whether the socket is carrying platform changes at this moment.
   var connected = false;
 
-  void _connect(SupabaseClient client) {
+  void _connect(SupabaseClient client, {required bool signedIn}) {
     _client = client;
     // One topic for everybody. There is nothing to filter on — these
     // tables have no `org_id` and the rows are the platform's — so what
@@ -164,14 +174,37 @@ class PlatformLive {
     // where that decision belongs.
     final channel = client.channel('platform');
 
-    for (final table in _watchers.keys) {
-      channel.onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: table,
-        callback: (_) => _touched(table),
-      );
+    // Postgres changes carry the row, so they only reach somebody the
+    // policy on the table lets read it — which is `authenticated`, and
+    // no further. A stranger on the front page gets nothing here.
+    if (signedIn) {
+      for (final table in _watchers.keys) {
+        channel.onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: table,
+          callback: (_) => _touched(table),
+        );
+      }
     }
+
+    // Which is why the landing tables also nudge. `0322` puts a trigger
+    // on each of them that broadcasts the name of the table that
+    // changed — the name, and nothing else — to a public topic, and
+    // this answers it by refetching through `landing_page()`. The gate
+    // is untouched: the socket says something was edited, the function
+    // still decides whether it has been published.
+    //
+    // Subscribed to whether or not anybody is signed in. An
+    // administrator with the console open in one tab and the front page
+    // in another is the person most likely to notice it missing.
+    channel.onBroadcast(
+      event: 'changed',
+      callback: (payload) {
+        final table = payload['table'];
+        if (table is String && _watchers.containsKey(table)) _touched(table);
+      },
+    );
 
     channel.subscribe((status, error) {
       connected = status == RealtimeSubscribeStatus.subscribed;

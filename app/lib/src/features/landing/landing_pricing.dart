@@ -64,8 +64,8 @@ class _LandingPricingState extends State<LandingPricing> {
             final columns = constraints.maxWidth > 820
                 ? 3
                 : constraints.maxWidth > 520
-                    ? 2
-                    : 1;
+                ? 2
+                : 1;
             final width = (constraints.maxWidth - (columns - 1) * 12) / columns;
             return Wrap(
               spacing: 12,
@@ -153,8 +153,8 @@ class _ModuleTile extends StatelessWidget {
             color: chosen
                 ? scheme.primary
                 : hovered
-                    ? scheme.outline
-                    : scheme.outlineVariant,
+                ? scheme.outline
+                : scheme.outlineVariant,
             width: chosen ? 2 : 1,
           ),
         ),
@@ -243,10 +243,7 @@ class _Total extends StatelessWidget {
                 chosen == 0
                     ? 'Just the books'
                     : '$chosen add-on${chosen == 1 ? '' : 's'}',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: scheme.onSurfaceVariant,
-                ),
+                style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
               ),
               const SizedBox(height: 2),
               // The figure animates rather than jumping, so a tick reads

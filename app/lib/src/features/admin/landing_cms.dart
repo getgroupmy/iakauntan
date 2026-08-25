@@ -213,6 +213,21 @@ class _PageFormState extends ConsumerState<_PageForm> {
     'meta_description': 'Link preview description',
   };
 
+  /// The eight switches, in the order somebody reads the page.
+  ///
+  /// Keyed by column so the form, the patch and the database cannot
+  /// drift: adding a switch is adding a line here.
+  static const _wayIn = <String, String>{
+    'bar_sign_in_desktop': 'Sign in — top bar, desktop',
+    'bar_register_desktop': 'Create an account — top bar, desktop',
+    'bar_sign_in_mobile': 'Sign in — top bar and menu, phone',
+    'bar_register_mobile': 'Create an account — top bar and menu, phone',
+    'hero_sign_in_desktop': 'Sign in — under the headline, desktop',
+    'hero_register_desktop': 'Create an account — under the headline, desktop',
+    'hero_sign_in_mobile': 'Sign in — under the headline, phone',
+    'hero_register_mobile': 'Create an account — under the headline, phone',
+  };
+
   late final Map<String, TextEditingController> _c = {
     for (final key in _fields.keys)
       key: TextEditingController(text: '${widget.existing?[key] ?? ''}'),
@@ -222,8 +237,9 @@ class _PageFormState extends ConsumerState<_PageForm> {
   late bool _pricing = widget.existing?['show_pricing'] == true;
   // Absent reads as on, the same way `register_enabled` does: a payload
   // saved before the columns existed must not hide the way in.
-  late bool _mastheadButton = widget.existing?['show_masthead_button'] != false;
-  late bool _heroButtons = widget.existing?['show_hero_buttons'] != false;
+  late final Map<String, bool> _ways = {
+    for (final key in _wayIn.keys) key: widget.existing?[key] != false,
+  };
   bool _busy = false;
 
   @override
@@ -252,12 +268,10 @@ class _PageFormState extends ConsumerState<_PageForm> {
     if (_pricing != (widget.existing?['show_pricing'] == true)) {
       patch['show_pricing'] = _pricing;
     }
-    if (_mastheadButton !=
-        (widget.existing?['show_masthead_button'] != false)) {
-      patch['show_masthead_button'] = _mastheadButton;
-    }
-    if (_heroButtons != (widget.existing?['show_hero_buttons'] != false)) {
-      patch['show_hero_buttons'] = _heroButtons;
+    for (final entry in _ways.entries) {
+      if (entry.value != (widget.existing?[entry.key] != false)) {
+        patch[entry.key] = entry.value;
+      }
     }
     return patch;
   }
@@ -387,29 +401,35 @@ class _PageFormState extends ConsumerState<_PageForm> {
                 'customers on by invitation.',
               ),
             ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _mastheadButton,
-              onChanged: _busy
-                  ? null
-                  : (v) => setState(() => _mastheadButton = v),
-              title: const Text('Button on the top bar'),
-              subtitle: const Text(
-                'Off leaves the bar with the logo and the menu, and takes '
-                'the button out of the menu on a phone too.',
-              ),
+            const Divider(height: Space.lg),
+            Text(
+              'Where each way in is drawn',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
             ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _heroButtons,
-              onChanged: _busy ? null : (v) => setState(() => _heroButtons = v),
-              title: const Text('Buttons under the headline'),
-              subtitle: const Text(
-                'Off leaves the headline and the picture with nothing to '
-                'press. The links in the footer stay either way, so a '
-                'visitor who reads to the bottom can still get in.',
-              ),
+            const SizedBox(height: 4),
+            const Text(
+              'One switch per button, by place and by screen width. The '
+              'links in the footer stay whatever is set here, so a '
+              'visitor who reads to the bottom can always get in.',
             ),
+            for (final entry in _wayIn.entries)
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _ways[entry.key]!,
+                onChanged: _busy
+                    ? null
+                    : (v) => setState(() => _ways[entry.key] = v),
+                title: Text(entry.value),
+                // Registration closed means there is no account to
+                // create, so the four register switches have nothing to
+                // act on until it is open again. Said here rather than
+                // by hiding them: an operator who turns registration
+                // back on should find their choices where they left
+                // them.
+                subtitle: !_register && entry.key.contains('_register_')
+                    ? const Text('Waiting on Offer Create an account')
+                    : null,
+              ),
             const Divider(height: Space.lg),
             for (final entry in _fields.entries) ...[
               Row(

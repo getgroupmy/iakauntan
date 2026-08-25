@@ -42,6 +42,15 @@ abstract final class Land {
   /// narrower than the screen because a line of text 1900 pixels long
   /// is a line nobody finishes.
   static const maxWidth = 1200.0;
+
+  /// Where the page stops being a desktop and starts being a phone.
+  ///
+  /// The masthead folds its links into a menu here and the hero band
+  /// changes height, and `0321` lets the console switch each way-in
+  /// button on either side of it — so the number is named once rather
+  /// than written out at each of the places that has to agree with the
+  /// others.
+  static const wide = 760.0;
   static const gutter = 24.0;
 
   /// A hairline, not a rule.
@@ -95,17 +104,11 @@ abstract final class Land {
     color: s.onSurface,
   );
 
-  static TextStyle body(ColorScheme s) => TextStyle(
-    fontSize: 15,
-    height: 1.6,
-    color: muted(s),
-  );
+  static TextStyle body(ColorScheme s) =>
+      TextStyle(fontSize: 15, height: 1.6, color: muted(s));
 
-  static TextStyle small(ColorScheme s) => TextStyle(
-    fontSize: 13,
-    height: 1.7,
-    color: muted(s),
-  );
+  static TextStyle small(ColorScheme s) =>
+      TextStyle(fontSize: 13, height: 1.7, color: muted(s));
 }
 
 /// The small capitalised line above a heading.
@@ -175,8 +178,9 @@ class LandingSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Column(
-      crossAxisAlignment:
-          centred ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      crossAxisAlignment: centred
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
       children: [
         LandingKicker(kicker),
         const SizedBox(height: Land.gap),

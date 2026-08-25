@@ -819,13 +819,24 @@ void main() {
       expect(c.heroImageUrl, 'https://cdn.test/hero.png');
     });
 
-    test('and is null when nobody has uploaded one', () {
+    test('and cleared falls back to the picture that ships', () {
+      // 0321. It shipped null, and null drew the empty window frame —
+      // right for a platform that has not chosen an image, wrong for
+      // this one, which has a screenshot of its own dashboard sitting
+      // in the web bundle. Cleared in the console, the built-in comes
+      // back, which is what every other defaulted field here does.
       final c = parseLandingContent({
         'page': {'hero_image_url': '   '},
       });
-      // The hero draws its empty window frame rather than collapsing,
-      // so null is a layout the page has rather than a gap in it.
-      expect(c.heroImageUrl, isNull);
+      expect(c.heroImageUrl, defaultHeroImageUrl);
+      expect(parseLandingContent(null).heroImageUrl, defaultHeroImageUrl);
+    });
+
+    test('the picture that ships is served from this origin', () {
+      // Same origin as the page: it survives a strict connect policy
+      // and does not hand a third party the referrer of every visitor
+      // to the front page.
+      expect(defaultHeroImageUrl, startsWith('https://iakauntan.com/'));
     });
 
     test('the call to action arrives whole', () {
@@ -855,47 +866,112 @@ void main() {
   });
 
   group('the switches that take the buttons off', () {
-    test('both are read', () {
+    test('all eight are read', () {
       final c = parseLandingContent({
-        'page': {'show_masthead_button': false, 'show_hero_buttons': false},
+        'page': {
+          'bar_sign_in_desktop': false,
+          'bar_sign_in_mobile': false,
+          'bar_register_desktop': false,
+          'bar_register_mobile': false,
+          'hero_sign_in_desktop': false,
+          'hero_sign_in_mobile': false,
+          'hero_register_desktop': false,
+          'hero_register_mobile': false,
+        },
       });
-      expect(c.showMastheadButton, isFalse);
-      expect(c.showHeroButtons, isFalse);
+      expect(c.barSignInDesktop, isFalse);
+      expect(c.barSignInMobile, isFalse);
+      expect(c.barRegisterDesktop, isFalse);
+      expect(c.barRegisterMobile, isFalse);
+      expect(c.heroSignInDesktop, isFalse);
+      expect(c.heroSignInMobile, isFalse);
+      expect(c.heroRegisterDesktop, isFalse);
+      expect(c.heroRegisterMobile, isFalse);
     });
 
-    test('and they are separate decisions', () {
-      // The whole reason there are two: a bar button with no hero
-      // buttons and hero buttons with a bare bar are both pages
-      // somebody wants, and one switch would make them move together.
-      final barOnly = parseLandingContent({
-        'page': {'show_hero_buttons': false},
-      });
-      expect(barOnly.showMastheadButton, isTrue);
-      expect(barOnly.showHeroButtons, isFalse);
+    test('and every one is its own decision', () {
+      // The reason there are eight. Turning one off must move nothing
+      // else — the failure this catches is a column read into the wrong
+      // field, which no amount of clicking in the console would
+      // explain.
+      const keys = [
+        'bar_sign_in_desktop',
+        'bar_sign_in_mobile',
+        'bar_register_desktop',
+        'bar_register_mobile',
+        'hero_sign_in_desktop',
+        'hero_sign_in_mobile',
+        'hero_register_desktop',
+        'hero_register_mobile',
+      ];
+      for (final off in keys) {
+        final c = parseLandingContent({
+          'page': {off: false},
+        });
+        final drawn = {
+          'bar_sign_in_desktop': c.barSignInDesktop,
+          'bar_sign_in_mobile': c.barSignInMobile,
+          'bar_register_desktop': c.barRegisterDesktop,
+          'bar_register_mobile': c.barRegisterMobile,
+          'hero_sign_in_desktop': c.heroSignInDesktop,
+          'hero_sign_in_mobile': c.heroSignInMobile,
+          'hero_register_desktop': c.heroRegisterDesktop,
+          'hero_register_mobile': c.heroRegisterMobile,
+        };
+        expect(
+          drawn.entries.where((e) => !e.value).map((e) => e.key),
+          [off],
+          reason: 'turning off $off moved something else',
+        );
+      }
+    });
 
-      final heroOnly = parseLandingContent({
-        'page': {'show_masthead_button': false},
+    test('the four questions the page asks pick the right pair', () {
+      // `barSignIn(wide:)` and the three like it are what the screen
+      // calls. A desktop switch answering a phone would be invisible in
+      // the console and obvious to a visitor.
+      final c = parseLandingContent({
+        'page': {'bar_sign_in_mobile': false, 'hero_register_desktop': false},
       });
-      expect(heroOnly.showMastheadButton, isFalse);
-      expect(heroOnly.showHeroButtons, isTrue);
+      expect(c.barSignIn(wide: true), isTrue);
+      expect(c.barSignIn(wide: false), isFalse);
+      expect(c.heroRegister(wide: true), isFalse);
+      expect(c.heroRegister(wide: false), isTrue);
+    });
+
+    test('registration closed places no register button anywhere', () {
+      // The switches say where a register button is drawn;
+      // `register_enabled` says whether there is one to draw. Folded in
+      // once, in the four questions, so no caller has to remember.
+      final c = parseLandingContent({
+        'page': {'register_enabled': false},
+      });
+      expect(c.barRegister(wide: true), isFalse);
+      expect(c.barRegister(wide: false), isFalse);
+      expect(c.heroRegister(wide: true), isFalse);
+      expect(c.heroRegister(wide: false), isFalse);
+      // And the sign-in switches are untouched by it, so turning
+      // registration back on finds the page as it was left.
+      expect(c.barSignIn(wide: true), isTrue);
+      expect(c.heroSignIn(wide: false), isTrue);
     });
 
     test('absent reads as on, and so does nonsense', () {
       // A payload saved before the columns existed, a fallback with no
       // page at all, or a string where a boolean belongs. Every one of
       // them has to leave the visitor a way in: a page that hides its
-      // own front door because a key was missing is worse than one
-      // that shows a button somebody wanted hidden.
+      // own front door because a key was missing is worse than one that
+      // shows a button somebody wanted hidden.
       for (final page in <Map<String, dynamic>>[
         <String, dynamic>{},
-        {'show_masthead_button': 'false', 'show_hero_buttons': 0},
+        {'bar_sign_in_desktop': 'false', 'hero_register_mobile': 0},
       ]) {
         final c = parseLandingContent({'page': page});
-        expect(c.showMastheadButton, isTrue, reason: '$page');
-        expect(c.showHeroButtons, isTrue, reason: '$page');
+        expect(c.barSignIn(wide: true), isTrue, reason: '$page');
+        expect(c.heroRegister(wide: false), isTrue, reason: '$page');
       }
-      expect(parseLandingContent(null).showMastheadButton, isTrue);
-      expect(parseLandingContent(null).showHeroButtons, isTrue);
+      expect(parseLandingContent(null).barSignIn(wide: false), isTrue);
+      expect(parseLandingContent(null).heroSignIn(wide: true), isTrue);
     });
   });
 }

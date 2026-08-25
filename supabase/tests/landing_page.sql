@@ -1263,23 +1263,30 @@ end $$;
 
 
 -- ---------------------------------------------------------------------
--- 0320: the two switches that take the buttons off the page
+-- 0321: one switch per button, and a hero picture out of the box
 --
--- `register_enabled` chooses which way in a place offers. These two
--- choose whether a place offers one at all — the button on the top bar
--- (and, in the app, the menu sheet that is the bar folded up on a
--- phone) and the buttons under the hero headline.
+-- `0320` had two switches, one per place. `0321` has eight — place,
+-- width, and which way in — because a button is three decisions and an
+-- operator wanting "Create an account on the desktop bar, only Sign in
+-- on a phone" could not say so.
 --
 -- What is asserted is the shape the page has to have for the switches
--- to be believed: both default on, both reach the browser, both save,
--- and neither can be set by anybody but a platform administrator. The
--- failure this catches is a switch that the console writes and the
--- payload drops, which is worse than no switch because it is trusted.
+-- to be believed: all eight default on, each saves on its own without
+-- disturbing the other seven, an untouched one survives somebody else's
+-- edit, and none of them can be set by anybody but a platform
+-- administrator. The failure this catches is a switch the console
+-- writes and the payload drops, which is worse than no switch because
+-- it is trusted.
 -- ---------------------------------------------------------------------
 do $$
 declare
   v_admin uuid := pg_temp.test_user();
-  v_out jsonb; v_ok boolean;
+  v_out jsonb; v_ok boolean; v_key text; v_other text;
+  v_keys text[] := array[
+    'bar_sign_in_desktop', 'bar_sign_in_mobile',
+    'bar_register_desktop', 'bar_register_mobile',
+    'hero_sign_in_desktop', 'hero_sign_in_mobile',
+    'hero_register_desktop', 'hero_register_mobile'];
 begin
   insert into public.platform_admins (user_id) values (v_admin)
     on conflict do nothing;
@@ -1288,86 +1295,130 @@ begin
   perform public.platform_save_landing_page(
     jsonb_build_object('is_published', true));
 
-  -- Shipped on, both of them. A platform that never opens the console
-  -- has the page it had before the columns existed.
+  -- Shipped on, all eight. A platform that never opens the console has
+  -- the page it had before the columns existed.
   v_out := public.landing_page();
-  perform pg_temp.check_eq('the bar button ships on',
-    v_out -> 'page' ->> 'show_masthead_button', 'true');
-  perform pg_temp.check_eq('and the hero buttons do too',
-    v_out -> 'page' ->> 'show_hero_buttons', 'true');
+  foreach v_key in array v_keys loop
+    perform pg_temp.check_eq(format('%s ships on', v_key),
+      v_out -> 'page' ->> v_key, 'true');
+  end loop;
 
-  -- Off, one at a time, because the whole point is that they are two
-  -- decisions: a bar button with no hero buttons and hero buttons with
-  -- a bare bar are both pages somebody wants.
+  -- One at a time, and only the one. This is the whole reason there are
+  -- eight rather than two: a switch that also moved the phone's button
+  -- would look right in the console and wrong on the page.
+  foreach v_key in array v_keys loop
+    perform public.platform_save_landing_page(
+      jsonb_build_object(v_key, false));
+    v_out := public.landing_page();
+    perform pg_temp.check_eq(format('%s goes off', v_key),
+      v_out -> 'page' ->> v_key, 'false');
+    foreach v_other in array v_keys loop
+      if v_other <> v_key then
+        perform pg_temp.check_eq(
+          format('%s is untouched by %s', v_other, v_key),
+          v_out -> 'page' ->> v_other, 'true');
+      end if;
+    end loop;
+    -- Back on, so the next one starts from the same page.
+    perform public.platform_save_landing_page(
+      jsonb_build_object(v_key, true));
+  end loop;
+
+  -- A patch that says nothing about them changes none of them. The
+  -- console sends only what the operator touched, so an untouched
+  -- switch must survive somebody else's edit.
   perform public.platform_save_landing_page(
-    jsonb_build_object('show_masthead_button', false));
-  v_out := public.landing_page();
-  perform pg_temp.check_eq('the bar button goes off on its own',
-    v_out -> 'page' ->> 'show_masthead_button', 'false');
-  perform pg_temp.check_eq('and the hero keeps its buttons',
-    v_out -> 'page' ->> 'show_hero_buttons', 'true');
-
-  perform public.platform_save_landing_page(
-    jsonb_build_object('show_hero_buttons', false));
-  v_out := public.landing_page();
-  perform pg_temp.check_eq('and the hero goes off on its own',
-    v_out -> 'page' ->> 'show_hero_buttons', 'false');
-  perform pg_temp.check_eq('without turning the bar back on',
-    v_out -> 'page' ->> 'show_masthead_button', 'false');
-
-  -- A patch that says nothing about them changes neither. This is the
-  -- rule the whole form depends on: the console sends only what the
-  -- operator touched, so an untouched switch must survive somebody
-  -- else's edit.
+    jsonb_build_object('hero_sign_in_mobile', false));
   perform public.platform_save_landing_page(
     jsonb_build_object('hero_headline', 'Books that balance'));
   v_out := public.landing_page();
-  perform pg_temp.check_eq('an unrelated edit leaves the bar switch alone',
-    v_out -> 'page' ->> 'show_masthead_button', 'false');
-  perform pg_temp.check_eq('and the hero switch alone',
-    v_out -> 'page' ->> 'show_hero_buttons', 'false');
+  perform pg_temp.check_eq('an unrelated edit leaves a switch alone',
+    v_out -> 'page' ->> 'hero_sign_in_mobile', 'false');
   perform pg_temp.check_eq('while saving what it did change',
     v_out -> 'page' ->> 'hero_headline', 'Books that balance');
-
-  -- And back on again, so this is a switch rather than a one-way door.
-  perform public.platform_save_landing_page(
-    jsonb_build_object(
-      'show_masthead_button', true, 'show_hero_buttons', true));
-  v_out := public.landing_page();
-  perform pg_temp.check_eq('the bar button comes back',
-    v_out -> 'page' ->> 'show_masthead_button', 'true');
-  perform pg_temp.check_eq('and so do the hero buttons',
-    v_out -> 'page' ->> 'show_hero_buttons', 'true');
 
   -- The draft door carries them too. 0318's shared body is the reason
   -- this is one assertion rather than a second implementation: a key
   -- added to the page is added once.
   perform public.platform_save_landing_page(
-    jsonb_build_object('is_published', false, 'show_hero_buttons', false));
+    jsonb_build_object('is_published', false));
   perform pg_temp.check_eq('the preview shows the draft switch',
-    public.platform_landing_preview() -> 'page' ->> 'show_hero_buttons',
+    public.platform_landing_preview() -> 'page' ->> 'hero_sign_in_mobile',
     'false');
   perform pg_temp.check_true('while the page itself shows nothing at all',
     public.landing_page() -> 'page' = 'null'::jsonb);
 
-  -- Nobody else may touch either. The page is the whole platform's
+  -- The hero has a picture without anybody choosing one, and it is
+  -- served from the same origin as the page.
+  perform pg_temp.check_eq('the hero ships with a picture',
+    public.platform_landing_preview() -> 'page' ->> 'hero_image_url',
+    'https://iakauntan.com/hero-dashboard.png');
+
+  -- Nobody else may touch any of it. The page is the whole platform's
   -- front door, and an ordinary account holder — the same person, with
   -- the badge taken off — is not an administrator.
   perform public.platform_save_landing_page(
-    jsonb_build_object('is_published', true, 'show_masthead_button', true));
+    jsonb_build_object('is_published', true, 'bar_sign_in_mobile', true));
   delete from public.platform_admins where user_id = v_admin;
   perform pg_temp.sign_in_as(v_admin);
   v_ok := false;
   begin
     perform public.platform_save_landing_page(
-      jsonb_build_object('show_masthead_button', false));
+      jsonb_build_object('bar_sign_in_mobile', false));
   exception when sqlstate '42501' then v_ok := true;
   end;
   perform pg_temp.sign_in_as(v_admin);
   perform pg_temp.check_true(
     'somebody who is not a platform administrator is refused', v_ok);
   perform pg_temp.check_eq('and the switch is where the administrator left it',
-    public.landing_page() -> 'page' ->> 'show_masthead_button', 'true');
+    public.landing_page() -> 'page' ->> 'bar_sign_in_mobile', 'true');
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- 0322: the front page is told when to look again
+--
+-- The trigger sends the name of the table that changed to a public
+-- broadcast topic and nothing else, so a stranger's browser can know to
+-- re-ask `landing_page()` without the socket ever carrying a draft.
+--
+-- Asserted here as structure rather than as delivery: whether Realtime
+-- hands the message on is Realtime's business and needs a running
+-- server, but which tables carry the trigger, and that the payload is
+-- the table name alone, are this repository's.
+-- ---------------------------------------------------------------------
+do $$
+declare v_src text; v_table text;
+begin
+  select prosrc into v_src
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'app' and p.proname = 'landing_touched';
+
+  perform pg_temp.check_true('the nudge exists', v_src is not null);
+
+  -- The one thing that would turn a nudge into a leak. Matched on a
+  -- field reference — `new.` or `old.` — rather than on the bare words,
+  -- because the function's own comment says why it does not use them
+  -- and a test that reads prose tests nothing.
+  perform pg_temp.check_true('and carries no row with it',
+    v_src !~ '\m(new|old)\.');
+  perform pg_temp.check_true('only the name of the table that changed',
+    v_src ~ 'tg_table_name');
+
+  -- Every table the payload is built from. One left off is a page that
+  -- updates for some edits and not others, which is harder to notice
+  -- than one that never updates at all.
+  foreach v_table in array array[
+    'landing_page', 'landing_sections', 'landing_app_links',
+    'landing_stats', 'landing_testimonials', 'landing_logos',
+    'platform_modules']
+  loop
+    perform pg_temp.check_eq(format('%s nudges the front page', v_table),
+      (select count(*)::int from pg_trigger t
+        where t.tgrelid = format('public.%I', v_table)::regclass
+          and not t.tgisinternal
+          and t.tgfoid = 'app.landing_touched()'::regprocedure), 1);
+  end loop;
 end $$;
 
 
