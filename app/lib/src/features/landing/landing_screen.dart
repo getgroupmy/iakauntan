@@ -88,11 +88,18 @@ class LandingPage extends StatelessWidget {
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  _Band(
-                    child: RevealOnScroll(
-                      child: _Hero(content: content, preview: preview),
+                  // Full bleed when there is a photograph to bleed:
+                  // outside `_Band`, because the whole point is that it
+                  // touches all four edges rather than sitting inside
+                  // the page's gutter.
+                  if (content.heroImageUrl != null)
+                    _HeroFullBleed(content: content, preview: preview)
+                  else
+                    _Band(
+                      child: RevealOnScroll(
+                        child: _Hero(content: content, preview: preview),
+                      ),
                     ),
-                  ),
                   // Directly under the hero, answering the first
                   // question anybody asks of accounting software here.
                   if (content.badges.isNotEmpty)
@@ -422,16 +429,23 @@ class _FallbackMark extends StatelessWidget {
   }
 }
 
-/// The hero, in two columns.
+/// The hero, one of two shapes.
 ///
-/// Copy on the left, a picture on the right — `hero_image_url`, which
-/// has been a column on `landing_page` since 0290 and was read by
-/// nothing until now. With no picture the right column draws a plain
-/// framed panel instead of collapsing, so the shape of the page does
-/// not depend on whether somebody has uploaded a screenshot yet, and
-/// so nothing here invents a product shot that does not exist.
+/// **Full bleed when there is a picture.** The reference page — and
+/// most of this category — runs a photograph edge to edge and sets the
+/// headline straight over it. That is not a bigger version of a
+/// two-column hero, it is a different layout, and it is most of why
+/// this page did not look like the reference however carefully the
+/// bands below it were matched.
 ///
-/// One column under 900 logical pixels, picture last.
+/// **Two columns when there is not.** A full-bleed hero with no
+/// photograph is a coloured rectangle with text on it, which is worse
+/// than the split. So with `hero_image_url` unset the copy sits beside
+/// the drawn application window instead, and the page still has a
+/// shape.
+///
+/// Upload one image in the console and the hero changes layout. That is
+/// the single largest thing an operator can do to this page.
 class _Hero extends StatelessWidget {
   const _Hero({required this.content, this.preview = false});
 
@@ -464,15 +478,107 @@ class _Hero extends StatelessWidget {
   }
 }
 
-class _HeroCopy extends StatelessWidget {
-  const _HeroCopy({required this.content, this.preview = false});
+/// The hero as the reference draws it: a photograph filling the band,
+/// a scrim, and the copy over the top of it.
+///
+/// The scrim is not decoration. Marketing photographs are chosen for
+/// mood rather than for contrast, and white text on an unmodified
+/// photograph is text that some visitors cannot read — a gradient from
+/// near-opaque at the left to nearly clear at the right keeps the copy
+/// legible whatever was uploaded, while leaving the half of the picture
+/// that usually carries the subject alone.
+class _HeroFullBleed extends StatelessWidget {
+  const _HeroFullBleed({required this.content, this.preview = false});
 
   final LandingContent content;
   final bool preview;
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth > 760;
+        return SizedBox(
+          height: wide ? 620 : 560,
+          width: double.infinity,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.network(
+                content.heroImageUrl!,
+                fit: BoxFit.cover,
+                // A hero that will not load must not leave white text
+                // on white. The ink stands in until it does.
+                errorBuilder: (context, _, __) =>
+                    Container(color: const Color(0xFF0F172A)),
+                loadingBuilder: (context, child, progress) =>
+                    progress == null
+                        ? child
+                        : Container(color: const Color(0xFF0F172A)),
+              ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      const Color(0xFF0F172A).withValues(alpha: 0.88),
+                      const Color(0xFF0F172A).withValues(alpha: 0.62),
+                      const Color(0xFF0F172A).withValues(alpha: wide ? 0.2 : 0.5),
+                    ],
+                    stops: const [0, 0.55, 1],
+                  ),
+                ),
+              ),
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: Land.maxWidth),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: Land.gutter,
+                    ),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 640),
+                        child: _HeroCopy(
+                          content: content,
+                          preview: preview,
+                          onInk: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _HeroCopy extends StatelessWidget {
+  const _HeroCopy({
+    required this.content,
+    this.preview = false,
+    this.onInk = false,
+  });
+
+  final LandingContent content;
+  final bool preview;
+
+  /// Drawn over the photograph, where every colour has to come from the
+  /// scrim's side of the contrast rather than the page's.
+  final bool onInk;
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final ink = onInk ? Colors.white : scheme.onSurface;
+    final inkSoft =
+        onInk ? Colors.white.withValues(alpha: 0.82) : Land.muted(scheme);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -482,14 +588,17 @@ class _HeroCopy extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: Land.gap),
             child: LandingKicker(content.tagline!),
           ),
-        Text(content.heroHeadline, style: Land.display(scheme)),
+        Text(
+          content.heroHeadline,
+          style: Land.display(scheme).copyWith(color: ink),
+        ),
         if (content.heroSubhead != null) ...[
           const SizedBox(height: 20),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
             child: Text(
               content.heroSubhead!,
-              style: Land.body(scheme).copyWith(fontSize: 17),
+              style: Land.body(scheme).copyWith(fontSize: 17, color: inkSoft),
             ),
           ),
         ],
@@ -525,7 +634,12 @@ class _HeroCopy extends StatelessWidget {
                   horizontal: 28,
                   vertical: 20,
                 ),
-                side: BorderSide(color: Land.border(scheme)),
+                foregroundColor: onInk ? Colors.white : null,
+                side: BorderSide(
+                  color: onInk
+                      ? Colors.white.withValues(alpha: 0.5)
+                      : Land.border(scheme),
+                ),
               ),
               child: Text(content.signInLabel),
             ),
