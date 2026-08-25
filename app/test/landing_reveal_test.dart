@@ -100,4 +100,34 @@ void main() {
 
     expect(opacityOf(tester), 1);
   });
+
+  testWidgets('reduce motion shows the content and survives leaving', (
+    tester,
+  ) async {
+    // Somebody who has asked their system for less movement gets the
+    // child with no animation at all — and so no ticker is ever made.
+    // The controller was a `late final`, so the first thing to touch it
+    // was `dispose`, which built one while the element was already
+    // deactivated and threw. Reduce motion made every landing page a
+    // crash on the way out.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: Scaffold(
+            body: RevealOnScroll(child: Container(key: const Key('card'))),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // No fade to wait for: the content is simply there.
+    expect(find.byKey(const Key('card')), findsOneWidget);
+
+    // And leaving the page is not an error.
+    await tester.pumpWidget(const MaterialApp(home: Scaffold()));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 }

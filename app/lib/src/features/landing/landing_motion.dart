@@ -26,15 +26,24 @@ class RevealOnScroll extends StatefulWidget {
 
 class _RevealOnScrollState extends State<RevealOnScroll>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
+  // Made on the first build that needs one, not on the first access.
+  // Somebody who has asked their system to reduce motion never takes
+  // the animated branch at all, so they never pay for a ticker — and,
+  // when the page goes away, `dispose` must not be the thing that
+  // creates one: building an AnimationController needs to look up
+  // TickerMode, and by dispose the element is deactivated, which
+  // throws. That is what a `late final` field did here.
+  AnimationController? _c;
+  bool _started = false;
+
+  AnimationController _controller() => _c ??= AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 420),
   );
-  bool _started = false;
 
   @override
   void dispose() {
-    _c.dispose();
+    _c?.dispose();
     super.dispose();
   }
 
@@ -42,7 +51,7 @@ class _RevealOnScrollState extends State<RevealOnScroll>
     if (_started || fractionVisible <= 0) return;
     _started = true;
     Future<void>.delayed(widget.delay, () {
-      if (mounted) _c.forward();
+      if (mounted) _c?.forward();
     });
   }
 
@@ -55,12 +64,13 @@ class _RevealOnScrollState extends State<RevealOnScroll>
       return widget.child;
     }
 
+    final c = _controller();
     return _VisibilityProbe(
       onVisible: _startWhenVisible,
       child: AnimatedBuilder(
-        animation: _c,
+        animation: c,
         builder: (context, child) {
-          final t = Curves.easeOutCubic.transform(_c.value);
+          final t = Curves.easeOutCubic.transform(c.value);
           return Opacity(
             opacity: t,
             child: Transform.translate(

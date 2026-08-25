@@ -296,7 +296,7 @@ class _Masthead extends StatelessWidget {
                       preview: preview,
                       onPick: _scrollTo,
                     ),
-                  LandingMark(content: content, size: 32),
+                  Flexible(child: LandingMark(content: content, size: 32)),
                   const Spacer(),
                   if (wide) ...[
                     // The products link opens a panel of the blocks
@@ -323,26 +323,49 @@ class _Masthead extends StatelessWidget {
                       ),
                     const SizedBox(width: 16),
                   ],
-                  if (wide)
+                  // One primary way in, always drawn, and on a phone
+                  // that is the only control on the bar — everything
+                  // else is in the sheet behind the menu button.
+                  //
+                  // Two bugs met here. The sign-in link used to be
+                  // gated on `wide` alone, so a phone whose platform
+                  // had registration closed got a bar with a burger, a
+                  // logo and nothing to press. And once a button was
+                  // always drawn, a long register label ran the row off
+                  // the right of a narrow screen — hence `Flexible`
+                  // and an ellipsis rather than a fixed row that
+                  // assumes the words are short.
+                  if (wide && content.registerEnabled)
                     TextButton(
                       onPressed: preview ? null : () => context.go('/signin'),
                       child: Text(content.signInLabel),
                     ),
-                  if (content.registerEnabled) ...[
+                  if (wide && content.registerEnabled)
                     const SizedBox(width: 8),
-                    FilledButton(
+                  Flexible(
+                    child: FilledButton(
                       onPressed: preview
                           ? null
-                          : () => context.go('/signin?mode=register'),
+                          : () => context.go(
+                                content.registerEnabled
+                                    ? '/signin?mode=register'
+                                    : '/signin',
+                              ),
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 20,
                           vertical: 16,
                         ),
                       ),
-                      child: Text(content.registerLabel),
+                      child: Text(
+                        content.registerEnabled
+                            ? content.registerLabel
+                            : content.signInLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ],
+                  ),
                 ],
               );
             },
@@ -391,13 +414,21 @@ class LandingMark extends StatelessWidget {
         else
           _FallbackMark(size: size),
         const SizedBox(width: 12),
-        Text(
-          content.wordmark,
-          style: TextStyle(
-            fontSize: size * 0.62,
-            fontWeight: FontWeight.w700,
-            color: scheme.primary,
-            letterSpacing: -0.5,
+        // Shrinks rather than overflowing. On a phone the bar carries a
+        // menu button, this mark and a way in, and a long wordmark had
+        // no way to give ground — the row simply ran off the right of
+        // the screen.
+        Flexible(
+          child: Text(
+            content.wordmark,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: size * 0.62,
+              fontWeight: FontWeight.w700,
+              color: scheme.primary,
+              letterSpacing: -0.5,
+            ),
           ),
         ),
       ],
@@ -607,6 +638,15 @@ class _HeroCopy extends StatelessWidget {
           spacing: 12,
           runSpacing: 12,
           children: [
+            // Registration open: the new visitor's button leads and
+            // the returning one's follows. Registration closed: there
+            // is one way in, so there is one button.
+            //
+            // This drew both regardless, and with `register_enabled`
+            // off the primary fell back to the sign-in label — two
+            // buttons, same words, same destination, side by side. A
+            // pair of identical buttons is not a smaller call to
+            // action, it is a page that looks broken.
             FilledButton(
               onPressed: preview
                   ? null
@@ -627,22 +667,23 @@ class _HeroCopy extends StatelessWidget {
                     : content.signInLabel,
               ),
             ),
-            OutlinedButton(
-              onPressed: preview ? null : () => context.go('/signin'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 28,
-                  vertical: 20,
+            if (content.registerEnabled)
+              OutlinedButton(
+                onPressed: preview ? null : () => context.go('/signin'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 20,
+                  ),
+                  foregroundColor: onInk ? Colors.white : null,
+                  side: BorderSide(
+                    color: onInk
+                        ? Colors.white.withValues(alpha: 0.5)
+                        : Land.border(scheme),
+                  ),
                 ),
-                foregroundColor: onInk ? Colors.white : null,
-                side: BorderSide(
-                  color: onInk
-                      ? Colors.white.withValues(alpha: 0.5)
-                      : Land.border(scheme),
-                ),
+                child: Text(content.signInLabel),
               ),
-              child: Text(content.signInLabel),
-            ),
           ],
         ),
       ],
