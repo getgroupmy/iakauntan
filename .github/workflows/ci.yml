@@ -671,16 +671,26 @@ jobs:
       # used for here is saying out loud what is about to happen.
       - name: Apply
         if: steps.creds.outputs.ready == 'true' && env.AUTOPUSH == 'true'
+        # The pending list comes in through the environment rather than
+        # `${{ }}` inside the script. An expression is pasted in as text
+        # before bash reads the line, so a value carrying a backtick —
+        # which is what the CLI's table gave this step once — becomes a
+        # command substitution and runs. That printed
+        # "0320: command not found" and swallowed the name it was meant
+        # to announce. A shell variable is read as data and cannot do
+        # that, whatever the CLI decides to draw next.
+        env:
+          PENDING: ${{ steps.state.outputs.pending }}
         run: |
           set -euo pipefail
-          if [ -n "${{ steps.state.outputs.pending }}" ]; then
-            echo "::notice::Applying to the hosted project: ${{ steps.state.outputs.pending }}"
+          if [ -n "$PENDING" ]; then
+            echo "::notice::Applying to the hosted project: $PENDING"
           fi
           scripts/ci/retry.sh supabase db push --linked
           {
             echo
-            if [ -n "${{ steps.state.outputs.pending }}" ]; then
-              echo "**Applied:** \`${{ steps.state.outputs.pending }}\`"
+            if [ -n "$PENDING" ]; then
+              echo "**Applied:** \`$PENDING\`"
             else
               echo "**Nothing was pending**, so the push had nothing to do."
             fi
