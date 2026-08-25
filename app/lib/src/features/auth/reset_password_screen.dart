@@ -64,7 +64,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Password changed. You are signed in.')),
         );
-        context.go('/');
+        context.go('/dashboard');
       }
     } on AuthException catch (e) {
       if (mounted) setState(() => _error = e.message);

@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787670905.5642612,
-    "ast_hash": "a006931b1480ec00479b90f09f242ff8",
+    "mtime": 1787671457.0200272,
+    "ast_hash": "7c542c5bef302f1cfe4385af562caa61",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787669638.0441856,
-    "ast_hash": "f94608ca7933d7a25b1535333dcb38e8",
+    "mtime": 1787671192.384278,
+    "ast_hash": "e1a91b7fe055726b916118ab6b4068ca",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -980,8 +980,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/reset_password_screen.dart": {
-    "mtime": 1787669638.0361857,
-    "ast_hash": "4da541c8d8b5d9e41427b1f88c9e58a4",
+    "mtime": 1787671172.574559,
+    "ast_hash": "a93e8e2984736e2b27f853443773aecd",
     "semantic_hash": ""
   },
   "app/test/reset_password_test.dart": {
@@ -4797,6 +4797,11 @@
   "supabase/migrations/0322_the_front_page_updates_itself.sql": {
     "mtime": 1787670104.7569258,
     "ast_hash": "864e22df8cd98bcb8b2aa8d51616fadf",
+    "semantic_hash": ""
+  },
+  "app/test/router_redirect_test.dart": {
+    "mtime": 1787671396.7642903,
+    "ast_hash": "827bb7244615edbf5cd7f336388a5b16",
     "semantic_hash": ""
   }
 }

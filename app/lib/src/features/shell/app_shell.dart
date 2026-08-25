@@ -126,7 +126,7 @@ const _destinations = <_Dest>[
     'Dashboard',
     Icons.dashboard_outlined,
     Icons.dashboard,
-    '/',
+    '/dashboard',
     primary: true,
   ),
   _Dest(
@@ -379,13 +379,7 @@ const _destinations = <_Dest>[
   // the person who runs the shop, and Reports is gated on accounting
   // that a food stall may not have bought.
   // The line at the door, beside the floor plan it feeds.
-  _Dest(
-    'Queue',
-    Icons.people_outline,
-    Icons.people,
-    '/queue',
-    module: 'pos',
-  ),
+  _Dest('Queue', Icons.people_outline, Icons.people, '/queue', module: 'pos'),
   // Everything out on a motorbike, beside the queue for the same
   // reason: both are somebody standing at the pass being asked how much
   // longer.
@@ -716,7 +710,9 @@ class AppShell extends ConsumerWidget {
     var bestLength = 0;
     for (var i = 0; i < dests.length; i++) {
       final path = dests[i].path;
-      final match = path == '/' ? location == '/' : location.startsWith(path);
+      // `/dashboard` is a prefix of nothing else, so the exact-match
+      // special case the old `/` needed is gone with it.
+      final match = location.startsWith(path);
       if (match && path.length >= bestLength) {
         best = i;
         bestLength = path.length;
@@ -828,11 +824,13 @@ class AppShell extends ConsumerWidget {
     // to say what they have in common — 0293's switch is about a menu
     // somebody can read, and a heading over a 72-pixel column is not
     // one.
-    final grouped = extended &&
-        (ref.watch(navGroupingProvider).valueOrNull ?? false);
-    final groupNames = ref.watch(moduleLabelsProvider).valueOrNull?.map(
-              (code, m) => MapEntry(code, m.group),
-            ) ??
+    final grouped =
+        extended && (ref.watch(navGroupingProvider).valueOrNull ?? false);
+    final groupNames =
+        ref
+            .watch(moduleLabelsProvider)
+            .valueOrNull
+            ?.map((code, m) => MapEntry(code, m.group)) ??
         const <String, String>{};
 
     return Scaffold(
@@ -891,8 +889,9 @@ class AppShell extends ConsumerWidget {
                                     child: Align(
                                       alignment: Alignment.bottomCenter,
                                       child: Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 12),
+                                        padding: const EdgeInsets.only(
+                                          bottom: 12,
+                                        ),
                                         child: _AccountButton(),
                                       ),
                                     ),
@@ -940,9 +939,11 @@ class AppShell extends ConsumerWidget {
             _showMoreSheet(
               context,
               dests,
-              groupNames: ref.read(moduleLabelsProvider).valueOrNull?.map(
-                    (code, m) => MapEntry(code, m.group),
-                  ) ??
+              groupNames:
+                  ref
+                      .read(moduleLabelsProvider)
+                      .valueOrNull
+                      ?.map((code, m) => MapEntry(code, m.group)) ??
                   const {},
               grouped: ref.read(navGroupingProvider).valueOrNull ?? false,
             );
@@ -1180,7 +1181,6 @@ class _GroupedRailTile extends StatelessWidget {
     );
   }
 }
-
 
 class _RailHeader extends ConsumerWidget {
   const _RailHeader({required this.extended});

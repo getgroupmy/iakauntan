@@ -101,89 +101,125 @@ import 'providers.dart';
 final _rootKey = GlobalKey<NavigatorState>();
 final _shellKey = GlobalKey<NavigatorState>();
 
+/// Where a visitor at [path] belongs, given what is known about them.
+///
+/// Pulled out of the router as a plain function so it can be asserted.
+/// This is the one rule in the app whose mistakes are unrecoverable from
+/// the outside: a redirect that returns a path which redirects back is
+/// not a wrong screen, it is a product that will not open, and nothing
+/// about the code says so — the loop only appears in a browser, on the
+/// address everybody uses.
+///
+/// Null means "stay". [hasOrg] and [isPlatformAdmin] are null while
+/// their answers are still loading or have failed, which are the same
+/// instruction: hold this route and decide when the answer arrives.
+String? routeFor({
+  required String path,
+  required bool signedIn,
+  required bool recovering,
+  required bool? hasOrg,
+  required bool? isPlatformAdmin,
+}) {
+  // The signing page is the one route that works with no account at
+  // all: a director will not sign up to an accounting system to sign
+  // one resolution. It authorises itself against the token.
+  if (path.startsWith('/sign/')) return null;
+  // The other page that works with no account: a customer opening a
+  // link to their own invoice.
+  if (path.startsWith('/share/')) return null;
+  // And the third: somebody at a table with a phone and a QR sticker.
+  // 0262's functions authorise themselves against the token, and a
+  // customer will not sign up to an accounting system to order a teh
+  // tarik.
+  if (path.startsWith('/menu/')) return null;
+
+  // And the fourth, which is not about a token at all: the corporate
+  // landing page, which is now the address itself. Somebody who typed
+  // what is on the business card has not come to sign in — they have
+  // come to find out what this is — and that is as true of a customer
+  // with a session already as of a stranger. So `/` is the front page
+  // for everybody, and the books are at `/dashboard`, one tap away
+  // behind the same button a stranger uses.
+  //
+  // It used to send a signed-in visitor from `/welcome` to their books,
+  // which meant the product had no front page at all for anybody who
+  // had ever logged in — including the person who owns it and is trying
+  // to look at what they have just published.
+  if (path == '/') return null;
+  // Kept because it was the address for a while and links to it exist.
+  // One redirect, not a second copy of the page.
+  if (path == '/welcome') return '/';
+
+  if (!signedIn) return path == '/signin' ? null : '/';
+
+  // Redeeming a reset link signs the user in, so this has to be checked
+  // before anything else sends them to the dashboard — otherwise they
+  // arrive at their books with the password they had forgotten still in
+  // force.
+  if (recovering) return path == '/reset-password' ? null : '/reset-password';
+
+  // Already signed in and pressing the landing page's way in: the button
+  // means "take me to my books", which is what it means to somebody
+  // without a session too — they just have a password to type on the
+  // way.
+  if (path == '/signin') return '/dashboard';
+
+  // Organizations may still be loading; hold the current route until we
+  // know whether the user has any books to open. The same goes for
+  // platform staff, who legitimately belong to no organization at all —
+  // deciding before that answer arrives is what sent the operator to the
+  // onboarding screen and left them there.
+  if (hasOrg == null || isPlatformAdmin == null) return null;
+
+  if (!hasOrg) {
+    // A platform operator has nothing to onboard into: their job is
+    // other people's companies, and the console is their home. They may
+    // still reach /onboarding deliberately if they want books of their
+    // own — it just is not forced on them.
+    //
+    // And /settings, which is not about a company at all below the
+    // company cards: it is where Change password and Sign out live, and
+    // the avatar menu offers it on every screen including this one. Left
+    // out of this list it was a dead link — the tap navigated and the
+    // redirect put them straight back, which looks identical to nothing
+    // happening.
+    if (isPlatformAdmin) {
+      return path.startsWith('/admin') ||
+              path == '/onboarding' ||
+              path == '/settings'
+          ? null
+          : '/admin';
+    }
+    return path == '/onboarding' ? null : '/onboarding';
+  }
+
+  if (path == '/onboarding') return '/dashboard';
+
+  return null;
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootKey,
     initialLocation: '/',
     refreshListenable: _AuthRefresh(ref),
     redirect: (context, state) {
-      final signedIn = ref.read(currentUserProvider) != null;
-      final path = state.matchedLocation;
-
-      // The signing page is the one route that works with no account at
-      // all: a director will not sign up to an accounting system to sign
-      // one resolution. It authorises itself against the token.
-      if (path.startsWith('/sign/')) return null;
-      // The other page that works with no account: a customer
-      // opening a link to their own invoice.
-      if (path.startsWith('/share/')) return null;
-      // And the third: somebody at a table with a phone and a QR
-      // sticker. 0262's functions authorise themselves against the
-      // token, and a customer will not sign up to an accounting system
-      // to order a teh tarik.
-      if (path.startsWith('/menu/')) return null;
-
-      // And the fourth, which is not about a token at all: the corporate
-      // landing page. Somebody who typed the address on a business card
-      // has not come to sign in — they have come to find out what this
-      // is — so a signed-out visitor lands there and reaches the
-      // password box by choosing to.
-      if (path == '/welcome') return signedIn ? '/' : null;
-
-      if (!signedIn) return path == '/signin' ? null : '/welcome';
-
-      // Redeeming a reset link signs the user in, so this has to be
-      // checked before anything else sends them to the dashboard —
-      // otherwise they arrive at their books with the password they had
-      // forgotten still in force.
-      if (ref.read(passwordRecoveryProvider)) {
-        return path == '/reset-password' ? null : '/reset-password';
-      }
-
-      if (path == '/signin') return '/';
-
-      // Organizations may still be loading; hold the current route until
-      // we know whether the user has any books to open. The same goes for
-      // platform staff, who legitimately belong to no organization at all
-      // — deciding before that answer arrives is what sent the operator
-      // to the onboarding screen and left them there.
       final orgs = ref.read(organizationsProvider);
-      if (orgs.isLoading || orgs.hasError) return null;
-
-      // Held on error as well as while loading, exactly as the
-      // organizations above are. Deciding without this answer sends the
-      // operator to onboarding, and getting there by mistake is worse
-      // than waiting: the redirect re-runs when the provider settles.
       final admin = ref.read(isPlatformAdminProvider);
-      if (admin.isLoading || admin.hasError) return null;
-
-      final hasOrg = (orgs.value ?? const []).isNotEmpty;
-
-      if (!hasOrg) {
-        // A platform operator has nothing to onboard into: their job is
-        // other people's companies, and the console is their home. They
-        // may still reach /onboarding deliberately if they want books of
-        // their own — it just is not forced on them.
-        //
-        // And /settings, which is not about a company at all below the
-        // company cards: it is where Change password and Sign out live,
-        // and the avatar menu offers it on every screen including this
-        // one. Left out of this list it was a dead link — the tap
-        // navigated and the redirect put them straight back, which
-        // looks identical to nothing happening.
-        if (admin.value ?? false) {
-          return path.startsWith('/admin') ||
-                  path == '/onboarding' ||
-                  path == '/settings'
-              ? null
-              : '/admin';
-        }
-        return path == '/onboarding' ? null : '/onboarding';
-      }
-
-      if (path == '/onboarding') return '/';
-
-      return null;
+      return routeFor(
+        path: state.matchedLocation,
+        signedIn: ref.read(currentUserProvider) != null,
+        recovering: ref.read(passwordRecoveryProvider),
+        // Loading and error are the same answer — wait — for both, so
+        // they arrive as one nullable rather than two states the rule
+        // would have to know about.
+        hasOrg: orgs.isLoading || orgs.hasError
+            ? null
+            : (orgs.value ?? const []).isNotEmpty,
+        isPlatformAdmin: admin.isLoading || admin.hasError
+            ? null
+            : (admin.value ?? false),
+      );
     },
     routes: [
       GoRoute(
@@ -197,8 +233,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       // Outside the shell and outside auth, like the signing and share
       // pages: no navigation rail, no company switcher, nothing but the
-      // company's own front page.
-      GoRoute(path: '/welcome', builder: (_, __) => const LandingScreen()),
+      // company's own front page. It is the address itself now — what
+      // is printed on the business card — so somebody arriving with a
+      // session already gets the page rather than being posted straight
+      // into books they did not ask for.
+      GoRoute(path: '/', builder: (_, __) => const LandingScreen()),
       GoRoute(path: '/onboarding', builder: (_, __) => const CreateOrgScreen()),
       // Reachable two ways on purpose: the router forces it after a
       // recovery event, and the reset e-mail links straight here. If the
@@ -233,7 +272,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state, child) =>
             AppShell(location: state.matchedLocation, child: child),
         routes: [
-          GoRoute(path: '/', builder: (_, __) => const DashboardScreen()),
+          GoRoute(
+            path: '/dashboard',
+            builder: (_, __) => const DashboardScreen(),
+          ),
 
           // Sales and purchases share one list and one editor; the doc
           // type in the path decides which cycle applies.
@@ -577,7 +619,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             Text('No page at ${state.matchedLocation}'),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: () => _rootKey.currentContext?.go('/'),
+              onPressed: () => _rootKey.currentContext?.go('/dashboard'),
               child: const Text('Back to dashboard'),
             ),
           ],
