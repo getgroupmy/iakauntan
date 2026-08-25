@@ -4810,8 +4810,13 @@
     "semantic_hash": ""
   },
   "supabase/tests/attachments_module.sql": {
-    "mtime": 1787672351.7434711,
-    "ast_hash": "cb1d9cb956b16a87616ab4e5b182788f",
+    "mtime": 1787673271.465464,
+    "ast_hash": "1445a3143853b2bf6c250e5129cab893",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0324_the_demo_can_show_an_attachment.sql": {
+    "mtime": 1787673235.9801457,
+    "ast_hash": "6cb6a5f67f687a7becb9f62fa8a91c19",
     "semantic_hash": ""
   }
 }

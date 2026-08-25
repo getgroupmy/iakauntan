@@ -254,23 +254,49 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
--- Nobody was granted it
+-- No customer was granted it, and every demo tenant was
 --
 -- Asked for explicitly: every company, old and new, has to have it
 -- switched on. Asserted because the alternative — a backfill somebody
 -- adds later out of sympathy for the support queue — would make the
 -- module invisible to exactly the customers it is meant to be sold to,
 -- and would do it silently.
+--
+-- The demo tenants are the exception, and `0324` is the migration that
+-- makes it. They are not customers: they exist so a visitor can see
+-- what the product does, and a demonstration with the paperwork missing
+-- from every bill misrepresents what is for sale. `demo_rebuild.sql`
+-- asserts the whole of that rule — no active module without a demo
+-- tenant to show it in — and caught `0323` leaving this one out.
 -- ---------------------------------------------------------------------
 do $$
+declare v_src text;
 begin
-  perform pg_temp.check_eq('no company is given it by the migration',
-    (select count(*)::int from public.org_modules
-      where module_code = 'attachments' and is_enabled
-        and org_id not in (select id from public.organizations
-                            where name like '%Lampiran%'
-                               or name like '%Melanggan%'
-                               or name like '%Tuntutan%')), 0);
+  perform pg_temp.check_eq('no customer is given it by the migration',
+    (select count(*)::int
+       from public.org_modules om
+       join public.organizations o on o.id = om.org_id
+      where om.module_code = 'attachments' and om.is_enabled
+        and not o.is_demo
+        and o.name not like '%Lampiran%'
+        and o.name not like '%Melanggan%'
+        and o.name not like '%Tuntutan%'), 0);
+
+  -- And a demo rebuild keeps giving it to the demo tenants. Structural
+  -- because the tenants themselves are made at runtime by
+  -- `app.demo_rebuild`, which this file does not run — the behaviour is
+  -- asserted where the tenants exist, in `demo_rebuild.sql`. What is
+  -- checked here is the coupling that file depends on: unlike every
+  -- other module it lists, this one is not detected from rows, because
+  -- attachments hang off records rather than having a subject of their
+  -- own.
+  select prosrc into v_src
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'app' and p.proname = 'demo_modules_in_use';
+  perform pg_temp.check_true('a rebuilt demo tenant still shows it',
+    v_src like '%attachments%');
+  perform pg_temp.check_true('and gets it for being a demo, not for data',
+    v_src ~ 'select id, ''attachments'' from public.organizations');
 end $$;
 
 rollback;
