@@ -17,42 +17,78 @@ import 'payment_gateways_admin.dart';
 import 'statutory_rates_admin.dart';
 
 /// One entry in the console's menu.
-typedef _Section = ({String label, IconData icon, Widget page});
+///
+/// Two icons, outlined and filled, because that is what a
+/// `NavigationRailDestination` takes and what every other menu in this
+/// app already does — the outline is the resting state and the filled
+/// one marks where you are.
+typedef _Section = ({
+  String label,
+  IconData icon,
+  IconData selectedIcon,
+  Widget page,
+});
 
 /// The console's ten sections, in the order they are offered.
 const _sections = <_Section>[
-  (label: 'Overview', icon: Icons.insights_outlined, page: _OverviewTab()),
+  (
+    label: 'Overview',
+    icon: Icons.insights_outlined,
+    selectedIcon: Icons.insights,
+    page: _OverviewTab(),
+  ),
   (
     label: 'Organizations',
     icon: Icons.business_outlined,
+    selectedIcon: Icons.business,
     page: _OrganizationsTab(),
   ),
   (
     label: 'Scanning credit',
     icon: Icons.credit_score_outlined,
+    selectedIcon: Icons.credit_score,
     page: CreditAdminTab(),
   ),
   (
     label: 'Readers',
     icon: Icons.document_scanner_outlined,
+    selectedIcon: Icons.document_scanner,
     page: OcrCatalogAdminTab(),
   ),
-  (label: 'Service settings', icon: Icons.tune, page: _SettingsTab()),
+  (
+    label: 'Service settings',
+    icon: Icons.tune_outlined,
+    selectedIcon: Icons.tune,
+    page: _SettingsTab(),
+  ),
   (
     label: 'Statutory rates',
     icon: Icons.gavel_outlined,
+    selectedIcon: Icons.gavel,
     page: StatutoryRatesAdminTab(),
   ),
-  (label: 'Landing page', icon: Icons.web_outlined, page: LandingCmsTab()),
-  (label: 'Branding', icon: Icons.palette_outlined, page: BrandingAdminTab()),
+  (
+    label: 'Landing page',
+    icon: Icons.web_outlined,
+    selectedIcon: Icons.web,
+    page: LandingCmsTab(),
+  ),
+  (
+    label: 'Branding',
+    icon: Icons.palette_outlined,
+    selectedIcon: Icons.palette,
+    page: BrandingAdminTab(),
+  ),
   (
     label: 'Modules & pricing',
     icon: Icons.widgets_outlined,
+    selectedIcon: Icons.widgets,
     page: ModulesAdminTab(),
   ),
   (
     label: 'Payment gateways',
     icon: Icons.payments_outlined,
+    selectedIcon: Icons.payments,
     page: PaymentGatewaysAdminTab(),
   ),
 ];
@@ -78,14 +114,6 @@ class PlatformConsoleScreen extends ConsumerStatefulWidget {
 }
 
 class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen> {
-  /// Wide enough for the menu to stand beside the section it opens.
-  /// Below this it lives in a drawer behind the app bar's button.
-  ///
-  /// The console draws inside the shell's own rail, so this is measured
-  /// against what is left after that rail — which is why it is lower
-  /// than the shell's 900.
-  static const _menuBreakpoint = 840.0;
-
   int _section = 0;
 
   /// Sections that have been opened at least once.
@@ -107,7 +135,13 @@ class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen> {
   @override
   Widget build(BuildContext context) {
     final isAdmin = ref.watch(isPlatformAdminProvider);
-    final wide = MediaQuery.sizeOf(context).width >= _menuBreakpoint;
+    // The shell's own widths, not a set of the console's own: the
+    // console's menu stands beside its section exactly when the account
+    // menu beside it does, and spells its destinations out at exactly
+    // the same point.
+    final width = MediaQuery.sizeOf(context).width;
+    final wide = width >= AppShell.railBreakpoint;
+    final extended = width >= AppShell.extendedBreakpoint;
 
     // The drawer is built outside `AsyncView`, so it asks the question
     // for itself: no menu until the answer is yes, rather than a menu
@@ -145,7 +179,7 @@ class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen> {
           ? null
           : Drawer(
               child: SafeArea(
-                child: _ConsoleMenu(
+                child: _ConsoleMenuSheet(
                   selected: _section,
                   onSelected: (i) {
                     Navigator.of(context).pop();
@@ -182,7 +216,11 @@ class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen> {
             // above "Platform health" and the same below it.
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _ConsoleMenu(selected: _section, onSelected: _go),
+              _ConsoleMenu(
+                selected: _section,
+                onSelected: _go,
+                extended: extended,
+              ),
               VerticalDivider(
                 width: 1,
                 color: scheme.outlineVariant.withValues(alpha: 0.6),
@@ -196,91 +234,94 @@ class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen> {
   }
 }
 
-/// The list of sections, drawn the same whether it is standing beside
-/// the console or sitting in a drawer over it.
+/// The console's sections, drawn as the app's own side menu.
+///
+/// A `NavigationRail`, at the widths the shell's rail uses and with the
+/// same measurements, because there is no reason for the console to
+/// have a second kind of menu. Below `extendedBreakpoint` it is a
+/// column of icons; at and above it, icons with their names — exactly
+/// as the account menu beside it behaves.
+///
+/// No header and no account button: the console draws inside the
+/// shell, which already has both a few pixels to the left. Two of
+/// either would be two of either.
 class _ConsoleMenu extends StatelessWidget {
-  const _ConsoleMenu({required this.selected, required this.onSelected});
+  const _ConsoleMenu({
+    required this.selected,
+    required this.onSelected,
+    required this.extended,
+  });
+
+  final int selected;
+  final void Function(int index) onSelected;
+  final bool extended;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      key: const Key('console-menu'),
+      width: extended ? AppShell.extendedWidth : AppShell.collapsedWidth,
+      // `NavigationRail` does not scroll, and ten destinations is taller
+      // than a laptop screen once the window is short — the same reason
+      // the shell wraps its own rail this way. The minimum height keeps
+      // the rail's background filling the column when there is room to
+      // spare.
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            // `NavigationRail` puts a flexible child in its own column,
+            // and a scroll view offers unbounded height — which is a
+            // contradiction Flutter refuses rather than resolves. The
+            // shell wraps its rail the same way for the same reason.
+            child: IntrinsicHeight(
+              child: NavigationRail(
+                extended: extended,
+                minExtendedWidth: AppShell.extendedWidth,
+                selectedIndex: selected,
+                onDestinationSelected: onSelected,
+                destinations: [
+                  for (final s in _sections)
+                    NavigationRailDestination(
+                      icon: Icon(s.icon),
+                      selectedIcon: Icon(s.selectedIcon),
+                      label: Text(s.label),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The same sections on a phone, in the shape this app puts a list of
+/// destinations in when there is no room for a rail: plain rows with an
+/// icon and a name, the way the shell's More sheet is drawn.
+class _ConsoleMenuSheet extends StatelessWidget {
+  const _ConsoleMenuSheet({required this.selected, required this.onSelected});
 
   final int selected;
   final void Function(int index) onSelected;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return ListView(
       key: const Key('console-menu'),
-      // The same width as the shell's extended rail, so a console
-      // opened from a wide window has one menu column, not two of
-      // different widths.
-      width: AppShell.extendedWidth,
-      child: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        children: [
-          for (var i = 0; i < _sections.length; i++)
-            _ConsoleMenuTile(
-              section: _sections[i],
-              selected: i == selected,
-              onTap: () => onSelected(i),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      children: [
+        for (var i = 0; i < _sections.length; i++)
+          ListTile(
+            leading: Icon(
+              i == selected ? _sections[i].selectedIcon : _sections[i].icon,
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ConsoleMenuTile extends StatelessWidget {
-  const _ConsoleMenuTile({
-    required this.section,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final _Section section;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 1),
-      child: Material(
-        color: selected ? scheme.secondaryContainer : Colors.transparent,
-        borderRadius: BorderRadius.circular(100),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(100),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              children: [
-                Icon(
-                  section.icon,
-                  size: 22,
-                  color: selected
-                      ? scheme.onSecondaryContainer
-                      : scheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    section.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                      color: selected
-                          ? scheme.onSecondaryContainer
-                          : scheme.onSurface,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            title: Text(_sections[i].label),
+            selected: i == selected,
+            onTap: () => onSelected(i),
           ),
-        ),
-      ),
+      ],
     );
   }
 }

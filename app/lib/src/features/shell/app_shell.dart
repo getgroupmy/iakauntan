@@ -670,7 +670,14 @@ class AppShell extends ConsumerWidget {
   final Widget child;
   final String location;
 
-  static const _railBreakpoint = 900.0;
+  /// Where the bottom bar gives way to the side menu, and where that
+  /// menu grows from a column of icons to icons with their names.
+  ///
+  /// Public because the platform console has a menu of its own beside
+  /// this one, and a second menu that changed shape at its own widths
+  /// would be a different menu rather than the same one twice.
+  static const railBreakpoint = 900.0;
+  static const extendedBreakpoint = 1200.0;
 
   /// Material's own defaults for the rail, named here because the header
   /// sits beside the rail rather than inside it and has to match.
@@ -678,7 +685,7 @@ class AppShell extends ConsumerWidget {
   // itself against the rail it stands in for, and a private static is
   // not visible from another class even in the same file.
   static const extendedWidth = 256.0;
-  static const _collapsedWidth = 80.0;
+  static const collapsedWidth = 80.0;
 
   /// Destinations this user can actually reach: modules the company
   /// holds and has not put away, plus the platform console for staff.
@@ -746,7 +753,7 @@ class AppShell extends ConsumerWidget {
     // as a blank page, with no clue as to why.
     if (dests.length < 2) return _bareLayout(context, dests);
 
-    final wide = MediaQuery.sizeOf(context).width >= _railBreakpoint;
+    final wide = MediaQuery.sizeOf(context).width >= railBreakpoint;
     return _reachableByCall(
       ref,
       wide
@@ -812,7 +819,7 @@ class AppShell extends ConsumerWidget {
 
   Widget _wideLayout(BuildContext context, WidgetRef ref, List<_Dest> dests) {
     final scheme = Theme.of(context).colorScheme;
-    final extended = MediaQuery.sizeOf(context).width >= 1200;
+    final extended = MediaQuery.sizeOf(context).width >= extendedBreakpoint;
 
     // Watched, not read: the setting and the module names arrive after
     // the first frame, and a menu that only regroups when something
@@ -851,7 +858,7 @@ class AppShell extends ConsumerWidget {
             // this subtree and an intrinsic pass offers unbounded width.
             // The company switcher is a Row that fills its line, and a
             // Row cannot size itself against unbounded width at all.
-            width: extended ? extendedWidth : _collapsedWidth,
+            width: extended ? extendedWidth : collapsedWidth,
             child: Column(
               children: [
                 // Outside the scroll view: the company you are looking at

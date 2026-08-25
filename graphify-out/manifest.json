@@ -115,8 +115,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
-    "mtime": 1787685988.3132772,
-    "ast_hash": "19b7fe414eaa107ae6a8b5d1dbd28335",
+    "mtime": 1787689124.7198195,
+    "ast_hash": "71a43d2bdb90250cd8802bfbb551b56e",
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787676591.429909,
-    "ast_hash": "e1a91b7fe055726b916118ab6b4068ca",
+    "mtime": 1787688879.519009,
+    "ast_hash": "3428731b6b0e75ad8c80227d0fa99db1",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -4840,13 +4840,13 @@
     "semantic_hash": ""
   },
   "app/screenshots/console_shot.dart": {
-    "mtime": 1787686116.18411,
-    "ast_hash": "d087252407af93ccf4f6bc0fced379ff",
+    "mtime": 1787689140.8860614,
+    "ast_hash": "6d7f37066ff89873e03906006b913555",
     "semantic_hash": ""
   },
   "app/test/platform_console_menu_test.dart": {
-    "mtime": 1787685958.5041747,
-    "ast_hash": "d9cb838388151bb6974bcb8c05ea9146",
+    "mtime": 1787689089.1340728,
+    "ast_hash": "2eae6fe16d0e0ee311dd732ddaac245b",
     "semantic_hash": ""
   }
 }

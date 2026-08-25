@@ -89,6 +89,27 @@ void main() {
         reason: 'the section starts under the app bar, not halfway down');
   });
 
+  testWidgets('the menu changes shape where the account menu does',
+      (tester) async {
+    // Between the two breakpoints the app's own rail is a column of
+    // icons, and the console's is too — one menu behaving one way, not
+    // two menus side by side behaving differently.
+    await pump(tester, size: const Size(1000, 900));
+    final menu = find.byKey(const Key('console-menu'));
+    expect(menu, findsOneWidget, reason: 'beside the section, not hidden');
+    expect(tester.getSize(menu).width, 80,
+        reason: "the shell's collapsed rail width");
+    expect(tester.widget<NavigationRail>(find.byType(NavigationRail)).extended,
+        isFalse, reason: 'icons, with no room for the words');
+
+    // Wide enough and the names are spelled out.
+    await pump(tester, size: laptop);
+    expect(tester.getSize(find.byKey(const Key('console-menu'))).width, 256,
+        reason: "the shell's extended rail width");
+    expect(tester.widget<NavigationRail>(find.byType(NavigationRail)).extended,
+        isTrue);
+  });
+
   testWidgets('a phone reaches all ten from the menu button', (tester) async {
     await pump(tester);
 

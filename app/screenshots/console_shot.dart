@@ -40,6 +40,7 @@ void main() {
       'console-phone-menu.png',
       openMenu: true,
     );
+    await _shoot(tester, const Size(1000, 900), 'console-tablet.png');
     await _shoot(tester, const Size(1280, 900), 'console-laptop.png');
   });
 }
