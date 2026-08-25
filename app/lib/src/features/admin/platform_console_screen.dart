@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../shell/app_shell.dart';
 import 'branding_admin.dart';
 import 'credit_admin.dart';
 import 'landing_cms.dart';
@@ -15,9 +16,59 @@ import 'ocr_catalog_admin.dart';
 import 'payment_gateways_admin.dart';
 import 'statutory_rates_admin.dart';
 
+/// One entry in the console's menu.
+typedef _Section = ({String label, IconData icon, Widget page});
+
+/// The console's ten sections, in the order they are offered.
+const _sections = <_Section>[
+  (label: 'Overview', icon: Icons.insights_outlined, page: _OverviewTab()),
+  (
+    label: 'Organizations',
+    icon: Icons.business_outlined,
+    page: _OrganizationsTab(),
+  ),
+  (
+    label: 'Scanning credit',
+    icon: Icons.credit_score_outlined,
+    page: CreditAdminTab(),
+  ),
+  (
+    label: 'Readers',
+    icon: Icons.document_scanner_outlined,
+    page: OcrCatalogAdminTab(),
+  ),
+  (label: 'Service settings', icon: Icons.tune, page: _SettingsTab()),
+  (
+    label: 'Statutory rates',
+    icon: Icons.gavel_outlined,
+    page: StatutoryRatesAdminTab(),
+  ),
+  (label: 'Landing page', icon: Icons.web_outlined, page: LandingCmsTab()),
+  (label: 'Branding', icon: Icons.palette_outlined, page: BrandingAdminTab()),
+  (
+    label: 'Modules & pricing',
+    icon: Icons.widgets_outlined,
+    page: ModulesAdminTab(),
+  ),
+  (
+    label: 'Payment gateways',
+    icon: Icons.payments_outlined,
+    page: PaymentGatewaysAdminTab(),
+  ),
+];
+
 /// Platform operator console. Everything here goes through SECURITY
 /// DEFINER functions that re-check platform admin rights, so a tenant
 /// user who guesses the route sees errors rather than data.
+///
+/// ## Why the sections are down the side rather than across the top
+///
+/// There are ten of them, and their names are phrases rather than
+/// words — "Modules & pricing", "Payment gateways". A scrolling tab
+/// strip could show three of those on a phone, which meant seven
+/// sections nobody could see existed: no arrow, no count, nothing but
+/// a strip that happened to move if you dragged it. A menu can be read
+/// down its length whatever the width of the screen.
 class PlatformConsoleScreen extends ConsumerStatefulWidget {
   const PlatformConsoleScreen({super.key});
 
@@ -26,45 +77,83 @@ class PlatformConsoleScreen extends ConsumerStatefulWidget {
       _PlatformConsoleScreenState();
 }
 
-class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 10, vsync: this);
+class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen> {
+  /// Wide enough for the menu to stand beside the section it opens.
+  /// Below this it lives in a drawer behind the app bar's button.
+  ///
+  /// The console draws inside the shell's own rail, so this is measured
+  /// against what is left after that rail — which is why it is lower
+  /// than the shell's 900.
+  static const _menuBreakpoint = 840.0;
 
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
+  int _section = 0;
+
+  /// Sections that have been opened at least once.
+  ///
+  /// Every one of these loads from the network the moment it is built,
+  /// so building all ten to open one would fire ten round trips at a
+  /// phone. They are kept once built, though: the settings and landing
+  /// sections hold half-typed forms, and switching away to check a
+  /// figure should not throw the typing away.
+  final _seen = <int>{0};
+
+  void _go(int index) {
+    setState(() {
+      _section = index;
+      _seen.add(index);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final isAdmin = ref.watch(isPlatformAdminProvider);
+    final wide = MediaQuery.sizeOf(context).width >= _menuBreakpoint;
+
+    // The drawer is built outside `AsyncView`, so it asks the question
+    // for itself: no menu until the answer is yes, rather than a menu
+    // over a refusal.
+    final allowed = isAdmin.valueOrNull ?? false;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          Icon(Icons.shield_outlined, size: 20),
-          SizedBox(width: 10),
-          Text('Platform console'),
+        title: Row(children: [
+          const Icon(Icons.shield_outlined, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Platform console'),
+                // Narrow, the menu is behind a button and cannot say
+                // where you are, so the app bar says it instead.
+                if (!wide && allowed)
+                  Text(
+                    _sections[_section].label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ]),
-        bottom: TabBar(
-          controller: _tabs,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          tabs: const [
-            Tab(text: 'Overview'),
-            Tab(text: 'Organizations'),
-            Tab(text: 'Scanning credit'),
-            Tab(text: 'Readers'),
-            Tab(text: 'Service settings'),
-            Tab(text: 'Statutory rates'),
-            Tab(text: 'Landing page'),
-            Tab(text: 'Branding'),
-            Tab(text: 'Modules & pricing'),
-            Tab(text: 'Payment gateways'),
-          ],
-        ),
       ),
+      drawer: wide || !allowed
+          ? null
+          : Drawer(
+              child: SafeArea(
+                child: _ConsoleMenu(
+                  selected: _section,
+                  onSelected: (i) {
+                    Navigator.of(context).pop();
+                    _go(i);
+                  },
+                ),
+              ),
+            ),
       body: AsyncView(
         value: isAdmin,
         builder: (allowed) {
@@ -75,22 +164,122 @@ class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen>
               message: 'This console is for platform staff only.',
             );
           }
-          return TabBarView(
-            controller: _tabs,
-            children: const [
-              _OverviewTab(),
-              _OrganizationsTab(),
-              CreditAdminTab(),
-              OcrCatalogAdminTab(),
-              _SettingsTab(),
-              StatutoryRatesAdminTab(),
-              LandingCmsTab(),
-              BrandingAdminTab(),
-              ModulesAdminTab(),
-              PaymentGatewaysAdminTab(),
+          final body = IndexedStack(
+            index: _section,
+            children: [
+              for (var i = 0; i < _sections.length; i++)
+                if (_seen.contains(i)) _sections[i].page else const SizedBox(),
+            ],
+          );
+          if (!wide) return body;
+
+          final scheme = Theme.of(context).colorScheme;
+          return Row(
+            // Stretched, not centred. A `Row` hands its children loose
+            // vertical constraints by default, so the section beside
+            // the menu sized itself to its content and then sat in the
+            // middle of the window — four hundred pixels of nothing
+            // above "Platform health" and the same below it.
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _ConsoleMenu(selected: _section, onSelected: _go),
+              VerticalDivider(
+                width: 1,
+                color: scheme.outlineVariant.withValues(alpha: 0.6),
+              ),
+              Expanded(child: body),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// The list of sections, drawn the same whether it is standing beside
+/// the console or sitting in a drawer over it.
+class _ConsoleMenu extends StatelessWidget {
+  const _ConsoleMenu({required this.selected, required this.onSelected});
+
+  final int selected;
+  final void Function(int index) onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      key: const Key('console-menu'),
+      // The same width as the shell's extended rail, so a console
+      // opened from a wide window has one menu column, not two of
+      // different widths.
+      width: AppShell.extendedWidth,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: [
+          for (var i = 0; i < _sections.length; i++)
+            _ConsoleMenuTile(
+              section: _sections[i],
+              selected: i == selected,
+              onTap: () => onSelected(i),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConsoleMenuTile extends StatelessWidget {
+  const _ConsoleMenuTile({
+    required this.section,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _Section section;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 1),
+      child: Material(
+        color: selected ? scheme.secondaryContainer : Colors.transparent,
+        borderRadius: BorderRadius.circular(100),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(100),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                Icon(
+                  section.icon,
+                  size: 22,
+                  color: selected
+                      ? scheme.onSecondaryContainer
+                      : scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    section.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                      color: selected
+                          ? scheme.onSecondaryContainer
+                          : scheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -119,13 +308,24 @@ class _OverviewTab extends ConsumerWidget {
                   'Platform health',
                   subtitle: 'Across every tenant on this deployment',
                 ),
-                GridView.count(
-                  crossAxisCount: columns,
+                GridView(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: columns == 1 ? 3.2 : 1.75,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    // One column runs the full width of a phone, so an
+                    // aspect ratio ties the card's height to the width
+                    // of the screen — which has nothing to do with how
+                    // tall the three lines inside it are. At 412 pixels
+                    // that came out four short and clipped the caption
+                    // off "10 joined in 30 days"; narrower still, and
+                    // the caption wraps and it clips more. A height in
+                    // pixels is what a stack of text actually needs.
+                    childAspectRatio: columns == 1 ? 1 : 1.75,
+                    mainAxisExtent: columns == 1 ? 132 : null,
+                  ),
                   children: [
                     StatTile(
                       label: 'Organizations',

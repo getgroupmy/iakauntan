@@ -115,8 +115,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
-    "mtime": 1787676591.417909,
-    "ast_hash": "7dad43cb88c38fb17b789a996e880cf3",
+    "mtime": 1787685988.3132772,
+    "ast_hash": "19b7fe414eaa107ae6a8b5d1dbd28335",
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
@@ -4837,6 +4837,16 @@
   "app/test/landing_hero_test.dart": {
     "mtime": 1787680569.5911756,
     "ast_hash": "9876feef2b168f02aa3802ef977e13b1",
+    "semantic_hash": ""
+  },
+  "app/screenshots/console_shot.dart": {
+    "mtime": 1787686116.18411,
+    "ast_hash": "d087252407af93ccf4f6bc0fced379ff",
+    "semantic_hash": ""
+  },
+  "app/test/platform_console_menu_test.dart": {
+    "mtime": 1787685958.5041747,
+    "ast_hash": "d9cb838388151bb6974bcb8c05ea9146",
     "semantic_hash": ""
   }
 }
