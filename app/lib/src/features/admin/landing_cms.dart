@@ -101,13 +101,10 @@ class _PreviewBar extends ConsumerWidget {
               child: Text(
                 published
                     ? 'This page is live. Anybody who visits the address '
-                        'sees what is below.'
+                          'sees what is below.'
                     : 'This page is a draft. Visitors see the copy the '
-                        'product ships with, not yours.',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: scheme.onSurfaceVariant,
-                ),
+                          'product ships with, not yours.',
+                style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
               ),
             ),
             const SizedBox(width: Space.sm),
@@ -223,6 +220,10 @@ class _PageFormState extends ConsumerState<_PageForm> {
   late bool _published = widget.existing?['is_published'] == true;
   late bool _register = widget.existing?['register_enabled'] != false;
   late bool _pricing = widget.existing?['show_pricing'] == true;
+  // Absent reads as on, the same way `register_enabled` does: a payload
+  // saved before the columns existed must not hide the way in.
+  late bool _mastheadButton = widget.existing?['show_masthead_button'] != false;
+  late bool _heroButtons = widget.existing?['show_hero_buttons'] != false;
   bool _busy = false;
 
   @override
@@ -250,6 +251,13 @@ class _PageFormState extends ConsumerState<_PageForm> {
     }
     if (_pricing != (widget.existing?['show_pricing'] == true)) {
       patch['show_pricing'] = _pricing;
+    }
+    if (_mastheadButton !=
+        (widget.existing?['show_masthead_button'] != false)) {
+      patch['show_masthead_button'] = _mastheadButton;
+    }
+    if (_heroButtons != (widget.existing?['show_hero_buttons'] != false)) {
+      patch['show_hero_buttons'] = _heroButtons;
     }
     return patch;
   }
@@ -379,6 +387,29 @@ class _PageFormState extends ConsumerState<_PageForm> {
                 'customers on by invitation.',
               ),
             ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _mastheadButton,
+              onChanged: _busy
+                  ? null
+                  : (v) => setState(() => _mastheadButton = v),
+              title: const Text('Button on the top bar'),
+              subtitle: const Text(
+                'Off leaves the bar with the logo and the menu, and takes '
+                'the button out of the menu on a phone too.',
+              ),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _heroButtons,
+              onChanged: _busy ? null : (v) => setState(() => _heroButtons = v),
+              title: const Text('Buttons under the headline'),
+              subtitle: const Text(
+                'Off leaves the headline and the picture with nothing to '
+                'press. The links in the footer stay either way, so a '
+                'visitor who reads to the bottom can still get in.',
+              ),
+            ),
             const Divider(height: Space.lg),
             for (final entry in _fields.entries) ...[
               Row(
@@ -387,7 +418,8 @@ class _PageFormState extends ConsumerState<_PageForm> {
                   Expanded(
                     child: TextField(
                       controller: _c[entry.key],
-                      maxLines: entry.key == 'address' ||
+                      maxLines:
+                          entry.key == 'address' ||
                               entry.key == 'hero_subhead' ||
                               entry.key == 'cta_body' ||
                               entry.key == 'meta_description'
@@ -458,8 +490,8 @@ class _SectionsCard extends ConsumerWidget {
                     _badges
                         ? 'What it files under'
                         : _reasons
-                            ? 'Why choose it'
-                            : 'What the page says',
+                        ? 'Why choose it'
+                        : 'What the page says',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -487,17 +519,18 @@ class _SectionsCard extends ConsumerWidget {
                     icon: _badges
                         ? Icons.verified_outlined
                         : _reasons
-                            ? Icons.thumb_up_outlined
-                            : Icons.article_outlined,
+                        ? Icons.thumb_up_outlined
+                        : Icons.article_outlined,
                     title: _badges
                         ? 'No badges written yet'
                         : _reasons
-                            ? 'No reasons written yet'
-                            : 'No blocks of copy yet',
+                        ? 'No reasons written yet'
+                        : 'No blocks of copy yet',
                     // Neither band is ever empty on the page: both fall
                     // back to the copy the product ships with, which
                     // describes what this repository actually does.
-                    message: 'The page shows the copy iAkauntan ships '
+                    message:
+                        'The page shows the copy iAkauntan ships '
                         'with until you write your own.',
                   );
                 }
@@ -623,15 +656,17 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
     final ok = await runWithFeedback(
       context,
       successMessage: 'Saved',
-      action: () => ref.read(landingAdminProvider).saveLandingSection(
-        id: widget.existing?['id'] as String?,
-        title: _title.text.trim(),
-        body: _body.text.trim(),
-        icon: _icon,
-        sortOrder: int.tryParse(_order.text.trim()),
-        isActive: _active,
-        kind: widget.kind,
-      ),
+      action: () => ref
+          .read(landingAdminProvider)
+          .saveLandingSection(
+            id: widget.existing?['id'] as String?,
+            title: _title.text.trim(),
+            body: _body.text.trim(),
+            icon: _icon,
+            sortOrder: int.tryParse(_order.text.trim()),
+            isActive: _active,
+            kind: widget.kind,
+          ),
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -655,16 +690,14 @@ class _SectionDialogState extends ConsumerState<_SectionDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(
-        switch ((widget.existing == null, widget.kind)) {
-          (true, 'reason') => 'Add a reason',
-          (true, 'badge') => 'Add a badge',
-          (true, _) => 'Add a block',
-          (false, 'reason') => 'Edit the reason',
-          (false, 'badge') => 'Edit the badge',
-          (false, _) => 'Edit the block',
-        },
-      ),
+      title: Text(switch ((widget.existing == null, widget.kind)) {
+        (true, 'reason') => 'Add a reason',
+        (true, 'badge') => 'Add a badge',
+        (true, _) => 'Add a block',
+        (false, 'reason') => 'Edit the reason',
+        (false, 'badge') => 'Edit the badge',
+        (false, _) => 'Edit the block',
+      }),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
@@ -879,13 +912,15 @@ class _AppLinkDialogState extends ConsumerState<_AppLinkDialog> {
     final ok = await runWithFeedback(
       context,
       successMessage: 'Saved',
-      action: () => ref.read(landingAdminProvider).saveLandingAppLink(
-        storeCode: _code.text.trim(),
-        label: _label.text.trim(),
-        url: url,
-        sortOrder: int.tryParse(_order.text.trim()),
-        isActive: _active,
-      ),
+      action: () => ref
+          .read(landingAdminProvider)
+          .saveLandingAppLink(
+            storeCode: _code.text.trim(),
+            label: _label.text.trim(),
+            url: url,
+            sortOrder: int.tryParse(_order.text.trim()),
+            isActive: _active,
+          ),
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -1022,7 +1057,8 @@ class _StatsCard extends ConsumerWidget {
                   return const EmptyState(
                     icon: Icons.trending_up,
                     title: 'No figures yet',
-                    message: 'The page shows no band of numbers. Add one only '
+                    message:
+                        'The page shows no band of numbers. Add one only '
                         'for a figure you can stand behind.',
                   );
                 }
@@ -1122,14 +1158,16 @@ class _StatDialogState extends ConsumerState<_StatDialog> {
     final ok = await runWithFeedback(
       context,
       successMessage: 'Saved',
-      action: () => ref.read(landingAdminProvider).saveLandingStat(
-        id: widget.existing?['id'] as String?,
-        value: _value.text.trim(),
-        label: _label.text.trim(),
-        icon: _icon,
-        sortOrder: int.tryParse(_order.text.trim()),
-        isActive: _active,
-      ),
+      action: () => ref
+          .read(landingAdminProvider)
+          .saveLandingStat(
+            id: widget.existing?['id'] as String?,
+            value: _value.text.trim(),
+            label: _label.text.trim(),
+            icon: _icon,
+            sortOrder: int.tryParse(_order.text.trim()),
+            isActive: _active,
+          ),
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -1167,7 +1205,8 @@ class _StatDialogState extends ConsumerState<_StatDialog> {
                   labelText: 'The number',
                   // Text, not a number field: the page prints this
                   // exactly as typed and nothing ever adds it up.
-                  helperText: 'Shown exactly as you type it — 240,000, '
+                  helperText:
+                      'Shown exactly as you type it — 240,000, '
                       '1,200+, RM4b.',
                 ),
               ),
@@ -1274,7 +1313,8 @@ class _TestimonialsCard extends ConsumerWidget {
                   return const EmptyState(
                     icon: Icons.format_quote,
                     title: 'No testimonials yet',
-                    message: 'The page shows none. Add only what a customer '
+                    message:
+                        'The page shows none. Add only what a customer '
                         'actually said, with their name against it.',
                   );
                 }
@@ -1335,8 +1375,7 @@ class _TestimonialDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic>? existing;
 
   @override
-  ConsumerState<_TestimonialDialog> createState() =>
-      _TestimonialDialogState();
+  ConsumerState<_TestimonialDialog> createState() => _TestimonialDialogState();
 }
 
 class _TestimonialDialogState extends ConsumerState<_TestimonialDialog> {
@@ -1385,14 +1424,16 @@ class _TestimonialDialogState extends ConsumerState<_TestimonialDialog> {
     final ok = await runWithFeedback(
       context,
       successMessage: 'Saved',
-      action: () => ref.read(landingAdminProvider).saveLandingTestimonial(
-        id: widget.existing?['id'] as String?,
-        quote: _quote.text.trim(),
-        author: _author.text.trim(),
-        company: _company.text.trim(),
-        sortOrder: int.tryParse(_order.text.trim()),
-        isActive: _active,
-      ),
+      action: () => ref
+          .read(landingAdminProvider)
+          .saveLandingTestimonial(
+            id: widget.existing?['id'] as String?,
+            quote: _quote.text.trim(),
+            author: _author.text.trim(),
+            company: _company.text.trim(),
+            sortOrder: int.tryParse(_order.text.trim()),
+            isActive: _active,
+          ),
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -1429,16 +1470,15 @@ class _TestimonialDialogState extends ConsumerState<_TestimonialDialog> {
               TextField(
                 controller: _quote,
                 maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'What they said',
-                ),
+                decoration: const InputDecoration(labelText: 'What they said'),
               ),
               const SizedBox(height: Space.sm),
               TextField(
                 controller: _author,
                 decoration: const InputDecoration(
                   labelText: 'Who said it',
-                  helperText: 'Required. A quote with no name against it is '
+                  helperText:
+                      'Required. A quote with no name against it is '
                       'not something to put on a front page.',
                 ),
               ),
@@ -1532,7 +1572,8 @@ class _LogosCard extends ConsumerWidget {
                   return const EmptyState(
                     icon: Icons.workspaces_outline,
                     title: 'No customer logos yet',
-                    message: 'The page shows no logo wall. Add a mark only '
+                    message:
+                        'The page shows no logo wall. Add a mark only '
                         'with that company\'s agreement.',
                   );
                 }
@@ -1620,9 +1661,7 @@ class _LogoDialogState extends ConsumerState<_LogoDialog> {
     }
     if (!_url.text.trim().startsWith('http')) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('A logo needs a full https address.'),
-        ),
+        const SnackBar(content: Text('A logo needs a full https address.')),
       );
       return;
     }
@@ -1630,13 +1669,15 @@ class _LogoDialogState extends ConsumerState<_LogoDialog> {
     final ok = await runWithFeedback(
       context,
       successMessage: 'Saved',
-      action: () => ref.read(landingAdminProvider).saveLandingLogo(
-        id: widget.existing?['id'] as String?,
-        name: _name.text.trim(),
-        logoUrl: _url.text.trim(),
-        sortOrder: int.tryParse(_order.text.trim()),
-        isActive: _active,
-      ),
+      action: () => ref
+          .read(landingAdminProvider)
+          .saveLandingLogo(
+            id: widget.existing?['id'] as String?,
+            name: _name.text.trim(),
+            logoUrl: _url.text.trim(),
+            sortOrder: int.tryParse(_order.text.trim()),
+            isActive: _active,
+          ),
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -1679,7 +1720,8 @@ class _LogoDialogState extends ConsumerState<_LogoDialog> {
                 controller: _url,
                 decoration: const InputDecoration(
                   labelText: 'Image address',
-                  helperText: 'A full https address. Shown as their name if '
+                  helperText:
+                      'A full https address. Shown as their name if '
                       'the image will not load.',
                 ),
               ),

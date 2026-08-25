@@ -151,9 +151,7 @@ class LandingPage extends StatelessWidget {
                   if (content.testimonials.isNotEmpty)
                     _Band(
                       tinted: true,
-                      child: _Testimonials(
-                        testimonials: content.testimonials,
-                      ),
+                      child: _Testimonials(testimonials: content.testimonials),
                     ),
                   if (content.logos.isNotEmpty)
                     _Band(
@@ -335,37 +333,43 @@ class _Masthead extends StatelessWidget {
                   // the right of a narrow screen — hence `Flexible`
                   // and an ellipsis rather than a fixed row that
                   // assumes the words are short.
-                  if (wide && content.registerEnabled)
-                    TextButton(
-                      onPressed: preview ? null : () => context.go('/signin'),
-                      child: Text(content.signInLabel),
-                    ),
-                  if (wide && content.registerEnabled)
-                    const SizedBox(width: 8),
-                  Flexible(
-                    child: FilledButton(
-                      onPressed: preview
-                          ? null
-                          : () => context.go(
+                  // 0320. The whole way in is a switch in the console.
+                  // Off leaves the bar with the logo and the menu,
+                  // which is what a platform that signs its customers
+                  // up by hand wants at the top of its front page.
+                  if (content.showMastheadButton) ...[
+                    if (wide && content.registerEnabled)
+                      TextButton(
+                        onPressed: preview ? null : () => context.go('/signin'),
+                        child: Text(content.signInLabel),
+                      ),
+                    if (wide && content.registerEnabled)
+                      const SizedBox(width: 8),
+                    Flexible(
+                      child: FilledButton(
+                        onPressed: preview
+                            ? null
+                            : () => context.go(
                                 content.registerEnabled
                                     ? '/signin?mode=register'
                                     : '/signin',
                               ),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 16,
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
+                        ),
+                        child: Text(
+                          content.registerEnabled
+                              ? content.registerLabel
+                              : content.signInLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      child: Text(
-                        content.registerEnabled
-                            ? content.registerLabel
-                            : content.signInLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
                     ),
-                  ),
+                  ],
                 ],
               );
             },
@@ -542,10 +546,9 @@ class _HeroFullBleed extends StatelessWidget {
                 // on white. The ink stands in until it does.
                 errorBuilder: (context, _, __) =>
                     Container(color: const Color(0xFF0F172A)),
-                loadingBuilder: (context, child, progress) =>
-                    progress == null
-                        ? child
-                        : Container(color: const Color(0xFF0F172A)),
+                loadingBuilder: (context, child, progress) => progress == null
+                    ? child
+                    : Container(color: const Color(0xFF0F172A)),
               ),
               DecoratedBox(
                 decoration: BoxDecoration(
@@ -555,7 +558,9 @@ class _HeroFullBleed extends StatelessWidget {
                     colors: [
                       const Color(0xFF0F172A).withValues(alpha: 0.88),
                       const Color(0xFF0F172A).withValues(alpha: 0.62),
-                      const Color(0xFF0F172A).withValues(alpha: wide ? 0.2 : 0.5),
+                      const Color(
+                        0xFF0F172A,
+                      ).withValues(alpha: wide ? 0.2 : 0.5),
                     ],
                     stops: const [0, 0.55, 1],
                   ),
@@ -608,8 +613,9 @@ class _HeroCopy extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final ink = onInk ? Colors.white : scheme.onSurface;
-    final inkSoft =
-        onInk ? Colors.white.withValues(alpha: 0.82) : Land.muted(scheme);
+    final inkSoft = onInk
+        ? Colors.white.withValues(alpha: 0.82)
+        : Land.muted(scheme);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -633,59 +639,66 @@ class _HeroCopy extends StatelessWidget {
             ),
           ),
         ],
-        const SizedBox(height: 32),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            // Registration open: the new visitor's button leads and
-            // the returning one's follows. Registration closed: there
-            // is one way in, so there is one button.
-            //
-            // This drew both regardless, and with `register_enabled`
-            // off the primary fell back to the sign-in label — two
-            // buttons, same words, same destination, side by side. A
-            // pair of identical buttons is not a smaller call to
-            // action, it is a page that looks broken.
-            FilledButton(
-              onPressed: preview
-                  ? null
-                  : () => context.go(
+        // 0320. The hero's buttons are a switch in the console. Off
+        // means the headline and the picture and nothing to press —
+        // the shape a platform wants when its front page is a
+        // brochure rather than a door. The gap goes with them, or the
+        // hero ends in a band of empty space.
+        if (content.showHeroButtons) ...[
+          const SizedBox(height: 32),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              // Registration open: the new visitor's button leads and
+              // the returning one's follows. Registration closed: there
+              // is one way in, so there is one button.
+              //
+              // This drew both regardless, and with `register_enabled`
+              // off the primary fell back to the sign-in label — two
+              // buttons, same words, same destination, side by side. A
+              // pair of identical buttons is not a smaller call to
+              // action, it is a page that looks broken.
+              FilledButton(
+                onPressed: preview
+                    ? null
+                    : () => context.go(
                         content.registerEnabled
                             ? '/signin?mode=register'
                             : '/signin',
                       ),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 28,
-                  vertical: 20,
-                ),
-              ),
-              child: Text(
-                content.registerEnabled
-                    ? content.registerLabel
-                    : content.signInLabel,
-              ),
-            ),
-            if (content.registerEnabled)
-              OutlinedButton(
-                onPressed: preview ? null : () => context.go('/signin'),
-                style: OutlinedButton.styleFrom(
+                style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 28,
                     vertical: 20,
                   ),
-                  foregroundColor: onInk ? Colors.white : null,
-                  side: BorderSide(
-                    color: onInk
-                        ? Colors.white.withValues(alpha: 0.5)
-                        : Land.border(scheme),
-                  ),
                 ),
-                child: Text(content.signInLabel),
+                child: Text(
+                  content.registerEnabled
+                      ? content.registerLabel
+                      : content.signInLabel,
+                ),
               ),
-          ],
-        ),
+              if (content.registerEnabled)
+                OutlinedButton(
+                  onPressed: preview ? null : () => context.go('/signin'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 28,
+                      vertical: 20,
+                    ),
+                    foregroundColor: onInk ? Colors.white : null,
+                    side: BorderSide(
+                      color: onInk
+                          ? Colors.white.withValues(alpha: 0.5)
+                          : Land.border(scheme),
+                    ),
+                  ),
+                  child: Text(content.signInLabel),
+                ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -855,8 +868,9 @@ class _HeroPlaceholder extends StatelessWidget {
                                       bar(
                                         40,
                                         9,
-                                        c: scheme.primary
-                                            .withValues(alpha: 0.55),
+                                        c: scheme.primary.withValues(
+                                          alpha: 0.55,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -899,8 +913,8 @@ class _HeroPlaceholder extends StatelessWidget {
                                           ),
                                           borderRadius:
                                               const BorderRadius.vertical(
-                                            top: Radius.circular(3),
-                                          ),
+                                                top: Radius.circular(3),
+                                              ),
                                         ),
                                       ),
                                     ),
@@ -1038,7 +1052,8 @@ class _Sections extends StatelessWidget {
         const LandingSectionHeader(
           kicker: 'Product',
           title: 'Everything the books need, in one place',
-          subtitle: 'One ledger underneath all of it, so a sale at the '
+          subtitle:
+              'One ledger underneath all of it, so a sale at the '
               'counter and a payroll run land in the same accounts.',
         ),
         const SizedBox(height: Land.gapLg),
@@ -1047,8 +1062,8 @@ class _Sections extends StatelessWidget {
             final columns = constraints.maxWidth > 900
                 ? 3
                 : constraints.maxWidth > 560
-                    ? 2
-                    : 1;
+                ? 2
+                : 1;
             final width =
                 (constraints.maxWidth - (columns - 1) * Land.gap) / columns;
             return Wrap(
@@ -1105,9 +1120,7 @@ class _FeatureCard extends StatelessWidget {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(Land.radiusTight),
-                color: scheme.primary.withValues(
-                  alpha: hovered ? 0.16 : 0.09,
-                ),
+                color: scheme.primary.withValues(alpha: hovered ? 0.16 : 0.09),
               ),
               child: Icon(
                 landingIcon(section.icon),
@@ -1121,10 +1134,7 @@ class _FeatureCard extends StatelessWidget {
               const SizedBox(height: Land.gapSm),
               Text(
                 section.body!,
-                style: Land.body(scheme).copyWith(
-                  fontSize: 14,
-                  height: 1.55,
-                ),
+                style: Land.body(scheme).copyWith(fontSize: 14, height: 1.55),
               ),
             ],
           ],
@@ -1200,10 +1210,7 @@ class _AppLinks extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const LandingSectionHeader(
-          kicker: 'Download',
-          title: 'Get the app',
-        ),
+        const LandingSectionHeader(kicker: 'Download', title: 'Get the app'),
         const SizedBox(height: Land.gapLg),
         Wrap(
           spacing: 12,
@@ -1322,8 +1329,7 @@ class _Footer extends StatelessWidget {
                         ],
                         if (company.isNotEmpty) ...[
                           const SizedBox(height: 12),
-                          for (final line in company)
-                            Text(line, style: small),
+                          for (final line in company) Text(line, style: small),
                         ],
                       ],
                     ),
@@ -1369,8 +1375,7 @@ class _Footer extends StatelessWidget {
                         for (final (label, url) in legal)
                           _FooterLink(
                             label: label,
-                            onTap:
-                                preview ? null : () => launchExternal(url),
+                            onTap: preview ? null : () => launchExternal(url),
                           ),
                       ],
                     ),
@@ -1492,18 +1497,17 @@ class _Cta extends StatelessWidget {
               children: [
                 Text(
                   content.ctaHeadline!,
-                  style: Land.heading(scheme).copyWith(
-                    fontSize: 27,
-                    color: scheme.onPrimary,
-                  ),
+                  style: Land.heading(
+                    scheme,
+                  ).copyWith(fontSize: 27, color: scheme.onPrimary),
                 ),
                 if (content.ctaBody != null) ...[
                   const SizedBox(height: 8),
                   Text(
                     content.ctaBody!,
-                    style: Land.body(scheme).copyWith(
-                      color: scheme.onPrimary.withValues(alpha: 0.86),
-                    ),
+                    style: Land.body(
+                      scheme,
+                    ).copyWith(color: scheme.onPrimary.withValues(alpha: 0.86)),
                   ),
                 ],
               ],
@@ -1511,8 +1515,7 @@ class _Cta extends StatelessWidget {
           ),
           if (hasButton)
             FilledButton(
-              onPressed:
-                  preview ? null : () => launchExternal(content.ctaUrl),
+              onPressed: preview ? null : () => launchExternal(content.ctaUrl),
               style: FilledButton.styleFrom(
                 backgroundColor: scheme.onPrimary,
                 foregroundColor: scheme.primary,
@@ -1550,7 +1553,8 @@ class _Reasons extends StatelessWidget {
         const LandingSectionHeader(
           kicker: 'Why us',
           title: 'Built for the rules you actually file under',
-          subtitle: 'Not a foreign package with a Malaysian tax code bolted '
+          subtitle:
+              'Not a foreign package with a Malaysian tax code bolted '
               'on the side.',
         ),
         const SizedBox(height: Land.gapLg),
@@ -1576,8 +1580,9 @@ class _Reasons extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              borderRadius:
-                                  BorderRadius.circular(Land.radiusTight),
+                              borderRadius: BorderRadius.circular(
+                                Land.radiusTight,
+                              ),
                               color: scheme.primary.withValues(alpha: 0.09),
                             ),
                             child: Icon(
@@ -1593,17 +1598,17 @@ class _Reasons extends StatelessWidget {
                               children: [
                                 Text(
                                   r.title,
-                                  style: Land.cardTitle(scheme)
-                                      .copyWith(fontSize: 16),
+                                  style: Land.cardTitle(
+                                    scheme,
+                                  ).copyWith(fontSize: 16),
                                 ),
                                 if (r.body != null) ...[
                                   const SizedBox(height: 6),
                                   Text(
                                     r.body!,
-                                    style: Land.body(scheme).copyWith(
-                                      fontSize: 14,
-                                      height: 1.55,
-                                    ),
+                                    style: Land.body(
+                                      scheme,
+                                    ).copyWith(fontSize: 14, height: 1.55),
                                   ),
                                 ],
                               ],
@@ -1650,8 +1655,8 @@ class _Stats extends StatelessWidget {
           final columns = constraints.maxWidth > 760
               ? (stats.length < 4 ? stats.length : 4)
               : constraints.maxWidth > 420
-                  ? 2
-                  : 1;
+              ? 2
+              : 1;
           final width =
               (constraints.maxWidth - (columns - 1) * Land.gapLg) / columns;
           return Wrap(
@@ -1728,8 +1733,8 @@ class _Testimonials extends StatelessWidget {
             final columns = constraints.maxWidth > 900
                 ? 3
                 : constraints.maxWidth > 560
-                    ? 2
-                    : 1;
+                ? 2
+                : 1;
             final width =
                 (constraints.maxWidth - (columns - 1) * Land.gap) / columns;
             return Wrap(
@@ -1884,10 +1889,9 @@ class _Logos extends StatelessWidget {
                   fit: BoxFit.contain,
                   errorBuilder: (context, _, __) => Text(
                     l.name,
-                    style: Land.small(scheme).copyWith(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: Land.small(
+                      scheme,
+                    ).copyWith(fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
@@ -2170,48 +2174,55 @@ class _Burger extends StatelessWidget {
                     onPick(entry.value);
                   },
                 ),
-              Divider(color: Land.border(scheme), height: 1),
-              Padding(
-                padding: const EdgeInsets.all(Land.gap),
-                child: Column(
-                  children: [
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: preview
-                            ? null
-                            : () {
-                                Navigator.of(sheet).pop();
-                                context.go('/signin');
-                              },
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          side: BorderSide(color: Land.border(scheme)),
-                        ),
-                        child: Text(content.signInLabel),
-                      ),
-                    ),
-                    if (content.registerEnabled) ...[
-                      const SizedBox(height: 10),
+              // 0320. The sheet is the bar folded up, so it follows the
+              // bar's switch — hiding the button in the bar and leaving
+              // it one tap away behind the menu would be hiding
+              // nothing. The rule above it goes too, or the sheet ends
+              // in a line with nothing under it.
+              if (content.showMastheadButton) ...[
+                Divider(color: Land.border(scheme), height: 1),
+                Padding(
+                  padding: const EdgeInsets.all(Land.gap),
+                  child: Column(
+                    children: [
                       SizedBox(
                         width: double.infinity,
-                        child: FilledButton(
+                        child: OutlinedButton(
                           onPressed: preview
                               ? null
                               : () {
                                   Navigator.of(sheet).pop();
-                                  context.go('/signin?mode=register');
+                                  context.go('/signin');
                                 },
-                          style: FilledButton.styleFrom(
+                          style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 18),
+                            side: BorderSide(color: Land.border(scheme)),
                           ),
-                          child: Text(content.registerLabel),
+                          child: Text(content.signInLabel),
                         ),
                       ),
+                      if (content.registerEnabled) ...[
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: preview
+                                ? null
+                                : () {
+                                    Navigator.of(sheet).pop();
+                                    context.go('/signin?mode=register');
+                                  },
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 18),
+                            ),
+                            child: Text(content.registerLabel),
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

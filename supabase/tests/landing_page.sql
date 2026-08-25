@@ -1262,4 +1262,113 @@ begin
 end $$;
 
 
+-- ---------------------------------------------------------------------
+-- 0320: the two switches that take the buttons off the page
+--
+-- `register_enabled` chooses which way in a place offers. These two
+-- choose whether a place offers one at all — the button on the top bar
+-- (and, in the app, the menu sheet that is the bar folded up on a
+-- phone) and the buttons under the hero headline.
+--
+-- What is asserted is the shape the page has to have for the switches
+-- to be believed: both default on, both reach the browser, both save,
+-- and neither can be set by anybody but a platform administrator. The
+-- failure this catches is a switch that the console writes and the
+-- payload drops, which is worse than no switch because it is trusted.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_out jsonb; v_ok boolean;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true));
+
+  -- Shipped on, both of them. A platform that never opens the console
+  -- has the page it had before the columns existed.
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('the bar button ships on',
+    v_out -> 'page' ->> 'show_masthead_button', 'true');
+  perform pg_temp.check_eq('and the hero buttons do too',
+    v_out -> 'page' ->> 'show_hero_buttons', 'true');
+
+  -- Off, one at a time, because the whole point is that they are two
+  -- decisions: a bar button with no hero buttons and hero buttons with
+  -- a bare bar are both pages somebody wants.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('show_masthead_button', false));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('the bar button goes off on its own',
+    v_out -> 'page' ->> 'show_masthead_button', 'false');
+  perform pg_temp.check_eq('and the hero keeps its buttons',
+    v_out -> 'page' ->> 'show_hero_buttons', 'true');
+
+  perform public.platform_save_landing_page(
+    jsonb_build_object('show_hero_buttons', false));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('and the hero goes off on its own',
+    v_out -> 'page' ->> 'show_hero_buttons', 'false');
+  perform pg_temp.check_eq('without turning the bar back on',
+    v_out -> 'page' ->> 'show_masthead_button', 'false');
+
+  -- A patch that says nothing about them changes neither. This is the
+  -- rule the whole form depends on: the console sends only what the
+  -- operator touched, so an untouched switch must survive somebody
+  -- else's edit.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('hero_headline', 'Books that balance'));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('an unrelated edit leaves the bar switch alone',
+    v_out -> 'page' ->> 'show_masthead_button', 'false');
+  perform pg_temp.check_eq('and the hero switch alone',
+    v_out -> 'page' ->> 'show_hero_buttons', 'false');
+  perform pg_temp.check_eq('while saving what it did change',
+    v_out -> 'page' ->> 'hero_headline', 'Books that balance');
+
+  -- And back on again, so this is a switch rather than a one-way door.
+  perform public.platform_save_landing_page(
+    jsonb_build_object(
+      'show_masthead_button', true, 'show_hero_buttons', true));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('the bar button comes back',
+    v_out -> 'page' ->> 'show_masthead_button', 'true');
+  perform pg_temp.check_eq('and so do the hero buttons',
+    v_out -> 'page' ->> 'show_hero_buttons', 'true');
+
+  -- The draft door carries them too. 0318's shared body is the reason
+  -- this is one assertion rather than a second implementation: a key
+  -- added to the page is added once.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', false, 'show_hero_buttons', false));
+  perform pg_temp.check_eq('the preview shows the draft switch',
+    public.platform_landing_preview() -> 'page' ->> 'show_hero_buttons',
+    'false');
+  perform pg_temp.check_true('while the page itself shows nothing at all',
+    public.landing_page() -> 'page' = 'null'::jsonb);
+
+  -- Nobody else may touch either. The page is the whole platform's
+  -- front door, and an ordinary account holder — the same person, with
+  -- the badge taken off — is not an administrator.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true, 'show_masthead_button', true));
+  delete from public.platform_admins where user_id = v_admin;
+  perform pg_temp.sign_in_as(v_admin);
+  v_ok := false;
+  begin
+    perform public.platform_save_landing_page(
+      jsonb_build_object('show_masthead_button', false));
+  exception when sqlstate '42501' then v_ok := true;
+  end;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.check_true(
+    'somebody who is not a platform administrator is refused', v_ok);
+  perform pg_temp.check_eq('and the switch is where the administrator left it',
+    public.landing_page() -> 'page' ->> 'show_masthead_button', 'true');
+end $$;
+
+
 rollback;

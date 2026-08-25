@@ -41,10 +41,9 @@ typedef LandingModule = ({
 /// test agree; a quote a visitor works out for themselves and an invoice
 /// a month later must not disagree, and this is the half of that which
 /// runs in a browser.
-double monthlyTotal(List<LandingModule> modules, Set<String> chosen) =>
-    modules
-        .where((m) => m.isCore || chosen.contains(m.code))
-        .fold<double>(0, (sum, m) => sum + m.monthlyPrice);
+double monthlyTotal(List<LandingModule> modules, Set<String> chosen) => modules
+    .where((m) => m.isCore || chosen.contains(m.code))
+    .fold<double>(0, (sum, m) => sum + m.monthlyPrice);
 
 /// One shop the app can be downloaded from.
 typedef LandingAppLink = ({
@@ -82,7 +81,8 @@ const defaultSections = <LandingSection>[
   (
     icon: 'receipt',
     title: 'LHDN e-Invoice',
-    body: 'Submit to MyInvois from the invoice screen and keep the '
+    body:
+        'Submit to MyInvois from the invoice screen and keep the '
         'validated document, its UUID and its QR against the invoice it '
         'came from. Consolidated submission for the counter sales nobody '
         'asked a receipt for.',
@@ -90,56 +90,64 @@ const defaultSections = <LandingSection>[
   (
     icon: 'payments',
     title: 'Double-entry accounting',
-    body: 'Sales, purchases, banking and a general ledger that balances '
+    body:
+        'Sales, purchases, banking and a general ledger that balances '
         'by construction. Multi-currency with realised and unrealised '
         'gain posted where it belongs, and fiscal periods that close.',
   ),
   (
     icon: 'people',
     title: 'Payroll and HR',
-    body: 'EPF, SOCSO, EIS and PCB computed to the statutory tables, '
+    body:
+        'EPF, SOCSO, EIS and PCB computed to the statutory tables, '
         'leave and claims that post themselves to the ledger, and a bank '
         'file the payroll run exports.',
   ),
   (
     icon: 'expenses',
     title: 'Expenses and claims',
-    body: 'Photograph a receipt and let it read itself, or key it in. '
+    body:
+        'Photograph a receipt and let it read itself, or key it in. '
         'Staff claims route through an approval chain and post to the '
         'ledger once approved, against the account they belong to.',
   ),
   (
     icon: 'store',
     title: 'Point of sale',
-    body: 'Retail, food and beverage, and service businesses, on a '
+    body:
+        'Retail, food and beverage, and service businesses, on a '
         'counter, a tablet or a phone. Keeps selling when the connection '
         'drops and lands the batch when it returns.',
   ),
   (
     icon: 'inventory',
     title: 'Stock that ties to the ledger',
-    body: 'Serial numbers and batches, several warehouses, landed cost, '
+    body:
+        'Serial numbers and batches, several warehouses, landed cost, '
         'and units that differ between how you buy and how you sell. '
         'Reordering off measured demand rather than a guess.',
   ),
   (
     icon: 'shield',
     title: 'Corporate secretarial',
-    body: 'Registers, resolutions and the SSM deadlines a company '
+    body:
+        'Registers, resolutions and the SSM deadlines a company '
         'actually owes, counted on the Malaysian calendar rather than '
         'the server\'s.',
   ),
   (
     icon: 'insights',
     title: 'The statements an auditor asks for',
-    body: 'Profit and loss, balance sheet, cash flow, changes in equity, '
+    body:
+        'Profit and loss, balance sheet, cash flow, changes in equity, '
         'aged receivables and payables, SST summary and deferred '
         'revenue — on screen, as PDF, and as CSV you can add up.',
   ),
   (
     icon: 'cloud',
     title: 'One place, every device',
-    body: 'The same books in a browser, on Android and on iOS. Roles '
+    body:
+        'The same books in a browser, on Android and on iOS. Roles '
         'down to the individual permission, and an audit trail of who '
         'changed what.',
   ),
@@ -162,14 +170,16 @@ const defaultReasons = <LandingSection>[
   (
     icon: 'gavel',
     title: 'Built for Malaysian rules',
-    body: 'e-Invoice to MyInvois, SST, EPF, SOCSO, EIS, PCB and the SSM '
+    body:
+        'e-Invoice to MyInvois, SST, EPF, SOCSO, EIS, PCB and the SSM '
         'filing calendar. Not a foreign package with a Malaysian tax '
         'code bolted on the side.',
   ),
   (
     icon: 'calculate',
     title: 'The arithmetic is tested',
-    body: 'Every statutory figure the software works out has an '
+    body:
+        'Every statutory figure the software works out has an '
         'assertion behind it that fails if the number moves. The rate '
         'tables are dated, so last year is still computed last year\'s '
         'way.',
@@ -177,28 +187,32 @@ const defaultReasons = <LandingSection>[
   (
     icon: 'lock',
     title: 'Your books are yours',
-    body: 'Every company\'s data is separated in the database itself, '
+    body:
+        'Every company\'s data is separated in the database itself, '
         'not by a filter the application remembers to apply. Roles go '
         'down to the individual permission.',
   ),
   (
     icon: 'devices',
     title: 'One system, not five',
-    body: 'Accounting, CRM, payroll, point of sale, stock and corporate '
+    body:
+        'Accounting, CRM, payroll, point of sale, stock and corporate '
         'secretarial share one ledger. A payroll run posts itself; a '
         'sale at the counter is in the accounts before the shift ends.',
   ),
   (
     icon: 'sync_alt',
     title: 'Nothing is locked in',
-    body: 'Statements, ledgers and registers export as CSV and PDF, and '
+    body:
+        'Statements, ledgers and registers export as CSV and PDF, and '
         'a customer or item list imports the same way. Leaving is a '
         'download rather than a negotiation.',
   ),
   (
     icon: 'payments',
     title: 'Pay for what you use',
-    body: 'The books are the core. Everything else — payroll, POS, '
+    body:
+        'The books are the core. Everything else — payroll, POS, '
         'corporate secretarial, ticketing — is a module a company turns '
         'on when it needs it and not before.',
   ),
@@ -249,6 +263,8 @@ class LandingContent {
     this.signInLabel = 'Sign in',
     this.registerLabel = 'Create an account',
     this.registerEnabled = true,
+    this.showMastheadButton = true,
+    this.showHeroButtons = true,
     this.companyName,
     this.companyRegNo,
     this.address,
@@ -305,6 +321,27 @@ class LandingContent {
   final String signInLabel;
   final String registerLabel;
   final bool registerEnabled;
+
+  /// Whether the top bar draws a way in, and whether the hero does.
+  ///
+  /// `registerEnabled` chooses *which* way in a place offers; these two
+  /// choose whether the place offers one at all. Separate switches
+  /// because the bar and the hero are separate decisions — a bar button
+  /// with no hero buttons reads as a product site, hero buttons with a
+  /// bare bar read as a landing page, and a platform that onboards its
+  /// customers by hand may want neither.
+  ///
+  /// The bar's switch governs the phone's menu sheet too: the sheet is
+  /// where the bar's controls go when the screen is too narrow to draw
+  /// them, so leaving it there would be hiding nothing. The footer's
+  /// links stay either way — somebody who has read to the bottom and
+  /// wants in should not have to guess the address.
+  ///
+  /// Both default true here as well as in the database, so a payload
+  /// that predates the columns, or the shipped fallback content, still
+  /// gives a visitor a way in.
+  final bool showMastheadButton;
+  final bool showHeroButtons;
   final String? companyName;
   final String? companyRegNo;
   final String? address;
@@ -461,7 +498,8 @@ LandingContent parseLandingContent(Object? raw) {
     testimonials.add((
       quote: quote.trim(),
       author: author.trim(),
-      company: e['company'] is String && (e['company'] as String).trim().isNotEmpty
+      company:
+          e['company'] is String && (e['company'] as String).trim().isNotEmpty
           ? (e['company'] as String).trim()
           : null,
       avatarUrl: e['avatar_url'] is String ? e['avatar_url'] as String : null,
@@ -510,8 +548,9 @@ LandingContent parseLandingContent(Object? raw) {
     modules.add((
       code: code,
       name: name,
-      description:
-          e['description'] is String ? (e['description'] as String) : null,
+      description: e['description'] is String
+          ? (e['description'] as String)
+          : null,
       // The price arrives as a JSON number or a string depending on the
       // driver; either way an unparseable one is nothing rather than a
       // crash, because a landing page that throws is a landing page
@@ -533,7 +572,8 @@ LandingContent parseLandingContent(Object? raw) {
     brandColourDark: brandStr('brand_colour_dark'),
     appIconUrl: brandStr('app_icon_url'),
     themeMode: brandStr('theme_mode') ?? 'system',
-    heroHeadline: str('hero_headline') ??
+    heroHeadline:
+        str('hero_headline') ??
         'Accounting, CRM, payroll and e-Invoice for Malaysian business',
     heroSubhead: str('hero_subhead'),
     heroImageUrl: str('hero_image_url'),
@@ -541,6 +581,12 @@ LandingContent parseLandingContent(Object? raw) {
     registerLabel: str('register_label') ?? 'Create an account',
     registerEnabled: page['register_enabled'] is bool
         ? page['register_enabled'] as bool
+        : true,
+    showMastheadButton: page['show_masthead_button'] is bool
+        ? page['show_masthead_button'] as bool
+        : true,
+    showHeroButtons: page['show_hero_buttons'] is bool
+        ? page['show_hero_buttons'] as bool
         : true,
     companyName: str('company_name'),
     companyRegNo: str('company_reg_no'),

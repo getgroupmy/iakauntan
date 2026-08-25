@@ -145,4 +145,99 @@ void main() {
       }
     }
   });
+
+  // ---- and the switches that take them away ----
+  //
+  // Asked for from the same phone: wanting a quieter top of the page,
+  // or a front page that is a brochure rather than a door, is an
+  // ordinary thing to want, and until `0320` there was no way to say
+  // so. Two switches, because the bar and the hero are two decisions.
+
+  testWidgets('the bar button off empties the bar, and the menu with it', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      const LandingContent(published: true, showMastheadButton: false),
+    );
+
+    for (final label in ['Sign in', 'Create an account']) {
+      for (final e in find.text(label).evaluate()) {
+        expect(
+          tester.getTopLeft(find.byWidget(e.widget)).dy,
+          greaterThan(96),
+          reason: '"$label" is still on the bar',
+        );
+      }
+    }
+
+    // The sheet is the bar folded up, so it has to follow: a button
+    // hidden on the bar and left one tap behind the menu is hidden
+    // from nobody.
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pumpAndSettle();
+    for (final label in ['Sign in', 'Create an account']) {
+      expect(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text(label),
+        ),
+        findsNothing,
+        reason: 'the menu still offers "$label"',
+      );
+    }
+  });
+
+  testWidgets('the hero buttons off leave the headline and nothing to press', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      const LandingContent(published: true, showHeroButtons: false),
+    );
+
+    // The headline is still there — this switch takes away buttons,
+    // not the hero.
+    expect(find.textContaining('Accounting'), findsWidgets);
+
+    // Nothing to press between the headline and the bands below it.
+    // Measured against the headline rather than a fixed offset, so the
+    // assertion survives the hero changing height: the buttons sit a
+    // little over a hundred pixels under it, and the next way in — the
+    // footer — is thousands.
+    final headline = tester.getRect(find.textContaining('Accounting').first);
+    for (final label in ['Sign in', 'Create an account']) {
+      for (final e in find.text(label).evaluate()) {
+        final dy = tester.getTopLeft(find.byWidget(e.widget)).dy;
+        expect(
+          dy < headline.top || dy > headline.bottom + 1000,
+          isTrue,
+          reason: '"$label" is still under the headline, at $dy',
+        );
+      }
+    }
+  });
+
+  testWidgets('both off still leaves a way in at the bottom', (tester) async {
+    // Deliberate. Somebody who has read to the bottom and wants in
+    // should not have to guess the address, and a footer link is not a
+    // button competing for attention at the top of the page.
+    await pump(
+      tester,
+      const LandingContent(
+        published: true,
+        showMastheadButton: false,
+        showHeroButtons: false,
+      ),
+    );
+    expect(labelled(tester, 'Sign in'), greaterThan(0));
+  });
+
+  testWidgets('and by default both are on', (tester) async {
+    // The switches ship on, so a platform that never opens the console
+    // has the page it had before them.
+    const content = LandingContent(published: true);
+    expect(content.showMastheadButton, isTrue);
+    expect(content.showHeroButtons, isTrue);
+  });
 }

@@ -4380,8 +4380,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/landing_page.sql": {
-    "mtime": 1787632013.6061957,
-    "ast_hash": "ad60ef6eb70b503d071e33a00581638f",
+    "mtime": 1787641732.0832891,
+    "ast_hash": "98d8f21a06e9f0120c3b9a729e7696e6",
     "semantic_hash": ""
   },
   "app/lib/src/data/landing_repository.dart": {
@@ -4390,23 +4390,23 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/landing_cms.dart": {
-    "mtime": 1787632013.0421956,
-    "ast_hash": "c38f55fabc48d2904c54a889c54126a6",
+    "mtime": 1787641364.2107515,
+    "ast_hash": "290601025072ec164f0d21ff6cacb174",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_content.dart": {
-    "mtime": 1787632013.0513852,
-    "ast_hash": "ae35118abff6350d32219d917dcbd414",
+    "mtime": 1787641335.5587497,
+    "ast_hash": "6d2158b4ead54c4b95022c0ad1df4075",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_screen.dart": {
-    "mtime": 1787632104.253194,
-    "ast_hash": "b5bb6f6aeaaadfcfe9eac05f8c54bc7a",
+    "mtime": 1787641495.4303358,
+    "ast_hash": "b37c4ad64228ebd6f96aa55a1a1c2d97",
     "semantic_hash": ""
   },
   "app/test/landing_content_test.dart": {
-    "mtime": 1787632013.0541956,
-    "ast_hash": "c59eb33dcbf822f3bee1b0662a197175",
+    "mtime": 1787641784.4187765,
+    "ast_hash": "50efd6ca30a0cf60934ea978050b8a5f",
     "semantic_hash": ""
   },
   "supabase/migrations/0291_the_logo_the_bucket_would_not_take.sql": {
@@ -4460,8 +4460,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_motion.dart": {
-    "mtime": 1787637399.2052312,
-    "ast_hash": "6d3018374e711b645fae9cdf57cc868b",
+    "mtime": 1787639545.5294864,
+    "ast_hash": "376575392b58721d7d8703fca7ee98f5",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_pricing.dart": {
@@ -4775,8 +4775,18 @@
     "semantic_hash": ""
   },
   "app/test/landing_reveal_test.dart": {
-    "mtime": 1787637375.399988,
-    "ast_hash": "a83ea0e1bd9e908ea0bf0c3057b138f6",
+    "mtime": 1787639524.9516113,
+    "ast_hash": "0689085681ba2f603660763cf69a0a5e",
+    "semantic_hash": ""
+  },
+  "app/test/landing_ways_in_test.dart": {
+    "mtime": 1787641543.9095776,
+    "ast_hash": "f6a63ebb4364ffb847dde24f6427765f",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0320_a_front_door_you_can_close.sql": {
+    "mtime": 1787641229.677986,
+    "ast_hash": "eeb6988eaf8c4a380c0954ac338d77e1",
     "semantic_hash": ""
   }
 }

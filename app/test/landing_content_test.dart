@@ -63,7 +63,8 @@ void main() {
   });
 
   group('a written page', () {
-    LandingContent published(Map<String, dynamic> extra) => parseLandingContent({
+    LandingContent published(Map<String, dynamic> extra) =>
+        parseLandingContent({
           'page': {'wordmark': 'iAkauntan', ...extra},
           'sections': const [],
           'app_links': const [],
@@ -159,15 +160,19 @@ void main() {
 
   group('the price list', () {
     LandingContent priced(List<Object?> modules) => parseLandingContent({
-          'page': {'wordmark': 'x', 'show_pricing': true},
-          'modules': modules,
-        });
+      'page': {'wordmark': 'x', 'show_pricing': true},
+      'modules': modules,
+    });
 
     test('what the page says about showing it', () {
       // Off unless the database said on. A parser that defaulted this to
       // true would publish a rate card the platform never agreed to.
-      expect(parseLandingContent({'page': {'wordmark': 'x'}}).showPricing,
-          isFalse);
+      expect(
+        parseLandingContent({
+          'page': {'wordmark': 'x'},
+        }).showPricing,
+        isFalse,
+      );
       expect(priced(const []).showPricing, isTrue);
     });
 
@@ -270,8 +275,7 @@ void main() {
       // Untickable on the screen, so the two have to agree; if a core
       // module could be dropped from the sum by not appearing in the
       // set, a stale set would quote a price nobody sells.
-      expect(monthlyTotal(all, const {'sales'}),
-          monthlyTotal(all, const {}));
+      expect(monthlyTotal(all, const {'sales'}), monthlyTotal(all, const {}));
     });
 
     test('a code nobody offers is not charged for', () {
@@ -308,8 +312,10 @@ void main() {
     });
 
     test('the icon source is read, and is null when unset', () {
-      expect(parse({'app_icon_url': 'https://x/icon.png'}).appIconUrl,
-          'https://x/icon.png');
+      expect(
+        parse({'app_icon_url': 'https://x/icon.png'}).appIconUrl,
+        'https://x/icon.png',
+      );
       expect(parse(const {}).appIconUrl, isNull);
     });
 
@@ -367,8 +373,10 @@ void main() {
     // The site is still not published, and that has to stay true — the
     // fix must not put anybody's draft front page up.
     test('and the page is still not published', () {
-      expect(parseLandingContent({'page': null, 'brand': brand}).published,
-          isFalse);
+      expect(
+        parseLandingContent({'page': null, 'brand': brand}).published,
+        isFalse,
+      );
       expect(parse({'wordmark': 'x'}).published, isTrue);
     });
 
@@ -414,10 +422,14 @@ void main() {
     });
 
     test('rubbish in the brand key is not a crash', () {
-      expect(parseLandingContent({'page': null, 'brand': 'nope'}).wordmark,
-          'iAkauntan');
-      expect(parseLandingContent({'page': null, 'brand': 42}).themeMode,
-          'system');
+      expect(
+        parseLandingContent({'page': null, 'brand': 'nope'}).wordmark,
+        'iAkauntan',
+      );
+      expect(
+        parseLandingContent({'page': null, 'brand': 42}).themeMode,
+        'system',
+      );
     });
   });
 
@@ -839,6 +851,51 @@ void main() {
         parseLandingContent({'page': <String, dynamic>{}}).ctaHeadline,
         isNull,
       );
+    });
+  });
+
+  group('the switches that take the buttons off', () {
+    test('both are read', () {
+      final c = parseLandingContent({
+        'page': {'show_masthead_button': false, 'show_hero_buttons': false},
+      });
+      expect(c.showMastheadButton, isFalse);
+      expect(c.showHeroButtons, isFalse);
+    });
+
+    test('and they are separate decisions', () {
+      // The whole reason there are two: a bar button with no hero
+      // buttons and hero buttons with a bare bar are both pages
+      // somebody wants, and one switch would make them move together.
+      final barOnly = parseLandingContent({
+        'page': {'show_hero_buttons': false},
+      });
+      expect(barOnly.showMastheadButton, isTrue);
+      expect(barOnly.showHeroButtons, isFalse);
+
+      final heroOnly = parseLandingContent({
+        'page': {'show_masthead_button': false},
+      });
+      expect(heroOnly.showMastheadButton, isFalse);
+      expect(heroOnly.showHeroButtons, isTrue);
+    });
+
+    test('absent reads as on, and so does nonsense', () {
+      // A payload saved before the columns existed, a fallback with no
+      // page at all, or a string where a boolean belongs. Every one of
+      // them has to leave the visitor a way in: a page that hides its
+      // own front door because a key was missing is worse than one
+      // that shows a button somebody wanted hidden.
+      for (final page in <Map<String, dynamic>>[
+        <String, dynamic>{},
+        {'show_masthead_button': 'false', 'show_hero_buttons': 0},
+      ]) {
+        final c = parseLandingContent({'page': page});
+        expect(c.showMastheadButton, isTrue, reason: '$page');
+        expect(c.showHeroButtons, isTrue, reason: '$page');
+      }
+      expect(parseLandingContent(null).showMastheadButton, isTrue);
+      expect(parseLandingContent(null).showHeroButtons, isTrue);
     });
   });
 }
