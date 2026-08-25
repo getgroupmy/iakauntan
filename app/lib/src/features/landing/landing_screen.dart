@@ -557,46 +557,58 @@ class _HeroFullBleed extends StatelessWidget {
         // four pixels and hid the bottom of the hero, which is exactly
         // the content the band exists to show.
         //
-        // The picture and the scrim fill whatever the copy asks for.
-        return ConstrainedBox(
-          constraints: BoxConstraints(
-            minHeight: wide ? 620 : 560,
-            minWidth: double.infinity,
-          ),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Image.network(
-                  content.heroImageUrl!,
-                  fit: BoxFit.cover,
-                  // A hero that will not load must not leave white text
-                  // on white. The ink stands in until it does.
-                  errorBuilder: (context, _, __) =>
-                      Container(color: const Color(0xFF0F172A)),
-                  loadingBuilder: (context, child, progress) => progress == null
-                      ? child
-                      : Container(color: const Color(0xFF0F172A)),
-                ),
+        // The floor is a child of the stack rather than a constraint on
+        // it, and that is the whole of it. This band sits in a scroll
+        // view, so the height it is offered is unbounded — and a
+        // `ConstrainedBox(minHeight:)` under an unbounded maximum sizes
+        // *itself* to the floor and leaves its child at the top, which
+        // put the copy against the top edge with four hundred pixels of
+        // dead photograph under it. An empty `SizedBox` of the same
+        // height, standing beside the copy, makes the stack at least
+        // that tall by being that tall; `alignment` then centres both.
+        // Content taller than the floor simply wins, which is what a
+        // floor is for.
+        //
+        // The picture and the scrim fill whatever comes out.
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(
+              child: Image.network(
+                content.heroImageUrl!,
+                fit: BoxFit.cover,
+                // A hero that will not load must not leave white text
+                // on white. The ink stands in until it does.
+                errorBuilder: (context, _, __) =>
+                    Container(color: const Color(0xFF0F172A)),
+                loadingBuilder: (context, child, progress) => progress == null
+                    ? child
+                    : Container(color: const Color(0xFF0F172A)),
               ),
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        const Color(0xFF0F172A).withValues(alpha: 0.88),
-                        const Color(0xFF0F172A).withValues(alpha: 0.62),
-                        const Color(
-                          0xFF0F172A,
-                        ).withValues(alpha: wide ? 0.2 : 0.5),
-                      ],
-                      stops: const [0, 0.55, 1],
-                    ),
+            ),
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      const Color(0xFF0F172A).withValues(alpha: 0.88),
+                      const Color(0xFF0F172A).withValues(alpha: 0.62),
+                      const Color(
+                        0xFF0F172A,
+                      ).withValues(alpha: wide ? 0.2 : 0.5),
+                    ],
+                    stops: const [0, 0.55, 1],
                   ),
                 ),
               ),
-              Center(
+            ),
+            // The floor, and nothing else.
+            SizedBox(height: wide ? 620 : 560),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: Land.bandY),
+              child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: Land.maxWidth),
                   child: Padding(
@@ -618,8 +630,8 @@ class _HeroFullBleed extends StatelessWidget {
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         );
       },
     );
