@@ -4763,5 +4763,15 @@
     "mtime": 1787632013.0461955,
     "ast_hash": "63c172b3fc45b585a0f5059b15fe325a",
     "semantic_hash": ""
+  },
+  "app/screenshots/dashboard_shot.dart": {
+    "mtime": 1787633988.2961273,
+    "ast_hash": "101a96bd72016b2e44aa6a7efaf020d5",
+    "semantic_hash": ""
+  },
+  "app/web/hero-dashboard.png": {
+    "mtime": 1787633988.319832,
+    "ast_hash": "f56aa0c3554bf0b30c0959fad048b87d",
+    "semantic_hash": ""
   }
 }
