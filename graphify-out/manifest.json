@@ -4380,8 +4380,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/landing_page.sql": {
-    "mtime": 1787670583.2842722,
-    "ast_hash": "695ba1b9aa3fed8c0617be3205d92b23",
+    "mtime": 1787674858.8584192,
+    "ast_hash": "024b7b7ec23431ef2eb524cf993cc9ec",
     "semantic_hash": ""
   },
   "app/lib/src/data/landing_repository.dart": {
@@ -4395,8 +4395,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_content.dart": {
-    "mtime": 1787669898.0762012,
-    "ast_hash": "dd3cf107839182e4a0252fbe735a7b9e",
+    "mtime": 1787674766.9055161,
+    "ast_hash": "f642146e15f8addfe7affb808e2375aa",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_screen.dart": {
@@ -4405,8 +4405,8 @@
     "semantic_hash": ""
   },
   "app/test/landing_content_test.dart": {
-    "mtime": 1787670261.0599368,
-    "ast_hash": "11c0937b37e859c5ced59f37ef2d27ab",
+    "mtime": 1787674834.2591155,
+    "ast_hash": "81eede6798e1255b8dfa5203a4fe0791",
     "semantic_hash": ""
   },
   "supabase/migrations/0291_the_logo_the_bucket_would_not_take.sql": {
@@ -4817,6 +4817,11 @@
   "supabase/migrations/0324_the_demo_can_show_an_attachment.sql": {
     "mtime": 1787673235.9801457,
     "ast_hash": "6cb6a5f67f687a7becb9f62fa8a91c19",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0325_the_mark_it_ships_with.sql": {
+    "mtime": 1787674754.2323751,
+    "ast_hash": "eec1936e36ce11f39b004178c002b5c0",
     "semantic_hash": ""
   }
 }

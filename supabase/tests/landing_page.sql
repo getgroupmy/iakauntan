@@ -1354,6 +1354,14 @@ begin
     public.platform_landing_preview() -> 'page' ->> 'hero_image_url',
     'https://iakauntan.com/hero-dashboard.png');
 
+  -- 0325. And a mark, which reaches the browser through `brand` rather
+  -- than `page` — branding a product is not publishing a website, so it
+  -- is never gated on `is_published` and an unpublished platform still
+  -- has its logo on the signed-in app.
+  perform pg_temp.check_true('and the product ships with a mark',
+    public.landing_page() -> 'brand' ->> 'logo_url' like
+      'https://%/storage/v1/object/public/logos/landing/logo%');
+
   -- Nobody else may touch any of it. The page is the whole platform's
   -- front door, and an ordinary account holder — the same person, with
   -- the badge taken off — is not an administrator.

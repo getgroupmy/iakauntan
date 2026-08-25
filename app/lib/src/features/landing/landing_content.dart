@@ -59,6 +59,23 @@ typedef LandingAppLink = ({
 /// page yet. The screen shows its built-in copy in that case rather than
 /// an error: a visitor who arrives before anybody has written the site
 /// should still be able to sign in.
+/// The mark the product ships with.
+///
+/// `logos/landing/logo`, public because the bucket is: `logos_read` is
+/// `using (bucket_id = 'logos')` and nothing further, which it has to
+/// be — the mark at the top of the landing page is read by people who
+/// are not signed in.
+///
+/// The file has been in storage since 24 August; what was missing was
+/// the column pointing at it, so every screen drew `_FallbackMark`
+/// instead. `0325` sets the same value as the column default, so the
+/// database and the offline fallback agree about what an unbranded
+/// platform looks like — and `_FallbackMark` goes back to being what it
+/// was written for, the case where the address will not load.
+const defaultLogoUrl =
+    'https://ewwcgtnniwqndrzukksm.supabase.co/storage/v1/object/public/'
+    'logos/landing/logo?v=1787561059459';
+
 /// The picture the hero shows when nobody has chosen one.
 ///
 /// `app/web/hero-dashboard.png`, served from the same origin as the
@@ -262,7 +279,7 @@ const defaultBadges = <LandingSection>[
 class LandingContent {
   const LandingContent({
     required this.published,
-    this.logoUrl,
+    this.logoUrl = defaultLogoUrl,
     this.logoDarkUrl,
     this.wordmark = 'iAkauntan',
     this.tagline,
@@ -475,7 +492,7 @@ LandingContent parseLandingContent(Object? raw) {
       // Nobody has published a site, and that is still true — what
       // changed is that it no longer costs the operator their colours.
       published: false,
-      logoUrl: brandStr('logo_url'),
+      logoUrl: brandStr('logo_url') ?? defaultLogoUrl,
       logoDarkUrl: brandStr('logo_dark_url'),
       wordmark: brandStr('wordmark') ?? 'iAkauntan',
       brandColour: brandStr('brand_colour'),
@@ -615,7 +632,7 @@ LandingContent parseLandingContent(Object? raw) {
 
   return LandingContent(
     published: true,
-    logoUrl: brandStr('logo_url'),
+    logoUrl: brandStr('logo_url') ?? defaultLogoUrl,
     logoDarkUrl: brandStr('logo_dark_url'),
     wordmark: brandStr('wordmark') ?? 'iAkauntan',
     tagline: str('tagline'),

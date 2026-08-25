@@ -384,7 +384,12 @@ void main() {
       final c = unpublished(const {});
       expect(c.wordmark, 'iAkauntan');
       expect(c.themeMode, 'system');
-      expect(c.logoUrl, isNull);
+      // 0325. This expected null, and null drew the two rectangles in
+      // `_FallbackMark`. What ships is now the mark itself, so "what
+      // shipped" means the file rather than the drawing of one.
+      expect(c.logoUrl, defaultLogoUrl);
+      // And a colour still is not: an unbranded platform takes the
+      // product's own palette rather than a hex somebody has to undo.
       expect(c.brandColour, isNull);
     });
 
@@ -862,6 +867,56 @@ void main() {
         parseLandingContent({'page': <String, dynamic>{}}).ctaHeadline,
         isNull,
       );
+    });
+  });
+
+  group('the mark it ships with', () {
+    test('an unbranded platform still has a logo', () {
+      // 0325. It shipped null, and null drew the two rectangles in
+      // `_FallbackMark`. The file has been in storage since August;
+      // what was missing was the column pointing at it.
+      expect(parseLandingContent(null).logoUrl, defaultLogoUrl);
+      expect(
+        parseLandingContent({'page': <String, dynamic>{}}).logoUrl,
+        defaultLogoUrl,
+      );
+    });
+
+    test('and an uploaded one replaces it', () {
+      final c = parseLandingContent({
+        'brand': {'logo_url': 'https://cdn.test/mine.png'},
+      });
+      expect(c.logoUrl, 'https://cdn.test/mine.png');
+    });
+
+    test('cleared in the console, the built-in comes back', () {
+      // Every other defaulted field on this page behaves this way. A
+      // default is not a lock.
+      final c = parseLandingContent({
+        'brand': {'logo_url': '   '},
+      });
+      expect(c.logoUrl, defaultLogoUrl);
+    });
+
+    test('it reaches an unpublished page too', () {
+      // Branding a product is not publishing a website — 0316. An
+      // operator who has not written a front page still has a logo on
+      // the signed-in app.
+      final c = parseLandingContent({
+        'page': null,
+        'brand': <String, dynamic>{},
+      });
+      expect(c.published, isFalse);
+      expect(c.logoUrl, defaultLogoUrl);
+    });
+
+    test('and it is a public address, because strangers read it', () {
+      // `logos_read` is `using (bucket_id = 'logos')` and nothing
+      // further, which it has to be: the mark at the top of the landing
+      // page is drawn for people who are not signed in. A signed URL
+      // here would work in every test and fail for every visitor.
+      expect(defaultLogoUrl, contains('/object/public/'));
+      expect(defaultLogoUrl, startsWith('https://'));
     });
   });
 
