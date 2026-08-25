@@ -4460,8 +4460,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_motion.dart": {
-    "mtime": 1787632013.0513852,
-    "ast_hash": "64a6760abe3caabd6a35ce6ae9d2a6b8",
+    "mtime": 1787637399.2052312,
+    "ast_hash": "6d3018374e711b645fae9cdf57cc868b",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_pricing.dart": {
@@ -4772,6 +4772,11 @@
   "app/web/hero-dashboard.png": {
     "mtime": 1787633988.319832,
     "ast_hash": "f56aa0c3554bf0b30c0959fad048b87d",
+    "semantic_hash": ""
+  },
+  "app/test/landing_reveal_test.dart": {
+    "mtime": 1787637375.399988,
+    "ast_hash": "a83ea0e1bd9e908ea0bf0c3057b138f6",
     "semantic_hash": ""
   }
 }

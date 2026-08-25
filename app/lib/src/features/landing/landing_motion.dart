@@ -91,13 +91,54 @@ class _VisibilityProbe extends StatefulWidget {
 }
 
 class _VisibilityProbeState extends State<_VisibilityProbe> {
+  /// The scroll position of the enclosing viewport.
+  ///
+  /// This used to be a `NotificationListener<ScrollNotification>`
+  /// wrapped around the child, and that never fired once. Notifications
+  /// travel **up** the tree from the `Scrollable` that dispatches them,
+  /// and every one of these probes is a descendant of the page's scroll
+  /// view — so the listener sat below the sender and heard nothing.
+  ///
+  /// The only thing that ever revealed anything was the post-frame
+  /// check in `initState`, which is true exactly for what is on screen
+  /// at the first frame. Everything below the fold stayed at opacity
+  /// zero permanently: laid out, taking its full height, and invisible.
+  /// On a phone, where the hero fills the screen, that was the entire
+  /// page under a blank gap the size of the content that should have
+  /// been in it.
+  ///
+  /// A `ScrollPosition` is a `Listenable` and `Scrollable.maybeOf`
+  /// finds it from a descendant, which is the direction that actually
+  /// works.
+  ScrollPosition? _position;
+
   @override
   void initState() {
     super.initState();
     // Everything above the fold is visible before a single scroll
-    // notification fires, so it has to be checked once on arrival or the
-    // hero never appears.
+    // happens, so it has to be checked once on arrival or the hero
+    // never appears.
     WidgetsBinding.instance.addPostFrameCallback((_) => _check());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = Scrollable.maybeOf(context)?.position;
+    if (identical(next, _position)) return;
+    _position?.removeListener(_check);
+    _position = next;
+    _position?.addListener(_check);
+    // Nothing to scroll — a preview pane, a test, a page short enough
+    // to fit. Reveal rather than wait for an event that cannot come:
+    // invisible forever is a far worse failure than un-animated.
+    if (next == null) widget.onVisible(1);
+  }
+
+  @override
+  void dispose() {
+    _position?.removeListener(_check);
+    super.dispose();
   }
 
   void _check() {
@@ -112,19 +153,9 @@ class _VisibilityProbeState extends State<_VisibilityProbe> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return NotificationListener<ScrollNotification>(
-      onNotification: (_) {
-        _check();
-        // False: this is watching, not consuming. Returning true would
-        // stop the notification reaching the scroll view above and the
-        // page would not scroll at all.
-        return false;
-      },
-      child: widget.child,
-    );
-  }
+  Widget build(BuildContext context) => widget.child;
 }
+
 
 /// A card that lifts under the pointer.
 ///
@@ -205,18 +236,38 @@ class _ParallaxState extends State<Parallax> {
   /// starts already displaced.
   double? _anchor;
 
-  bool _onScroll(ScrollNotification n) {
-    if (n.metrics.axis != Axis.vertical) return false;
+  /// Same correction as `_VisibilityProbe`: this was a
+  /// `NotificationListener<ScrollNotification>` around the child, which
+  /// is below the `Scrollable` that sends them and therefore never
+  /// heard one. The element simply never moved.
+  ScrollPosition? _position;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = Scrollable.maybeOf(context)?.position;
+    if (identical(next, _position)) return;
+    _position?.removeListener(_onScroll);
+    _position = next;
+    _position?.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _position?.removeListener(_onScroll);
+    super.dispose();
+  }
+
+  void _onScroll() {
     final box = context.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return false;
+    if (box == null || !box.hasSize) return;
     final y = box.localToGlobal(Offset.zero).dy;
     _anchor ??= y + _offset;
 
-    final travelled = (_anchor! - y);
+    final travelled = _anchor! - y;
     final next = (travelled * widget.factor)
         .clamp(-widget.maxOffset, widget.maxOffset);
     if ((next - _offset).abs() > 0.5) setState(() => _offset = next);
-    return false;
   }
 
   @override
@@ -226,12 +277,9 @@ class _ParallaxState extends State<Parallax> {
     if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
       return widget.child;
     }
-    return NotificationListener<ScrollNotification>(
-      onNotification: _onScroll,
-      child: Transform.translate(
-        offset: Offset(0, _offset),
-        child: widget.child,
-      ),
+    return Transform.translate(
+      offset: Offset(0, _offset),
+      child: widget.child,
     );
   }
 }
@@ -281,14 +329,11 @@ class _CountUpState extends State<CountUp>
   /// the width it will finish at — so "240,000" does not shuffle left
   /// and right as it climbs, which reads as a glitch rather than as a
   /// count.
-  String _at(double t) => widget.text.replaceAllMapped(
-    RegExp(r'\d+'),
-    (m) {
-      final full = m[0]!;
-      final scaled = (int.parse(full) * t).round().toString();
-      return scaled.padLeft(full.length, '0');
-    },
-  );
+  String _at(double t) => widget.text.replaceAllMapped(RegExp(r'\d+'), (m) {
+    final full = m[0]!;
+    final scaled = (int.parse(full) * t).round().toString();
+    return scaled.padLeft(full.length, '0');
+  });
 
   @override
   Widget build(BuildContext context) {
