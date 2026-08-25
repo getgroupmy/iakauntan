@@ -76,6 +76,23 @@ const defaultLogoUrl =
     'https://ewwcgtnniwqndrzukksm.supabase.co/storage/v1/object/public/'
     'logos/landing/logo?v=1787561059459';
 
+/// The icon the browser tab shows when nobody has chosen one.
+///
+/// A different column from [defaultLogoUrl] and, today, the same image.
+/// They are not the same job: a mark on a landing page is read at 36
+/// pixels beside a wordmark, a favicon at 16 in a row of other tabs,
+/// and the version that survives that is usually cropped tighter with
+/// no wordmark at all. Two defaults so they can drift apart the moment
+/// somebody uploads a proper one.
+///
+/// `applyFavicon` returns early on null, so before `0326` the uploaded
+/// icon was never used and the tab kept the static one in
+/// `web/index.html` — which is still the last resort, one layer further
+/// out than this.
+const defaultAppIconUrl =
+    'https://ewwcgtnniwqndrzukksm.supabase.co/storage/v1/object/public/'
+    'logos/landing/app-icon?v=1787675276405';
+
 /// The picture the hero shows when nobody has chosen one.
 ///
 /// `app/web/hero-dashboard.png`, served from the same origin as the
@@ -285,7 +302,7 @@ class LandingContent {
     this.tagline,
     this.brandColour,
     this.brandColourDark,
-    this.appIconUrl,
+    this.appIconUrl = defaultAppIconUrl,
     this.themeMode = 'system',
     this.heroHeadline =
         'Accounting, CRM, payroll and e-Invoice for Malaysian business',
@@ -497,7 +514,7 @@ LandingContent parseLandingContent(Object? raw) {
       wordmark: brandStr('wordmark') ?? 'iAkauntan',
       brandColour: brandStr('brand_colour'),
       brandColourDark: brandStr('brand_colour_dark'),
-      appIconUrl: brandStr('app_icon_url'),
+      appIconUrl: brandStr('app_icon_url') ?? defaultAppIconUrl,
       themeMode: brandStr('theme_mode') ?? 'system',
     );
   }
@@ -638,7 +655,7 @@ LandingContent parseLandingContent(Object? raw) {
     tagline: str('tagline'),
     brandColour: brandStr('brand_colour'),
     brandColourDark: brandStr('brand_colour_dark'),
-    appIconUrl: brandStr('app_icon_url'),
+    appIconUrl: brandStr('app_icon_url') ?? defaultAppIconUrl,
     themeMode: brandStr('theme_mode') ?? 'system',
     heroHeadline:
         str('hero_headline') ??

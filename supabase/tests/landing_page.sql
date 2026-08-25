@@ -1362,6 +1362,13 @@ begin
     public.landing_page() -> 'brand' ->> 'logo_url' like
       'https://%/storage/v1/object/public/logos/landing/logo%');
 
+  -- 0326. And an icon for the browser tab, which is its own column:
+  -- `applyFavicon` returns early on null, so before this the uploaded
+  -- one was never used.
+  perform pg_temp.check_true('and an icon for the tab',
+    public.landing_page() -> 'brand' ->> 'app_icon_url' like
+      'https://%/storage/v1/object/public/logos/landing/app-icon%');
+
   -- Nobody else may touch any of it. The page is the whole platform's
   -- front door, and an ordinary account holder — the same person, with
   -- the badge taken off — is not an administrator.

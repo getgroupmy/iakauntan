@@ -311,12 +311,16 @@ void main() {
       expect(LandingContent.fallback.themeMode, 'system');
     });
 
-    test('the icon source is read, and is null when unset', () {
+    test('the icon source is read, and falls back when unset', () {
       expect(
         parse({'app_icon_url': 'https://x/icon.png'}).appIconUrl,
         'https://x/icon.png',
       );
-      expect(parse(const {}).appIconUrl, isNull);
+      // 0326. This expected null, which meant `applyFavicon` returned
+      // early and the tab kept the static icon in `web/index.html`.
+      // What ships is the uploaded one now; the static file is still
+      // the last resort, one layer further out.
+      expect(parse(const {}).appIconUrl, defaultAppIconUrl);
     });
 
     test('the stored scheme becomes the Flutter one', () {
@@ -910,13 +914,46 @@ void main() {
       expect(c.logoUrl, defaultLogoUrl);
     });
 
+    test('and the browser tab has an icon for the same reason', () {
+      // 0326. `applyFavicon` returns early on null, so the uploaded
+      // icon was never used and the tab kept the static one in
+      // `web/index.html`. Its own column, not the logo's: a mark beside
+      // a wordmark at 36 pixels and a favicon at 16 are different
+      // pictures, whatever they happen to be today.
+      expect(parseLandingContent(null).appIconUrl, defaultAppIconUrl);
+      expect(
+        parseLandingContent({
+          'brand': {'app_icon_url': '  '},
+        }).appIconUrl,
+        defaultAppIconUrl,
+      );
+      expect(
+        parseLandingContent({
+          'brand': {'app_icon_url': 'https://cdn.test/fav.png'},
+        }).appIconUrl,
+        'https://cdn.test/fav.png',
+      );
+    });
+
+    test('and the two can be set apart', () {
+      // The point of them being two columns. Uploading a tighter crop
+      // for the tab must not change the mark on the page.
+      final c = parseLandingContent({
+        'brand': {'app_icon_url': 'https://cdn.test/fav.png'},
+      });
+      expect(c.appIconUrl, 'https://cdn.test/fav.png');
+      expect(c.logoUrl, defaultLogoUrl);
+    });
+
     test('and it is a public address, because strangers read it', () {
       // `logos_read` is `using (bucket_id = 'logos')` and nothing
       // further, which it has to be: the mark at the top of the landing
       // page is drawn for people who are not signed in. A signed URL
       // here would work in every test and fail for every visitor.
-      expect(defaultLogoUrl, contains('/object/public/'));
-      expect(defaultLogoUrl, startsWith('https://'));
+      for (final url in [defaultLogoUrl, defaultAppIconUrl]) {
+        expect(url, contains('/object/public/'), reason: url);
+        expect(url, startsWith('https://'), reason: url);
+      }
     });
   });
 
