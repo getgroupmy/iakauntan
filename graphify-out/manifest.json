@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787728033.5534472,
-    "ast_hash": "68459f098f98387fadbc2e3eae42551b",
+    "mtime": 1787729304.9542184,
+    "ast_hash": "ba5519c56681b7147177137ded92dc5c",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -115,13 +115,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
-    "mtime": 1787728033.5614471,
-    "ast_hash": "242ccde1f058bab03dfd7fc4f59df9f7",
+    "mtime": 1787729261.2746,
+    "ast_hash": "4be0b18cfdfb7e9a6091c508526e1ba2",
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1787728033.5614471,
-    "ast_hash": "59873a7a9d56ff7fb44ec2a8d033ef4f",
+    "mtime": 1787729393.1618404,
+    "ast_hash": "7c8383034a93b1588aa1922c608d5da8",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1787728033.5734472,
-    "ast_hash": "feaea6fa324acd356b8e7bd1a4721425",
+    "mtime": 1787729193.1633935,
+    "ast_hash": "04f02c4b597a24ea66b7e0e0d0d8fbcd",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787728033.5774472,
-    "ast_hash": "629fe56b05b8e0354e2b3e7abe7a58e1",
+    "mtime": 1787729304.937159,
+    "ast_hash": "bb28b496244fec01bd106df39716b921",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -4877,6 +4877,31 @@
   "supabase/tests/workspace_address.sql": {
     "mtime": 1787728557.9334784,
     "ast_hash": "5b24406201cce68922049fe5191859da",
+    "semantic_hash": ""
+  },
+  "app/lib/src/data/reserved_names_repository.dart": {
+    "mtime": 1787729488.8816266,
+    "ast_hash": "08d1ce2c1a728e57295f80fd7b9de81b",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/admin/reservations_admin.dart": {
+    "mtime": 1787729250.23412,
+    "ast_hash": "54930d4cb2f719e2392cd4909ef48b6a",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/mail/inbox_screen.dart": {
+    "mtime": 1787729289.8929052,
+    "ast_hash": "acb030793bf1f09eefc2301b838f8567",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/settings/addresses_card.dart": {
+    "mtime": 1787729213.4215174,
+    "ast_hash": "24d760ac1d90640e46569a564094084c",
+    "semantic_hash": ""
+  },
+  "app/test/reserved_names_test.dart": {
+    "mtime": 1787729419.2100184,
+    "ast_hash": "041874c58dbf5ee96ca2cdfe00a4b8b5",
     "semantic_hash": ""
   }
 }

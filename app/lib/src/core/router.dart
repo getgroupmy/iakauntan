@@ -11,6 +11,7 @@ import '../features/contacts/contacts_screen.dart';
 import '../features/crm/leads_screen.dart';
 import '../features/crm/pipeline_screen.dart';
 import '../features/admin/platform_console_screen.dart';
+import '../features/mail/inbox_screen.dart';
 import '../features/assets/assets_screen.dart';
 import '../features/banking/reconciliation_screen.dart';
 import '../features/stock/lots_screen.dart';
@@ -362,6 +363,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, state) =>
                 PayslipScreen(payslipId: state.pathParameters['id']!),
           ),
+          GoRoute(path: '/inbox', builder: (_, __) => const InboxScreen()),
           // One route per console section, from the same table the side
           // menu is built from, so a section cannot appear in the menu
           // without somewhere to go or exist without appearing.

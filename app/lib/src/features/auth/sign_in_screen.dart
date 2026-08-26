@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/providers.dart';
+import '../../data/reserved_names_repository.dart';
 import '../../core/theme.dart';
 import '../landing/landing_content.dart';
 import 'demo_accounts.dart';
@@ -27,6 +28,12 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   /// they must not disagree.
   String get _wordmark =>
       ref.watch(landingContentProvider).valueOrNull?.wordmark ?? 'iAkauntan';
+
+  /// The company whose door this is, when somebody has arrived at their
+  /// own subdomain rather than at ours. Null everywhere else, which is
+  /// most places.
+  String? get _workspace =>
+      ref.watch(workspaceHostProvider).valueOrNull?['name'] as String?;
 
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
@@ -216,7 +223,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 Text(
                   _isSignUp
                       ? 'Set up your books in a couple of minutes.'
-                      : 'Sign in to continue to $_wordmark.',
+                      : 'Sign in to continue to ${_workspace ?? _wordmark}.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 28),
@@ -401,9 +408,16 @@ class _Brand extends ConsumerWidget {
     final color = onDark ? scheme.onPrimary : scheme.primary;
     final brand = ref.watch(landingContentProvider).valueOrNull;
 
+    // A company that has been given a subdomain owns this page: at
+    // `sinar.iakauntan.com` the mark is Sinar's, not ours. Everywhere
+    // else this is null and nothing below changes.
+    final workspace = ref.watch(workspaceHostProvider).valueOrNull;
+
     // On the primary panel the light logo is the wrong one: same rule
     // the landing page uses, for the same reason.
-    final url = (onDark ? brand?.logoDarkUrl : null) ?? brand?.logoUrl;
+    final url = workspace?['logo_url'] as String? ??
+        (onDark ? brand?.logoDarkUrl : null) ??
+        brand?.logoUrl;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -420,7 +434,7 @@ class _Brand extends ConsumerWidget {
           _Wallet(onDark: onDark),
         const SizedBox(width: 12),
         Text(
-          brand?.wordmark ?? 'iAkauntan',
+          workspace?['name'] as String? ?? brand?.wordmark ?? 'iAkauntan',
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w700,

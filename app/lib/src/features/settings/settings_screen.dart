@@ -11,6 +11,7 @@ import '../../data/models.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/repository.dart';
 import '../auth/reset_password_screen.dart' show validatePassword;
+import 'addresses_card.dart';
 import 'claim_approval_card.dart';
 import 'branches_card.dart';
 import 'chat_card.dart';
@@ -75,6 +76,11 @@ class SettingsScreen extends ConsumerWidget {
                     ],
                     const CompanyGroupCard(),
                     const SizedBox(height: 16),
+                    // Beside the company's own details, because that is
+                    // what a name on our domain is: another way of
+                    // saying who they are. Draws nothing for a company
+                    // holding neither module.
+                    const AddressesCard(),
                     _EinvoiceCard(org: organization, canEdit: isAdmin),
                     const SizedBox(height: 16),
                     _ScanningCard(canEdit: isAdmin),

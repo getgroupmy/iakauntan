@@ -657,6 +657,16 @@ final _destinations = <_Dest>[
     adminOnly: true,
   ),
   _Dest('Email', Icons.mail_outline, Icons.mail, '/email'),
+  // Mail that arrived, as opposed to `/email` which is mail this
+  // company sent. Two different questions, and putting them on one
+  // screen would make the outbox's own list harder to read.
+  _Dest(
+    'Inbox',
+    Icons.inbox_outlined,
+    Icons.inbox,
+    '/inbox',
+    module: 'mailbox',
+  ),
   _Dest('Settings', Icons.settings_outlined, Icons.settings, '/settings'),
   // The platform console, one destination per section. Everything a
   // platform operator does lives in this menu rather than in a second

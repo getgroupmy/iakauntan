@@ -13,6 +13,7 @@ import 'landing_cms.dart';
 import 'modules_admin.dart';
 import 'ocr_catalog_admin.dart';
 import 'payment_gateways_admin.dart';
+import 'reservations_admin.dart';
 import 'statutory_rates_admin.dart';
 
 /// One section of the platform console.
@@ -97,6 +98,15 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/rates',
     primary: false,
     page: StatutoryRatesAdminTab(),
+  ),
+  (
+    group: 'Website & brand',
+    label: 'Names on our domain',
+    icon: Icons.alternate_email_outlined,
+    selectedIcon: Icons.alternate_email,
+    path: '/admin/names',
+    primary: false,
+    page: ReservationsAdminTab(),
   ),
   (
     group: 'Website & brand',
