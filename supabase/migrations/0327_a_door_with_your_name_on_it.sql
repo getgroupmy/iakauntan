@@ -198,6 +198,12 @@ create or replace function app.normalize_host_label(p_name text)
 returns text
 language sql
 immutable
+-- Pinned like every other function here. `lower` and `btrim` are
+-- built-ins and could not be shadowed by a schema earlier on the path,
+-- but the rule is that a function does not depend on the caller's path
+-- to find its operators, and an exception argued case by case is a rule
+-- nobody can check.
+set search_path = pg_catalog, pg_temp
 as $$
   select lower(btrim(coalesce(p_name, '')));
 $$;

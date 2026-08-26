@@ -740,8 +740,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory.sql": {
-    "mtime": 1787728034.0494473,
-    "ast_hash": "28ceb353f85cbc5d0d741fab9143696e",
+    "mtime": 1787729793.994503,
+    "ast_hash": "ebc7341675e27a5072f979c6349ea9f5",
     "semantic_hash": ""
   },
   ".claude/CLAUDE.md": {
@@ -4855,13 +4855,13 @@
     "semantic_hash": ""
   },
   "supabase/functions/receive-email/index.ts": {
-    "mtime": 1787728810.1826415,
-    "ast_hash": "e3159c710d2506856fb0c062c94422f8",
+    "mtime": 1787729794.0061367,
+    "ast_hash": "db185e327ef4997d1b9dbe45c0347ed3",
     "semantic_hash": ""
   },
   "supabase/migrations/0327_a_door_with_your_name_on_it.sql": {
-    "mtime": 1787728669.169631,
-    "ast_hash": "8c92f128abe0f1ee61bbf52dd91cbdce",
+    "mtime": 1787729854.3032992,
+    "ast_hash": "ba911794796fd3a9e8609baa9bae5890",
     "semantic_hash": ""
   },
   "supabase/migrations/0328_an_address_that_belongs_to_you.sql": {

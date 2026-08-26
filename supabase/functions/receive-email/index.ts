@@ -79,7 +79,7 @@ function splitAddress(raw: string): { email: string; name: string | null } {
   return { email: raw.trim().toLowerCase(), name: null };
 }
 
-serveFunction(async (req: Request) => {
+serveFunction("receive-email.failed", async (req: Request) => {
   const secret = Deno.env.get("INBOUND_SECRET") ?? "";
   if (!secret) {
     // Refusing rather than accepting: an unset secret would otherwise

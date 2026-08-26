@@ -332,7 +332,25 @@ begin
            -- of the public surface rather than the polite route to it.
            -- `supabase/tests/landing_page.sql` asserts both, and that
            -- only a platform administrator can change what it says.
-           'landing_page')));
+           'landing_page',
+           -- 0327, and the same shape of thing as the landing page: a
+           -- question a browser has to be able to ask before anybody
+           -- has signed in.
+           --
+           -- It takes a host and answers whose door it is — a company's
+           -- name and its logo, so the sign-in page at
+           -- `sinar.iakauntan.com` can say Sinar on it. No identifier,
+           -- no contact, nothing about who works there, and a host
+           -- nobody has reserved comes back empty rather than as an
+           -- error, because "this name is free" is not a secret.
+           --
+           -- What it can be probed for is whether a given subdomain is
+           -- taken, which is what a browser typing the address finds
+           -- out anyway. `supabase/tests/workspace_address.sql` asserts
+           -- the rest: that a request is not a door, that the door
+           -- closes for a company that stops paying or stops trading,
+           -- and that anon may call this and nothing else here.
+           'workspace_by_host')));
 
   -- The other half of that allowlist, and it is not decoration.
   --
@@ -347,7 +365,7 @@ begin
   --
   -- So assert the exposure. A share link that has silently stopped
   -- working is found by a customer, not by us.
-  perform pg_temp.check_eq('and the eight that need anon still have it',
+  perform pg_temp.check_eq('and the nine that need anon still have it',
     (select count(*)
        from pg_proc p
        join pg_namespace n on n.oid = p.pronamespace
@@ -365,8 +383,13 @@ begin
                           -- A landing page that has silently stopped
                           -- loading is found by somebody deciding not to
                           -- buy the product.
-                          'landing_page')),
-    8);
+                          'landing_page',
+                          -- And a company's own door that has stopped
+                          -- opening is found by their staff, who see
+                          -- our mark where theirs should be and wonder
+                          -- what they have signed into.
+                          'workspace_by_host')),
+    9);
 
   perform pg_temp.check_true('and the link tables stay shut to anon',
     not exists (
