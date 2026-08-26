@@ -12,6 +12,7 @@ import '../../data/models.dart';
 import '../landing/landing_content.dart';
 import '../chat/call_incoming.dart';
 import '../chat/chat_live.dart';
+import '../admin/platform_console_screen.dart';
 
 /// Navigation destination shared by the rail (wide) and bottom bar (narrow).
 /// One heading and the destinations beneath it.
@@ -121,7 +122,9 @@ class _Dest {
   final bool adminOnly;
 }
 
-const _destinations = <_Dest>[
+// Not `const`: the console's ten sections are appended from their own
+// table at the end, and a constant list cannot be built with a loop.
+final _destinations = <_Dest>[
   _Dest(
     'Dashboard',
     Icons.dashboard_outlined,
@@ -655,13 +658,26 @@ const _destinations = <_Dest>[
   ),
   _Dest('Email', Icons.mail_outline, Icons.mail, '/email'),
   _Dest('Settings', Icons.settings_outlined, Icons.settings, '/settings'),
-  _Dest(
-    'Platform',
-    Icons.shield_outlined,
-    Icons.shield,
-    '/admin',
-    platformOnly: true,
-  ),
+  // The platform console, one destination per section. Everything a
+  // platform operator does lives in this menu rather than in a second
+  // one drawn inside the console — there is one side menu in this app
+  // and this is it.
+  //
+  // `module` carries the heading rather than a module code: no module
+  // is named "Billing", so `groupByModule` falls through to the code
+  // itself, which is the heading. And `platformOnly` is answered before
+  // `module` is ever read, so nothing here is hidden for want of an
+  // entitlement nobody sells.
+  for (final s in platformConsoleSections)
+    _Dest(
+      s.label,
+      s.icon,
+      s.selectedIcon,
+      s.path,
+      primary: s.primary,
+      module: s.group,
+      platformOnly: true,
+    ),
 ];
 
 class AppShell extends ConsumerWidget {
@@ -932,6 +948,12 @@ class AppShell extends ConsumerWidget {
 
   Widget _narrowLayout(BuildContext context, WidgetRef ref, List<_Dest> dests) {
     final primary = dests.where((d) => d.primary).toList();
+    // Material's bottom bar refuses to draw fewer than two slots, and
+    // "More" is only one of them — so a set of destinations with none
+    // marked primary threw rather than rendered. The first destination
+    // stands in: whatever this person can reach, they can reach one of
+    // it without opening the sheet.
+    if (primary.isEmpty) primary.add(dests.first);
     final selected = dests[_selectedIndexIn(dests)];
     final primaryIndex = primary.indexOf(selected);
 
@@ -1079,8 +1101,6 @@ class _GroupedRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return SizedBox(
       // The same width as the extended rail this replaces, so turning
       // the setting on moves headings in without the menu resizing.
@@ -1095,22 +1115,12 @@ class _GroupedRail extends StatelessWidget {
             groupNames,
             true,
           )) ...[
-            if (section.heading != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 12, 6),
-                child: Text(
-                  section.heading!.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
+            if (section.heading != null) RailHeading(section.heading!),
             for (final d in section.items)
-              _GroupedRailTile(
-                dest: d,
+              RailTile(
+                icon: d.icon,
+                selectedIcon: d.selectedIcon,
+                label: d.label,
                 // The index the caller knows this destination by. The
                 // sections reorder them, so the position within a
                 // section says nothing about which route it is — reading
@@ -1131,14 +1141,52 @@ class _GroupedRail extends StatelessWidget {
   }
 }
 
-class _GroupedRailTile extends StatelessWidget {
-  const _GroupedRailTile({
-    required this.dest,
+/// The words over a run of related destinations.
+///
+/// Public, and used by the platform console's menu as well as this one:
+/// a heading that was drawn one way here and another way there would be
+/// two menus rather than one menu in two places.
+class RailHeading extends StatelessWidget {
+  const RailHeading(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 12, 6),
+      child: Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.8,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+/// One row of a grouped side menu: an icon, a name, and a pill behind
+/// it when it is the one you are looking at.
+///
+/// Takes the icons and the label rather than a destination, so the
+/// platform console — whose sections are not routes — draws its menu
+/// out of the same rows this one is made of.
+class RailTile extends StatelessWidget {
+  const RailTile({
+    super.key,
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
     required this.selected,
     required this.onTap,
   });
 
-  final _Dest dest;
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
   final bool selected;
   final VoidCallback onTap;
 
@@ -1159,7 +1207,7 @@ class _GroupedRailTile extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  selected ? dest.selectedIcon : dest.icon,
+                  selected ? selectedIcon : icon,
                   size: 22,
                   color: selected
                       ? scheme.onSecondaryContainer
@@ -1168,7 +1216,7 @@ class _GroupedRailTile extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    dest.label,
+                    label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(

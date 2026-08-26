@@ -6,10 +6,14 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
+import 'package:iakauntan/src/data/models.dart';
+import 'package:iakauntan/src/data/platform_catalog_repository.dart';
 import 'package:iakauntan/src/features/admin/platform_console_screen.dart';
+import 'package:iakauntan/src/features/shell/app_shell.dart';
 
 /// Renders the platform console and writes it to a PNG.
 ///
@@ -34,14 +38,24 @@ void main() {
   // no reason to pay for three separate bindings.
   testWidgets('console', (tester) async {
     await _shoot(tester, const Size(412, 900), 'console-phone.png');
+    await _shoot(tester, const Size(1000, 900), 'console-tablet.png');
+    await _shoot(
+      tester,
+      const Size(1280, 900),
+      'console-laptop-flat.png',
+      grouped: false,
+    );
+    await _shoot(tester, const Size(1280, 900), 'console-laptop.png');
+    // Last, and deliberately: the sheet is a route on the navigator, and
+    // pumping the next shot's widget tree updates that navigator rather
+    // than replacing it — so an open sheet stays open and lands in the
+    // middle of every picture taken after it.
     await _shoot(
       tester,
       const Size(412, 900),
       'console-phone-menu.png',
       openMenu: true,
     );
-    await _shoot(tester, const Size(1000, 900), 'console-tablet.png');
-    await _shoot(tester, const Size(1280, 900), 'console-laptop.png');
   });
 }
 
@@ -50,6 +64,7 @@ Future<void> _shoot(
   Size size,
   String name, {
   bool openMenu = false,
+  bool grouped = true,
 }) async {
   // Logical pixels, one to one: `physicalSize` is divided by the ratio
   // to get the layout size, so a phone's 412 with a ratio of 2 lays the
@@ -64,14 +79,39 @@ Future<void> _shoot(
     RepaintBoundary(
       key: _shot,
       child: ProviderScope(
+        // Keyed per shot so each one gets a container of its own. The
+        // shots are pumped into one binding, and without this Flutter
+        // reuses the element and the overrides from the shot before —
+        // which is how a picture meant to show the grouped menu came
+        // out showing the flat one.
+        key: ValueKey(name),
         overrides: [
+          // Signed out as far as the widget tree is concerned: the
+          // shell opens a realtime socket for whoever is signed in, and
+          // there is no Supabase behind this binding to open one on.
+          currentUserProvider.overrideWithValue(null),
+          authStateProvider.overrideWith((_) => const Stream<AuthState>.empty()),
           isPlatformAdminProvider.overrideWith((ref) async => true),
           platformStatsProvider.overrideWith((ref) async => _stats),
+          // A platform operator belongs to no company. That is what
+          // leaves the menu holding the console's sections and nothing
+          // else, which is the thing being looked at here.
+          organizationsProvider.overrideWith(
+            (ref) async => const <Organization>[],
+          ),
+          currentOrgProvider.overrideWith((ref) async => null),
+          navGroupingProvider.overrideWith((ref) async => grouped),
         ],
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.dark(),
-          home: const PlatformConsoleScreen(),
+          // The shell, not the console alone: the menu beside it is the
+          // app's own, and a shot of the console without it would be a
+          // shot of the half that did not change.
+          home: const AppShell(
+            location: '/admin',
+            child: PlatformConsoleScreen(path: '/admin'),
+          ),
         ),
       ),
     ),
@@ -80,14 +120,13 @@ Future<void> _shoot(
   await tester.pumpAndSettle();
 
   if (openMenu) {
-    // Opened through the scaffold rather than by tapping the button,
-    // and pumped for a fixed span rather than settled. `pumpAndSettle`
-    // over a tap on a tooltipped button does not come back here — it
-    // keeps finding another frame to draw and runs until the test
-    // times out, with no failure to read afterwards.
-    tester.state<ScaffoldState>(find.byType(Scaffold)).openDrawer();
+    // The narrow layout puts everything without a slot in the bottom
+    // bar behind "More". Pumped for a fixed span rather than settled:
+    // `pumpAndSettle` over a sheet opening does not always come back,
+    // and a generator that hangs writes nothing.
+    await tester.tap(find.text('More'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 500));
   }
 
   await _write(tester, name);

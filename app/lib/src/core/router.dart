@@ -362,10 +362,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, state) =>
                 PayslipScreen(payslipId: state.pathParameters['id']!),
           ),
-          GoRoute(
-            path: '/admin',
-            builder: (_, __) => const PlatformConsoleScreen(),
-          ),
+          // One route per console section, from the same table the side
+          // menu is built from, so a section cannot appear in the menu
+          // without somewhere to go or exist without appearing.
+          for (final section in platformConsoleSections)
+            GoRoute(
+              path: section.path,
+              builder: (_, __) => PlatformConsoleScreen(path: section.path),
+            ),
           GoRoute(path: '/crm', builder: (_, __) => const PipelineScreen()),
           GoRoute(path: '/crm/leads', builder: (_, __) => const LeadsScreen()),
           GoRoute(

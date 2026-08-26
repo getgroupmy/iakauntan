@@ -7,7 +7,6 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
-import '../shell/app_shell.dart';
 import 'branding_admin.dart';
 import 'credit_admin.dart';
 import 'landing_cms.dart';
@@ -16,178 +15,169 @@ import 'ocr_catalog_admin.dart';
 import 'payment_gateways_admin.dart';
 import 'statutory_rates_admin.dart';
 
-/// One entry in the console's menu.
+/// One section of the platform console.
 ///
-/// Two icons, outlined and filled, because that is what a
-/// `NavigationRailDestination` takes and what every other menu in this
-/// app already does — the outline is the resting state and the filled
-/// one marks where you are.
-typedef _Section = ({
+/// Public, because the console has no menu of its own: these are real
+/// routes, and the app's own side menu is what opens them. The shell
+/// builds a destination from each of these the same way it builds one
+/// from a module.
+typedef ConsoleSection = ({
+  /// The heading this section sits under when the menu is grouped. Used
+  /// as the heading text directly — `groupByModule` falls back to the
+  /// code when there is no module by that name, and there is no module
+  /// by any of these names.
+  String group,
   String label,
   IconData icon,
   IconData selectedIcon,
+  String path,
+
+  /// Gets a slot in the phone's bottom bar rather than living behind
+  /// "More". Two of the ten, because the bar has room for a few and
+  /// Material refuses to draw one with fewer than two slots.
+  bool primary,
   Widget page,
 });
 
-/// The console's ten sections, in the order they are offered.
-const _sections = <_Section>[
+/// The console's ten sections, in the order the menu offers them.
+///
+/// Grouped in runs rather than sorted into groups, so the order stays
+/// the same whether or not the platform has asked for a grouped menu.
+const platformConsoleSections = <ConsoleSection>[
   (
+    group: 'Platform',
     label: 'Overview',
     icon: Icons.insights_outlined,
     selectedIcon: Icons.insights,
+    path: '/admin',
+    primary: true,
     page: _OverviewTab(),
   ),
   (
+    group: 'Platform',
     label: 'Organizations',
     icon: Icons.business_outlined,
     selectedIcon: Icons.business,
+    path: '/admin/organizations',
+    primary: true,
     page: _OrganizationsTab(),
   ),
   (
+    group: 'Document scanning',
     label: 'Scanning credit',
     icon: Icons.credit_score_outlined,
     selectedIcon: Icons.credit_score,
+    path: '/admin/credit',
+    primary: false,
     page: CreditAdminTab(),
   ),
   (
+    group: 'Document scanning',
     label: 'Readers',
     icon: Icons.document_scanner_outlined,
     selectedIcon: Icons.document_scanner,
+    path: '/admin/readers',
+    primary: false,
     page: OcrCatalogAdminTab(),
   ),
   (
+    group: 'Service',
     label: 'Service settings',
     icon: Icons.tune_outlined,
     selectedIcon: Icons.tune,
+    path: '/admin/service',
+    primary: false,
     page: _SettingsTab(),
   ),
   (
+    group: 'Service',
     label: 'Statutory rates',
     icon: Icons.gavel_outlined,
     selectedIcon: Icons.gavel,
+    path: '/admin/rates',
+    primary: false,
     page: StatutoryRatesAdminTab(),
   ),
   (
+    group: 'Website & brand',
     label: 'Landing page',
     icon: Icons.web_outlined,
     selectedIcon: Icons.web,
+    path: '/admin/landing',
+    primary: false,
     page: LandingCmsTab(),
   ),
   (
+    group: 'Website & brand',
     label: 'Branding',
     icon: Icons.palette_outlined,
     selectedIcon: Icons.palette,
+    path: '/admin/branding',
+    primary: false,
     page: BrandingAdminTab(),
   ),
   (
+    group: 'Billing',
     label: 'Modules & pricing',
     icon: Icons.widgets_outlined,
     selectedIcon: Icons.widgets,
+    path: '/admin/modules',
+    primary: false,
     page: ModulesAdminTab(),
   ),
   (
+    group: 'Billing',
     label: 'Payment gateways',
     icon: Icons.payments_outlined,
     selectedIcon: Icons.payments,
+    path: '/admin/gateways',
+    primary: false,
     page: PaymentGatewaysAdminTab(),
   ),
 ];
 
-/// Platform operator console. Everything here goes through SECURITY
-/// DEFINER functions that re-check platform admin rights, so a tenant
-/// user who guesses the route sees errors rather than data.
+/// One section of the platform operator console.
 ///
-/// ## Why the sections are down the side rather than across the top
+/// Everything here goes through SECURITY DEFINER functions that
+/// re-check platform admin rights, so a tenant user who guesses the
+/// route sees errors rather than data. The check below is what stops
+/// them seeing the furniture.
 ///
-/// There are ten of them, and their names are phrases rather than
-/// words — "Modules & pricing", "Payment gateways". A scrolling tab
-/// strip could show three of those on a phone, which meant seven
-/// sections nobody could see existed: no arrow, no count, nothing but
-/// a strip that happened to move if you dragged it. A menu can be read
-/// down its length whatever the width of the screen.
-class PlatformConsoleScreen extends ConsumerStatefulWidget {
-  const PlatformConsoleScreen({super.key});
+/// ## Why there is no menu in this file
+///
+/// There was one, twice: first a strip of tabs across the top, then a
+/// column down the side. Both were a second menu, drawn beside the
+/// app's own, in a window that then had two of them — a thin strip of
+/// icons on the far left and a list of sections next to it.
+///
+/// The sections are routes now. The shell's side menu opens them, the
+/// same menu that opens Sales and Payroll, with the same header above
+/// it and the same account button under it. One menu, and this screen
+/// is what sits to the right of it.
+class PlatformConsoleScreen extends ConsumerWidget {
+  const PlatformConsoleScreen({super.key, required this.path});
+
+  /// Which of `platformConsoleSections` to show.
+  final String path;
+
+  ConsoleSection get _section => platformConsoleSections.firstWhere(
+    (s) => s.path == path,
+    orElse: () => platformConsoleSections.first,
+  );
 
   @override
-  ConsumerState<PlatformConsoleScreen> createState() =>
-      _PlatformConsoleScreenState();
-}
-
-class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen> {
-  int _section = 0;
-
-  /// Sections that have been opened at least once.
-  ///
-  /// Every one of these loads from the network the moment it is built,
-  /// so building all ten to open one would fire ten round trips at a
-  /// phone. They are kept once built, though: the settings and landing
-  /// sections hold half-typed forms, and switching away to check a
-  /// figure should not throw the typing away.
-  final _seen = <int>{0};
-
-  void _go(int index) {
-    setState(() {
-      _section = index;
-      _seen.add(index);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isAdmin = ref.watch(isPlatformAdminProvider);
-    // The shell's own widths, not a set of the console's own: the
-    // console's menu stands beside its section exactly when the account
-    // menu beside it does, and spells its destinations out at exactly
-    // the same point.
-    final width = MediaQuery.sizeOf(context).width;
-    final wide = width >= AppShell.railBreakpoint;
-    final extended = width >= AppShell.extendedBreakpoint;
-
-    // The drawer is built outside `AsyncView`, so it asks the question
-    // for itself: no menu until the answer is yes, rather than a menu
-    // over a refusal.
-    final allowed = isAdmin.valueOrNull ?? false;
+    final section = _section;
 
     return Scaffold(
       appBar: AppBar(
         title: Row(children: [
           const Icon(Icons.shield_outlined, size: 20),
           const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Platform console'),
-                // Narrow, the menu is behind a button and cannot say
-                // where you are, so the app bar says it instead.
-                if (!wide && allowed)
-                  Text(
-                    _sections[_section].label,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-              ],
-            ),
-          ),
+          Expanded(child: Text(section.label)),
         ]),
       ),
-      drawer: wide || !allowed
-          ? null
-          : Drawer(
-              child: SafeArea(
-                child: _ConsoleMenuSheet(
-                  selected: _section,
-                  onSelected: (i) {
-                    Navigator.of(context).pop();
-                    _go(i);
-                  },
-                ),
-              ),
-            ),
       body: AsyncView(
         value: isAdmin,
         builder: (allowed) {
@@ -198,130 +188,9 @@ class _PlatformConsoleScreenState extends ConsumerState<PlatformConsoleScreen> {
               message: 'This console is for platform staff only.',
             );
           }
-          final body = IndexedStack(
-            index: _section,
-            children: [
-              for (var i = 0; i < _sections.length; i++)
-                if (_seen.contains(i)) _sections[i].page else const SizedBox(),
-            ],
-          );
-          if (!wide) return body;
-
-          final scheme = Theme.of(context).colorScheme;
-          return Row(
-            // Stretched, not centred. A `Row` hands its children loose
-            // vertical constraints by default, so the section beside
-            // the menu sized itself to its content and then sat in the
-            // middle of the window — four hundred pixels of nothing
-            // above "Platform health" and the same below it.
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _ConsoleMenu(
-                selected: _section,
-                onSelected: _go,
-                extended: extended,
-              ),
-              VerticalDivider(
-                width: 1,
-                color: scheme.outlineVariant.withValues(alpha: 0.6),
-              ),
-              Expanded(child: body),
-            ],
-          );
+          return section.page;
         },
       ),
-    );
-  }
-}
-
-/// The console's sections, drawn as the app's own side menu.
-///
-/// A `NavigationRail`, at the widths the shell's rail uses and with the
-/// same measurements, because there is no reason for the console to
-/// have a second kind of menu. Below `extendedBreakpoint` it is a
-/// column of icons; at and above it, icons with their names — exactly
-/// as the account menu beside it behaves.
-///
-/// No header and no account button: the console draws inside the
-/// shell, which already has both a few pixels to the left. Two of
-/// either would be two of either.
-class _ConsoleMenu extends StatelessWidget {
-  const _ConsoleMenu({
-    required this.selected,
-    required this.onSelected,
-    required this.extended,
-  });
-
-  final int selected;
-  final void Function(int index) onSelected;
-  final bool extended;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      key: const Key('console-menu'),
-      width: extended ? AppShell.extendedWidth : AppShell.collapsedWidth,
-      // `NavigationRail` does not scroll, and ten destinations is taller
-      // than a laptop screen once the window is short — the same reason
-      // the shell wraps its own rail this way. The minimum height keeps
-      // the rail's background filling the column when there is room to
-      // spare.
-      child: LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            // `NavigationRail` puts a flexible child in its own column,
-            // and a scroll view offers unbounded height — which is a
-            // contradiction Flutter refuses rather than resolves. The
-            // shell wraps its rail the same way for the same reason.
-            child: IntrinsicHeight(
-              child: NavigationRail(
-                extended: extended,
-                minExtendedWidth: AppShell.extendedWidth,
-                selectedIndex: selected,
-                onDestinationSelected: onSelected,
-                destinations: [
-                  for (final s in _sections)
-                    NavigationRailDestination(
-                      icon: Icon(s.icon),
-                      selectedIcon: Icon(s.selectedIcon),
-                      label: Text(s.label),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The same sections on a phone, in the shape this app puts a list of
-/// destinations in when there is no room for a rail: plain rows with an
-/// icon and a name, the way the shell's More sheet is drawn.
-class _ConsoleMenuSheet extends StatelessWidget {
-  const _ConsoleMenuSheet({required this.selected, required this.onSelected});
-
-  final int selected;
-  final void Function(int index) onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      key: const Key('console-menu'),
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      children: [
-        for (var i = 0; i < _sections.length; i++)
-          ListTile(
-            leading: Icon(
-              i == selected ? _sections[i].selectedIcon : _sections[i].icon,
-            ),
-            title: Text(_sections[i].label),
-            selected: i == selected,
-            onTap: () => onSelected(i),
-          ),
-      ],
     );
   }
 }
