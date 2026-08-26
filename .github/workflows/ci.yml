@@ -436,6 +436,19 @@ jobs:
       - run: deno check supabase/functions/_shared/billplz_test.ts
       - run: deno test supabase/functions/_shared/billplz_test.ts
 
+      # The workspace proxy, which is a Cloudflare worker rather than an
+      # edge function but runs here because it shares the toolchain and
+      # nothing else in this file would execute it.
+      #
+      # What it decides is which host a request is sent to, and all
+      # three ways of getting that wrong are quiet: proxying the apex
+      # through itself answers 508 after burning the subrequest budget;
+      # treating `www` as a company shows a sign-in page for a company
+      # that does not exist; rewriting every `Location` breaks the OAuth
+      # round trip and nothing else.
+      - run: deno check cloudflare/workspace-proxy/route_test.ts
+      - run: deno test cloudflare/workspace-proxy/route_test.ts
+
       # The functions themselves, type-checked but not run. They cannot
       # be unit tested here — every one of them exists to call somebody
       # else — but a typo in a field name is caught by the compiler, and

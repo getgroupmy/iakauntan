@@ -44,21 +44,26 @@ the parsing in it is the only part worth porting.
 ### Path B — nameservers stay at Cloudflare
 
 Email Routing works as built. The wildcard is solved at the edge
-instead: a **proxied** (orange-cloud) `*` CNAME to the Vercel deployment
-host, with Cloudflare's Universal SSL terminating TLS. Universal SSL
-covers one level of subdomain, which is exactly what a tenant gets.
+instead: a **proxied** (orange-cloud) `*` CNAME, with Cloudflare's
+Universal SSL terminating TLS. Universal SSL covers one level of
+subdomain, which is exactly what a tenant gets.
 
-Two details that catch people:
+That handles the browser's half of the connection. It does not handle
+the origin's. Pointing the proxied wildcard straight at Vercel fails
+with **error 525**: Cloudflare offers SNI `sinar.iakauntan.com`, Vercel
+holds no certificate for it, and the handshake never completes. Vercel
+issues a wildcard certificate only through a DNS-01 challenge it
+automates itself, which needs its own nameservers — the very thing this
+path declines to give it.
 
-- `*.iakauntan.com` still has to be added to the Vercel project, or
-  Vercel does not recognise the `Host` header and answers 404.
-- Cloudflare's SSL mode has to be **Full**, not **Full (strict)** —
-  Vercel holds no certificate for a host it could not validate, so
-  strict origin verification fails.
+So the origin's half is handled by a worker,
+`cloudflare/workspace-proxy/`, which fetches the apex — a host Vercel
+can answer for — and returns it under the company's own address. Step 6
+has the detail.
 
 **Path B is the one to take** unless there is a reason to move the zone.
-It keeps the mail half exactly as built, and the wildcard is the easier
-of the two problems to solve at the edge.
+It keeps the mail half exactly as built, and the worker is thirty lines
+of decision beside a hundred of mail parsing that already live here.
 
 ---
 
@@ -149,18 +154,73 @@ stay as it is; the proxy setting is per record, and only the wildcard
 needs it — that is what makes Cloudflare terminate TLS for
 `<name>.iakauntan.com`.
 
-### 6. Vercel and Cloudflare SSL
+### 6. The workspace proxy
 
-Two settings, both needed:
+**An earlier draft of this step was wrong**, and wrong in a way that
+costs an evening, so the correction is written out rather than quietly
+replaced.
 
-- Vercel → the project → **Settings → Domains** → add
-  `*.iakauntan.com`. Vercel will mark it *Invalid Configuration* because
-  it expects its own DNS records. On Path B that is cosmetic — the
-  domain has to be there or Vercel does not recognise the `Host` header
-  and answers 404.
-- Cloudflare → **SSL/TLS → Overview** → mode **Full**. Not *Full
-  (strict)*: Vercel holds no certificate for a host it could not
-  validate, so strict origin verification fails.
+It said to add `*.iakauntan.com` in Vercel, ignore the *Invalid
+Configuration* warning as cosmetic, and set Cloudflare's SSL mode to
+**Full**. Doing exactly that produces:
+
+> **SSL handshake failed — Error code 525.** Browser ✓, Cloudflare ✓,
+> Host ✗.
+
+Cloudflare opens a TLS connection to Vercel with SNI
+`sinar.iakauntan.com`. Vercel holds no certificate for that host and
+aborts the handshake. *Invalid Configuration* is not cosmetic: it is
+Vercel saying it cannot issue a certificate. It issues a **wildcard**
+certificate only through a DNS-01 challenge it automates itself, which
+needs Vercel's nameservers — and on Path B ours are at Cloudflare and
+have to stay there. `Full` does not rescue it either: `Full` skips
+*validating* the origin's certificate, but the handshake still has to
+complete.
+
+So the wildcard is served by a worker instead, from
+`cloudflare/workspace-proxy/`:
+
+```
+npx wrangler deploy            # from that directory
+```
+
+It has no secrets. `wrangler.toml` carries the route
+(`*.iakauntan.com/*`), which is what binds it to every company's
+subdomain and — because of the leading `*.` — not to the apex.
+
+The worker never asks Vercel for a host Vercel has never heard of. It
+fetches the apex, which Vercel does hold a certificate for, and returns
+that. The address bar still reads `sinar.iakauntan.com`, which is all
+the app needs: it resolves the company client-side from `Uri.base.host`.
+
+Two things that still have to be true:
+
+- The `*` DNS record from step 5 must be **proxied** (orange cloud). A
+  worker route over a grey-clouded record never fires.
+- Cloudflare → **SSL/TLS → Overview** → **Full**. The worker's own
+  subrequest goes to the apex over TLS regardless, but the zone-wide
+  setting should not be *Flexible*.
+
+`*.iakauntan.com` in the Vercel project is now unnecessary. Leaving it
+there is harmless; it will read *Invalid Configuration* forever.
+
+`cloudflare/workspace-proxy/route_test.ts` asserts what the worker does
+with a URL, and runs in CI's `edge` job.
+
+#### If you want one name working before deploying anything
+
+An explicit record beats the wildcard, so a single subdomain can be
+taken straight to Vercel with no worker involved:
+
+1. Cloudflare → DNS → `CNAME`, name `sinar`, target
+   `cname.vercel-dns.com`, **DNS only (grey cloud)**.
+2. Vercel → **Settings → Domains** → add `sinar.iakauntan.com` — the
+   exact host, not the wildcard. Vercel validates it over HTTP-01 and
+   issues a real certificate, usually within a minute.
+
+Grey cloud means the browser reaches Vercel directly, so there is no
+origin leg to fail. This does not scale — it is a step per company —
+but it proves the app half without waiting on anything else.
 
 ### 7. A name to test with
 

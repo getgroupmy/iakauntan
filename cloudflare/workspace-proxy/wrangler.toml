@@ -1,0 +1,17 @@
+name = "iakauntan-workspace-proxy"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# The route is what binds this to every company's subdomain. The
+# pattern has a leading `*.`, so it matches `sinar.iakauntan.com` and
+# does not match the bare apex — which is what keeps the worker from
+# proxying to itself.
+#
+# The wildcard DNS record must be **proxied** (orange cloud). A route
+# over a grey-clouded record never fires, and the request goes straight
+# to the origin, where it fails the way it did before this existed.
+routes = [
+  { pattern = "*.iakauntan.com/*", zone_name = "iakauntan.com" },
+]
+
+# No secrets and no variables. Everything this needs is in the URL.
