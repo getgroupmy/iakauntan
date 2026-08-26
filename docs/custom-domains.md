@@ -62,9 +62,173 @@ of the two problems to solve at the edge.
 
 ---
 
+## The runbook
+
+Ten steps, in this order. The order is deliberate: everything that can
+be done safely in advance is done first, so that when DNS goes live the
+thing either works or fails for one reason rather than three.
+
+Nothing before step 5 changes what any visitor sees. Steps 1–4 are
+inert until a subdomain resolves.
+
+Identifiers you will need:
+
+| Thing | Value |
+|---|---|
+| Supabase project ref | `ewwcgtnniwqndrzukksm` |
+| Vercel project | `prj_ACEwE16VnLeesABU7sAkPhzdn2Ti` |
+| Vercel team | `team_EBG91tunYkCckYh5bCELGRU3` |
+
+### 1. Decide the path
+
+Read *The decision that comes first* above and pick. Everything below
+assumes **Path B** — nameservers stay at Cloudflare — because it keeps
+inbound mail exactly as built. If you take Path A, steps 5 and 6 are
+replaced by adding the wildcard in Vercel, and steps 7–9 by whichever
+inbound provider you choose.
+
+Do not start step 5 until this is settled. Moving nameservers after
+wiring Email Routing means unpicking both.
+
+### 2. The Supabase redirect allow-list
+
+Supabase → **Authentication → URL Configuration → Redirect URLs**, add:
+
+```
+https://*.iakauntan.com/**
+```
+
+Leave the existing entries alone. This is additive and inert until a
+subdomain exists.
+
+*Why now:* without it a tenant's sign-in page draws correctly and then
+fails on submit, and that failure looks like the app rather than like a
+setting.
+
+### 3. `ALLOWED_ORIGINS`
+
+Supabase → **Edge Functions → Secrets**. If `ALLOWED_ORIGINS` is *not*
+set, skip this step — the functions answer `*` and nothing needs doing.
+
+If it is set, it must name both:
+
+```
+https://iakauntan.com,https://*.iakauntan.com
+```
+
+The apex needs its own entry. `*` stands for a label, not for nothing,
+so `https://*.iakauntan.com` alone would lock out the main site.
+
+### 4. Check nothing is broken yet
+
+Load `https://iakauntan.com`, sign in, and open a screen that calls an
+edge function — Settings will do. Steps 2 and 3 cannot break anything,
+but finding that out now is cheaper than finding it out after the DNS
+has changed.
+
+### 5. The wildcard record, in Cloudflare
+
+Cloudflare → the `iakauntan.com` zone → **DNS → Records → Add record**:
+
+| Field | Value |
+|---|---|
+| Type | `CNAME` |
+| Name | `*` |
+| Target | the host the apex already points at |
+| Proxy status | **Proxied** (orange cloud) |
+
+Take the target from the existing apex record rather than typing a
+Vercel host from memory. Explicit records still win over the wildcard,
+so any subdomain already in the zone keeps behaving as it does.
+
+### 6. Vercel and Cloudflare SSL
+
+Two settings, both needed:
+
+- Vercel → the project → **Settings → Domains** → add
+  `*.iakauntan.com`. Vercel will mark it *Invalid Configuration* because
+  it expects its own DNS records. On Path B that is cosmetic — the
+  domain has to be there or Vercel does not recognise the `Host` header
+  and answers 404.
+- Cloudflare → **SSL/TLS → Overview** → mode **Full**. Not *Full
+  (strict)*: Vercel holds no certificate for a host it could not
+  validate, so strict origin verification fails.
+
+### 7. A name to test with
+
+In the app, as a platform operator:
+
+1. Switch the `workspace_address` module on for one company —
+   **Platform console → Organizations**.
+2. As that company, **Settings → Your names on our domain**, ask for a
+   name.
+3. Back in **Platform console → Names on our domain**, approve it.
+
+Then, before opening a browser:
+
+```sql
+select * from public.workspace_by_host('<name>.iakauntan.com');
+```
+
+A row means the database half is right. No row means the module is off,
+the request is not approved, or the company is not active — all three
+visible in the console.
+
+### 8. Open it
+
+`https://<name>.iakauntan.com` should show that company's name and logo
+and say *"Sign in to continue to <company>"*.
+
+If TLS fails, it is step 5 or 6 and nothing to do with this repository.
+If it loads but says iAkauntan, the host lookup returned nothing — go
+back to step 7's query.
+
+**Then actually sign in.** That is the step that exercises the redirect
+allow-list from step 2, and it fails last and loudest.
+
+### 9. Inbound mail
+
+Only after steps 5–8 are working, so a mail problem is a mail problem.
+
+1. Cloudflare → **Email → Email Routing**, and let it add its own MX
+   records.
+2. From `cloudflare/email-router/`:
+   ```
+   npx wrangler deploy
+   npx wrangler secret put INBOUND_SECRET
+   npx wrangler secret put FUNCTION_URL
+   ```
+   `FUNCTION_URL` is
+   `https://ewwcgtnniwqndrzukksm.supabase.co/functions/v1/receive-email`.
+   Generate the secret with `openssl rand -hex 32` and keep it to hand
+   for the next step.
+3. Email Routing → **Routes** → catch-all → *Send to a Worker* → this
+   one. Nothing arrives until this is set.
+4. Supabase → **Edge Functions → Secrets** → `INBOUND_SECRET`, the same
+   string.
+
+### 10. Send it a message
+
+Switch the `mailbox` module on for the test company, ask for an address,
+approve it, and send something to it from an ordinary mail client. It
+should appear in **Inbox** within a few seconds.
+
+If it does not, check in this order — each stage names which of step 9's
+four settings is missing:
+
+1. Email Routing's activity log shows the message arriving.
+2. `npx wrangler tail` shows the worker POSTing.
+3. Supabase → Edge Functions → `receive-email` → Logs shows the call.
+
+A 401 in the third means the two halves of `INBOUND_SECRET` do not
+match. A 503 means it is unset on the Supabase side.
+
+---
+
 ## Three things in this system that must change either way
 
-The DNS is necessary and not sufficient. All three of these are
+Steps 2, 3 and a fact worth knowing, explained rather than listed. The
+DNS is necessary and not sufficient. All three of these are
 invisible until somebody tries to sign in at their own address.
 
 ### 1. The Supabase Auth redirect allow-list
@@ -142,7 +306,8 @@ which companies are on the platform.
 
 ## Checking it worked
 
-Three checks, innermost first, so a failure says which layer is wrong.
+Steps 7, 8 and 10, in more detail than the runbook gives them. Three
+checks, innermost first, so a failure says which layer is wrong.
 
 **The database.** Before any browser is involved:
 
