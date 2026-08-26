@@ -966,6 +966,13 @@ rest, including the drift it was written to end, and
 [docs/schedulers.md](docs/schedulers.md) covers the two timers and the
 credential they share.
 
+Two things this pipeline cannot do are the DNS a company's own
+subdomain and mailbox need — a wildcard certificate and a set of MX
+records, neither of which a migration can arrange.
+[docs/custom-domains.md](docs/custom-domains.md) is what to do about
+that, in the order to do it, and the three settings that are invisible
+until somebody tries to sign in at their own address.
+
 `migrate` sits between the two, on the default branch only and before
 either deploys, because a function or a screen that expects a column the
 database does not have yet is the failure that ordering prevents. It

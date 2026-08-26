@@ -406,6 +406,8 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+      - run: deno check supabase/functions/_shared/cors_test.ts
+      - run: deno test supabase/functions/_shared/cors_test.ts
       - run: deno check supabase/functions/_shared/scheduler_test.ts
       # No permission flags: it touches no network, environment or disk,
       # and if it ever needs to, that is worth noticing.
