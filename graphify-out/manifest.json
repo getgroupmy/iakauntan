@@ -335,8 +335,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/_shared/cors.ts": {
-    "mtime": 1787764657.8754542,
-    "ast_hash": "1565fd82ced788c159941e5d652c040c",
+    "mtime": 1787766341.0225902,
+    "ast_hash": "5363a52885dec6c0cc3546afa1892f76",
     "semantic_hash": ""
   },
   "supabase/functions/_shared/myinvois.ts": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787764667.1778467,
-    "ast_hash": "185ee7bab93af81e7ddfcfd701f87056",
+    "mtime": 1787766341.062906,
+    "ast_hash": "ccd523b013f544135e6f5285adce3cf3",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -4919,14 +4919,19 @@
     "ast_hash": "66085310705bf3024d18817f04141fd9",
     "semantic_hash": ""
   },
-  "supabase/functions/_shared/cors_test.ts": {
-    "mtime": 1787764580.3059642,
-    "ast_hash": "60dcf5b4bcfdf282cd570d43fe651d5b",
+  "docs/custom-domains.md": {
+    "mtime": 1787766382.7444122,
+    "ast_hash": "a3b24045153de852831ac72d64a35f00",
     "semantic_hash": ""
   },
-  "docs/custom-domains.md": {
-    "mtime": 1787764713.7739592,
-    "ast_hash": "6117cd6074092f7ceae8cbb692f752cc",
+  "supabase/functions/_shared/origin.ts": {
+    "mtime": 1787766341.0077975,
+    "ast_hash": "395631c688f6d787fef8221932486122",
+    "semantic_hash": ""
+  },
+  "supabase/functions/_shared/origin_test.ts": {
+    "mtime": 1787766341.045793,
+    "ast_hash": "1e26bd00e095d5b17adff3dca23b16dc",
     "semantic_hash": ""
   }
 }

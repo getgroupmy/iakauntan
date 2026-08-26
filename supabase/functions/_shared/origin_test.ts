@@ -1,7 +1,7 @@
 /**
  * Which origins the functions answer, and — mostly — which they do not.
  *
- *   deno test supabase/functions/_shared/cors_test.ts
+ *   deno test supabase/functions/_shared/origin_test.ts
  *
  * `ALLOWED_ORIGINS` used to be an exact-match list, which was right
  * until `0327` began selling companies their own subdomain. A list of
@@ -17,12 +17,14 @@
  * notices.
  *
  * No permissions are needed to run this: no network, no environment, no
- * disk. If that ever stops being true it is worth knowing, which is why
- * CI runs it with no flags.
+ * disk. That is why `originAllowed` lives in `origin.ts` and not in
+ * `cors.ts` — `cors.ts` reads `ALLOWED_ORIGINS` at module scope, so
+ * importing it costs `--allow-env`, and this file failed to load at all
+ * on the run that first tried it.
  */
 import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
 
-import { originAllowed } from "./cors.ts";
+import { originAllowed } from "./origin.ts";
 
 const APP = "https://iakauntan.com";
 const TENANTS = "https://*.iakauntan.com";

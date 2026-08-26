@@ -87,7 +87,7 @@ https://iakauntan.com,https://*.iakauntan.com
 ```
 
 One `*` is allowed and stands for exactly one DNS label, which is what
-a tenant has. `supabase/functions/_shared/cors_test.ts` asserts what
+a tenant has. `supabase/functions/_shared/origin_test.ts` asserts what
 that does and does not admit — in particular that it does not admit
 `evil-iakauntan.com`, two labels, or the bare domain.
 

@@ -1,5 +1,8 @@
 // Cross-origin rules, and what a failure is allowed to say.
 
+import { originAllowed } from "./origin.ts";
+
+
 /// Origins the browser may call these functions from.
 ///
 /// Unset means `*`, which is where this started and what the running
@@ -24,44 +27,6 @@ const ALLOWED = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
   .split(",")
   .map((o) => o.trim())
   .filter((o) => o.length > 0);
-
-/// Whether `origin` is admitted by one of `patterns`.
-///
-/// Exported and pure so it can be asserted without a server. The whole
-/// of the CORS decision is here; `corsFor` below only chooses what to
-/// do about the answer.
-///
-/// ## What `*` is allowed to mean
-///
-/// One label, and only where it was written. `[^.]+` rather than `.*`
-/// is the entire security of this: `.*` in `https://*.iakauntan.com`
-/// would admit `https://anything.evil.com.iakauntan.com`, and — worse,
-/// because it is the shape attackers actually try — an unanchored match
-/// would admit `https://evil-iakauntan.com` and
-/// `https://iakauntan.com.evil.test`.
-///
-/// So the pattern is escaped whole, `*` becomes one label, and the
-/// result is anchored at both ends. A pattern with no `*` in it is an
-/// exact comparison, which is what every existing entry is.
-export function originAllowed(origin: string, patterns: string[]): boolean {
-  // An empty Origin is not a browser asking; it is a caller that sent
-  // no header. Never admitted, because admitting it would echo an
-  // empty allow-origin and mean nothing.
-  if (!origin) return false;
-
-  return patterns.some((pattern) => {
-    if (!pattern.includes("*")) return pattern === origin;
-
-    // Every regex metacharacter in the pattern is a literal — the dots
-    // in a host name most of all. `*` is put back afterwards as the one
-    // thing that is not.
-    const escaped = pattern
-      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-      .replaceAll("\\*", "[^.]+");
-
-    return new RegExp(`^${escaped}$`).test(origin);
-  });
-}
 
 export function corsFor(req?: Request): Record<string, string> {
   const base: Record<string, string> = {
