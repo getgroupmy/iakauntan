@@ -134,12 +134,20 @@ Cloudflare → the `iakauntan.com` zone → **DNS → Records → Add record**:
 |---|---|
 | Type | `CNAME` |
 | Name | `*` |
-| Target | the host the apex already points at |
+| Target | the CNAME target Vercel gives for a **subdomain** |
 | Proxy status | **Proxied** (orange cloud) |
 
-Take the target from the existing apex record rather than typing a
-Vercel host from memory. Explicit records still win over the wildcard,
-so any subdomain already in the zone keeps behaving as it does.
+The apex cannot be copied here. `iakauntan.com` is an **A** record to
+Vercel's anycast addresses (`64.29.17.65`, `216.198.79.65`), and a CNAME
+cannot point at an address. Take the target from Vercel instead —
+**Settings → Domains**, the value it shows for a subdomain, normally
+`cname.vercel-dns.com`.
+
+Explicit records still win over the wildcard, so any subdomain already
+in the zone keeps behaving as it does. The apex's own grey cloud can
+stay as it is; the proxy setting is per record, and only the wildcard
+needs it — that is what makes Cloudflare terminate TLS for
+`<name>.iakauntan.com`.
 
 ### 6. Vercel and Cloudflare SSL
 
