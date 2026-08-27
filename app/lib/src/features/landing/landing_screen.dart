@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/platform_live.dart';
 import '../../core/safe_link.dart';
+import '../../data/site_pages_repository.dart';
 import 'landing_content.dart';
 import 'landing_dark_band.dart';
 import 'landing_motion.dart';
@@ -39,6 +40,11 @@ class LandingScreen extends ConsumerWidget {
       body: SafeArea(
         child: LandingPage(
           content: fetched.valueOrNull ?? LandingContent.fallback,
+          // Which of Terms, Privacy and Contact the operator has
+          // published. Empty while it loads and empty if it fails, so
+          // the footer draws whatever links it can and never waits.
+          pages: ref.watch(sitePagesProvider).valueOrNull?.keys.toSet() ??
+              const {},
         ),
       ),
     );
@@ -53,9 +59,22 @@ class LandingScreen extends ConsumerWidget {
 /// preview, and a preview that drifts is worse than none because it is
 /// believed. One payload, one parser, one set of widgets.
 class LandingPage extends StatelessWidget {
-  const LandingPage({super.key, required this.content, this.preview = false});
+  const LandingPage({
+    super.key,
+    required this.content,
+    this.preview = false,
+    this.pages = const {},
+  });
 
   final LandingContent content;
+
+  /// The slugs of the pages an operator has actually published.
+  ///
+  /// Passed in rather than watched here, because this widget is drawn
+  /// in the console's preview and in a screenshot harness as well as at
+  /// the front door — it takes everything it draws as an argument, and
+  /// a provider read anywhere inside it would make that untrue.
+  final Set<String> pages;
 
   /// Drawn inside the console rather than at the front door.
   ///
@@ -190,7 +209,7 @@ class LandingPage extends StatelessWidget {
                         ),
                       ),
                     ),
-                  _Footer(content: content, preview: preview),
+                  _Footer(content: content, preview: preview, pages: pages),
                 ],
               ),
             ),
@@ -1321,10 +1340,17 @@ IconData storeIcon(String storeCode) {
 /// with nothing behind them looks like a bigger company and behaves
 /// like a broken one, so a column with nothing in it is not rendered.
 class _Footer extends StatelessWidget {
-  const _Footer({required this.content, this.preview = false});
+  const _Footer({
+    required this.content,
+    this.preview = false,
+    this.pages = const {},
+  });
 
   final LandingContent content;
   final bool preview;
+
+  /// The slugs published in the console, from `LandingPage`.
+  final Set<String> pages;
 
   @override
   Widget build(BuildContext context) {
@@ -1343,10 +1369,25 @@ class _Footer extends StatelessWidget {
         (content.supportEmail!, 'mailto:${content.supportEmail}'),
       if (content.supportPhone != null) (content.supportPhone!, null),
     ];
-    final legal = <(String, String)>[
-      if (content.privacyUrl != null) ('Privacy', content.privacyUrl!),
-      if (content.termsUrl != null) ('Terms', content.termsUrl!),
-    ];
+    // Written here, or hosted somewhere else, or neither.
+    //
+    // A page published in the console wins over the URL column, because
+    // somebody who has written the policy here has answered the
+    // question the column was standing in for. The column stays for a
+    // platform whose legal pages live on its own site — and a heading
+    // with nothing behind it is still not rendered.
+    final legal = <(String, String, bool)>[];
+    void link(String slug, String label, String? url) {
+      if (pages.contains(slug)) {
+        legal.add((label, '/$slug', true));
+      } else if (url != null) {
+        legal.add((label, url, false));
+      }
+    }
+
+    link('privacy', 'Privacy', content.privacyUrl);
+    link('terms', 'Terms', content.termsUrl);
+    link('contact', 'Contact us', null);
 
     return Container(
       width: double.infinity,
@@ -1421,10 +1462,14 @@ class _Footer extends StatelessWidget {
                     _FooterColumn(
                       heading: 'Legal',
                       children: [
-                        for (final (label, url) in legal)
+                        for (final (label, url, internal) in legal)
                           _FooterLink(
                             label: label,
-                            onTap: preview ? null : () => launchExternal(url),
+                            onTap: preview
+                                ? null
+                                : internal
+                                    ? () => context.go(url)
+                                    : () => launchExternal(url),
                           ),
                       ],
                     ),

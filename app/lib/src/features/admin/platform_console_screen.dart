@@ -14,6 +14,7 @@ import 'modules_admin.dart';
 import 'ocr_catalog_admin.dart';
 import 'payment_gateways_admin.dart';
 import 'reservations_admin.dart';
+import 'site_pages_admin.dart';
 import 'statutory_rates_admin.dart';
 
 /// One section of the platform console.
@@ -116,6 +117,51 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/landing',
     primary: false,
     page: LandingCmsTab(),
+  ),
+  (
+    group: 'Website & brand',
+    label: 'Sign in page',
+    icon: Icons.login_outlined,
+    selectedIcon: Icons.login,
+    path: '/admin/page/signin',
+    primary: false,
+    page: SitePageTab(slug: 'signin'),
+  ),
+  (
+    group: 'Website & brand',
+    label: 'Sign up page',
+    icon: Icons.person_add_alt_outlined,
+    selectedIcon: Icons.person_add_alt_1,
+    path: '/admin/page/signup',
+    primary: false,
+    page: SitePageTab(slug: 'signup'),
+  ),
+  (
+    group: 'Website & brand',
+    label: 'Terms of Use',
+    icon: Icons.gavel_outlined,
+    selectedIcon: Icons.gavel,
+    path: '/admin/page/terms',
+    primary: false,
+    page: SitePageTab(slug: 'terms'),
+  ),
+  (
+    group: 'Website & brand',
+    label: 'Privacy Policy',
+    icon: Icons.privacy_tip_outlined,
+    selectedIcon: Icons.privacy_tip,
+    path: '/admin/page/privacy',
+    primary: false,
+    page: SitePageTab(slug: 'privacy'),
+  ),
+  (
+    group: 'Website & brand',
+    label: 'Contact us',
+    icon: Icons.contact_support_outlined,
+    selectedIcon: Icons.contact_support,
+    path: '/admin/page/contact',
+    primary: false,
+    page: SitePageTab(slug: 'contact'),
   ),
   (
     group: 'Website & brand',

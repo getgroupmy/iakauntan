@@ -85,6 +85,33 @@ void main() {
       }
     });
 
+    test('the terms, the privacy policy and the way to ask about them', () {
+      // Somebody is asked to agree to these before they have an
+      // account, which makes "sign in to read the terms" a circle.
+      for (final path in ['/terms', '/privacy', '/contact']) {
+        expect(go(path), isNull, reason: path);
+      }
+    });
+
+    test('and they stay open at a company\'s own door too', () {
+      // `/` there is the sign-in form. These three are not: a policy
+      // is a policy whichever address it was reached from.
+      for (final path in ['/terms', '/privacy', '/contact']) {
+        expect(
+          routeFor(
+            path: path,
+            signedIn: false,
+            recovering: false,
+            hasOrg: null,
+            isPlatformAdmin: null,
+            atCompanyDoor: true,
+          ),
+          isNull,
+          reason: path,
+        );
+      }
+    });
+
     test('and nothing else — everything else is the front page', () {
       for (final path in ['/dashboard', '/sales', '/settings', '/admin']) {
         expect(go(path), '/', reason: path);
@@ -151,6 +178,9 @@ void main() {
       '/sign/abc',
       '/share/abc',
       '/menu/abc',
+      '/terms',
+      '/privacy',
+      '/contact',
       '/nothing-like-this',
     ];
     for (final signedIn in [true, false]) {

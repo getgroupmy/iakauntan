@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/providers.dart';
 import '../../data/reserved_names_repository.dart';
+import '../../data/site_pages_repository.dart';
 import '../../core/theme.dart';
 import '../landing/landing_content.dart';
 import 'demo_accounts.dart';
@@ -34,6 +35,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   /// most places.
   String? get _workspace =>
       ref.watch(workspaceHostProvider).valueOrNull?['name'] as String?;
+
+  /// The wording an operator wrote for whichever of the two moods this
+  /// screen is in, from `site_pages()`. Null until it arrives and null
+  /// if nobody has written it, and both mean the same thing here: use
+  /// the sentence the product shipped with.
+  SitePage? get _copy =>
+      ref.watch(sitePagesProvider).valueOrNull?[_isSignUp ? 'signup' : 'signin'];
 
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
@@ -257,7 +265,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   const SizedBox(height: 32),
                 ],
                 Text(
-                  _isSignUp ? 'Create your account' : 'Welcome back',
+                  _copy?.title ??
+                      (_isSignUp ? 'Create your account' : 'Welcome back'),
                   style: Theme.of(context)
                       .textTheme
                       .headlineSmall
@@ -265,9 +274,17 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  _isSignUp
-                      ? 'Set up your books in a couple of minutes.'
-                      : 'Sign in to continue to ${_workspace ?? _wordmark}.',
+                  // At a company's own door the second line names the
+                  // company, and it beats anything written in the
+                  // console: platform-wide copy cannot say "Sinar", and
+                  // that is the one fact somebody standing at
+                  // `sinar.iakauntan.com` is checking for.
+                  _workspace != null && !_isSignUp
+                      ? 'Sign in to continue to $_workspace.'
+                      : _copy?.body ??
+                          (_isSignUp
+                              ? 'Set up your books in a couple of minutes.'
+                              : 'Sign in to continue to $_wordmark.'),
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 28),

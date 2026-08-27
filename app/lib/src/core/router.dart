@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/reset_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
 import '../features/landing/landing_screen.dart';
+import '../features/landing/site_page_screen.dart';
 import '../features/chat/chat_screen.dart';
 import '../features/contacts/contact_editor.dart';
 import '../features/contacts/contacts_screen.dart';
@@ -143,7 +144,18 @@ String? routeFor({
   // tarik.
   if (path.startsWith('/menu/')) return null;
 
-  // And the fourth, which is not about a token at all: the corporate
+  // And the fourth, which is not about a token either: the terms
+  // somebody is being asked to agree to, the privacy policy that
+  // describes what happens to them, and the address to write to about
+  // both. A policy you have to sign in to read is not a policy, and
+  // the footer links to all three from the front page — including the
+  // front page of a company's own address, where `/` is the sign-in
+  // form and these three still are not.
+  if (path == '/terms' || path == '/privacy' || path == '/contact') {
+    return null;
+  }
+
+  // And the fifth, which is not about a token at all: the corporate
   // landing page, which is now the address itself. Somebody who typed
   // what is on the business card has not come to sign in — they have
   // come to find out what this is — and that is as true of a customer
@@ -275,6 +287,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       // session already gets the page rather than being posted straight
       // into books they did not ask for.
       GoRoute(path: '/', builder: (_, __) => const LandingScreen()),
+      // The three pages the footer links to. Outside the shell and
+      // outside auth for the reason given in `routeFor`: they are read
+      // before anybody has an account, and often instead of getting one.
+      for (final slug in const ['terms', 'privacy', 'contact'])
+        GoRoute(
+          path: '/$slug',
+          builder: (_, __) => SitePageScreen(slug: slug),
+        ),
       GoRoute(path: '/onboarding', builder: (_, __) => const CreateOrgScreen()),
       // Reachable two ways on purpose: the router forces it after a
       // recovery event, and the reset e-mail links straight here. If the

@@ -350,7 +350,23 @@ begin
            -- the rest: that a request is not a door, that the door
            -- closes for a company that stops paying or stops trading,
            -- and that anon may call this and nothing else here.
-           'workspace_by_host')));
+           'workspace_by_host',
+           -- 0334, and the plainest one on the list: the terms
+           -- somebody is being asked to agree to, the privacy policy
+           -- that describes what happens to them, and the address to
+           -- write to if they want to ask about either. A policy only
+           -- members can read is not a policy.
+           --
+           -- It takes no argument, so there is nothing to vary and
+           -- nothing to probe with. What comes back is the wording on
+           -- five screens: the two that always draw — sign in and sign
+           -- up — and the three that are only returned once a platform
+           -- administrator has published them, so a half-written
+           -- privacy policy is not a published one.
+           -- `supabase/tests/site_pages.sql` asserts the gate, that
+           -- the table behind it is shut to anon, and that only a
+           -- platform administrator can change what it says.
+           'site_pages')));
 
   -- The other half of that allowlist, and it is not decoration.
   --
@@ -365,7 +381,7 @@ begin
   --
   -- So assert the exposure. A share link that has silently stopped
   -- working is found by a customer, not by us.
-  perform pg_temp.check_eq('and the nine that need anon still have it',
+  perform pg_temp.check_eq('and the ten that need anon still have it',
     (select count(*)
        from pg_proc p
        join pg_namespace n on n.oid = p.pronamespace
@@ -388,8 +404,12 @@ begin
                           -- opening is found by their staff, who see
                           -- our mark where theirs should be and wonder
                           -- what they have signed into.
-                          'workspace_by_host')),
-    9);
+                          'workspace_by_host',
+                          -- And a terms page that has silently stopped
+                          -- loading is found by somebody who was asked
+                          -- to agree to it and could not read it.
+                          'site_pages')),
+    10);
 
   perform pg_temp.check_true('and the link tables stay shut to anon',
     not exists (

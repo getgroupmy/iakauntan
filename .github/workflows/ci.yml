@@ -133,6 +133,7 @@ jobs:
                    supabase/tests/placeholder_copy.sql \
                    supabase/tests/unknown_workspace_page.sql \
                    supabase/tests/reservation_admin.sql \
+                   supabase/tests/site_pages.sql \
                    supabase/tests/security_audit.sql \
                    supabase/tests/audit_redaction.sql \
                    supabase/tests/ledger_append_only.sql \
