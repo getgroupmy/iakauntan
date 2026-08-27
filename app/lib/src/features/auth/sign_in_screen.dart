@@ -45,6 +45,14 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   SitePage? get _copy =>
       ref.watch(sitePagesProvider).valueOrNull?[_isSignUp ? 'signup' : 'signin'];
 
+  /// The words before the name, when nobody has written their own.
+  ///
+  /// A lead-in rather than a whole sentence: the screen puts the
+  /// company's name — or the platform's — after it, so what an operator
+  /// types is the half that is theirs to decide.
+  String get _defaultLeadIn =>
+      _isSignUp ? 'Create your account at' : 'Sign in to continue to';
+
   /// Whether the platform is currently offering the demo logins.
   ///
   /// False while the payload is in flight, deliberately: a list of
@@ -321,17 +329,19 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    // At a company's own door the second line names the
-                    // company, and it beats anything written in the
-                    // console: platform-wide copy cannot say "Sinar",
-                    // and that is the one fact somebody standing at
-                    // `sinar.iakauntan.com` is checking for.
-                    _workspace != null && !_isSignUp
-                        ? 'Sign in to continue to $_workspace.'
-                        : _copy?.body ??
-                            (_isSignUp
-                                ? 'Set up your books in a couple of minutes.'
-                                : 'Sign in to continue to $_wordmark.'),
+                    // Three pieces, and only two of them are anybody's
+                    // to type: the heading above, this lead-in, and the
+                    // name — which is the company's at its own door and
+                    // the platform's everywhere else, and is never
+                    // typed here because platform-wide copy cannot say
+                    // "Sinar".
+                    //
+                    // Joined here rather than stored as one sentence so
+                    // that an operator writing "Log masuk untuk teruskan
+                    // ke" gets their words in front of a name they did
+                    // not have to know.
+                    '${_copy?.body ?? _defaultLeadIn} '
+                    '${_workspace ?? _wordmark}.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 28),

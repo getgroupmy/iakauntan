@@ -104,11 +104,10 @@ class _SitePageTabState extends ConsumerState<SitePageTab> {
                           controller: _body,
                           minLines: _gated ? 14 : 3,
                           maxLines: _gated ? 40 : 6,
-                          decoration: const InputDecoration(
-                            labelText: 'Body',
+                          decoration: InputDecoration(
+                            labelText: _gated ? 'Body' : 'Line under it',
                             alignLabelWithHint: true,
-                            helperText: 'Left empty, the screen uses the '
-                                'wording the product ships with.',
+                            helperText: sitePageBodyHelp(widget.slug),
                           ),
                         ),
                         if (_gated) ...[
@@ -212,9 +211,22 @@ String sitePageHint(String slug) => switch (slug) {
 };
 
 String sitePageTitleHelp(String slug) => switch (slug) {
-  'signin' || 'signup' => 'Shown above the form. Left empty, the screen '
-      'uses its own wording.',
+  'signin' || 'signup' => 'The line above the form — "Welcome back". Left '
+      'empty, the screen uses its own wording.',
   _ => 'Shown at the top of the page.',
+};
+
+/// What the body box does, which differs on the two auth screens.
+///
+/// There it is a lead-in rather than a whole sentence: the screen puts
+/// the company's name after it, so an operator writes the half that is
+/// theirs and never has to know whose door this is.
+String sitePageBodyHelp(String slug) => switch (slug) {
+  'signin' => 'The line under it, without the name — "Sign in to continue '
+      'to". The company\'s name, or yours, is added after it.',
+  'signup' => 'The line under it, without the name — "Create your account '
+      'at". Your name is added after it.',
+  _ => 'Left empty, the screen uses the wording the product ships with.',
 };
 
 /// The one-tap demo logins, switched on and off.

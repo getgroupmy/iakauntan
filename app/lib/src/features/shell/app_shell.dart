@@ -122,6 +122,45 @@ class _Dest {
   final bool adminOnly;
 }
 
+/// One place inside the product that an address can be pointed at.
+///
+/// `0342` lets an operator confine a subdomain to a module, or to one
+/// screen inside it. The console needs a list of what those are, and
+/// this is it — derived from the same table the navigation is built
+/// from, so a screen that exists is offerable and one that does not
+/// cannot be chosen.
+typedef ModuleDestination = ({String module, String label, String path});
+
+/// Every destination a name can be pointed at, module first.
+///
+/// Platform-only destinations are left out: the console's own sections
+/// are not something a company's address opens. So are the five that
+/// belong to no module — Dashboard, Import, Team, Email and Settings
+/// are the workspace rather than the product, and confining an address
+/// to "Settings" is not a thing anybody means.
+List<ModuleDestination> assignableDestinations() {
+  final out = <ModuleDestination>[
+    for (final d in _destinations)
+      if (d.module != null && !d.platformOnly && !d.adminOnly)
+        (module: d.module!, label: d.label, path: d.path),
+  ];
+  out.sort((a, b) {
+    final byModule = a.module.compareTo(b.module);
+    return byModule != 0 ? byModule : a.label.compareTo(b.label);
+  });
+  return out;
+}
+
+/// The paths a name confined to [module] may reach.
+///
+/// Every destination of that module, plus its alternate — property is
+/// sold as strata and non-strata and either opens the portfolio, so an
+/// address confined to one of them must not stop at the other's door.
+Set<String> pathsForModule(String module) => {
+  for (final d in _destinations)
+    if (d.module == module || d.altModule == module) d.path,
+};
+
 // Not `const`: the console's ten sections are appended from their own
 // table at the end, and a constant list cannot be built with a loop.
 final _destinations = <_Dest>[

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/reset_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
 import '../features/landing/landing_screen.dart';
+import '../features/landing/no_access_screen.dart';
 import '../features/landing/site_page_screen.dart';
 import '../features/chat/chat_screen.dart';
 import '../features/contacts/contact_editor.dart';
@@ -122,6 +123,42 @@ final _shellKey = GlobalKey<NavigatorState>();
 /// a shopfront for the product, and a company that paid for its own
 /// address did not buy one; somebody arriving there wants the sign-in
 /// form. It only moves `/`, so every other route is unaffected and a
+/// What one address is confined to, from the row `workspace_by_host`
+/// returned.
+///
+/// Null everywhere the operator has not pointed a name at a module,
+/// which is every address by default. [Confinement.landingPath] is
+/// where somebody signing in through it lands, and [Confinement.allows]
+/// is everywhere else they may go — the module's other screens when a
+/// module was chosen, and nowhere at all when one exact screen was.
+typedef Confinement = ({String module, String landingPath, Set<String> allows});
+
+Confinement? confinementFor(Map<String, dynamic>? workspace) {
+  final module = workspace?['module_code'];
+  if (module is! String || module.isEmpty) return null;
+
+  final path = workspace?['landing_path'];
+  if (path is String && path.isNotEmpty) {
+    // One screen was named. That is the whole of what this address
+    // opens — a kitchen display is not a door into the rest of the
+    // till.
+    return (module: module, landingPath: path, allows: {path});
+  }
+
+  final paths = pathsForModule(module);
+  if (paths.isEmpty) {
+    // A module with no screen in the navigation. Nothing to confine to
+    // and nothing to send them to, so this is not a restriction — the
+    // alternative is bouncing somebody around an address that opens
+    // nothing at all.
+    return null;
+  }
+  // No particular screen, so the module's own front door: the first of
+  // its destinations in the order the navigation lists them, which is
+  // the one a person would call "the" screen for that module.
+  return (module: module, landingPath: paths.first, allows: paths);
+}
+
 /// signed-in visitor is not bounced anywhere.
 String? routeFor({
   required String path,
@@ -130,6 +167,9 @@ String? routeFor({
   required bool? hasOrg,
   required bool? isPlatformAdmin,
   bool atCompanyDoor = false,
+  String? confinedTo,
+  Set<String> confinedAllows = const {},
+  bool? moduleHeld,
 }) {
   // The signing page is the one route that works with no account at
   // all: a director will not sign up to an accounting system to sign
@@ -237,6 +277,37 @@ String? routeFor({
     return path == '/onboarding' ? null : '/onboarding';
   }
 
+  // `0342`. An address pointed at one module opens that module and
+  // nothing else — it is a restriction rather than a nicer starting
+  // point. A counter tablet on `till.iakauntan.com` cannot wander into
+  // payroll, and the way it cannot is here rather than in the menu,
+  // because a menu that hides a page is not a page that refuses to
+  // open.
+  //
+  // The database is still the authority on what may be *read*: this
+  // only decides which screens draw. What it buys is that the tablet
+  // by the till shows a till.
+  if (confinedTo != null) {
+    // Not subscribed, or the module was put away. Saying so is the
+    // whole behaviour — `moduleHeld` false with no screen to send them
+    // to would otherwise be a redirect loop onto a page that will not
+    // render.
+    if (moduleHeld == false) {
+      return path == '/no-access' ? null : '/no-access';
+    }
+    // Still loading. Hold the route rather than guessing, exactly as
+    // `hasOrg` above does: guessing "allowed" flashes a screen this
+    // address is not for, and guessing "refused" flashes the refusal.
+    if (moduleHeld == null) return null;
+
+    if (path == confinedTo || confinedAllows.contains(path)) return null;
+    // Settings stays reachable. It is where Sign out lives, and an
+    // address somebody cannot sign out of is a device nobody can hand
+    // to the next shift.
+    if (path == '/settings') return null;
+    return confinedTo;
+  }
+
   if (path == '/onboarding') return '/dashboard';
 
   return null;
@@ -250,6 +321,11 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final orgs = ref.read(organizationsProvider);
       final admin = ref.read(isPlatformAdminProvider);
+      // What this address is confined to, if anything.
+      final door = confinementFor(
+        ref.read(workspaceLookupProvider).valueOrNull?.workspace,
+      );
+
       return routeFor(
         path: state.matchedLocation,
         signedIn: ref.read(currentUserProvider) != null,
@@ -268,6 +344,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         // the same choice `app.dart` makes, for the same reason.
         atCompanyDoor: ref.read(workspaceLookupProvider).valueOrNull?.host ==
             WorkspaceHost.found,
+        // 0342. An address the operator pointed at one module opens
+        // that and nothing else. All three are null or empty at every
+        // other address, and nothing above changes.
+        confinedTo: door?.landingPath,
+        confinedAllows: door?.allows ?? const {},
+        moduleHeld: door == null
+            ? null
+            : ref
+                .watch(enabledModulesProvider)
+                .whenOrNull(data: (held) => held.contains(door.module)),
       );
     },
     routes: [
@@ -295,6 +381,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           path: '/$slug',
           builder: (_, __) => SitePageScreen(slug: slug),
         ),
+      // 0342. Outside the shell, because the shell is a menu of places
+      // this address does not open.
+      GoRoute(path: '/no-access', builder: (_, __) => const NoAccessScreen()),
       GoRoute(path: '/onboarding', builder: (_, __) => const CreateOrgScreen()),
       // Reachable two ways on purpose: the router forces it after a
       // recovery event, and the reset e-mail links straight here. If the

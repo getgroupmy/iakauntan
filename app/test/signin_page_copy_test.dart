@@ -16,10 +16,14 @@ import 'package:iakauntan/src/features/landing/landing_content.dart';
 /// assertions that matter are about the bare page — a switch that
 /// quietly defaults on looks exactly like the product working.
 void main() {
-  Widget wrap(LandingContent brand, {String? workspaceName}) => ProviderScope(
+  Widget wrap(
+    LandingContent brand, {
+    String? workspaceName,
+    Map<String, SitePage> pages = const {},
+  }) => ProviderScope(
     overrides: [
       landingContentProvider.overrideWith((ref) async => brand),
-      sitePagesProvider.overrideWith((ref) async => const {}),
+      sitePagesProvider.overrideWith((ref) async => pages),
       workspaceLookupProvider.overrideWith(
         (ref) async => workspaceName == null
             ? (host: WorkspaceHost.platform, workspace: null)
@@ -218,6 +222,71 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.textContaining('Create an account'), findsOneWidget);
+    });
+  });
+
+  group('the heading is three pieces', () {
+    // `0342`'s companion change. Two of them are typed and the third is
+    // the name, which is the company's at its own door and the
+    // platform's everywhere else — so an operator writing the lead-in
+    // never has to know whose door it will appear on.
+    testWidgets('the shipped lead-in, with the platform name after it',
+        (tester) async {
+      await tester.pumpWidget(wrap(const LandingContent(
+        published: true,
+        wordmark: 'Kira Kira',
+        signinShowHeading: true,
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Welcome back'), findsOneWidget);
+      expect(find.text('Sign in to continue to Kira Kira.'), findsOneWidget);
+    });
+
+    testWidgets('an operator\'s own lead-in, with the name still after it',
+        (tester) async {
+      // The half that is theirs. A platform in Malay signs people in
+      // with Malay words in front of a name it never had to type.
+      await tester.pumpWidget(wrap(
+        const LandingContent(
+          published: true,
+          wordmark: 'Kira Kira',
+          signinShowHeading: true,
+        ),
+        pages: const {
+          'signin': SitePage(
+            slug: 'signin',
+            title: 'Selamat kembali',
+            body: 'Log masuk untuk teruskan ke',
+          ),
+        },
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Selamat kembali'), findsOneWidget);
+      expect(
+        find.text('Log masuk untuk teruskan ke Kira Kira.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Sign in to continue'), findsNothing);
+    });
+
+    testWidgets('and the company name at its own door', (tester) async {
+      await tester.pumpWidget(wrap(
+        const LandingContent(
+          published: true,
+          wordmark: 'Kira Kira',
+          signinShowHeading: true,
+        ),
+        workspaceName: 'Sinar Teknologi',
+      ));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Sign in to continue to Sinar Teknologi.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Kira Kira'), findsNothing);
     });
   });
 

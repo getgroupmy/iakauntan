@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787822945.4825897,
-    "ast_hash": "e0aeb8c7a9fe4e86d6e0ab5ba7896b84",
+    "mtime": 1787829214.4775083,
+    "ast_hash": "7708923d530d2458ba5591cbcde9ed75",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -120,8 +120,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1787826588.2047732,
-    "ast_hash": "dc383773342e14f5e3b45fa380c4d51b",
+    "mtime": 1787829405.009866,
+    "ast_hash": "3c6ec51c52b7636cf71eab2a39a76817",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787822945.4985898,
-    "ast_hash": "bb28b496244fec01bd106df39716b921",
+    "mtime": 1787829220.9896278,
+    "ast_hash": "df3e199144a766a418c6649b108a1f6c",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787823776.923829,
-    "ast_hash": "8582e960cda6d2f3d6aa76b618c3f767",
+    "mtime": 1787829421.7421293,
+    "ast_hash": "245b6d1eba3d4d1298b6897cd8dd07a2",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -4880,13 +4880,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/reserved_names_repository.dart": {
-    "mtime": 1787822945.4865897,
-    "ast_hash": "5d0a27366120f1e32d75523329e323c8",
+    "mtime": 1787828801.3578672,
+    "ast_hash": "a10362d17d6d9dba996837c8b0f9cae6",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/reservations_admin.dart": {
-    "mtime": 1787822945.4865897,
-    "ast_hash": "a490c5c1ecc1077fa121b27ba97afb77",
+    "mtime": 1787829035.876426,
+    "ast_hash": "7800a0e6696b07696b8dd24274416f75",
     "semantic_hash": ""
   },
   "app/lib/src/features/mail/inbox_screen.dart": {
@@ -4940,8 +4940,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/site_pages_admin.dart": {
-    "mtime": 1787826459.8181384,
-    "ast_hash": "4e5cec00efa8ccfca1e7b232749a25f4",
+    "mtime": 1787829265.4376001,
+    "ast_hash": "c7215e8be1a7bc0e76abb4a649f15869",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/site_page_screen.dart": {
@@ -5035,8 +5035,8 @@
     "semantic_hash": ""
   },
   "app/test/signin_page_copy_test.dart": {
-    "mtime": 1787825759.0039635,
-    "ast_hash": "a36047ad5a7e2fdb2aebad61c4970a27",
+    "mtime": 1787829351.470541,
+    "ast_hash": "8eb2025d319dfd2ff6734ab525e0a80f",
     "semantic_hash": ""
   },
   "supabase/migrations/0336_the_sign_in_page_is_not_our_poster.sql": {
@@ -5107,6 +5107,26 @@
   "supabase/migrations/0341_the_pages_change_while_you_watch.sql": {
     "mtime": 1787826527.598508,
     "ast_hash": "06a3b3bb9f648af4b29ec509c2d0467a",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/landing/no_access_screen.dart": {
+    "mtime": 1787828948.6569128,
+    "ast_hash": "97db05e19aed35abd5a8f75310adf7b0",
+    "semantic_hash": ""
+  },
+  "app/test/confined_address_test.dart": {
+    "mtime": 1787829188.1842175,
+    "ast_hash": "480b37fc259038452bfe5c38098a455a",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0342_a_name_held_and_a_name_pointed.sql": {
+    "mtime": 1787828672.922052,
+    "ast_hash": "a4ba2ea22589aec89a0a44999f3f7e0e",
+    "semantic_hash": ""
+  },
+  "supabase/tests/held_and_pointed_names.sql": {
+    "mtime": 1787828747.0802598,
+    "ast_hash": "e992c1429fe938b5f4aed4213582c942",
     "semantic_hash": ""
   }
 }

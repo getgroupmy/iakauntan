@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/reserved_names_repository.dart';
 import '../landing/landing_content.dart';
+import '../shell/app_shell.dart';
 
 /// Names companies have asked for on the platform's domain, and the
 /// decision an operator has to make about each one.
@@ -41,6 +42,13 @@ class ReservationsAdminTab extends ConsumerWidget {
                     ? 'Nothing to decide'
                     : '${waiting.length} '
                         '${waiting.length == 1 ? 'request' : 'requests'}',
+                // 0342. The screen could only wait before this: every
+                // name on it arrived because a company asked for one.
+                action: TextButton.icon(
+                  onPressed: () => _holdName(context, ref),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Hold a name'),
+                ),
               ),
               if (waiting.isEmpty)
                 const EmptyState(
@@ -441,6 +449,22 @@ class _UnknownWorkspaceCopyCardState
 /// Before this existed the only remedy was to delete the row — which
 /// did not help, because the company it should have gone to then could
 /// not request it either. The name was taken by nobody.
+/// Open the hold-a-name dialog, and refresh the lists if it took.
+///
+/// Both lists, because a held name lands among the decided ones while
+/// the count above it is of the ones still waiting — refreshing one and
+/// not the other is how a name appears in a list whose heading says
+/// there is nothing in it.
+Future<void> _holdName(BuildContext context, WidgetRef ref) async {
+  final held = await showDialog<bool>(
+    context: context,
+    builder: (_) => const HoldNameDialog(),
+  );
+  if (held != true) return;
+  ref.invalidate(pendingReservationsProvider);
+  ref.invalidate(decidedReservationsProvider);
+}
+
 class _EditReservationDialog extends ConsumerStatefulWidget {
   const _EditReservationDialog({required this.row});
 
@@ -456,6 +480,8 @@ class _EditReservationDialogState
   late final _name =
       TextEditingController(text: '${widget.row['name'] ?? ''}');
   late String? _orgId = widget.row['org_id'] as String?;
+  late String? _module = widget.row['module_code'] as String?;
+  late String? _path = widget.row['landing_path'] as String?;
   bool _busy = false;
 
   @override
@@ -472,6 +498,11 @@ class _EditReservationDialogState
             id: '${widget.row['id']}',
             orgId: _orgId,
             name: _name.text.trim(),
+            // Empty rather than null: null means "leave it alone", and
+            // an operator clearing the picker means "take it off".
+            moduleCode: _module ?? '',
+            landingPath: _path ?? '',
+            release: _orgId == null,
           );
       if (!mounted) return;
       Navigator.pop(context);
@@ -522,6 +553,17 @@ class _EditReservationDialogState
               onChanged: (v) => setState(() => _orgId = v),
             ),
           ),
+          if (widget.row['kind'] == 'subdomain') ...[
+            const SizedBox(height: 16),
+            ConfinementFields(
+              module: _module,
+              path: _path,
+              onChanged: (module, path) => setState(() {
+                _module = module;
+                _path = path;
+              }),
+            ),
+          ],
         ],
       ),
       actions: [
@@ -532,6 +574,221 @@ class _EditReservationDialogState
         FilledButton(
           onPressed: _busy ? null : _save,
           child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// The two pickers that say what one address is for.
+///
+/// `0342`. Left alone, an address opens the whole product, which is
+/// what every address did before this existed. Pointed at a module, it
+/// opens that and nothing else; pointed at a screen, only that screen.
+///
+/// The screens on offer come from the navigation's own table, so one
+/// that exists can be chosen and one that does not cannot be typed.
+class ConfinementFields extends StatelessWidget {
+  const ConfinementFields({
+    super.key,
+    required this.module,
+    required this.path,
+    required this.onChanged,
+  });
+
+  final String? module;
+  final String? path;
+
+  /// Both at once, because they are one decision: choosing a different
+  /// module has to drop a screen that belonged to the old one, and two
+  /// separate callbacks would let a caller forget.
+  final void Function(String? module, String? path) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final all = assignableDestinations();
+    final modules = <String>{for (final d in all) d.module}.toList()..sort();
+    final screens = [for (final d in all) if (d.module == module) d];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String?>(
+          value: modules.contains(module) ? module : null,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Opens only',
+            helperText: 'Left empty, this address opens the whole product.',
+          ),
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('The whole product'),
+            ),
+            for (final m in modules)
+              DropdownMenuItem<String?>(value: m, child: Text(m)),
+          ],
+          // A screen belongs to the module it was chosen under, so
+          // changing the module drops it rather than leaving a path
+          // pointing somewhere this address no longer goes.
+          onChanged: (v) => onChanged(v, null),
+        ),
+        if (module != null && screens.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String?>(
+            value: screens.any((d) => d.path == path) ? path : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'And only this screen',
+              helperText: 'Optional. Left empty, the whole module opens.',
+            ),
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text('Any screen in the module'),
+              ),
+              for (final d in screens)
+                DropdownMenuItem<String?>(
+                  value: d.path,
+                  child: Text(d.label, overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: (v) => onChanged(module, v),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Holding a name before anybody asks for it.
+///
+/// `0342`. The screen could only wait: a company asked, an operator
+/// approved or refused, and that was the whole surface. So `shop`,
+/// `app`, `status` — the names worth keeping out of the pool — could
+/// only be kept out by the `Set` inside the Cloudflare worker, which is
+/// not somewhere an operator can reach.
+///
+/// A company is optional here and that is the point. A name with nobody
+/// behind it is held: nobody else can take it, and a visitor gets the
+/// "nothing at this address" page until somebody is given it.
+class HoldNameDialog extends ConsumerStatefulWidget {
+  const HoldNameDialog({super.key});
+
+  @override
+  ConsumerState<HoldNameDialog> createState() => _HoldNameDialogState();
+}
+
+class _HoldNameDialogState extends ConsumerState<HoldNameDialog> {
+  final _name = TextEditingController();
+  final _note = TextEditingController();
+  String? _orgId;
+  String? _module;
+  String? _path;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _busy = true);
+    try {
+      await ref.read(reservedNamesProvider).reserve(
+            name: _name.text.trim(),
+            orgId: _orgId,
+            moduleCode: _module,
+            landingPath: _path,
+            note: _note.text.trim(),
+          );
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e is PostgrestException ? e.message : '$e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final orgs = ref.watch(platformOrgsProvider);
+
+    return AlertDialog(
+      title: const Text('Hold a name'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _name,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                suffixText: '.iakauntan.com',
+                helperText: '3 to 63 letters, digits and hyphens',
+              ),
+            ),
+            const SizedBox(height: 16),
+            orgs.when(
+              loading: () => const LinearProgressIndicator(),
+              error: (e, _) => Text('Could not load the companies: $e'),
+              data: (rows) => DropdownButtonFormField<String?>(
+                value: _orgId,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Company',
+                  helperText: 'Optional. Left empty, the name is held and '
+                      'nothing answers on it yet.',
+                ),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Nobody — just hold it'),
+                  ),
+                  for (final o in rows)
+                    DropdownMenuItem<String?>(
+                      value: o.id,
+                      child: Text(o.name, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (v) => setState(() => _orgId = v),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ConfinementFields(
+              module: _module,
+              path: _path,
+              onChanged: (module, path) => setState(() {
+                _module = module;
+                _path = path;
+              }),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _note,
+              decoration: const InputDecoration(
+                labelText: 'Note',
+                helperText: 'Optional. Why this name is spoken for.',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy || _name.text.trim().isEmpty ? null : _save,
+          child: const Text('Hold it'),
         ),
       ],
     );

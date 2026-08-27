@@ -159,17 +159,48 @@ class ReservedNames {
   /// Both are optional and null leaves that half alone, so the console
   /// can send whatever its form holds without deciding which of the two
   /// the operator meant to change.
+  /// Hold a name, with or without a company behind it.
+  ///
+  /// `0342`. An operator reserving a name is the decision — there is
+  /// nobody to approve it afterwards — so the row is created approved.
+  Future<void> reserve({
+    required String name,
+    String? orgId,
+    String? moduleCode,
+    String? landingPath,
+    String? note,
+  }) =>
+      client.rpc('platform_reserve_subdomain', params: {
+        'p_name': name,
+        'p_org_id': orgId,
+        'p_module_code': moduleCode,
+        'p_landing_path': landingPath,
+        'p_note': note,
+      });
+
+  /// Move a name, rename it, point it, or let go of it.
+  ///
+  /// An omitted argument leaves that field alone. The two `0342` added
+  /// are cleared with an empty string rather than a null, because a
+  /// null already means "do not touch" — and [release] does the same
+  /// job for the company, which has no empty form to send.
   Future<void> update({
     required String kind,
     required String id,
     String? orgId,
     String? name,
+    String? moduleCode,
+    String? landingPath,
+    bool release = false,
   }) =>
       client.rpc('platform_update_reservation', params: {
         'p_kind': kind,
         'p_id': id,
         'p_org_id': orgId,
         'p_name': name,
+        'p_module_code': moduleCode,
+        'p_landing_path': landingPath,
+        'p_release': release,
       });
 
   Future<void> decide({
