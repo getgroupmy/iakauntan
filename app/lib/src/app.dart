@@ -5,7 +5,9 @@ import 'core/env.dart';
 import 'core/favicon.dart';
 import 'core/router.dart';
 import 'core/theme.dart';
+import 'data/reserved_names_repository.dart';
 import 'features/landing/landing_content.dart';
+import 'features/landing/unknown_workspace_screen.dart';
 
 class IAkauntanApp extends ConsumerWidget {
   const IAkauntanApp({super.key});
@@ -49,6 +51,20 @@ class IAkauntanApp extends ConsumerWidget {
       // the same to everybody can now say so, which it could not before.
       themeMode: themeModeFor(brand?.themeMode),
       routerConfig: ref.watch(routerProvider),
+      // A name nobody holds gets one page, whatever route was asked
+      // for. Here rather than in the router because it is a fact about
+      // the address rather than about the path: `/`, `/signin` and any
+      // deep link into the app are all equally not this visitor's, and
+      // a redirect would only move the same wrong answer around.
+      //
+      // `valueOrNull` while the lookup is in flight, so the ordinary
+      // app draws first and this replaces it — the alternative is a
+      // blank screen on every page load for the sake of the rare one.
+      builder: (context, child) =>
+          ref.watch(workspaceLookupProvider).valueOrNull?.host ==
+                  WorkspaceHost.unknown
+              ? const UnknownWorkspaceScreen()
+              : child ?? const SizedBox.shrink(),
     );
   }
 }

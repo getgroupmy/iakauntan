@@ -341,6 +341,10 @@ class LandingContent {
     this.ctaBody,
     this.ctaLabel,
     this.ctaUrl,
+    this.unknownTitle,
+    this.unknownBody,
+    this.unknownCtaLabel,
+    this.unknownCtaUrl,
   });
 
   final bool published;
@@ -467,6 +471,34 @@ class LandingContent {
 
   /// The page nobody has written yet.
   ///
+  /// The page a visitor gets at a subdomain nobody holds.
+  ///
+  /// All four nullable, and null is not an absence to render — it is
+  /// "the operator has not written this", and the screen falls back to
+  /// the copy below. Emptying a box in the console therefore restores
+  /// the default rather than producing a blank apology.
+  ///
+  /// These arrive in the payload's `brand` object rather than its
+  /// `page`, so they survive an unpublished site: somebody standing at
+  /// a door that does not open needs an answer whether or not a
+  /// marketing site has been written.
+  final String? unknownTitle;
+  final String? unknownBody;
+  final String? unknownCtaLabel;
+
+  /// Where that page's button goes. Null means the bare domain, which
+  /// the screen works out from the address it is being drawn at — the
+  /// platform does not have to be told its own name twice.
+  final String? unknownCtaUrl;
+
+  /// What the page says when nobody has written it.
+  static const defaultUnknownTitle = 'There is nothing at this address';
+  static const defaultUnknownBody =
+      'The web address you used does not belong to any company here. '
+      'Check it for a typo, or ask whoever gave it to you for the '
+      'current one.';
+  static const defaultUnknownCtaLabel = 'Go to the main site';
+
   /// Not an empty object: the defaults above are the copy the product
   /// ships with, so an unpublished site is a plain one rather than a
   /// blank one.
@@ -516,6 +548,13 @@ LandingContent parseLandingContent(Object? raw) {
       brandColourDark: brandStr('brand_colour_dark'),
       appIconUrl: brandStr('app_icon_url') ?? defaultAppIconUrl,
       themeMode: brandStr('theme_mode') ?? 'system',
+      // Read here too, and this branch is the one that matters: an
+      // operator who has not published a site still has visitors
+      // arriving at names nobody holds.
+      unknownTitle: brandStr('unknown_title'),
+      unknownBody: brandStr('unknown_body'),
+      unknownCtaLabel: brandStr('unknown_cta_label'),
+      unknownCtaUrl: brandStr('unknown_cta_url'),
     );
   }
 
@@ -718,6 +757,13 @@ LandingContent parseLandingContent(Object? raw) {
     ctaBody: str('cta_body'),
     ctaLabel: str('cta_label'),
     ctaUrl: str('cta_url'),
+    // `brandStr` and not `str`: these live in `brand` so they survive
+    // an unpublished site, and reading them from the page as well is
+    // what lets a payload written before 0331 still parse.
+    unknownTitle: brandStr('unknown_title'),
+    unknownBody: brandStr('unknown_body'),
+    unknownCtaLabel: brandStr('unknown_cta_label'),
+    unknownCtaUrl: brandStr('unknown_cta_url'),
   );
 }
 

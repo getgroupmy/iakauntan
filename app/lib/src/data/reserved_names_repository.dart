@@ -259,17 +259,42 @@ final decidedReservationsProvider =
   (ref) => ref.watch(reservedNamesProvider).decided(),
 );
 
+/// What the address in the browser's bar turned out to be.
+///
+/// Three outcomes, and the third is the one this enum exists for.
+/// Before `0331` an unknown name and the bare domain were both "null",
+/// so `nosuchcompany.iakauntan.com` drew the platform's own front page
+/// — which tells a visitor the address is fine and the company is not
+/// there, when the truth is the other way round.
+enum WorkspaceHost {
+  /// Not a company's address at all: a native build, the bare domain,
+  /// `localhost`, or one of the platform's own labels. Draw the
+  /// ordinary app.
+  platform,
+
+  /// A company holds this name. Draw its door.
+  found,
+
+  /// The address is shaped like a company's and nobody holds it. Draw
+  /// the page that says so.
+  unknown,
+}
+
+/// Whose door this is, and the company if it is anybody's.
+typedef WorkspaceLookup = ({WorkspaceHost host, Map<String, dynamic>? workspace});
+
 /// Whose door this is, for the address in the browser's bar.
 ///
 /// Read before anybody has signed in, which is the whole point: the
-/// sign-in page at `sinar.iakauntan.com` should say Sinar on it. Null
-/// on a native build, on the bare domain, and for a name nobody has
-/// been given — all of which mean "draw the platform's own page", so
-/// none of them is an error.
-final workspaceHostProvider =
-    FutureProvider<Map<String, dynamic>?>((ref) async {
+/// sign-in page at `sinar.iakauntan.com` should say Sinar on it.
+///
+/// A lookup that *fails* is deliberately `platform` rather than
+/// `unknown`. A company whose name is perfectly good must not be told
+/// it does not exist because a request timed out — the platform's own
+/// page is a survivable wrong answer and that one is not.
+final workspaceLookupProvider = FutureProvider<WorkspaceLookup>((ref) async {
   final label = workspaceLabel(Uri.base.host);
-  if (label == null) return null;
+  if (label == null) return (host: WorkspaceHost.platform, workspace: null);
 
   try {
     final rows = Repo.rows(
@@ -277,11 +302,23 @@ final workspaceHostProvider =
           .watch(supabaseProvider)
           .rpc('workspace_by_host', params: {'p_host': Uri.base.host}),
     );
-    return rows.isEmpty ? null : rows.first;
+    return rows.isEmpty
+        ? (host: WorkspaceHost.unknown, workspace: null)
+        : (host: WorkspaceHost.found, workspace: rows.first);
   } catch (_) {
-    // A sign-in page that cannot reach the server still has to draw.
-    return null;
+    // A sign-in page that cannot reach the server still has to draw,
+    // and it must not draw an accusation.
+    return (host: WorkspaceHost.platform, workspace: null);
   }
+});
+
+/// The company at this address, or null for every other case.
+///
+/// Kept because that is what the two places drawing a logo and a name
+/// actually want, and neither of them cares which kind of "no" it got.
+final workspaceHostProvider =
+    FutureProvider<Map<String, dynamic>?>((ref) async {
+  return (await ref.watch(workspaceLookupProvider.future)).workspace;
 });
 
 /// Mail that arrived at this company's addresses, newest first.

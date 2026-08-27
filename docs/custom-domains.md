@@ -242,6 +242,25 @@ A row means the database half is right. No row means the module is off,
 the request is not approved, or the company is not active — all three
 visible in the console.
 
+### 7b. A name that is nobody's
+
+Every label under the wildcard resolves, so `nosuchcompany.iakauntan.com`
+reaches the app exactly as an approved name does. `0331` gives that
+visitor a page that says so, rather than the platform's own front page —
+which reads as "the address is fine, the company is not here", the
+opposite of what happened.
+
+The copy is edited in **Platform console → Names on our domain**, under
+*When the name is nobody's*. Every box may be left empty; empty means
+"use the wording the product ships with", so clearing a field restores
+the default rather than producing a blank page. The button's address may
+be left empty too, and then it goes to the bare domain.
+
+It is stored on `landing_page` with the rest of the front-door copy, and
+travels in the payload's `brand` object rather than its `page` — `page`
+is gated on publication, and somebody standing at a door that does not
+open needs an answer whether or not a marketing site has been written.
+
 ### 8. Open it
 
 `https://<name>.iakauntan.com` should show that company's name and logo

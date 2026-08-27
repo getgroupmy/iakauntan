@@ -131,6 +131,7 @@ jobs:
                    supabase/tests/workspace_address.sql \
                    supabase/tests/mailbox.sql \
                    supabase/tests/placeholder_copy.sql \
+                   supabase/tests/unknown_workspace_page.sql \
                    supabase/tests/security_audit.sql \
                    supabase/tests/audit_redaction.sql \
                    supabase/tests/ledger_append_only.sql \
