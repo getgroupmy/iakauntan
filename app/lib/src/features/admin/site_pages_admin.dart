@@ -354,13 +354,22 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
             ),
             const SizedBox(height: Space.sm),
             _Switch(
-              value: on('signin_show_mark'),
+              value: on('signin_show_logo'),
               busy: _busy,
-              title: 'Your logo and name',
+              title: 'Your logo',
               subtitle: 'On the panel beside the form, and above the form '
                   'on a phone. A company signing in at its own subdomain '
-                  'always sees its own mark, whichever way this is set.',
-              onChanged: (v) => _save({'signin_show_mark': v}),
+                  'always sees its own, whichever way this is set.',
+              onChanged: (v) => _save({'signin_show_logo': v}),
+            ),
+            _Switch(
+              value: on('signin_show_name'),
+              busy: _busy,
+              title: 'Your name beside it',
+              subtitle: 'Separate from the logo, because a logo that '
+                  'already has the name in it does not want the word next '
+                  'to it.',
+              onChanged: (v) => _save({'signin_show_name': v}),
             ),
             _Switch(
               value: on('signin_show_headline'),

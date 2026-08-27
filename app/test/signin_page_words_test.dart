@@ -171,7 +171,8 @@ void main() {
         published: true,
         logoUrl: null,
         wordmark: 'Sesuatu',
-        signinShowMark: true,
+        signinShowLogo: true,
+        signinShowName: true,
       )));
       await tester.pumpAndSettle();
 
@@ -185,7 +186,8 @@ void main() {
         published: true,
         logoUrl: null,
         wordmark: 'Kira Kira',
-        signinShowMark: true,
+        signinShowLogo: true,
+        signinShowName: true,
       )));
       await tester.pumpAndSettle();
 

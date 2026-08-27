@@ -41,8 +41,10 @@ begin
   insert into public.landing_page (id) values (true);
   select * into v_row from public.landing_page;
 
-  perform pg_temp.check_true('the mark is off out of the box',
-                             v_row.signin_show_mark is false);
+  perform pg_temp.check_true('the logo is off out of the box',
+                             v_row.signin_show_logo is false);
+  perform pg_temp.check_true('and the name beside it',
+                             v_row.signin_show_name is false);
   perform pg_temp.check_true('and the headline',
                              v_row.signin_show_headline is false);
   perform pg_temp.check_true('and the heading above the form',
@@ -79,8 +81,10 @@ begin
 
   perform pg_temp.check_true('the test ran as an anonymous visitor',
                              v_role = 'anon');
-  perform pg_temp.check_true('the mark stays off for a visitor',
-    (v_out -> 'brand' ->> 'signin_show_mark')::boolean is false);
+  perform pg_temp.check_true('the logo stays off for a visitor',
+    (v_out -> 'brand' ->> 'signin_show_logo')::boolean is false);
+  perform pg_temp.check_true('and the name',
+    (v_out -> 'brand' ->> 'signin_show_name')::boolean is false);
   perform pg_temp.check_eq('and no point travels at all',
     jsonb_array_length(v_out -> 'signin_points'), 0);
 end $$;
@@ -102,7 +106,7 @@ begin
   perform pg_temp.sign_in_as(v_admin);
 
   perform public.platform_save_landing_page(jsonb_build_object(
-    'signin_show_mark', true,
+    'signin_show_logo', true,
     'signin_show_headline', true,
     'signin_show_heading', true,
     'signin_show_register', true,
@@ -122,8 +126,13 @@ begin
   perform pg_temp.check_true('the marketing site is still a draft',
     v_out -> 'page' is null or v_out -> 'page' = 'null'::jsonb);
 
-  perform pg_temp.check_true('the mark reaches the form anyway',
-    (v_out -> 'brand' ->> 'signin_show_mark')::boolean);
+  perform pg_temp.check_true('the logo reaches the form anyway',
+    (v_out -> 'brand' ->> 'signin_show_logo')::boolean);
+  -- 0338, and the point of the split: the patch turned the logo on and
+  -- said nothing about the name, so the name is still off. One switch
+  -- could not express that.
+  perform pg_temp.check_true('and the name it said nothing about stays off',
+    (v_out -> 'brand' ->> 'signin_show_name')::boolean is false);
   perform pg_temp.check_true('and the headline switch',
     (v_out -> 'brand' ->> 'signin_show_headline')::boolean);
   perform pg_temp.check_true('and the heading switch',
@@ -190,7 +199,7 @@ begin
   perform public.platform_save_landing_page(
     jsonb_build_object('wordmark', 'iAkauntan'));
   perform pg_temp.check_true('saving something else moves no switch',
-    (select p.signin_show_mark and p.signin_show_register
+    (select p.signin_show_logo and p.signin_show_register
        from public.landing_page p));
 end $$;
 
@@ -211,7 +220,7 @@ begin
   perform pg_temp.sign_in_as(v_outsider);
   begin
     perform public.platform_save_landing_page(
-      jsonb_build_object('signin_show_mark', false));
+      jsonb_build_object('signin_show_logo', false));
   exception when insufficient_privilege then v_page := true;
   end;
   begin
@@ -246,6 +255,22 @@ begin
                            v_state, '22023');
   perform pg_temp.check_true('and the refusal knows about sign-in points',
                              v_msg like '%sign-in point%');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And the column the two replace is gone
+--
+-- `0338` dropped `signin_show_mark` rather than leaving it. A column
+-- the payload still carried and the screen ignored is one somebody
+-- would eventually set and then wonder about.
+-- ---------------------------------------------------------------------
+do $$
+begin
+  perform pg_temp.check_true('the one switch the two replace is gone',
+    not exists (
+      select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'landing_page'
+         and column_name = 'signin_show_mark'));
 end $$;
 
 rollback;

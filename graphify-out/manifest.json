@@ -120,8 +120,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1787823650.4977973,
-    "ast_hash": "844fd7d8b8b5d688b524f47844f9031d",
+    "mtime": 1787825814.7545335,
+    "ast_hash": "8f45c939ea48e04f0e84474bb3d081e9",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -4395,8 +4395,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_content.dart": {
-    "mtime": 1787823760.4305627,
-    "ast_hash": "b1d36fd8cc6fdffe4f9977430babc878",
+    "mtime": 1787825661.0739002,
+    "ast_hash": "3e7cc8b17d46d70f9d157bcad628d87b",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_screen.dart": {
@@ -4940,8 +4940,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/site_pages_admin.dart": {
-    "mtime": 1787823466.9994884,
-    "ast_hash": "921f9b0263d560d5677413774f4a9413",
+    "mtime": 1787825708.5923176,
+    "ast_hash": "1a43ffb3b0f1dbf040ae4fd5a59b2f32",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/site_page_screen.dart": {
@@ -5035,8 +5035,8 @@
     "semantic_hash": ""
   },
   "app/test/signin_page_copy_test.dart": {
-    "mtime": 1787822945.5065897,
-    "ast_hash": "3bba59965c84a9e071127569d6149944",
+    "mtime": 1787825759.0039635,
+    "ast_hash": "a36047ad5a7e2fdb2aebad61c4970a27",
     "semantic_hash": ""
   },
   "supabase/migrations/0336_the_sign_in_page_is_not_our_poster.sql": {
@@ -5045,13 +5045,13 @@
     "semantic_hash": ""
   },
   "supabase/tests/signin_page_copy.sql": {
-    "mtime": 1787822946.0305898,
-    "ast_hash": "7a286e68a79d9b3e91ada85d8dd2d783",
+    "mtime": 1787825872.8691714,
+    "ast_hash": "3e402a55581454c72cedb6da6a20185c",
     "semantic_hash": ""
   },
   "app/test/signin_page_words_test.dart": {
-    "mtime": 1787823729.091589,
-    "ast_hash": "c8d3f7a724b40db6cdc974e811da95e4",
+    "mtime": 1787825708.5927472,
+    "ast_hash": "45407be47a4fe89cf2b13b32cbaf9017",
     "semantic_hash": ""
   },
   "supabase/migrations/0337_the_last_things_that_were_ours.sql": {
@@ -5062,6 +5062,11 @@
   "supabase/tests/signin_page_words.sql": {
     "mtime": 1787823515.0780056,
     "ast_hash": "23d310bf658e08c90b9061ef5365781d",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0338_the_logo_and_the_name.sql": {
+    "mtime": 1787825651.3018801,
+    "ast_hash": "d0727fe311241d8dcc7276af7a781b5b",
     "semantic_hash": ""
   }
 }

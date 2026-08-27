@@ -128,21 +128,23 @@ void main() {
     test('and reads them on a published site too', () {
       final content = parseLandingContent(const {
         'page': {'is_published': true},
-        'brand': {'signin_show_mark': true},
+        'brand': {'signin_show_logo': true, 'signin_show_name': true},
         'signin_points': [
           {'icon': 'check', 'title': 'One thing', 'body': 'About it.'},
         ],
       });
 
       expect(content.published, isTrue);
-      expect(content.signinShowMark, isTrue);
+      expect(content.signinShowLogo, isTrue);
+      expect(content.signinShowName, isTrue);
       expect(content.signinPoints, hasLength(1));
     });
 
     test('a platform that has said nothing has nothing to draw', () {
       final content = parseLandingContent(const {'brand': {}});
 
-      expect(content.signinShowMark, isFalse);
+      expect(content.signinShowLogo, isFalse);
+      expect(content.signinShowName, isFalse);
       expect(content.signinShowHeadline, isFalse);
       expect(content.signinShowHeading, isFalse);
       expect(content.signinShowRegister, isFalse);
@@ -216,6 +218,60 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.textContaining('Create an account'), findsOneWidget);
+    });
+  });
+
+  group('the logo and the name are two decisions', () {
+    // `0338`. One switch could not say "the picture but not the word",
+    // which is what a platform whose logo already contains its name
+    // wants — and that is most of them.
+    testWidgets('the name alone draws no logo', (tester) async {
+      await tester.pumpWidget(wrap(const LandingContent(
+        published: true,
+        logoUrl: 'https://example.test/logo.png',
+        wordmark: 'Kira Kira',
+        signinShowName: true,
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Kira Kira'), findsWidgets);
+      expect(find.byType(Image), findsNothing);
+    });
+
+    testWidgets('the logo alone draws no name', (tester) async {
+      await tester.pumpWidget(wrap(const LandingContent(
+        published: true,
+        logoUrl: 'https://example.test/logo.png',
+        wordmark: 'Kira Kira',
+        signinShowLogo: true,
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Kira Kira'), findsNothing);
+      expect(find.byType(Image), findsWidgets);
+    });
+
+    testWidgets('and neither draws no panel', (tester) async {
+      await tester.pumpWidget(wrap(const LandingContent(
+        published: true,
+        logoUrl: 'https://example.test/logo.png',
+        wordmark: 'Kira Kira',
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('signin-panel')), findsNothing);
+    });
+
+    testWidgets('but either one on its own brings the panel back',
+        (tester) async {
+      await tester.pumpWidget(wrap(const LandingContent(
+        published: true,
+        wordmark: 'Kira Kira',
+        signinShowName: true,
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('signin-panel')), findsOneWidget);
     });
   });
 

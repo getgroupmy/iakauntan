@@ -352,7 +352,8 @@ class LandingContent {
     this.unknownCtaLabel,
     this.unknownCtaUrl,
     this.demoAccountsEnabled = false,
-    this.signinShowMark = false,
+    this.signinShowLogo = false,
+    this.signinShowName = false,
     this.signinHeadline,
     this.signinShowHeadline = false,
     this.signinShowHeading = false,
@@ -538,7 +539,11 @@ class LandingContent {
   ///
   /// In `brand` rather than `page`, so the sign-in form does not have
   /// to wait for a marketing site to be published.
-  final bool signinShowMark;
+  /// Two switches rather than one since `0338`: a logo that already
+  /// contains the platform's name does not want the word beside it, and
+  /// an abstract mark may want only the word.
+  final bool signinShowLogo;
+  final bool signinShowName;
   final String? signinHeadline;
   final bool signinShowHeadline;
 
@@ -688,7 +693,8 @@ LandingContent parseLandingContent(Object? raw) {
       unknownCtaLabel: brandStr('unknown_cta_label'),
       unknownCtaUrl: brandStr('unknown_cta_url'),
       demoAccountsEnabled: brandBool('demo_accounts_enabled'),
-      signinShowMark: brandBool('signin_show_mark'),
+      signinShowLogo: brandBool('signin_show_logo'),
+      signinShowName: brandBool('signin_show_name'),
       signinHeadline: brandStr('signin_headline'),
       signinShowHeadline: brandBool('signin_show_headline'),
       signinShowHeading: brandBool('signin_show_heading'),
@@ -892,7 +898,8 @@ LandingContent parseLandingContent(Object? raw) {
     unknownCtaLabel: brandStr('unknown_cta_label'),
     unknownCtaUrl: brandStr('unknown_cta_url'),
     demoAccountsEnabled: brandBool('demo_accounts_enabled'),
-    signinShowMark: brandBool('signin_show_mark'),
+    signinShowLogo: brandBool('signin_show_logo'),
+    signinShowName: brandBool('signin_show_name'),
     signinHeadline: brandStr('signin_headline'),
     signinShowHeadline: brandBool('signin_show_headline'),
     signinShowHeading: brandBool('signin_show_heading'),

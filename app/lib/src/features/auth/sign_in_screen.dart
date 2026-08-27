@@ -64,14 +64,20 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   /// platform that has turned everything off.
   LandingContent? get _brand => ref.watch(landingContentProvider).valueOrNull;
 
-  /// Whether the mark is drawn at all.
+  /// Whether the logo is drawn, and whether the name is.
   ///
-  /// A company at its own subdomain always gets one: that mark is
-  /// Sinar's, and this switch is about whether *our* marketing appears
-  /// on the page. Taking a company's own logo off its own door because
-  /// the platform turned its own off would be the wrong reading of it.
-  bool get _showMark =>
-      _workspace != null || (_brand?.signinShowMark ?? false);
+  /// Two questions since `0338`: a logo that already contains the
+  /// platform's name does not want the word beside it, and an abstract
+  /// mark may want only the word.
+  ///
+  /// A company at its own subdomain gets both regardless: that mark is
+  /// Sinar's, and these switches are about whether *our* marketing
+  /// appears on the page. Taking a company's own logo off its own door
+  /// because the platform turned its own off would be the wrong reading.
+  bool get _showLogo =>
+      _workspace != null || (_brand?.signinShowLogo ?? false);
+  bool get _showName =>
+      _workspace != null || (_brand?.signinShowName ?? false);
 
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
@@ -292,8 +298,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               children: [
                 // On a phone there is no panel, so this is the only
                 // place the mark can appear. Same switch either way.
-                if (!wide && _showMark) ...[
-                  const _Brand(),
+                if (!wide && (_showLogo || _showName)) ...[
+                  _Brand(logo: _showLogo, name: _showName),
                   const SizedBox(height: 32),
                 ],
                 if (_brand?.signinShowHeading ?? false) ...[
@@ -489,7 +495,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     // two-column layout would draw.
     final hero = _HeroContent(
       panel: AppTheme.parseHex(_brand?.signinPanelColour) ?? scheme.primary,
-      showMark: _showMark,
+      showLogo: _showLogo,
+      showName: _showName,
       headline: (_brand?.signinShowHeadline ?? false)
           ? (_brand?.signinHeadline ?? LandingContent.defaultSigninHeadline)
           : null,
@@ -530,13 +537,15 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 /// and the way they would disagree is an empty teal half-screen.
 class _HeroContent {
   const _HeroContent({
-    required this.showMark,
+    required this.showLogo,
+    required this.showName,
     required this.headline,
     required this.points,
     required this.panel,
   });
 
-  final bool showMark;
+  final bool showLogo;
+  final bool showName;
   final String? headline;
   final List<LandingSection> points;
 
@@ -555,7 +564,8 @@ class _HeroContent {
           ? Colors.white
           : Colors.black87;
 
-  bool get isEmpty => !showMark && headline == null && points.isEmpty;
+  bool get isEmpty =>
+      !showLogo && !showName && headline == null && points.isEmpty;
 }
 
 /// The mark, on the way in.
@@ -572,7 +582,18 @@ class _HeroContent {
 /// placeholder. So a missing logo, or one whose address will not load,
 /// leaves the wordmark standing alone.
 class _Brand extends ConsumerWidget {
-  const _Brand({this.onDark = false, this.ink});
+  const _Brand({
+    this.onDark = false,
+    this.ink,
+    this.logo = true,
+    this.name = true,
+  });
+
+  /// Which halves to draw. Both default true because every caller
+  /// outside the sign-in screen wants the whole mark; the sign-in
+  /// screen passes `0338`'s two switches.
+  final bool logo;
+  final bool name;
 
   /// Sitting on the panel rather than on the page, which is where the
   /// dark variant of a logo earns its keep.
@@ -605,7 +626,7 @@ class _Brand extends ConsumerWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (url != null) ...[
+        if (logo && url != null) ...[
           Image.network(
             url,
             height: 40,
@@ -614,21 +635,23 @@ class _Brand extends ConsumerWidget {
             // — and must not put our icon there instead.
             errorBuilder: (_, _, _) => const SizedBox.shrink(),
           ),
-          const SizedBox(width: 12),
+          if (name) const SizedBox(width: 12),
         ],
-        Text(
-          // No literal here any more. `landing_page.wordmark` is NOT
-          // NULL, so the backend answers; `LandingContent` supplies the
-          // app's own build-time name only when there is no payload at
-          // all, which is the one case where inventing a name is worst.
-          workspace?['name'] as String? ?? brand?.wordmark ?? Env.appName,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w700,
-            color: color,
-            letterSpacing: -0.5,
+        if (name)
+          Text(
+            // No literal here any more. `landing_page.wordmark` is NOT
+            // NULL, so the backend answers; `LandingContent` supplies
+            // the app's own build-time name only when there is no
+            // payload at all, which is the one case where inventing a
+            // name is worst.
+            workspace?['name'] as String? ?? brand?.wordmark ?? Env.appName,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: color,
+              letterSpacing: -0.5,
+            ),
           ),
-        ),
       ],
     );
   }
@@ -652,8 +675,13 @@ class _Hero extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        if (content.showMark) ...[
-          _Brand(onDark: true, ink: ink),
+        if (content.showLogo || content.showName) ...[
+          _Brand(
+            onDark: true,
+            ink: ink,
+            logo: content.showLogo,
+            name: content.showName,
+          ),
           const SizedBox(height: 40),
         ],
         if (content.headline != null) ...[
