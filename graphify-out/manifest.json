@@ -120,8 +120,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1787829405.009866,
-    "ast_hash": "3c6ec51c52b7636cf71eab2a39a76817",
+    "mtime": 1787852683.6658614,
+    "ast_hash": "37f3d119dad66b7ba2a75f251d51dbee",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -4955,8 +4955,8 @@
     "semantic_hash": ""
   },
   "app/test/company_door_sign_in_test.dart": {
-    "mtime": 1787822945.5025897,
-    "ast_hash": "71254c7247d1284d4f75b016d82ef7ed",
+    "mtime": 1787852626.2616897,
+    "ast_hash": "c0bbb81b2bcbfb44e8cb518eeeca2606",
     "semantic_hash": ""
   },
   "app/test/router_refresh_test.dart": {
@@ -5165,13 +5165,18 @@
     "semantic_hash": ""
   },
   "supabase/tests/name_purposes.sql": {
-    "mtime": 1787844329.0701694,
-    "ast_hash": "e3caaeab3ad7801a6973520bf8328df8",
+    "mtime": 1787851448.7399967,
+    "ast_hash": "cbb69734784f49bf1a2cff922e6a1f32",
     "semantic_hash": ""
   },
   "supabase/migrations/0345_a_door_with_no_company_behind_it.sql": {
     "mtime": 1787844299.0341012,
     "ast_hash": "744313ba6bc80f9a927730ae1c51f411",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0346_the_module_this_address_opens.sql": {
+    "mtime": 1787851414.783706,
+    "ast_hash": "92c7d547c7e90dd22f65d60976c2d3bc",
     "semantic_hash": ""
   }
 }

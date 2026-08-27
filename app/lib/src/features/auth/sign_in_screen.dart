@@ -22,10 +22,12 @@ class SignInScreen extends ConsumerStatefulWidget {
   final bool startOnRegister;
 
   @override
-  ConsumerState<SignInScreen> createState() => _SignInScreenState();
+  ConsumerState<SignInScreen> createState() => SignInScreenState();
 }
 
-class _SignInScreenState extends ConsumerState<SignInScreen> {
+/// Public so a test can reach [showRefusal] — the dialog is the whole
+/// of what a refusal is, and the alternative is asserting a fake.
+class SignInScreenState extends ConsumerState<SignInScreen> {
   /// What this platform calls itself, or what the product shipped as.
   /// Named rather than inlined because it appears in two sentences and
   /// they must not disagree.
@@ -137,7 +139,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           email: _email.text.trim(),
           password: _password.text,
         );
-        await _refuseIfNotTheirDoor();
+        // Two ways a correct password is still the wrong way in, and
+        // the second is only worth asking once the first has passed:
+        // a refusal signs the session out, and asking "may this
+        // account open the till" with no account gets the answer no
+        // for a reason that is not theirs.
+        if (await _refuseIfNotTheirDoor()) return;
+        await _refuseIfModuleNotActive();
       }
     } on AuthException catch (e) {
       await _noteRefusal(e);
@@ -148,6 +156,92 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  /// Turn away somebody whose account cannot open what this address
+  /// opens.
+  ///
+  /// `0346`. `pos.iakauntan.com` is the till and nothing else, so an
+  /// account with no till has nowhere to arrive. The app used to let
+  /// them in and then redirect to a screen saying no, which is a screen
+  /// where a sentence would do — and which leaves somebody signed in to
+  /// a product they cannot use, the way out being to find Sign out on a
+  /// page that exists to tell them off.
+  ///
+  /// So: signed out again, left on the form they were already looking
+  /// at, and told which module it is in a dialog rather than in small
+  /// red text under a field. The dialog is deliberate — this is not a
+  /// typo in a password, it is the wrong account for this address, and
+  /// the next thing to do is sign in as somebody else.
+  ///
+  /// A failure to reach the server leaves the session alone, the same
+  /// choice [_refuseIfNotTheirDoor] makes: refusing somebody because a
+  /// request timed out is worse than letting them through to a screen
+  /// the router will hold anyway.
+  Future<void> _refuseIfModuleNotActive() async {
+    final client = ref.read(supabaseProvider);
+    String? refused;
+    try {
+      refused = await client.rpc(
+        'workspace_module_refusal',
+        params: {'p_host': Uri.base.host},
+      ) as String?;
+    } catch (_) {
+      return;
+    }
+    if (refused == null) return;
+
+    await refuse(
+      title: 'Not activated',
+      message: 'This address opens $refused, and that is not switched '
+          'on for your company. Ask whoever looks after your '
+          'subscription, or sign in at iakauntan.com to reach the rest '
+          'of your books.',
+    );
+  }
+
+  /// Sign the session out and say why, without moving anybody.
+  ///
+  /// A dialog rather than the small red text under a field, and the
+  /// difference is what kind of problem this is. Red text under a field
+  /// is for a typo — try again, the form is still the thing you are
+  /// doing. Neither of these is a typo: the password was right and the
+  /// account is wrong for this address, so the next thing to do is sign
+  /// in as somebody else, and that deserves an interruption.
+  ///
+  /// Signed out first, and that is what keeps them here: the router
+  /// sends a signed-in visitor at `/signin` on to their books, so
+  /// leaving the session in place would move them off the page the
+  /// message is on.
+  Future<void> refuse({
+    required String title,
+    required String message,
+  }) async {
+    await ref.read(supabaseProvider).auth.signOut();
+    if (!mounted) return;
+    await showRefusal(title: title, message: message);
+  }
+
+  /// The saying-so half of [refuse], separately because it is the half
+  /// worth pressing: what a refusal *looks* like is the whole of this
+  /// change, and a test that has to stand up a signed-in Supabase to
+  /// see it would be asserting the fake.
+  @visibleForTesting
+  Future<void> showRefusal({
+    required String title,
+    required String message,
+  }) => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('OK'),
+        ),
+      ],
+    ),
+  );
 
   /// Turn away somebody who signed in correctly at a door that is not
   /// theirs.
@@ -167,9 +261,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   /// A failure to reach the server leaves the session alone. Signing
   /// somebody out because a request timed out is a worse answer than
   /// letting a member through on a page that is theirs anyway.
-  Future<void> _refuseIfNotTheirDoor() async {
+  Future<bool> _refuseIfNotTheirDoor() async {
     final workspace = ref.read(workspaceHostProvider).valueOrNull;
-    if (workspace == null) return;
+    if (workspace == null) return false;
 
     final client = ref.read(supabaseProvider);
     bool allowed;
@@ -180,16 +274,22 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           ) as bool? ??
           true;
     } catch (_) {
-      return;
+      return false;
     }
-    if (allowed) return;
+    if (allowed) return false;
 
-    await client.auth.signOut();
-    if (!mounted) return;
-    setState(() {
-      _error = 'That account is not on ${workspace['name']}\'s team. '
-          'Sign in at iakauntan.com to reach your own books.';
-    });
+    // A company's door names the company; one of ours has no name to
+    // give, and `Sinar's team` with the name missing reads as a bug.
+    final whose = workspace['name'] as String?;
+    await refuse(
+      title: 'Not your workspace',
+      message: whose == null
+          ? 'That account may not use this address. Sign in at '
+              'iakauntan.com to reach your own books.'
+          : 'That account is not on $whose\'s team. Sign in at '
+              'iakauntan.com to reach your own books.',
+    );
+    return true;
   }
 
   /// Tell the company that somebody was refused at its door.

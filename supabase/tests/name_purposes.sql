@@ -512,4 +512,87 @@ begin
     public.may_use_workspace('pintu-theirs.iakauntan.com'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Whether the account signing in may open what the address opens
+--
+-- `0346`. The address says "the till"; the account may have no till.
+-- Answered at the door so the sign-in form can say so and stay where it
+-- is, rather than letting somebody in and then showing them a screen
+-- that says no.
+--
+-- Null means nothing to refuse. Anything else is the module's own name,
+-- because "not subscribed to a module" is not a sentence anybody can
+-- act on.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin  uuid := pg_temp.test_user();
+  v_has    uuid;
+  v_hasnt  uuid;
+  v_person uuid := pg_temp.another_user('till-person@iakauntan.test');
+  v_bare   uuid := pg_temp.another_user('operator-6@iakauntan.test');
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform public.platform_reserve_subdomain('counter-a', null, 'pos', '/till',
+                                            null, 'admin');
+  perform public.platform_reserve_subdomain('open-house', null, null, null,
+                                            null, 'reserved');
+
+  -- Everything is on for the first, and only the core modules for the
+  -- second — `pos` is not one of them.
+  v_has := pg_temp.test_org('Kedai Ada Till');
+  v_hasnt := pg_temp.test_org('Kedai Tiada Till', array['sales']);
+
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_hasnt, v_person, 'owner', 'active');
+  perform pg_temp.sign_in_as(v_person);
+
+  perform pg_temp.check_eq('a company without the module is told which one',
+    public.workspace_module_refusal('counter-a.iakauntan.com'),
+    'Point of Sale');
+
+  -- Three addresses that confine nothing. A refusal at any of them is
+  -- the check running where it has nothing to check.
+  perform pg_temp.check_true('a name that opens everything refuses nobody',
+    public.workspace_module_refusal('open-house.iakauntan.com') is null);
+  perform pg_temp.check_true('nor does an address nobody holds',
+    public.workspace_module_refusal('nosuchname.iakauntan.com') is null);
+  perform pg_temp.check_true('nor the bare domain',
+    public.workspace_module_refusal('iakauntan.com') is null);
+
+  -- An invitation nobody accepted is not a company you are in.
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_has, v_person, 'sales', 'invited');
+  perform pg_temp.check_eq('an unaccepted invitation opens nothing',
+    public.workspace_module_refusal('counter-a.iakauntan.com'),
+    'Point of Sale');
+
+  -- Belonging to one company that holds it is enough. The address names
+  -- a module, not a company, and after signing in they will be in one
+  -- of theirs — refusing on the strength of the other would be refusing
+  -- a fact about a company they were not signing in to.
+  update public.org_members set status = 'active'
+   where org_id = v_has and user_id = v_person;
+  perform pg_temp.check_true('one company with it is enough',
+    public.workspace_module_refusal('counter-a.iakauntan.com') is null);
+
+  -- An operator has to be able to open the address to see what the shop
+  -- sees, and one with no company of their own holds no modules at all
+  -- — so this has to be an operator who is in nothing. Asserted with
+  -- `v_admin` first, it passed for the wrong reason: the helper's
+  -- platform admin is also the owner of the company above, and was
+  -- being let through as a member rather than as staff.
+  perform pg_temp.sign_in_as(v_bare);
+  perform pg_temp.check_eq('somebody in no company at all is refused',
+    public.workspace_module_refusal('counter-a.iakauntan.com'),
+    'Point of Sale');
+
+  insert into public.platform_admins (user_id) values (v_bare)
+    on conflict do nothing;
+  perform pg_temp.check_true('but the same person as platform staff is not',
+    public.workspace_module_refusal('counter-a.iakauntan.com') is null);
+end $$;
+
 rollback;
