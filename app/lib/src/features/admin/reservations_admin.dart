@@ -6,6 +6,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/models.dart';
 import '../../data/reserved_names_repository.dart';
 import '../landing/landing_content.dart';
 import '../shell/app_shell.dart';
@@ -588,7 +589,7 @@ class _EditReservationDialogState
 ///
 /// The screens on offer come from the navigation's own table, so one
 /// that exists can be chosen and one that does not cannot be typed.
-class ConfinementFields extends StatelessWidget {
+class ConfinementFields extends ConsumerWidget {
   const ConfinementFields({
     super.key,
     required this.module,
@@ -600,15 +601,32 @@ class ConfinementFields extends StatelessWidget {
   final String? path;
 
   /// Both at once, because they are one decision: choosing a different
-  /// module has to drop a screen that belonged to the old one, and two
+  /// module has to drop a feature that belonged to the old one, and two
   /// separate callbacks would let a caller forget.
   final void Function(String? module, String? path) onChanged;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final all = assignableDestinations();
-    final modules = <String>{for (final d in all) d.module}.toList()..sort();
-    final screens = [for (final d in all) if (d.module == module) d];
+
+    // The catalogue's own names — "Point of Sale" rather than `pos`.
+    // The first version listed the codes, which reads as a debugging
+    // aid rather than a menu, and puts `property_strata` and `mbrs` in
+    // front of somebody choosing between them.
+    //
+    // Falls back to the code where the catalogue has not loaded or has
+    // no such row: a name that is only usually right is still better
+    // than a list that is empty until a fetch lands.
+    final catalogue = {
+      for (final m in ref.watch(platformModulesProvider).valueOrNull ??
+          const <ModuleInfo>[])
+        m.code: m.name,
+    };
+    String nameOf(String code) => catalogue[code] ?? code;
+
+    final modules = <String>{for (final d in all) d.module}.toList()
+      ..sort((a, b) => nameOf(a).compareTo(nameOf(b)));
+    final features = [for (final d in all) if (d.module == module) d];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -617,7 +635,7 @@ class ConfinementFields extends StatelessWidget {
           value: modules.contains(module) ? module : null,
           isExpanded: true,
           decoration: const InputDecoration(
-            labelText: 'Opens only',
+            labelText: 'Module',
             helperText: 'Left empty, this address opens the whole product.',
           ),
           items: [
@@ -626,28 +644,32 @@ class ConfinementFields extends StatelessWidget {
               child: Text('The whole product'),
             ),
             for (final m in modules)
-              DropdownMenuItem<String?>(value: m, child: Text(m)),
+              DropdownMenuItem<String?>(
+                value: m,
+                child: Text(nameOf(m), overflow: TextOverflow.ellipsis),
+              ),
           ],
-          // A screen belongs to the module it was chosen under, so
+          // A feature belongs to the module it was chosen under, so
           // changing the module drops it rather than leaving a path
           // pointing somewhere this address no longer goes.
           onChanged: (v) => onChanged(v, null),
         ),
-        if (module != null && screens.isNotEmpty) ...[
+        if (module != null && features.isNotEmpty) ...[
           const SizedBox(height: 12),
           DropdownButtonFormField<String?>(
-            value: screens.any((d) => d.path == path) ? path : null,
+            value: features.any((d) => d.path == path) ? path : null,
             isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'And only this screen',
-              helperText: 'Optional. Left empty, the whole module opens.',
+            decoration: InputDecoration(
+              labelText: 'Feature',
+              helperText: 'Optional. Left empty, the whole of '
+                  '${nameOf(module!)} opens.',
             ),
             items: [
-              const DropdownMenuItem<String?>(
+              DropdownMenuItem<String?>(
                 value: null,
-                child: Text('Any screen in the module'),
+                child: Text('Any feature of ${nameOf(module!)}'),
               ),
-              for (final d in screens)
+              for (final d in features)
                 DropdownMenuItem<String?>(
                   value: d.path,
                   child: Text(d.label, overflow: TextOverflow.ellipsis),
