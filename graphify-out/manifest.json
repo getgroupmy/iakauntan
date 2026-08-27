@@ -40,8 +40,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/app.dart": {
-    "mtime": 1787822945.4825897,
-    "ast_hash": "6f65c47b6defcde80c4b20e4dc340edf",
+    "mtime": 1787826285.9973483,
+    "ast_hash": "03d69a79e67eb0178243eb4ed61acf74",
     "semantic_hash": ""
   },
   "app/lib/src/core/download.dart": {
@@ -120,8 +120,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1787825814.7545335,
-    "ast_hash": "8f45c939ea48e04f0e84474bb3d081e9",
+    "mtime": 1787826588.2047732,
+    "ast_hash": "dc383773342e14f5e3b45fa380c4d51b",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -325,8 +325,8 @@
     "semantic_hash": "86582eb494efb62ce33fef7f93a514b3"
   },
   "app/web/manifest.json": {
-    "mtime": 1786450127.4518445,
-    "ast_hash": "84bfa0be4c5b3ef971ea51823398428b",
+    "mtime": 1787826664.5297668,
+    "ast_hash": "130a106d08b6874459db54ae3b95e9a5",
     "semantic_hash": ""
   },
   "supabase/functions/_shared/context.ts": {
@@ -835,8 +835,8 @@
     "semantic_hash": ""
   },
   "app/web/index.html": {
-    "mtime": 1786774845.201076,
-    "ast_hash": "09c9cabe63e9a7f382340dc683ef105d",
+    "mtime": 1787826664.5294933,
+    "ast_hash": "d4c41a92ca45b252c2fe6c31236548b4",
     "semantic_hash": ""
   },
   "app/android/app/src/main/res/mipmap-hdpi/ic_launcher.png": {
@@ -4325,8 +4325,8 @@
     "semantic_hash": ""
   },
   "brand/README.md": {
-    "mtime": 1787822945.5125225,
-    "ast_hash": "83f8e48059e6580543d6c668ece5dad7",
+    "mtime": 1787826897.9219136,
+    "ast_hash": "390a916274de58932520247e701b4e05",
     "semantic_hash": ""
   },
   "brand/iakauntan-mark-512.png": {
@@ -4395,8 +4395,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_content.dart": {
-    "mtime": 1787825661.0739002,
-    "ast_hash": "3e7cc8b17d46d70f9d157bcad628d87b",
+    "mtime": 1787826395.6187441,
+    "ast_hash": "67ba126b8581ebd42a85265f3d0519e3",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_screen.dart": {
@@ -4455,8 +4455,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/platform_live.dart": {
-    "mtime": 1787822945.4825897,
-    "ast_hash": "8a0a6bbf9273a46b49e9ae87a8561f5c",
+    "mtime": 1787826545.5579863,
+    "ast_hash": "0658e7676d7d37c36626c8d0b94bfdfc",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_motion.dart": {
@@ -4480,8 +4480,8 @@
     "semantic_hash": ""
   },
   "app/test/platform_live_test.dart": {
-    "mtime": 1787822945.5065897,
-    "ast_hash": "5d7717523ba55f041acf9ce167171c11",
+    "mtime": 1787826635.7251713,
+    "ast_hash": "4c894b62d20fe084e9eef57d5da7288d",
     "semantic_hash": ""
   },
   "supabase/functions/_shared/billplz.ts": {
@@ -4645,8 +4645,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/branding_admin.dart": {
-    "mtime": 1787823388.850101,
-    "ast_hash": "e6519d52f9a4e7078fac430da6ef4382",
+    "mtime": 1787826459.8185163,
+    "ast_hash": "30f1ae911dd120974c34398e232d3787",
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/report_csv.dart": {
@@ -4690,8 +4690,8 @@
     "semantic_hash": ""
   },
   "scripts/ci/branding_icon.sh": {
-    "mtime": 1787822946.0046568,
-    "ast_hash": "a3aa22ab1620c3fef596b15be4d4a83a",
+    "mtime": 1787826718.6431077,
+    "ast_hash": "c14a45458ad0dae53abbbc16c3d58cb8",
     "semantic_hash": ""
   },
   "scripts/ci/retry.sh": {
@@ -4940,13 +4940,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/site_pages_admin.dart": {
-    "mtime": 1787825708.5923176,
-    "ast_hash": "1a43ffb3b0f1dbf040ae4fd5a59b2f32",
+    "mtime": 1787826459.8181384,
+    "ast_hash": "4e5cec00efa8ccfca1e7b232749a25f4",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/site_page_screen.dart": {
-    "mtime": 1787822945.4950595,
-    "ast_hash": "7533292eed1402b3f7016ce8e5fb9517",
+    "mtime": 1787826617.5720034,
+    "ast_hash": "556f7b1ad3d4ef0f9bc50dbbbc5eb4e0",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/unknown_workspace_screen.dart": {
@@ -5050,8 +5050,8 @@
     "semantic_hash": ""
   },
   "app/test/signin_page_words_test.dart": {
-    "mtime": 1787825708.5927472,
-    "ast_hash": "45407be47a4fe89cf2b13b32cbaf9017",
+    "mtime": 1787826434.5362365,
+    "ast_hash": "a9989d36bc89c84bdd69616e6d13f545",
     "semantic_hash": ""
   },
   "supabase/migrations/0337_the_last_things_that_were_ours.sql": {
@@ -5060,13 +5060,53 @@
     "semantic_hash": ""
   },
   "supabase/tests/signin_page_words.sql": {
-    "mtime": 1787823515.0780056,
-    "ast_hash": "23d310bf658e08c90b9061ef5365781d",
+    "mtime": 1787826862.7906501,
+    "ast_hash": "31a6aa421d7b2d183f17e0383882817d",
     "semantic_hash": ""
   },
   "supabase/migrations/0338_the_logo_and_the_name.sql": {
     "mtime": 1787825651.3018801,
     "ast_hash": "d0727fe311241d8dcc7276af7a781b5b",
+    "semantic_hash": ""
+  },
+  "app/lib/src/core/brand_chrome.dart": {
+    "mtime": 1787826276.0664089,
+    "ast_hash": "46137a919b23b4fc16d4106ba56648be",
+    "semantic_hash": ""
+  },
+  "app/lib/src/core/brand_chrome_stub.dart": {
+    "mtime": 1787826276.0665135,
+    "ast_hash": "e0077847e7d725251a639a7cf664882a",
+    "semantic_hash": ""
+  },
+  "app/lib/src/core/brand_chrome_web.dart": {
+    "mtime": 1787826276.0702007,
+    "ast_hash": "86f56cb90edb4d601a88a86ed3f4d4aa",
+    "semantic_hash": ""
+  },
+  "app/test/brand_chrome_test.dart": {
+    "mtime": 1787826751.9187298,
+    "ast_hash": "32dfecafe4641c3da3cc976202c845e2",
+    "semantic_hash": ""
+  },
+  "app/tool/brand_chrome.dart": {
+    "mtime": 1787826831.7965314,
+    "ast_hash": "ff9cad549de95156535ab48d6d3c6ce2",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0339_the_browsers_own_furniture.sql": {
+    "mtime": 1787826316.9974835,
+    "ast_hash": "c49c97292ab6e234058e8dff82c9778e",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0340_one_colour_chosen_once.sql": {
+    "mtime": 1787826484.4516642,
+    "ast_hash": "0091c4d7dfc164e8c4ba86a48ce1d278",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0341_the_pages_change_while_you_watch.sql": {
+    "mtime": 1787826527.598508,
+    "ast_hash": "06a3b3bb9f648af4b29ec509c2d0467a",
     "semantic_hash": ""
   }
 }

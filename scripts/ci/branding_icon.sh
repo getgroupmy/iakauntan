@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
-# Put the platform's own icon on the build.
+# Put the platform's own icon, name and colour on the build.
 #
 # The console's branding tab stores a square source image on
-# `landing_page.app_icon_url`. The favicon and the PWA icons are files
-# inside the built bundle, so the only moment they can change is here,
-# just before `flutter build web` — which is why the tab says an upload
-# takes effect on the next deploy rather than on save.
+# `landing_page.app_icon_url`, a name on `wordmark` and a colour on
+# `brand_colour`. The favicon, the PWA icons, `index.html` and
+# `manifest.json` are all files inside the built bundle, so the only
+# moment they can change is here, just before `flutter build web` —
+# which is why the tab says an upload takes effect on the next deploy
+# rather than on save.
+#
+# The running app repoints the same tags again once it has the payload
+# (`lib/src/core/brand_chrome.dart` and `favicon.dart`), so a change in
+# the console does not wait for a deploy to reach a visitor. What waits
+# for a deploy is what a browser sees *before* the app boots, and what a
+# PWA install reads — which is only ever these files.
 #
 # Reads through `landing_page()`, the same anon-readable function the
 # front page uses, so this needs no credential the shipped bundle does
@@ -55,10 +63,16 @@ fi
 
 icon="$(printf '%s' "$body" | "$root/scripts/ci/branding_icon.py")"
 
+cd "$root/app" || exit 0
+
+# The name and the colour, onto the two files a browser reads before any
+# Dart runs. Given the same payload, and just as unable to fail the
+# deploy: it prints what it did and exits zero either way.
+printf '%s' "$body" | dart run tool/brand_chrome.dart
+
 if [ -z "$icon" ]; then
   note "No app icon is set in the console; the shipped icons were kept."
   exit 0
 fi
 
-cd "$root/app" || exit 0
 dart run tool/make_icons.dart "$icon"

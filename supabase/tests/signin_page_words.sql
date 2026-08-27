@@ -36,8 +36,6 @@ begin
   insert into public.landing_page (id) values (true);
   select * into v_row from public.landing_page;
 
-  perform pg_temp.check_true('the panel colour is unchosen',
-                             v_row.signin_panel_colour is null);
   foreach v_col in array array[
     'signin_email_label', 'signin_password_label', 'signin_name_label',
     'signin_forgot_label', 'signin_register_prompt', 'signin_signin_prompt'
@@ -71,7 +69,6 @@ begin
   perform pg_temp.sign_in_as(v_admin);
 
   perform public.platform_save_landing_page(jsonb_build_object(
-    'signin_panel_colour',    '#123456',
     'signin_email_label',     'E-mel',
     'signin_password_label',  'Kata laluan',
     'signin_name_label',      'Nama penuh',
@@ -90,8 +87,6 @@ begin
   perform pg_temp.check_true('the marketing site is still a draft',
     v_out -> 'page' is null or v_out -> 'page' = 'null'::jsonb);
 
-  perform pg_temp.check_eq('the panel colour reaches the form',
-                           v_brand ->> 'signin_panel_colour', '#123456');
   perform pg_temp.check_eq('and the email box''s name',
                            v_brand ->> 'signin_email_label', 'E-mel');
   perform pg_temp.check_eq('and the password box''s',
@@ -117,42 +112,6 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
--- A colour that is not a colour is refused, twice
---
--- Once by the saver, with a sentence somebody can act on, and once by
--- the table — because the saver is the door everybody uses and the
--- constraint is what makes that true rather than merely usual.
--- ---------------------------------------------------------------------
-do $$
-declare
-  v_admin uuid := pg_temp.test_user();
-  v_state text; v_msg text; v_direct boolean := false; v_kept text;
-begin
-  insert into public.platform_admins (user_id) values (v_admin)
-    on conflict do nothing;
-  perform pg_temp.sign_in_as(v_admin);
-
-  begin
-    perform public.platform_save_landing_page(
-      jsonb_build_object('signin_panel_colour', 'teal'));
-  exception when others then v_state := sqlstate; v_msg := sqlerrm;
-  end;
-  perform pg_temp.check_eq('a colour has to be a colour', v_state, '22023');
-  perform pg_temp.check_true('and the refusal shows the shape wanted',
-                             v_msg like '%#0B7A6B%');
-
-  begin
-    update public.landing_page set signin_panel_colour = 'teal';
-  exception when check_violation then v_direct := true;
-  end;
-  perform pg_temp.check_true('the table refuses it too', v_direct);
-
-  select p.signin_panel_colour into v_kept from public.landing_page p;
-  perform pg_temp.check_eq('and the colour that was there is still there',
-                           v_kept, '#123456');
-end $$;
-
--- ---------------------------------------------------------------------
 -- An emptied box asks for the shipped word back
 --
 -- Null, not an empty string: the screen renders `?? 'Email'` on null
@@ -166,14 +125,11 @@ begin
   perform pg_temp.sign_in_as(v_admin);
 
   perform public.platform_save_landing_page(jsonb_build_object(
-    'signin_email_label', '   ',
-    'signin_panel_colour', ''));
+    'signin_email_label', '   '));
   select * into v_row from public.landing_page;
 
   perform pg_temp.check_true('an emptied label is null, not ""',
                              v_row.signin_email_label is null);
-  perform pg_temp.check_true('and an emptied colour is null',
-                             v_row.signin_panel_colour is null);
 
   -- And a patch that does not mention them leaves them alone.
   perform public.platform_save_landing_page(
@@ -206,6 +162,90 @@ begin
   select p.signin_password_label into v_kept from public.landing_page p;
   perform pg_temp.check_eq('and the words are as the operator left them',
                            v_kept, 'Kata laluan');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The colour is Branding's, and only Branding's
+--
+-- `0337` briefly gave the sign-in panel a colour of its own. `0340`
+-- took it back out: a platform has one colour, chosen once, and a
+-- second field for it is a second answer that is free to disagree with
+-- the first.
+-- ---------------------------------------------------------------------
+do $$
+begin
+  perform pg_temp.check_true('the sign-in screen has no colour of its own',
+    not exists (
+      select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'landing_page'
+         and column_name = 'signin_panel_colour'));
+
+  -- And the one it uses is still there to be set.
+  perform pg_temp.check_true('while the brand colour still is',
+    exists (
+      select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'landing_page'
+         and column_name = 'brand_colour'));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The browser's own furniture travels too
+--
+-- `meta_title` and `meta_description` have been stored since `0290` and
+-- editable since `0316`, and nothing read them until `0339` put them in
+-- `brand`. They are the tab's title and the sentence a link preview
+-- shows, so they are needed on every screen — including every screen a
+-- platform with no published marketing site still draws.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_out jsonb;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+
+  perform public.platform_save_landing_page(jsonb_build_object(
+    'meta_title', 'Kira Kira — buku',
+    'meta_description', 'Perakaunan untuk perniagaan Malaysia.'));
+
+  perform pg_temp.sign_out();
+  set local role anon;
+  v_out := public.landing_page();
+  reset role;
+
+  perform pg_temp.check_true('the site is still a draft',
+    v_out -> 'page' is null or v_out -> 'page' = 'null'::jsonb);
+  perform pg_temp.check_eq('the tab title reaches the browser anyway',
+    v_out -> 'brand' ->> 'meta_title', 'Kira Kira — buku');
+  perform pg_temp.check_eq('and the sentence a link preview reads',
+    v_out -> 'brand' ->> 'meta_description',
+    'Perakaunan untuk perniagaan Malaysia.');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And the five pages change while somebody is looking at them
+--
+-- `0341` put `site_pages` in the realtime publication. Without it an
+-- operator rewrites the sign-in screen's wording, watches the sign-in
+-- page in the next tab, and nothing happens until they reload — which
+-- reads exactly like a console that did not save.
+-- ---------------------------------------------------------------------
+do $$
+begin
+  perform pg_temp.check_true('the five pages are published for realtime',
+    exists (
+      select 1 from pg_publication_tables
+       where pubname = 'supabase_realtime'
+         and schemaname = 'public' and tablename = 'site_pages'));
+
+  -- Full, so a subscriber can tell a published page from a draft
+  -- without going back to the database for the row it was just sent.
+  perform pg_temp.check_eq('with the whole row, not just its key',
+    (select c.relreplident::text from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relname = 'site_pages'), 'f');
 end $$;
 
 rollback;

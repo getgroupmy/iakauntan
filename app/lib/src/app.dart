@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/env.dart';
+import 'core/brand_chrome.dart';
 import 'core/favicon.dart';
 import 'core/router.dart';
 import 'core/theme.dart';
@@ -34,6 +35,24 @@ class IAkauntanApp extends ConsumerWidget {
     // sets an attribute to a value it may already hold. On anything that
     // is not a browser it does nothing at all.
     applyFavicon(brand?.appIconUrl);
+
+    // And the rest of what the browser itself shows: the colour on an
+    // Android address bar, the name on the tab and on an iOS home
+    // screen, and the sentence a link preview reads.
+    //
+    // Same reasoning as the favicon above and the same limitation: the
+    // built files are what a browser sees before any of this runs, so
+    // CI stamps them too. This is what makes a change in the console
+    // reach a visitor without waiting for a deploy.
+    //
+    // `metaTitle` and `metaDescription` before the wordmark, because an
+    // operator who wrote a page title meant it for exactly this; the
+    // wordmark is what a platform that has not is called.
+    applyBrandChrome(
+      themeColour: brand?.brandColour,
+      title: brand?.metaTitle ?? brand?.wordmark,
+      description: brand?.metaDescription,
+    );
 
     return MaterialApp.router(
       title: Env.appName,

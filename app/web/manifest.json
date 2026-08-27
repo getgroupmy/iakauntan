@@ -1,11 +1,9 @@
 {
-    "name": "iAkauntan — accounting and CRM for Malaysian business",
-    "short_name": "iAkauntan",
+    "name": "",
+    "short_name": "",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#F6F8F8",
-    "theme_color": "#0B7A6B",
-    "description": "Accounting, CRM, payroll and LHDN e-Invoice for Malaysian business.",
+    "description": "",
     "prefer_related_applications": false,
     "icons": [
         {

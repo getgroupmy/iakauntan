@@ -352,6 +352,8 @@ class LandingContent {
     this.unknownCtaLabel,
     this.unknownCtaUrl,
     this.demoAccountsEnabled = false,
+    this.metaTitle,
+    this.metaDescription,
     this.signinShowLogo = false,
     this.signinShowName = false,
     this.signinHeadline,
@@ -359,7 +361,6 @@ class LandingContent {
     this.signinShowHeading = false,
     this.signinShowRegister = false,
     this.signinPoints = const [],
-    this.signinPanelColour,
     this.signinEmailLabel,
     this.signinPasswordLabel,
     this.signinNameLabel,
@@ -539,6 +540,18 @@ class LandingContent {
   ///
   /// In `brand` rather than `page`, so the sign-in form does not have
   /// to wait for a marketing site to be published.
+  /// What the browser itself shows: the tab's title and the sentence a
+  /// link preview reads.
+  ///
+  /// Stored since `0290` and edited in the console since `0316`, and
+  /// read by nothing until `0339` put them in `brand` — so an operator
+  /// could write a browser-tab title and watch it change nothing.
+  ///
+  /// Null falls back to the wordmark for the title and to whatever the
+  /// build shipped for the description.
+  final String? metaTitle;
+  final String? metaDescription;
+
   /// Two switches rather than one since `0338`: a logo that already
   /// contains the platform's name does not want the word beside it, and
   /// an abstract mark may want only the word.
@@ -558,14 +571,6 @@ class LandingContent {
   /// switch by the database. An empty list means nothing to draw, which
   /// is what a platform that has turned all three off has asked for.
   final List<LandingSection> signinPoints;
-
-  /// The colour of the panel beside the form.
-  ///
-  /// Null means the brand colour, which is what the panel was before
-  /// this existed. A platform whose product is dark blue may still want
-  /// something else on the one screen that is half flat colour, and
-  /// before `0337` it had no way to say so.
-  final String? signinPanelColour;
 
   /// The words on the form itself.
   ///
@@ -693,6 +698,8 @@ LandingContent parseLandingContent(Object? raw) {
       unknownCtaLabel: brandStr('unknown_cta_label'),
       unknownCtaUrl: brandStr('unknown_cta_url'),
       demoAccountsEnabled: brandBool('demo_accounts_enabled'),
+      metaTitle: brandStr('meta_title'),
+      metaDescription: brandStr('meta_description'),
       signinShowLogo: brandBool('signin_show_logo'),
       signinShowName: brandBool('signin_show_name'),
       signinHeadline: brandStr('signin_headline'),
@@ -700,7 +707,6 @@ LandingContent parseLandingContent(Object? raw) {
       signinShowHeading: brandBool('signin_show_heading'),
       signinShowRegister: brandBool('signin_show_register'),
       signinPoints: blocks('signin_points'),
-      signinPanelColour: brandStr('signin_panel_colour'),
       signinEmailLabel: brandStr('signin_email_label'),
       signinPasswordLabel: brandStr('signin_password_label'),
       signinNameLabel: brandStr('signin_name_label'),
@@ -898,6 +904,8 @@ LandingContent parseLandingContent(Object? raw) {
     unknownCtaLabel: brandStr('unknown_cta_label'),
     unknownCtaUrl: brandStr('unknown_cta_url'),
     demoAccountsEnabled: brandBool('demo_accounts_enabled'),
+    metaTitle: brandStr('meta_title'),
+    metaDescription: brandStr('meta_description'),
     signinShowLogo: brandBool('signin_show_logo'),
     signinShowName: brandBool('signin_show_name'),
     signinHeadline: brandStr('signin_headline'),
@@ -905,7 +913,6 @@ LandingContent parseLandingContent(Object? raw) {
     signinShowHeading: brandBool('signin_show_heading'),
     signinShowRegister: brandBool('signin_show_register'),
     signinPoints: blocks('signin_points'),
-    signinPanelColour: brandStr('signin_panel_colour'),
     signinEmailLabel: brandStr('signin_email_label'),
     signinPasswordLabel: brandStr('signin_password_label'),
     signinNameLabel: brandStr('signin_name_label'),

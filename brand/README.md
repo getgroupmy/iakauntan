@@ -38,10 +38,17 @@ the masters here and the app icons into `app/web/`.
   artwork, not to the rendering. `favicon.png` is 32px and is affected. A
   single-letter or solid-silhouette variant would be the fix if small sizes
   matter.
-- **The mark's green is `#0BD00B`; the app's theme colour is still the teal
-  `#0B7A6B`** in `app/web/manifest.json` and `app/web/index.html`. They
-  disagree on purpose — changing the theme colour recolours the browser chrome
-  and the splash, which is a design call, not an asset swap.
-- The sign-in screen still uses `Icons.account_balance_wallet` with a text
-  wordmark (`app/lib/src/features/auth/sign_in_screen.dart`). Placing the mark
-  in-app is likewise a design call and was left alone.
+- **The mark's green is `#0BD00B`; the app's theme colour is whatever is set
+  under Branding.** Neither file carries a colour any more. `index.html` and
+  `manifest.json` are stamped from `landing_page()` by
+  `scripts/ci/branding_icon.sh` before each build, and the running app sets the
+  same tags again once it has the payload — so changing the browser chrome is a
+  console setting rather than an edit here. A build with no database
+  credentials ships them unstamped, which means no theme colour at all: a
+  browser then uses its own, which is a truthful "this platform has not said"
+  rather than somebody else's green.
+- The sign-in screen no longer draws a built-in icon at all. `0337` removed the
+  `Icons.account_balance_wallet` fallback — it was this product's mark on
+  somebody else's page, and a visitor cannot tell it from a real logo — so a
+  platform with no uploaded logo gets its wordmark alone. `0338` made the logo
+  and the name two separate switches under **Sign in page**.

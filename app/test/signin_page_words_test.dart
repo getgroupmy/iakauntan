@@ -89,79 +89,6 @@ void main() {
     });
   });
 
-  group('the panel colour', () {
-    Color panelOf(WidgetTester tester) =>
-        tester.widget<Container>(find.byKey(const Key('signin-panel'))).color!;
-
-    testWidgets('is the brand colour when none is chosen', (tester) async {
-      await tester.pumpWidget(wrap(const LandingContent(
-        published: true,
-        brandColour: '#0B7A6B',
-        signinShowHeadline: true,
-      )));
-      await tester.pumpAndSettle();
-
-      // Not asserted as an exact value — Material derives the scheme —
-      // only that a chosen panel colour is not what is being drawn.
-      expect(panelOf(tester), isNot(const Color(0xFF123456)));
-    });
-
-    testWidgets('and the operator\'s own when one is', (tester) async {
-      await tester.pumpWidget(wrap(const LandingContent(
-        published: true,
-        signinPanelColour: '#123456',
-        signinShowHeadline: true,
-      )));
-      await tester.pumpAndSettle();
-
-      expect(panelOf(tester), const Color(0xFF123456));
-    });
-
-    testWidgets('a nonsense colour falls back rather than crashing',
-        (tester) async {
-      // The column is checked in the database, but this screen is the
-      // one nobody can route around — it must survive a payload that
-      // somehow carries rubbish.
-      await tester.pumpWidget(wrap(const LandingContent(
-        published: true,
-        signinPanelColour: 'teal',
-        signinShowHeadline: true,
-      )));
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const Key('signin-panel')), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('writes in ink you can read on a pale panel', (tester) async {
-      // The one that would ship silently: `onPrimary` is white for this
-      // product's teal, and white on a pale panel is a blank page.
-      await tester.pumpWidget(wrap(const LandingContent(
-        published: true,
-        signinPanelColour: '#FFF8DC',
-        signinShowHeadline: true,
-        signinHeadline: 'Readable?',
-      )));
-      await tester.pumpAndSettle();
-
-      final headline = tester.widget<Text>(find.text('Readable?'));
-      expect(headline.style?.color, isNot(Colors.white));
-    });
-
-    testWidgets('and in white on a dark one', (tester) async {
-      await tester.pumpWidget(wrap(const LandingContent(
-        published: true,
-        signinPanelColour: '#0F172A',
-        signinShowHeadline: true,
-        signinHeadline: 'Readable?',
-      )));
-      await tester.pumpAndSettle();
-
-      final headline = tester.widget<Text>(find.text('Readable?'));
-      expect(headline.style?.color, Colors.white);
-    });
-  });
-
   group('the mark', () {
     testWidgets('draws no icon of ours when no logo is set', (tester) async {
       // Until 0337 this fell back to a compiled-in wallet, which is this
@@ -200,7 +127,6 @@ void main() {
     test('carries the words and the colour beside brand', () {
       final content = parseLandingContent(const {
         'brand': {
-          'signin_panel_colour': '#123456',
           'signin_email_label': 'E-mel',
           'signin_password_label': 'Kata laluan',
           'signin_name_label': 'Nama penuh',
@@ -214,7 +140,6 @@ void main() {
 
       // Unpublished, which is the branch this screen is usually on.
       expect(content.published, isFalse);
-      expect(content.signinPanelColour, '#123456');
       expect(content.signinEmailLabel, 'E-mel');
       expect(content.signinPasswordLabel, 'Kata laluan');
       expect(content.signinNameLabel, 'Nama penuh');
@@ -244,7 +169,6 @@ void main() {
     test('and leaves them unwritten when nobody has said', () {
       final content = parseLandingContent(const {'brand': {}});
 
-      expect(content.signinPanelColour, isNull);
       expect(content.signinEmailLabel, isNull);
       expect(content.signinRegisterPrompt, isNull);
       // These two are NOT NULL in the database, so the shipped word is

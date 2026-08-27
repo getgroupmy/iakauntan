@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/env.dart';
+import '../../core/platform_live.dart';
 import '../../core/providers.dart';
 import '../../data/reserved_names_repository.dart';
 import '../../data/site_pages_repository.dart';
@@ -283,6 +284,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Opens the socket for somebody who is not signed in, so a change
+    // in the console reaches this page while it is open. Everything on
+    // this screen is an operator's setting now, and a settings screen
+    // whose effect you can only see by reloading is one people stop
+    // trusting.
+    ref.watch(platformLiveProvider);
+
     final scheme = Theme.of(context).colorScheme;
     final wide = MediaQuery.sizeOf(context).width >= 900;
 
@@ -494,7 +502,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     // centred form, and with every switch off that is exactly what the
     // two-column layout would draw.
     final hero = _HeroContent(
-      panel: AppTheme.parseHex(_brand?.signinPanelColour) ?? scheme.primary,
+      // The brand colour, as Material derives it. `0337` briefly let
+      // this be set again on the sign-in screen; `0340` took that back
+      // out — a platform has one colour, chosen once under Branding,
+      // and a second field for it is a second answer to the same
+      // question.
+      panel: scheme.primary,
+      ink: scheme.onPrimary,
       showLogo: _showLogo,
       showName: _showName,
       headline: (_brand?.signinShowHeadline ?? false)
@@ -542,6 +556,7 @@ class _HeroContent {
     required this.headline,
     required this.points,
     required this.panel,
+    required this.ink,
   });
 
   final bool showLogo;
@@ -554,15 +569,11 @@ class _HeroContent {
 
   /// Ink that can be read on it.
   ///
-  /// Derived rather than `scheme.onPrimary`, because since `0337` the
-  /// panel colour is the operator's own and need not be the brand
-  /// colour at all. `onPrimary` is white for this product's teal, and
-  /// white on a pale panel is an operator discovering by screenshot
-  /// that their sign-in page is blank.
-  Color get ink =>
-      ThemeData.estimateBrightnessForColor(panel) == Brightness.dark
-          ? Colors.white
-          : Colors.black87;
+  /// `onPrimary` rather than something derived here: the panel is
+  /// `primary`, and Material guarantees the pair is legible however
+  /// the operator's brand colour was seeded. Deriving it again would be
+  /// a second opinion about a question the scheme has already answered.
+  final Color ink;
 
   bool get isEmpty =>
       !showLogo && !showName && headline == null && points.isEmpty;

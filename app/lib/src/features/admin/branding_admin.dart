@@ -350,7 +350,7 @@ class _ColourCard extends StatelessWidget {
       title: 'Colour',
       subtitle: 'One seed each way, and the scheme Material derives',
       children: [
-        SeedField(
+        _SeedField(
           label: 'Brand colour',
           value: light,
           fallback: AppTheme.seed,
@@ -362,7 +362,7 @@ class _ColourCard extends StatelessWidget {
           brightness: Brightness.light,
         ),
         const SizedBox(height: 20),
-        SeedField(
+        _SeedField(
           label: 'Brand colour, dark scheme',
           value: dark,
           fallback: AppTheme.parseHex(light) ?? AppTheme.seed,
@@ -387,12 +387,8 @@ class _ColourCard extends StatelessWidget {
 /// A field and swatches rather than a colour wheel: a brand colour is a
 /// value somebody already has written down, and the swatches are there
 /// so the field is never the only way in.
-/// Public since `0337`, which needs the same field on the sign-in
-/// page's console screen for the panel colour. One field, so the two
-/// places cannot disagree about what a valid colour looks like.
-class SeedField extends StatefulWidget {
-  const SeedField({
-    super.key,
+class _SeedField extends StatefulWidget {
+  const _SeedField({
     required this.label,
     required this.value,
     required this.fallback,
@@ -407,10 +403,10 @@ class SeedField extends StatefulWidget {
   final ValueChanged<String?> onChanged;
 
   @override
-  State<SeedField> createState() => _SeedFieldState();
+  State<_SeedField> createState() => _SeedFieldState();
 }
 
-class _SeedFieldState extends State<SeedField> {
+class _SeedFieldState extends State<_SeedField> {
   late final TextEditingController _c =
       TextEditingController(text: widget.value ?? '');
 

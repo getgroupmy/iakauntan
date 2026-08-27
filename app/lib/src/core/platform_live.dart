@@ -41,6 +41,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/landing_repository.dart';
+import '../data/site_pages_repository.dart';
 import '../data/platform_catalog_repository.dart';
 import '../features/landing/landing_content.dart';
 import 'providers.dart';
@@ -83,8 +84,17 @@ final Map<String, List<ProviderOrFamily>> _watchers = {
     landingSectionsAdminProvider,
     landingReasonsAdminProvider,
     landingBadgesAdminProvider,
+    // 0336's fourth kind, the bullets beside the sign-in form. Left out
+    // of this list, editing one refreshed the landing page's three
+    // bands and not the list the operator was actually looking at.
+    landingSigninPointsAdminProvider,
     landingContentProvider,
   ],
+  // 0334's five pages: the wording on the two auth screens and the
+  // three the footer links to. `sitePagesProvider` is what a visitor
+  // reads and `sitePageDraftsProvider` is the console's own view, and
+  // both have to move or the operator's tab and the visitor's disagree.
+  'site_pages': [sitePagesProvider, sitePageDraftsProvider],
   'landing_app_links': [landingAppLinksAdminProvider, landingContentProvider],
   'landing_stats': [landingStatsAdminProvider, landingContentProvider],
   'landing_testimonials': [

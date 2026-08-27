@@ -6,7 +6,6 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/landing_repository.dart';
 import '../../data/site_pages_repository.dart';
-import 'branding_admin.dart' show SeedField;
 import 'landing_cms.dart';
 
 /// The pages beside the product, edited rather than deployed.
@@ -401,17 +400,6 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
                 icon: const Icon(Icons.save_outlined, size: 18),
                 label: const Text('Save headline'),
               ),
-            ),
-            const SizedBox(height: Space.md),
-            SeedField(
-              label: 'Panel colour',
-              value: row?['signin_panel_colour'] as String?,
-              fallback: AppTheme.parseHex(row?['brand_colour'] as String?) ??
-                  AppTheme.seed,
-              helper: 'Left empty, the panel uses your brand colour. The '
-                  'writing on it switches between white and black to stay '
-                  'readable on whatever you pick.',
-              onChanged: (v) => _save({'signin_panel_colour': v ?? ''}),
             ),
             const Divider(height: Space.lg),
             _Switch(

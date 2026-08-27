@@ -18,22 +18,51 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description"
-        content="Accounting, CRM, payroll and LHDN e-Invoice for Malaysian business.">
-  <meta name="theme-color" content="#0B7A6B">
+
+  <!--
+    No brand in this file.
+
+    A theme colour, a description and a name used to be written here as
+    literals, which meant every deployment of this software told the
+    browser it was iAkauntan: the tint on an Android address bar, the
+    name on a tab and on an iOS home screen, and the sentence a link
+    preview reads.
+
+    They come from `landing_page()` now, twice over:
+
+      * `scripts/ci/brand_chrome.sh` stamps this file and manifest.json
+        before `flutter build web`. That is the only moment a file
+        inside the bundle can change, and it is what a browser sees
+        before any Dart has run.
+      * `lib/src/core/brand_chrome.dart` sets the same tags again once
+        the payload arrives, so a colour changed in the console reaches
+        a visitor on the next load rather than the next deploy.
+
+    A build made without database credentials stamps nothing and ships
+    this file as it stands — no colour, no description, and the tab
+    named by the line below until the app boots and renames it. That is
+    the intended fallback: a browser with no theme colour uses its own,
+    which is a truthful "this platform has not said" rather than
+    somebody else's green.
+
+    The three markers below are what the stamper looks for. Leave them.
+  -->
+  <!-- brand:description -->
+  <!-- brand:theme-color -->
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="iAkauntan">
+  <!-- brand:apple-title -->
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <!-- The app overwrites document.title once it boots; this is what shows
-       while the bundle is still downloading. -->
-  <title>iAkauntan</title>
+  <!-- The app overwrites document.title once it boots; this is what
+       shows while the bundle is still downloading, and what the stamper
+       replaces when the console has a name to put here. -->
+  <title>Loading…</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>

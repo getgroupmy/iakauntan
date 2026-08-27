@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:iakauntan/src/core/platform_live.dart';
+import 'package:iakauntan/src/data/site_pages_repository.dart';
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/data/landing_repository.dart';
 import 'package:iakauntan/src/data/platform_catalog_repository.dart';
@@ -29,6 +30,9 @@ void main() {
       'landing_stats',
       'landing_testimonials',
       'landing_logos',
+      // 0341. The five pages around the product — the wording on the
+      // two auth screens, and Terms, Privacy and Contact.
+      'site_pages',
     });
   });
 
@@ -143,6 +147,32 @@ void main() {
     expect(
       platformLiveProviders('landing_logos'),
       contains(landingLogosAdminProvider),
+    );
+  });
+
+  test('and the sign-in bullets refresh the list they are edited in', () {
+    // 0336 added a fourth `kind` to `landing_sections` and 0341 put it
+    // here. Left out, editing a bullet refreshed the landing page's
+    // three bands and not the list the operator was looking at.
+    expect(
+      platformLiveProviders('landing_sections'),
+      contains(landingSigninPointsAdminProvider),
+    );
+  });
+
+  test('and the five pages refresh both what is read and what is edited',
+      () {
+    // Both, and for different reasons: `sitePagesProvider` is the
+    // sign-in screen's wording and the three public pages, and
+    // `sitePageDraftsProvider` is the console's own view. One without
+    // the other is a tab that disagrees with the page beside it.
+    expect(
+      platformLiveProviders('site_pages'),
+      contains(sitePagesProvider),
+    );
+    expect(
+      platformLiveProviders('site_pages'),
+      contains(sitePageDraftsProvider),
     );
   });
 

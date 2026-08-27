@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/platform_live.dart';
 import '../../data/site_pages_repository.dart';
 import 'landing_content.dart';
 import 'landing_tokens.dart';
@@ -26,6 +27,10 @@ class SitePageScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The same socket the landing page opens: a policy rewritten in
+    // the console reaches a visitor who is already reading it.
+    ref.watch(platformLiveProvider);
+
     final scheme = Theme.of(context).colorScheme;
     final brand = ref.watch(landingContentProvider).valueOrNull;
     final page = ref.watch(sitePagesProvider).valueOrNull?[slug];
