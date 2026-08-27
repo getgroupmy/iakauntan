@@ -459,4 +459,57 @@ begin
     array_to_string(v_purposes, ','), 'company,reserved,admin');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Who may stand at a door with no company behind it
+--
+-- `0333`'s door policy asks whether somebody is on the company's team,
+-- and the sign-in screen signs the session out again when the answer is
+-- no. `0344` made addresses with no company, `app.is_org_member(null)`
+-- is false, and so `pos.iakauntan.com` took a correct password, issued
+-- a token, and logged straight back out — for everybody, whatever their
+-- company was subscribed to.
+--
+-- The four rows below are the four kinds of address there now are, and
+-- the only one that may refuse anybody is a company's.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin   uuid := pg_temp.test_user();
+  v_org     uuid;
+  v_member  uuid;
+  v_outside uuid := pg_temp.another_user('nobody-in-particular@iakauntan.test');
+begin
+  v_org := pg_temp.test_org('Kedai Pintu');
+  select auth.uid() into v_member;
+
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform public.platform_reserve_subdomain('pintu-theirs', v_org);
+  perform public.platform_reserve_subdomain('pintu-ours', null, 'pos', null,
+                                            null, 'admin');
+  perform public.platform_reserve_subdomain('pintu-parked', null, null, null,
+                                            null, 'reserved');
+
+  perform pg_temp.sign_in_as(v_outside);
+
+  -- The regression, stated as the thing that was broken: somebody with
+  -- no connection to anything may use an address of ours, because there
+  -- is no team there to not be on.
+  perform pg_temp.check_true('anybody may use an address of ours',
+    public.may_use_workspace('pintu-ours.iakauntan.com'));
+  perform pg_temp.check_true('and a parked name refuses nobody either',
+    public.may_use_workspace('pintu-parked.iakauntan.com'));
+
+  -- And the half that must not have moved. This is the whole point of
+  -- the policy, and widening it for two new kinds of address is exactly
+  -- the change that could take it with them.
+  perform pg_temp.check_true('but a stranger is still not on their team',
+    not public.may_use_workspace('pintu-theirs.iakauntan.com'));
+
+  perform pg_temp.sign_in_as(v_member);
+  perform pg_temp.check_true('and their own people still are',
+    public.may_use_workspace('pintu-theirs.iakauntan.com'));
+end $$;
+
 rollback;

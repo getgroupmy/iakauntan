@@ -5160,13 +5160,18 @@
     "semantic_hash": ""
   },
   "supabase/migrations/0344_a_name_for_us_and_a_name_for_nobody.sql": {
-    "mtime": 1787841184.428498,
-    "ast_hash": "16fd116b4f9abec141f7d7291cfe7d3f",
+    "mtime": 1787842801.5609064,
+    "ast_hash": "f1a15517a52cdf85d7802f1b674ba909",
     "semantic_hash": ""
   },
   "supabase/tests/name_purposes.sql": {
-    "mtime": 1787841040.7630954,
-    "ast_hash": "adfaeb0498f67f3c4bcdfe0bc4b227d3",
+    "mtime": 1787844329.0701694,
+    "ast_hash": "e3caaeab3ad7801a6973520bf8328df8",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0345_a_door_with_no_company_behind_it.sql": {
+    "mtime": 1787844299.0341012,
+    "ast_hash": "744313ba6bc80f9a927730ae1c51f411",
     "semantic_hash": ""
   }
 }
