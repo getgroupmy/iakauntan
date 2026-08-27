@@ -164,7 +164,7 @@ class _PendingState extends ConsumerState<_Pending> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${row['org_name'] ?? 'Unknown company'} · asked '
+                    '${whoseName(row)} · asked '
                     '${Fmt.date(DateTime.tryParse('${row['requested_at']}'))}',
                     style: TextStyle(color: scheme.onSurfaceVariant),
                   ),
@@ -274,7 +274,7 @@ class _Decided extends ConsumerWidget {
                   title: Text(_address(row)),
                   subtitle: Text(
                     [
-                      '${row['org_name'] ?? 'Unknown company'}',
+                      whoseName(row),
                       if ((row['note'] as String?)?.isNotEmpty == true)
                         '${row['note']}',
                     ].join(' · '),
@@ -483,6 +483,9 @@ class _EditReservationDialogState
   late String? _orgId = widget.row['org_id'] as String?;
   late String? _module = widget.row['module_code'] as String?;
   late String? _path = widget.row['landing_path'] as String?;
+  // A mailbox has no purpose of its own — it is always a company's —
+  // and the row carries `company` for one, so this is right for both.
+  late String _purpose = '${widget.row['purpose'] ?? 'company'}';
   bool _busy = false;
 
   @override
@@ -497,13 +500,19 @@ class _EditReservationDialogState
       await ref.read(reservedNamesProvider).update(
             kind: '${widget.row['kind']}',
             id: '${widget.row['id']}',
-            orgId: _orgId,
+            // A company only where there is meant to be one. `0344`
+            // drops it on the way past otherwise, which is why there is
+            // no Release to press any more: moving a name to ours is
+            // the same act as letting the company go, and asking twice
+            // was asking the operator to say it twice.
+            orgId: _purpose == 'company' ? _orgId : null,
             name: _name.text.trim(),
             // Empty rather than null: null means "leave it alone", and
             // an operator clearing the picker means "take it off".
             moduleCode: _module ?? '',
             landingPath: _path ?? '',
-            release: _orgId == null,
+            release: _subdomain ? false : _orgId == null,
+            purpose: _subdomain ? _purpose : null,
           );
       if (!mounted) return;
       Navigator.pop(context);
@@ -516,12 +525,12 @@ class _EditReservationDialogState
     }
   }
 
+  bool get _subdomain => widget.row['kind'] == 'subdomain';
+
   @override
   Widget build(BuildContext context) {
     final orgs = ref.watch(platformOrgsProvider);
-    final suffix = widget.row['kind'] == 'subdomain'
-        ? '.iakauntan.com'
-        : '@iakauntan.com';
+    final suffix = _subdomain ? '.iakauntan.com' : '@iakauntan.com';
 
     return AlertDialog(
       title: const Text('Change this name'),
@@ -536,25 +545,44 @@ class _EditReservationDialogState
               helperText: '3 to 63 letters, digits and hyphens',
             ),
           ),
-          const SizedBox(height: 16),
-          orgs.when(
-            loading: () => const LinearProgressIndicator(),
-            error: (e, _) => Text('Could not load the companies: $e'),
-            data: (rows) => DropdownButtonFormField<String>(
-              value: _orgId,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Company'),
-              items: [
-                for (final o in rows)
-                  DropdownMenuItem(
-                    value: o.id,
-                    child: Text(o.name, overflow: TextOverflow.ellipsis),
-                  ),
-              ],
-              onChanged: (v) => setState(() => _orgId = v),
+          if (_subdomain) ...[
+            const SizedBox(height: 16),
+            PurposeField(
+              purpose: _purpose,
+              onChanged: (v) => setState(() {
+                _purpose = v;
+                // Parked names point nowhere, and the database refuses
+                // a submission that says both. Clearing them here means
+                // an operator sees what they are about to save rather
+                // than reading a message about it afterwards.
+                if (v == 'reserved') {
+                  _module = null;
+                  _path = null;
+                }
+              }),
             ),
-          ),
-          if (widget.row['kind'] == 'subdomain') ...[
+          ],
+          if (_purpose == 'company') ...[
+            const SizedBox(height: 16),
+            orgs.when(
+              loading: () => const LinearProgressIndicator(),
+              error: (e, _) => Text('Could not load the companies: $e'),
+              data: (rows) => DropdownButtonFormField<String>(
+                value: _orgId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Company'),
+                items: [
+                  for (final o in rows)
+                    DropdownMenuItem(
+                      value: o.id,
+                      child: Text(o.name, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (v) => setState(() => _orgId = v),
+              ),
+            ),
+          ],
+          if (_subdomain && _purpose != 'reserved') ...[
             const SizedBox(height: 16),
             ConfinementFields(
               module: _module,
@@ -576,6 +604,88 @@ class _EditReservationDialogState
           onPressed: _busy ? null : _save,
           child: const Text('Save'),
         ),
+      ],
+    );
+  }
+}
+
+/// Who a row is for, in one phrase.
+///
+/// "Unknown company" was right when a name with nobody on it could only
+/// be a request whose company had gone missing. `0344` gives two other
+/// answers, and both of them are the row working as intended — a name
+/// we are holding, and an address we run ourselves. Reading either as a
+/// missing company is the list telling an operator something is wrong
+/// with a row they deliberately made.
+String whoseName(Map<String, dynamic> row) => switch (row['purpose']) {
+      'reserved' => 'Held by us',
+      'admin' => 'Ours, in use',
+      _ => '${row['org_name'] ?? 'Unknown company'}',
+    };
+
+/// Whose a name is, and whether it is in use.
+///
+/// `0344`. Before it, a name with no company on it could only be parked,
+/// so an address the platform wanted to run itself had to be given to
+/// some company to work at all — a real arrangement expressed as a fake
+/// customer. Two questions instead of one:
+///
+///   * is this a company's, or ours?
+///   * if it is ours, is it parked, or is it a door we actually use?
+///
+/// The second only appears once the first is answered "ours", because
+/// asking it of a company's address has no meaning — a company's door
+/// is in use by definition.
+class PurposeField extends StatelessWidget {
+  const PurposeField({
+    super.key,
+    required this.purpose,
+    required this.onChanged,
+  });
+
+  /// `company`, `reserved` or `admin`.
+  final String purpose;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ours = purpose != 'company';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: false, label: Text('A company\'s')),
+            ButtonSegment(value: true, label: Text('Ours')),
+          ],
+          selected: {ours},
+          // Moving to ours cannot keep a company, and moving back has
+          // no company to return to — so the far side of each switch is
+          // the plainest of its two, and the operator picks the rest.
+          onSelectionChanged: (v) =>
+              onChanged(v.first ? 'reserved' : 'company'),
+        ),
+        if (ours) ...[
+          const SizedBox(height: 12),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'reserved', label: Text('Reserved')),
+              ButtonSegment(value: 'admin', label: Text('Admin use')),
+            ],
+            selected: {purpose},
+            onSelectionChanged: (v) => onChanged(v.first),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            purpose == 'reserved'
+                ? 'Held so nobody else can take it. Nothing answers on '
+                    'it: a visitor is told there is nothing at this '
+                    'address.'
+                : 'Ours and open. It signs in on our own mark, and needs '
+                    'nobody to have bought an address of their own.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ],
     );
   }
@@ -707,6 +817,9 @@ class _HoldNameDialogState extends ConsumerState<HoldNameDialog> {
   String? _orgId;
   String? _module;
   String? _path;
+  // Held is what this dialog is called from — "Hold a name" — so it is
+  // where the form opens, and the two other answers are one press away.
+  String _purpose = 'reserved';
   bool _busy = false;
 
   @override
@@ -721,10 +834,11 @@ class _HoldNameDialogState extends ConsumerState<HoldNameDialog> {
     try {
       await ref.read(reservedNamesProvider).reserve(
             name: _name.text.trim(),
-            orgId: _orgId,
+            orgId: _purpose == 'company' ? _orgId : null,
             moduleCode: _module,
             landingPath: _path,
             note: _note.text.trim(),
+            purpose: _purpose,
           );
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -758,40 +872,47 @@ class _HoldNameDialogState extends ConsumerState<HoldNameDialog> {
               ),
             ),
             const SizedBox(height: 16),
-            orgs.when(
-              loading: () => const LinearProgressIndicator(),
-              error: (e, _) => Text('Could not load the companies: $e'),
-              data: (rows) => DropdownButtonFormField<String?>(
-                value: _orgId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Company',
-                  helperText: 'Optional. Left empty, the name is held and '
-                      'nothing answers on it yet.',
-                ),
-                items: [
-                  const DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('Nobody — just hold it'),
-                  ),
-                  for (final o in rows)
-                    DropdownMenuItem<String?>(
-                      value: o.id,
-                      child: Text(o.name, overflow: TextOverflow.ellipsis),
-                    ),
-                ],
-                onChanged: (v) => setState(() => _orgId = v),
-              ),
-            ),
-            const SizedBox(height: 16),
-            ConfinementFields(
-              module: _module,
-              path: _path,
-              onChanged: (module, path) => setState(() {
-                _module = module;
-                _path = path;
+            PurposeField(
+              purpose: _purpose,
+              onChanged: (v) => setState(() {
+                _purpose = v;
+                if (v == 'reserved') {
+                  _module = null;
+                  _path = null;
+                }
               }),
             ),
+            if (_purpose == 'company') ...[
+              const SizedBox(height: 16),
+              orgs.when(
+                loading: () => const LinearProgressIndicator(),
+                error: (e, _) => Text('Could not load the companies: $e'),
+                data: (rows) => DropdownButtonFormField<String?>(
+                  value: _orgId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Company'),
+                  items: [
+                    for (final o in rows)
+                      DropdownMenuItem<String?>(
+                        value: o.id,
+                        child: Text(o.name, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => _orgId = v),
+                ),
+              ),
+            ],
+            if (_purpose != 'reserved') ...[
+              const SizedBox(height: 16),
+              ConfinementFields(
+                module: _module,
+                path: _path,
+                onChanged: (module, path) => setState(() {
+                  _module = module;
+                  _path = path;
+                }),
+              ),
+            ],
             const SizedBox(height: 16),
             TextField(
               controller: _note,
@@ -810,7 +931,11 @@ class _HoldNameDialogState extends ConsumerState<HoldNameDialog> {
         ),
         FilledButton(
           onPressed: _busy || _name.text.trim().isEmpty ? null : _save,
-          child: const Text('Hold it'),
+          child: Text(switch (_purpose) {
+            'company' => 'Give it to them',
+            'admin' => 'Put it to use',
+            _ => 'Hold it',
+          }),
         ),
       ],
     );

@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787829214.4775083,
-    "ast_hash": "7708923d530d2458ba5591cbcde9ed75",
+    "mtime": 1787841608.2399666,
+    "ast_hash": "8be095d4cfc2f156057fab24b7ab64bd",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787835606.992577,
-    "ast_hash": "929e5627021940a2ac2eec626efe7521",
+    "mtime": 1787841232.2056046,
+    "ast_hash": "ccfc0cd4fdc3ade9ca5899fd53bceac6",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -4880,13 +4880,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/reserved_names_repository.dart": {
-    "mtime": 1787828801.3578672,
-    "ast_hash": "a10362d17d6d9dba996837c8b0f9cae6",
+    "mtime": 1787841248.1588593,
+    "ast_hash": "22f04889f1e7023c5a8cd30e5f2da1b3",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/reservations_admin.dart": {
-    "mtime": 1787834444.4688845,
-    "ast_hash": "a05004448a3d56993837f64ff7bfbb47",
+    "mtime": 1787841536.1307738,
+    "ast_hash": "26e942e8e64956054517d1a363f41d9d",
     "semantic_hash": ""
   },
   "app/lib/src/features/mail/inbox_screen.dart": {
@@ -4920,8 +4920,8 @@
     "semantic_hash": ""
   },
   "docs/custom-domains.md": {
-    "mtime": 1787835625.0175176,
-    "ast_hash": "a8331c917471d53711fc03d1bbbb9b0a",
+    "mtime": 1787841816.4260895,
+    "ast_hash": "b1619d0d01e9b2ca6c4291736e837855",
     "semantic_hash": ""
   },
   "supabase/functions/_shared/origin.ts": {
@@ -5152,6 +5152,21 @@
   "app/test/confinement_fields_test.dart": {
     "mtime": 1787834346.4515793,
     "ast_hash": "af90e94bb7493a4c4eb34f834d3f19cd",
+    "semantic_hash": ""
+  },
+  "app/test/name_purposes_test.dart": {
+    "mtime": 1787841568.6024563,
+    "ast_hash": "0a90c8bbb92beda29873b28725312881",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0344_a_name_for_us_and_a_name_for_nobody.sql": {
+    "mtime": 1787841184.428498,
+    "ast_hash": "16fd116b4f9abec141f7d7291cfe7d3f",
+    "semantic_hash": ""
+  },
+  "supabase/tests/name_purposes.sql": {
+    "mtime": 1787841040.7630954,
+    "ast_hash": "adfaeb0498f67f3c4bcdfe0bc4b227d3",
     "semantic_hash": ""
   }
 }

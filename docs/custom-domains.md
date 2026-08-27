@@ -260,6 +260,31 @@ A row means the database half is right. No row means the module is off,
 the request is not approved, or the company is not active — all three
 visible in the console.
 
+### 7a. The three kinds of name
+
+`0344`. **Platform console → Names on our domain** asks whose a name is
+before it asks anything else:
+
+| Kind | Company | What answers on it |
+|---|---|---|
+| A company's | required | their sign-in page, gated on their holding `workspace_address` |
+| Ours → Reserved | none | nothing; the visitor gets 7b's page |
+| Ours → Admin use | none | the app on our own mark, confined to the module or screen chosen |
+
+**Admin use** is the one worth reading twice. It exists so an address we
+run ourselves — a counter tablet on `pos`, a kitchen screen on `kds` —
+does not have to be given to some company to work at all, which is a
+real arrangement expressed as a fake customer. It needs nobody to have
+bought `workspace_address`, because there is nobody to have bought it.
+
+It is **not** an authorisation, and the name invites that reading. An
+admin address answers to anyone who types it, exactly as
+`iakauntan.com` does; what arrives is the ordinary sign-in page, and who
+may then read what is decided where it always was — by the session, by
+RLS. The confinement is which screens draw, not which rows are legible.
+Making one staff-only would be a rule in the router after sign-in, not a
+setting on the name.
+
 ### 7b. A name that is nobody's
 
 Every label under the wildcard resolves, so `nosuchcompany.iakauntan.com`

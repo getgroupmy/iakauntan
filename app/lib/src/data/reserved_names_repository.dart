@@ -163,12 +163,18 @@ class ReservedNames {
   ///
   /// `0342`. An operator reserving a name is the decision — there is
   /// nobody to approve it afterwards — so the row is created approved.
+  ///
+  /// [purpose] is `0344`'s: `company`, `reserved` or `admin`. Null lets
+  /// the database read it off the company, which is what every caller
+  /// written before that migration meant — a company on it made it
+  /// theirs, and nothing on it made it held.
   Future<void> reserve({
     required String name,
     String? orgId,
     String? moduleCode,
     String? landingPath,
     String? note,
+    String? purpose,
   }) =>
       client.rpc('platform_reserve_subdomain', params: {
         'p_name': name,
@@ -176,6 +182,7 @@ class ReservedNames {
         'p_module_code': moduleCode,
         'p_landing_path': landingPath,
         'p_note': note,
+        'p_purpose': purpose,
       });
 
   /// Move a name, rename it, point it, or let go of it.
@@ -192,6 +199,7 @@ class ReservedNames {
     String? moduleCode,
     String? landingPath,
     bool release = false,
+    String? purpose,
   }) =>
       client.rpc('platform_update_reservation', params: {
         'p_kind': kind,
@@ -201,6 +209,7 @@ class ReservedNames {
         'p_module_code': moduleCode,
         'p_landing_path': landingPath,
         'p_release': release,
+        'p_purpose': purpose,
       });
 
   Future<void> decide({

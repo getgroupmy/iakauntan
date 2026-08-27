@@ -131,18 +131,31 @@ final _shellKey = GlobalKey<NavigatorState>();
 /// where somebody signing in through it lands, and [Confinement.allows]
 /// is everywhere else they may go — the module's other screens when a
 /// module was chosen, and nowhere at all when one exact screen was.
-typedef Confinement = ({String module, String landingPath, Set<String> allows});
+///
+/// [Confinement.ours] is `0344`'s: the address belongs to the platform
+/// rather than to a company. It changes one thing, and only one — see
+/// `moduleHeld` below.
+typedef Confinement = ({
+  String module,
+  String landingPath,
+  Set<String> allows,
+  bool ours,
+});
 
 Confinement? confinementFor(Map<String, dynamic>? workspace) {
   final module = workspace?['module_code'];
   if (module is! String || module.isEmpty) return null;
+
+  // `0344`. An address of ours has no company behind it, which is the
+  // whole of what it means here.
+  final ours = workspace?['purpose'] == 'admin';
 
   final path = workspace?['landing_path'];
   if (path is String && path.isNotEmpty) {
     // One screen was named. That is the whole of what this address
     // opens — a kitchen display is not a door into the rest of the
     // till.
-    return (module: module, landingPath: path, allows: {path});
+    return (module: module, landingPath: path, allows: {path}, ours: ours);
   }
 
   final paths = pathsForModule(module);
@@ -156,7 +169,27 @@ Confinement? confinementFor(Map<String, dynamic>? workspace) {
   // No particular screen, so the module's own front door: the first of
   // its destinations in the order the navigation lists them, which is
   // the one a person would call "the" screen for that module.
-  return (module: module, landingPath: paths.first, allows: paths);
+  return (module: module, landingPath: paths.first, allows: paths, ours: ours);
+}
+
+/// Whether the module behind a confined address is held, for the
+/// router's `moduleHeld`.
+///
+/// Null means "still loading", which the rule below treats as "wait"
+/// rather than as either answer.
+///
+/// A function rather than three lines inside the redirect closure,
+/// because the interesting case cannot be reached from outside a
+/// running router otherwise — and it is the case that matters. `0344`.
+/// An address of ours has no company behind it, so there is no
+/// subscription to hold and nothing to look up. Asking anyway refuses
+/// every one of them: a platform operator with no company of their own
+/// holds no modules at all, so the lookup answers false for a reason
+/// that has nothing to do with the address.
+bool? moduleHeldFor(Confinement? door, AsyncValue<Set<String>> enabled) {
+  if (door == null) return null;
+  if (door.ours) return true;
+  return enabled.whenOrNull(data: (held) => held.contains(door.module));
 }
 
 /// signed-in visitor is not bounced anywhere.
@@ -349,11 +382,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         // other address, and nothing above changes.
         confinedTo: door?.landingPath,
         confinedAllows: door?.allows ?? const {},
-        moduleHeld: door == null
-            ? null
-            : ref
-                .watch(enabledModulesProvider)
-                .whenOrNull(data: (held) => held.contains(door.module)),
+        moduleHeld: moduleHeldFor(door, ref.watch(enabledModulesProvider)),
       );
     },
     routes: [
