@@ -59,10 +59,20 @@ alter table public.org_subdomains
   add column if not exists purpose text;
 
 -- Every row that exists was made under the old rule, so the old rule is
--- how they are read: a company on it means it is that company's, and
--- nothing on it means it was parked.
+-- how they are read — and it had three outcomes, not two.
+--
+-- A company on it means it is that company's. Nothing on it and nothing
+-- pointed means it was parked. But a name held with no company *and*
+-- pointed at a module was an operator saying "this address opens the
+-- till", which is the arrangement this migration exists to name: it was
+-- admin use before there was a word for it, and reading it as parked
+-- would both lose what it was for and fail the constraint below.
 update public.org_subdomains
-   set purpose = case when org_id is null then 'reserved' else 'company' end
+   set purpose = case
+                   when org_id is not null then 'company'
+                   when module_code is not null then 'admin'
+                   else 'reserved'
+                 end
  where purpose is null;
 
 alter table public.org_subdomains
@@ -226,11 +236,18 @@ declare
   v_error   text;
   v_module  text := nullif(btrim(p_module_code), '');
   v_path    text := nullif(btrim(p_landing_path), '');
-  -- Null means "read it off the company", which is what every caller
-  -- written before this migration meant and could not say.
+  -- Null means "read it off the rest of the call", which is what every
+  -- caller written before this migration meant and could not say. The
+  -- same three-way reading the backfill above uses, and for the same
+  -- reason: a pointed name with no company was never parked, and
+  -- calling it parked here would refuse the call four checks later.
   v_purpose text := coalesce(nullif(btrim(p_purpose), ''),
-                             case when p_org_id is null
-                                  then 'reserved' else 'company' end);
+                             case
+                               when p_org_id is not null then 'company'
+                               when nullif(btrim(p_module_code), '') is not null
+                                 then 'admin'
+                               else 'reserved'
+                             end);
   v_id      uuid;
 begin
   if not app.is_platform_admin() then

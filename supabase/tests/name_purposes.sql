@@ -41,7 +41,7 @@ begin;
 do $$
 declare
   v_admin uuid := pg_temp.test_user();
-  v_org uuid; v_held uuid; v_theirs uuid;
+  v_org uuid; v_held uuid; v_theirs uuid; v_used uuid;
 begin
   v_org := pg_temp.test_org('Kedai Lama');
   insert into public.platform_admins (user_id) values (v_admin)
@@ -55,6 +55,42 @@ begin
     (select purpose from public.org_subdomains where id = v_held), 'reserved');
   perform pg_temp.check_eq('and a name with a company on it is theirs',
     (select purpose from public.org_subdomains where id = v_theirs), 'company');
+
+  -- The third reading, and the one that cost a red deploy. A name held
+  -- with no company but pointed at a module was an operator saying
+  -- "this address opens the till" — admin use before there was a word
+  -- for it. Reading it as parked loses what it was for, and then the
+  -- constraint below refuses the row outright.
+  v_used := public.platform_reserve_subdomain('inuse', null, 'pos', '/till');
+  perform pg_temp.check_eq('and a name pointed somewhere is one of ours',
+    (select purpose from public.org_subdomains where id = v_used), 'admin');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The table refuses what the backfill had to be careful about
+--
+-- Asserted against the table rather than the function, because this is
+-- the check that failed on the hosted project: the migration's own
+-- backfill produced rows the migration's own constraint would not
+-- accept, and no function was involved in either half.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_id uuid; v_direct boolean := false;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+
+  v_id := public.platform_reserve_subdomain('firmly', null, 'pos', null,
+                                            null, 'admin');
+  begin
+    update public.org_subdomains set purpose = 'reserved' where id = v_id;
+  exception when check_violation then v_direct := true;
+  end;
+  perform pg_temp.check_true('a parked name pointed at a module cannot exist',
+                             v_direct);
 end $$;
 
 -- ---------------------------------------------------------------------
