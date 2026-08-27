@@ -244,6 +244,35 @@ void _companyDoor() {
       );
     });
 
+    test('signing out lands on the sign-in form, not the front page', () {
+      // The route somebody is on when they sign out is wherever they
+      // were — the button does not navigate, the router re-decides.
+      expect(
+        routeFor(
+          path: '/dashboard',
+          signedIn: false,
+          recovering: false,
+          hasOrg: null,
+          isPlatformAdmin: null,
+          atCompanyDoor: true,
+        ),
+        '/signin',
+      );
+    });
+
+    test('and at the bare domain it still lands on the front page', () {
+      expect(
+        routeFor(
+          path: '/dashboard',
+          signedIn: false,
+          recovering: false,
+          hasOrg: null,
+          isPlatformAdmin: null,
+        ),
+        '/',
+      );
+    });
+
     test('and /signin itself is not a loop', () {
       // The one mistake in this function that cannot be recovered from
       // outside: a redirect whose destination redirects back.

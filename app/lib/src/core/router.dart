@@ -165,7 +165,24 @@ String? routeFor({
   // One redirect, not a second copy of the page.
   if (path == '/welcome') return '/';
 
-  if (!signedIn) return path == '/signin' ? null : '/';
+  // Signed out, and where that lands depends on whose address this is.
+  //
+  // At the bare domain it is the front page: somebody who has just
+  // signed out of the product may well want to read about it, and that
+  // is the page the button on it goes back to.
+  //
+  // At a company's own address it is the sign-in form. Signing out of
+  // Sinar should leave you at Sinar's door, not at a shopfront for the
+  // accounting system Sinar happens to use.
+  //
+  // Said in one hop rather than leaving `/` to redirect on again. The
+  // chain did resolve, but it made the answer to "where does signing
+  // out go" depend on a second rule further up the function, and this
+  // is the rule that is asserted.
+  if (!signedIn) {
+    if (path == '/signin') return null;
+    return atCompanyDoor ? '/signin' : '/';
+  }
 
   // Redeeming a reset link signs the user in, so this has to be checked
   // before anything else sends them to the dashboard — otherwise they
