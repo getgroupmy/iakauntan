@@ -6,6 +6,7 @@ import '../../core/platform_live.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/landing_repository.dart';
+import '../landing/landing_content.dart';
 
 /// What the product looks like, on a screen rather than in a row.
 ///
@@ -50,6 +51,20 @@ class _BrandingAdminTabState extends ConsumerState<BrandingAdminTab> {
 
   void _set(String key, Object? value) => setState(() => _draft[key] = value);
 
+  /// The roles overridden for one scheme, with anything unsaved on top.
+  ///
+  /// Reads through `_value` like every other field on this screen, so a
+  /// colour picked and not yet saved shows in the preview — which is
+  /// the whole reason the preview is beside the picker.
+  Map<String, String> _scheme(Map<String, dynamic> row, String which) {
+    final out = <String, String>{};
+    for (final role in LandingContent.schemeRoles) {
+      final v = _text(row, LandingContent.schemeColumn(which, role));
+      if (v != null) out[role] = v;
+    }
+    return out;
+  }
+
   @override
   Widget build(BuildContext context) {
     final page = ref.watch(landingPageAdminProvider);
@@ -78,6 +93,8 @@ class _BrandingAdminTabState extends ConsumerState<BrandingAdminTab> {
                 _ColourCard(
                   light: _text(r, 'brand_colour'),
                   dark: _text(r, 'brand_colour_dark'),
+                  schemeLight: _scheme(r, 'light'),
+                  schemeDark: _scheme(r, 'dark'),
                   onChanged: _set,
                 ),
                 const SizedBox(height: 16),
@@ -337,18 +354,26 @@ class _ColourCard extends StatelessWidget {
   const _ColourCard({
     required this.light,
     required this.dark,
+    required this.schemeLight,
+    required this.schemeDark,
     required this.onChanged,
   });
 
   final String? light;
   final String? dark;
+
+  /// What an operator has overridden, by role, for each scheme. `0343`.
+  final Map<String, String> schemeLight;
+  final Map<String, String> schemeDark;
+
   final void Function(String key, Object? value) onChanged;
 
   @override
   Widget build(BuildContext context) {
     return _Card(
       title: 'Colour',
-      subtitle: 'One seed each way, and the scheme Material derives',
+      subtitle: 'One seed each way, the scheme Material derives, and any '
+          'role you would rather choose yourself',
       children: [
         _SeedField(
           label: 'Brand colour',
@@ -360,6 +385,13 @@ class _ColourCard extends StatelessWidget {
         SchemePreview(
           seed: AppTheme.parseHex(light) ?? AppTheme.seed,
           brightness: Brightness.light,
+          overrides: schemeLight,
+          onOverride: (role, hex) => onChanged(
+            LandingContent.schemeColumn('light', role),
+            // Empty rather than null: the saver reads null as "leave it
+            // alone", and giving a role back to Material is a change.
+            hex ?? '',
+          ),
         ),
         const SizedBox(height: 20),
         _SeedField(
@@ -376,6 +408,11 @@ class _ColourCard extends StatelessWidget {
               AppTheme.parseHex(light) ??
               AppTheme.seed,
           brightness: Brightness.dark,
+          overrides: schemeDark,
+          onOverride: (role, hex) => onChanged(
+            LandingContent.schemeColumn('dark', role),
+            hex ?? '',
+          ),
         ),
       ],
     );
@@ -505,16 +542,26 @@ class SchemePreview extends StatelessWidget {
     super.key,
     required this.seed,
     required this.brightness,
+    this.overrides = const {},
+    this.onOverride,
   });
 
   final Color seed;
   final Brightness brightness;
 
+  /// What an operator has chosen, by role. `0343`.
+  final Map<String, String> overrides;
+
+  /// Called with a role and a colour, or a role and null to give it
+  /// back to Material. Null here draws the preview inert, which is what
+  /// it was before there was anything to change.
+  final void Function(String role, String? hex)? onOverride;
+
   @override
   Widget build(BuildContext context) {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: seed,
-      brightness: brightness,
+    final scheme = AppTheme.applyOverrides(
+      ColorScheme.fromSeed(seedColor: seed, brightness: brightness),
+      overrides,
     );
 
     return Container(
@@ -540,25 +587,37 @@ class SchemePreview extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _Swatch('Primary', scheme.primary, scheme.onPrimary),
-              _Swatch(
-                'Container',
-                scheme.primaryContainer,
-                scheme.onPrimaryContainer,
-              ),
-              _Swatch('Secondary', scheme.secondary, scheme.onSecondary),
-              _Swatch('Surface', scheme.surface, scheme.onSurface),
-              _Swatch(
-                'Surface tint',
-                scheme.surfaceContainerHighest,
-                scheme.onSurfaceVariant,
-              ),
-              _Swatch('Error', scheme.error, scheme.onError),
+              for (final r in const [
+                (role: 'primary', label: 'Primary'),
+                (role: 'container', label: 'Container'),
+                (role: 'secondary', label: 'Secondary'),
+                (role: 'surface', label: 'Surface'),
+                (role: 'surfaceTint', label: 'Surface tint'),
+                (role: 'error', label: 'Error'),
+              ])
+                _Swatch(
+                  r.label,
+                  _roleColour(scheme, r.role),
+                  _roleInk(scheme, r.role),
+                  // Overridden roles are marked, because "the same as
+                  // Material would have chosen" and "chosen, and it
+                  // happens to match" look identical on a swatch.
+                  chosen: overrides.containsKey(r.role),
+                  onTap: onOverride == null
+                      ? null
+                      : () => _edit(context, r.role, r.label),
+                ),
             ],
           ),
           const SizedBox(height: 12),
           // The two controls people actually look at, in the colours
-          // they will actually be.
+          // they will actually be. Not settings of their own: a filled
+          // button is Primary and a flat one is Primary as text, so
+          // they follow that tile rather than having tiles here.
+          //
+          // 0343 left them as a demonstration for exactly that reason —
+          // giving them their own colour would be a second answer to
+          // what Primary is.
           Row(children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
@@ -583,30 +642,84 @@ class SchemePreview extends StatelessWidget {
   }
 }
 
+/// The colour one role is showing, after any override.
+Color _roleColour(ColorScheme s, String role) => switch (role) {
+  'primary' => s.primary,
+  'container' => s.primaryContainer,
+  'secondary' => s.secondary,
+  'surface' => s.surface,
+  'surfaceTint' => s.surfaceContainerHighest,
+  _ => s.error,
+};
+
+/// And the ink Material pairs with it.
+Color _roleInk(ColorScheme s, String role) => switch (role) {
+  'primary' => s.onPrimary,
+  'container' => s.onPrimaryContainer,
+  'secondary' => s.onSecondary,
+  'surface' => s.onSurface,
+  'surfaceTint' => s.onSurfaceVariant,
+  _ => s.onError,
+};
+
 /// One role of the scheme, with its own label drawn on it — which is
 /// the only way to see whether the pair is readable.
 class _Swatch extends StatelessWidget {
-  const _Swatch(this.label, this.colour, this.on);
+  const _Swatch(
+    this.label,
+    this.colour,
+    this.on, {
+    this.chosen = false,
+    this.onTap,
+  });
 
   final String label;
   final Color colour;
   final Color on;
 
+  /// Whether an operator picked this one rather than Material.
+  final bool chosen;
+
+  /// Null before `0343`, and still null wherever the preview is only a
+  /// preview.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final tile = Container(
       width: 104,
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: colour,
         borderRadius: BorderRadius.circular(Radii.sm),
+        border: chosen ? Border.all(color: on, width: 2) : null,
       ),
       alignment: Alignment.centerLeft,
-      child: Text(
-        label,
-        style: TextStyle(color: on, fontSize: 11, fontWeight: FontWeight.w600),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: on,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (onTap != null)
+            Icon(chosen ? Icons.edit : Icons.edit_outlined,
+                size: 12, color: on.withValues(alpha: 0.7)),
+        ],
       ),
+    );
+
+    if (onTap == null) return tile;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(Radii.sm),
+      child: tile,
     );
   }
 }
@@ -839,6 +952,112 @@ class _Card extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// One role, picked or given back to Material.
+Future<void> _edit(BuildContext context, String role, String label) async {
+  final state = context.findAncestorWidgetOfExactType<SchemePreview>();
+  if (state?.onOverride == null) return;
+
+  final chosen = await showDialog<({bool clear, String? hex})>(
+    context: context,
+    builder: (_) => _RoleColourDialog(
+      label: label,
+      value: state!.overrides[role],
+    ),
+  );
+  if (chosen == null) return;
+  state!.onOverride!(role, chosen.clear ? null : chosen.hex);
+}
+
+/// A hex box for one scheme role, with a way to stop overriding it.
+///
+/// "Let Material choose" rather than an empty box that means the same
+/// thing: clearing a field and closing a dialog are the same gesture,
+/// and only one of them should mean "undo my choice".
+class _RoleColourDialog extends StatefulWidget {
+  const _RoleColourDialog({required this.label, required this.value});
+
+  final String label;
+  final String? value;
+
+  @override
+  State<_RoleColourDialog> createState() => _RoleColourDialogState();
+}
+
+class _RoleColourDialogState extends State<_RoleColourDialog> {
+  late final _c = TextEditingController(text: widget.value ?? '');
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final parsed = AppTheme.parseHex(_c.text.trim());
+    final bad = _c.text.trim().isNotEmpty && parsed == null;
+
+    return AlertDialog(
+      title: Text(widget.label),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                margin: const EdgeInsets.only(right: 12),
+                decoration: BoxDecoration(
+                  color: parsed ?? Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(Radii.sm),
+                  border: Border.all(color: Theme.of(context).dividerColor),
+                ),
+              ),
+              Expanded(
+                child: TextField(
+                  controller: _c,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Colour',
+                    hintText: '#0B7A6B',
+                    errorText: bad ? 'Six hex digits after a hash' : null,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'The writing on it switches between white and black to stay '
+            'readable, so you only choose the background.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () =>
+              Navigator.pop(context, (clear: true, hex: null)),
+          child: const Text('Let Material choose'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: parsed == null
+              ? null
+              : () => Navigator.pop(context, (clear: false, hex: _c.text.trim())),
+          child: const Text('Use this'),
+        ),
+      ],
     );
   }
 }

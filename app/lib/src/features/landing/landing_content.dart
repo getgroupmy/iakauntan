@@ -352,6 +352,8 @@ class LandingContent {
     this.unknownCtaLabel,
     this.unknownCtaUrl,
     this.demoAccountsEnabled = false,
+    this.schemeLight = const {},
+    this.schemeDark = const {},
     this.metaTitle,
     this.metaDescription,
     this.signinShowLogo = false,
@@ -540,6 +542,37 @@ class LandingContent {
   ///
   /// In `brand` rather than `page`, so the sign-in form does not have
   /// to wait for a marketing site to be published.
+  /// One colour per scheme role, where an operator has chosen one.
+  ///
+  /// Keyed by role — `primary`, `container`, `secondary`, `surface`,
+  /// `surfaceTint`, `error` — and usually empty, which is the normal
+  /// state: Material derives every role from the brand colour, and an
+  /// override replaces one of them afterwards rather than instead.
+  ///
+  /// `0343`. Before it, the six tiles under Branding were a picture of
+  /// the derivation with nothing behind them to type into.
+  final Map<String, String> schemeLight;
+  final Map<String, String> schemeDark;
+
+  /// The roles an operator may override, in the order the console
+  /// shows them.
+  static const schemeRoles = [
+    'primary',
+    'container',
+    'secondary',
+    'surface',
+    'surfaceTint',
+    'error',
+  ];
+
+  /// The column one role is stored in, for [which] scheme.
+  ///
+  /// Named here rather than spelled out at both ends, because the two
+  /// ends are a Dart map key and a Postgres column and they differ in
+  /// exactly one place.
+  static String schemeColumn(String which, String role) =>
+      'scheme_${which}_${role == 'surfaceTint' ? 'surface_tint' : role}';
+
   /// What the browser itself shows: the tab's title and the sentence a
   /// link preview reads.
   ///
@@ -678,6 +711,18 @@ LandingContent parseLandingContent(Object? raw) {
 
   // 0336. Above the early return rather than after it: the sign-in
   // bullets travel ungated, so an unpublished site still has them.
+  // 0343. One map per scheme, holding only the roles somebody has
+  // actually chosen. Absent and blank are the same thing here — both
+  // mean "let Material derive this one".
+  Map<String, String> schemeOverrides(String which) {
+    final out = <String, String>{};
+    for (final role in LandingContent.schemeRoles) {
+      final v = brandStr(LandingContent.schemeColumn(which, role));
+      if (v != null) out[role] = v;
+    }
+    return out;
+  }
+
   if (page is! Map) {
     return LandingContent(
       // Nobody has published a site, and that is still true — what
@@ -698,6 +743,8 @@ LandingContent parseLandingContent(Object? raw) {
       unknownCtaLabel: brandStr('unknown_cta_label'),
       unknownCtaUrl: brandStr('unknown_cta_url'),
       demoAccountsEnabled: brandBool('demo_accounts_enabled'),
+      schemeLight: schemeOverrides('light'),
+      schemeDark: schemeOverrides('dark'),
       metaTitle: brandStr('meta_title'),
       metaDescription: brandStr('meta_description'),
       signinShowLogo: brandBool('signin_show_logo'),
@@ -904,6 +951,8 @@ LandingContent parseLandingContent(Object? raw) {
     unknownCtaLabel: brandStr('unknown_cta_label'),
     unknownCtaUrl: brandStr('unknown_cta_url'),
     demoAccountsEnabled: brandBool('demo_accounts_enabled'),
+    schemeLight: schemeOverrides('light'),
+    schemeDark: schemeOverrides('dark'),
     metaTitle: brandStr('meta_title'),
     metaDescription: brandStr('meta_description'),
     signinShowLogo: brandBool('signin_show_logo'),

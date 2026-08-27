@@ -59,10 +59,12 @@ class IAkauntanApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(
         seedColor: AppTheme.parseHex(brand?.brandColour),
+        overrides: brand?.schemeLight ?? const {},
       ),
       darkTheme: AppTheme.dark(
         seedColor: AppTheme.parseHex(brand?.brandColourDark) ??
             AppTheme.parseHex(brand?.brandColour),
+        overrides: brand?.schemeDark ?? const {},
       ),
       // Which of the two a visitor gets before they have chosen. The
       // default is `system`, which is what `MaterialApp` does anyway —

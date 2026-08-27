@@ -138,6 +138,7 @@ jobs:
                    supabase/tests/signin_page_copy.sql \
                    supabase/tests/signin_page_words.sql \
                    supabase/tests/held_and_pointed_names.sql \
+                   supabase/tests/scheme_roles.sql \
                    supabase/tests/security_audit.sql \
                    supabase/tests/audit_redaction.sql \
                    supabase/tests/ledger_append_only.sql \

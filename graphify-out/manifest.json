@@ -40,8 +40,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/app.dart": {
-    "mtime": 1787826285.9973483,
-    "ast_hash": "03d69a79e67eb0178243eb4ed61acf74",
+    "mtime": 1787830592.7197773,
+    "ast_hash": "d115f6b1008ccacdeef3b9caebf9b083",
     "semantic_hash": ""
   },
   "app/lib/src/core/download.dart": {
@@ -80,8 +80,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
-    "mtime": 1787822945.4825897,
-    "ast_hash": "9bdd5068d4c0777f453a266eb8a90535",
+    "mtime": 1787830863.7776163,
+    "ast_hash": "00ccfcd31009404593e9d9a10a31cb68",
     "semantic_hash": ""
   },
   "app/lib/src/core/widgets.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787829421.7421293,
-    "ast_hash": "245b6d1eba3d4d1298b6897cd8dd07a2",
+    "mtime": 1787830879.8207078,
+    "ast_hash": "ddca79dba7deecf0ced454750dae8cc7",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -4395,8 +4395,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_content.dart": {
-    "mtime": 1787826395.6187441,
-    "ast_hash": "67ba126b8581ebd42a85265f3d0519e3",
+    "mtime": 1787830840.9659655,
+    "ast_hash": "6e4fb7878828dc9968611867a63ca089",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_screen.dart": {
@@ -4645,8 +4645,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/branding_admin.dart": {
-    "mtime": 1787826459.8185163,
-    "ast_hash": "30f1ae911dd120974c34398e232d3787",
+    "mtime": 1787830704.7123892,
+    "ast_hash": "c1aa75bcf02ca0cdaabdf1842197a82c",
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/report_csv.dart": {
@@ -5127,6 +5127,21 @@
   "supabase/tests/held_and_pointed_names.sql": {
     "mtime": 1787828747.0802598,
     "ast_hash": "e992c1429fe938b5f4aed4213582c942",
+    "semantic_hash": ""
+  },
+  "app/test/scheme_roles_test.dart": {
+    "mtime": 1787830785.2543466,
+    "ast_hash": "f054e335c5e00e23c1ccf48c79db1b1a",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0343_the_scheme_one_role_at_a_time.sql": {
+    "mtime": 1787830507.1984167,
+    "ast_hash": "1e8681003a6dd6df8bd95a214dc81b12",
+    "semantic_hash": ""
+  },
+  "supabase/tests/scheme_roles.sql": {
+    "mtime": 1787830742.4424114,
+    "ast_hash": "036b9ae95047aadc992a51c13f002bdd",
     "semantic_hash": ""
   }
 }

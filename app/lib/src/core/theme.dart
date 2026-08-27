@@ -147,15 +147,78 @@ class AppTheme {
   /// request was blocked.
   static const fontFamily = 'Plus Jakarta Sans';
 
-  static ThemeData light({Color? seedColor}) =>
-      _build(Brightness.light, seedColor);
-  static ThemeData dark({Color? seedColor}) =>
-      _build(Brightness.dark, seedColor);
+  static ThemeData light({
+    Color? seedColor,
+    Map<String, String> overrides = const {},
+  }) => _build(Brightness.light, seedColor, overrides);
 
-  static ThemeData _build(Brightness brightness, [Color? seedColor]) {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: seedColor ?? seed,
-      brightness: brightness,
+  static ThemeData dark({
+    Color? seedColor,
+    Map<String, String> overrides = const {},
+  }) => _build(Brightness.dark, seedColor, overrides);
+
+  /// Ink that can be read on [background].
+  ///
+  /// Material pairs every role with an `on` colour it computed from the
+  /// seed. An override replaces the role and cannot replace the pair —
+  /// so a pale Primary would keep white text on every filled button.
+  /// This is what stops that, and it is a rendering decision rather
+  /// than something to store.
+  static Color inkOn(Color background) =>
+      ThemeData.estimateBrightnessForColor(background) == Brightness.dark
+          ? Colors.white
+          : Colors.black87;
+
+  /// [base] with whatever roles an operator has chosen replaced.
+  ///
+  /// On top of the derivation rather than instead of it: a platform
+  /// that overrides nothing but Error keeps a coherent scheme with its
+  /// own red in it, and clearing that box gives Material's red back.
+  ///
+  /// An unparseable value is ignored rather than thrown on — the
+  /// database checks the shape, but this is the code path every screen
+  /// in the product goes through, and a colour typed wrong somewhere
+  /// must not be a product that will not draw.
+  static ColorScheme applyOverrides(
+    ColorScheme base,
+    Map<String, String> overrides,
+  ) {
+    var scheme = base;
+    for (final entry in overrides.entries) {
+      final colour = parseHex(entry.value);
+      if (colour == null) continue;
+      final ink = inkOn(colour);
+      scheme = switch (entry.key) {
+        'primary' => scheme.copyWith(primary: colour, onPrimary: ink),
+        'container' =>
+          scheme.copyWith(primaryContainer: colour, onPrimaryContainer: ink),
+        'secondary' => scheme.copyWith(secondary: colour, onSecondary: ink),
+        'surface' => scheme.copyWith(surface: colour, onSurface: ink),
+        // The tone raised surfaces use, which is what the console's
+        // "Surface tint" tile shows. Not `surfaceTint`, which is an
+        // elevation overlay nobody looks at directly.
+        'surfaceTint' => scheme.copyWith(
+          surfaceContainerHighest: colour,
+          onSurfaceVariant: ink,
+        ),
+        'error' => scheme.copyWith(error: colour, onError: ink),
+        _ => scheme,
+      };
+    }
+    return scheme;
+  }
+
+  static ThemeData _build(
+    Brightness brightness, [
+    Color? seedColor,
+    Map<String, String> overrides = const {},
+  ]) {
+    final scheme = applyOverrides(
+      ColorScheme.fromSeed(
+        seedColor: seedColor ?? seed,
+        brightness: brightness,
+      ),
+      overrides,
     );
     final isDark = brightness == Brightness.dark;
     final colors = isDark ? AppColors._dark : AppColors._light;
