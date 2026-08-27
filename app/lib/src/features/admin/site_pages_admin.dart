@@ -6,6 +6,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/landing_repository.dart';
 import '../../data/site_pages_repository.dart';
+import 'branding_admin.dart' show SeedField;
 import 'landing_cms.dart';
 
 /// The pages beside the product, edited rather than deployed.
@@ -143,6 +144,8 @@ class _SitePageTabState extends ConsumerState<SitePageTab> {
                 if (widget.slug == 'signin') ...[
                   const SizedBox(height: Space.lg),
                   const _SigninPanelCard(),
+                  const SizedBox(height: Space.lg),
+                  const _SigninWordsCard(),
                   const SizedBox(height: Space.lg),
                   const LandingSectionsCard(kind: 'signin'),
                   const SizedBox(height: Space.lg),
@@ -390,6 +393,17 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
                 label: const Text('Save headline'),
               ),
             ),
+            const SizedBox(height: Space.md),
+            SeedField(
+              label: 'Panel colour',
+              value: row?['signin_panel_colour'] as String?,
+              fallback: AppTheme.parseHex(row?['brand_colour'] as String?) ??
+                  AppTheme.seed,
+              helper: 'Left empty, the panel uses your brand colour. The '
+                  'writing on it switches between white and black to stay '
+                  'readable on whatever you pick.',
+              onChanged: (v) => _save({'signin_panel_colour': v ?? ''}),
+            ),
             const Divider(height: Space.lg),
             _Switch(
               value: on('signin_show_heading'),
@@ -456,4 +470,177 @@ class _Switch extends StatelessWidget {
     title: Text(title),
     subtitle: Text(subtitle),
   );
+}
+
+/// The words on the form itself.
+///
+/// Every one of them was a Dart literal until `0337`, which meant a
+/// platform in Malay signed people in with an English form no matter
+/// what it had written everywhere else.
+///
+/// Unlike the switches above, these do not default to empty: an empty
+/// box means "the word the product ships with", because a form whose
+/// fields have no labels is not a cleaner form.
+class _SigninWordsCard extends ConsumerStatefulWidget {
+  const _SigninWordsCard();
+
+  @override
+  ConsumerState<_SigninWordsCard> createState() => _SigninWordsCardState();
+}
+
+class _SigninWordsCardState extends ConsumerState<_SigninWordsCard> {
+  /// Each console field, the column it writes and the word it replaces.
+  ///
+  /// A table rather than eight declared controllers, because they are
+  /// eight of exactly the same thing and the shipped word belongs next
+  /// to the column it is the default for.
+  /// [notNull] marks the two columns that predate this screen.
+  ///
+  /// `sign_in_label` and `register_label` are NOT NULL with a default,
+  /// so the saver reads an empty string as "leave it alone" rather than
+  /// as "clear it". Emptying those boxes therefore sends the shipped
+  /// word explicitly, which restores the same default the column has —
+  /// so "leave a box empty to get the word under it" is true of all
+  /// eight rather than of six of them.
+  static const _fields =
+      <({String column, String label, String ships, bool notNull})>[
+    (
+      column: 'signin_email_label',
+      label: 'Email box',
+      ships: 'Email',
+      notNull: false,
+    ),
+    (
+      column: 'signin_password_label',
+      label: 'Password box',
+      ships: 'Password',
+      notNull: false,
+    ),
+    (
+      column: 'signin_name_label',
+      label: 'Name box, on the sign-up form',
+      ships: 'Full name',
+      notNull: false,
+    ),
+    (
+      column: 'signin_forgot_label',
+      label: 'The forgotten-password link',
+      ships: 'Forgot password?',
+      notNull: false,
+    ),
+    (
+      column: 'sign_in_label',
+      label: 'The sign-in button',
+      ships: 'Sign in',
+      notNull: true,
+    ),
+    (
+      column: 'register_label',
+      label: 'The sign-up button',
+      ships: 'Create an account',
+      notNull: true,
+    ),
+    (
+      column: 'signin_register_prompt',
+      label: 'The sentence offering an account',
+      // Built from your name rather than stored, so there is no literal
+      // to show here — clearing the box gives the sentence back.
+      ships: 'New to <your name>? Create an account',
+      notNull: false,
+    ),
+    (
+      column: 'signin_signin_prompt',
+      label: 'The sentence back to signing in',
+      ships: 'Already have an account? Sign in',
+      notNull: false,
+    ),
+  ];
+
+  final _controllers = <String, TextEditingController>{
+    for (final f in _fields) f.column: TextEditingController(),
+  };
+  bool _loaded = false;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    for (final c in _controllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final row = ref.watch(landingPageAdminProvider).valueOrNull;
+    if (!_loaded && row != null) {
+      _loaded = true;
+      for (final f in _fields) {
+        _controllers[f.column]!.text = '${row[f.column] ?? ''}';
+      }
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'The words on the form',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Leave a box empty to use the word shown under it.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: Space.sm),
+            for (final f in _fields) ...[
+              TextField(
+                controller: _controllers[f.column],
+                decoration: InputDecoration(
+                  labelText: f.label,
+                  helperText: 'Ships as "${f.ships}"',
+                ),
+              ),
+              const SizedBox(height: Space.md),
+            ],
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                onPressed: _busy ? null : _save,
+                icon: const Icon(Icons.save_outlined),
+                label: const Text('Save words'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    setState(() => _busy = true);
+    // Every field, empty included: an empty box is somebody asking for
+    // the shipped word back, and the saver reads only an *absent* key
+    // as "leave it alone".
+    final patch = <String, dynamic>{
+      for (final f in _fields)
+        f.column: _controllers[f.column]!.text.trim().isEmpty && f.notNull
+            ? f.ships
+            : _controllers[f.column]!.text,
+    };
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Saved',
+      action: () => ref.read(landingAdminProvider).saveLandingPage(patch),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      ref.invalidate(landingPageAdminProvider);
+      invalidatePlatformTable(ref, 'landing_page');
+    }
+  }
 }

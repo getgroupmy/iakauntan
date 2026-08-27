@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/env.dart';
 import '../../core/providers.dart';
 import '../../data/reserved_names_repository.dart';
 import '../../data/site_pages_repository.dart';
@@ -325,9 +326,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   TextFormField(
                     controller: _fullName,
                     textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Full name',
-                      prefixIcon: Icon(Icons.person_outline),
+                    decoration: InputDecoration(
+                      labelText: _brand?.signinNameLabel ?? 'Full name',
+                      prefixIcon: const Icon(Icons.person_outline),
                     ),
                     validator: (v) => (v ?? '').trim().isEmpty
                         ? 'Enter your name'
@@ -340,9 +341,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   keyboardType: TextInputType.emailAddress,
                   autofillHints: const [AutofillHints.email],
                   textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: Icon(Icons.mail_outline),
+                  decoration: InputDecoration(
+                    labelText: _brand?.signinEmailLabel ?? 'Email',
+                    prefixIcon: const Icon(Icons.mail_outline),
                   ),
                   validator: (v) {
                     final value = (v ?? '').trim();
@@ -358,7 +359,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   autofillHints: const [AutofillHints.password],
                   onFieldSubmitted: (_) => _submit(),
                   decoration: InputDecoration(
-                    labelText: 'Password',
+                    labelText: _brand?.signinPasswordLabel ?? 'Password',
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(
@@ -380,7 +381,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     alignment: Alignment.centerRight,
                     child: TextButton(
                       onPressed: _busy ? null : _resetPassword,
-                      child: const Text('Forgot password?'),
+                      child: Text(
+                        _brand?.signinForgotLabel ?? 'Forgot password?',
+                      ),
                     ),
                   ),
                 if (_error != null) ...[
@@ -400,7 +403,14 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : Text(_isSignUp ? 'Create account' : 'Sign in'),
+                      // `registerLabel` and `signInLabel` have been on
+                      // `landing_page` since 0290 and this button was
+                      // ignoring both, so renaming it in the console
+                      // changed the landing page and not the form the
+                      // button leads to.
+                      : Text(_isSignUp
+                          ? (_brand?.registerLabel ?? 'Create account')
+                          : (_brand?.signInLabel ?? 'Sign in')),
                 ),
                 // Everything below the Sign in button is about joining
                 // the platform, and none of it belongs at a company's
@@ -432,8 +442,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                             }),
                     child: Text(
                       _isSignUp
-                          ? 'Already have an account? Sign in'
-                          : 'New to $_wordmark? Create an account',
+                          ? (_brand?.signinSigninPrompt ??
+                              'Already have an account? Sign in')
+                          : (_brand?.signinRegisterPrompt ??
+                              'New to $_wordmark? Create an account'),
                     ),
                   ),
                 ],
@@ -476,6 +488,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     // centred form, and with every switch off that is exactly what the
     // two-column layout would draw.
     final hero = _HeroContent(
+      panel: AppTheme.parseHex(_brand?.signinPanelColour) ?? scheme.primary,
       showMark: _showMark,
       headline: (_brand?.signinShowHeadline ?? false)
           ? (_brand?.signinHeadline ?? LandingContent.defaultSigninHeadline)
@@ -491,7 +504,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           Expanded(
             child: Container(
               key: const Key('signin-panel'),
-              color: scheme.primary,
+              // The operator's colour if they chose one, and the brand
+              // colour if they did not — which is what the panel was
+              // before there was anything to choose.
+              color: hero.panel,
               child: Padding(
                 padding: const EdgeInsets.all(48),
                 child: _Hero(content: hero),
@@ -517,60 +533,62 @@ class _HeroContent {
     required this.showMark,
     required this.headline,
     required this.points,
+    required this.panel,
   });
 
   final bool showMark;
   final String? headline;
   final List<LandingSection> points;
 
+  /// The colour the panel is actually painted.
+  final Color panel;
+
+  /// Ink that can be read on it.
+  ///
+  /// Derived rather than `scheme.onPrimary`, because since `0337` the
+  /// panel colour is the operator's own and need not be the brand
+  /// colour at all. `onPrimary` is white for this product's teal, and
+  /// white on a pale panel is an operator discovering by screenshot
+  /// that their sign-in page is blank.
+  Color get ink =>
+      ThemeData.estimateBrightnessForColor(panel) == Brightness.dark
+          ? Colors.white
+          : Colors.black87;
+
   bool get isEmpty => !showMark && headline == null && points.isEmpty;
 }
 
-/// The platform's mark, on the way in.
+/// The mark, on the way in.
 ///
-/// Reads the same brand the landing page does. Before this it was a
-/// hardcoded wallet icon and the literal string "iAkauntan", so an
-/// operator who uploaded a logo saw it on the front page and then signed
-/// in to somebody else's product.
+/// Reads the same brand the landing page does — the uploaded logo and
+/// the wordmark, or a company's own where this is a company's own door.
 ///
-/// Falls back to exactly what was here before whenever no logo is set,
-/// which is every platform that has not opened the console — so nothing
-/// changes for them.
-/// What the sign-in screen showed before anybody uploaded anything.
-class _Wallet extends StatelessWidget {
-  const _Wallet({required this.onDark});
-
-  final bool onDark;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(9),
-      decoration: BoxDecoration(
-        color: onDark ? scheme.onPrimary : scheme.primary,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Icon(
-        Icons.account_balance_wallet,
-        color: onDark ? scheme.primary : scheme.onPrimary,
-        size: 22,
-      ),
-    );
-  }
-}
-
+/// ## There is no drawn fallback any more
+///
+/// Until `0337` a platform with no logo uploaded got a compiled-in
+/// wallet icon in a rounded square. That is this product's mark, drawn
+/// on somebody else's sign-in page, and a visitor cannot tell it from a
+/// real one — which makes it worse than nothing rather than a
+/// placeholder. So a missing logo, or one whose address will not load,
+/// leaves the wordmark standing alone.
 class _Brand extends ConsumerWidget {
-  const _Brand({this.onDark = false});
+  const _Brand({this.onDark = false, this.ink});
 
-  /// Sitting on the primary colour rather than on the page, which is
-  /// where the dark variant of a logo earns its keep.
+  /// Sitting on the panel rather than on the page, which is where the
+  /// dark variant of a logo earns its keep.
   final bool onDark;
+
+  /// The colour to write the wordmark in.
+  ///
+  /// Passed from the panel since `0337`, because the panel's colour is
+  /// the operator's own and `onPrimary` need not be readable on it.
+  /// Null off the panel, where the brand colour on the page is right.
+  final Color? ink;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final color = onDark ? scheme.onPrimary : scheme.primary;
+    final color = ink ?? (onDark ? scheme.onPrimary : scheme.primary);
     final brand = ref.watch(landingContentProvider).valueOrNull;
 
     // A company that has been given a subdomain owns this page: at
@@ -578,8 +596,8 @@ class _Brand extends ConsumerWidget {
     // else this is null and nothing below changes.
     final workspace = ref.watch(workspaceHostProvider).valueOrNull;
 
-    // On the primary panel the light logo is the wrong one: same rule
-    // the landing page uses, for the same reason.
+    // On the panel the light logo is the wrong one: same rule the
+    // landing page uses, for the same reason.
     final url = workspace?['logo_url'] as String? ??
         (onDark ? brand?.logoDarkUrl : null) ??
         brand?.logoUrl;
@@ -587,19 +605,23 @@ class _Brand extends ConsumerWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (url != null)
+        if (url != null) ...[
           Image.network(
             url,
             height: 40,
             // A logo that will not load must not take the sign-in form
-            // with it — this is the one screen nobody can route around.
-            errorBuilder: (_, _, _) => _Wallet(onDark: onDark),
-          )
-        else
-          _Wallet(onDark: onDark),
-        const SizedBox(width: 12),
+            // with it — this is the one screen nobody can route around
+            // — and must not put our icon there instead.
+            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          ),
+          const SizedBox(width: 12),
+        ],
         Text(
-          workspace?['name'] as String? ?? brand?.wordmark ?? 'iAkauntan',
+          // No literal here any more. `landing_page.wordmark` is NOT
+          // NULL, so the backend answers; `LandingContent` supplies the
+          // app's own build-time name only when there is no payload at
+          // all, which is the one case where inventing a name is worst.
+          workspace?['name'] as String? ?? brand?.wordmark ?? Env.appName,
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w700,
@@ -625,13 +647,13 @@ class _Hero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final ink = content.ink;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (content.showMark) ...[
-          const _Brand(onDark: true),
+          _Brand(onDark: true, ink: ink),
           const SizedBox(height: 40),
         ],
         if (content.headline != null) ...[
@@ -641,7 +663,7 @@ class _Hero extends StatelessWidget {
               fontSize: 34,
               height: 1.2,
               fontWeight: FontWeight.w700,
-              color: scheme.onPrimary,
+              color: ink,
               letterSpacing: -1,
             ),
           ),
@@ -654,7 +676,7 @@ class _Hero extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(Icons.check_circle,
-                    color: scheme.onPrimary.withValues(alpha: 0.9), size: 20),
+                    color: ink.withValues(alpha: 0.9), size: 20),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -663,7 +685,7 @@ class _Hero extends StatelessWidget {
                       Text(
                         point.title,
                         style: TextStyle(
-                          color: scheme.onPrimary,
+                          color: ink,
                           fontWeight: FontWeight.w600,
                           fontSize: 15,
                         ),
@@ -673,7 +695,7 @@ class _Hero extends StatelessWidget {
                         Text(
                           point.body!,
                           style: TextStyle(
-                            color: scheme.onPrimary.withValues(alpha: 0.75),
+                            color: ink.withValues(alpha: 0.75),
                             fontSize: 13,
                             height: 1.4,
                           ),

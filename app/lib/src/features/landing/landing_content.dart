@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/env.dart';
 import '../../core/providers.dart';
 
 /// One block of copy on the landing page.
@@ -298,7 +299,12 @@ class LandingContent {
     required this.published,
     this.logoUrl = defaultLogoUrl,
     this.logoDarkUrl,
-    this.wordmark = 'iAkauntan',
+    // `landing_page.wordmark` is NOT NULL, so the backend always
+    // answers and this is only what an empty payload gets. The app's
+    // own build-time name rather than a literal typed here again: one
+    // place decides what this product calls itself when nothing else
+    // has said.
+    this.wordmark = Env.appName,
     this.tagline,
     this.brandColour,
     this.brandColourDark,
@@ -352,6 +358,13 @@ class LandingContent {
     this.signinShowHeading = false,
     this.signinShowRegister = false,
     this.signinPoints = const [],
+    this.signinPanelColour,
+    this.signinEmailLabel,
+    this.signinPasswordLabel,
+    this.signinNameLabel,
+    this.signinForgotLabel,
+    this.signinRegisterPrompt,
+    this.signinSigninPrompt,
   });
 
   final bool published;
@@ -541,6 +554,29 @@ class LandingContent {
   /// is what a platform that has turned all three off has asked for.
   final List<LandingSection> signinPoints;
 
+  /// The colour of the panel beside the form.
+  ///
+  /// Null means the brand colour, which is what the panel was before
+  /// this existed. A platform whose product is dark blue may still want
+  /// something else on the one screen that is half flat colour, and
+  /// before `0337` it had no way to say so.
+  final String? signinPanelColour;
+
+  /// The words on the form itself.
+  ///
+  /// All nullable, and null means the word the product ships with — not
+  /// an empty label. A form whose boxes have no names is not a cleaner
+  /// form, so unlike `0336`'s switches these do not default to off.
+  final String? signinEmailLabel;
+  final String? signinPasswordLabel;
+  final String? signinNameLabel;
+  final String? signinForgotLabel;
+
+  /// The two sentences under the button: the one offering an account,
+  /// and the one back to signing in.
+  final String? signinRegisterPrompt;
+  final String? signinSigninPrompt;
+
   /// The headline the panel falls back to when nobody has written one.
   ///
   /// Kept here rather than in the screen because the console's preview
@@ -658,6 +694,18 @@ LandingContent parseLandingContent(Object? raw) {
       signinShowHeading: brandBool('signin_show_heading'),
       signinShowRegister: brandBool('signin_show_register'),
       signinPoints: blocks('signin_points'),
+      signinPanelColour: brandStr('signin_panel_colour'),
+      signinEmailLabel: brandStr('signin_email_label'),
+      signinPasswordLabel: brandStr('signin_password_label'),
+      signinNameLabel: brandStr('signin_name_label'),
+      signinForgotLabel: brandStr('signin_forgot_label'),
+      signinRegisterPrompt: brandStr('signin_register_prompt'),
+      signinSigninPrompt: brandStr('signin_signin_prompt'),
+      // 0337. These two have been on the table since 0290 and were
+      // read out of `page` only, so an unpublished site fell back to
+      // the literals — on the one screen that draws unpublished.
+      signInLabel: brandStr('sign_in_label') ?? 'Sign in',
+      registerLabel: brandStr('register_label') ?? 'Create an account',
     );
   }
 
@@ -778,8 +826,10 @@ LandingContent parseLandingContent(Object? raw) {
         'Accounting, CRM, payroll and e-Invoice for Malaysian business',
     heroSubhead: str('hero_subhead'),
     heroImageUrl: str('hero_image_url') ?? defaultHeroImageUrl,
-    signInLabel: str('sign_in_label') ?? 'Sign in',
-    registerLabel: str('register_label') ?? 'Create an account',
+    // `brandStr` since 0337, not `str`: the sign-in screen reads these
+    // and it draws before anything is published.
+    signInLabel: brandStr('sign_in_label') ?? 'Sign in',
+    registerLabel: brandStr('register_label') ?? 'Create an account',
     registerEnabled: page['register_enabled'] is bool
         ? page['register_enabled'] as bool
         : true,
@@ -848,6 +898,13 @@ LandingContent parseLandingContent(Object? raw) {
     signinShowHeading: brandBool('signin_show_heading'),
     signinShowRegister: brandBool('signin_show_register'),
     signinPoints: blocks('signin_points'),
+    signinPanelColour: brandStr('signin_panel_colour'),
+    signinEmailLabel: brandStr('signin_email_label'),
+    signinPasswordLabel: brandStr('signin_password_label'),
+    signinNameLabel: brandStr('signin_name_label'),
+    signinForgotLabel: brandStr('signin_forgot_label'),
+    signinRegisterPrompt: brandStr('signin_register_prompt'),
+    signinSigninPrompt: brandStr('signin_signin_prompt'),
   );
 }
 
