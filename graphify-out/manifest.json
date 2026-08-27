@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787841608.2399666,
-    "ast_hash": "8be095d4cfc2f156057fab24b7ab64bd",
+    "mtime": 1787850550.0268626,
+    "ast_hash": "de319e818fdd959512cbaf70b23f48a9",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -5155,8 +5155,8 @@
     "semantic_hash": ""
   },
   "app/test/name_purposes_test.dart": {
-    "mtime": 1787841568.6024563,
-    "ast_hash": "0a90c8bbb92beda29873b28725312881",
+    "mtime": 1787850507.775222,
+    "ast_hash": "2b55a409d9693de9cde7085dbfd0f630",
     "semantic_hash": ""
   },
   "supabase/migrations/0344_a_name_for_us_and_a_name_for_nobody.sql": {

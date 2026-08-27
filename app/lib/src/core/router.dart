@@ -186,10 +186,24 @@ Confinement? confinementFor(Map<String, dynamic>? workspace) {
 /// every one of them: a platform operator with no company of their own
 /// holds no modules at all, so the lookup answers false for a reason
 /// that has nothing to do with the address.
+///
+/// An **empty** set is "not known yet" rather than "none of them", and
+/// that is not a guess about intent — `enabledModulesProvider` answers
+/// `{}` as settled data whenever `repoProvider` is null, which it is
+/// for the moment between signing in and the current company landing.
+/// Read as a fact it says this person holds no modules at all, and the
+/// rule below then sends them to `/no-access` with confidence, a
+/// heartbeat before the truth arrives. That is the `/no-access` flash:
+/// not a wrong answer about the module, a confident answer given
+/// before there was anything to answer about. No real company has
+/// nothing enabled — the core modules are always on — so nothing is
+/// lost by waiting.
 bool? moduleHeldFor(Confinement? door, AsyncValue<Set<String>> enabled) {
   if (door == null) return null;
   if (door.ours) return true;
-  return enabled.whenOrNull(data: (held) => held.contains(door.module));
+  return enabled.whenOrNull(
+    data: (held) => held.isEmpty ? null : held.contains(door.module),
+  );
 }
 
 /// signed-in visitor is not bounced anywhere.
@@ -200,6 +214,7 @@ String? routeFor({
   required bool? hasOrg,
   required bool? isPlatformAdmin,
   bool atCompanyDoor = false,
+  bool doorKnown = true,
   String? confinedTo,
   Set<String> confinedAllows = const {},
   bool? moduleHeld,
@@ -279,7 +294,15 @@ String? routeFor({
   // means "take me to my books", which is what it means to somebody
   // without a session too — they just have a password to type on the
   // way.
-  if (path == '/signin') return '/dashboard';
+  //
+  // Held until the lookup says whose address this is. Not for the sake
+  // of correctness — it ends up in the same place either way — but
+  // because "the books" is a different screen at a confined address,
+  // and answering early sends somebody to the dashboard and then moves
+  // them off it, which they watch happen. Once the answer is in, the
+  // hop to the dashboard and the hop from there to the till resolve as
+  // one chain and nothing in between is ever drawn.
+  if (path == '/signin') return doorKnown ? '/dashboard' : null;
 
   // Organizations may still be loading; hold the current route until we
   // know whether the user has any books to open. The same goes for
@@ -377,12 +400,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         // the same choice `app.dart` makes, for the same reason.
         atCompanyDoor: ref.read(workspaceLookupProvider).valueOrNull?.host ==
             WorkspaceHost.found,
+        doorKnown: ref.read(workspaceLookupProvider).hasValue,
         // 0342. An address the operator pointed at one module opens
         // that and nothing else. All three are null or empty at every
         // other address, and nothing above changes.
         confinedTo: door?.landingPath,
         confinedAllows: door?.allows ?? const {},
-        moduleHeld: moduleHeldFor(door, ref.watch(enabledModulesProvider)),
+        // `read`, like every other provider here, and the difference is
+        // not stylistic. `watch` inside this callback makes
+        // `routerProvider` itself depend on the modules, so the moment
+        // they resolve the provider is rebuilt — and a rebuilt
+        // `GoRouter` starts again at `initialLocation`, walking `/` →
+        // `/signin` → `/dashboard` → the confined screen, and does it
+        // again on the next resolve. That is the loop. What re-runs
+        // this redirect is `AuthRefresh` below, which is why every
+        // provider the rule reads is listened to there.
+        moduleHeld: moduleHeldFor(door, ref.read(enabledModulesProvider)),
       );
     },
     routes: [
@@ -871,5 +904,11 @@ class AuthRefresh extends ChangeNotifier {
     // platform's shopfront, which is exactly what that rule exists to
     // prevent.
     ref.listen(workspaceLookupProvider, (_, __) => notifyListeners());
+    // What a confined address is allowed to open. Listened to for the
+    // same reason as the rest — the rule reads it and holds while it is
+    // unknown — and added when the redirect stopped `watch`ing it,
+    // because watching it there rebuilt the router instead of
+    // re-running the rule.
+    ref.listen(enabledModulesProvider, (_, __) => notifyListeners());
   }
 }

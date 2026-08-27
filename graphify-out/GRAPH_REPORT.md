@@ -1,16 +1,16 @@
 # Graph Report - iakauntan  (2026-08-27)
 
 ## Corpus Check
-- 996 files · ~1,456,938 words
+- 996 files · ~1,457,601 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 18831 nodes · 30912 edges · 1070 communities (791 shown, 279 thin omitted)
+- 18832 nodes · 30914 edges · 1035 communities (781 shown, 254 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 334 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `edaa8363`
+- Built from commit: `3343e1fc`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -22,19 +22,19 @@
 - document_editor.dart
 - warn
 - 0009_functions.sql
-- settings_screen.dart
+- ConsumerState
 - providers.dart
 - router.dart
-- PartialEvaluator
+- .get
 - order_screen.dart
 - _
 - claims_screen.dart
-- ConsumerState
+- matter_detail_screen.dart
 - pdf.worker.js
 - ConfigNamespace
 - promotions_screen.dart
 - public.purchase_documents
-- ../../data/models.dart
+- contact_editor.dart
 - report_spec.dart
 - StatelessWidget
 - public.run_item_conversion
@@ -43,9 +43,9 @@
 - reports_screen.dart
 - corp_repository.dart
 - line_editor.dart
-- PDFPageProxy
+- .getTextContent
 - _
-- .success
+- .[Vs]
 - pdf.js
 - modifier_groups_dialog.dart
 - public.sales_documents
@@ -55,7 +55,7 @@
 - 0027_hrms_time_leave_claims.sql
 - CanvasGraphics
 - TemplateNamespace
-- landingContentProvider
+- package:go_router/go_router.dart
 - 0014_reports.sql
 - public.client_account_transactions
 - call_engine.dart
@@ -71,7 +71,7 @@
 - 0036_hrms_talent.sql
 - tax_year_section.dart
 - 0007_einvoice.sql
-- stock_card_dialog.dart
+- ../../data/models.dart
 - public.post_payroll_run
 - app_shell.dart
 - 0037_hrms_workflow_rpcs.sql
@@ -92,7 +92,7 @@
 - chat_screen.dart
 - settlement_dialog.dart
 - AnnotationEditor
-- invoice_pdf.dart
+- dart:typed_data
 - 0002_reference.sql
 - public.gl_entries
 - 0018_platform_admin_modules_and_permissions.sql
@@ -106,8 +106,8 @@
 - public.corp_filings
 - 0069_document_signatures.sql
 - app.can_read_attachment
-- kiosk_screen.dart
-- getMeasurement
+- filing_screen.dart
+- getRelevant
 - entity_screen.dart
 - What the database can do that nobody can reach
 - iAkauntan
@@ -133,7 +133,7 @@
 - 0046_hrms_payslip_access_rpcs.sql
 - public.payroll_payment_instruction
 - 0063_corp_secretarial_deadlines.sql
-- onboarding_screen.dart
+- interviews_dialog.dart
 - getInteger
 - git
 - app.calc_pcb
@@ -193,9 +193,9 @@
 - receipt_pdf.dart
 - autocount_api_inventory.py
 - public.post_stock_adjustment
-- team_screen.dart
+- employee_records.dart
 - 0259_an_address_a_fee_and_a_driver.sql
-- memberships_screen_test.dart
+- package:iakauntan/src/core/theme.dart
 - 0256_a_price_the_shop_decided_in_advance.sql
 - call_screen.dart
 - .createDocumentHandler
@@ -224,18 +224,18 @@
 - CalRGBCS
 - reserved_names_repository.dart
 - XMLParserBase
-- email_screen.dart
+- State
 - 0217_a_slot_that_cannot_be_sold_twice.sql
 - What Akaunting has that iAkauntan does not
 - 0275_the_cheque_dated_next_month.sql
 - J
-- ConsumerStatefulWidget
+- transfers_screen.dart
 - receipt_capture.dart
 - public.document_share_links
 - public.report_ap_aging
 - public.salespeople
-- .resolve
-- payroll_screen.dart
+- PDFPageProxy
+- List
 - Turning email on
 - 0264_what_the_plate_takes_out_of_the_store.sql
 - 0106_serial_and_batch_tracking.sql
@@ -245,13 +245,13 @@
 - 0265_the_van_and_the_chicken_that_becomes_eight_pieces.sql
 - public.bank_transfers
 - public.pos_sales
-- cheques_screen.dart
+- String?
 - 0197_inventory_forecasting.sql
 - 0111_ocr_and_credit.sql
 - public.pos_receipt_text
 - InkDrawOutline
-- unreachable
-- .compile
+- exchange_rates_screen.dart
+- ExpressionBuilderVisitor
 - 0113_ocr_provider_catalog.sql
 - 0104_live_exchange_rates.sql
 - landing_cms.dart
@@ -270,7 +270,7 @@
 - _
 - ubl.ts
 - 0271_the_freight_is_part_of_what_it_cost.sql
-- return
+- item_prices_dialog.dart
 - 0167_approval_workflow.sql
 - public.email_document
 - MyInvoisClient
@@ -299,8 +299,8 @@
 - O
 - io
 - supplier_details_test.dart
-- AnnotationStorage
-- floor_plan_screen.dart
+- WorkerTransport
+- ../../data/repository.dart
 - report_csv.dart
 - supplier_from_scan.dart
 - LocaleSetNamespace
@@ -319,12 +319,12 @@
 - Room
 - h
 - 0119_claims_go_up_the_line.sql
-- String?
-- onboarding_template_dialog.dart
+- item_params_dialog.dart
+- bundles_screen.dart
 - ChunkedStream
-- rule_editor.dart
+- receipt_settings_screen.dart
 - asset_schedule_dialog.dart
-- VoidCallback
+- assets_screen.dart
 - call_screen_test.dart
 - site_pages_repository.dart
 - scan_all_data.dart
@@ -337,7 +337,7 @@
 - employee_editor.dart
 - modifier_sheet.dart
 - public.manufacturing_orders
-- State
+- landing_motion.dart
 - chat_group.dart
 - NullOptimizer
 - documents/transfer_dialog.dart
@@ -352,8 +352,8 @@
 - 0140_call_signalling.sql
 - credit_dialog.dart
 - diary_screen.dart
-- stock_take_screen.dart
-- WorkerTransport
+- create_org_screen.dart
+- member_panel.dart
 - asset_editor.dart
 - payment_gateways_admin.dart
 - public.chat_thread
@@ -368,7 +368,7 @@
 - AES128Cipher
 - public.chat_my_conversations
 - index.js
-- credit_admin.dart
+- dashboard_screen.dart
 - addresses_card.dart
 - 0132_company_groups.sql
 - LocalPdfManager
@@ -377,7 +377,7 @@
 - ../../core/providers.dart
 - forecast_screen.dart
 - signing_page.dart
-- ../../data/repository.dart
+- recipes_screen.dart
 - landing_tokens.dart
 - receipts_screen.dart
 - 0317_the_rest_of_a_front_page.sql
@@ -387,9 +387,9 @@
 - landing_repository.dart
 - app.can_attach_to
 - Timesheets
-- transfer.dart
+- return
 - Departmental accounting
-- deposits_screen.dart
+- branches_card.dart
 - Corporate secretarial (add-on)
 - 0206_pos_outlets_registers_and_shifts.sql
 - public.post_expense
@@ -406,11 +406,11 @@
 - 0209_completing_a_sale.sql
 - 0157_reconciliations_march_forward.sql
 - 0163_property_charges_and_rls.sql
-- StampEditor
+- ColorPicker
 - public.my_account_deletion_blockers
 - 0213_the_room_and_the_bill_on_it.sql
 - 0220_a_customer_serving_themselves.sql
-- make_icons.dart
+- charge_run_sheet.dart
 - web_push_vector.js
 - 0194_ticketing_lifecycle.sql
 - public.time_entries
@@ -421,16 +421,16 @@
 - mtool_csv.dart
 - claim_approval_chain.sql
 - offline_till.dart
-- kiosk_board_screen.dart
+- call_incoming.dart
 - 0156_disposal_charges_what_it_relieves.sql
 - public.intercompany_inbox
 - public.org_team
 - table_cards_pdf.dart
 - 0269_crediting_a_counter_sale_puts_it_back.sql
-- .get
+- currentOrgProvider
 - 0258_breakfast_stops_at_eleven.sql
 - 0131_branches.sql
-- List
+- payslip_screen.dart
 - Audited financial statements and MBRS
 - loyalty_tiers_dialog.dart
 - branch_belongs_to_org
@@ -462,7 +462,7 @@
 - 0190_demo_sinar_cash_people_and_assets.sql
 - public.run_inventory_forecast
 - web_push_keygen.ts
-- Annotation
+- Page
 - app.landing_payload
 - package:iakauntan/src/data/models.dart
 - 0219_sell_with_no_signal_and_land_it_once.sql
@@ -473,18 +473,18 @@
 - stations_screen.dart
 - app.materialise_movement_lots
 - public.report_migration_progress
-- recurring_screen.dart
-- JpegImage
+- VoidCallback
+- ColorConverters
 - h
 - app.landing_payload
 - Repo
 - 0235_who_got_in_and_what_they_took.sql
-- interviews_dialog.dart
+- .fallbackToSystemFont
 - 0251_an_answer_that_is_not_on_the_list.sql
 - 0274_the_number_the_board_agreed.sql
 - public.org_members
 - public.my_group_companies
-- FreeTextEditor
+- FreeDrawOutliner
 - 0255_a_price_the_manager_takes_off.sql
 - dart:async
 - 0229_how_the_order_arrived.sql
@@ -503,9 +503,9 @@
 - public.chat_participants
 - public.deposit_notes
 - Modules and entitlement
-- pipeline_screen.dart
+- build
 - public.pos_sale_line_voids
-- work_centre_dialog.dart
+- stock_card_test.dart
 - 0185_demo_seed_spine.sql
 - TextMeasure
 - 0193_ticketing_sla_clock.sql
@@ -548,7 +548,7 @@
 - app.write_audit_log
 - 0189_the_chart_cannot_post_payroll.sql
 - supabase-shim.sql
-- double get
+- CCITTFaxDecoder
 - app.post_sales_document_internal
 - billplz.ts
 - public.pos_registers
@@ -556,16 +556,16 @@
 - reset_password_screen.dart
 - group_reports_screen.dart
 - fetch-rates/index.ts
-- asset_schedule_test.dart
+- group_ownership_test.dart
 - CFFIndex
 - public.void_pos_sale
-- chatDirectoryProvider
+- _DirectoryDialogState
 - 0342_a_name_held_and_a_name_pointed.sql
 - mark.py
 - public.void_pos_sale
 - console_shot.dart
 - app.build_revenue_schedule
-- valueToHtml
+- .success
 - public.pos_table_by_code
 - 0307_a_retry_that_does_not_post_twice.sql
 - PostScriptParser
@@ -574,20 +574,20 @@
 - Gaps against Rillet
 - app.landing_payload
 - The runbook
-- ._createMaskCanvas
+- push_stub.dart
 - 0263_a_report_somebody_builds.sql
 - AnnotationBorderStyle
 - reservations_admin.dart
-- .restore
+- moduleTiles
 - app.demo_modules_in_use
 - group_reports_test.dart
 - PDFImage
 - public.report_sst_summary
-- platform_live.dart
-- platform_catalog_repository.dart
+- app.dart
+- narrow_layout_test.dart
 - app.landing_payload
 - public.platform_payments
-- Exception
+- _EmployeeEditorState
 - app.landing_payload
 - Rooms
 - 0328_an_address_that_belongs_to_you.sql
@@ -603,7 +603,7 @@
 - public.transfer_document
 - DeviceRgbCS
 - public.pos_table_by_code
-- SimpleDOMNode
+- safe_link.dart
 - public.landing_page
 - What the plate takes out of the store
 - public.landing_page
@@ -624,8 +624,8 @@
 - public.platform_modules
 - public.landing_page
 - note
-- AppColors
-- live_updates.dart
+- PrinterName
+- platform_live.dart
 - favicon.dart
 - favicon_stub.dart
 - public.landing_page
@@ -635,52 +635,53 @@
 - till_screen_test.dart
 - public.landing_page
 - XFAObject
-- o
+- DocKind
 - K
-- share_dialog.dart
+- Attributes
 - .add
 - ArithmeticDecoder
-- find
+- FontFinder
 - PDFWorkerStreamReader
 - .constructor
 - ci
 - void_sheet.dart
-- .toArray
+- JpegImage
 - package:supabase_flutter/supabase_flutter.dart
 - ToUnicodeMap
 - public.platform_save_landing_section
-- platformRepoProvider
-- PopupElement
+- CurrentPage
+- DatePatterns
 - DeviceGrayCS
 - FontSelector
 - .getBytes
 - hi
 - Stream
-- statement_pdf.dart
-- getCurrentTransform
+- DateTimeSymbols
+- DefaultAppearanceEvaluator
 - public.landing_page
 - PDFWorker
 - ImageResizer
 - workspace-proxy/worker.js
 - XFAAttribute
-- export_log.dart
-- .getPattern
+- live_updates.dart
+- DigestMethod
 - ui
 - app.landing_payload
-- warn
+- Driver
 - _ThreadState
 - SimpleXMLParser
-- report_spec_test.dart
-- BaseFilterFactory
+- EffectiveOutputPolicy
+- Enforce
+- EOIMarkerError
 - .[Vs]
-- push_types.dart
+- FlipLabel
 - app.landing_payload
 - HighlightOutline
 - ContentObject
 - DatasetsNamespace
 - HuffmanTable
 - CFFStrings
-- build
+- platformModulesProvider
 - GlyphHeader
 - Root
 - AsciiHexStream
@@ -694,7 +695,7 @@
 - Empty
 - Exclude
 - worker.js
-- getSubroutineBias
+- IncludeXDPContent
 - LocalFunctionCache
 - LocalTilingPatternCache
 - CallEngine
@@ -723,116 +724,81 @@
 - xdp_Xdp
 - XdpNamespace
 - public.may_use_workspace
-- AppColorsX
+- IncrementalMerge
 - Acrobat
 - AddSilentPrint
-- AdjustData
+- LocaleSet
 - Agent
 - AlwaysEmbed
-- Ascii85Stream
-- AutoSave
-- BaseShading
-- BindItems
+- MissingPDFException
+- MsgId
+- Pagination
+- Pdfa
 - Bookend
 - Cache
 - CaretAnnotation
 - Certificate
 - CFFCharset
-- CFFPrivateDict
+- PickTrayByPDFSize
 - Producer
 - Change
-- Cmd
+- PlaintextMetadata
 - Common
 - core/brand_chrome.dart
-- CompressLogicalStructure
+- Present
 - brand_chrome_stub.dart
 - config_FontInfo
 - rebuild.sh
 - suite.sh
 - config_Script
-- connection_set_Uri
-- Creator
-- CurrencySymbols
-- Data
-- Day
+- Print
+- PrintScaling
+- Proto
+- SetProperty
+- signature_Signature
 - DefaultUi
-- Destination
-- DNLMarkerError
-- DocumentAssembly
+- SoapAction
+- StringStream
+- SubmitUrl
 - DummyShading
-- DuplexOption
-- DynamicRender
-- Embed
+- Tagged
+- TimePatterns
+- Version
 - Encoding
-- EncryptionLevel
-- EquateRange
-- Era
-- EraNames
+- WebClient
+- WsdlConnection
+- Xdp
+- Xsl
 - ExcludeNS
-- ExitStatus
-- fonts_Glyph
 - Format
 - FormatError
 - FormFieldFilling
 - HuffmanLine
 - Interactive
 - InvalidPDFException
-- Jbig2Error
 - public.landing_page
 - JpegError
 - JpxError
-- Level
 - public.email_outbox
-- li
 - LocalColorSpaceCache
 - Locale
 - locale_set_LocaleSet
-- Log
-- MapElement
 - MeridiemNames
-- ModifyAnnots
 - Month
-- NameAttr
-- NullStream
 - NumberPatterns
 - NumberSymbols
-- Oid
-- OpenAction
 - Option01
-- Option10
 - public.landing_page
-- Output
 - OutputXSL
 - Overprint
-- ParserEOFException
-- Part
-- PasswordException
-- Pcl
-- Pdf
-- Permissions
-- Picture
-- PolygonAnnotation
-- PrintHighQuality
-- Reason
-- RefElement
-- RenderPolicy
 - RootElement
 - Span
-- StartNode
 - SubmitFormat
-- SubsetBelow
 - SuppressBanner
 - Traversal
-- Type
 - TypeFaces
-- UnknownErrorException
-- ValidationMessaging
-- ViewerPreferences
 - Whitespace
-- Xdc
 - XmlConnection
-- XRefParseException
-- XsdConnection
 - Zpl
 - public.site_pages
 
@@ -853,17 +819,17 @@
   supabase/migrations/0050_hrms_post_payroll_split_claims.sql → app/lib/src/data/models.dart
 - `public.post_payroll_run()` --reads_from--> `zakat`  [EXTRACTED]
   supabase/migrations/0050_hrms_post_payroll_split_claims.sql → app/lib/src/data/models.dart
-- `#os()` --indirect_call--> `nt()`  [INFERRED]
-  app/web/pdfjs/pdf.js → app/web/tesseract/worker.min.js
 - `_note` --references--> `repoProvider`  [EXTRACTED]
   app/lib/src/core/export_log.dart → app/lib/src/core/providers.dart
 - `_save` --references--> `repoProvider`  [EXTRACTED]
   app/lib/src/features/admin/ocr_catalog_admin.dart → app/lib/src/core/providers.dart
+- `_delete` --references--> `repoProvider`  [EXTRACTED]
+  app/lib/src/features/approvals/approvals_screen.dart → app/lib/src/core/providers.dart
 
 ## Import Cycles
 - None detected.
 
-## Communities (1070 total, 279 thin omitted)
+## Communities (1035 total, 254 thin omitted)
 
 ### Community 0 - "models.dart"
 Cohesion: 0.00
@@ -883,51 +849,51 @@ Nodes (25): cancel(), checkStatus(), submit(), ID_TYPES, markVerified(), validat
 
 ### Community 4 - "document_editor.dart"
 Cohesion: 0.02
-Nodes (103): _actions, _applyScan, _ApprovalBanner, _base, baseCurrency, caption, _changeCurrency, _contactId (+95 more)
+Nodes (100): _actions, _applyScan, _ApprovalBanner, _base, baseCurrency, caption, _changeCurrency, _contactId (+92 more)
 
 ### Community 5 - "warn"
 Cohesion: 0.03
-Nodes (29): AppearanceStreamEvaluator, ButtonWidgetAnnotation, Catalog, collectActions(), _collectJS(), createValidAbsoluteUrl(), decodeString(), DecodingContext (+21 more)
+Nodes (27): AppearanceStreamEvaluator, Catalog, clearGlobalCaches(), collectActions(), _collectJS(), createValidAbsoluteUrl(), decodeString(), DecodingContext (+19 more)
 
 ### Community 6 - "0009_functions.sql"
 Cohesion: 0.04
 Nodes (38): app.apply_account_balance, app.apply_allocation, app.apply_stock_movement, app.assert_gl_balanced, app.calc_document_line, app.recalc_purchase_totals, app.recalc_sales_totals, app.track_opportunity_stage (+30 more)
 
-### Community 7 - "settings_screen.dart"
+### Community 7 - "ConsumerState"
 Cohesion: 0.02
-Nodes (132): addresses_card.dart, liveUpdatesProvider, accountDeletionBlockersProvider, creditInvoicesProvider, currentOrgIdProvider, currentUserProvider, fxRevaluationPreviewProvider, isDemoAccountProvider (+124 more)
+Nodes (159): addresses_card.dart, accountsProvider, assetMovementsProvider, creditInvoicesProvider, fxRevaluationPreviewProvider, posStallSettlementsProvider, posStallsProvider, revenueDueProvider (+151 more)
 
 ### Community 8 - "providers.dart"
-Cohesion: 0.02
-Nodes (162): access, accessPermissions, agedBalancesProvider, approvalStateProvider, attendanceProvider, auditPayslip, authStateProvider, bankTransfersProvider (+154 more)
+Cohesion: 0.01
+Nodes (189): access, accessPermissions, agedBalancesProvider, approvalStateProvider, attendanceProvider, auditPayslip, bankTransfersProvider, billingRatesProvider (+181 more)
 
 ### Community 9 - "router.dart"
 Cohesion: 0.02
-Nodes (116): atCompanyDoor, confinedAllows, Confinement, confinementFor, _documentRoutes, module, moduleHeldFor, null (+108 more)
+Nodes (117): atCompanyDoor, confinedAllows, Confinement, confinementFor, _documentRoutes, doorKnown, module, moduleHeldFor (+109 more)
 
-### Community 10 - "PartialEvaluator"
+### Community 10 - ".get"
 Cohesion: 0.04
-Nodes (20): E, addLocallyCachedImageOps(), assert(), BaseLocalCache, getNewAnnotationsMap(), getTilingPatternIR(), getTransformMatrix(), isKnownFontName() (+12 more)
+Nodes (20): E, addLocallyCachedImageOps(), Annotation, CircleAnnotation, getInheritableProperty(), getNewAnnotationsMap(), getRgbColor(), getTilingPatternIR() (+12 more)
 
 ### Community 11 - "order_screen.dart"
-Cohesion: 0.09
-Nodes (26): manufacturingOrderProvider, manufacturingShortagesProvider, _Body, _book, build, _busy, _cancel, components (+18 more)
+Cohesion: 0.03
+Nodes (61): manufacturingOrderProvider, manufacturingShortagesProvider, withholdingTypesProvider, _byRole, createState, dispose, _docType, initState (+53 more)
 
 ### Community 12 - "_"
 Cohesion: 0.05
-Nodes (40): _, applyOverrides, AppTheme, base, _border, _build, _clickable, colors (+32 more)
+Nodes (46): @immutable, TicketQuery, _, AppColors, AppColorsX, applyOverrides, AppTheme, base (+38 more)
 
 ### Community 13 - "claims_screen.dart"
 Cohesion: 0.03
-Nodes (84): claimApprovalsProvider, claimsAwaitingMeProvider, claimsProvider, claimTypesProvider, leaveRequestsProvider, leaveTypesProvider, myAttendanceTodayProvider, myEmployeeProvider (+76 more)
+Nodes (87): claimApprovalsProvider, claimsAwaitingMeProvider, claimsProvider, claimTypesProvider, leaveRequestsProvider, leaveTypesProvider, myAttendanceTodayProvider, myEmployeeProvider (+79 more)
 
-### Community 14 - "ConsumerState"
-Cohesion: 0.01
-Nodes (208): accountsProvider, bankAccountsProvider, bomsProvider, canPostProvider, canReadLedgerProvider, canWriteProvider, clientTransactionsProvider, contactsProvider (+200 more)
+### Community 14 - "matter_detail_screen.dart"
+Cohesion: 0.04
+Nodes (63): clientTransactionsProvider, disbursementsProvider, mattersProvider, matterSummaryProvider, timeEntriesProvider, Matter, MatterSummary, _activity (+55 more)
 
 ### Community 15 - "pdf.worker.js"
 Cohesion: 0.00
-Nodes (297): AbortException, Acrobat7, ADBE_JSConsole, ADBE_JSDebugger, AddViewerPreferences, AdobeExtensionLevel, Amd, An (+289 more)
+Nodes (295): AbortException, Acrobat7, ADBE_JSConsole, ADBE_JSDebugger, AddViewerPreferences, AdjustData, AdobeExtensionLevel, Amd (+287 more)
 
 ### Community 17 - "promotions_screen.dart"
 Cohesion: 0.03
@@ -937,33 +903,33 @@ Nodes (59): posMenuSchedulesProvider, posPromotionsProvider, bits, build, create
 Cohesion: 0.17
 Nodes (30): public.bank_reconciliations, public.bank_transactions, public.expenses, public.purchase_document_lines, public.purchase_documents, public.purchase_payments, public.stock_adjustment_lines, public.stock_adjustments (+22 more)
 
-### Community 19 - "../../data/models.dart"
-Cohesion: 0.02
-Nodes (91): groupCompaniesProvider, itemPricesProvider, itemVariantMatrixProvider, itemVariantsProvider, priceLevelsProvider, Item, _build, _c (+83 more)
+### Community 19 - "contact_editor.dart"
+Cohesion: 0.06
+Nodes (34): groupCompaniesProvider, _build, _c, ContactEditor, _ContactEditorState, contactId, contactType, _controllers (+26 more)
 
 ### Community 20 - "report_spec.dart"
 Cohesion: 0.03
-Nodes (64): active, agedBalanceSpec, _agedKind, _agingBuckets, amount, assets, balance, balanceSheetSpec (+56 more)
+Nodes (67): active, agedBalanceSpec, _agedKind, _agingBuckets, amount, assets, balance, balanceSheetSpec (+59 more)
 
 ### Community 21 - "StatelessWidget"
-Cohesion: 0.03
-Nodes (92): LandingModule, build, ink, LandingDarkBand, module, _ModuleCard, modules, onInk (+84 more)
+Cohesion: 0.04
+Nodes (69): anchors, _AppLinks, _Badges, _Band, _Bubble, _Burger, child, children (+61 more)
 
 ### Community 22 - "public.run_item_conversion"
 Cohesion: 0.07
 Nodes (34): created_by, item_id, movement_date, movement_no, movement_type, notes, public.item_conversion_outputs, public.item_conversions (+26 more)
 
 ### Community 23 - ".add"
-Cohesion: 0.03
-Nodes (18): AnnotationElement, bindEvents(), CircleAnnotationElement, EditorToolbar, FileAttachmentAnnotationElement, getRectDims(), HighlightToolbar, LineAnnotationElement (+10 more)
+Cohesion: 0.02
+Nodes (23): AnnotationElement, AnnotationLayer, bindEvents(), CircleAnnotationElement, EditorToolbar, FileAttachmentAnnotationElement, getRectDims(), HighlightToolbar (+15 more)
 
 ### Community 24 - "statement_import.dart"
 Cohesion: 0.05
 Nodes (36): amount, amountAt, _amountNames, creditAt, _creditNames, d, date, dateAt (+28 more)
 
 ### Community 25 - "reports_screen.dart"
-Cohesion: 0.07
-Nodes (35): trialBalanceProvider, ReportSpec, _aged, _agedProvider, _balanceSheetProvider, _Block, _cashFlowProvider, _cell (+27 more)
+Cohesion: 0.06
+Nodes (38): trialBalanceProvider, ReportBlock, ReportHighlight, ReportSection, ReportSpec, _aged, _agedProvider, _balanceSheetProvider (+30 more)
 
 ### Community 26 - "corp_repository.dart"
 Cohesion: 0.06
@@ -973,21 +939,21 @@ Nodes (31): addCorpShareEvent, corpBeneficialOwners, corpCharges, corpCreateSign
 Cohesion: 0.04
 Nodes (52): _applyItem, baseUom, _codeOf, controller, createState, currency, _DateField, defers (+44 more)
 
-### Community 28 - "PDFPageProxy"
-Cohesion: 0.04
-Nodes (8): AnnotationElementFactory, AnnotationLayer, InternalRenderTask, PDFNetworkStream, PDFPageProxy, setLayerDimensions(), TextLayer, XfaText
+### Community 28 - ".getTextContent"
+Cohesion: 0.06
+Nodes (12): Binder, createDataNode(), createText(), EvalState, parseExpression(), r, run(), searchNode() (+4 more)
 
 ### Community 29 - "_"
 Cohesion: 0.07
 Nodes (29): _, _compact, _date, _dateTime, days, Fmt, _fractional, initials (+21 more)
 
-### Community 30 - ".success"
-Cohesion: 0.07
-Nodes (28): applyAssist(), ariaLabel(), br, Caption, checkDimensions(), computeBbox(), createWrapper(), fixDimensions() (+20 more)
+### Community 30 - ".[Vs]"
+Cohesion: 0.05
+Nodes (40): applyAssist(), Caption, CheckButton, checkDimensions(), computeBbox(), ContentArea, Corner, createWrapper() (+32 more)
 
 ### Community 31 - "pdf.js"
 Cohesion: 0.01
-Nodes (93): AbortException, addAlphaFilter(), addFilter(), addHCMFilter(), addHighlightHCMFilter(), addLuminosityFilter(), b, BaseCanvasFactory (+85 more)
+Nodes (95): AbortException, addAlphaFilter(), addFilter(), addHCMFilter(), addHighlightHCMFilter(), addLuminosityFilter(), b, BaseCanvasFactory (+87 more)
 
 ### Community 32 - "modifier_groups_dialog.dart"
 Cohesion: 0.06
@@ -1006,16 +972,20 @@ Cohesion: 0.23
 Nodes (3): getB(), MeshShading, MeshStreamReader
 
 ### Community 36 - "compileCharString"
-Cohesion: 0.05
-Nodes (13): Commands, compileCharString(), CompiledFont, compileGlyf(), CompositeGlyph, getFloat214(), getInt16(), getInt8() (+5 more)
+Cohesion: 0.04
+Nodes (18): CFFFDSelect, Commands, compileCharString(), CompiledFont, compileGlyf(), CompositeGlyph, FontRendererFactory, getFloat214() (+10 more)
 
 ### Community 37 - "0027_hrms_time_leave_claims.sql"
 Cohesion: 0.16
 Nodes (23): public.attendance_records, public.claim_types, public.employee_shifts, public.expense_claim_lines, public.expense_claims, public.leave_balances, public.leave_entitlement_bands, public.leave_requests (+15 more)
 
-### Community 40 - "landingContentProvider"
-Cohesion: 0.11
-Nodes (27): build, IAkauntanApp, platformLiveProvider, routerProvider, workspaceHostProvider, sitePagesProvider, _Brand, build (+19 more)
+### Community 38 - "CanvasGraphics"
+Cohesion: 0.04
+Nodes (14): applyBoundingBox(), CanvasGraphics, copyCtxState(), drawImageAtIntegerCoords(), getCurrentTransform(), getCurrentTransformInverse(), getImageSmoothingEnabled(), info() (+6 more)
+
+### Community 40 - "package:go_router/go_router.dart"
+Cohesion: 0.05
+Nodes (38): LandingContent, LandingModule, build, ink, LandingDarkBand, module, _ModuleCard, modules (+30 more)
 
 ### Community 41 - "0014_reports.sql"
 Cohesion: 0.13
@@ -1034,24 +1004,24 @@ Cohesion: 0.08
 Nodes (29): leadsProvider, pipelinesProvider, _amount, build, _c, canWrite, _close, _convert (+21 more)
 
 ### Community 45 - "expenses_screen.dart"
-Cohesion: 0.05
-Nodes (36): _accountId, _amount, _apply, _bankAccountId, _capture, createState, _date, _description (+28 more)
+Cohesion: 0.06
+Nodes (34): _accountId, _amount, _apply, _bankAccountId, _capture, createState, _date, _description (+26 more)
 
 ### Community 46 - ".onSymbolDictionary"
-Cohesion: 0.09
-Nodes (16): CCITTFaxDecoder, ContextCache, decodeBitmap(), decodeIAID(), decodeInteger(), decodeMMRBitmap(), decodeRefinement(), decodeTextRegion() (+8 more)
+Cohesion: 0.10
+Nodes (16): m, ContextCache, decodeBitmap(), decodeIAID(), decodeInteger(), decodeMMRBitmap(), decodeRefinement(), decodeTextRegion() (+8 more)
 
 ### Community 47 - "repoProvider"
 Cohesion: 0.01
-Nodes (193): currentPosShiftProvider, itemModifierOptionsProvider, parkedPosSalesProvider, posDeliveryForProvider, posMembershipsProvider, posMenuProvider, posOpenOrdersProvider, posRegistersProvider (+185 more)
+Nodes (184): currentPosShiftProvider, itemModifierOptionsProvider, parkedPosSalesProvider, posDeliveryForProvider, posMembershipsProvider, posMenuProvider, posOpenOrdersProvider, posRegistersProvider (+176 more)
 
 ### Community 48 - "shadow"
 Cohesion: 0.03
-Nodes (9): bytesToString(), FontFaceObject, FontLoader, PageViewport, PDFDocumentProxy, PrintAnnotationStorage, shadow(), TouchManager (+1 more)
+Nodes (5): PageViewport, PDFDocumentProxy, PrintAnnotationStorage, shadow(), util_FeatureTest
 
 ### Community 49 - "document_list_screen.dart"
 Cohesion: 0.07
-Nodes (28): BusinessDocument, DocKind, DocKindX, contactId, createState, dispose, doc, docType (+20 more)
+Nodes (33): documentsProvider, intercompanyInboxProvider, BusinessDocument, build, contactId, createState, dispose, doc (+25 more)
 
 ### Community 50 - "public.post_sales_document"
 Cohesion: 0.13
@@ -1073,9 +1043,9 @@ Nodes (36): declaredReliefsProvider, reliefTypesProvider, ytdOpeningProvider, De
 Cohesion: 0.21
 Nodes (16): app.set_einvoice_cancel_deadline, public.ref_einvoice_types, public.einvoice_consolidation_items, public.einvoice_consolidations, public.einvoice_documents, public.einvoice_lines, public.einvoice_logs, public.einvoice_submissions (+8 more)
 
-### Community 56 - "stock_card_dialog.dart"
-Cohesion: 0.07
-Nodes (28): stockCardProvider, build, _CardHeader, closing, createState, emptyLabel, _from, item (+20 more)
+### Community 56 - "../../data/models.dart"
+Cohesion: 0.03
+Nodes (63): itemVariantMatrixProvider, itemVariantsProvider, stockCardProvider, Contact, Item, contact, ContactsScreen, _ContactsScreenState (+55 more)
 
 ### Community 57 - "public.post_payroll_run"
 Cohesion: 0.12
@@ -1103,11 +1073,11 @@ Nodes (16): public.employee_salary_components, public.pay_periods, public.payrol
 
 ### Community 63 - "statutory_rates_admin.dart"
 Cohesion: 0.05
-Nodes (37): _AdminScheduleTile, _body, byCategory, category, createState, dispose, _employee, employeeAmount (+29 more)
+Nodes (39): _AdminScheduleTile, _body, byCategory, category, createState, dispose, _employee, employeeAmount (+31 more)
 
 ### Community 64 - "widgets.dart"
 Cohesion: 0.03
-Nodes (74): accent, action, amount, AsyncView, _AsyncViewState, _beginWaiting, bold, build (+66 more)
+Nodes (72): accent, action, amount, _beginWaiting, bold, build, caption, child (+64 more)
 
 ### Community 65 - "_"
 Cohesion: 0.11
@@ -1127,7 +1097,7 @@ Nodes (15): public.calculate_payroll_run(), public.attendance_records, public.de
 
 ### Community 69 - "ConsumerWidget"
 Cohesion: 0.02
-Nodes (138): applicantsProvider, appraisalsProvider, approvalRulesProvider, canAdminProvider, chatAccessListProvider, chatLinksProvider, corpOfficersProvider, fsBalanceCheckProvider (+130 more)
+Nodes (149): access_types_card.dart, liveUpdatesProvider, accountDeletionBlockersProvider, applicantsProvider, appraisalsProvider, approvalRulesProvider, canAdminProvider, corpOfficersProvider (+141 more)
 
 ### Community 70 - "0015_einvoice_prepare.sql"
 Cohesion: 0.13
@@ -1146,16 +1116,20 @@ Cohesion: 0.21
 Nodes (11): app.handle_new_user, on_auth_user_created, public.audit_logs, public.number_sequences, public.org_members, public.organizations, public.profiles, set_updated_at (+3 more)
 
 ### Community 74 - "chat_screen.dart"
-Cohesion: 0.05
-Nodes (37): _Avatar, _Bubble, ChatScreen, _ChatScreenState, _controller, conversationId, createState, _delete (+29 more)
+Cohesion: 0.06
+Nodes (35): _Avatar, _Bubble, _controller, conversationId, createState, _delete, _deleted, dispose (+27 more)
 
 ### Community 75 - "settlement_dialog.dart"
 Cohesion: 0.05
-Nodes (37): _allocated, _allocatedDocs, _AllocationRow, _AllocationRowState, _allocations, amount, _bankAccountId, _bankCharges (+29 more)
+Nodes (43): outstandingProvider, paymentModesProvider, _allocated, _allocatedDocs, _AllocationRow, _AllocationRowState, _allocations, amount (+35 more)
 
-### Community 77 - "invoice_pdf.dart"
-Cohesion: 0.05
-Nodes (46): anyDiscount, anyTax, bits, buildInvoicePdf, join, kit, mode, pdf (+38 more)
+### Community 76 - "AnnotationEditor"
+Cohesion: 0.02
+Nodes (3): AnnotationEditor, ImageManager, StampEditor
+
+### Community 77 - "dart:typed_data"
+Cohesion: 0.03
+Nodes (65): false, saveBytesFile, saveTextFile, address, aged, buildStatementPdf, isCustomer, kit (+57 more)
 
 ### Community 78 - "0002_reference.sql"
 Cohesion: 0.18
@@ -1174,8 +1148,8 @@ Cohesion: 0.11
 Nodes (26): app.advance_recurring_document(), app.post_sales_document_internal(), app.queue_document_email(), app.queue_overdue_reminders(), app.raise_recurring_document(), app.run_recurring_documents(), app.snapshot_document(), public.create_recurring_document() (+18 more)
 
 ### Community 82 - "push_web.dart"
-Cohesion: 0.07
-Nodes (27): ask, currentPushEndpoint, pushStatus, subscribeToPush, unsubscribeFromPush, ask, auth, _b64url (+19 more)
+Cohesion: 0.05
+Nodes (37): _applied, applyBrandChrome, existing, key, meta, anchor, blob, saveBytesFile (+29 more)
 
 ### Community 83 - "0020_platform_admin_rpcs.sql"
 Cohesion: 0.17
@@ -1209,17 +1183,17 @@ Nodes (8): public.corp_request_signatures(), public.corp_signature_requests, pub
 Cohesion: 0.20
 Nodes (7): app.attachment_path_ok, public.employee_documents, app.can_read_attachment(), attachment_path_ok, public.expense_claims, public.leave_requests, public.payslips
 
-### Community 91 - "kiosk_screen.dart"
-Cohesion: 0.06
-Nodes (32): _Attract, _busy, _category, createState, dispose, _idle, _idleAfter, KioskScreen (+24 more)
+### Community 91 - "filing_screen.dart"
+Cohesion: 0.05
+Nodes (45): fsBalanceCheckProvider, fsDeadlinesProvider, fsExemptionProvider, fsExportProvider, fsFilingProvider, posChannelMixProvider, posOutletChannelsProvider, auditStatus (+37 more)
 
-### Community 92 - "getMeasurement"
-Cohesion: 0.03
-Nodes (27): addHTML(), Area, Border, CheckButton, ContentArea, Corner, createLine(), Draw (+19 more)
+### Community 92 - "getRelevant"
+Cohesion: 0.04
+Nodes (14): addHTML(), Area, Border, createLine(), ExclGroup, flushHTML(), getAvailableSpace(), getContainedChildren() (+6 more)
 
 ### Community 93 - "entity_screen.dart"
 Cohesion: 0.03
-Nodes (70): CorpBeneficialOwner, CorpCharge, CorpDocument, CorpEntity, CorpFiling, CorpMember, CorpOfficer, CorpShareEvent (+62 more)
+Nodes (69): CorpBeneficialOwner, CorpCharge, CorpDocument, CorpEntity, CorpFiling, CorpMember, CorpOfficer, CorpShareEvent (+61 more)
 
 ### Community 94 - "What the database can do that nobody can reach"
 Cohesion: 0.25
@@ -1309,13 +1283,13 @@ Nodes (3): public.request_payslip_access(), public.revoke_payslip_access(), publ
 Cohesion: 0.50
 Nodes (4): public.mark_payroll_paid(), public.payroll_payment_instruction(), public.payroll_runs, public.payslips
 
-### Community 118 - "onboarding_screen.dart"
-Cohesion: 0.07
-Nodes (35): canManageHrProvider, directoryProvider, onboardingChecklistsProvider, onboardingTasksProvider, Employee, build, checklist, _ChecklistTile (+27 more)
+### Community 118 - "interviews_dialog.dart"
+Cohesion: 0.04
+Nodes (62): canManageHrProvider, directoryProvider, employeesProvider, interviewsProvider, onboardingChecklistsProvider, onboardingTasksProvider, Employee, applicantId (+54 more)
 
 ### Community 119 - "getInteger"
-Cohesion: 0.03
-Nodes (30): Arc, Barcode, Break, BreakAfter, BreakBefore, ChoiceList, Comb, config_Area (+22 more)
+Cohesion: 0.04
+Nodes (24): Barcode, Break, BreakAfter, BreakBefore, Comb, config_Area, DayNames, Equate (+16 more)
 
 ### Community 121 - "app.calc_pcb"
 Cohesion: 0.50
@@ -1355,7 +1329,7 @@ Nodes (5): For /graphify explain, For /graphify path, graphify reference: query,
 
 ### Community 136 - "ocr_repository.dart"
 Cohesion: 0.03
-Nodes (64): amount, balance, blurb, clearOcrCredentials, code, copyWith, creditInvoices, creditLedger (+56 more)
+Nodes (68): OrgNotReady, amount, balance, blurb, clearOcrCredentials, code, copyWith, creditInvoices (+60 more)
 
 ### Community 137 - "graphify reference: add a URL and watch a folder"
 Cohesion: 0.50
@@ -1395,7 +1369,7 @@ Nodes (13): "100% integration" is the wrong target, 1. Nothing records where a r
 
 ### Community 178 - "journal_editor.dart"
 Cohesion: 0.06
-Nodes (32): accountId, accounts, createState, credit, credits, _date, debit, debits (+24 more)
+Nodes (31): accountId, accounts, createState, credit, credits, _date, debit, debits (+23 more)
 
 ### Community 180 - "public.post_receipt"
 Cohesion: 0.18
@@ -1414,12 +1388,12 @@ Cohesion: 0.19
 Nodes (11): public.depreciation_entries, public.depreciation_runs, public.fixed_assets, public.run_depreciation(), auth.users, public.accounts, public.bank_accounts, public.contacts (+3 more)
 
 ### Community 184 - "package:flutter/material.dart"
-Cohesion: 0.03
-Nodes (73): asset, main, main, field, harness, main, reveal, contrast (+65 more)
+Cohesion: 0.05
+Nodes (40): main, board, main, run, show, harness, main, menuItem (+32 more)
 
 ### Community 185 - "chat_attachments.dart"
 Cohesion: 0.05
-Nodes (42): launchExternal, launchUrl, uri, attachment, build, _busy, _bytes, ChatAttachmentView (+34 more)
+Nodes (38): attachment, build, _busy, _bytes, ChatAttachmentView, ChatComposerActions, _ChatComposerActionsState, _clock (+30 more)
 
 ### Community 189 - "Gaps against AutoCount Accounting 2.0"
 Cohesion: 0.14
@@ -1432,19 +1406,19 @@ THANK, 47300 PETALING, 99 SPEEDMART, 1234, 13, 3, AMAN, Amount (+14 more)
 
 ### Community 192 - "HighlightEditor"
 Cohesion: 0.03
-Nodes (11): BaseShadingPattern, DrawingEditor, DrawingOptions, DrawLayer, FreeHighlightOutline, g, HighlightEditor, InkAnnotationElement (+3 more)
+Nodes (12): BaseShadingPattern, DrawingEditor, DrawingOptions, DrawLayer, FreeHighlightOutline, HighlightEditor, InkAnnotationElement, InkDrawingOptions (+4 more)
 
 ### Community 193 - "0095_outbound_email.sql"
 Cohesion: 0.17
 Nodes (14): app.document_email_vars(), app.issue_share_token(), app.queue_overdue_reminders(), app.share_url(), public.email_document(), public.email_outbox, public.email_settings, public.email_templates (+6 more)
 
 ### Community 195 - "worker.min.js"
-Cohesion: 0.19
-Nodes (39): t(), t(), r(), a(), at(), B(), c(), ct() (+31 more)
+Cohesion: 0.16
+Nodes (55): t(), A(), c(), e(), f(), G(), h(), i() (+47 more)
 
 ### Community 196 - ".get"
-Cohesion: 0.05
-Nodes (23): Q, ChoiceWidgetAnnotation, computeIDs(), ErrorFont, escapeString(), EvalState, FakeUnicodeFont, FreeTextAnnotation (+15 more)
+Cohesion: 0.04
+Nodes (25): Q, ButtonWidgetAnnotation, ChoiceWidgetAnnotation, computeIDs(), ErrorFont, escapeString(), FakeUnicodeFont, FreeTextAnnotation (+17 more)
 
 ### Community 202 - "0078_fx_rates_and_foreign_amounts.sql"
 Cohesion: 0.29
@@ -1462,17 +1436,17 @@ Nodes (4): fetch(), field_names(), main(), Property names of a schema, following
 Cohesion: 0.20
 Nodes (7): public.stock_adjustment_lines, public.stock_adjustments, app.default_warehouse(), public.post_stock_adjustment(), public.accounts, public.items, public.warehouses
 
-### Community 208 - "team_screen.dart"
-Cohesion: 0.04
-Nodes (54): access_types_card.dart, accessPermissionsProvider, accessTypesProvider, platformModulesProvider, AccessType, PayslipAccessRequest, TeamMember, ConfinementFields (+46 more)
+### Community 208 - "employee_records.dart"
+Cohesion: 0.05
+Nodes (42): employeeRowsProvider, arg, build, createState, _DateField, _deleteButton, _DependantDialog, _DependantDialogState (+34 more)
 
 ### Community 209 - "0259_an_address_a_fee_and_a_driver.sql"
 Cohesion: 0.15
 Nodes (28): app.pos_delivery_blocked(), app.pos_delivery_zone_for(), app.recalc_pos_sale(), public.assign_pos_delivery(), public.clear_pos_delivery(), public.complete_pos_sale(), public.merge_pos_sales(), public.pos_deliveries (+20 more)
 
-### Community 210 - "memberships_screen_test.dart"
-Cohesion: 0.06
-Nodes (28): go, main, screen, show, main, onADesktop, screen, shell (+20 more)
+### Community 210 - "package:iakauntan/src/core/theme.dart"
+Cohesion: 0.05
+Nodes (39): ConsoleSection, go, contrast, main, host, main, open, opened (+31 more)
 
 ### Community 211 - "0256_a_price_the_shop_decided_in_advance.sql"
 Cohesion: 0.19
@@ -1483,8 +1457,8 @@ Cohesion: 0.05
 Nodes (40): active, _Banner, build, callId, CallScreen, _CallScreenState, cameraOn, _Controls (+32 more)
 
 ### Community 214 - ".createDocumentHandler"
-Cohesion: 0.04
-Nodes (13): AnnotationFactory, BasePdfManager, clearGlobalCaches(), isRefsEqual(), JpxImage, MessageHandler, NetworkPdfManager, ni (+5 more)
+Cohesion: 0.03
+Nodes (16): AnnotationFactory, assert(), BasePdfManager, BaseStream, ColorSpace, MessageHandler, NetworkPdfManager, Pattern (+8 more)
 
 ### Community 215 - "tesseract-core-simd-lstm.wasm.js"
 Cohesion: 0.05
@@ -1512,11 +1486,11 @@ Nodes (30): html, main, manifest, head, main, org, _plainInvoice, 2026 (+22 more
 
 ### Community 226 - "import_screen.dart"
 Cohesion: 0.05
-Nodes (39): _aliases, _asAt, _busy, _ChangeoverField, _Columns, _contactAliases, createState, danger (+31 more)
+Nodes (38): _aliases, _asAt, _busy, _ChangeoverField, _Columns, _contactAliases, createState, danger (+30 more)
 
 ### Community 229 - "tesseract-core-lstm.wasm.js"
 Cohesion: 0.06
-Nodes (45): ac(), $b(), bi(), Cb(), Db(), e(), ei(), fb() (+37 more)
+Nodes (46): ac(), $b(), bi(), Cb(), Db(), e(), ei(), fb() (+38 more)
 
 ### Community 230 - "pos_reports_screen.dart"
 Cohesion: 0.09
@@ -1532,7 +1506,7 @@ Nodes (10): A(), ci(), hi(), I(), J(), K(), Q(), S() (+2 more)
 
 ### Community 235 - "ticket_screen.dart"
 Cohesion: 0.04
-Nodes (64): cannedResponsesProvider, ticketCategoriesProvider, ticketCommentsProvider, ticketEventsProvider, ticketProvider, ticketsProvider, ticketTeamsProvider, build (+56 more)
+Nodes (63): cannedResponsesProvider, ticketCategoriesProvider, ticketCommentsProvider, ticketEventsProvider, ticketProvider, ticketsProvider, ticketTeamsProvider, build (+55 more)
 
 ### Community 238 - "V"
 Cohesion: 0.05
@@ -1540,15 +1514,15 @@ Nodes (4): A(), S(), V(), Va()
 
 ### Community 239 - "getStringOption"
 Cohesion: 0.02
-Nodes (51): AppearanceFilter, BatchOutput, Bind, Calculate, Certificates, Compress, Connect, CurrencySymbol (+43 more)
+Nodes (46): AppearanceFilter, BatchOutput, Bind, Calculate, Certificates, Compress, Connect, CurrencySymbol (+38 more)
 
 ### Community 240 - "app.claim_expense_allocation"
 Cohesion: 0.33
 Nodes (5): app.claim_expense_allocation(), public.accounts, public.claim_types, public.expense_claim_lines, public.expense_claims
 
 ### Community 241 - "hr_setup_screen.dart"
-Cohesion: 0.04
-Nodes (48): payrollSettingsProvider, setupRowsProvider, _blank, boolean, build, _c, _ClaimTypesTab, _ComponentsTab (+40 more)
+Cohesion: 0.05
+Nodes (46): payrollSettingsProvider, setupRowsProvider, _blank, boolean, build, _c, _ClaimTypesTab, _ComponentsTab (+38 more)
 
 ### Community 245 - "public.report_cash_flow"
 Cohesion: 0.53
@@ -1560,7 +1534,7 @@ Nodes (10): public.leads, public.onboarding_checklists, public.onboarding_tasks,
 
 ### Community 248 - "branding_admin.dart"
 Cohesion: 0.03
-Nodes (64): _apply, brightness, _busy, _c, _Card, changes, children, chosen (+56 more)
+Nodes (60): _apply, brightness, _busy, _c, _Card, changes, children, chosen (+52 more)
 
 ### Community 249 - "CalRGBCS"
 Cohesion: 0.05
@@ -1574,9 +1548,9 @@ Nodes (28): all, bare, checkName, client, decide, decided, first, label (+20 mor
 Cohesion: 0.12
 Nodes (3): DatasetXMLParser, XFAParser, XMLParserBase
 
-### Community 253 - "email_screen.dart"
-Cohesion: 0.08
-Nodes (26): emailOutboxProvider, emailSettingsProvider, build, _busy, createState, _days, _digestTo, dispose (+18 more)
+### Community 253 - "State"
+Cohesion: 0.07
+Nodes (43): AsyncView, _AsyncViewState, _RoleColourDialog, _RoleColourDialogState, _SeedField, _SeedFieldState, _RejectDialog, _RejectDialogState (+35 more)
 
 ### Community 254 - "0217_a_slot_that_cannot_be_sold_twice.sql"
 Cohesion: 0.15
@@ -1594,9 +1568,9 @@ Nodes (19): app.cheque_account(), post_dated_cheques_touch, public.clear_pdc(), 
 Cohesion: 0.12
 Nodes (3): I(), J(), Q()
 
-### Community 259 - "ConsumerStatefulWidget"
-Cohesion: 0.01
-Nodes (171): bundleAvailabilityProvider, bundleMarginProvider, bundlePartsProvider, employeeRowsProvider, itemBundlesProvider, itemConversionsProvider, itemsProvider, itemUomOptionsProvider (+163 more)
+### Community 259 - "transfers_screen.dart"
+Cohesion: 0.05
+Nodes (47): _addLine, _addOutput, _code, _ConversionSheet, _ConversionSheetState, createState, dispose, _fields (+39 more)
 
 ### Community 260 - "receipt_capture.dart"
 Cohesion: 0.07
@@ -1614,13 +1588,13 @@ Nodes (8): public.report_ap_aging(), public.report_ar_aging(), public.contacts, 
 Cohesion: 0.29
 Nodes (4): public.salespeople, public.employees, public.org_members, public.organizations
 
-### Community 268 - ".resolve"
-Cohesion: 0.03
-Nodes (15): assert(), getArrayBuffer(), MessageHandler, PDFDataRangeTransport, PDFDataTransportStream, PDFDataTransportStreamRangeReader, PDFDataTransportStreamReader, PDFFetchStreamReader (+7 more)
+### Community 268 - "PDFPageProxy"
+Cohesion: 0.02
+Nodes (23): AnnotationElementFactory, assert(), bytesToString(), createHeaders(), FontFaceObject, FontLoader, HighlightOutliner, InternalRenderTask (+15 more)
 
-### Community 269 - "payroll_screen.dart"
+### Community 269 - "List"
 Cohesion: 0.04
-Nodes (46): PaymentLine, PayrollRun, _buildForm, _calculate, createState, _DateField, dispose, emphasise (+38 more)
+Nodes (49): PaymentLine, PayrollRun, _buildForm, _calculate, createState, _DateField, dispose, emphasise (+41 more)
 
 ### Community 270 - "Turning email on"
 Cohesion: 0.14
@@ -1635,8 +1609,8 @@ Cohesion: 0.14
 Nodes (4): public.stock_lots, public.contacts, public.items, public.organizations
 
 ### Community 273 - "company_card.dart"
-Cohesion: 0.03
-Nodes (61): claimApprovalThresholdProvider, hasPostingsProvider, Organization, _amount, build, canAdmin, ClaimApprovalCard, ClaimApprovalCardState (+53 more)
+Cohesion: 0.05
+Nodes (46): hasPostingsProvider, build, _busy, _city, _CompanyDialog, _CompanyDialogState, createState, _currency (+38 more)
 
 ### Community 275 - "Fetching the day's exchange rates"
 Cohesion: 0.25
@@ -1654,9 +1628,9 @@ Nodes (13): public.bank_transfers, public.create_bank_transfer(), public.post_ba
 Cohesion: 0.11
 Nodes (20): public.pos_shifts, public.pos_sale_lines, public.pos_sales, public.pos_tender_types, public.pos_tenders, set_updated_at, app.set_updated_at, auth.users (+12 more)
 
-### Community 282 - "cheques_screen.dart"
-Cohesion: 0.03
-Nodes (67): contraCandidatesProvider, contraLinesProvider, contraNotesProvider, postDatedChequesProvider, _amount, _bank, _bankName, build (+59 more)
+### Community 282 - "String?"
+Cohesion: 0.01
+Nodes (150): _applied, applyFavicon, bankAccountsProvider, contraCandidatesProvider, contraLinesProvider, contraNotesProvider, CurrentOrgNotifier, depositHistoryProvider (+142 more)
 
 ### Community 283 - "0197_inventory_forecasting.sql"
 Cohesion: 0.20
@@ -1672,15 +1646,15 @@ Nodes (22): public.pos_deliveries, public.pos_delivery_zones, public.pos_promoti
 
 ### Community 286 - "InkDrawOutline"
 Cohesion: 0.06
-Nodes (4): FreeDrawOutline, InkDrawOutline, InkDrawOutliner, Outline
+Nodes (5): FreeDrawOutline, g, InkDrawOutline, InkDrawOutliner, Outline
 
-### Community 289 - "unreachable"
-Cohesion: 0.05
-Nodes (7): AESBaseCipher, BaseStream, ColorSpace, Dict, Pattern, RadialAxialShading, unreachable()
-
-### Community 290 - ".compile"
+### Community 289 - "exchange_rates_screen.dart"
 Cohesion: 0.06
-Nodes (13): AstArgument, AstBinaryOperation, AstLiteral, AstMin, AstVariable, AstVariableDefinition, buildAddOperation(), buildMinOperation() (+5 more)
+Nodes (35): claimApprovalThresholdProvider, Organization, _asAt, base, _board, _c, createState, currency (+27 more)
+
+### Community 290 - "ExpressionBuilderVisitor"
+Cohesion: 0.08
+Nodes (7): AstArgument, AstBinaryOperation, AstLiteral, AstMin, AstVariable, AstVariableDefinition, ExpressionBuilderVisitor
 
 ### Community 291 - "0113_ocr_provider_catalog.sql"
 Cohesion: 0.22
@@ -1688,23 +1662,23 @@ Nodes (4): app.ocr_price(), public.ocr_providers, public.org_ocr_credentials, pu
 
 ### Community 294 - "landing_cms.dart"
 Cohesion: 0.04
-Nodes (63): landingAppLinksAdminProvider, landingLogosAdminProvider, landingPreviewProvider, landingStatsAdminProvider, landingTestimonialsAdminProvider, _active, _AppLinkDialog, _AppLinkDialogState (+55 more)
+Nodes (50): _active, _AppLinkDialog, _AppLinkDialogState, _author, _badges, _body, _busy, _c (+42 more)
 
 ### Community 296 - "public.reverse_gl_entry"
 Cohesion: 0.40
 Nodes (3): public.reverse_gl_entry(), public.gl_entries, public.gl_lines
 
 ### Community 299 - ".checkAndRepair"
-Cohesion: 0.07
-Nodes (18): adjustMapping(), adjustWidths(), amendFallbackToUnicode(), Builder, convertCidString(), createCmapTable(), createNameTable(), createOS2Table() (+10 more)
+Cohesion: 0.06
+Nodes (20): adjustMapping(), adjustWidths(), amendFallbackToUnicode(), Builder, convertCidString(), createCmapTable(), createNameTable(), createOS2Table() (+12 more)
 
 ### Community 300 - "items_screen.dart"
-Cohesion: 0.03
-Nodes (84): activitiesProvider, arAgingProvider, classificationCodesProvider, dashboardProvider, enabledModulesProvider, moduleDashboardProvider, moduleEnabled, revenueTrendProvider (+76 more)
+Cohesion: 0.04
+Nodes (62): accessPermissionsProvider, accessTypesProvider, classificationCodesProvider, enabledModulesProvider, moduleEnabled, AccessType, build, _classification (+54 more)
 
 ### Community 302 - "attachments_card.dart"
 Cohesion: 0.08
-Nodes (25): AttachmentsCard, _busy, canAttach, canWrite, createState, file, _FileRow, onChanged (+17 more)
+Nodes (29): ocrStatusProvider, AttachmentsCard, _AttachmentsCardState, attachmentsProvider, build, _busy, canAttach, canWrite (+21 more)
 
 ### Community 305 - "line_draft.dart"
 Cohesion: 0.05
@@ -1715,8 +1689,8 @@ Cohesion: 0.12
 Nodes (21): RFC-7635, base64url(), hmac(), signRoomToken(), turnCredentials(), Delivery, Attachment, OutboxRow (+13 more)
 
 ### Community 311 - "leave_bands_dialog.dart"
-Cohesion: 0.03
-Nodes (68): auditTrailProvider, branchesProvider, leaveBandsProvider, AuditEntry, _applyPreset, band, _BandDialog, _BandDialogState (+60 more)
+Cohesion: 0.09
+Nodes (25): leaveBandsProvider, _applyPreset, band, _BandDialog, _BandDialogState, _BandRow, build, _busy (+17 more)
 
 ### Community 312 - "ocr/index.ts"
 Cohesion: 0.19
@@ -1734,9 +1708,9 @@ Nodes (14): AddressJson, buildAddress(), buildLine(), buildParty(), buildTaxSubt
 Cohesion: 0.11
 Nodes (27): app.materialise_movement_lots, app.apply_stock_movement(), app.landed_cost_account(), landed_cost_runs_touch, public.cancel_landed_cost_run(), public.landed_cost_allocations, public.landed_cost_charges, public.landed_cost_preview() (+19 more)
 
-### Community 316 - "return"
+### Community 316 - "item_prices_dialog.dart"
 Cohesion: 0.07
-Nodes (29): _applied, applyBrandChrome, existing, key, meta, false, saveBytesFile, saveTextFile (+21 more)
+Nodes (32): itemPricesProvider, priceLevelsProvider, _active, build, _code, createState, _delete, dispose (+24 more)
 
 ### Community 317 - "0167_approval_workflow.sql"
 Cohesion: 0.17
@@ -1760,7 +1734,7 @@ Nodes (10): An auditor asking to see payslips, And every change is recorded too,
 
 ### Community 323 - "static const"
 Cohesion: 0.03
-Nodes (78): _, appName, Env, misconfiguration, supabaseAnonKey, supabaseUrl, webPushPublicKey, appraisalGoalsProvider (+70 more)
+Nodes (60): _, appName, Env, misconfiguration, supabaseAnonKey, supabaseUrl, webPushPublicKey, appraisalGoalsProvider (+52 more)
 
 ### Community 324 - "app.receipt_email_vars"
 Cohesion: 0.25
@@ -1775,8 +1749,8 @@ Cohesion: 0.05
 Nodes (5): di(), gi(), ii(), L(), Rh()
 
 ### Community 327 - "company_details_test.dart"
-Cohesion: 0.10
-Nodes (18): currency, editButton, harness, main, org, main, main, roomToSeeItAll (+10 more)
+Cohesion: 0.07
+Nodes (23): field, harness, main, reveal, currency, editButton, harness, main (+15 more)
 
 ### Community 330 - "They are deployed by CI"
 Cohesion: 0.25
@@ -1811,8 +1785,8 @@ Cohesion: 0.10
 Nodes (22): documentActivityProvider, _ActivityDialog, _ActivityTile, _attachPdf, build, _busy, createState, defaultTo (+14 more)
 
 ### Community 340 - "repeat_dialog.dart"
-Cohesion: 0.08
-Nodes (24): _autoEmail, _autoPost, build, _count, createState, _DateRow, dispose, docNo (+16 more)
+Cohesion: 0.03
+Nodes (63): membershipBalanceProvider, membershipBillingGapsProvider, membershipSubscriptionsProvider, stockOnHandProvider, _autoEmail, _autoPost, build, _count (+55 more)
 
 ### Community 343 - "O"
 Cohesion: 0.07
@@ -1826,17 +1800,17 @@ Nodes (3): M(), N(), O()
 Cohesion: 0.07
 Nodes (27): 41000, 50672 Kuala, Aman, 004521998877, 200201003726, 8899001122334455, Aman, Baharu (+19 more)
 
-### Community 347 - "AnnotationStorage"
-Cohesion: 0.05
-Nodes (10): AnnotationStorage, ColorConverters, makeColorComp(), Metadata, MurmurHash3_64, objectFromMap(), OptionalContentConfig, OptionalContentGroup (+2 more)
-
-### Community 348 - "floor_plan_screen.dart"
+### Community 347 - "WorkerTransport"
 Cohesion: 0.03
-Nodes (70): posFloorPlanProvider, posQueueProvider, assignTable, AssignTableSheet, _AssignTableSheetState, build, _code, createState (+62 more)
+Nodes (12): AnnotationStorage, isRefProxy(), LinkAnnotationElement, Metadata, MurmurHash3_64, objectFromMap(), OptionalContentConfig, OptionalContentGroup (+4 more)
+
+### Community 348 - "../../data/repository.dart"
+Cohesion: 0.02
+Nodes (104): documentShareLinksProvider, posFloorPlanProvider, posMenuLinksProvider, posQueueProvider, build, _busy, createState, _days (+96 more)
 
 ### Community 349 - "report_csv.dart"
 Cohesion: 0.11
-Nodes (19): _block, buffer, _cell, _escape, g, h, m, _number (+11 more)
+Nodes (17): _block, buffer, _cell, _escape, g, h, m, _number (+9 more)
 
 ### Community 350 - "supplier_from_scan.dart"
 Cohesion: 0.07
@@ -1844,18 +1818,18 @@ Nodes (26): answer, _bestMatches, build, byName, candidates, contactId, _create,
 
 ### Community 355 - "bom_dialog.dart"
 Cohesion: 0.06
-Nodes (34): BomDialog, bomId, _code, createState, dispose, enabled, initState, _isNew (+26 more)
+Nodes (33): bomId, _code, createState, dispose, enabled, initState, _isNew, itemId (+25 more)
 
 ### Community 356 - "AnnotationEditorLayer"
-Cohesion: 0.04
-Nodes (4): AltText, AnnotationEditorLayer, ColorPicker, destroy()
+Cohesion: 0.02
+Nodes (5): AltText, AnnotationEditorLayer, destroy(), FakeEditor, FreeTextEditor
 
 ### Community 357 - "0215_the_kitchen_gets_told_once.sql"
 Cohesion: 0.20
 Nodes (20): app.pos_line_modifier_text(), app.pos_route_item(), public.bump_kitchen_ticket(), public.category_kitchen_stations, public.item_kitchen_stations, public.kitchen_display(), public.pos_kitchen_stations, public.pos_kitchen_ticket_lines (+12 more)
 
 ### Community 358 - "isArrayEqual"
-Cohesion: 0.21
+Cohesion: 0.20
 Nodes (4): isArrayEqual(), NullCipher, PDF17, PDF20
 
 ### Community 359 - "landing_shot.dart"
@@ -1876,11 +1850,11 @@ Nodes (13): app.chat_enabled(), app.chat_orgs_linked(), app.chat_participant_org
 
 ### Community 364 - "landing_carousel.dart"
 Cohesion: 0.09
-Nodes (20): _Arrow, build, colour, _controller, createState, didUpdateWidget, dispose, height (+12 more)
+Nodes (18): _Arrow, build, colour, _controller, createState, didUpdateWidget, dispose, height (+10 more)
 
 ### Community 365 - "reconciliation_screen.dart"
 Cohesion: 0.05
-Nodes (39): _asAt, _balance, _bankAccountId, banks, canPost, caption, _complete, _Controls (+31 more)
+Nodes (36): _asAt, _balance, _bankAccountId, banks, canPost, caption, _complete, _Controls (+28 more)
 
 ### Community 366 - "attachments_repository.dart"
 Cohesion: 0.11
@@ -1894,37 +1868,37 @@ Nodes (3): d(), h(), Ya()
 Cohesion: 0.17
 Nodes (13): app.claim_chain_trigger, app.build_claim_chain(), app.may_decide_claim_step(), claim_chain_on_submit, public.claim_approval_settings, public.claim_approvals, public.decide_claim_step(), auth.users (+5 more)
 
-### Community 371 - "String?"
-Cohesion: 0.02
-Nodes (94): _applied, applyFavicon, forecastSettingsProvider, _alpha, _bucket, build, _c, createState (+86 more)
+### Community 371 - "item_params_dialog.dart"
+Cohesion: 0.03
+Nodes (64): forecastSettingsProvider, _alpha, _bucket, build, _c, createState, current, _decimal (+56 more)
 
-### Community 372 - "onboarding_template_dialog.dart"
+### Community 372 - "bundles_screen.dart"
+Cohesion: 0.08
+Nodes (31): bundleAvailabilityProvider, bundleMarginProvider, bundlePartsProvider, itemBundlesProvider, availabilityLabel, build, _BundleDialog, _BundleDialogState (+23 more)
+
+### Community 374 - "receipt_settings_screen.dart"
 Cohesion: 0.09
-Nodes (22): templateItemsProvider, build, _category, createState, _dayLabel, _delete, _description, dispose (+14 more)
-
-### Community 374 - "rule_editor.dart"
-Cohesion: 0.10
-Nodes (21): _byRole, createState, dispose, _docType, initState, _kind, _min, _role (+13 more)
+Nodes (27): posReceiptSettingsProvider, posReceiptTextProvider, posRecentSaleProvider, build, _cashier, _channel, _copies, createState (+19 more)
 
 ### Community 375 - "asset_schedule_dialog.dart"
-Cohesion: 0.07
-Nodes (29): assetMovementsProvider, depreciationHistoryProvider, asset, assetScheduleMiscast, assetScheduleTotals, bold, broken, build (+21 more)
+Cohesion: 0.08
+Nodes (26): depreciationHistoryProvider, asset, assetScheduleMiscast, assetScheduleTotals, bold, broken, build, createState (+18 more)
 
-### Community 376 - "VoidCallback"
-Cohesion: 0.06
-Nodes (33): asset, assets, AssetsScreen, _AssetTile, createState, _dispose, _edit, emphasise (+25 more)
+### Community 376 - "assets_screen.dart"
+Cohesion: 0.10
+Nodes (20): asset, assets, _AssetTile, createState, _dispose, _edit, emphasise, _includeDisposed (+12 more)
 
 ### Community 377 - "call_screen_test.dart"
 Cohesion: 0.07
 Nodes (28): CallPhase, cameraCalls, cameraOn, canShareScreen, close, closed, connect, failure (+20 more)
 
 ### Community 378 - "site_pages_repository.dart"
-Cohesion: 0.15
-Nodes (12): body, client, drafts, fromRow, isPublished, pages, save, SitePage (+4 more)
+Cohesion: 0.09
+Nodes (22): client, modules, navGrouping, paymentGateways, PlatformCatalog, rows, saveModule, savePaymentGateway (+14 more)
 
 ### Community 379 - "scan_all_data.dart"
-Cohesion: 0.10
-Nodes (20): OcrExtraction, allDataLines, _AllDataPage, _AllDataPageState, _assign, _Assigned, assignToField, build (+12 more)
+Cohesion: 0.08
+Nodes (25): OcrExtraction, allDataLines, _AllDataPage, _AllDataPageState, _assign, _Assigned, assignToField, build (+17 more)
 
 ### Community 380 - "Approvals"
 Cohesion: 0.17
@@ -1943,8 +1917,8 @@ Cohesion: 0.14
 Nodes (4): ai(), Kh(), Y(), Yh()
 
 ### Community 386 - "employee_editor.dart"
-Cohesion: 0.05
-Nodes (42): departmentsProvider, employeeProvider, positionsProvider, _birthDate, build, _c, children, createState (+34 more)
+Cohesion: 0.06
+Nodes (34): _birthDate, _c, children, createState, _ctl, _DateField, _departmentId, dispose (+26 more)
 
 ### Community 387 - "modifier_sheet.dart"
 Cohesion: 0.06
@@ -1954,17 +1928,17 @@ Nodes (33): allowTyped, _answer, basePrice, build, _chosen, _chosenIn, _complete
 Cohesion: 0.21
 Nodes (19): app.absorption_account(), public.bills_of_materials, public.bom_lines, public.bom_operations, public.confirm_manufacturing_order(), public.manufacturing_orders, public.mo_components, public.mo_operations (+11 more)
 
-### Community 389 - "State"
-Cohesion: 0.03
-Nodes (81): AnimationController?, _RejectDialog, _RejectDialogState, _RateDialog, _RateDialogState, _LineRow, _LineRowState, _NewFilingDialog (+73 more)
+### Community 389 - "landing_motion.dart"
+Cohesion: 0.06
+Nodes (38): AnimationController?, _anchor, _at, build, _c, _check, child, _controller (+30 more)
 
 ### Community 390 - "chat_group.dart"
-Cohesion: 0.15
-Nodes (13): _chosen, conversationId, _create, createState, _crossesCompanies, dispose, _leave, NewGroupDialog (+5 more)
+Cohesion: 0.14
+Nodes (18): chatDirectoryProvider, chatMembersProvider, _add, build, _chosen, conversationId, _create, createState (+10 more)
 
 ### Community 392 - "documents/transfer_dialog.dart"
-Cohesion: 0.09
-Nodes (21): build, _controller, createState, dispose, initState, line, _lines, _load (+13 more)
+Cohesion: 0.08
+Nodes (23): build, _controller, createState, dispose, initState, line, _LineRowState, _lines (+15 more)
 
 ### Community 393 - "0268_the_food_court_and_what_each_stall_is_owed.sql"
 Cohesion: 0.14
@@ -2008,19 +1982,23 @@ Nodes (21): invoiceCreditRemainingProvider, build, createState, _credit, _Credit
 
 ### Community 403 - "diary_screen.dart"
 Cohesion: 0.06
-Nodes (32): posDaySheetProvider, _at, booking, _BookingDialog, _BookingDialogState, bookings, build, _checkIn (+24 more)
+Nodes (33): posDaySheetProvider, posServicesProvider, _at, _book, booking, bookings, build, _checkIn (+25 more)
 
-### Community 404 - "stock_take_screen.dart"
-Cohesion: 0.05
-Nodes (44): stockOnHandProvider, warehousesProvider, _WarehousePicker, build, _city, _code, createState, dispose (+36 more)
+### Community 404 - "create_org_screen.dart"
+Cohesion: 0.07
+Nodes (27): _address, _busy, _city, createState, data, dispose, _email, _emptyToNull (+19 more)
+
+### Community 405 - "member_panel.dart"
+Cohesion: 0.08
+Nodes (25): posSaleMemberProvider, accountId, build, _clear, createState, dispose, _find, held (+17 more)
 
 ### Community 406 - "asset_editor.dart"
-Cohesion: 0.08
-Nodes (25): _acquired, asset, _AssetEditor, _AssetEditorState, _assetNo, build, _category, _cost (+17 more)
+Cohesion: 0.06
+Nodes (34): _acquired, asset, _AssetEditor, _AssetEditorState, _assetNo, build, _category, _cost (+26 more)
 
 ### Community 407 - "payment_gateways_admin.dart"
 Cohesion: 0.10
-Nodes (20): platformGatewaysAdminProvider, _active, build, _busy, _changed, _checkout, _code, createState (+12 more)
+Nodes (21): platformGatewaysAdminProvider, _active, build, _busy, _changed, _checkout, _code, createState (+13 more)
 
 ### Community 408 - "public.chat_thread"
 Cohesion: 0.28
@@ -2031,12 +2009,12 @@ Cohesion: 0.27
 Nodes (9): public.approval_requests, public.approval_steps, public.approval_state(), public.my_approvals(), public.gl_entries, public.gl_lines, public.profiles, public.purchase_documents (+1 more)
 
 ### Community 410 - "scales_screen.dart"
-Cohesion: 0.07
-Nodes (34): scaleFormatsProvider, weighedItemsProvider, body, build, _check, code, createState, dispose (+26 more)
+Cohesion: 0.06
+Nodes (37): scaleFormatsProvider, weighedItemsProvider, body, build, _check, code, createState, dispose (+29 more)
 
 ### Community 411 - "kitchen_screen.dart"
-Cohesion: 0.05
-Nodes (48): chatActiveCallProvider, chatIncomingCallsProvider, kitchenDisplayProvider, posKitchenStationsProvider, posStationRoutingProvider, _open, build, call (+40 more)
+Cohesion: 0.04
+Nodes (52): kioskOrderBoardProvider, kitchenDisplayProvider, posKitchenStationsProvider, posStationRoutingProvider, _Board, build, createState, dispose (+44 more)
 
 ### Community 412 - "0192_ticketing.sql"
 Cohesion: 0.23
@@ -2066,9 +2044,9 @@ Nodes (10): public.chat_attachments, public.chat_my_conversations(), public.chat
 Cohesion: 0.29
 Nodes (5): loadConfig(), mediaCodecs, required(), config, server
 
-### Community 420 - "credit_admin.dart"
-Cohesion: 0.09
-Nodes (23): _AdjustDialog, platformCreditProvider, platformInvoicesProvider, _adjust, _AdjustDialog, _AdjustDialogState, _amount, _BalanceRow (+15 more)
+### Community 420 - "dashboard_screen.dart"
+Cohesion: 0.08
+Nodes (25): revenueTrendProvider, DashboardSummary, _activityIcon, block, code, color, dashboardTabs, data (+17 more)
 
 ### Community 421 - "addresses_card.dart"
 Cohesion: 0.09
@@ -2088,27 +2066,27 @@ Nodes (3): public.claim_approvals, public.claims_awaiting_my_approval(), public.
 
 ### Community 426 - "../../core/providers.dart"
 Cohesion: 0.01
-Nodes (203): themeModeFor, bankReconciliationsProvider, collectionsWorklistProvider, depreciationPreviewProvider, fsFilingsProvider, intercompanyInboxProvider, myTimeEntriesProvider, ocrProviderCatalogProvider (+195 more)
+Nodes (180): _AdjustDialog, chatAccessListProvider, chatLinksProvider, collectionsWorklistProvider, depreciationPreviewProvider, fsFilingsProvider, ocrProviderCatalogProvider, platformCreditProvider (+172 more)
 
 ### Community 427 - "forecast_screen.dart"
-Cohesion: 0.06
-Nodes (31): _Count, _createOrders, createState, ForecastScreen, _ForecastScreenState, label, _LineSheet, _Loaded (+23 more)
+Cohesion: 0.02
+Nodes (102): bomsProvider, forecastLinesProvider, forecastSuggestionsProvider, itemConversionsProvider, itemsProvider, latestForecastRunProvider, manufacturingOrdersProvider, stockTransfersProvider (+94 more)
 
 ### Community 428 - "signing_page.dart"
 Cohesion: 0.10
 Nodes (21): body, build, _client, createState, dispose, _done, _forState, icon (+13 more)
 
-### Community 429 - "../../data/repository.dart"
+### Community 429 - "recipes_screen.dart"
 Cohesion: 0.02
-Nodes (122): posDeliveryBoardProvider, posDeliveryZonesProvider, posDriversProvider, posMenuLinksProvider, posOutletsProvider, posReceiptSettingsProvider, posReceiptTextProvider, posRecentSaleProvider (+114 more)
+Nodes (90): itemUomOptionsProvider, posDeliveryBoardProvider, posDeliveryZonesProvider, posDriversProvider, posItemAvailabilityProvider, posOutletsProvider, posRecipesProvider, _open (+82 more)
 
 ### Community 430 - "landing_tokens.dart"
 Cohesion: 0.06
 Nodes (30): bandY, bandYTight, body, border, borderHover, build, cardTitle, centred (+22 more)
 
 ### Community 431 - "receipts_screen.dart"
-Cohesion: 0.03
-Nodes (82): currentOrgProvider, orgLogoProvider, payslipProvider, settlementProvider, settlementsProvider, withholdingTypesProvider, _downloadStatement, _DocumentEditorState (+74 more)
+Cohesion: 0.07
+Nodes (30): settlementProvider, settlementsProvider, _attach, _body, build, _busy, createState, defaultTo (+22 more)
 
 ### Community 432 - "0317_the_rest_of_a_front_page.sql"
 Cohesion: 0.14
@@ -2127,8 +2105,8 @@ Cohesion: 0.04
 Nodes (29): addHex(), BinaryCMapReader, BinaryCMapStream, createBuiltInCMap(), decrypt(), expectInt(), expectString(), extendCMap() (+21 more)
 
 ### Community 436 - "landing_repository.dart"
-Cohesion: 0.07
-Nodes (26): client, deleteLandingAppLink, deleteLandingLogo, deleteLandingSection, deleteLandingStat, deleteLandingTestimonial, LandingAdmin, landingAppLinks (+18 more)
+Cohesion: 0.06
+Nodes (39): client, deleteLandingAppLink, deleteLandingLogo, deleteLandingSection, deleteLandingStat, deleteLandingTestimonial, LandingAdmin, landingAppLinks (+31 more)
 
 ### Community 437 - "app.can_attach_to"
 Cohesion: 0.50
@@ -2138,17 +2116,17 @@ Nodes (3): app.can_attach_to(), public.expense_claims, public.leave_requests
 Cohesion: 0.29
 Nodes (6): Billing, Not done, The rate, Timesheets, What the test proves, What was already here, and what was not
 
-### Community 440 - "transfer.dart"
-Cohesion: 0.14
-Nodes (13): canTransfer, description, fromJson, lineId, lineNo, null, outstanding, quantity (+5 more)
+### Community 440 - "return"
+Cohesion: 0.08
+Nodes (21): current, packRows, rows, used, bytes, file, readRecording, canTransfer (+13 more)
 
 ### Community 441 - "Departmental accounting"
 Cohesion: 0.29
 Nodes (6): Departmental accounting, Not done, What was added, What was already there, What was missing, Where departments are maintained
 
-### Community 442 - "deposits_screen.dart"
-Cohesion: 0.06
-Nodes (33): depositHistoryProvider, depositNotesProvider, amount, applied, balance, _bank, build, _busy (+25 more)
+### Community 442 - "branches_card.dart"
+Cohesion: 0.08
+Nodes (24): _BranchDialog, _BranchDialogState, _city, _code, createState, dispose, _email, existing (+16 more)
 
 ### Community 443 - "Corporate secretarial (add-on)"
 Cohesion: 0.25
@@ -2172,15 +2150,15 @@ Nodes (6): Closing an account, Logs, The browser, What is collected, and where i
 
 ### Community 448 - "entity_editor.dart"
 Cohesion: 0.06
-Nodes (32): _auditExempt, _blank, build, _c, children, createState, _ctl, _DateField (+24 more)
+Nodes (36): corpEntityProvider, _auditExempt, _blank, build, _c, children, CorpEntityEditor, _CorpEntityEditorState (+28 more)
 
 ### Community 449 - "package:flutter_test/flutter_test.dart"
 Cohesion: 0.03
-Nodes (51): Amount,Particulars,Posting, main, main, main, today, main, main, due (+43 more)
+Nodes (50): Amount,Particulars,Posting, main, main, main, today, main, main, due (+42 more)
 
 ### Community 450 - "lots_screen.dart"
-Cohesion: 0.11
-Nodes (18): _balances, build, createState, dispose, empty, _expiring, future, initState (+10 more)
+Cohesion: 0.10
+Nodes (20): _balances, build, createState, dispose, empty, _expiring, future, initState (+12 more)
 
 ### Community 451 - "diary_screen_test.dart"
 Cohesion: 0.14
@@ -2199,8 +2177,8 @@ Cohesion: 0.27
 Nodes (14): app.pos_modifier_max(), public.add_line_modifier(), public.item_modifier_groups, public.item_modifier_options(), public.pos_line_modifier_gaps(), public.pos_modifier_groups, public.pos_modifiers, public.pos_sale_line_modifiers (+6 more)
 
 ### Community 455 - ".toString"
-Cohesion: 0.06
-Nodes (10): decodeScan(), findNextFileMarker(), MurmurHash3_64, readDataBlock(), readUint16(), RefSet, RefSetCache, skipData() (+2 more)
+Cohesion: 0.05
+Nodes (8): DatasetReader, MetadataParser, MurmurHash3_64, parseXFAPath(), RefSet, RefSetCache, StructElementNode, XmlObject
 
 ### Community 456 - "0209_completing_a_sale.sql"
 Cohesion: 0.16
@@ -2226,9 +2204,9 @@ Nodes (13): app.pos_table_belongs, app.pos_table_belongs(), pos_area_belongs, po
 Cohesion: 0.18
 Nodes (12): public.pos_kitchen_ticket_lines, public.pos_kitchen_tickets, public.complete_kiosk_order(), public.kiosk_order_board(), public.pos_order_counters, public.send_order_to_kitchen(), public.start_kiosk_order(), public.pos_kitchen_stations (+4 more)
 
-### Community 463 - "make_icons.dart"
-Cohesion: 0.15
-Nodes (12): bytes, client, icons, main, path, _read, _say, source (+4 more)
+### Community 463 - "charge_run_sheet.dart"
+Cohesion: 0.11
+Nodes (18): build, _ChargeRunSheet, _ChargeRunSheetState, createState, _due, _error, _from, id (+10 more)
 
 ### Community 464 - "web_push_vector.js"
 Cohesion: 0.15
@@ -2264,11 +2242,11 @@ Nodes (11): _amount, buffer, _escape, escaped, frozen, mtoolCsv, mtoolFilename, 
 
 ### Community 474 - "offline_till.dart"
 Cohesion: 0.10
-Nodes (25): posOfflineProvider, _add, _amount, _basket, build, createState, dispose, initState (+17 more)
+Nodes (24): posOfflineProvider, _add, _amount, _basket, build, createState, dispose, initState (+16 more)
 
-### Community 475 - "kiosk_board_screen.dart"
+### Community 475 - "call_incoming.dart"
 Cohesion: 0.13
-Nodes (16): kioskOrderBoardProvider, _Board, build, createState, dispose, emphasis, _Half, initState (+8 more)
+Nodes (17): chatActiveCallProvider, chatIncomingCallsProvider, build, call, CallButtons, child, conversationId, createState (+9 more)
 
 ### Community 476 - "0156_disposal_charges_what_it_relieves.sql"
 Cohesion: 0.19
@@ -2290,17 +2268,17 @@ Nodes (15): area, _blank, buildTableCardsPdf, _card, cards, code, kit, name (+7 
 Cohesion: 0.18
 Nodes (15): app.pos_recipe_consumed(), app.pos_recipe_returned(), app.pos_return_recipes(), app.sales_credit_recipe_trigger(), public.credit_sales_invoice(), public.invoice_credit_remaining(), public.document_line_lots, public.items (+7 more)
 
-### Community 482 - ".get"
-Cohesion: 0.11
-Nodes (4): HighlightOutliner, LinkAnnotationElement, normalizeUnicode(), PDFObjects
+### Community 482 - "currentOrgProvider"
+Cohesion: 0.16
+Nodes (18): currentOrgProvider, orgLogoProvider, _downloadStatement, _DocumentEditorState, _downloadPdf, _load, _renderPdf, _submitEinvoice (+10 more)
 
 ### Community 483 - "0258_breakfast_stops_at_eleven.sql"
 Cohesion: 0.16
 Nodes (15): public.pos_item_stops, public.pos_menu_schedule_items, public.pos_menu_schedules, app.pos_window_open(), public.pos_menu(), public.pos_menu_schedules_admin(), public.pos_stopped_items(), public.resume_pos_item() (+7 more)
 
-### Community 485 - "List"
-Cohesion: 0.06
-Nodes (33): propertySitesProvider, propertyStatutoryDueProvider, Payslip, _BasesCard, lines, _LinesCard, negative, payslipId (+25 more)
+### Community 485 - "payslip_screen.dart"
+Cohesion: 0.11
+Nodes (18): payslipProvider, Payslip, _BasesCard, build, lines, _LinesCard, negative, payslipId (+10 more)
 
 ### Community 486 - "Audited financial statements and MBRS"
 Cohesion: 0.18
@@ -2343,20 +2321,20 @@ Cohesion: 0.22
 Nodes (8): pg_attribute, pg_class, pg_constraint, pg_namespace, app.demo_teardown(), auth.users, public.org_members, public.organizations
 
 ### Community 503 - "platform_console_screen.dart"
-Cohesion: 0.07
-Nodes (28): PlatformOrg, _controller, createState, _dirty, dispose, _encode, initState, _isToggle (+20 more)
+Cohesion: 0.06
+Nodes (34): platformRepoProvider, PlatformOrg, _sell, _controller, createState, _dirty, dispose, _encode (+26 more)
 
 ### Community 504 - ".push"
-Cohesion: 0.04
-Nodes (33): addChildren(), arrayBuffersToBytes(), buildHuffmanTable(), ChunkedStreamManager, encodeToXmlString(), escapePDFName(), EvaluatorPreprocessor, generateFont() (+25 more)
+Cohesion: 0.03
+Nodes (37): addChildren(), AESBaseCipher, arrayBuffersToBytes(), buildHuffmanTable(), ChunkedStreamManager, Dict, encodeToXmlString(), escapePDFName() (+29 more)
 
 ### Community 505 - "public.register_device"
 Cohesion: 0.40
 Nodes (3): public.device_tokens, public.register_device(), public.chat_participants
 
 ### Community 506 - "tool/brand_chrome.dart"
-Cohesion: 0.09
-Nodes (21): _attr, Brand, colour, description, file, fromPayload, isEmpty, main (+13 more)
+Cohesion: 0.06
+Nodes (27): main, files, main, main, _attr, Brand, colour, description (+19 more)
 
 ### Community 507 - "Running it"
 Cohesion: 0.17
@@ -2402,17 +2380,13 @@ Nodes (4): app.demo_sync_bank_balance(), public.bank_accounts, public.gl_entries
 Cohesion: 0.18
 Nodes (9): public.create_po_from_suggestions(), public.run_inventory_forecast(), public.contacts, public.forecast_lines, public.forecast_runs, public.items, public.purchase_document_lines, public.purchase_documents (+1 more)
 
-### Community 523 - "Annotation"
-Cohesion: 0.12
-Nodes (3): Annotation, lookupNormalRect(), MarkupAnnotation
-
 ### Community 524 - "app.landing_payload"
 Cohesion: 0.20
 Nodes (8): app.landing_payload(), public.landing_app_links, public.landing_logos, public.landing_page, public.landing_sections, public.landing_stats, public.landing_testimonials, public.platform_modules
 
 ### Community 525 - "package:iakauntan/src/data/models.dart"
 Cohesion: 0.04
-Nodes (40): harness, main, message, open, doc, main, main, _tin (+32 more)
+Nodes (39): asset, main, assetsHarness, history, main, note, scheduleHarness, van (+31 more)
 
 ### Community 526 - "0219_sell_with_no_signal_and_land_it_once.sql"
 Cohesion: 0.39
@@ -2436,7 +2410,7 @@ Nodes (12): public.item_modifier_group_ids(), public.pos_modifier_options_admin(
 
 ### Community 531 - "stations_screen.dart"
 Cohesion: 0.06
-Nodes (35): category, _CategoryBlock, clearLabel, code, createState, _default, dispose, _editStation (+27 more)
+Nodes (34): category, _CategoryBlock, clearLabel, code, createState, _default, dispose, _editStation (+26 more)
 
 ### Community 532 - "app.materialise_movement_lots"
 Cohesion: 0.40
@@ -2446,9 +2420,13 @@ Nodes (3): app.materialise_movement_lots(), public.document_line_lots, public.it
 Cohesion: 0.40
 Nodes (4): public.report_migration_progress(), public.gl_entries, public.purchase_documents, public.stock_movements
 
-### Community 536 - "recurring_screen.dart"
-Cohesion: 0.07
-Nodes (29): recurringJournalsProvider, accounts, _active, _autoPost, _balances, build, createState, _credits (+21 more)
+### Community 536 - "VoidCallback"
+Cohesion: 0.02
+Nodes (108): bankReconciliationsProvider, branchesProvider, canPostProvider, emailOutboxProvider, emailSettingsProvider, expensesProvider, journalSourceFilterProvider, journalsProvider (+100 more)
+
+### Community 537 - "ColorConverters"
+Cohesion: 0.18
+Nodes (3): ColorConverters, makeColorComp(), scaleAndClamp()
 
 ### Community 538 - "h"
 Cohesion: 0.26
@@ -2466,9 +2444,9 @@ Nodes (34): RepoOcr, RepoOcrCatalog, Repo, RepoApprovals, RepoBudgets, RepoBundl
 Cohesion: 0.12
 Nodes (14): app.record_session_end, app.record_sign_in, cron.job, app.note_read(), app.record_security_event(), app.record_session_end(), app.record_sign_in(), public.report_failed_sign_in() (+6 more)
 
-### Community 542 - "interviews_dialog.dart"
-Cohesion: 0.08
-Nodes (27): employeesProvider, interviewsProvider, applicantId, _at, build, createState, dispose, _duration (+19 more)
+### Community 542 - ".fallbackToSystemFont"
+Cohesion: 0.14
+Nodes (13): applyStandardFontGlyphMap(), buildToFontChar(), Fi, getStandardFontName(), getUnicodeForGlyph(), getXfaFontName(), isKnownFontName(), ji (+5 more)
 
 ### Community 543 - "0251_an_answer_that_is_not_on_the_list.sql"
 Cohesion: 0.31
@@ -2478,17 +2456,13 @@ Nodes (7): public.add_line_free_modifier(), public.item_modifier_options(), publ
 Cohesion: 0.22
 Nodes (17): budgets_touch, public.approve_budget(), public.archive_budget(), public.budget_lines, public.budget_lines_for(), public.budgets, public.build_budget_from_actual(), public.report_budget_vs_actual() (+9 more)
 
-### Community 551 - "FreeTextEditor"
-Cohesion: 0.04
-Nodes (4): FakeEditor, FreeDrawOutliner, FreeHighlightOutliner, FreeTextEditor
-
 ### Community 552 - "0255_a_price_the_manager_takes_off.sql"
 Cohesion: 0.25
 Nodes (12): app.recalc_pos_sale(), public.complete_pos_sale(), public.discount_pos_sale(), public.discount_pos_sale_line(), public.merge_pos_sales(), public.pos_discount_summary(), public.split_pos_sale(), public.pos_outlets (+4 more)
 
 ### Community 553 - "dart:async"
 Cohesion: 0.05
-Nodes (38): LandingContent, main, wrap, main, main, pump, main, band (+30 more)
+Nodes (37): main, wrap, main, main, pump, main, band, copy (+29 more)
 
 ### Community 554 - "0229_how_the_order_arrived.sql"
 Cohesion: 0.13
@@ -2515,8 +2489,8 @@ Cohesion: 0.67
 Nodes (3): public.leave_balances, public.leave_requests, public.leave_types
 
 ### Community 563 - "scan_intake.dart"
-Cohesion: 0.09
-Nodes (22): _load, CaptureSource, accepted, _askSource, build, icon, null, onTap (+14 more)
+Cohesion: 0.10
+Nodes (19): CaptureSource, accepted, _askSource, build, icon, null, onTap, park (+11 more)
 
 ### Community 565 - "stations_screen_test.dart"
 Cohesion: 0.22
@@ -2535,8 +2509,8 @@ Cohesion: 0.13
 Nodes (18): app.apply_allocation(), app.same_party(), contra_notes_touch, public.contra_candidates(), public.contra_lines(), public.contra_notes, public.contra_notes_list(), public.create_contra() (+10 more)
 
 ### Community 569 - "notifications_card.dart"
-Cohesion: 0.13
-Nodes (15): pushStatusProvider, _Body, _BodyState, build, _busy, createState, icon, _Note (+7 more)
+Cohesion: 0.10
+Nodes (20): pushStatusProvider, auth, endpoint, p256dh, PushStatus, PushSubscriptionInfo, _Body, _BodyState (+12 more)
 
 ### Community 572 - "public.deposit_notes"
 Cohesion: 0.14
@@ -2546,17 +2520,17 @@ Nodes (22): app.deposit_account(), app.refresh_deposit(), deposit_notes_touch, p
 Cohesion: 0.20
 Nodes (9): Entitlement, and the weaker idea beside it, Modules and entitlement, The dashboard, The five destinations that carry no module, The hole this closed, Turning a check on without taking anything away, Two questions, and both have to be yes, What this means for tests (+1 more)
 
-### Community 574 - "pipeline_screen.dart"
-Cohesion: 0.09
-Nodes (25): opportunitiesProvider, pipelineStagesProvider, Opportunity, PipelineStage, _amount, build, canWrite, _closeDate (+17 more)
+### Community 574 - "build"
+Cohesion: 0.16
+Nodes (14): activitiesProvider, arAgingProvider, dashboardProvider, moduleDashboardProvider, moduleLabelsProvider, _ActivitiesCard, _Books, build (+6 more)
 
 ### Community 575 - "public.pos_sale_line_voids"
 Cohesion: 0.24
 Nodes (9): public.pos_sale_line_voids, public.pos_void_summary(), public.remove_pos_sale_line(), public.void_pos_sale_line(), auth.users, public.items, public.organizations, public.pos_sale_lines (+1 more)
 
-### Community 576 - "work_centre_dialog.dart"
-Cohesion: 0.12
-Nodes (16): build, _code, createState, dispose, existing, _hours, initState, _isNew (+8 more)
+### Community 576 - "stock_card_test.dart"
+Cohesion: 0.15
+Nodes (12): broughtForward, card, harness, item, itemsHarness, main, movement, open (+4 more)
 
 ### Community 578 - "TextMeasure"
 Cohesion: 0.09
@@ -2571,8 +2545,8 @@ Cohesion: 0.25
 Nodes (7): public.pos_voided_bills(), public.pos_outlets, public.pos_registers, public.pos_sale_lines, public.pos_sales, public.pos_tables, public.profiles
 
 ### Community 581 - "open_item_import_test.dart"
-Cohesion: 0.14
-Nodes (12): harness, main, openBalances, openInvoices, step, deferred, main, parse (+4 more)
+Cohesion: 0.12
+Nodes (13): main, harness, main, openBalances, openInvoices, step, deferred, main (+5 more)
 
 ### Community 582 - "app.queue_sales_digest"
 Cohesion: 0.20
@@ -2591,8 +2565,8 @@ Cohesion: 0.27
 Nodes (10): q.seated_at, app.pos_queue_quote(), public.pos_queue(), public.pos_queue_day(), public.pos_queue_entries, public.set_pos_queue_status(), auth.users, public.organizations (+2 more)
 
 ### Community 602 - "modules_admin.dart"
-Cohesion: 0.12
-Nodes (17): _active, _busy, _changed, _code, createState, _description, dispose, _edit (+9 more)
+Cohesion: 0.09
+Nodes (26): navGroupingProvider, platformCatalogProvider, platformModulesAdminProvider, _active, build, _busy, _changed, _code (+18 more)
 
 ### Community 603 - "public.pos_sale_member"
 Cohesion: 0.39
@@ -2631,12 +2605,12 @@ Cohesion: 0.33
 Nodes (5): public.pos_menu(), public.item_categories, public.items, public.pos_outlets, public.stock_levels
 
 ### Community 615 - "contact_extras.dart"
-Cohesion: 0.04
-Nodes (55): contactAddressesProvider, contactPersonsProvider, publicHolidaysProvider, _AddressDialog, _AddressDialogState, _AddressTile, build, _c (+47 more)
+Cohesion: 0.03
+Nodes (79): contactAddressesProvider, contactPersonsProvider, publicHolidaysProvider, _AddressDialog, _AddressDialogState, _AddressTile, build, _c (+71 more)
 
 ### Community 616 - "bool get"
-Cohesion: 0.06
-Nodes (33): bytes, _content, copy, dir, docScannerLikely, false, isScannerUnavailable, path (+25 more)
+Cohesion: 0.04
+Nodes (44): bytes, _content, copy, dir, docScannerLikely, false, isScannerUnavailable, path (+36 more)
 
 ### Community 617 - "0216_splitting_the_bill.sql"
 Cohesion: 0.53
@@ -2674,10 +2648,6 @@ Nodes (3): app.write_audit_log(), public.access_types, public.organizations
 Cohesion: 0.16
 Nodes (7): auth.audit_log_entries, auth.identities, auth.refresh_tokens, auth.sessions, auth.users, storage.buckets, storage.objects
 
-### Community 648 - "double get"
-Cohesion: 0.20
-Nodes (9): Ageing, current, over90, today, total, upTo30, upTo60, upTo90 (+1 more)
-
 ### Community 649 - "app.post_sales_document_internal"
 Cohesion: 0.20
 Nodes (9): public.revenue_schedule_periods, app.cancel_revenue_schedule(), app.post_sales_document_internal(), public.accounts, public.contacts, public.items, public.sales_document_lines, public.sales_documents (+1 more)
@@ -2687,28 +2657,24 @@ Cohesion: 0.25
 Nodes (12): billplzApiBase(), BillplzBill, billplzSignature(), billplzSourceString(), createBillplzBill(), flattenRedirectParams(), hmacSha256Hex(), safeEqual() (+4 more)
 
 ### Community 663 - "reset_password_screen.dart"
-Cohesion: 0.09
-Nodes (25): passwordRecoveryProvider, _abandon, _busy, _confirm, createState, dispose, _error, _formKey (+17 more)
+Cohesion: 0.05
+Nodes (40): auditTrailProvider, passwordRecoveryProvider, AuditEntry, _abandon, _busy, _confirm, createState, dispose (+32 more)
 
 ### Community 664 - "group_reports_screen.dart"
-Cohesion: 0.10
-Nodes (21): build, _CombinationNotice, _companyCount, createState, dispose, empty, _GroupReport, initState (+13 more)
+Cohesion: 0.08
+Nodes (26): groupConsolidatedProvider, groupEliminationCheckProvider, groupIntercompanyProvider, groupTrialBalanceProvider, build, _CombinationNotice, _companyCount, createState (+18 more)
 
 ### Community 665 - "fetch-rates/index.ts"
 Cohesion: 0.21
 Nodes (7): BNM_HEADERS, BnmRow, Quote, SESSIONS, isSchedulerCall(), safeEqual(), SchedulerKeys
 
-### Community 666 - "asset_schedule_test.dart"
-Cohesion: 0.10
-Nodes (16): assetsHarness, history, main, note, scheduleHarness, van, year, company (+8 more)
+### Community 666 - "group_ownership_test.dart"
+Cohesion: 0.25
+Nodes (7): company, harness, main, menuItem, recorded, unrecorded, package:iakauntan/src/features/settings/company_group_card.dart
 
 ### Community 668 - "public.void_pos_sale"
 Cohesion: 0.50
 Nodes (3): public.void_pos_sale(), public.pos_sale_lines, public.pos_sales
-
-### Community 669 - "chatDirectoryProvider"
-Cohesion: 0.38
-Nodes (7): chatDirectoryProvider, chatMembersProvider, _add, build, MembersSheet, _DirectoryDialog, _DirectoryDialogState
 
 ### Community 675 - "0342_a_name_held_and_a_name_pointed.sql"
 Cohesion: 0.29
@@ -2723,16 +2689,16 @@ Cohesion: 0.50
 Nodes (3): public.void_pos_sale(), public.pos_sale_lines, public.pos_sales
 
 ### Community 678 - "console_shot.dart"
-Cohesion: 0.03
-Nodes (60): build, ReceiptPaper, showReceiptSheet, text, boundary, bytes, dir, faces (+52 more)
+Cohesion: 0.04
+Nodes (49): boundary, bytes, dir, faces, grouped, _loadFonts, main, _materialIcons (+41 more)
 
 ### Community 681 - "app.build_revenue_schedule"
 Cohesion: 0.19
 Nodes (11): app.build_revenue_schedule(), app.deferred_revenue_account(), public.revenue_schedule_periods, public.accounts, public.contacts, public.gl_entries, public.items, public.organizations (+3 more)
 
-### Community 682 - "valueToHtml"
-Cohesion: 0.08
-Nodes (7): BooleanElement, DateElement, Decimal, Float, Integer, Time, valueToHtml()
+### Community 682 - ".success"
+Cohesion: 0.03
+Nodes (23): Arc, ariaLabel(), BooleanElement, br, ChoiceList, DateElement, DateTimeEdit, Decimal (+15 more)
 
 ### Community 683 - "public.pos_table_by_code"
 Cohesion: 0.40
@@ -2762,17 +2728,21 @@ Nodes (8): app.landing_payload(), public.landing_app_links, public.landing_logos
 Cohesion: 0.14
 Nodes (14): 10. Send it a message, 1. Decide the path, 2. The Supabase redirect allow-list, 3. `ALLOWED_ORIGINS`, 4. Check nothing is broken yet, 5. The wildcard record, in Cloudflare, 6. The workspace proxy, 7. A name to test with (+6 more)
 
-### Community 696 - "._createMaskCanvas"
-Cohesion: 0.16
-Nodes (5): drawImageAtIntegerCoords(), getCurrentTransformInverse(), getImageSmoothingEnabled(), putBinaryImageData(), yt()
+### Community 696 - "push_stub.dart"
+Cohesion: 0.22
+Nodes (7): ask, currentPushEndpoint, pushStatus, subscribeToPush, unsubscribeFromPush, push_stub.dart, push_types.dart
 
 ### Community 697 - "0263_a_report_somebody_builds.sql"
 Cohesion: 0.18
 Nodes (5): app.pos_report_period(), public.pos_reports, public.pos_reports_list(), public.upsert_pos_report(), public.organizations
 
 ### Community 700 - "reservations_admin.dart"
-Cohesion: 0.06
-Nodes (44): platformOrgsProvider, decidedReservationsProvider, pendingReservationsProvider, reservedNamesProvider, _OrganizationsTab, _address, _body, build (+36 more)
+Cohesion: 0.07
+Nodes (37): reservedNamesProvider, _address, _body, _busy, _controller, createState, _decide, dispose (+29 more)
+
+### Community 702 - "moduleTiles"
+Cohesion: 0.22
+Nodes (9): moduleTiles, _save, Route /hr/claims, Route /hr/payroll, Route /hr/people, Route /items, Route /stock-take, Route /tickets (+1 more)
 
 ### Community 703 - "app.demo_modules_in_use"
 Cohesion: 0.17
@@ -2780,23 +2750,23 @@ Nodes (11): app.demo_modules_in_use(), public.employees, public.fixed_assets, pu
 
 ### Community 704 - "group_reports_test.dart"
 Cohesion: 0.07
-Nodes (23): main, range, reconciled, row, harness, main, register, table (+15 more)
+Nodes (27): ReportGrid, main, range, reconciled, row, harness, main, register (+19 more)
 
 ### Community 705 - "PDFImage"
-Cohesion: 0.18
+Cohesion: 0.19
 Nodes (5): convertBlackAndWhiteToRGBA(), convertToRGBA(), decodeAndClamp(), PDFImage, resizeImageMask()
 
 ### Community 706 - "public.report_sst_summary"
 Cohesion: 0.25
 Nodes (7): public.report_sst_summary(), public.purchase_document_lines, public.purchase_documents, public.ref_tax_types, public.sales_document_lines, public.sales_documents, public.tax_codes
 
-### Community 707 - "platform_live.dart"
-Cohesion: 0.10
-Nodes (20): _channel, _client, _connect, connected, dispose, _flush, invalidatePlatformTable, live (+12 more)
-
-### Community 708 - "platform_catalog_repository.dart"
+### Community 707 - "app.dart"
 Cohesion: 0.11
-Nodes (20): client, modules, navGrouping, navGroupingProvider, paymentGateways, PlatformCatalog, platformCatalogProvider, platformModulesAdminProvider (+12 more)
+Nodes (20): build, IAkauntanApp, themeModeFor, authStateProvider, build, PasswordRecoveryNotifier, AuthRefresh, routerProvider (+12 more)
+
+### Community 708 - "narrow_layout_test.dart"
+Cohesion: 0.22
+Nodes (7): filters, main, phone, pump, harness, main, package:iakauntan/src/core/widgets.dart
 
 ### Community 716 - "app.landing_payload"
 Cohesion: 0.20
@@ -2806,9 +2776,9 @@ Nodes (8): app.landing_payload(), public.landing_app_links, public.landing_logos
 Cohesion: 0.24
 Nodes (9): public.platform_invoices, public.begin_gateway_payment(), public.platform_payments, public.settle_gateway_payment(), set_updated_at, app.set_updated_at, auth.users, public.organizations (+1 more)
 
-### Community 718 - "Exception"
-Cohesion: 0.50
-Nodes (4): OrgNotReady, OcrException, MyInvoisException, Exception
+### Community 718 - "_EmployeeEditorState"
+Cohesion: 0.47
+Nodes (6): departmentsProvider, employeeProvider, positionsProvider, build, EmployeeEditor, _EmployeeEditorState
 
 ### Community 719 - "app.landing_payload"
 Cohesion: 0.20
@@ -2819,8 +2789,8 @@ Cohesion: 0.21
 Nodes (12): app.check_outbox_sender, app.check_outbox_sender(), app.mail_domain(), email_outbox_sender, public.inbound_email_attachments, public.inbound_emails, public.org_mailboxes, public.receive_email() (+4 more)
 
 ### Community 722 - "site_editor.dart"
-Cohesion: 0.11
-Nodes (19): _active, _blank, build, _c, createState, _ctl, dispose, _formKey (+11 more)
+Cohesion: 0.06
+Nodes (37): propertySiteProvider, propertyStatutoryChargesProvider, propertyUnitsProvider, strataArrearsProvider, strataChargeRunsProvider, strataSchemeProvider, tenanciesProvider, _active (+29 more)
 
 ### Community 724 - "app.landing_payload"
 Cohesion: 0.20
@@ -2843,8 +2813,8 @@ Cohesion: 0.40
 Nodes (4): public.post_expense(), public.accounts, public.bank_accounts, public.expenses
 
 ### Community 732 - "sign_in_screen.dart"
-Cohesion: 0.05
-Nodes (38): _Banner, _busy, color, content, _copy, createState, _defaultLeadIn, _demoBusy (+30 more)
+Cohesion: 0.04
+Nodes (58): platformLiveProvider, workspaceHostProvider, sitePagesProvider, _Banner, _Brand, build, _busy, color (+50 more)
 
 ### Community 733 - "public.transfer_document"
 Cohesion: 0.33
@@ -2854,9 +2824,9 @@ Nodes (5): public.transfer_document(), public.purchase_document_lines, public.pu
 Cohesion: 0.40
 Nodes (4): public.pos_table_by_code(), public.pos_floor_areas, public.pos_sales, public.pos_tables
 
-### Community 737 - "SimpleDOMNode"
-Cohesion: 0.12
-Nodes (4): DatasetReader, MetadataParser, parseXFAPath(), SimpleDOMNode
+### Community 737 - "safe_link.dart"
+Cohesion: 0.40
+Nodes (4): launchExternal, launchUrl, uri, package:url_launcher/url_launcher.dart
 
 ### Community 738 - "public.landing_page"
 Cohesion: 0.33
@@ -2895,8 +2865,8 @@ Cohesion: 0.67
 Nodes (3): Settlement is a purchase bill, The court is a principal here, and that is a judgement, The food court, and what each stall is owed
 
 ### Community 783 - ".parse"
-Cohesion: 0.07
-Nodes (6): JpegStream, parseDefaultAppearance(), PDFFunction, PDFFunctionFactory, toNumberArray(), XFAFactory
+Cohesion: 0.05
+Nodes (11): buildAddOperation(), buildMinOperation(), buildMulOperation(), buildSubOperation(), CFFFont, JpegStream, PDFFunction, PDFFunctionFactory (+3 more)
 
 ### Community 795 - "The van, and the chicken that becomes eight pieces"
 Cohesion: 0.67
@@ -2904,15 +2874,11 @@ Nodes (3): A conversion is one thing becoming several, A transfer is two events,
 
 ### Community 798 - "package:flutter_riverpod/flutter_riverpod.dart"
 Cohesion: 0.03
-Nodes (55): ConsoleSection, banner, harness, main, claim, harness, main, harness (+47 more)
+Nodes (63): banner, harness, main, claim, harness, main, harness, main (+55 more)
 
-### Community 814 - "AppColors"
-Cohesion: 0.67
-Nodes (4): @immutable, TicketQuery, AppColors, ThemeExtension
-
-### Community 815 - "live_updates.dart"
+### Community 815 - "platform_live.dart"
 Cohesion: 0.05
-Nodes (38): _channel, _client, _connect, connected, dispose, _flush, live, liveUpdateColumn (+30 more)
+Nodes (38): _channel, _client, _connect, connected, dispose, _flush, invalidatePlatformTable, live (+30 more)
 
 ### Community 819 - "A company's own address on our domain"
 Cohesion: 0.17
@@ -2926,37 +2892,25 @@ Nodes (8): Aa, Ca(), Jh(), Ra(), Ca(), Jh(), Ra(), b()
 Cohesion: 0.13
 Nodes (12): main, main, harness, main, menuItem, openOrder, register, shift (+4 more)
 
-### Community 831 - "XFAObject"
-Cohesion: 0.04
-Nodes (7): Binder, createDataNode(), createText(), parseExpression(), searchNode(), XFAObject, XFAObjectArray
-
-### Community 832 - "o"
-Cohesion: 0.44
-Nodes (18): A(), c(), e(), f(), G(), h(), i(), j() (+10 more)
-
-### Community 834 - "share_dialog.dart"
-Cohesion: 0.12
-Nodes (18): documentShareLinksProvider, build, _busy, createState, _days, dispose, docNo, documentId (+10 more)
-
 ### Community 835 - ".add"
 Cohesion: 0.06
-Nodes (6): CFFCompiler, CFFDict, CFFOffsetTracker, CFFParser, CFFTopDict, GlobalImageCache
+Nodes (7): BaseLocalCache, CFFCompiler, CFFDict, CFFOffsetTracker, CFFParser, CFFTopDict, GlobalImageCache
 
-### Community 837 - "find"
-Cohesion: 0.13
-Nodes (8): find(), FontFinder, FontInfo, getCurrentPara(), PageSet, selectFont(), setFontFamily(), stripQuotes()
+### Community 837 - "FontFinder"
+Cohesion: 0.28
+Nodes (3): FontFinder, FontInfo, selectFont()
 
 ### Community 839 - ".constructor"
-Cohesion: 0.24
-Nodes (3): ARCFourCipher, CipherTransformFactory, eo
+Cohesion: 0.17
+Nodes (5): ARCFourCipher, CipherTransform, CipherTransformFactory, eo, stringToBytes()
 
 ### Community 843 - "void_sheet.dart"
 Cohesion: 0.15
 Nodes (13): build, confirmLabel, createState, description, dispose, _note, prompt, _ready (+5 more)
 
-### Community 844 - ".toArray"
-Cohesion: 0.13
-Nodes (12): Jbig2Image, OpenTypeFileBuilder, processSegment(), processSegments(), readInt8(), readRegionSegmentInformation(), readSegmentHeader(), readSegments() (+4 more)
+### Community 844 - "JpegImage"
+Cohesion: 0.07
+Nodes (22): buildComponentData(), decodeScan(), findNextFileMarker(), getBlockBufferOffset(), Jbig2Image, JpegImage, OpenTypeFileBuilder, prepareComponents() (+14 more)
 
 ### Community 846 - "package:supabase_flutter/supabase_flutter.dart"
 Cohesion: 0.04
@@ -2966,86 +2920,62 @@ Nodes (40): build, configuration, error, main, misconfigured, _StartupFailure, d
 Cohesion: 0.18
 Nodes (8): public.platform_save_landing_section(), public.landing_app_links, public.landing_logos, public.landing_page, public.landing_sections, public.landing_stats, public.landing_testimonials, public.platform_modules
 
-### Community 849 - "platformRepoProvider"
-Cohesion: 0.25
-Nodes (8): platformRepoProvider, _sell, _OrgTile, _setStatus, _toggleModule, _PublishDialog, _PublishDialogState, _save
-
 ### Community 853 - ".getBytes"
 Cohesion: 0.04
-Nodes (21): bytesToString(), CCITTFaxStream, CipherTransform, DecodeStream, findBlock(), FlateStream, FontRendererFactory, getFontFileType() (+13 more)
+Nodes (16): bytesToString(), CCITTFaxStream, DecodeStream, find(), findBlock(), FlateStream, getFontFileType(), isTrueTypeCollectionFile() (+8 more)
 
-### Community 857 - "statement_pdf.dart"
-Cohesion: 0.12
-Nodes (16): address, aged, buildStatementPdf, isCustomer, kit, mode, open, pdf (+8 more)
-
-### Community 859 - "getCurrentTransform"
-Cohesion: 0.19
-Nodes (4): getCurrentTransform(), m, resetCtxToDefault(), TilingPattern
+### Community 861 - "PDFWorker"
+Cohesion: 0.09
+Nodes (3): PDFNodeStreamFsFullReader, PDFNodeStreamFsRangeReader, PDFWorker
 
 ### Community 863 - "workspace-proxy/worker.js"
 Cohesion: 0.62
 Nodes (5): APEX, fetch(), NOT_TENANTS, rewriteLocation(), upstream()
 
-### Community 867 - "export_log.dart"
-Cohesion: 0.20
-Nodes (9): exportBytesFile, exportTextFile, _note, ref, repo, saved, what, download.dart (+1 more)
-
-### Community 868 - ".getPattern"
-Cohesion: 0.27
-Nodes (3): applyBoundingBox(), MeshShadingPattern, RadialAxialShadingPattern
+### Community 867 - "live_updates.dart"
+Cohesion: 0.06
+Nodes (29): exportBytesFile, exportTextFile, _note, ref, repo, saved, what, _channel (+21 more)
 
 ### Community 871 - "app.landing_payload"
 Cohesion: 0.20
 Nodes (8): app.landing_payload(), public.landing_app_links, public.landing_logos, public.landing_page, public.landing_sections, public.landing_stats, public.landing_testimonials, public.platform_modules
 
-### Community 872 - "warn"
-Cohesion: 0.24
-Nodes (3): info(), StatTimer, warn()
-
 ### Community 874 - "_ThreadState"
-Cohesion: 0.32
-Nodes (8): chatConversationsProvider, chatThreadProvider, chatTypingProvider, build, _ConversationList, _send, _Thread, _ThreadState
-
-### Community 876 - "report_spec_test.dart"
-Cohesion: 0.32
-Nodes (7): ReportBlock, ReportGrid, ReportHighlight, ReportSection, main, pl, range
+Cohesion: 0.22
+Nodes (11): chatConversationsProvider, chatThreadProvider, chatTypingProvider, chatLiveProvider, build, ChatScreen, _ChatScreenState, _ConversationList (+3 more)
 
 ### Community 879 - ".[Vs]"
 Cohesion: 0.29
 Nodes (4): a, Button, fixURL(), recoverJsURL()
 
-### Community 880 - "push_types.dart"
-Cohesion: 0.33
-Nodes (5): auth, endpoint, p256dh, PushStatus, PushSubscriptionInfo
-
 ### Community 882 - "app.landing_payload"
 Cohesion: 0.22
 Nodes (8): app.landing_payload(), public.landing_app_links, public.landing_logos, public.landing_page, public.landing_sections, public.landing_stats, public.landing_testimonials, public.platform_modules
 
-### Community 888 - "build"
-Cohesion: 0.40
-Nodes (5): platformSettingsProvider, platformStatsProvider, build, _OverviewTab, _SettingsTab
+### Community 888 - "platformModulesProvider"
+Cohesion: 0.15
+Nodes (15): platformModulesProvider, platformOrgsProvider, platformSettingsProvider, platformStatsProvider, decidedReservationsProvider, pendingReservationsProvider, build, _OrganizationsTab (+7 more)
 
 ### Community 910 - "CallEngine"
 Cohesion: 0.50
 Nodes (5): CallEngine, MediasoupCallEngine, FakeCallEngine, ChangeNotifier, Listenable
 
 ## Knowledge Gaps
-- **6867 isolated node(s):** `XCTest`, `misconfigured`, `error`, `configuration`, `main` (+6862 more)
+- **6868 isolated node(s):** `XCTest`, `misconfigured`, `error`, `configuration`, `main` (+6863 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **279 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **254 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `DateTime` connect `../../core/providers.dart` to `models.dart`, `corp_models.dart`, `employee_editor.dart`, `document_editor.dart`, `ConsumerStatefulWidget`, `settings_screen.dart`, `ocr_repository.dart`, `claims_screen.dart`, `ConsumerState`, `payroll_screen.dart`, `pdf.worker.js`, `diary_screen.dart`, `stock_take_screen.dart`, `asset_editor.dart`, `statement_import.dart`, `recurring_screen.dart`, `cheques_screen.dart`, `line_editor.dart`, `interviews_dialog.dart`, `valueToHtml`, `leads_screen.dart`, `expenses_screen.dart`, `../../data/repository.dart`, `receipts_screen.dart`, `lot_dialog.dart`, `line_draft.dart`, `journal_editor.dart`, `receipt_text.dart`, `stock_card_dialog.dart`, `chat_attachments.dart`, `deposits_screen.dart`, `pipeline_screen.dart`, `statutory_rates_admin.dart`, `entity_editor.dart`, `static const`, `ConsumerWidget`, `settlement_dialog.dart`, `cash_forecast_screen.dart`, `repeat_dialog.dart`, `scan_result_dialog.dart`, `shared_document_page.dart`, `landed_cost_screen.dart`, `import_screen.dart`, `contact_extras.dart`, `offline_store.dart`, `reconciliation_screen.dart`, `attachments_repository.dart`, `onboarding_screen.dart`, `asset_schedule_dialog.dart`?**
-  _High betweenness centrality (0.193) - this node is a cross-community bridge._
-- **Why does `Color` connect `landing_carousel.dart` to `widgets.dart`, `_`, `items_screen.dart`, `pdf.worker.js`, `StatelessWidget`, `branding_admin.dart`, `sign_in_screen.dart`, `entity_screen.dart`?**
-  _High betweenness centrality (0.055) - this node is a cross-community bridge._
-- **Why does `Q` connect `.get` to `.add`, `warn`, `.constructor`, `.checkAndRepair`, `.onSymbolDictionary`, `.getObj`, `.createDocumentHandler`, `.push`, `pdf.js`?**
+- **Why does `DateTime` connect `String?` to `models.dart`, `corp_models.dart`, `employee_editor.dart`, `document_editor.dart`, `ConsumerState`, `ocr_repository.dart`, `providers.dart`, `claims_screen.dart`, `List`, `matter_detail_screen.dart`, `pdf.worker.js`, `diary_screen.dart`, `asset_editor.dart`, `statement_import.dart`, `VoidCallback`, `line_editor.dart`, `exchange_rates_screen.dart`, `../../core/providers.dart`, `forecast_screen.dart`, `leads_screen.dart`, `expenses_screen.dart`, `lot_dialog.dart`, `line_draft.dart`, `journal_editor.dart`, `receipt_text.dart`, `../../data/models.dart`, `chat_attachments.dart`, `statutory_rates_admin.dart`, `entity_editor.dart`, `static const`, `ConsumerWidget`, `settlement_dialog.dart`, `charge_run_sheet.dart`, `employee_records.dart`, `cash_forecast_screen.dart`, `repeat_dialog.dart`, `scan_result_dialog.dart`, `shared_document_page.dart`, `landed_cost_screen.dart`, `import_screen.dart`, `contact_extras.dart`, `offline_store.dart`, `reconciliation_screen.dart`, `attachments_repository.dart`, `interviews_dialog.dart`, `asset_schedule_dialog.dart`?**
+  _High betweenness centrality (0.195) - this node is a cross-community bridge._
+- **Why does `Color` connect `landing_carousel.dart` to `widgets.dart`, `dashboard_screen.dart`, `package:go_router/go_router.dart`, `_`, `pdf.worker.js`, `StatelessWidget`, `branding_admin.dart`, `sign_in_screen.dart`, `entity_screen.dart`?**
+  _High betweenness centrality (0.053) - this node is a cross-community bridge._
+- **Why does `Q` connect `.get` to `.add`, `warn`, `.constructor`, `.checkAndRepair`, `.onSymbolDictionary`, `.getObj`, `.getBytes`, `.createDocumentHandler`, `.push`, `pdf.js`?**
   _High betweenness centrality (0.027) - this node is a cross-community bridge._
 - **What connects `XCTest`, `misconfigured`, `error` to the rest of the system?**
-  _6867 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _6868 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `models.dart` be split into smaller, more focused modules?**
   _Cohesion score 0.0047169811320754715 - nodes in this community are weakly interconnected._
 - **Should `repository.dart` be split into smaller, more focused modules?**

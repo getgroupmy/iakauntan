@@ -111,6 +111,73 @@ void main() {
     });
   });
 
+  group('the three hops nobody should watch happen', () {
+    // What the user saw: /no-access, then /dashboard, then /till, over
+    // and over. Three separate faults wearing one symptom, and each is
+    // asserted on its own — a fix for any one of them alone still
+    // leaves an address that flickers.
+    final ours = confinementFor(const {
+      'module_code': 'pos',
+      'landing_path': '/till',
+      'purpose': 'admin',
+    });
+    final theirs = confinementFor(const {
+      'module_code': 'pos',
+      'landing_path': '/till',
+      'purpose': 'company',
+    });
+
+    test('an empty module set is not an answer', () {
+      // `enabledModulesProvider` returns {} as *data* whenever there is
+      // no current company yet, which is true for a moment after every
+      // sign-in. Read as a fact it refuses somebody who was never
+      // asked about.
+      expect(moduleHeldFor(theirs, const AsyncValue.data({})), isNull);
+      expect(moduleHeldFor(theirs, const AsyncValue.data({'hr'})), isFalse);
+      expect(moduleHeldFor(theirs, const AsyncValue.data({'pos'})), isTrue);
+    });
+
+    test('so nobody is refused before there is anything to refuse', () {
+      // The /no-access flash, stated as a route.
+      expect(
+        routeFor(
+          path: '/dashboard',
+          signedIn: true,
+          recovering: false,
+          hasOrg: true,
+          isPlatformAdmin: false,
+          atCompanyDoor: true,
+          confinedTo: '/till',
+          confinedAllows: const {'/till'},
+          moduleHeld: moduleHeldFor(theirs, const AsyncValue.data({})),
+        ),
+        isNot('/no-access'),
+      );
+    });
+
+    test('and signing in waits until it knows whose address this is', () {
+      // The /dashboard hop. Answering before the lookup lands sends
+      // somebody to the books and then moves them off, which they
+      // watch happen; holding lets both hops resolve as one chain.
+      String? go({required bool doorKnown}) => routeFor(
+        path: '/signin',
+        signedIn: true,
+        recovering: false,
+        hasOrg: true,
+        isPlatformAdmin: false,
+        atCompanyDoor: true,
+        doorKnown: doorKnown,
+      );
+
+      expect(go(doorKnown: false), isNull);
+      expect(go(doorKnown: true), '/dashboard');
+    });
+
+    test('an address of ours is still never asked', () {
+      expect(moduleHeldFor(ours, const AsyncValue.data({})), isTrue);
+    });
+  });
+
   group('what the list calls each one', () {
     test('a held name is not a company that went missing', () {
       expect(whoseName(const {'purpose': 'reserved'}), 'Held by us');
