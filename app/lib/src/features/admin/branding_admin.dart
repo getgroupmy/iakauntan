@@ -557,6 +557,26 @@ class SchemePreview extends StatelessWidget {
   /// it was before there was anything to change.
   final void Function(String role, String? hex)? onOverride;
 
+  /// One role, picked or given back to Material.
+  ///
+  /// A method rather than a free function looking the widget up: the
+  /// first version called `findAncestorWidgetOfExactType<SchemePreview>`
+  /// from inside `SchemePreview.build`, where this widget is what owns
+  /// the context rather than an ancestor of it. The lookup returned
+  /// null, the guard below returned, and tapping a swatch did nothing
+  /// at all — silently, which is why it took a screenshot to find.
+  Future<void> _edit(BuildContext context, String role, String label) async {
+    final choose = onOverride;
+    if (choose == null) return;
+
+    final chosen = await showDialog<({bool clear, String? hex})>(
+      context: context,
+      builder: (_) => _RoleColourDialog(label: label, value: overrides[role]),
+    );
+    if (chosen == null) return;
+    choose(role, chosen.clear ? null : chosen.hex);
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = AppTheme.applyOverrides(
@@ -954,22 +974,6 @@ class _Card extends StatelessWidget {
       ),
     );
   }
-}
-
-/// One role, picked or given back to Material.
-Future<void> _edit(BuildContext context, String role, String label) async {
-  final state = context.findAncestorWidgetOfExactType<SchemePreview>();
-  if (state?.onOverride == null) return;
-
-  final chosen = await showDialog<({bool clear, String? hex})>(
-    context: context,
-    builder: (_) => _RoleColourDialog(
-      label: label,
-      value: state!.overrides[role],
-    ),
-  );
-  if (chosen == null) return;
-  state!.onOverride!(role, chosen.clear ? null : chosen.hex);
 }
 
 /// A hex box for one scheme role, with a way to stop overriding it.

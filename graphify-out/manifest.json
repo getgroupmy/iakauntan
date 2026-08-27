@@ -4645,8 +4645,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/branding_admin.dart": {
-    "mtime": 1787830704.7123892,
-    "ast_hash": "c1aa75bcf02ca0cdaabdf1842197a82c",
+    "mtime": 1787833525.4964418,
+    "ast_hash": "a324aede1cc49c77311244cec972f3f6",
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/report_csv.dart": {
@@ -5142,6 +5142,11 @@
   "supabase/tests/scheme_roles.sql": {
     "mtime": 1787830742.4424114,
     "ast_hash": "036b9ae95047aadc992a51c13f002bdd",
+    "semantic_hash": ""
+  },
+  "app/test/scheme_picker_test.dart": {
+    "mtime": 1787833449.8628666,
+    "ast_hash": "ed6743b01844534999784b1d228e6755",
     "semantic_hash": ""
   }
 }
