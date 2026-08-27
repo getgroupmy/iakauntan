@@ -345,6 +345,7 @@ class LandingContent {
     this.unknownBody,
     this.unknownCtaLabel,
     this.unknownCtaUrl,
+    this.demoAccountsEnabled = false,
   });
 
   final bool published;
@@ -491,6 +492,20 @@ class LandingContent {
   /// platform does not have to be told its own name twice.
   final String? unknownCtaUrl;
 
+  /// Whether the sign-in screen offers the one-tap demo logins.
+  ///
+  /// The inner of two gates, and the default is the closed one. The
+  /// outer gate is `demoModeEnabled`, a compile-time flag: a build that
+  /// did not ask for demo mode does not carry the demo password at all,
+  /// and no row can put it back. This decides whether a build that
+  /// *does* carry it actually offers the list — which is a decision
+  /// about what the platform is doing this week, not about how it was
+  /// compiled.
+  ///
+  /// In `brand` rather than `page`, so it works before anybody has
+  /// published a marketing site. The sign-in screen draws either way.
+  final bool demoAccountsEnabled;
+
   /// What the page says when nobody has written it.
   static const defaultUnknownTitle = 'There is nothing at this address';
   static const defaultUnknownBody =
@@ -536,6 +551,16 @@ LandingContent parseLandingContent(Object? raw) {
   String? brandStr(String key) =>
       from(brand, key) ?? (page is Map ? from(page, key) : null);
 
+  // The same lookup for a switch. Absent is false rather than true,
+  // which is the whole point of the column: a payload written before
+  // 0335 has no answer, and "no answer" must not read as "show them".
+  bool brandBool(String key) {
+    if (brand[key] is bool) return brand[key] as bool;
+    final pg = page;
+    if (pg is Map && pg[key] is bool) return pg[key] as bool;
+    return false;
+  }
+
   if (page is! Map) {
     return LandingContent(
       // Nobody has published a site, and that is still true — what
@@ -555,6 +580,7 @@ LandingContent parseLandingContent(Object? raw) {
       unknownBody: brandStr('unknown_body'),
       unknownCtaLabel: brandStr('unknown_cta_label'),
       unknownCtaUrl: brandStr('unknown_cta_url'),
+      demoAccountsEnabled: brandBool('demo_accounts_enabled'),
     );
   }
 
@@ -764,6 +790,7 @@ LandingContent parseLandingContent(Object? raw) {
     unknownBody: brandStr('unknown_body'),
     unknownCtaLabel: brandStr('unknown_cta_label'),
     unknownCtaUrl: brandStr('unknown_cta_url'),
+    demoAccountsEnabled: brandBool('demo_accounts_enabled'),
   );
 }
 

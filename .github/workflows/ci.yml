@@ -134,6 +134,7 @@ jobs:
                    supabase/tests/unknown_workspace_page.sql \
                    supabase/tests/reservation_admin.sql \
                    supabase/tests/site_pages.sql \
+                   supabase/tests/demo_accounts_switch.sql \
                    supabase/tests/security_audit.sql \
                    supabase/tests/audit_redaction.sql \
                    supabase/tests/ledger_append_only.sql \
@@ -1032,11 +1033,17 @@ jobs:
           # the service role key must never reach a client bundle.
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
-          # Set the repository variable DEMO_MODE to `true` to put the
-          # one-tap demo logins on the sign-in page. Unset means off,
-          # which is the safe way round: a build that forgets the flag
-          # ships a closed door rather than a working login to a seeded
-          # owner account. The demo deployment has to ask for them.
+          # Set the repository variable DEMO_MODE to `true` to let the
+          # build carry the one-tap demo logins. Unset means off, which
+          # is the safe way round: a build that forgets the flag ships a
+          # closed door rather than a working login to a seeded owner
+          # account.
+          #
+          # 0335: this is now the outer of two gates and no longer puts
+          # the list on the page by itself. It decides whether the demo
+          # password is in the bundle at all; whether the sign-in screen
+          # actually offers the list is `demo_accounts_enabled` in the
+          # platform console, which is off until somebody turns it on.
           DEMO_MODE: ${{ vars.DEMO_MODE }}
           # A repository *variable*, not a secret: this is the public
           # half of the VAPID pair and it is handed to every push service

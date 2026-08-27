@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/platform_live.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/landing_repository.dart';
 import '../../data/site_pages_repository.dart';
 
 /// The pages beside the product, edited rather than deployed.
@@ -137,6 +139,10 @@ class _SitePageTabState extends ConsumerState<SitePageTab> {
                     ),
                   ),
                 ),
+                if (widget.slug == 'signin') ...[
+                  const SizedBox(height: Space.lg),
+                  const _DemoAccountsCard(),
+                ],
                 const SizedBox(height: Space.lg),
               ],
             ),
@@ -203,3 +209,78 @@ String sitePageTitleHelp(String slug) => switch (slug) {
       'uses its own wording.',
   _ => 'Shown at the top of the page.',
 };
+
+/// The one-tap demo logins, switched on and off.
+///
+/// On this screen rather than on the landing page's, because the list
+/// is drawn on the sign-in screen and this is the section for it.
+///
+/// The switch is the *inner* of two gates and says so on the card. A
+/// build made without `--dart-define=DEMO_MODE=true` does not carry the
+/// demo password at all, and nothing here can put it back — so an
+/// operator who turns this on and sees nothing has not found a bug.
+class _DemoAccountsCard extends ConsumerStatefulWidget {
+  const _DemoAccountsCard();
+
+  @override
+  ConsumerState<_DemoAccountsCard> createState() => _DemoAccountsCardState();
+}
+
+class _DemoAccountsCardState extends ConsumerState<_DemoAccountsCard> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = ref.watch(landingPageAdminProvider).valueOrNull;
+    final on = row?['demo_accounts_enabled'] == true;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: on,
+              onChanged: _busy ? null : _set,
+              title: const Text('Offer the demo logins'),
+              subtitle: const Text(
+                'Adds the row of one-tap demo accounts under the sign-in '
+                'form. Off by default. Everyone shares the same demo '
+                'company, so anything a visitor changes is there for the '
+                'next one.',
+              ),
+            ),
+            const SizedBox(height: Space.sm),
+            Text(
+              'The app also has to be built with DEMO_MODE turned on — '
+              'the demo password ships inside the bundle, so a build that '
+              'did not ask for it cannot be talked into it here.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _set(bool value) async {
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: value ? 'Demo logins on' : 'Demo logins off',
+      action: () => ref
+          .read(landingAdminProvider)
+          .saveLandingPage({'demo_accounts_enabled': value}),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      ref.invalidate(landingPageAdminProvider);
+      // The sign-in screen reads `landing_page()`, not the table, so
+      // this is what makes the list appear or go without a reload.
+      invalidatePlatformTable(ref, 'landing_page');
+    }
+  }
+}

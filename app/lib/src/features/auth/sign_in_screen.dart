@@ -43,6 +43,16 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   SitePage? get _copy =>
       ref.watch(sitePagesProvider).valueOrNull?[_isSignUp ? 'signup' : 'signin'];
 
+  /// Whether the platform is currently offering the demo logins.
+  ///
+  /// False while the payload is in flight, deliberately: a list of
+  /// one-tap logins that appears a moment after the page has settled is
+  /// worse than one that never appears, and the safe answer is the one
+  /// to show while nothing is known.
+  bool get _demoOffered =>
+      ref.watch(landingContentProvider).valueOrNull?.demoAccountsEnabled ??
+      false;
+
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
@@ -403,7 +413,18 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 // demo logins on Sinar's page reads as though those
                 // companies are somehow part of Sinar — or worse, that
                 // this is not really Sinar's page at all.
-                if (demoModeEnabled && !_isSignUp && _workspace == null) ...[
+                // And not unless a platform administrator has turned
+                // them on. `demoModeEnabled` is the outer gate — a
+                // build without it does not carry the demo password at
+                // all — and this is the inner one, off by default, so
+                // that a build which does carry it still shows nothing
+                // until somebody decides it should.
+                if (showDemoAccounts(
+                  buildAllows: demoModeEnabled,
+                  platformOffers: _demoOffered,
+                  isSignUp: _isSignUp,
+                  atCompanyDoor: _workspace != null,
+                )) ...[
                   const SizedBox(height: 20),
                   DemoAccountPicker(
                     onPick: _signInAsDemo,

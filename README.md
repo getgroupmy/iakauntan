@@ -894,9 +894,11 @@ All the same, before this deployment carries real books:
 
 - **Rotate the demo password and delete the demo users.** It is
   `Demo!Akaun2026` in the history and in every built bundle.
-- **Do not set `DEMO_MODE`.** It now defaults to off, so a build that
-  forgets the flag ships a closed door; `--dart-define=DEMO_MODE=true` is
-  what puts the one-tap logins back on the sign-in page.
+- **Do not set `DEMO_MODE`.** It defaults to off, so a build that forgets
+  the flag ships a closed door — the demo password is not in the bundle at
+  all. Since `0335` it is the outer of two gates: the sign-in screen also
+  needs **Platform console → Sign in page → Offer the demo logins**, which
+  is off until somebody turns it on. Leave both off.
 - **Rotate any secret you believe may have been pasted anywhere** — a
   chat window, a ticket, a screenshot. Rotation is cheap; the assumption
   that it never leaked is not.
@@ -1286,12 +1288,25 @@ the demo password inside the bundle, which is harmless only while those
 eight accounts are the only thing it opens. Two things to do, together:
 
 - set the repository variable `DEMO_MODE` to `false` (or build with
-  `--dart-define=DEMO_MODE=false`), which removes the panel; and
+  `--dart-define=DEMO_MODE=false`), which takes the demo password out of
+  the bundle; and
 - delete the demo users and every demo organization — `app.demo_teardown()`
   does both, and is what `app.demo_rebuild()` calls first.
 
-The switch is compile-time on purpose. A door that can be reopened by
-editing a row is not closed.
+**There are two gates, and they are different kinds of thing.** `0335`
+added the second: `demo_accounts_enabled` on `landing_page`, switched
+from **Platform console → Sign in page**, and off by default. It decides
+whether the sign-in screen *offers* the list, which is a decision about
+what the platform is doing this week and belongs where the operator is
+looking.
+
+It does not replace the compile-time flag, and could not: a row cannot
+un-ship a password that is already in the JavaScript. So the flag stays
+the outer gate and stays the one that matters for the paragraph above —
+turning the console switch off hides the panel, but only a build without
+`DEMO_MODE` stops shipping the credential. A door that can be reopened by
+editing a row is not closed; a door that is only ever opened by a rebuild
+is one nobody can close on a Tuesday afternoon. Hence both.
 
 **The demo credentials are frozen in the database.** Handing a stranger a
 session on a shared account means handing them the ability to change its
