@@ -346,6 +346,12 @@ class LandingContent {
     this.unknownCtaLabel,
     this.unknownCtaUrl,
     this.demoAccountsEnabled = false,
+    this.signinShowMark = false,
+    this.signinHeadline,
+    this.signinShowHeadline = false,
+    this.signinShowHeading = false,
+    this.signinShowRegister = false,
+    this.signinPoints = const [],
   });
 
   final bool published;
@@ -506,6 +512,43 @@ class LandingContent {
   /// published a marketing site. The sign-in screen draws either way.
   final bool demoAccountsEnabled;
 
+  /// What the sign-in screen shows beside the form, and whether it
+  /// shows any of it.
+  ///
+  /// Every switch here defaults to hidden. Before `0336` the panel was
+  /// a Dart literal — our mark, our headline, our three claims about
+  /// Malaysian e-Invoice — on every deployment of this product,
+  /// including one run by somebody who had uploaded their own logo and
+  /// written their own front page. Off by default is the correction:
+  /// what appears on that page is there because an operator put it
+  /// there.
+  ///
+  /// In `brand` rather than `page`, so the sign-in form does not have
+  /// to wait for a marketing site to be published.
+  final bool signinShowMark;
+  final String? signinHeadline;
+  final bool signinShowHeadline;
+
+  /// Whether "Welcome back" and the sentence under it are drawn. The
+  /// wording itself is `0334`'s `site_pages`, so this is only whether.
+  final bool signinShowHeading;
+
+  /// Whether "New to X? Create an account" is offered under the button.
+  final bool signinShowRegister;
+
+  /// The bullets beside the form, each already filtered on its own
+  /// switch by the database. An empty list means nothing to draw, which
+  /// is what a platform that has turned all three off has asked for.
+  final List<LandingSection> signinPoints;
+
+  /// The headline the panel falls back to when nobody has written one.
+  ///
+  /// Kept here rather than in the screen because the console's preview
+  /// and the screen have to agree about it, and because it is the copy
+  /// this repository shipped with rather than a placeholder.
+  static const defaultSigninHeadline =
+      'Accounting and CRM\nfor Malaysian business.';
+
   /// What the page says when nobody has written it.
   static const defaultUnknownTitle = 'There is nothing at this address';
   static const defaultUnknownBody =
@@ -561,31 +604,6 @@ LandingContent parseLandingContent(Object? raw) {
     return false;
   }
 
-  if (page is! Map) {
-    return LandingContent(
-      // Nobody has published a site, and that is still true — what
-      // changed is that it no longer costs the operator their colours.
-      published: false,
-      logoUrl: brandStr('logo_url') ?? defaultLogoUrl,
-      logoDarkUrl: brandStr('logo_dark_url'),
-      wordmark: brandStr('wordmark') ?? 'iAkauntan',
-      brandColour: brandStr('brand_colour'),
-      brandColourDark: brandStr('brand_colour_dark'),
-      appIconUrl: brandStr('app_icon_url') ?? defaultAppIconUrl,
-      themeMode: brandStr('theme_mode') ?? 'system',
-      // Read here too, and this branch is the one that matters: an
-      // operator who has not published a site still has visitors
-      // arriving at names nobody holds.
-      unknownTitle: brandStr('unknown_title'),
-      unknownBody: brandStr('unknown_body'),
-      unknownCtaLabel: brandStr('unknown_cta_label'),
-      unknownCtaUrl: brandStr('unknown_cta_url'),
-      demoAccountsEnabled: brandBool('demo_accounts_enabled'),
-    );
-  }
-
-  String? str(String key) => from(page, key);
-
   // A key that arrived as something other than a list is no rows, not
   // a crash. `as List?` throws on a string, and the whole point of this
   // function is that the front page survives whatever comes back — it
@@ -611,6 +629,39 @@ LandingContent parseLandingContent(Object? raw) {
     }
     return out;
   }
+
+  // 0336. Above the early return rather than after it: the sign-in
+  // bullets travel ungated, so an unpublished site still has them.
+  if (page is! Map) {
+    return LandingContent(
+      // Nobody has published a site, and that is still true — what
+      // changed is that it no longer costs the operator their colours.
+      published: false,
+      logoUrl: brandStr('logo_url') ?? defaultLogoUrl,
+      logoDarkUrl: brandStr('logo_dark_url'),
+      wordmark: brandStr('wordmark') ?? 'iAkauntan',
+      brandColour: brandStr('brand_colour'),
+      brandColourDark: brandStr('brand_colour_dark'),
+      appIconUrl: brandStr('app_icon_url') ?? defaultAppIconUrl,
+      themeMode: brandStr('theme_mode') ?? 'system',
+      // Read here too, and this branch is the one that matters: an
+      // operator who has not published a site still has visitors
+      // arriving at names nobody holds.
+      unknownTitle: brandStr('unknown_title'),
+      unknownBody: brandStr('unknown_body'),
+      unknownCtaLabel: brandStr('unknown_cta_label'),
+      unknownCtaUrl: brandStr('unknown_cta_url'),
+      demoAccountsEnabled: brandBool('demo_accounts_enabled'),
+      signinShowMark: brandBool('signin_show_mark'),
+      signinHeadline: brandStr('signin_headline'),
+      signinShowHeadline: brandBool('signin_show_headline'),
+      signinShowHeading: brandBool('signin_show_heading'),
+      signinShowRegister: brandBool('signin_show_register'),
+      signinPoints: blocks('signin_points'),
+    );
+  }
+
+  String? str(String key) => from(page, key);
 
   final sections = blocks('sections');
   final reasons = blocks('reasons');
@@ -791,6 +842,12 @@ LandingContent parseLandingContent(Object? raw) {
     unknownCtaLabel: brandStr('unknown_cta_label'),
     unknownCtaUrl: brandStr('unknown_cta_url'),
     demoAccountsEnabled: brandBool('demo_accounts_enabled'),
+    signinShowMark: brandBool('signin_show_mark'),
+    signinHeadline: brandStr('signin_headline'),
+    signinShowHeadline: brandBool('signin_show_headline'),
+    signinShowHeading: brandBool('signin_show_heading'),
+    signinShowRegister: brandBool('signin_show_register'),
+    signinPoints: blocks('signin_points'),
   );
 }
 

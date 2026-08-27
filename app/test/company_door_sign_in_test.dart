@@ -28,6 +28,10 @@ void main() {
     view.resetDevicePixelRatio();
   });
 
+  // `signinShowRegister` is on throughout, because what is asserted
+  // here is the company-door rule and not `0336`'s switch: with the
+  // switch off the link is absent everywhere, and "absent on Sinar's
+  // door" would pass without the rule existing at all.
   Widget wrap({Map<String, dynamic>? workspace}) => ProviderScope(
         overrides: [
           workspaceHostProvider.overrideWith((ref) async => workspace),
@@ -37,7 +41,10 @@ void main() {
                 : (host: WorkspaceHost.found, workspace: workspace),
           ),
           landingContentProvider.overrideWith(
-            (ref) async => LandingContent.fallback,
+            (ref) async => const LandingContent(
+              published: true,
+              signinShowRegister: true,
+            ),
           ),
         ],
         child: const MaterialApp(home: SignInScreen()),

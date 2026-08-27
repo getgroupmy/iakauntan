@@ -6,6 +6,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/landing_repository.dart';
 import '../../data/site_pages_repository.dart';
+import 'landing_cms.dart';
 
 /// The pages beside the product, edited rather than deployed.
 ///
@@ -140,6 +141,10 @@ class _SitePageTabState extends ConsumerState<SitePageTab> {
                   ),
                 ),
                 if (widget.slug == 'signin') ...[
+                  const SizedBox(height: Space.lg),
+                  const _SigninPanelCard(),
+                  const SizedBox(height: Space.lg),
+                  const LandingSectionsCard(kind: 'signin'),
                   const SizedBox(height: Space.lg),
                   const _DemoAccountsCard(),
                 ],
@@ -283,4 +288,172 @@ class _DemoAccountsCardState extends ConsumerState<_DemoAccountsCard> {
       invalidatePlatformTable(ref, 'landing_page');
     }
   }
+}
+
+/// What the sign-in screen shows around the form.
+///
+/// Four switches and one line of copy. Every switch starts off, and
+/// that is the change `0336` is: the panel used to be our mark, our
+/// headline and our three claims, compiled in, on every deployment of
+/// this product.
+///
+/// The wording of the heading itself is not here — it is the form above
+/// this card, which writes `site_pages('signin')`. This is only whether
+/// it is drawn, which is a different question and belongs next to the
+/// other three whethers.
+class _SigninPanelCard extends ConsumerStatefulWidget {
+  const _SigninPanelCard();
+
+  @override
+  ConsumerState<_SigninPanelCard> createState() => _SigninPanelCardState();
+}
+
+class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
+  final _headline = TextEditingController();
+
+  /// Whether the box has been filled from the row yet.
+  ///
+  /// Once only, so a rebuild after a save does not throw away what
+  /// somebody is halfway through typing.
+  bool _loaded = false;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _headline.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final row = ref.watch(landingPageAdminProvider).valueOrNull;
+    if (!_loaded && row != null) {
+      _loaded = true;
+      _headline.text = '${row['signin_headline'] ?? ''}';
+    }
+    bool on(String key) => row?[key] == true;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Beside and around the form',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Everything here starts off. A visitor sees the sign-in '
+              'form and nothing else until you switch something on.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: Space.sm),
+            _Switch(
+              value: on('signin_show_mark'),
+              busy: _busy,
+              title: 'Your logo and name',
+              subtitle: 'On the panel beside the form, and above the form '
+                  'on a phone. A company signing in at its own subdomain '
+                  'always sees its own mark, whichever way this is set.',
+              onChanged: (v) => _save({'signin_show_mark': v}),
+            ),
+            _Switch(
+              value: on('signin_show_headline'),
+              busy: _busy,
+              title: 'The headline',
+              subtitle: 'The large line on the panel. Its wording is the '
+                  'box below.',
+              onChanged: (v) => _save({'signin_show_headline': v}),
+            ),
+            const SizedBox(height: Space.sm),
+            TextField(
+              controller: _headline,
+              minLines: 2,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Headline',
+                alignLabelWithHint: true,
+                helperText: 'One line per line. Left empty, the panel uses '
+                    'the wording the product ships with.',
+              ),
+            ),
+            const SizedBox(height: Space.sm),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: _busy
+                    ? null
+                    : () => _save({'signin_headline': _headline.text}),
+                icon: const Icon(Icons.save_outlined, size: 18),
+                label: const Text('Save headline'),
+              ),
+            ),
+            const Divider(height: Space.lg),
+            _Switch(
+              value: on('signin_show_heading'),
+              busy: _busy,
+              title: 'The heading above the form',
+              subtitle: 'The line and sentence you edit at the top of this '
+                  'screen. Off, the form has no heading at all.',
+              onChanged: (v) => _save({'signin_show_heading': v}),
+            ),
+            _Switch(
+              value: on('signin_show_register'),
+              busy: _busy,
+              title: 'Offer an account',
+              subtitle: 'Draws "New to us? Create an account" under the '
+                  'button. Off, somebody can still reach the form at '
+                  '/signin?mode=register, and the way back from it is '
+                  'always drawn.',
+              onChanged: (v) => _save({'signin_show_register': v}),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _save(Map<String, dynamic> patch) async {
+    setState(() => _busy = true);
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Saved',
+      action: () => ref.read(landingAdminProvider).saveLandingPage(patch),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      ref.invalidate(landingPageAdminProvider);
+      // The sign-in screen reads `landing_page()`, not the table.
+      invalidatePlatformTable(ref, 'landing_page');
+    }
+  }
+}
+
+/// One switch, with room for a sentence saying what it actually does.
+class _Switch extends StatelessWidget {
+  const _Switch({
+    required this.value,
+    required this.busy,
+    required this.title,
+    required this.subtitle,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final bool busy;
+  final String title;
+  final String subtitle;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) => SwitchListTile(
+    contentPadding: EdgeInsets.zero,
+    value: value,
+    onChanged: busy ? null : onChanged,
+    title: Text(title),
+    subtitle: Text(subtitle),
+  );
 }

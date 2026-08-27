@@ -297,6 +297,13 @@ final landingReasonsAdminProvider =
   (ref) => ref.watch(landingAdminProvider).landingSections(kind: 'reason'),
 );
 
+/// The bullets beside the sign-in form (`0336`). Same table as the
+/// landing page's bands, a fourth `kind` to keep them apart.
+final landingSigninPointsAdminProvider =
+    FutureProvider<List<Map<String, dynamic>>>(
+  (ref) => ref.watch(landingAdminProvider).landingSections(kind: 'signin'),
+);
+
 final landingBadgesAdminProvider =
     FutureProvider<List<Map<String, dynamic>>>(
   (ref) => ref.watch(landingAdminProvider).landingSections(kind: 'badge'),

@@ -1,0 +1,247 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:iakauntan/src/data/reserved_names_repository.dart';
+import 'package:iakauntan/src/data/site_pages_repository.dart';
+import 'package:iakauntan/src/features/auth/sign_in_screen.dart';
+import 'package:iakauntan/src/features/landing/landing_content.dart';
+
+/// What the sign-in screen draws around the form.
+///
+/// Before `0336` the answer was "our poster, always": our mark, our
+/// headline and three claims about Malaysian e-Invoice, compiled in.
+/// Now every piece has a switch and every switch starts off, so the
+/// assertions that matter are about the bare page — a switch that
+/// quietly defaults on looks exactly like the product working.
+void main() {
+  Widget wrap(LandingContent brand, {String? workspaceName}) => ProviderScope(
+    overrides: [
+      landingContentProvider.overrideWith((ref) async => brand),
+      sitePagesProvider.overrideWith((ref) async => const {}),
+      workspaceLookupProvider.overrideWith(
+        (ref) async => workspaceName == null
+            ? (host: WorkspaceHost.platform, workspace: null)
+            : (
+                host: WorkspaceHost.found,
+                workspace: <String, dynamic>{'name': workspaceName},
+              ),
+      ),
+    ],
+    child: const MaterialApp(home: SignInScreen()),
+  );
+
+  setUp(() {
+    // The two-column layout needs the room, or the panel overflows and
+    // the overflow is what fails rather than the assertion.
+    final view = TestWidgetsFlutterBinding.instance.platformDispatcher
+        .views
+        .first;
+    view.physicalSize = const Size(1600, 2400);
+    view.devicePixelRatio = 1.0;
+    addTearDown(view.reset);
+  });
+
+  group('a platform that has switched nothing on', () {
+    testWidgets('shows a form and nothing around it', (tester) async {
+      await tester.pumpWidget(wrap(LandingContent.fallback));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Welcome back'), findsNothing);
+      expect(find.textContaining('Accounting and CRM'), findsNothing);
+      expect(find.textContaining('LHDN e-Invoice'), findsNothing);
+      expect(find.textContaining('Create an account'), findsNothing);
+
+      // The form itself is never optional.
+      expect(find.text('Sign in'), findsOneWidget);
+      expect(find.text('Email'), findsOneWidget);
+    });
+
+    testWidgets('and does not draw an empty panel beside it', (tester) async {
+      // Half a screen of flat colour next to a login box is worse than
+      // a centred form, so with nothing to put in it the two-column
+      // layout is dropped rather than emptied.
+      await tester.pumpWidget(wrap(LandingContent.fallback));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('signin-panel')), findsNothing);
+    });
+
+    testWidgets('but one switched-on piece brings the panel back',
+        (tester) async {
+      await tester.pumpWidget(
+        wrap(const LandingContent(published: true, signinShowHeadline: true)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('signin-panel')), findsOneWidget);
+    });
+  });
+
+  testWidgets('and an answer that has not arrived yet is also nothing',
+      (tester) async {
+    // Not a detail. Copy that appears a moment after the form has
+    // settled reads as a glitch, and "loading" defaulting to "draw it"
+    // would put our poster back on every first paint.
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          landingContentProvider.overrideWith(
+            (ref) => Completer<LandingContent>().future,
+          ),
+          sitePagesProvider.overrideWith((ref) async => const {}),
+          workspaceLookupProvider.overrideWith(
+            (ref) async => (host: WorkspaceHost.platform, workspace: null),
+          ),
+        ],
+        child: const MaterialApp(home: SignInScreen()),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Welcome back'), findsNothing);
+    expect(find.textContaining('Create an account'), findsNothing);
+    expect(find.byKey(const Key('signin-panel')), findsNothing);
+    expect(find.text('Sign in'), findsOneWidget);
+  });
+
+  group('the payload the database sends', () {
+    // Straight through `parseLandingContent`, because the screen taking
+    // a `LandingContent` cannot catch a field that is never read out of
+    // the payload — and that failure looks exactly like a console that
+    // saves and a page that never changes.
+    test('carries the bullets beside brand, not inside page', () {
+      final content = parseLandingContent(const {
+        'brand': {'signin_show_headline': true},
+        'signin_points': [
+          {'icon': 'check', 'title': 'One thing', 'body': 'About it.'},
+        ],
+      });
+
+      // Unpublished — which is the branch that returns early, and the
+      // one an operator who has not written a marketing site is on.
+      expect(content.published, isFalse);
+      expect(content.signinShowHeadline, isTrue);
+      expect(content.signinPoints, hasLength(1));
+      expect(content.signinPoints.single.title, 'One thing');
+    });
+
+    test('and reads them on a published site too', () {
+      final content = parseLandingContent(const {
+        'page': {'is_published': true},
+        'brand': {'signin_show_mark': true},
+        'signin_points': [
+          {'icon': 'check', 'title': 'One thing', 'body': 'About it.'},
+        ],
+      });
+
+      expect(content.published, isTrue);
+      expect(content.signinShowMark, isTrue);
+      expect(content.signinPoints, hasLength(1));
+    });
+
+    test('a platform that has said nothing has nothing to draw', () {
+      final content = parseLandingContent(const {'brand': {}});
+
+      expect(content.signinShowMark, isFalse);
+      expect(content.signinShowHeadline, isFalse);
+      expect(content.signinShowHeading, isFalse);
+      expect(content.signinShowRegister, isFalse);
+      expect(content.signinPoints, isEmpty);
+      expect(content.signinHeadline, isNull);
+    });
+  });
+
+  group('switched on, one piece at a time', () {
+    testWidgets('the heading', (tester) async {
+      await tester.pumpWidget(
+        wrap(const LandingContent(published: true, signinShowHeading: true)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Welcome back'), findsOneWidget);
+    });
+
+    testWidgets('the headline, in the operator\'s own words', (tester) async {
+      await tester.pumpWidget(wrap(const LandingContent(
+        published: true,
+        signinShowHeadline: true,
+        signinHeadline: 'Perakaunan untuk perniagaan Malaysia.',
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Perakaunan untuk perniagaan Malaysia.'), findsOneWidget);
+      expect(find.textContaining('Accounting and CRM'), findsNothing);
+    });
+
+    testWidgets('and the shipped words when nobody has written any',
+        (tester) async {
+      await tester.pumpWidget(
+        wrap(const LandingContent(published: true, signinShowHeadline: true)),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text(LandingContent.defaultSigninHeadline),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the points, and only the ones the database sent',
+        (tester) async {
+      // The database filters on `is_active`, so an absent point is a
+      // point somebody switched off — there is nothing to filter here.
+      await tester.pumpWidget(wrap(const LandingContent(
+        published: true,
+        signinPoints: [
+          (icon: 'check', title: 'One thing', body: 'About the one thing.'),
+        ],
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('One thing'), findsOneWidget);
+      expect(find.text('About the one thing.'), findsOneWidget);
+      expect(find.textContaining('LHDN e-Invoice'), findsNothing);
+    });
+
+    testWidgets('a point with no body draws its title alone', (tester) async {
+      await tester.pumpWidget(wrap(const LandingContent(
+        published: true,
+        signinPoints: [(icon: 'check', title: 'Just a title', body: null)],
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text('Just a title'), findsOneWidget);
+    });
+
+    testWidgets('the offer of an account', (tester) async {
+      await tester.pumpWidget(
+        wrap(const LandingContent(published: true, signinShowRegister: true)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Create an account'), findsOneWidget);
+    });
+  });
+
+  group("a company's own door", () {
+    testWidgets('always gets its mark, whatever the platform switched off',
+        (tester) async {
+      // The switch is about whether *our* marketing appears. Sinar's
+      // logo on Sinar's door is not our marketing, and taking it away
+      // because the platform turned its own off is the wrong reading.
+      await tester.pumpWidget(
+        wrap(LandingContent.fallback, workspaceName: 'Sinar Teknologi'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Sinar Teknologi'), findsWidgets);
+    });
+
+    testWidgets('and is never offered an account here', (tester) async {
+      // Even with the switch on: an account made at Sinar's door would
+      // not be on Sinar's team, and the door policy would then turn it
+      // away — a loop the visitor cannot see the shape of.
+      await tester.pumpWidget(wrap(
+        const LandingContent(published: true, signinShowRegister: true),
+        workspaceName: 'Sinar Teknologi',
+      ));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Create an account'), findsNothing);
+    });
+  });
+}

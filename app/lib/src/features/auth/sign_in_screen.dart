@@ -53,6 +53,25 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       ref.watch(landingContentProvider).valueOrNull?.demoAccountsEnabled ??
       false;
 
+  /// The brand payload, or null while it is in flight.
+  ///
+  /// Every switch below reads through this, and every one of them
+  /// treats "not yet known" as "do not draw". That is the same choice
+  /// the demo list makes and for the same reason: copy that appears a
+  /// moment after the form has settled reads as a glitch, and a page
+  /// that starts bare and stays bare is the honest rendering of a
+  /// platform that has turned everything off.
+  LandingContent? get _brand => ref.watch(landingContentProvider).valueOrNull;
+
+  /// Whether the mark is drawn at all.
+  ///
+  /// A company at its own subdomain always gets one: that mark is
+  /// Sinar's, and this switch is about whether *our* marketing appears
+  /// on the page. Taking a company's own logo off its own door because
+  /// the platform turned its own off would be the wrong reading of it.
+  bool get _showMark =>
+      _workspace != null || (_brand?.signinShowMark ?? false);
+
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
@@ -270,34 +289,38 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (!wide) ...[
+                // On a phone there is no panel, so this is the only
+                // place the mark can appear. Same switch either way.
+                if (!wide && _showMark) ...[
                   const _Brand(),
                   const SizedBox(height: 32),
                 ],
-                Text(
-                  _copy?.title ??
-                      (_isSignUp ? 'Create your account' : 'Welcome back'),
-                  style: Theme.of(context)
-                      .textTheme
-                      .headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  // At a company's own door the second line names the
-                  // company, and it beats anything written in the
-                  // console: platform-wide copy cannot say "Sinar", and
-                  // that is the one fact somebody standing at
-                  // `sinar.iakauntan.com` is checking for.
-                  _workspace != null && !_isSignUp
-                      ? 'Sign in to continue to $_workspace.'
-                      : _copy?.body ??
-                          (_isSignUp
-                              ? 'Set up your books in a couple of minutes.'
-                              : 'Sign in to continue to $_wordmark.'),
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 28),
+                if (_brand?.signinShowHeading ?? false) ...[
+                  Text(
+                    _copy?.title ??
+                        (_isSignUp ? 'Create your account' : 'Welcome back'),
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    // At a company's own door the second line names the
+                    // company, and it beats anything written in the
+                    // console: platform-wide copy cannot say "Sinar",
+                    // and that is the one fact somebody standing at
+                    // `sinar.iakauntan.com` is checking for.
+                    _workspace != null && !_isSignUp
+                        ? 'Sign in to continue to $_workspace.'
+                        : _copy?.body ??
+                            (_isSignUp
+                                ? 'Set up your books in a couple of minutes.'
+                                : 'Sign in to continue to $_wordmark.'),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 28),
+                ],
                 if (_isSignUp) ...[
                   TextFormField(
                     controller: _fullName,
@@ -388,7 +411,16 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 // away, which is a loop the visitor cannot see the shape
                 // of. Somebody who needs an account at Sinar is invited
                 // to one by Sinar.
-                if (_workspace == null) ...[
+                // And not unless the platform is offering it. Off by
+                // default, like everything else `0336` put a switch on:
+                // a way in that nobody chose to draw is a way in the
+                // operator did not know they were offering.
+                //
+                // `_isSignUp` is exempt because that half of the button
+                // is the way *back* from the form somebody is already
+                // looking at, and hiding it would strand them.
+                if (_workspace == null &&
+                    (_isSignUp || (_brand?.signinShowRegister ?? false))) ...[
                   const SizedBox(height: 12),
                   TextButton(
                     onPressed: _busy
@@ -439,17 +471,30 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       ),
     );
 
-    if (!wide) return Scaffold(body: form);
+    // A wide window with nothing to put in the panel gets no panel.
+    // Half a screen of flat colour beside a login box is worse than a
+    // centred form, and with every switch off that is exactly what the
+    // two-column layout would draw.
+    final hero = _HeroContent(
+      showMark: _showMark,
+      headline: (_brand?.signinShowHeadline ?? false)
+          ? (_brand?.signinHeadline ?? LandingContent.defaultSigninHeadline)
+          : null,
+      points: _brand?.signinPoints ?? const [],
+    );
+
+    if (!wide || hero.isEmpty) return Scaffold(body: form);
 
     return Scaffold(
       body: Row(
         children: [
           Expanded(
             child: Container(
+              key: const Key('signin-panel'),
               color: scheme.primary,
-              child: const Padding(
-                padding: EdgeInsets.all(48),
-                child: _Hero(),
+              child: Padding(
+                padding: const EdgeInsets.all(48),
+                child: _Hero(content: hero),
               ),
             ),
           ),
@@ -458,6 +503,27 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       ),
     );
   }
+}
+
+/// What the panel beside the form has to draw, if anything.
+///
+/// A record rather than three arguments so that "is there anything at
+/// all" is one question with one answer, asked in the place that
+/// decides whether to draw the panel and answered by the same value
+/// that fills it. Two separate conditions would eventually disagree,
+/// and the way they would disagree is an empty teal half-screen.
+class _HeroContent {
+  const _HeroContent({
+    required this.showMark,
+    required this.headline,
+    required this.points,
+  });
+
+  final bool showMark;
+  final String? headline;
+  final List<LandingSection> points;
+
+  bool get isEmpty => !showMark && headline == null && points.isEmpty;
 }
 
 /// The platform's mark, on the way in.
@@ -546,14 +612,16 @@ class _Brand extends ConsumerWidget {
   }
 }
 
+/// The panel beside the form.
+///
+/// Everything on it is now an operator's decision. Before `0336` this
+/// was our mark, our headline and three claims about what the product
+/// does, compiled in — on every deployment, including one run by
+/// somebody who had never said any of it.
 class _Hero extends StatelessWidget {
-  const _Hero();
+  const _Hero({required this.content});
 
-  static const _points = [
-    ('LHDN e-Invoice built in', 'Submit to MyInvois and track validation without leaving your books.'),
-    ('Double-entry you can trust', 'Every invoice, bill and payment posts to a balanced ledger.'),
-    ('Sales and CRM together', 'Move a deal from lead to paid invoice in one system.'),
-  ];
+  final _HeroContent content;
 
   @override
   Widget build(BuildContext context) {
@@ -562,20 +630,24 @@ class _Hero extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const _Brand(onDark: true),
-        const SizedBox(height: 40),
-        Text(
-          'Accounting and CRM\nfor Malaysian business.',
-          style: TextStyle(
-            fontSize: 34,
-            height: 1.2,
-            fontWeight: FontWeight.w700,
-            color: scheme.onPrimary,
-            letterSpacing: -1,
+        if (content.showMark) ...[
+          const _Brand(onDark: true),
+          const SizedBox(height: 40),
+        ],
+        if (content.headline != null) ...[
+          Text(
+            content.headline!,
+            style: TextStyle(
+              fontSize: 34,
+              height: 1.2,
+              fontWeight: FontWeight.w700,
+              color: scheme.onPrimary,
+              letterSpacing: -1,
+            ),
           ),
-        ),
-        const SizedBox(height: 32),
-        for (final (title, body) in _points)
+          const SizedBox(height: 32),
+        ],
+        for (final point in content.points)
           Padding(
             padding: const EdgeInsets.only(bottom: 20),
             child: Row(
@@ -589,22 +661,24 @@ class _Hero extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        title,
+                        point.title,
                         style: TextStyle(
                           color: scheme.onPrimary,
                           fontWeight: FontWeight.w600,
                           fontSize: 15,
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        body,
-                        style: TextStyle(
-                          color: scheme.onPrimary.withValues(alpha: 0.75),
-                          fontSize: 13,
-                          height: 1.4,
+                      if (point.body != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          point.body!,
+                          style: TextStyle(
+                            color: scheme.onPrimary.withValues(alpha: 0.75),
+                            fontSize: 13,
+                            height: 1.4,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),

@@ -120,8 +120,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1787817871.6377752,
-    "ast_hash": "51ca32f05ff24609c3abfa7a5219e359",
+    "mtime": 1787821013.5657842,
+    "ast_hash": "d0a61d9ac127417a67378209822215de",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787817969.674543,
-    "ast_hash": "cd3db265731afc086c65f4ba06eb3805",
+    "mtime": 1787821053.457137,
+    "ast_hash": "76e3b4072d8358d41d45f960bf339e18",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -4385,18 +4385,18 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/landing_repository.dart": {
-    "mtime": 1787774083.5298893,
-    "ast_hash": "88fbcb6e71bd6686dc7e4e2ca6b4a1aa",
+    "mtime": 1787820704.0645342,
+    "ast_hash": "5fd40388e310ff86f727593c9f5ed073",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/landing_cms.dart": {
-    "mtime": 1787774083.5418892,
-    "ast_hash": "97fd4105f6fdab5e0e512ec0eab57250",
+    "mtime": 1787820697.9477773,
+    "ast_hash": "6f1bd65b131314f1646ecd5a957f21ba",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_content.dart": {
-    "mtime": 1787817945.120122,
-    "ast_hash": "92405c51b6a54effe399a50404cc5af0",
+    "mtime": 1787821035.5665638,
+    "ast_hash": "ab673d0f5ea3853f608c6781da66c88c",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_screen.dart": {
@@ -4940,8 +4940,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/site_pages_admin.dart": {
-    "mtime": 1787817769.3220036,
-    "ast_hash": "365414a3154e2cafe1923965a6630c19",
+    "mtime": 1787820747.5422063,
+    "ast_hash": "fa37660b49173b91cfd8e4beadf4387b",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/site_page_screen.dart": {
@@ -4955,8 +4955,8 @@
     "semantic_hash": ""
   },
   "app/test/company_door_sign_in_test.dart": {
-    "mtime": 1787814393.3256373,
-    "ast_hash": "f718588bde01e53e07af86ed82ca3e3d",
+    "mtime": 1787821247.1662574,
+    "ast_hash": "71254c7247d1284d4f75b016d82ef7ed",
     "semantic_hash": ""
   },
   "app/test/router_refresh_test.dart": {
@@ -5032,6 +5032,21 @@
   "supabase/tests/demo_accounts_switch.sql": {
     "mtime": 1787817833.9208887,
     "ast_hash": "408e987f1c22e47ccdaf6eb9a1e4b656",
+    "semantic_hash": ""
+  },
+  "app/test/signin_page_copy_test.dart": {
+    "mtime": 1787820987.1127424,
+    "ast_hash": "3bba59965c84a9e071127569d6149944",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0336_the_sign_in_page_is_not_our_poster.sql": {
+    "mtime": 1787820544.7728267,
+    "ast_hash": "935e8d000f644c29264bd4476346d25b",
+    "semantic_hash": ""
+  },
+  "supabase/tests/signin_page_copy.sql": {
+    "mtime": 1787820794.848821,
+    "ast_hash": "7a286e68a79d9b3e91ada85d8dd2d783",
     "semantic_hash": ""
   }
 }

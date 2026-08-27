@@ -45,11 +45,11 @@ class LandingCmsTab extends ConsumerWidget {
           const SizedBox(height: Space.lg),
           _PageForm(existing: row),
           const SizedBox(height: Space.lg),
-          const _SectionsCard(),
+          const LandingSectionsCard(),
           const SizedBox(height: Space.lg),
-          const _SectionsCard(kind: 'reason'),
+          const LandingSectionsCard(kind: 'reason'),
           const SizedBox(height: Space.lg),
-          const _SectionsCard(kind: 'badge'),
+          const LandingSectionsCard(kind: 'badge'),
           const SizedBox(height: Space.lg),
           const _StatsCard(),
           const SizedBox(height: Space.lg),
@@ -482,19 +482,27 @@ class _PageFormState extends ConsumerState<_PageForm> {
 /// by `kind`, so this is one card shown twice rather than two cards to
 /// keep in step. The saver defaults `kind` to `feature`, which is what
 /// every row written before 0317 is.
-class _SectionsCard extends ConsumerWidget {
-  const _SectionsCard({this.kind = 'feature'});
+/// A list of `landing_sections` rows of one kind, with an editor.
+///
+/// Public since `0336`, which put a fourth kind — the bullets beside
+/// the sign-in form — on a different console screen. Same table, same
+/// saver, same dialog: a second copy of this card would be a second
+/// place for the ordering and the on/off switch to drift.
+class LandingSectionsCard extends ConsumerWidget {
+  const LandingSectionsCard({super.key, this.kind = 'feature'});
 
   final String kind;
 
   bool get _reasons => kind == 'reason';
   bool get _badges => kind == 'badge';
+  bool get _signin => kind == 'signin';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sections = ref.watch(switch (kind) {
       'reason' => landingReasonsAdminProvider,
       'badge' => landingBadgesAdminProvider,
+      'signin' => landingSigninPointsAdminProvider,
       _ => landingSectionsAdminProvider,
     });
     return Card(
@@ -507,7 +515,9 @@ class _SectionsCard extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    _badges
+                    _signin
+                        ? 'The points beside the form'
+                        : _badges
                         ? 'What it files under'
                         : _reasons
                         ? 'Why choose it'
@@ -536,22 +546,29 @@ class _SectionsCard extends ConsumerWidget {
                 }
                 if (rows.isEmpty) {
                   return EmptyState(
-                    icon: _badges
+                    icon: _signin
+                        ? Icons.checklist_outlined
+                        : _badges
                         ? Icons.verified_outlined
                         : _reasons
                         ? Icons.thumb_up_outlined
                         : Icons.article_outlined,
-                    title: _badges
+                    title: _signin
+                        ? 'No points beside the form'
+                        : _badges
                         ? 'No badges written yet'
                         : _reasons
                         ? 'No reasons written yet'
                         : 'No blocks of copy yet',
-                    // Neither band is ever empty on the page: both fall
-                    // back to the copy the product ships with, which
-                    // describes what this repository actually does.
-                    message:
-                        'The page shows the copy iAkauntan ships '
-                        'with until you write your own.',
+                    // The landing page's bands fall back to the copy
+                    // the product ships with. The sign-in panel does
+                    // not: nothing there is drawn unless somebody put
+                    // it there, which is what 0336 is about.
+                    message: _signin
+                        ? 'Nothing is shown beside the sign-in form '
+                              'unless you add it and switch it on.'
+                        : 'The page shows the copy iAkauntan ships '
+                              'with until you write your own.',
                   );
                 }
                 return Column(
