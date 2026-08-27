@@ -188,6 +188,24 @@ It has no secrets. `wrangler.toml` carries the route
 (`*.iakauntan.com/*`), which is what binds it to every company's
 subdomain and — because of the leading `*.` — not to the apex.
 
+**CI does this now**, on every push to the default branch: the `worker`
+job in `.github/workflows/ci.yml`. It needs one repository secret,
+`CLOUDFLARE_API_TOKEN` — a token with **Edit Cloudflare Workers** on
+this zone, from dash.cloudflare.com → My Profile → API Tokens, added
+under Settings → Secrets and variables → Actions. Without it the job
+warns on the run summary and deploys nothing, rather than going red.
+
+The command above is still the way to do it the first time, or from a
+laptop when CI is not the fastest route to a fix. Both upload the same
+script to the same route; neither is authoritative over the other.
+
+The job then asks `ci-probe.iakauntan.com` for a page and expects a 200.
+That is not a check of *which* page — no company holds that name, so the
+app draws the one that says so — it is a check that TLS completed and
+something served. It is the assertion this arrangement went without for
+its whole first outing, during which every subdomain answered 525 and
+nothing said so.
+
 The worker never asks Vercel for a host Vercel has never heard of. It
 fetches the apex, which Vercel does hold a certificate for, and returns
 that. The address bar still reads `sinar.iakauntan.com`, which is all
