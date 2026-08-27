@@ -97,6 +97,7 @@ import '../features/hr/talent_screen.dart';
 import '../features/team/security_screen.dart';
 import '../features/team/team_screen.dart';
 import '../features/shell/app_shell.dart';
+import '../data/reserved_names_repository.dart';
 import 'providers.dart';
 
 final _rootKey = GlobalKey<NavigatorState>();
@@ -114,12 +115,20 @@ final _shellKey = GlobalKey<NavigatorState>();
 /// Null means "stay". [hasOrg] and [isPlatformAdmin] are null while
 /// their answers are still loading or have failed, which are the same
 /// instruction: hold this route and decide when the answer arrives.
+///
+/// [atCompanyDoor] is true at `sinar.iakauntan.com` — a company's own
+/// address, rather than the platform's. The bare domain's front page is
+/// a shopfront for the product, and a company that paid for its own
+/// address did not buy one; somebody arriving there wants the sign-in
+/// form. It only moves `/`, so every other route is unaffected and a
+/// signed-in visitor is not bounced anywhere.
 String? routeFor({
   required String path,
   required bool signedIn,
   required bool recovering,
   required bool? hasOrg,
   required bool? isPlatformAdmin,
+  bool atCompanyDoor = false,
 }) {
   // The signing page is the one route that works with no account at
   // all: a director will not sign up to an accounting system to sign
@@ -146,7 +155,12 @@ String? routeFor({
   // which meant the product had no front page at all for anybody who
   // had ever logged in — including the person who owns it and is trying
   // to look at what they have just published.
-  if (path == '/') return null;
+  //
+  // Unless this is a company's own address. `sinar.iakauntan.com` is
+  // not a shopfront — a stranger who typed it was looking for Sinar,
+  // not for what iAkauntan is — so its `/` is the sign-in form. Only
+  // `/`: a signed-in visitor on any other route is left alone.
+  if (path == '/') return atCompanyDoor ? '/signin' : null;
   // Kept because it was the address for a while and links to it exist.
   // One redirect, not a second copy of the page.
   if (path == '/welcome') return '/';
@@ -220,6 +234,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         isPlatformAdmin: admin.isLoading || admin.hasError
             ? null
             : (admin.value ?? false),
+        // While the lookup is in flight this is false, so the front
+        // page draws and the redirect happens when the answer lands —
+        // the same choice `app.dart` makes, for the same reason.
+        atCompanyDoor: ref.read(workspaceLookupProvider).valueOrNull?.host ==
+            WorkspaceHost.found,
       );
     },
     routes: [

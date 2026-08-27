@@ -130,84 +130,47 @@ class ReservedNames {
   // -------------------------------------------------------------------
   // What an operator decides
   // -------------------------------------------------------------------
-  /// Everything still waiting, both kinds, newest request last.
-  ///
-  /// The two tables are read separately and stitched together here
-  /// rather than in a view: they are two modules, and a view over both
-  /// would be a third thing to keep in step with either.
+  /// Everything still waiting, both kinds.
   Future<List<Map<String, dynamic>>> pending() async {
-    final subs = Repo.rows(
-      await client
-          .from('org_subdomains')
-          .select('id, org_id, subdomain, status, requested_at, '
-              'organizations(name)')
-          .eq('status', 'requested'),
-    );
-    final boxes = Repo.rows(
-      await client
-          .from('org_mailboxes')
-          .select('id, org_id, local_part, status, requested_at, '
-              'organizations(name)')
-          .eq('status', 'requested'),
-    );
-
-    final all = <Map<String, dynamic>>[
-      for (final r in subs)
-        {
-          ...r,
-          'kind': 'subdomain',
-          'name': r['subdomain'],
-          'org_name': (r['organizations'] as Map?)?['name'],
-        },
-      for (final r in boxes)
-        {
-          ...r,
-          'kind': 'mailbox',
-          'name': r['local_part'],
-          'org_name': (r['organizations'] as Map?)?['name'],
-        },
-    ];
-    all.sort((a, b) =>
-        '${a['requested_at']}'.compareTo('${b['requested_at']}'));
-    return all;
+    final rows = await all();
+    return [for (final r in rows) if (r['status'] == 'requested') r];
   }
 
-  /// Everything already decided, so an operator can see what was given
-  /// out and take one back.
+  /// What has been decided, newest first.
   Future<List<Map<String, dynamic>>> decided() async {
-    final subs = Repo.rows(
-      await client
-          .from('org_subdomains')
-          .select('id, org_id, subdomain, status, decided_at, note, '
-              'organizations(name)')
-          .neq('status', 'requested'),
-    );
-    final boxes = Repo.rows(
-      await client
-          .from('org_mailboxes')
-          .select('id, org_id, local_part, status, decided_at, note, '
-              'organizations(name)')
-          .neq('status', 'requested'),
-    );
-    final all = <Map<String, dynamic>>[
-      for (final r in subs)
-        {
-          ...r,
-          'kind': 'subdomain',
-          'name': r['subdomain'],
-          'org_name': (r['organizations'] as Map?)?['name'],
-        },
-      for (final r in boxes)
-        {
-          ...r,
-          'kind': 'mailbox',
-          'name': r['local_part'],
-          'org_name': (r['organizations'] as Map?)?['name'],
-        },
-    ];
-    all.sort((a, b) => '${b['decided_at']}'.compareTo('${a['decided_at']}'));
-    return all;
+    final rows = await all();
+    return [for (final r in rows) if (r['status'] != 'requested') r];
   }
+
+  /// Every reservation an operator may act on, with the company on it.
+  ///
+  /// Through an RPC rather than PostgREST's `organizations(name)` embed,
+  /// which is what the two lists used to do. `organizations` carries one
+  /// SELECT policy — `app.is_org_member(id)` — and a platform operator
+  /// is not a member of the companies they administer, so the embed came
+  /// back null and every row on the screen read "Unknown company". The
+  /// rows themselves were never the problem: `org_subdomains` lets an
+  /// operator read them, so the list looked complete and was anonymous.
+  Future<List<Map<String, dynamic>>> all() async =>
+      Repo.rows(await client.rpc('platform_reservations'));
+
+  /// Move a name to another company, or correct how it is spelled.
+  ///
+  /// Both are optional and null leaves that half alone, so the console
+  /// can send whatever its form holds without deciding which of the two
+  /// the operator meant to change.
+  Future<void> update({
+    required String kind,
+    required String id,
+    String? orgId,
+    String? name,
+  }) =>
+      client.rpc('platform_update_reservation', params: {
+        'p_kind': kind,
+        'p_id': id,
+        'p_org_id': orgId,
+        'p_name': name,
+      });
 
   Future<void> decide({
     required String kind,

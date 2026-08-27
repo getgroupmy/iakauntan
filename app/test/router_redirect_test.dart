@@ -191,4 +191,73 @@ void main() {
       }
     }
   });
+
+  _companyDoor();
+}
+
+/// `0333`. A company's own address opens on the sign-in form.
+///
+/// The bare domain's `/` is a shopfront for the product; a company that
+/// paid for its own address did not buy one, and somebody who typed
+/// `sinar.iakauntan.com` came looking for Sinar. Only `/` moves — a
+/// signed-in visitor deeper in the app must not be bounced out of it.
+void _companyDoor() {
+  group('a company\'s own door', () {
+    test('sends the front page to the sign-in form', () {
+      expect(
+        routeFor(
+          path: '/',
+          signedIn: false,
+          recovering: false,
+          hasOrg: null,
+          isPlatformAdmin: null,
+          atCompanyDoor: true,
+        ),
+        '/signin',
+      );
+    });
+
+    test('leaves the bare domain alone', () {
+      expect(
+        routeFor(
+          path: '/',
+          signedIn: false,
+          recovering: false,
+          hasOrg: null,
+          isPlatformAdmin: null,
+        ),
+        isNull,
+      );
+    });
+
+    test('does not bounce a signed-in visitor out of the app', () {
+      expect(
+        routeFor(
+          path: '/dashboard',
+          signedIn: true,
+          recovering: false,
+          hasOrg: true,
+          isPlatformAdmin: false,
+          atCompanyDoor: true,
+        ),
+        isNull,
+      );
+    });
+
+    test('and /signin itself is not a loop', () {
+      // The one mistake in this function that cannot be recovered from
+      // outside: a redirect whose destination redirects back.
+      expect(
+        routeFor(
+          path: '/signin',
+          signedIn: false,
+          recovering: false,
+          hasOrg: null,
+          isPlatformAdmin: null,
+          atCompanyDoor: true,
+        ),
+        isNull,
+      );
+    });
+  });
 }

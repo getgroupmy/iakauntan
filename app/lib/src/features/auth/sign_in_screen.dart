@@ -84,6 +84,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           email: _email.text.trim(),
           password: _password.text,
         );
+        await _refuseIfNotTheirDoor();
       }
     } on AuthException catch (e) {
       await _noteRefusal(e);
@@ -93,6 +94,49 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Turn away somebody who signed in correctly at a door that is not
+  /// theirs.
+  ///
+  /// Read this before relying on it: it is a **door policy, not a
+  /// security boundary**. The same person can sign in at
+  /// `iakauntan.com` with the same password and reach exactly the same
+  /// data, because the data was never protected by which hostname the
+  /// browser used — it is protected by RLS on every table, which this
+  /// does not touch and does not need to.
+  ///
+  /// What it buys is that a company's own address behaves like one. A
+  /// stranger who lands on Sinar's page, sees Sinar's name and logo and
+  /// is let in has been told something untrue about their relationship
+  /// to Sinar, even though they only ever reach their own books.
+  ///
+  /// A failure to reach the server leaves the session alone. Signing
+  /// somebody out because a request timed out is a worse answer than
+  /// letting a member through on a page that is theirs anyway.
+  Future<void> _refuseIfNotTheirDoor() async {
+    final workspace = ref.read(workspaceHostProvider).valueOrNull;
+    if (workspace == null) return;
+
+    final client = ref.read(supabaseProvider);
+    bool allowed;
+    try {
+      allowed = await client.rpc(
+            'may_use_workspace',
+            params: {'p_host': Uri.base.host},
+          ) as bool? ??
+          true;
+    } catch (_) {
+      return;
+    }
+    if (allowed) return;
+
+    await client.auth.signOut();
+    if (!mounted) return;
+    setState(() {
+      _error = 'That account is not on ${workspace['name']}\'s team. '
+          'Sign in at iakauntan.com to reach your own books.';
+    });
   }
 
   /// Tell the company that somebody was refused at its door.
@@ -325,7 +369,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 ),
                 // Not offered halfway through creating an account: the
                 // demo is an alternative to signing up, not a step in it.
-                if (demoModeEnabled && !_isSignUp) ...[
+                //
+                // Nor at a company's own address. `sinar.iakauntan.com`
+                // is Sinar's door, and a row of other companies' demo
+                // logins on it reads as though those companies are
+                // somehow part of Sinar — or worse, that this is not
+                // really Sinar's page at all.
+                if (demoModeEnabled && !_isSignUp && _workspace == null) ...[
                   const SizedBox(height: 20),
                   DemoAccountPicker(
                     onPick: _signInAsDemo,

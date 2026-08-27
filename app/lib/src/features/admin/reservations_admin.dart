@@ -270,6 +270,17 @@ class _Decided extends ConsumerWidget {
                         '${row['note']}',
                     ].join(' · '),
                   ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.edit_outlined),
+                    tooltip: 'Change the name or the company',
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => _EditReservationDialog(row: row),
+                    ).then((_) {
+                      ref.invalidate(decidedReservationsProvider);
+                      ref.invalidate(pendingReservationsProvider);
+                    }),
+                  ),
                 ),
             ],
           ),
@@ -415,6 +426,114 @@ class _UnknownWorkspaceCopyCardState
           ],
         ),
       ),
+    );
+  }
+}
+
+
+/// Change which company holds a name, or how it is spelled.
+///
+/// Both together, in one dialog, because they are the same correction
+/// seen from two sides: a name typed wrong and a name given to the
+/// wrong company are both "this reservation is not what it should be",
+/// and an operator who has opened this has usually decided which.
+///
+/// Before this existed the only remedy was to delete the row — which
+/// did not help, because the company it should have gone to then could
+/// not request it either. The name was taken by nobody.
+class _EditReservationDialog extends ConsumerStatefulWidget {
+  const _EditReservationDialog({required this.row});
+
+  final Map<String, dynamic> row;
+
+  @override
+  ConsumerState<_EditReservationDialog> createState() =>
+      _EditReservationDialogState();
+}
+
+class _EditReservationDialogState
+    extends ConsumerState<_EditReservationDialog> {
+  late final _name =
+      TextEditingController(text: '${widget.row['name'] ?? ''}');
+  late String? _orgId = widget.row['org_id'] as String?;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _busy = true);
+    try {
+      await ref.read(reservedNamesProvider).update(
+            kind: '${widget.row['kind']}',
+            id: '${widget.row['id']}',
+            orgId: _orgId,
+            name: _name.text.trim(),
+          );
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e is PostgrestException ? e.message : '$e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final orgs = ref.watch(platformOrgsProvider);
+    final suffix = widget.row['kind'] == 'subdomain'
+        ? '.iakauntan.com'
+        : '@iakauntan.com';
+
+    return AlertDialog(
+      title: const Text('Change this name'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _name,
+            decoration: InputDecoration(
+              labelText: 'Name',
+              suffixText: suffix,
+              helperText: '3 to 63 letters, digits and hyphens',
+            ),
+          ),
+          const SizedBox(height: 16),
+          orgs.when(
+            loading: () => const LinearProgressIndicator(),
+            error: (e, _) => Text('Could not load the companies: $e'),
+            data: (rows) => DropdownButtonFormField<String>(
+              value: _orgId,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Company'),
+              items: [
+                for (final o in rows)
+                  DropdownMenuItem(
+                    value: o.id,
+                    child: Text(o.name, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: (v) => setState(() => _orgId = v),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _save,
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }
