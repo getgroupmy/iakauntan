@@ -352,29 +352,40 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                         )
                       : Text(_isSignUp ? 'Create account' : 'Sign in'),
                 ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () => setState(() {
-                            _isSignUp = !_isSignUp;
-                            _error = null;
-                            _notice = null;
-                          }),
-                  child: Text(
-                    _isSignUp
-                        ? 'Already have an account? Sign in'
-                        : 'New to $_wordmark? Create an account',
+                // Everything below the Sign in button is about joining
+                // the platform, and none of it belongs at a company's
+                // own address.
+                //
+                // Creating an account here would make one that is not on
+                // Sinar's team — and the door policy would then turn it
+                // away, which is a loop the visitor cannot see the shape
+                // of. Somebody who needs an account at Sinar is invited
+                // to one by Sinar.
+                if (_workspace == null) ...[
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: _busy
+                        ? null
+                        : () => setState(() {
+                              _isSignUp = !_isSignUp;
+                              _error = null;
+                              _notice = null;
+                            }),
+                    child: Text(
+                      _isSignUp
+                          ? 'Already have an account? Sign in'
+                          : 'New to $_wordmark? Create an account',
+                    ),
                   ),
-                ),
+                ],
                 // Not offered halfway through creating an account: the
                 // demo is an alternative to signing up, not a step in it.
                 //
-                // Nor at a company's own address. `sinar.iakauntan.com`
-                // is Sinar's door, and a row of other companies' demo
-                // logins on it reads as though those companies are
-                // somehow part of Sinar — or worse, that this is not
-                // really Sinar's page at all.
+                // Nor at a company's own address, for its own reason
+                // rather than the one above: a row of other companies'
+                // demo logins on Sinar's page reads as though those
+                // companies are somehow part of Sinar — or worse, that
+                // this is not really Sinar's page at all.
                 if (demoModeEnabled && !_isSignUp && _workspace == null) ...[
                   const SizedBox(height: 20),
                   DemoAccountPicker(

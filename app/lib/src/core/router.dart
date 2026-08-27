@@ -234,7 +234,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootKey,
     initialLocation: '/',
-    refreshListenable: _AuthRefresh(ref),
+    refreshListenable: AuthRefresh(ref),
     redirect: (context, state) {
       final orgs = ref.read(organizationsProvider);
       final admin = ref.read(isPlatformAdminProvider);
@@ -700,8 +700,20 @@ List<RouteBase> _documentRoutes(String prefix, String fallbackType) => [
 ];
 
 /// Bridges Riverpod auth/org state into go_router's Listenable API.
-class _AuthRefresh extends ChangeNotifier {
-  _AuthRefresh(Ref ref) {
+/// What tells the router to decide again.
+///
+/// Every input to `routeFor` that can still be loading has to be in
+/// here. The redirect runs once per navigation; a provider that
+/// resolves afterwards changes the right answer and nothing asks for
+/// it again, so the visitor sits on the screen the loading state
+/// happened to produce. That is not a subtle failure — it is the front
+/// page instead of the sign-in form, or a signed-in operator stuck
+/// wherever they landed — and it has now happened twice.
+///
+/// Public, and constructed from a provider below, so a test can hold
+/// one and watch it fire.
+class AuthRefresh extends ChangeNotifier {
+  AuthRefresh(Ref ref) {
     ref.listen(authStateProvider, (_, __) => notifyListeners());
     ref.listen(organizationsProvider, (_, __) => notifyListeners());
     // The redirect holds its decision while this is loading, so it has to
@@ -712,5 +724,14 @@ class _AuthRefresh extends ChangeNotifier {
     // builds the recovery notifier, and it has to be alive and subscribed
     // before the recovery event arrives or it will miss it.
     ref.listen(passwordRecoveryProvider, (_, __) => notifyListeners());
+    // Whose address this is, for the same reason as the three above and
+    // with the same failure when it is missing. `0333` added
+    // `atCompanyDoor` to the redirect without adding this line: the
+    // lookup is still in flight on the first evaluation, so the rule saw
+    // `false`, `/` stayed, the front page drew — and nothing ever asked
+    // the question again. A visitor at `sinar.iakauntan.com` sat on the
+    // platform's shopfront, which is exactly what that rule exists to
+    // prevent.
+    ref.listen(workspaceLookupProvider, (_, __) => notifyListeners());
   }
 }
