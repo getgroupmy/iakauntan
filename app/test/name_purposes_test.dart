@@ -178,6 +178,56 @@ void main() {
     });
   });
 
+  group('nobody is moved on a session still being vetted', () {
+    // The recording: sign in, land in the app, get thrown out, and only
+    // then read why. Both door checks need a session to ask their
+    // question, so they run after the password is accepted — and the
+    // session is what the router watches. Without a hold the router
+    // acts on it first and the checks undo it a round trip later,
+    // which reads as a fault rather than as a decision.
+    String? go({required bool vetting, String path = '/signin'}) => routeFor(
+      path: path,
+      signedIn: true,
+      recovering: false,
+      hasOrg: true,
+      isPlatformAdmin: false,
+      atCompanyDoor: true,
+      confinedTo: '/till',
+      confinedAllows: const {'/till'},
+      moduleHeld: true,
+      vetting: vetting,
+    );
+
+    test('while the checks run, nothing moves', () {
+      expect(go(vetting: true), isNull);
+      // Not just the sign-in page: a hold that only held one route
+      // would let anything already open carry on into the app.
+      expect(go(vetting: true, path: '/dashboard'), isNull);
+    });
+
+    test('and once they pass, it moves as it always did', () {
+      expect(go(vetting: false), '/dashboard');
+      expect(go(vetting: false, path: '/dashboard'), '/till');
+    });
+
+    test('a refused session is signed out, so the form keeps them', () {
+      // What the router sees after a refusal: no session, at /signin,
+      // at a company's door. It must leave them exactly there — the
+      // dialog is on that screen.
+      expect(
+        routeFor(
+          path: '/signin',
+          signedIn: false,
+          recovering: false,
+          hasOrg: null,
+          isPlatformAdmin: null,
+          atCompanyDoor: true,
+        ),
+        isNull,
+      );
+    });
+  });
+
   group('what the list calls each one', () {
     test('a held name is not a company that went missing', () {
       expect(whoseName(const {'purpose': 'reserved'}), 'Held by us');

@@ -663,6 +663,25 @@ final platformSettingsProvider =
 // ---------------------------------------------------------------------
 // Module entitlements for the active tenant
 // ---------------------------------------------------------------------
+/// True from the moment a sign-in succeeds until the door checks that
+/// may undo it have finished.
+///
+/// `0346` asks two questions after the password is accepted — is this
+/// account on this company's team, and can it open what this address
+/// opens — and either answer can sign the session straight back out.
+/// Both need a session to ask, so they cannot be asked first.
+///
+/// Meanwhile the session itself is what the router watches. Without
+/// this the order is: password accepted, router moves them into the
+/// app, checks come back, session revoked, router moves them out
+/// again, and only then does the dialog get a screen to appear on.
+/// The person watches themselves get in and thrown out before being
+/// told why, which reads as a fault rather than as a decision.
+///
+/// So the router holds while this is true. Nobody is moved on the
+/// strength of a session that is still being vetted.
+final vettingProvider = StateProvider<bool>((ref) => false);
+
 final enabledModulesProvider = FutureProvider<Set<String>>((ref) async {
   final repo = ref.watch(repoProvider);
   if (repo == null) return <String>{};

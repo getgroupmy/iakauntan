@@ -215,6 +215,7 @@ String? routeFor({
   required bool? isPlatformAdmin,
   bool atCompanyDoor = false,
   bool doorKnown = true,
+  bool vetting = false,
   String? confinedTo,
   Set<String> confinedAllows = const {},
   bool? moduleHeld,
@@ -283,6 +284,12 @@ String? routeFor({
     if (path == '/signin') return null;
     return atCompanyDoor ? '/signin' : '/';
   }
+
+  // Signed in, and the door checks that may undo it are still running.
+  // Hold: moving anybody now means moving them back a moment later,
+  // and the round trip is visible — it is the "in, then out, then a
+  // dialog" that made a decision look like a fault.
+  if (vetting) return null;
 
   // Redeeming a reset link signs the user in, so this has to be checked
   // before anything else sends them to the dashboard — otherwise they
@@ -401,6 +408,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         atCompanyDoor: ref.read(workspaceLookupProvider).valueOrNull?.host ==
             WorkspaceHost.found,
         doorKnown: ref.read(workspaceLookupProvider).hasValue,
+        vetting: ref.read(vettingProvider),
         // 0342. An address the operator pointed at one module opens
         // that and nothing else. All three are null or empty at every
         // other address, and nothing above changes.
@@ -910,5 +918,7 @@ class AuthRefresh extends ChangeNotifier {
     // because watching it there rebuilt the router instead of
     // re-running the rule.
     ref.listen(enabledModulesProvider, (_, __) => notifyListeners());
+    // And the hold itself, or letting go of it would never be noticed.
+    ref.listen(vettingProvider, (_, __) => notifyListeners());
   }
 }

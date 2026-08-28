@@ -135,6 +135,13 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           });
         }
       } else {
+        // Raised before the password is sent, not after it comes back:
+        // the session appears the instant `signInWithPassword`
+        // returns, and the router watches the session. Set afterwards
+        // there is a gap, and the gap is exactly long enough for
+        // somebody to be moved into the app on a session these checks
+        // are about to revoke.
+        ref.read(vettingProvider.notifier).state = true;
         await auth.signInWithPassword(
           email: _email.text.trim(),
           password: _password.text,
@@ -153,6 +160,12 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
+      // Let go last, and unconditionally. A refusal has already signed
+      // the session out by now, so releasing the hold leaves somebody
+      // on this form; an ordinary sign-in releases it and the router
+      // takes them where they were going. An exception releases it
+      // too — a hold nobody lifts is an app that never moves again.
+      ref.read(vettingProvider.notifier).state = false;
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -335,10 +348,18 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       _notice = null;
     });
     try {
+      // Held and checked like the form's own sign-in. A demo account is
+      // an ordinary account with a password written on the screen, so
+      // it reaches a company's door and a confined address exactly as
+      // anybody else's does — and without this it did so unvetted,
+      // which is the one way into the app that asked nothing.
+      ref.read(vettingProvider.notifier).state = true;
       await ref.read(supabaseProvider).auth.signInWithPassword(
             email: account.email,
             password: demoPassword,
           );
+      if (await _refuseIfNotTheirDoor()) return;
+      await _refuseIfModuleNotActive();
     } on AuthException catch (e) {
       if (!mounted) return;
       // The likeliest cause by far is that the demo users were deleted
@@ -351,6 +372,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
+      ref.read(vettingProvider.notifier).state = false;
       if (mounted) setState(() => _demoBusy = null);
     }
   }

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -93,13 +91,8 @@ void main() {
         async {
       await tester.pumpWidget(wrap(workspace: const {'name': 'Sinar'}));
       await tester.pumpAndSettle();
-      // Deliberately not awaited: the future completes when the dialog
-      // is dismissed, so awaiting it here waits for a tap that this
-      // line is what makes possible.
-      unawaited(
-        tester.state<SignInScreenState>(find.byType(SignInScreen))
-            .showRefusal(title: title, message: message),
-      );
+      await tester.state<SignInScreenState>(find.byType(SignInScreen))
+          .showRefusal(title: title, message: message);
       await tester.pumpAndSettle();
     }
 
