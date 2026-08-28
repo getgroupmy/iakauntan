@@ -120,8 +120,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1787907984.754471,
-    "ast_hash": "3685f4430cfee3ce6a21acb6ac3d0fd3",
+    "mtime": 1787911701.3325527,
+    "ast_hash": "84981fbc0020eb9478ab4195941cba1e",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -5190,8 +5190,8 @@
     "semantic_hash": ""
   },
   "app/test/password_dialog_test.dart": {
-    "mtime": 1787899127.280188,
-    "ast_hash": "ac202b15444a7291814612e5f3b319b8",
+    "mtime": 1787911665.7241957,
+    "ast_hash": "6a6d46e48a4fb0cdcfb70e33116b41ba",
     "semantic_hash": ""
   },
   "app/lib/src/core/page_waiting.dart": {

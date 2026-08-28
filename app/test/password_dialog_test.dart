@@ -160,4 +160,45 @@ void main() {
     await tester.pump();
     expect(find.text('Wrong password.'), findsNothing);
   });
+
+  testWidgets('and it is one width, and a sensible one on a wide screen',
+      (tester) async {
+    // Twice wrong now, in opposite directions, which is why it is
+    // pinned. Sized to its content the box had three widths for one
+    // dialog — as wide as the email, wider when a refusal landed under
+    // the field, narrower when it cleared. Given `double.maxFinite` to
+    // fix that, it took every pixel the dialog would allow: on a
+    // desktop, a password field the width of the window.
+    final view = TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
+        .views
+        .first;
+    view.physicalSize = const Size(1800, 1000);
+    view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      view.resetPhysicalSize();
+      view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(wrap(onSubmit: (_) async => 'A refusal long '
+        'enough to wrap onto a second line inside the box.'));
+    await tester.pumpAndSettle();
+
+    double fieldWidth() => tester.getSize(find.byType(TextField)).width;
+    final before = fieldWidth();
+
+    expect(
+      before,
+      lessThan(500),
+      reason: 'a password box should not be as wide as the window',
+    );
+
+    await tester.enterText(find.byType(TextField), 'wrong');
+    await tester.tap(find.text('Sign in').last);
+    await tester.pumpAndSettle();
+
+    // The sentence is on screen, and the box did not move to make room.
+    expect(find.textContaining('A refusal long enough'), findsOneWidget);
+    expect(fieldWidth(), before);
+  });
 }

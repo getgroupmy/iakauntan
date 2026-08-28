@@ -91,57 +91,68 @@ class PasswordDialogState extends State<PasswordDialog> {
     canPop: !_busy,
     child: AlertDialog(
       title: Text(widget.action),
-      // Full width of whatever the dialog allows, rather than the width
-      // of the longest thing currently inside it. Without it the box is
-      // as wide as the email on the way in, then jumps wider when a
-      // refusal lands under the field and narrower when it clears --
-      // three sizes for one dialog, which reads as the box fighting the
-      // person typing in it.
-      content: SizedBox(
-        width: double.maxFinite,
-        child: SingleChildScrollView(
-          child: AutofillGroup(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(widget.email,
-                    style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _password,
-                  obscureText: _obscure,
-                  autofocus: true,
-                  enabled: !_busy,
-                  autofillHints: const [AutofillHints.password],
-                  // Only while there is something to clear: a setState
-                  // per keystroke is a rebuild of the box per keystroke,
-                  // and that is what typing into it felt like.
-                  onChanged: _error == null
-                      ? null
-                      : (_) => setState(() => _error = null),
-                  onSubmitted: (_) => _busy ? null : _go(),
-                  decoration: InputDecoration(
-                    labelText: widget.label,
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscure ? Icons.visibility_off : Icons.visibility,
-                      ),
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                    ),
-                  ),
-                ),
-                if (_error != null) ...[
+      // One width, and a sensible one.
+      //
+      // Two things are being fixed at once here and they pull opposite
+      // ways. Sizing to the content gives three widths for one dialog —
+      // as wide as the email on the way in, wider when a refusal lands
+      // under the field, narrower when it clears — which reads as the
+      // box fighting the person typing in it. But `double.maxFinite`
+      // alone takes *everything* the dialog will allow, and on a desktop
+      // that is a password field the width of the window.
+      //
+      // So: fill the available width, up to a cap. On a phone the cap is
+      // never reached and the box is as wide as the screen allows; on a
+      // desktop it settles at a width a password actually wants. Either
+      // way it is the same width before and after the sentence appears.
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: AutofillGroup(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.email,
+                      style: Theme.of(context).textTheme.bodySmall),
                   const SizedBox(height: 12),
-                  Text(
-                    _error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+                  TextField(
+                    controller: _password,
+                    obscureText: _obscure,
+                    autofocus: true,
+                    enabled: !_busy,
+                    autofillHints: const [AutofillHints.password],
+                    // Only while there is something to clear: a setState
+                    // per keystroke is a rebuild of the box per keystroke,
+                    // and that is what typing into it felt like.
+                    onChanged: _error == null
+                        ? null
+                        : (_) => setState(() => _error = null),
+                    onSubmitted: (_) => _busy ? null : _go(),
+                    decoration: InputDecoration(
+                      labelText: widget.label,
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscure ? Icons.visibility_off : Icons.visibility,
+                        ),
+                        onPressed: () => setState(() => _obscure = !_obscure),
+                      ),
                     ),
                   ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
