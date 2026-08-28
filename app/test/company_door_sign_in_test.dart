@@ -80,6 +80,37 @@ void main() {
     expect(find.textContaining('Create an account'), findsWidgets);
   });
 
+  group('the email, asked before the password', () {
+    // `0347`. A company's door is for a known set of people, so the
+    // form asks who is there first — and a shift standing at a counter
+    // is told "User not found" instead of typing a password that was
+    // never going to be taken.
+    //
+    // Only the shape is asserted here. Which emails get through is the
+    // database's rule and `supabase/tests/email_before_password.sql`
+    // holds it, including the part that matters most: every address
+    // that is not for anybody in particular answers yes to everybody.
+    testWidgets('a company door asks for the email alone', (tester) async {
+      await tester.pumpWidget(wrap(workspace: const {'name': 'Sinar'}));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Continue'), findsOneWidget);
+      expect(find.text('Password'), findsNothing);
+      expect(find.text('Forgot password?'), findsNothing);
+    });
+
+    testWidgets('and the bare domain asks for both at once', (tester) async {
+      await tester.pumpWidget(wrap());
+      await tester.pumpAndSettle();
+
+      // Nobody at `iakauntan.com` is not one of a known set of people,
+      // so there is nothing to ask and no reason to make anybody press
+      // twice.
+      expect(find.text('Continue'), findsNothing);
+      expect(find.text('Password'), findsOneWidget);
+    });
+  });
+
   group('the hold around a sign-in', () {
     // The ordering, asserted directly, because the ordering is what
     // nothing could see: `vettingProvider` was declared and the router

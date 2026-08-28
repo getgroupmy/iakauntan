@@ -120,8 +120,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1787890472.7821221,
-    "ast_hash": "5e354e8996bbb4543afe6c69af2f70c3",
+    "mtime": 1787894305.9000173,
+    "ast_hash": "97d250baa50b7c5ca011243fb5d18cf5",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -740,8 +740,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory.sql": {
-    "mtime": 1787822946.0345898,
-    "ast_hash": "812bc4fca8fc3181246007c7d179457f",
+    "mtime": 1787893828.008636,
+    "ast_hash": "235e8d046227d64cfa9f25c67ce02fe6",
     "semantic_hash": ""
   },
   ".claude/CLAUDE.md": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787841232.2056046,
-    "ast_hash": "ccfc0cd4fdc3ade9ca5899fd53bceac6",
+    "mtime": 1787893886.037998,
+    "ast_hash": "88487044bd70760e0f9e09692a971598",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -4955,8 +4955,8 @@
     "semantic_hash": ""
   },
   "app/test/company_door_sign_in_test.dart": {
-    "mtime": 1787890429.4785006,
-    "ast_hash": "19ffcd46923bb87a99106f5b30259b78",
+    "mtime": 1787893977.2577324,
+    "ast_hash": "8e07ae891d99150b3e2d4b000ca4f383",
     "semantic_hash": ""
   },
   "app/test/router_refresh_test.dart": {
@@ -5177,6 +5177,16 @@
   "supabase/migrations/0346_the_module_this_address_opens.sql": {
     "mtime": 1787890215.6341338,
     "ast_hash": "92c7d547c7e90dd22f65d60976c2d3bc",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0347_the_email_before_the_password.sql": {
+    "mtime": 1787893786.127237,
+    "ast_hash": "9ded70c312988f3a85a2971d9a6a9e59",
+    "semantic_hash": ""
+  },
+  "supabase/tests/email_before_password.sql": {
+    "mtime": 1787894241.2412753,
+    "ast_hash": "1e45ac20a8f8b66245b519ac4b36eb23",
     "semantic_hash": ""
   }
 }

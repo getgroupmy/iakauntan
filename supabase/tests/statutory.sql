@@ -300,6 +300,31 @@ begin
            -- the rate limit; the rest is the signature, which takes an
            -- address and nothing else.
            'report_failed_sign_in',
+           -- 0347, and the one entry on this list that makes the
+           -- platform easier to enumerate rather than harder. Read it
+           -- as a decision, because it is one.
+           --
+           -- A company's door and an address pointed at a module are
+           -- both for a known set of people, and taking a password from
+           -- somebody who was never going to be let in is a round trip
+           -- that ends in a refusal it could have started with. So the
+           -- form asks the email first and this answers whether it has
+           -- any business there — which means anyone who can reach
+           -- `sinar.iakauntan.com` can ask whether an address is on
+           -- Sinar's team without knowing a password. Before this they
+           -- had to know one.
+           --
+           -- What bounds it: it answers a bare yes or no and nothing
+           -- else; an address that exists nowhere and one belonging to
+           -- another company are the same answer; and every host that
+           -- is not for somebody in particular — the bare domain, a
+           -- name nobody holds, a parked name — answers true for
+           -- everybody, so the oracle reaches only addresses an
+           -- operator deliberately pointed at somebody.
+           -- `supabase/tests/email_before_password.sql` asserts each of
+           -- those, including the ones that are about what it does not
+           -- say.
+           'may_sign_in_here',
            -- 0262, and the three of them are one feature: a token on a
            -- sticker, the menu behind it, and an order placed from it.
            --
@@ -381,7 +406,7 @@ begin
   --
   -- So assert the exposure. A share link that has silently stopped
   -- working is found by a customer, not by us.
-  perform pg_temp.check_eq('and the ten that need anon still have it',
+  perform pg_temp.check_eq('and the eleven that need anon still have it',
     (select count(*)
        from pg_proc p
        join pg_namespace n on n.oid = p.pronamespace
@@ -408,8 +433,12 @@ begin
                           -- And a terms page that has silently stopped
                           -- loading is found by somebody who was asked
                           -- to agree to it and could not read it.
-                          'site_pages')),
-    10);
+                          'site_pages',
+                          -- And a door that has stopped asking the
+                          -- email first is found by a shift standing at
+                          -- a till typing a password nobody will take.
+                          'may_sign_in_here')),
+    11);
 
   perform pg_temp.check_true('and the link tables stay shut to anon',
     not exists (

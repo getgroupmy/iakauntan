@@ -136,6 +136,17 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   final _fullName = TextEditingController();
 
   late bool _isSignUp = widget.startOnRegister;
+
+  /// `0347`. At an address that is for somebody in particular, the form
+  /// asks who is there before it asks for a password. True once that
+  /// question has been answered yes for [_askedFor].
+  bool _emailAccepted = false;
+
+  /// The email the yes was about, so editing the box takes the password
+  /// away again. Not a safety measure — the server asks again after the
+  /// password, and would refuse — but a form that keeps a yes it was
+  /// given about a different address is one nobody can reason about.
+  String? _askedFor;
   bool _busy = false;
   String? _demoBusy;
   bool _obscure = true;
@@ -148,6 +159,69 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     _password.dispose();
     _fullName.dispose();
     super.dispose();
+  }
+
+  /// Whether this address asks the email first.
+  ///
+  /// Only a company's door and an address of ours, because only those
+  /// are for a known set of people. The bare domain keeps the one-step
+  /// form it has always had: there is nobody there to not be.
+  ///
+  /// Read rather than awaited, and that is safe here in a way it was
+  /// not in `_refuseIfNotTheirDoor`: this decides the shape of a form,
+  /// not whether somebody gets in. A lookup still in flight shows the
+  /// one-step form, and the checks after the password still refuse
+  /// whoever should be refused.
+  bool get _asksEmailFirst =>
+      !_isSignUp &&
+      ref.watch(workspaceLookupProvider).valueOrNull?.host ==
+          WorkspaceHost.found;
+
+  /// Ask whether this email has any business here, before taking a
+  /// password it may be about to refuse.
+  Future<void> _checkEmail() async {
+    final email = _email.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() => _error = 'Enter a valid email');
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      final allowed = await ref.read(supabaseProvider).rpc(
+            'may_sign_in_here',
+            params: {'p_host': Uri.base.host, 'p_email': email},
+          ) as bool? ??
+          true;
+      if (!mounted) return;
+      setState(() {
+        if (allowed) {
+          _emailAccepted = true;
+          _askedFor = email;
+        } else {
+          // The wording asked for. It is the honest answer — this
+          // address is for a particular set of people and this is not
+          // one of them — and it is also the sentence that makes this
+          // an oracle, which `0347` sets out at length.
+          _error = 'User not found';
+        }
+      });
+    } catch (_) {
+      // Unreachable server: go on to the password rather than refuse.
+      // The checks after it still run, and refusing somebody because a
+      // request timed out is the worse of the two wrong answers.
+      if (!mounted) return;
+      setState(() {
+        _emailAccepted = true;
+        _askedFor = email;
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _submit() async {
@@ -540,6 +614,16 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   keyboardType: TextInputType.emailAddress,
                   autofillHints: const [AutofillHints.email],
                   textInputAction: TextInputAction.next,
+                  onFieldSubmitted: (_) =>
+                      _asksEmailFirst && !_emailAccepted ? _checkEmail() : null,
+                  // Typing a different address takes the password box
+                  // away again, so the form never holds a yes it was
+                  // given about somebody else.
+                  onChanged: (v) {
+                    if (_emailAccepted && v.trim() != _askedFor) {
+                      setState(() => _emailAccepted = false);
+                    }
+                  },
                   decoration: InputDecoration(
                     labelText: _brand?.signinEmailLabel ?? 'Email',
                     prefixIcon: const Icon(Icons.mail_outline),
@@ -551,6 +635,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                     return null;
                   },
                 ),
+                if (!_asksEmailFirst || _emailAccepted) ...[
                 const SizedBox(height: 14),
                 TextFormField(
                   controller: _password,
@@ -585,6 +670,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                       ),
                     ),
                   ),
+                ],
                 if (_error != null) ...[
                   const SizedBox(height: 12),
                   _Banner(message: _error!, color: context.colors.danger),
@@ -595,13 +681,19 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                 ],
                 const SizedBox(height: 20),
                 FilledButton(
-                  onPressed: _busy ? null : _submit,
+                  onPressed: _busy
+                      ? null
+                      : (_asksEmailFirst && !_emailAccepted
+                          ? _checkEmail
+                          : _submit),
                   child: _busy
                       ? const SizedBox(
                           height: 20,
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
+                      : _asksEmailFirst && !_emailAccepted
+                      ? const Text('Continue')
                       // `registerLabel` and `signInLabel` have been on
                       // `landing_page` since 0290 and this button was
                       // ignoring both, so renaming it in the console
