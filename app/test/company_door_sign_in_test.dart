@@ -80,6 +80,60 @@ void main() {
     expect(find.textContaining('Create an account'), findsWidgets);
   });
 
+  group('the hold around a sign-in', () {
+    // The ordering, asserted directly, because the ordering is what
+    // nothing could see: `vettingProvider` was declared and the router
+    // honoured it while, for one commit, nothing raised it. A rebase
+    // resolved a conflict in the sign-in screen in favour of an older
+    // copy and took the two lines with it. Everything compiled, every
+    // test passed, and the app went back to letting people in and
+    // throwing them out again.
+    test('goes up before the password leaves, and down after vetting', () async {
+      final order = <String>[];
+
+      await vettedSignIn(
+        hold: (held) => order.add(held ? 'hold' : 'release'),
+        signIn: () async => order.add('signIn'),
+        vet: () async => order.add('vet'),
+      );
+
+      expect(order, ['hold', 'signIn', 'vet', 'release']);
+    });
+
+    test('and comes down even when signing in throws', () async {
+      final order = <String>[];
+
+      await expectLater(
+        vettedSignIn(
+          hold: (held) => order.add(held ? 'hold' : 'release'),
+          signIn: () async => throw Exception('wrong password'),
+          vet: () async => order.add('vet'),
+        ),
+        throwsException,
+      );
+
+      // A hold nobody lifts is an app that never moves again, so the
+      // release matters more here than anywhere. And vetting is skipped
+      // — there is no session to ask about.
+      expect(order, ['hold', 'release']);
+    });
+
+    test('and even when the vetting itself throws', () async {
+      final order = <String>[];
+
+      await expectLater(
+        vettedSignIn(
+          hold: (held) => order.add(held ? 'hold' : 'release'),
+          signIn: () async => order.add('signIn'),
+          vet: () async => throw Exception('the lookup fell over'),
+        ),
+        throwsException,
+      );
+
+      expect(order, ['hold', 'signIn', 'release']);
+    });
+  });
+
   group('what a refusal says', () {
     // Pure, and separate from the round trip, because the interesting
     // case is the one where the round trip has not finished: the name

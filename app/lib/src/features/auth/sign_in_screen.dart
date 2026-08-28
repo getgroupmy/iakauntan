@@ -12,6 +12,34 @@ import '../../core/theme.dart';
 import '../landing/landing_content.dart';
 import 'demo_accounts.dart';
 
+/// Sign in, then vet, with the router held from before the password
+/// leaves until after the answer is in.
+///
+/// The ordering is the whole of it, and the ordering is what nothing
+/// could see. `vettingProvider` was declared, the router honoured it,
+/// and for one commit nothing raised it — a rebase resolved a conflict
+/// in this file in favour of an older copy and took the two lines with
+/// it. Everything still compiled, every test still passed, and the app
+/// went back to letting people in and throwing them out again.
+///
+/// So the sequence is a function with its three moving parts passed in,
+/// and asserted directly: raised before [signIn], lowered after [vet],
+/// and lowered even when [signIn] throws — because a hold nobody lifts
+/// is an app that never moves again.
+Future<void> vettedSignIn({
+  required Future<void> Function() signIn,
+  required Future<void> Function() vet,
+  required void Function(bool) hold,
+}) async {
+  hold(true);
+  try {
+    await signIn();
+    await vet();
+  } finally {
+    hold(false);
+  }
+}
+
 /// What to tell somebody refused at a door that is not theirs.
 ///
 /// A company's door names the company. One of ours has no name to give,
@@ -147,17 +175,29 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           });
         }
       } else {
-        await auth.signInWithPassword(
-          email: _email.text.trim(),
-          password: _password.text,
+        // The hold goes up before the password is sent, not after it
+        // comes back: the session appears the instant
+        // `signInWithPassword` returns and the router watches the
+        // session, so a gap there is long enough to move somebody into
+        // the app on a session these checks are about to revoke. That
+        // is the "in, then out, then a dialog" that made a decision
+        // look like a fault.
+        await vettedSignIn(
+          hold: (held) => ref.read(vettingProvider.notifier).state = held,
+          signIn: () => auth.signInWithPassword(
+            email: _email.text.trim(),
+            password: _password.text,
+          ),
+          // Two ways a correct password is still the wrong way in, and
+          // the second is only worth asking once the first has passed:
+          // a refusal signs the session out, and asking "may this
+          // account open the till" with no account gets the answer no
+          // for a reason that is not theirs.
+          vet: () async {
+            if (await _refuseIfNotTheirDoor()) return;
+            await _refuseIfModuleNotActive();
+          },
         );
-        // Two ways a correct password is still the wrong way in, and
-        // the second is only worth asking once the first has passed:
-        // a refusal signs the session out, and asking "may this
-        // account open the till" with no account gets the answer no
-        // for a reason that is not theirs.
-        if (await _refuseIfNotTheirDoor()) return;
-        await _refuseIfModuleNotActive();
       }
     } on AuthException catch (e) {
       await _noteRefusal(e);
@@ -358,10 +398,22 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       _notice = null;
     });
     try {
-      await ref.read(supabaseProvider).auth.signInWithPassword(
-            email: account.email,
-            password: demoPassword,
-          );
+      // Held and checked like the form's own sign-in. A demo account is
+      // an ordinary account with its password written on the screen, so
+      // it reaches a company's door and a confined address exactly as
+      // anybody else's does — and without this it did so unvetted,
+      // which made it the one way into the app that asked nothing.
+      await vettedSignIn(
+        hold: (held) => ref.read(vettingProvider.notifier).state = held,
+        signIn: () => ref.read(supabaseProvider).auth.signInWithPassword(
+              email: account.email,
+              password: demoPassword,
+            ),
+        vet: () async {
+          if (await _refuseIfNotTheirDoor()) return;
+          await _refuseIfModuleNotActive();
+        },
+      );
     } on AuthException catch (e) {
       if (!mounted) return;
       // The likeliest cause by far is that the demo users were deleted

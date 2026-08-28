@@ -70,12 +70,12 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787886942.0429897,
+    "mtime": 1787890215.590134,
     "ast_hash": "e9da75ce305feaa436e7b810678877ad",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787886942.0429897,
+    "mtime": 1787890215.590134,
     "ast_hash": "5f6ab676004c4a564275c11d3c36bd83",
     "semantic_hash": ""
   },
@@ -120,8 +120,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1787886979.034991,
-    "ast_hash": "e76dd9e4f321d6d8789f4ef24d1d453a",
+    "mtime": 1787890472.7821221,
+    "ast_hash": "5e354e8996bbb4543afe6c69af2f70c3",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -4955,8 +4955,8 @@
     "semantic_hash": ""
   },
   "app/test/company_door_sign_in_test.dart": {
-    "mtime": 1787886979.034991,
-    "ast_hash": "5f3941c6f4974b98ca6d195b990e06fa",
+    "mtime": 1787890429.4785006,
+    "ast_hash": "19ffcd46923bb87a99106f5b30259b78",
     "semantic_hash": ""
   },
   "app/test/router_refresh_test.dart": {
@@ -5155,7 +5155,7 @@
     "semantic_hash": ""
   },
   "app/test/name_purposes_test.dart": {
-    "mtime": 1787886942.0469897,
+    "mtime": 1787890215.590134,
     "ast_hash": "eadbfc8fe09e6264259d768a3693a960",
     "semantic_hash": ""
   },
@@ -5165,7 +5165,7 @@
     "semantic_hash": ""
   },
   "supabase/tests/name_purposes.sql": {
-    "mtime": 1787851448.7399967,
+    "mtime": 1787890215.6341338,
     "ast_hash": "cbb69734784f49bf1a2cff922e6a1f32",
     "semantic_hash": ""
   },
@@ -5175,7 +5175,7 @@
     "semantic_hash": ""
   },
   "supabase/migrations/0346_the_module_this_address_opens.sql": {
-    "mtime": 1787851414.783706,
+    "mtime": 1787890215.6341338,
     "ast_hash": "92c7d547c7e90dd22f65d60976c2d3bc",
     "semantic_hash": ""
   }
