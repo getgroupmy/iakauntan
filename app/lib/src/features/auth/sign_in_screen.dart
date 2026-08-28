@@ -12,6 +12,124 @@ import '../../core/theme.dart';
 import '../landing/landing_content.dart';
 import 'demo_accounts.dart';
 
+/// The password, asked in a box of its own.
+///
+/// At an address that is for somebody in particular the form asks who
+/// is there first, and once that is settled the password is the only
+/// thing left to say — so it is asked on its own rather than appearing
+/// underneath an email box that has already done its job.
+///
+/// Its own widget, and public, for a reason about testing as much as
+/// tidiness: the sign-in screen has proved impossible to pump with a
+/// route above it, which is written up at length in
+/// `company_door_sign_in_test.dart`. On its own, the thing worth
+/// pressing can be pressed.
+///
+/// [onSubmit] returns null when the password was accepted, and the
+/// sentence to show inside the box when it was not — so a mistyped
+/// password is corrected where it was typed rather than behind the box
+/// that has just closed.
+class PasswordDialog extends StatefulWidget {
+  const PasswordDialog({
+    super.key,
+    required this.email,
+    required this.label,
+    required this.action,
+    required this.onSubmit,
+  });
+
+  /// Shown so somebody can see which account they are about to open,
+  /// having typed it a step ago.
+  final String email;
+  final String label;
+  final String action;
+  final Future<String?> Function(String password) onSubmit;
+
+  @override
+  State<PasswordDialog> createState() => PasswordDialogState();
+}
+
+class PasswordDialogState extends State<PasswordDialog> {
+  final _password = TextEditingController();
+  bool _obscure = true;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _go() async {
+    if (_password.text.isEmpty) {
+      setState(() => _error = 'Enter your password');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final failure = await widget.onSubmit(_password.text);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _error = failure;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.action),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(widget.email, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _password,
+          obscureText: _obscure,
+          autofocus: true,
+          autofillHints: const [AutofillHints.password],
+          onSubmitted: (_) => _busy ? null : _go(),
+          decoration: InputDecoration(
+            labelText: widget.label,
+            prefixIcon: const Icon(Icons.lock_outline),
+            suffixIcon: IconButton(
+              icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+              onPressed: () => setState(() => _obscure = !_obscure),
+            ),
+          ),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            _error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ],
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: _busy ? null : () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: _busy ? null : _go,
+        child: _busy
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Text(widget.action),
+      ),
+    ],
+  );
+}
+
 /// Sign in, then vet, with the router held from before the password
 /// leaves until after the answer is in.
 ///
@@ -137,16 +255,6 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
 
   late bool _isSignUp = widget.startOnRegister;
 
-  /// `0347`. At an address that is for somebody in particular, the form
-  /// asks who is there before it asks for a password. True once that
-  /// question has been answered yes for [_askedFor].
-  bool _emailAccepted = false;
-
-  /// The email the yes was about, so editing the box takes the password
-  /// away again. Not a safety measure — the server asks again after the
-  /// password, and would refuse — but a form that keeps a yes it was
-  /// given about a different address is one nobody can reason about.
-  String? _askedFor;
   bool _busy = false;
   String? _demoBusy;
   bool _obscure = true;
@@ -198,30 +306,76 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           ) as bool? ??
           true;
       if (!mounted) return;
-      setState(() {
-        if (allowed) {
-          _emailAccepted = true;
-          _askedFor = email;
-        } else {
-          // The wording asked for. It is the honest answer — this
-          // address is for a particular set of people and this is not
-          // one of them — and it is also the sentence that makes this
-          // an oracle, which `0347` sets out at length.
+      if (!allowed) {
+        // The wording asked for. It is the honest answer — this address
+        // is for a particular set of people and this is not one of them
+        // — and it is also the sentence that makes this an oracle,
+        // which `0347` sets out at length.
+        setState(() {
+          _busy = false;
           _error = 'User not found';
-        }
-      });
+        });
+        return;
+      }
     } catch (_) {
       // Unreachable server: go on to the password rather than refuse.
       // The checks after it still run, and refusing somebody because a
       // request timed out is the worse of the two wrong answers.
-      if (!mounted) return;
-      setState(() {
-        _emailAccepted = true;
-        _askedFor = email;
-      });
-    } finally {
-      if (mounted) setState(() => _busy = false);
     }
+    if (!mounted) return;
+    setState(() => _busy = false);
+    await askForPassword();
+  }
+
+  /// The second step: the password, in a box of its own.
+  ///
+  /// Separated from [_checkEmail] so a test can open it without an
+  /// email round trip, and named without an underscore for the same
+  /// reason [showRefusal] is.
+  @visibleForTesting
+  Future<void> askForPassword() => showDialog<void>(
+    context: context,
+    builder: (dialogContext) => PasswordDialog(
+      email: _email.text.trim(),
+      label: _brand?.signinPasswordLabel ?? 'Password',
+      action: _brand?.signInLabel ?? 'Sign in',
+      onSubmit: (password) => _signInWithPassword(password, dialogContext),
+    ),
+  );
+
+  /// Sign in with what was typed in the box, and say what to put back
+  /// in it — null when there is nothing to say and the box should go.
+  ///
+  /// The box closes before the vetting rather than after, so a refusal
+  /// is never a dialog on top of a dialog: what somebody is told about
+  /// their account arrives on the form, which is where they will be
+  /// standing when they read it.
+  Future<String?> _signInWithPassword(
+    String password,
+    BuildContext dialogContext,
+  ) async {
+    String? failure;
+    await vettedSignIn(
+      hold: (held) => ref.read(vettingProvider.notifier).state = held,
+      signIn: () async {
+        try {
+          await ref.read(supabaseProvider).auth.signInWithPassword(
+                email: _email.text.trim(),
+                password: password,
+              );
+        } on AuthException catch (e) {
+          await _noteRefusal(e);
+          failure = e.message;
+        }
+      },
+      vet: () async {
+        if (failure != null) return;
+        if (dialogContext.mounted) Navigator.pop(dialogContext);
+        if (await _refuseIfNotTheirDoor()) return;
+        await _refuseIfModuleNotActive();
+      },
+    );
+    return failure;
   }
 
   Future<void> _submit() async {
@@ -615,15 +769,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   autofillHints: const [AutofillHints.email],
                   textInputAction: TextInputAction.next,
                   onFieldSubmitted: (_) =>
-                      _asksEmailFirst && !_emailAccepted ? _checkEmail() : null,
-                  // Typing a different address takes the password box
-                  // away again, so the form never holds a yes it was
-                  // given about somebody else.
-                  onChanged: (v) {
-                    if (_emailAccepted && v.trim() != _askedFor) {
-                      setState(() => _emailAccepted = false);
-                    }
-                  },
+                      _asksEmailFirst ? _checkEmail() : null,
                   decoration: InputDecoration(
                     labelText: _brand?.signinEmailLabel ?? 'Email',
                     prefixIcon: const Icon(Icons.mail_outline),
@@ -635,7 +781,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                     return null;
                   },
                 ),
-                if (!_asksEmailFirst || _emailAccepted) ...[
+                if (!_asksEmailFirst) ...[
                 const SizedBox(height: 14),
                 TextFormField(
                   controller: _password,
@@ -681,18 +827,15 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                 ],
                 const SizedBox(height: 20),
                 FilledButton(
-                  onPressed: _busy
-                      ? null
-                      : (_asksEmailFirst && !_emailAccepted
-                          ? _checkEmail
-                          : _submit),
+                  onPressed:
+                      _busy ? null : (_asksEmailFirst ? _checkEmail : _submit),
                   child: _busy
                       ? const SizedBox(
                           height: 20,
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : _asksEmailFirst && !_emailAccepted
+                      : _asksEmailFirst
                       ? const Text('Continue')
                       // `registerLabel` and `signInLabel` have been on
                       // `landing_page` since 0290 and this button was

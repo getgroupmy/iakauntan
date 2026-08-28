@@ -70,12 +70,12 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787890215.590134,
+    "mtime": 1787896548.1855135,
     "ast_hash": "e9da75ce305feaa436e7b810678877ad",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787890215.590134,
+    "mtime": 1787896548.1855135,
     "ast_hash": "5f6ab676004c4a564275c11d3c36bd83",
     "semantic_hash": ""
   },
@@ -120,8 +120,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1787894305.9000173,
-    "ast_hash": "97d250baa50b7c5ca011243fb5d18cf5",
+    "mtime": 1787896761.6182542,
+    "ast_hash": "8c231f69f630b8915c222eb7c4776abb",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -740,7 +740,7 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory.sql": {
-    "mtime": 1787893828.008636,
+    "mtime": 1787896548.5919268,
     "ast_hash": "235e8d046227d64cfa9f25c67ce02fe6",
     "semantic_hash": ""
   },
@@ -795,7 +795,7 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787893886.037998,
+    "mtime": 1787896548.1855135,
     "ast_hash": "88487044bd70760e0f9e09692a971598",
     "semantic_hash": ""
   },
@@ -4955,7 +4955,7 @@
     "semantic_hash": ""
   },
   "app/test/company_door_sign_in_test.dart": {
-    "mtime": 1787893977.2577324,
+    "mtime": 1787896548.187927,
     "ast_hash": "8e07ae891d99150b3e2d4b000ca4f383",
     "semantic_hash": ""
   },
@@ -5155,7 +5155,7 @@
     "semantic_hash": ""
   },
   "app/test/name_purposes_test.dart": {
-    "mtime": 1787890215.590134,
+    "mtime": 1787896548.187927,
     "ast_hash": "eadbfc8fe09e6264259d768a3693a960",
     "semantic_hash": ""
   },
@@ -5165,7 +5165,7 @@
     "semantic_hash": ""
   },
   "supabase/tests/name_purposes.sql": {
-    "mtime": 1787890215.6341338,
+    "mtime": 1787896548.5919268,
     "ast_hash": "cbb69734784f49bf1a2cff922e6a1f32",
     "semantic_hash": ""
   },
@@ -5175,18 +5175,23 @@
     "semantic_hash": ""
   },
   "supabase/migrations/0346_the_module_this_address_opens.sql": {
-    "mtime": 1787890215.6341338,
+    "mtime": 1787896548.5919268,
     "ast_hash": "92c7d547c7e90dd22f65d60976c2d3bc",
     "semantic_hash": ""
   },
   "supabase/migrations/0347_the_email_before_the_password.sql": {
-    "mtime": 1787893786.127237,
+    "mtime": 1787896548.5919268,
     "ast_hash": "9ded70c312988f3a85a2971d9a6a9e59",
     "semantic_hash": ""
   },
   "supabase/tests/email_before_password.sql": {
-    "mtime": 1787894241.2412753,
+    "mtime": 1787896548.5919268,
     "ast_hash": "1e45ac20a8f8b66245b519ac4b36eb23",
+    "semantic_hash": ""
+  },
+  "app/test/password_dialog_test.dart": {
+    "mtime": 1787896699.9175937,
+    "ast_hash": "1fafc754f61f5890806f52285c21fce5",
     "semantic_hash": ""
   }
 }
