@@ -24,6 +24,21 @@
  * change rather than a deploy of the app, and that a scraped bundle
  * cannot spend our quota.
  *
+ * ## Two APIs, and which one answers
+ *
+ * Places API (New) first, the legacy Places API behind it. They are
+ * separate products on separate hosts with separate switches in the
+ * Cloud console, and a key enabled for one is routinely refused by the
+ * other — which is exactly what happened here: the key was live, the
+ * old API was on, the new one was not, and every request came back 403
+ * with an empty box and no explanation.
+ *
+ * So a refusal that means "this key may not use this API" — 403, 404,
+ * or the new API's own quota — is retried against the old one rather
+ * than shown to somebody typing an address. A 400 is not: that is a
+ * request we built wrong, and asking a second API the same wrong
+ * question buys a second refusal and one more billed call.
+ *
  * ## Sessions
  *
  * Places bills autocomplete by session: the keystrokes leading to one
@@ -42,9 +57,44 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { fail, json, serveFunction } from "../_shared/cors.ts";
 import { requireEnv } from "../_shared/env.ts";
+import {
+  type Address,
+  addressFromLegacy,
+  addressFromNew,
+  legacyRefused,
+  PlacesRefusal,
+  statusOf,
+  type Suggestion,
+  suggestionsFromLegacy,
+  suggestionsFromNew,
+  worthFallingBack,
+} from "./parse.ts";
 
 const AUTOCOMPLETE = "https://places.googleapis.com/v1/places:autocomplete";
 const DETAILS = "https://places.googleapis.com/v1/places/";
+
+const OLD_AUTOCOMPLETE =
+  "https://maps.googleapis.com/maps/api/place/autocomplete/json";
+const OLD_DETAILS = "https://maps.googleapis.com/maps/api/place/details/json";
+
+/// When the new API last refused this key, if it has.
+///
+/// An isolate that has been told "no" once does not need to be told
+/// again per keystroke: without this, every letter somebody types pays
+/// a wasted round trip before the one that works. It is deliberately
+/// only a memory of this isolate and only for a few minutes, so turning
+/// the new API on in the console starts being used again on its own
+/// rather than after a deploy.
+let newApiRefusedAt = 0;
+const REMEMBER_MS = 5 * 60 * 1000;
+
+function newApiWorthTrying(): boolean {
+  return Date.now() - newApiRefusedAt > REMEMBER_MS;
+}
+
+function rememberRefusal(): void {
+  newApiRefusedAt = Date.now();
+}
 
 /// Google's own words for why it said no.
 ///
@@ -59,7 +109,7 @@ const DETAILS = "https://places.googleapis.com/v1/places/";
 ///
 /// The body carries no credential: the key travels in a header and
 /// Google does not echo it back.
-async function refusal(call: string, res: Response): Promise<Error> {
+async function refusal(call: string, res: Response): Promise<PlacesRefusal> {
   const body = await res.text().catch(() => "");
   let said = body.slice(0, 500);
   try {
@@ -71,30 +121,10 @@ async function refusal(call: string, res: Response): Promise<Error> {
       said = [e.status, e.message].filter(Boolean).join(": ");
     }
   } catch { /* not JSON; the raw body is what there is */ }
-  return new Error(`places ${call} ${res.status}${said ? ` -- ${said}` : ""}`);
-}
-
-/// One suggestion, as the screen wants it: a line to show in bold and a
-/// line under it. Google's own split, not one we compute.
-interface Suggestion {
-  id: string;
-  line: string;
-  detail: string;
-}
-
-/// The pieces the company form has boxes for.
-///
-/// Google returns a list of components with types; this picks the ones
-/// the form asks for and drops the rest. A `null` is a component Google
-/// did not return, which is common and not an error — plenty of
-/// addresses have no postcode.
-interface Address {
-  line1: string | null;
-  city: string | null;
-  postcode: string | null;
-  state: string | null;
-  country: string | null;
-  formatted: string | null;
+  return new PlacesRefusal(
+    `places ${call} ${res.status}${said ? ` -- ${said}` : ""}`,
+    res.status,
+  );
 }
 
 /// Who is asking. Signed in is the whole requirement; see the note above.
@@ -111,48 +141,10 @@ async function requireCaller(req: Request): Promise<void> {
   if (error || !data.user) throw new Response(null, { status: 401 });
 }
 
-function component(
-  components: Array<Record<string, unknown>>,
-  type: string,
-): string | null {
-  for (const c of components) {
-    const types = (c.types ?? []) as string[];
-    if (types.includes(type)) {
-      return (c.longText ?? c.shortText ?? null) as string | null;
-    }
-  }
-  return null;
-}
+/// What answered, so the caller and the log can say which.
+type Via = "new" | "legacy";
 
-/// Google's components, in the shape the form fills from.
-///
-/// `line1` is the street address: the number and the road, joined,
-/// because those are two components and one box. Everything else is one
-/// component each.
-function toAddress(place: Record<string, unknown>): Address {
-  const components =
-    (place.addressComponents ?? []) as Array<Record<string, unknown>>;
-
-  const number = component(components, "street_number");
-  const route = component(components, "route");
-  const line1 = [number, route].filter((p) => p).join(" ") || null;
-
-  return {
-    line1,
-    // `locality` is the town or city; `postal_town` is what the UK and
-    // a few others use instead, and an address with neither falls back
-    // to the administrative area below it rather than to nothing.
-    city: component(components, "locality") ??
-      component(components, "postal_town") ??
-      component(components, "administrative_area_level_2"),
-    postcode: component(components, "postal_code"),
-    state: component(components, "administrative_area_level_1"),
-    country: component(components, "country"),
-    formatted: (place.formattedAddress ?? null) as string | null,
-  };
-}
-
-async function suggest(
+async function suggestNew(
   key: string,
   q: string,
   country: string | null,
@@ -178,26 +170,67 @@ async function suggest(
   });
 
   if (!res.ok) throw await refusal("autocomplete", res);
-  const data = await res.json() as Record<string, unknown>;
-  const raw = (data.suggestions ?? []) as Array<Record<string, unknown>>;
-
-  const out: Suggestion[] = [];
-  for (const s of raw) {
-    const p = s.placePrediction as Record<string, unknown> | undefined;
-    if (!p) continue;
-    const f = (p.structuredFormat ?? {}) as Record<string, unknown>;
-    const main = (f.mainText ?? {}) as Record<string, unknown>;
-    const secondary = (f.secondaryText ?? {}) as Record<string, unknown>;
-    out.push({
-      id: String(p.placeId ?? ""),
-      line: String(main.text ?? ""),
-      detail: String(secondary.text ?? ""),
-    });
-  }
-  return out.filter((s) => s.id.length > 0);
+  return suggestionsFromNew(await res.json() as Record<string, unknown>);
 }
 
-async function details(
+async function suggestLegacy(
+  key: string,
+  q: string,
+  country: string | null,
+  session: string | null,
+): Promise<Suggestion[]> {
+  const url = new URL(OLD_AUTOCOMPLETE);
+  url.searchParams.set("input", q);
+  url.searchParams.set("key", key);
+  // The old API spells the same restriction `components=country:my`.
+  if (country) {
+    url.searchParams.set("components", `country:${country.toLowerCase()}`);
+  }
+  if (session) url.searchParams.set("sessiontoken", session);
+
+  const res = await fetch(url);
+  if (!res.ok) throw await refusal("autocomplete (legacy)", res);
+
+  const data = await res.json() as Record<string, unknown>;
+  // 200 with the refusal in the body — see `legacyRefused`.
+  if (legacyRefused(data.status as string | undefined)) {
+    throw new PlacesRefusal(
+      `places autocomplete (legacy) ${data.status}` +
+        (data.error_message ? ` -- ${data.error_message}` : ""),
+      null,
+    );
+  }
+  return suggestionsFromLegacy(data);
+}
+
+async function suggest(
+  key: string,
+  q: string,
+  country: string | null,
+  session: string | null,
+): Promise<{ suggestions: Suggestion[]; via: Via }> {
+  if (newApiWorthTrying()) {
+    try {
+      const found = await suggestNew(key, q, country, session);
+      return { suggestions: found, via: "new" };
+    } catch (e) {
+      const status = statusOf(e);
+      if (status === null || !worthFallingBack(status)) throw e;
+      rememberRefusal();
+      console.error(
+        JSON.stringify({
+          event: "places",
+          note: "new API refused; falling back to the legacy Places API",
+          reason: `${e instanceof Error ? e.message : e}`,
+        }),
+      );
+    }
+  }
+  const found = await suggestLegacy(key, q, country, session);
+  return { suggestions: found, via: "legacy" };
+}
+
+async function detailsNew(
   key: string,
   place: string,
   session: string | null,
@@ -213,7 +246,52 @@ async function details(
   });
 
   if (!res.ok) throw await refusal("details", res);
-  return toAddress(await res.json() as Record<string, unknown>);
+  return addressFromNew(await res.json() as Record<string, unknown>);
+}
+
+async function detailsLegacy(
+  key: string,
+  place: string,
+  session: string | null,
+): Promise<Address> {
+  const url = new URL(OLD_DETAILS);
+  url.searchParams.set("place_id", place);
+  url.searchParams.set("key", key);
+  url.searchParams.set("fields", "address_component,formatted_address");
+  if (session) url.searchParams.set("sessiontoken", session);
+
+  const res = await fetch(url);
+  if (!res.ok) throw await refusal("details (legacy)", res);
+
+  const data = await res.json() as Record<string, unknown>;
+  if (legacyRefused(data.status as string | undefined)) {
+    throw new PlacesRefusal(
+      `places details (legacy) ${data.status}` +
+        (data.error_message ? ` -- ${data.error_message}` : ""),
+      null,
+    );
+  }
+  return addressFromLegacy(data);
+}
+
+async function details(
+  key: string,
+  place: string,
+  session: string | null,
+): Promise<Address> {
+  // A place id from one API is a place id to the other, so the fallback
+  // works on the second half of a session as well as the first — which
+  // matters, because the half that fills the boxes is this one.
+  if (newApiWorthTrying()) {
+    try {
+      return await detailsNew(key, place, session);
+    } catch (e) {
+      const status = statusOf(e);
+      if (status === null || !worthFallingBack(status)) throw e;
+      rememberRefusal();
+    }
+  }
+  return await detailsLegacy(key, place, session);
 }
 
 serveFunction("places", async (req) => {
@@ -245,8 +323,14 @@ serveFunction("places", async (req) => {
   if (q.length < 3) return json({ suggestions: [], configured: true });
 
   const country = typeof body.country === "string" ? body.country : null;
+  const answered = await suggest(key, q, country, session);
   return json({
-    suggestions: await suggest(key, q, country, session),
+    suggestions: answered.suggestions,
     configured: true,
+    // Which API answered. Nothing on the screen reads it; it is here so
+    // that "suggestions work" and "suggestions work because the new API
+    // is off and we are on the old one" are distinguishable without
+    // reading the logs.
+    via: answered.via,
   });
 });

@@ -449,6 +449,19 @@ jobs:
       - run: deno check supabase/functions/_shared/billplz_test.ts
       - run: deno test supabase/functions/_shared/billplz_test.ts
 
+      # Two Google APIs, and the reading that tells them apart.
+      #
+      # `places` asks Places API (New) and falls back to the legacy
+      # Places API when a key is not permitted to use the new one. The
+      # two answer in different words — `longText` against `long_name`,
+      # an HTTP status against a `status` string inside a 200 body — and
+      # every way of confusing them is quiet: an address with every
+      # field null reads as a place Google knows nothing about, and a
+      # `REQUEST_DENIED` behind a 200 reads as "no such street". The
+      # fetching cannot be tested here; the reading can, and is.
+      - run: deno check supabase/functions/places/parse_test.ts
+      - run: deno test supabase/functions/places/parse_test.ts
+
       # The workspace proxy, which is a Cloudflare worker rather than an
       # edge function but runs here because it shares the toolchain and
       # nothing else in this file would execute it.

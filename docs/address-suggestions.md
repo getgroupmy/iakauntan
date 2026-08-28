@@ -22,14 +22,58 @@ of the app.
 Restrict it anyway, at **console.cloud.google.com → APIs & Services →
 Credentials**:
 
-- **API restrictions** — Places API (New) only. Nothing else is called.
+- **API restrictions** — Places API (New) *and* Places API, since the
+  second is the fallback. Nothing else is called.
 - **Application restrictions** — none is correct here. The caller is an
   edge function, not a browser, so there is no referrer to allow and no
   fixed egress address to allow-list.
 
 Enable **Places API (New)**. The older Places API is a different
-product with different endpoints, and this function calls the new one:
-`places:autocomplete` and `places/{id}`.
+product on a different host with its own switch in the console, and the
+function prefers the new one: `places:autocomplete` and `places/{id}`.
+
+## Which API answers
+
+New first, legacy behind it.
+
+A key that is not permitted to use Places API (New) is refused with a
+`403`, and that is not a hypothetical — it is what this deployment did
+on the first day: key live, old API enabled, new API not, every request
+403, and an address box that suggested nothing while looking perfectly
+healthy. So a refusal meaning *this key may not use this API* — `403`,
+`404`, or the new API's own `429` — is retried against
+`maps.googleapis.com/maps/api/place/*` rather than shown to somebody
+typing.
+
+A `400` is not retried. That is a request we built wrong, and asking a
+second API the same wrong question buys a second refusal and one more
+billed call.
+
+An isolate that has been refused remembers it for five minutes, so the
+wasted first call is paid once rather than once per keystroke — and
+because it is only a memory and only for five minutes, turning the new
+API on in the console starts being used again on its own, with no
+deploy.
+
+The reply carries `via: "new" | "legacy"`. Nothing on the screen reads
+it; it is there so that *suggestions work* and *suggestions work
+because the new API is off and we are on the old one* are
+distinguishable without opening the logs.
+
+Two traps live in that fallback, and `supabase/functions/places/parse.ts`
+exists to keep them apart from the fetching so they can be asserted:
+
+- the legacy API answers **HTTP 200 with the refusal in the body**.
+  Code that checks `res.ok` reads `REQUEST_DENIED` as an empty result
+  and shows "no such street" for a key problem;
+- and the two spell the same components differently — `longText`
+  against `long_name`, `suggestions` against `predictions`. Reading the
+  wrong one throws nothing and yields an address with every field null,
+  which looks like a place Google has no data for.
+
+`supabase/functions/places/parse_test.ts` holds a real body of each
+shape against the reader and asserts the two produce the *same*
+address. It runs in CI.
 
 ## Where the box is
 
