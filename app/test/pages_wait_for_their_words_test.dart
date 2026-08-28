@@ -9,6 +9,7 @@ import 'package:iakauntan/src/features/landing/landing_content.dart';
 import 'package:iakauntan/src/features/landing/landing_screen.dart';
 import 'package:iakauntan/src/features/landing/site_page_screen.dart';
 import 'package:iakauntan/src/features/landing/unknown_workspace_screen.dart';
+import 'package:iakauntan/src/features/shell/app_shell.dart';
 
 /// No page draws the product we shipped on the way to the one the
 /// operator wrote.
@@ -111,6 +112,72 @@ void main() {
 
     expect(find.text('No such shop'), findsOneWidget);
     expect(find.text(LandingContent.defaultUnknownTitle), findsNothing);
+  });
+
+  group('the name in the nav, which is not a page', () {
+    // The shell cannot draw the circle: holding somebody's books behind
+    // a spinner waiting on the landing payload would be a worse trade
+    // than the flicker it fixes. So the word waits on its own — the
+    // space where it goes stays empty for one round trip, and the name
+    // arrives once instead of arriving wrong and being corrected.
+    testWidgets('is nothing at all until the brand has landed',
+        (tester) async {
+      final landing = Completer<LandingContent>();
+      String? seen;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            landingContentProvider.overrideWith((ref) => landing.future),
+          ],
+          child: MaterialApp(
+            home: Consumer(
+              builder: (context, ref, _) {
+                seen = platformWordmark(ref);
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(seen, isNull);
+
+      landing.complete(const LandingContent(
+        published: true,
+        wordmark: 'Kira',
+      ));
+      await tester.pumpAndSettle();
+
+      expect(seen, 'Kira');
+    });
+
+    testWidgets('and is what we ship under when it is never coming',
+        (tester) async {
+      String? seen;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            landingContentProvider.overrideWith(
+              (ref) => Future<LandingContent>.error('no'),
+            ),
+          ],
+          child: MaterialApp(
+            home: Consumer(
+              builder: (context, ref, _) {
+                seen = platformWordmark(ref);
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(seen, 'iAkauntan');
+    });
   });
 
   group('what counts as an answer', () {

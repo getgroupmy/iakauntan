@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/format.dart';
 import '../../core/live_updates.dart';
 import '../../core/platform_live.dart';
+import '../../core/page_waiting.dart';
 import '../../core/providers.dart';
 import '../../data/platform_catalog_repository.dart';
 import '../../core/theme.dart';
@@ -1304,7 +1305,11 @@ class _RailHeader extends ConsumerWidget {
               // The company wins when there is one — this is their
               // workspace, not the platform's. The fallback is the only
               // place the platform's own name belongs here.
-              message: org?.name ?? platformWordmark(ref),
+              // Empty rather than the shipped name while the brand is
+              // in flight: a tooltip nobody is hovering over costs
+              // nothing to withhold, and Flutter draws none for an
+              // empty message.
+              message: org?.name ?? platformWordmark(ref) ?? '',
               child: CircleAvatar(
                 backgroundColor: scheme.primary,
                 child: Text(
@@ -1388,7 +1393,7 @@ class _OrgSwitcher extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      org?.name ?? platformWordmark(ref),
+                      org?.name ?? platformWordmark(ref) ?? '',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1473,5 +1478,21 @@ class _AccountButton extends ConsumerWidget {
 /// working inside "Sinar Teknologi" should see Sinar Teknologi, and the
 /// operator's brand belongs on the way in and on the front page rather
 /// than over the top of their customer's own identity.
-String platformWordmark(WidgetRef ref) =>
-    ref.watch(landingContentProvider).valueOrNull?.wordmark ?? 'iAkauntan';
+///
+/// Null while the payload is still in flight, and only then. Every
+/// public page draws [PageWaiting] rather than the name we ship with
+/// (see `core/page_waiting.dart`); the shell cannot do that, because
+/// holding somebody's books behind a spinner waiting on the landing
+/// payload would be a worse trade than the flicker it fixes. So the
+/// word waits on its own: the space where it goes stays empty for the
+/// length of one round trip, and the name arrives once instead of
+/// arriving wrong and being corrected.
+///
+/// A failure still gives 'iAkauntan'. A payload that is never coming is
+/// a real answer, and this is what a platform that has not renamed
+/// itself is called.
+String? platformWordmark(WidgetRef ref) {
+  final fetched = ref.watch(landingContentProvider);
+  if (!settled(fetched)) return null;
+  return fetched.valueOrNull?.wordmark ?? 'iAkauntan';
+}

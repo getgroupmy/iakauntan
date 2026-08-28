@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1787829220.9896278,
-    "ast_hash": "df3e199144a766a418c6649b108a1f6c",
+    "mtime": 1787901076.188463,
+    "ast_hash": "300d19ddc20b99989c2df288110c7d46",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -5200,8 +5200,8 @@
     "semantic_hash": ""
   },
   "app/test/pages_wait_for_their_words_test.dart": {
-    "mtime": 1787900062.2945828,
-    "ast_hash": "789499808c0e6233e6199b596cbc7549",
+    "mtime": 1787901050.7361856,
+    "ast_hash": "7fe75f0053947a14b2a8c2e3ae240e51",
     "semantic_hash": ""
   }
 }
