@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/providers.dart';
 import 'repository.dart';
+import '../features/landing/landing_content.dart';
 
 /// The two names a company can reserve on the platform's domain: a
 /// subdomain to sign in at, and an address to send and receive from.
@@ -303,7 +304,11 @@ final workspaceLookupProvider = FutureProvider<WorkspaceLookup>((ref) async {
     final rows = Repo.rows(
       await ref
           .watch(supabaseProvider)
-          .rpc('workspace_by_host', params: {'p_host': Uri.base.host}),
+          .rpc('workspace_by_host', params: {'p_host': Uri.base.host})
+          // Bounded for the reason `brandDeadline` gives: the sign-in
+          // page waits for this one, and a wait with no end is a page
+          // with no end.
+          .timeout(brandDeadline),
     );
     return rows.isEmpty
         ? (host: WorkspaceHost.unknown, workspace: null)

@@ -976,9 +976,28 @@ LandingContent parseLandingContent(Object? raw) {
 /// `landing_page()` is one of the functions open to an unauthenticated
 /// caller, so this works before anybody has signed in — which is the
 /// whole point of it.
+/// How long a page will wait for the words an operator wrote before it
+/// draws the ones the product shipped with.
+///
+/// Every public page now holds a spinner until this provider and its
+/// neighbours have answered, so that nobody sees our version of a page
+/// replaced by theirs. That trade only works if an answer always comes:
+/// a request that hangs — a phone that has left the network mid-flight,
+/// an origin that accepts a connection and never replies — used to cost
+/// a page drawn in the shipped words, and without a deadline it would
+/// now cost a page that spins for ever.
+///
+/// Five seconds because the call is a single indexed read and normally
+/// answers in a fraction of one. It is a ceiling on a failure, not a
+/// budget for a success.
+const brandDeadline = Duration(seconds: 5);
+
 final landingContentProvider = FutureProvider<LandingContent>((ref) async {
   try {
-    final data = await ref.watch(supabaseProvider).rpc('landing_page');
+    final data = await ref
+        .watch(supabaseProvider)
+        .rpc('landing_page')
+        .timeout(brandDeadline);
     return parseLandingContent(data);
   } catch (_) {
     // A front door that will not open because the network hiccupped is

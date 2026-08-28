@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/providers.dart';
 import 'repository.dart';
+import '../features/landing/landing_content.dart';
 
 /// One of the five pages around the product.
 ///
@@ -113,7 +114,10 @@ final sitePagesRepositoryProvider = Provider<SitePagesRepository>(
 /// the words the product shipped with.
 final sitePagesProvider = FutureProvider<Map<String, SitePage>>((ref) async {
   try {
-    return await ref.watch(sitePagesRepositoryProvider).pages();
+    return await ref
+        .watch(sitePagesRepositoryProvider)
+        .pages()
+        .timeout(brandDeadline);
   } catch (_) {
     return const {};
   }
