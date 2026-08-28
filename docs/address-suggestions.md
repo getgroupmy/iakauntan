@@ -1,8 +1,7 @@
 # Address suggestions
 
-The company setup screen asks which country first, then suggests
-addresses in it. The suggesting is Google Places; the key is not in the
-app.
+Every box in the product that asks for an address suggests one. The
+suggesting is Google Places; the key is not in the app.
 
 ## The key lives in one place
 
@@ -32,6 +31,52 @@ Enable **Places API (New)**. The older Places API is a different
 product with different endpoints, and this function calls the new one:
 `places:autocomplete` and `places/{id}`.
 
+## Where the box is
+
+`AddressField` in `app/lib/src/core/address_field.dart`, on the street
+line of every address the product collects:
+
+| Screen | Address |
+| --- | --- |
+| Company setup | The one the new company is at |
+| Settings → Company details | Business address, and the registered office when it differs |
+| Settings → Branches | Where a branch trades from |
+| Settings → Warehouses | Where stock is kept |
+| Contacts | A customer's or supplier's address |
+| Contacts → Delivery addresses | Each place you deliver to |
+| Property → Site | Where the property is |
+| Till → Delivery | Where the order is going |
+
+The public menu a diner orders from is deliberately not on that list.
+The `places` function requires a signed-in caller, and the whole point
+of that requirement is that our Places quota is not spendable by
+anybody who can load a page.
+
+## The state box, and why it is filled with a number
+
+`state_code` is a foreign key into `ref_states` on contacts and
+warehouses. So what a suggestion writes into a state box has to be the
+LHDN code — `10`, not `Selangor`. A name written there is not a
+slightly wrong value, it is a row that will not save.
+
+`stateCodeFor` does that translation, and it is not a string compare:
+Google answers with the name in common English use and `ref_states`
+carries the name LHDN publishes, and for five of the sixteen those are
+different words — Kuala Lumpur against Wilayah Persekutuan Kuala
+Lumpur, Penang against Pulau Pinang, Malacca against Melaka, and the
+same for Labuan and Putrajaya. Without the aliases a company in KL —
+the single likeliest answer — picks its address and watches the state
+box stay empty.
+
+A state the list does not match leaves the box as it was rather than
+clearing it, for the same foreign-key reason. So does a component
+Google did not return: a suggestion with no postcode does not blank the
+postcode somebody typed.
+
+The till's delivery sheet is the exception, and stores the state *name*
+— that address goes on a docket a driver reads, and `10` does not tell
+anybody where Selangor is.
+
 ## What it costs, and the session token
 
 Places bills autocomplete by *session*, not by keystroke. Every
@@ -46,10 +91,13 @@ magnitude too large. `app/test/company_country_and_address_test.dart`
 asserts it, and fails if the token is renewed per keystroke or reused
 after a choice.
 
-Two other guards on the same bill: nothing is asked for fewer than
-three characters, and the country the operator chose is sent as
-`includedRegionCodes`, so somebody setting up a Malaysian company is
-not offered a street in Ohio.
+Three other guards on the same bill: nothing is asked for fewer than
+three characters; the country is sent as `includedRegionCodes`, so a
+Malaysian company is not offered a street in Ohio — the country chosen
+at setup on that screen, and the organization's own country
+(`orgCountryAlpha2Provider`) everywhere after; and once the function
+says it has no key the box stops asking altogether, rather than paying
+a round trip per keystroke for the rest of the session.
 
 ## Without a key
 
@@ -57,7 +105,10 @@ The function answers `{"suggestions": [], "configured": false}` and the
 form keeps working: the address boxes are ordinary text fields
 underneath and always were. What is missing is the suggesting. That is
 deliberate — a deployment that has not bought a Places key should have
-a working setup screen, not a 500 that reads like an outage.
+working screens, not a 500 that reads like an outage.
+
+Each box asks once and then believes the answer, so an unconfigured
+deployment costs one call per box rather than one per letter.
 
 ## Which country, and what it changes
 

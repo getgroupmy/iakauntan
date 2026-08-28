@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/address_field.dart';
 import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
@@ -8,6 +9,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../../data/places_repository.dart';
 // `RepoGroupContacts` is an extension, and a Dart extension is only
 // in scope where its declaring library is imported.
 import '../../data/repository.dart';
@@ -491,10 +493,25 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
 
                       const SizedBox(height: 24),
                       const SectionHeader('Address'),
-                      TextFormField(
+                      AddressField(
                         controller: _c('address1'),
-                        decoration:
-                            const InputDecoration(labelText: 'Address line 1'),
+                        label: 'Address line 1',
+                        country: ref.watch(orgCountryAlpha2Provider),
+                        // The state is a dropdown here rather than a
+                        // box, so it is set rather than typed into.
+                        onChosen: (a) {
+                          fillAddressBoxes(
+                            a,
+                            statesAsync.valueOrNull ?? const [],
+                            postcode: _c('postcode'),
+                            city: _c('city'),
+                          );
+                          final code = stateCodeFor(
+                            statesAsync.valueOrNull ?? const [],
+                            a.state,
+                          );
+                          if (code != null) setState(() => _stateCode = code);
+                        },
                       ),
                       const SizedBox(height: 14),
                       TextFormField(

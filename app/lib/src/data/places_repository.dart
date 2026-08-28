@@ -105,3 +105,41 @@ final countriesProvider =
       .map((e) => Map<String, dynamic>.from(e as Map))
       .toList();
 });
+
+/// The thirteen states and three federal territories, as reference data.
+///
+/// Read straight from `ref_states` rather than through the org
+/// repository, because the first screen that needs it — company setup —
+/// runs before there is an organization to be a member of. The
+/// [stateCodeFor] matcher in `core/address_field.dart` reads this list
+/// to turn the state Google names into the code `state_code` holds.
+final refStatesProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final data = await ref
+      .watch(supabaseProvider)
+      .from('ref_states')
+      .select('code, name')
+      .order('code');
+  return (data as List)
+      .map((e) => Map<String, dynamic>.from(e as Map))
+      .toList();
+});
+
+/// The current organization's country, in the two letters Places wants.
+///
+/// `organizations.country_code` is alpha-3 and Google's
+/// `includedRegionCodes` is alpha-2, and one is not the other's first
+/// two letters — Portugal is PRT and PT, and PR is Puerto Rico. So the
+/// answer comes from `ref_countries`, which carries both on one row.
+///
+/// Null while either is still loading, and null for a country the
+/// reference table does not list. Null asks the world, which is a wider
+/// answer rather than a wrong one.
+final orgCountryAlpha2Provider = Provider<String?>((ref) {
+  final org = ref.watch(currentOrgProvider).valueOrNull;
+  if (org == null) return null;
+  for (final c in ref.watch(countriesProvider).valueOrNull ?? const []) {
+    if (c['code'] == org.countryCode) return c['alpha2'] as String?;
+  }
+  return null;
+});

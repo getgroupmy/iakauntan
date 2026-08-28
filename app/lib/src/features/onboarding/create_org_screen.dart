@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/address_field.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -140,17 +141,10 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   /// Matched on the name because that is all Places gives — and left
   /// null when nothing matches rather than guessed, since a wrong state
   /// on a company record is worse than an empty one somebody fills in.
-  String? _stateFor(String? name) {
-    if (name == null) return null;
-    final wanted = name.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
-    if (wanted.isEmpty) return null;
-    for (final s in ref.read(_statesProvider).valueOrNull ?? const []) {
-      final have = '${s['name']}'.toLowerCase().replaceAll(
-            RegExp(r'[^a-z]'), '');
-      if (have == wanted) return s['code'] as String?;
-    }
-    return null;
-  }
+  String? _stateFor(String? name) => stateCodeFor(
+    ref.read(refStatesProvider).valueOrNull ?? const [],
+    name,
+  );
 
   void _chooseCountry(String code, String alpha2) => setState(() {
     _country = code;
@@ -169,7 +163,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final statesAsync = ref.watch(_statesProvider);
+    final statesAsync = ref.watch(refStatesProvider);
 
     // First question first. Everything below reads the answer — which
     // fields to draw, which country the address box suggests in — so
@@ -409,18 +403,6 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   }
 }
 
-/// States are reference data, readable before an org exists.
-final _statesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final data = await ref
-      .watch(supabaseProvider)
-      .from('ref_states')
-      .select()
-      .order('code');
-  return (data as List)
-      .map((e) => Map<String, dynamic>.from(e as Map))
-      .toList();
-});
-
 /// Two fields side by side on wide screens, stacked on phones.
 class _Row2 extends StatelessWidget {
   const _Row2({required this.left, required this.right});
@@ -554,153 +536,4 @@ class _CountryStepState extends ConsumerState<_CountryStep> {
       ),
     );
   }
-}
-
-/// An address box that suggests, and fills the boxes beside it.
-///
-/// Typed straight through when nothing comes back — the field is a
-/// `TextFormField` underneath and the form works without a single
-/// suggestion, which is what a deployment with no Places key gets and
-/// what everybody gets when Google is unreachable.
-///
-/// Public because the same box belongs on the contact and outlet
-/// editors eventually, and because a widget a test can pump on its own
-/// is a widget a test can pump on its own.
-class AddressField extends ConsumerStatefulWidget {
-  const AddressField({
-    super.key,
-    required this.controller,
-    required this.onChosen,
-    this.country,
-    this.label = 'Address',
-  });
-
-  final TextEditingController controller;
-
-  /// The rest of the address, for the boxes this one does not own.
-  final void Function(PlaceAddress address) onChosen;
-
-  /// Two letters, so suggestions stay in the country somebody chose.
-  /// Null asks the world, which is the honest answer before the
-  /// question has been answered.
-  final String? country;
-  final String label;
-
-  @override
-  ConsumerState<AddressField> createState() => AddressFieldState();
-}
-
-class AddressFieldState extends ConsumerState<AddressField> {
-  List<PlaceSuggestion> _suggestions = const [];
-  bool _busy = false;
-
-  /// One token for the keystrokes leading to one chosen address.
-  ///
-  /// Places bills a session as a unit: the same token across every
-  /// keystroke and the final details fetch is one charge, and a fresh
-  /// token per keystroke is one charge each. Renewed after a choice,
-  /// because that choice closed the session.
-  String _session = _newSession();
-
-  /// The query the last request was for.
-  ///
-  /// Answers arrive out of order — a three-letter query can come back
-  /// after the five-letter one that followed it, and the list would go
-  /// backwards under somebody still typing. A reply for anything but
-  /// the current text is dropped.
-  String _inFlightFor = '';
-
-  static String _newSession() =>
-      DateTime.now().microsecondsSinceEpoch.toRadixString(36);
-
-  Future<void> _look(String text) async {
-    final q = text.trim();
-    _inFlightFor = q;
-    if (q.length < 3) {
-      if (_suggestions.isNotEmpty) setState(() => _suggestions = const []);
-      return;
-    }
-
-    setState(() => _busy = true);
-    try {
-      final res = await ref.read(placesProvider).suggest(
-        q,
-        country: widget.country,
-        session: _session,
-      );
-      if (!mounted || _inFlightFor != q) return;
-      setState(() => _suggestions = res.suggestions);
-    } catch (_) {
-      // A box that will not take an address because the suggester is
-      // down is worse than one with no suggestions.
-      if (mounted) setState(() => _suggestions = const []);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _choose(PlaceSuggestion s) async {
-    setState(() {
-      _suggestions = const [];
-      _busy = true;
-    });
-    try {
-      final address = await ref
-          .read(placesProvider)
-          .address(s.id, session: _session);
-      if (!mounted) return;
-      if (address != null) {
-        widget.controller.text = address.line1 ?? s.line;
-        widget.onChosen(address);
-      } else {
-        widget.controller.text = s.line;
-      }
-    } catch (_) {
-      if (mounted) widget.controller.text = s.line;
-    } finally {
-      // Whatever happened, that session is over.
-      _session = _newSession();
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      TextFormField(
-        controller: widget.controller,
-        onChanged: _look,
-        decoration: InputDecoration(
-          labelText: widget.label,
-          suffixIcon: _busy
-              ? const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: SizedBox(
-                    height: 16,
-                    width: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              : null,
-        ),
-      ),
-      if (_suggestions.isNotEmpty)
-        Card(
-          margin: const EdgeInsets.only(top: 4),
-          child: Column(
-            children: [
-              for (final s in _suggestions)
-                ListTile(
-                  dense: true,
-                  leading: const Icon(Icons.place_outlined, size: 18),
-                  title: Text(s.line),
-                  subtitle: s.detail.isEmpty ? null : Text(s.detail),
-                  onTap: () => _choose(s),
-                ),
-            ],
-          ),
-        ),
-    ],
-  );
 }

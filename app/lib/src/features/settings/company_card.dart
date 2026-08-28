@@ -2,11 +2,13 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/address_field.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../../data/places_repository.dart';
 import '../../data/repository.dart';
 
 bool _present(String? s) => s != null && s.trim().isNotEmpty;
@@ -307,6 +309,12 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
     // it is wrong relabels every figure the company has.
     final posted = ref.watch(hasPostingsProvider).value ?? true;
 
+    // Watched rather than read, so the reference list is on its way
+    // before anybody picks a suggestion. A state arriving after the
+    // pick would leave the box empty with no way to tell why.
+    final states = ref.watch(refStatesProvider).valueOrNull ?? const [];
+    final country = ref.watch(orgCountryAlpha2Provider);
+
     return AlertDialog(
       title: const Text('Company details'),
       content: SizedBox(
@@ -376,11 +384,19 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
                 style: TextStyle(fontSize: 12),
               ),
               const SizedBox(height: Space.sm),
-              TextField(
-                key: const ValueKey('company-address1'),
+              AddressField(
+                fieldKey: const ValueKey('company-address1'),
                 controller: _line1,
                 enabled: !_saving,
-                decoration: const InputDecoration(labelText: 'Address line 1'),
+                label: 'Address line 1',
+                country: country,
+                onChosen: (a) => fillAddressBoxes(
+                  a,
+                  states,
+                  postcode: _postcode,
+                  city: _city,
+                  stateCode: _state,
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -470,12 +486,18 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
                 title: const Text('Same as the business address'),
               ),
               if (!_registeredSameAsBusiness) ...[
-                TextField(
-                  key: const ValueKey('company-registered-address1'),
+                AddressField(
+                  fieldKey: const ValueKey('company-registered-address1'),
                   controller: _regLine1,
                   enabled: !_saving,
-                  decoration: const InputDecoration(
-                    labelText: 'Address line 1',
+                  label: 'Address line 1',
+                  country: country,
+                  onChosen: (a) => fillAddressBoxes(
+                    a,
+                    states,
+                    postcode: _regPostcode,
+                    city: _regCity,
+                    stateCode: _regState,
                   ),
                 ),
                 const SizedBox(height: 8),
