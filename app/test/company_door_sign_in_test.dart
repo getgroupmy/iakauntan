@@ -87,39 +87,67 @@ void main() {
     // would do, and one they arrive at signed in to a product they
     // cannot use. Now they are turned back on the form they were
     // already looking at.
-    Future<void> refuseOn(WidgetTester tester, String title, String message)
-        async {
+    //
+    // `showRefusal`'s future completes when the dialog is dismissed, so
+    // every test here holds it and awaits it after tapping OK. The
+    // first version dropped it, and a dropped future nothing completes
+    // is a test that hangs until the ten-minute timeout — which it did,
+    // in CI, taking the whole suite past the job's twenty minutes with
+    // it. It passed when this file was run on its own, which is the
+    // only reason it was pushed.
+    Future<SignInScreenState> door(WidgetTester tester) async {
       await tester.pumpWidget(wrap(workspace: const {'name': 'Sinar'}));
       await tester.pumpAndSettle();
-      await tester.state<SignInScreenState>(find.byType(SignInScreen))
-          .showRefusal(title: title, message: message);
+      return tester.state<SignInScreenState>(find.byType(SignInScreen));
+    }
+
+    Future<void> dismiss(WidgetTester tester, Future<void> open) async {
+      await tester.tap(find.text('OK'));
       await tester.pumpAndSettle();
+      await open;
     }
 
     testWidgets('says which module, in a dialog', (tester) async {
-      await refuseOn(tester, 'Not activated',
-          'This address opens Point of Sale, and that is not switched on.');
+      final state = await door(tester);
+      final open = state.showRefusal(
+        title: 'Not activated',
+        message: 'This address opens Point of Sale, and that is not on.',
+      );
+      await tester.pumpAndSettle();
 
       expect(find.byType(AlertDialog), findsOneWidget);
       expect(find.text('Not activated'), findsOneWidget);
       expect(find.textContaining('Point of Sale'), findsOneWidget);
+
+      await dismiss(tester, open);
     });
 
     testWidgets('and leaves the form where it was', (tester) async {
-      await refuseOn(tester, 'Not your workspace', 'Not on Sinar\'s team.');
+      final state = await door(tester);
+      final open = state.showRefusal(
+        title: 'Not your workspace',
+        message: "Not on Sinar's team.",
+      );
+      await tester.pumpAndSettle();
 
       // The whole point of the change: the sign-in form is still there
       // behind the dialog, so the next thing to do — sign in as
       // somebody else — is the thing already on screen.
       expect(find.byType(TextFormField), findsWidgets);
       expect(find.byType(AlertDialog), findsOneWidget);
+
+      await dismiss(tester, open);
     });
 
     testWidgets('and closes on OK, leaving the form', (tester) async {
-      await refuseOn(tester, 'Not activated', 'No till here.');
-
-      await tester.tap(find.text('OK'));
+      final state = await door(tester);
+      final open = state.showRefusal(
+        title: 'Not activated',
+        message: 'No till here.',
+      );
       await tester.pumpAndSettle();
+
+      await dismiss(tester, open);
 
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.byType(TextFormField), findsWidgets);
