@@ -125,8 +125,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
-    "mtime": 1787232668.1979492,
-    "ast_hash": "60673fdf6bddc6a856cf5030d3d002af",
+    "mtime": 1787931761.6909113,
+    "ast_hash": "7af3c95f52c1d85935568a29772bc273",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contacts_screen.dart": {
@@ -260,8 +260,8 @@
     "semantic_hash": "e58e35578f6071bf209f21ce15e74f45"
   },
   "app/lib/src/features/onboarding/create_org_screen.dart": {
-    "mtime": 1787929780.5398164,
-    "ast_hash": "3848fca1ecef10f7827022552e15ede7",
+    "mtime": 1787931665.8593094,
+    "ast_hash": "cd23f270debcaca39e9dc4e87200ac00",
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/reports_screen.dart": {
@@ -1420,8 +1420,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_extras.dart": {
-    "mtime": 1786785756.6144881,
-    "ast_hash": "9933c299b310784bba0528bf8460e290",
+    "mtime": 1787931782.6132338,
+    "ast_hash": "0b56d7bd0d8889b2c685d301e02cde47",
     "semantic_hash": ""
   },
   "app/lib/src/features/crm/leads_screen.dart": {
@@ -2130,8 +2130,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/company_card.dart": {
-    "mtime": 1786780137.1299038,
-    "ast_hash": "2f9cb057ab3b7974b917a743d4ee619d",
+    "mtime": 1787931713.735369,
+    "ast_hash": "8f615a428567027c0f3bb26be79a1007",
     "semantic_hash": ""
   },
   "app/test/company_details_test.dart": {
@@ -2140,8 +2140,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/warehouses_card.dart": {
-    "mtime": 1786690421.0800116,
-    "ast_hash": "635b607f5424abb2e36142da5b95c821",
+    "mtime": 1787931738.335101,
+    "ast_hash": "f1b692cdc249d22ad51e14d5d6a4c06d",
     "semantic_hash": ""
   },
   "supabase/migrations/0130_a_company_has_two_addresses.sql": {
@@ -2150,8 +2150,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/branches_card.dart": {
-    "mtime": 1786785756.622488,
-    "ast_hash": "bcafbf0eb10e29f4dfbf097929bc3e2b",
+    "mtime": 1787931738.3347754,
+    "ast_hash": "98e0cdc72dcf85c26b73dc495c6660dc",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/company_group_card.dart": {
@@ -2965,8 +2965,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/property/site_editor.dart": {
-    "mtime": 1786983736.5832176,
-    "ast_hash": "df00b858461ce24cae35602e8ff0c662",
+    "mtime": 1787931805.6871133,
+    "ast_hash": "d8f0625c89251e6e03d8201dba54180e",
     "semantic_hash": ""
   },
   "supabase/migrations/0179_two_comments_that_never_matched.sql": {
@@ -3805,13 +3805,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/delivery_sheet.dart": {
-    "mtime": 1787822945.4950595,
-    "ast_hash": "576fdfb6077ed25db33c2cbe0d148577",
+    "mtime": 1787932199.9192238,
+    "ast_hash": "6ae1477a6dda51ffe00bbfb82e3ebff5",
     "semantic_hash": ""
   },
   "app/test/delivery_test.dart": {
-    "mtime": 1787822945.5025897,
-    "ast_hash": "542806c2c8e8446f081ada2787c7bdb4",
+    "mtime": 1787932284.0952432,
+    "ast_hash": "54ec6f64098a05f160b8c808743de63a",
     "semantic_hash": ""
   },
   "supabase/migrations/0259_an_address_a_fee_and_a_driver.sql": {
@@ -5230,13 +5230,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/places_repository.dart": {
-    "mtime": 1787929591.7294738,
-    "ast_hash": "5a16a07862122d533f2349fc885a4c5e",
+    "mtime": 1787931645.2094269,
+    "ast_hash": "52a50b044207e29800905e6000e2d385",
     "semantic_hash": ""
   },
   "app/test/company_country_and_address_test.dart": {
-    "mtime": 1787929735.3614705,
-    "ast_hash": "6e4979c92e6306e0281e22d6713d4cd8",
+    "mtime": 1787931880.3475585,
+    "ast_hash": "3495fdc5722197f9b911ebfc7cb0fb52",
     "semantic_hash": ""
   },
   "supabase/functions/places/index.ts": {
@@ -5255,8 +5255,18 @@
     "semantic_hash": ""
   },
   "docs/address-suggestions.md": {
-    "mtime": 1787930015.3845623,
-    "ast_hash": "cfe3b4808de3c027a32e9c9243a8ac41",
+    "mtime": 1787932145.8698926,
+    "ast_hash": "d85be0176fefc9298888e0fa6a9d982a",
+    "semantic_hash": ""
+  },
+  "app/lib/src/core/address_field.dart": {
+    "mtime": 1787932199.9190068,
+    "ast_hash": "809f04d16c4162068215e119c7166705",
+    "semantic_hash": ""
+  },
+  "app/test/address_suggestions_everywhere_test.dart": {
+    "mtime": 1787931927.4247594,
+    "ast_hash": "0bbfa87818eee7f5d7de117d16f51a2a",
     "semantic_hash": ""
   }
 }
