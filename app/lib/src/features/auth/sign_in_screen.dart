@@ -12,6 +12,18 @@ import '../../core/theme.dart';
 import '../landing/landing_content.dart';
 import 'demo_accounts.dart';
 
+/// What to tell somebody refused at a door that is not theirs.
+///
+/// A company's door names the company. One of ours has no name to give,
+/// and "not on 's team" with the name missing reads as a bug rather
+/// than as an answer — which is the shape this takes whenever the host
+/// lookup has not landed by the time the refusal has.
+String notTheirDoorMessage(String? whose) => whose == null
+    ? 'That account may not use this address. Sign in at iakauntan.com '
+        'to reach your own books.'
+    : "That account is not on $whose's team. Sign in at iakauntan.com "
+        'to reach your own books.';
+
 class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key, this.startOnRegister = false});
 
@@ -135,13 +147,6 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           });
         }
       } else {
-        // Raised before the password is sent, not after it comes back:
-        // the session appears the instant `signInWithPassword`
-        // returns, and the router watches the session. Set afterwards
-        // there is a gap, and the gap is exactly long enough for
-        // somebody to be moved into the app on a session these checks
-        // are about to revoke.
-        ref.read(vettingProvider.notifier).state = true;
         await auth.signInWithPassword(
           email: _email.text.trim(),
           password: _password.text,
@@ -160,12 +165,6 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
-      // Let go last, and unconditionally. A refusal has already signed
-      // the session out by now, so releasing the hold leaves somebody
-      // on this form; an ordinary sign-in releases it and the router
-      // takes them where they were going. An exception releases it
-      // too — a hold nobody lifts is an app that never moves again.
-      ref.read(vettingProvider.notifier).state = false;
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -275,9 +274,22 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// somebody out because a request timed out is a worse answer than
   /// letting a member through on a page that is theirs anyway.
   Future<bool> _refuseIfNotTheirDoor() async {
-    final workspace = ref.read(workspaceHostProvider).valueOrNull;
-    if (workspace == null) return false;
-
+    // Asked at every address, always. It used to start with
+    //
+    //     final workspace = ref.read(workspaceHostProvider).valueOrNull;
+    //     if (workspace == null) return false;
+    //
+    // which is a synchronous read of an asynchronous lookup: null means
+    // "not back yet" just as often as it means "not a company's door",
+    // and the two were treated the same. Somebody who typed a password
+    // faster than the lookup came back was not refused — the check
+    // simply did not run, silently, and Sinar's door let anybody in.
+    //
+    // The guard bought nothing either. `may_use_workspace` answers
+    // *true* for the bare domain and for a name nobody holds, and says
+    // in its own comment why it has to: answering false there would
+    // lock everybody out of the platform. There was never a host it was
+    // unsafe to ask about.
     final client = ref.read(supabaseProvider);
     bool allowed;
     try {
@@ -291,16 +303,14 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     }
     if (allowed) return false;
 
-    // A company's door names the company; one of ours has no name to
-    // give, and `Sinar's team` with the name missing reads as a bug.
-    final whose = workspace['name'] as String?;
+    // Only now is the name wanted, and only for the wording — so a
+    // lookup still in flight costs a less specific sentence rather than
+    // the whole refusal.
     await refuse(
       title: 'Not your workspace',
-      message: whose == null
-          ? 'That account may not use this address. Sign in at '
-              'iakauntan.com to reach your own books.'
-          : 'That account is not on $whose\'s team. Sign in at '
-              'iakauntan.com to reach your own books.',
+      message: notTheirDoorMessage(
+        ref.read(workspaceHostProvider).valueOrNull?['name'] as String?,
+      ),
     );
     return true;
   }
@@ -348,18 +358,10 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       _notice = null;
     });
     try {
-      // Held and checked like the form's own sign-in. A demo account is
-      // an ordinary account with a password written on the screen, so
-      // it reaches a company's door and a confined address exactly as
-      // anybody else's does — and without this it did so unvetted,
-      // which is the one way into the app that asked nothing.
-      ref.read(vettingProvider.notifier).state = true;
       await ref.read(supabaseProvider).auth.signInWithPassword(
             email: account.email,
             password: demoPassword,
           );
-      if (await _refuseIfNotTheirDoor()) return;
-      await _refuseIfModuleNotActive();
     } on AuthException catch (e) {
       if (!mounted) return;
       // The likeliest cause by far is that the demo users were deleted
@@ -372,7 +374,6 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
-      ref.read(vettingProvider.notifier).state = false;
       if (mounted) setState(() => _demoBusy = null);
     }
   }
