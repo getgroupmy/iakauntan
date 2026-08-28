@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iakauntan/src/features/auth/sign_in_screen.dart';
@@ -110,5 +111,53 @@ void main() {
     expect(calls, 1);
 
     await tester.pump(const Duration(milliseconds: 300));
+  });
+
+  testWidgets('and does not go anywhere while one is in flight',
+      (tester) async {
+    // What used to happen here: a tap outside the box, or a back
+    // gesture, took the box away — and the sign-in it had already
+    // started went on without it. The spinner left with the box, and
+    // half a second later somebody was either inside the app or
+    // looking at a sentence with nothing on screen that had asked them
+    // anything. Whatever is running keeps its own box until it has an
+    // answer.
+    final gate = Completer<String?>();
+    await tester.pumpWidget(wrap(onSubmit: (_) => gate.future));
+
+    bool canPop() => tester.widget<PopScope>(find.byType(PopScope)).canPop;
+    expect(canPop(), isTrue);
+
+    await tester.enterText(find.byType(TextField), 'hunter2');
+    await tester.tap(find.text('Sign in').last);
+    await tester.pump();
+
+    expect(canPop(), isFalse);
+    // And nothing to type into either: a password edited underneath a
+    // request that is carrying the old one is a box lying about what
+    // it sent.
+    expect(tester.widget<TextField>(find.byType(TextField)).enabled, isFalse);
+
+    gate.complete('Wrong password.');
+    await tester.pump();
+
+    expect(canPop(), isTrue);
+    expect(find.text('Wrong password.'), findsOneWidget);
+  });
+
+  testWidgets('and a correction clears the sentence that asked for it',
+      (tester) async {
+    // Red text that stays put while somebody retypes is red text about
+    // a password they are no longer offering.
+    await tester.pumpWidget(wrap(onSubmit: (_) async => 'Wrong password.'));
+
+    await tester.enterText(find.byType(TextField), 'wrong');
+    await tester.tap(find.text('Sign in').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Wrong password.'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'wrong-again');
+    await tester.pump();
+    expect(find.text('Wrong password.'), findsNothing);
   });
 }

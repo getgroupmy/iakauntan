@@ -1,3 +1,5 @@
+import 'package:iakauntan/src/data/site_pages_repository.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -208,4 +210,54 @@ void main() {
   // is pure and cannot hang, and `sign_in_screen.dart` keeps
   // `showRefusal` as its own method so whoever works out the quiescence
   // problem has a seam to pump.
+
+  group('nothing before the operator\'s page has landed', () {
+    // The complaint: for a split second the sign-in page is the one we
+    // shipped — our labels, no logo, no panel — and then it becomes the
+    // one the operator wrote. Every switch on this screen already reads
+    // "not yet known" as "do not draw", which is why the headline and
+    // the register link do not flicker. The *labels* have no switch:
+    // `_brand?.signinEmailLabel ?? 'Email'` has to draw something, and
+    // until the payload lands the something is ours.
+    Widget waiting({Completer<LandingContent>? landing}) => ProviderScope(
+          overrides: [
+            workspaceHostProvider.overrideWith((ref) async => null),
+            workspaceLookupProvider.overrideWith(
+              (ref) async => (host: WorkspaceHost.platform, workspace: null),
+            ),
+            sitePagesProvider.overrideWith((ref) async => const {}),
+            landingContentProvider.overrideWith(
+              (ref) => (landing ?? Completer<LandingContent>()).future,
+            ),
+          ],
+          child: const MaterialApp(home: SignInScreen()),
+        );
+
+    testWidgets('draws no form at all', (tester) async {
+      await tester.pumpWidget(waiting());
+      await tester.pump();
+
+      expect(find.byType(TextFormField), findsNothing);
+      expect(find.text('Email'), findsNothing);
+      expect(find.text('Sign in'), findsNothing);
+    });
+
+    testWidgets('and the operator\'s words are the only ones ever seen',
+        (tester) async {
+      final landing = Completer<LandingContent>();
+      await tester.pumpWidget(waiting(landing: landing));
+      await tester.pump();
+
+      expect(find.text('Email'), findsNothing);
+
+      landing.complete(const LandingContent(
+        published: true,
+        signinEmailLabel: 'Work email',
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Work email'), findsOneWidget);
+      expect(find.text('Email'), findsNothing);
+    });
+  });
 }

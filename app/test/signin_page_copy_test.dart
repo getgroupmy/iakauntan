@@ -86,6 +86,13 @@ void main() {
     // Not a detail. Copy that appears a moment after the form has
     // settled reads as a glitch, and "loading" defaulting to "draw it"
     // would put our poster back on every first paint.
+    //
+    // The form went the same way. This test used to end by finding the
+    // Sign in button here, because the switches were the only things
+    // waiting: the labels have no switch, so `?? 'Email'` drew the word
+    // we shipped with and the operator's word a moment later, and the
+    // panel arrived after the form it stands beside. A page that is
+    // loading looks like a page that is loading.
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -105,7 +112,8 @@ void main() {
     expect(find.text('Welcome back'), findsNothing);
     expect(find.textContaining('Create an account'), findsNothing);
     expect(find.byKey(const Key('signin-panel')), findsNothing);
-    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.text('Sign in'), findsNothing);
+    expect(find.byType(TextFormField), findsNothing);
   });
 
   group('the payload the database sends', () {

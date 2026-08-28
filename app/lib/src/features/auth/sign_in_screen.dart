@@ -79,54 +79,99 @@ class PasswordDialogState extends State<PasswordDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(widget.action),
-    content: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(widget.email, style: Theme.of(context).textTheme.bodySmall),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _password,
-          obscureText: _obscure,
-          autofocus: true,
-          autofillHints: const [AutofillHints.password],
-          onSubmitted: (_) => _busy ? null : _go(),
-          decoration: InputDecoration(
-            labelText: widget.label,
-            prefixIcon: const Icon(Icons.lock_outline),
-            suffixIcon: IconButton(
-              icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
-              onPressed: () => setState(() => _obscure = !_obscure),
+  Widget build(BuildContext context) => PopScope(
+    // Not dismissable while a password is in the air. The box used to
+    // go on a tap outside it or a back gesture, and the sign-in it had
+    // already started went on without it -- so the box vanished, the
+    // spinner with it, and half a second later somebody was either
+    // inside the app or looking at a sentence with no idea what had
+    // asked the question. Whatever is running keeps its own box until
+    // it has an answer.
+    canPop: !_busy,
+    child: AlertDialog(
+      title: Text(widget.action),
+      // Full width of whatever the dialog allows, rather than the width
+      // of the longest thing currently inside it. Without it the box is
+      // as wide as the email on the way in, then jumps wider when a
+      // refusal lands under the field and narrower when it clears --
+      // three sizes for one dialog, which reads as the box fighting the
+      // person typing in it.
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: AutofillGroup(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.email,
+                    style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _password,
+                  obscureText: _obscure,
+                  autofocus: true,
+                  enabled: !_busy,
+                  autofillHints: const [AutofillHints.password],
+                  // Only while there is something to clear: a setState
+                  // per keystroke is a rebuild of the box per keystroke,
+                  // and that is what typing into it felt like.
+                  onChanged: _error == null
+                      ? null
+                      : (_) => setState(() => _error = null),
+                  onSubmitted: (_) => _busy ? null : _go(),
+                  decoration: InputDecoration(
+                    labelText: widget.label,
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscure ? Icons.visibility_off : Icons.visibility,
+                      ),
+                      onPressed: () => setState(() => _obscure = !_obscure),
+                    ),
+                  ),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
-        if (_error != null) ...[
-          const SizedBox(height: 12),
-          Text(
-            _error!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _go,
+          // The label stays where it is and goes invisible under the
+          // spinner, rather than being replaced by it. Swapping a word
+          // for a 20px circle resizes the button, which resizes the
+          // action row, which moves Cancel out from under the finger
+          // that is on its way to it.
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Opacity(opacity: _busy ? 0 : 1, child: Text(widget.action)),
+              if (_busy)
+                const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
           ),
-        ],
+        ),
       ],
     ),
-    actions: [
-      TextButton(
-        onPressed: _busy ? null : () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        onPressed: _busy ? null : _go,
-        child: _busy
-            ? const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Text(widget.action),
-      ),
-    ],
   );
 }
 
@@ -197,6 +242,29 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// most places.
   String? get _workspace =>
       ref.watch(workspaceHostProvider).valueOrNull?['name'] as String?;
+
+  /// Whether every question this screen's appearance depends on has an
+  /// answer yet.
+  ///
+  /// The switches above read "not yet known" as "do not draw", which is
+  /// right for them and not enough on its own, because the *labels* do
+  /// not have a switch: `_brand?.signinEmailLabel ?? 'Email'` draws the
+  /// word we shipped with while the payload is in flight and the
+  /// operator's word a moment later. So does every other label, and so
+  /// does the whole two-column layout — logo and panel absent, then
+  /// present. The page an operator has never seen flickers past on the
+  /// way to the one they wrote, on every load.
+  ///
+  /// An error counts as settled. A payload that is never coming is a
+  /// real answer — draw what the product shipped with — and it is only
+  /// the *waiting* that has no honest rendering.
+  bool get _settled {
+    bool done(AsyncValue<Object?> v) => v.hasValue || v.hasError;
+    return done(ref.watch(landingContentProvider)) &&
+        done(ref.watch(workspaceHostProvider)) &&
+        done(ref.watch(workspaceLookupProvider)) &&
+        done(ref.watch(sitePagesProvider));
+  }
 
   /// The wording an operator wrote for whichever of the two moods this
   /// screen is in, from `site_pages()`. Null until it arrives and null
@@ -335,6 +403,9 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   @visibleForTesting
   Future<void> askForPassword() => showDialog<void>(
     context: context,
+    // Nothing outside the box dismisses it. See the `PopScope` in
+    // [PasswordDialogState.build] for why.
+    barrierDismissible: false,
     builder: (dialogContext) => PasswordDialog(
       email: _email.text.trim(),
       label: _brand?.signinPasswordLabel ?? 'Password',
@@ -346,10 +417,12 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// Sign in with what was typed in the box, and say what to put back
   /// in it — null when there is nothing to say and the box should go.
   ///
-  /// The box closes before the vetting rather than after, so a refusal
-  /// is never a dialog on top of a dialog: what somebody is told about
-  /// their account arrives on the form, which is where they will be
-  /// standing when they read it.
+  /// The box stays up until there is an answer, and a refusal arrives
+  /// inside it. It used to close the moment the password was accepted
+  /// and then spend two round trips deciding — a window with no box, no
+  /// spinner and a form that answered nothing, which is most of what
+  /// made this feel broken. There is still never a dialog on top of a
+  /// dialog, because now there is only ever the one.
   Future<String?> _signInWithPassword(
     String password,
     BuildContext dialogContext,
@@ -370,9 +443,17 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       },
       vet: () async {
         if (failure != null) return;
-        if (dialogContext.mounted) Navigator.pop(dialogContext);
-        if (await _refuseIfNotTheirDoor()) return;
-        await _refuseIfModuleNotActive();
+        final refusal = await _refusal();
+        if (refusal == null) {
+          if (dialogContext.mounted) Navigator.pop(dialogContext);
+          return;
+        }
+        // Signed out first, and that is what keeps them here: the
+        // router sends a signed-in visitor at `/signin` on to their
+        // books, so leaving the session in place would move them off
+        // the page the message is on.
+        await ref.read(supabaseProvider).auth.signOut();
+        failure = refusal;
       },
     );
     return failure;
@@ -458,6 +539,18 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// request timed out is worse than letting them through to a screen
   /// the router will hold anyway.
   Future<void> _refuseIfModuleNotActive() async {
+    final message = await _moduleRefusal();
+    if (message == null) return;
+    await refuse(title: 'Not activated', message: message);
+  }
+
+  /// What to say about the module, or null when there is nothing to
+  /// say.
+  ///
+  /// Split from [_refuseIfModuleNotActive] so the two-step form can put
+  /// the sentence inside the box the password was typed in, instead of
+  /// closing that box and opening another one behind it.
+  Future<String?> _moduleRefusal() async {
     final client = ref.read(supabaseProvider);
     String? refused;
     try {
@@ -466,17 +559,13 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
         params: {'p_host': Uri.base.host},
       ) as String?;
     } catch (_) {
-      return;
+      return null;
     }
-    if (refused == null) return;
-
-    await refuse(
-      title: 'Not activated',
-      message: 'This address opens $refused, and that is not switched '
-          'on for your company. Ask whoever looks after your '
-          'subscription, or sign in at iakauntan.com to reach the rest '
-          'of your books.',
-    );
+    if (refused == null) return null;
+    return 'This address opens $refused, and that is not switched '
+        'on for your company. Ask whoever looks after your '
+        'subscription, or sign in at iakauntan.com to reach the rest '
+        'of your books.';
   }
 
   /// Sign the session out and say why, without moving anybody.
@@ -558,6 +647,17 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     // in its own comment why it has to: answering false there would
     // lock everybody out of the platform. There was never a host it was
     // unsafe to ask about.
+    final message = await _doorRefusal();
+    if (message == null) return false;
+    await refuse(title: 'Not your workspace', message: message);
+    return true;
+  }
+
+  /// What to say about the door, or null when the door is theirs.
+  ///
+  /// The other half of [_refuseIfNotTheirDoor], split for the reason
+  /// [_moduleRefusal] is.
+  Future<String?> _doorRefusal() async {
     final client = ref.read(supabaseProvider);
     bool allowed;
     try {
@@ -567,20 +667,28 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           ) as bool? ??
           true;
     } catch (_) {
-      return false;
+      return null;
     }
-    if (allowed) return false;
+    if (allowed) return null;
 
     // Only now is the name wanted, and only for the wording — so a
     // lookup still in flight costs a less specific sentence rather than
     // the whole refusal.
-    await refuse(
-      title: 'Not your workspace',
-      message: notTheirDoorMessage(
-        ref.read(workspaceHostProvider).valueOrNull?['name'] as String?,
-      ),
+    return notTheirDoorMessage(
+      ref.read(workspaceHostProvider).valueOrNull?['name'] as String?,
     );
-    return true;
+  }
+
+  /// Both questions at once, the door's answer first.
+  ///
+  /// They used to be asked one after the other, which is two round
+  /// trips end to end between the password being accepted and anything
+  /// appearing — and, because the box had already closed, two round
+  /// trips of a form that looks idle and answers nothing. They do not
+  /// depend on each other, so they go together and cost one.
+  Future<String?> _refusal() async {
+    final answers = await Future.wait([_doorRefusal(), _moduleRefusal()]);
+    return answers[0] ?? answers[1];
   }
 
   /// Tell the company that somebody was refused at its door.
@@ -704,6 +812,17 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
 
     final scheme = Theme.of(context).colorScheme;
     final wide = MediaQuery.sizeOf(context).width >= 900;
+
+    // Nothing at all until there is something true to draw. A blank
+    // page for the length of one round trip is a page that is loading;
+    // the shipped labels and no panel, replaced a moment later, is a
+    // different product appearing and then leaving.
+    if (!_settled) {
+      return Scaffold(
+        backgroundColor: scheme.surface,
+        body: const SizedBox.expand(),
+      );
+    }
 
     final form = Center(
       child: SingleChildScrollView(
