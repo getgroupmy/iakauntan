@@ -330,4 +330,98 @@ void main() {
       expect(find.text('The company desk'), findsNothing);
     });
   });
+
+  group('and the company writes its own words on it', () {
+    // `0349`. The platform's `login` row is one sentence for every
+    // tenant at once, which is to say a generic one. The words over
+    // Sinar's door are Sinar's, and they arrive on the workspace lookup
+    // — the call this screen already makes for the name and the mark.
+    //
+    // Field by field, which is the part worth pinning: a company that
+    // wrote a heading and left the lead-in alone keeps ours underneath
+    // theirs. Row-by-row precedence would silently blank the half they
+    // did not touch, and it would look like the save had eaten it.
+    Widget wrapDoor({String? title, String? body}) => ProviderScope(
+          overrides: [
+            workspaceHostProvider.overrideWith(
+              (ref) => {
+                'name': 'Sinar Teknologi Sdn Bhd',
+                'login_title': title,
+                'login_body': body,
+              },
+            ),
+            workspaceLookupProvider.overrideWith(
+              (ref) => (
+                host: WorkspaceHost.found,
+                workspace: const {'name': 'Sinar Teknologi Sdn Bhd'},
+              ),
+            ),
+            landingContentProvider.overrideWith(
+              (ref) => const LandingContent(
+                published: true,
+                signinShowHeading: true,
+              ),
+            ),
+            sitePagesProvider.overrideWith(
+              (ref) => const {
+                'login': SitePage(
+                  slug: 'login',
+                  title: 'The platform wrote this',
+                  body: 'Sign in to continue to',
+                  isPublished: false,
+                ),
+              },
+            ),
+          ],
+          child: const MaterialApp(
+            home: SignInScreen(scope: SignInScope.workspace),
+          ),
+        );
+
+    testWidgets('a heading of its own wins', (tester) async {
+      await tester.pumpWidget(wrapDoor(title: 'Masuk ke Sinar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Masuk ke Sinar'), findsOneWidget);
+      expect(find.text('The platform wrote this'), findsNothing);
+    });
+
+    testWidgets('and the half it did not write is still ours',
+        (tester) async {
+      await tester.pumpWidget(wrapDoor(title: 'Masuk ke Sinar'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Sign in to continue to Sinar Teknologi Sdn Bhd.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a lead-in of its own wins too, in front of the name',
+        (tester) async {
+      await tester.pumpWidget(
+        wrapDoor(body: 'Log masuk untuk teruskan ke'),
+      );
+      await tester.pumpAndSettle();
+
+      // The name is never typed by an operator — platform-wide copy
+      // cannot say "Sinar" — so what they write goes in front of it.
+      expect(
+        find.text('Log masuk untuk teruskan ke Sinar Teknologi Sdn Bhd.'),
+        findsOneWidget,
+      );
+      expect(find.text('The platform wrote this'), findsOneWidget);
+    });
+
+    testWidgets('and a company that wrote nothing gets ours', (tester) async {
+      await tester.pumpWidget(wrapDoor());
+      await tester.pumpAndSettle();
+
+      expect(find.text('The platform wrote this'), findsOneWidget);
+      expect(
+        find.text('Sign in to continue to Sinar Teknologi Sdn Bhd.'),
+        findsOneWidget,
+      );
+    });
+  });
 }

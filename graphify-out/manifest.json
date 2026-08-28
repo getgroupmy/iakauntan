@@ -120,8 +120,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1787903989.9785168,
-    "ast_hash": "f8fb86f05f5674df22e5a036c694831a",
+    "mtime": 1787904933.094201,
+    "ast_hash": "10f034826df4748b3bcac694ffa3fcd7",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787898619.3901823,
-    "ast_hash": "88487044bd70760e0f9e09692a971598",
+    "mtime": 1787904788.9423335,
+    "ast_hash": "007524660d5b2f82799f05d6c648911c",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -4880,8 +4880,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/reserved_names_repository.dart": {
-    "mtime": 1787902065.395,
-    "ast_hash": "2ac5cea718a16595e94a879a375c943f",
+    "mtime": 1787904840.1980398,
+    "ast_hash": "7afca5615ed1dfbab34103c3c96c07fe",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/reservations_admin.dart": {
@@ -4895,8 +4895,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/addresses_card.dart": {
-    "mtime": 1787822945.4985898,
-    "ast_hash": "24d760ac1d90640e46569a564094084c",
+    "mtime": 1787904873.6188648,
+    "ast_hash": "88c5430de744a9aace0b874b406908ec",
     "semantic_hash": ""
   },
   "app/test/reserved_names_test.dart": {
@@ -4955,8 +4955,8 @@
     "semantic_hash": ""
   },
   "app/test/company_door_sign_in_test.dart": {
-    "mtime": 1787903954.5757685,
-    "ast_hash": "6cc2ac4047e302f157e8d4a3c1e67fc7",
+    "mtime": 1787904908.2147684,
+    "ast_hash": "45e3f2264bb8e69854869c00cec01ad9",
     "semantic_hash": ""
   },
   "app/test/router_refresh_test.dart": {
@@ -5207,6 +5207,16 @@
   "supabase/migrations/0348_a_door_of_its_own.sql": {
     "mtime": 1787903666.5500667,
     "ast_hash": "04f4018ea9def82c4203724050c9fe33",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0349_the_words_over_a_company_s_own_door.sql": {
+    "mtime": 1787904685.032217,
+    "ast_hash": "6744239bdc6f009d4b9bd9d5dfe69857",
+    "semantic_hash": ""
+  },
+  "supabase/tests/org_login_page.sql": {
+    "mtime": 1787904765.7500439,
+    "ast_hash": "abc144985dd708c74b2abaf740d4960a",
     "semantic_hash": ""
   }
 }

@@ -151,9 +151,158 @@ class _Subdomain extends ConsumerWidget {
                     .requestSubdomain(orgId, name),
                 onDone: () => ref.invalidate(orgSubdomainProvider),
               ),
+            // And once it is live, the words on it. Here rather than in
+            // a screen of its own because it is the same subject: the
+            // address, and what it says when somebody arrives at it.
+            // A company with no address yet has nothing to write on.
+            if (status == 'approved') const _DoorWords(),
           ],
         );
       },
+    );
+  }
+}
+
+/// What a company writes over its own sign-in page.
+///
+/// `0348` gave workspace addresses their own page of copy and `0349`
+/// gave it to the company. The platform's version is a sentence written
+/// for every tenant at once, which is to say a generic one; this is the
+/// company saying something true about itself to its own staff.
+///
+/// Two boxes and no publish switch. The three pages the footer links to
+/// are gated on publication because a half-written privacy policy is
+/// worse than none; a heading is not that kind of document, and a draft
+/// state here would only be a way to have typed something and not see
+/// it.
+///
+/// Empty is not blank. Clearing a box restores the platform's wording
+/// rather than rendering a blank line above the form, which is what the
+/// saver's `nullif(btrim(...), '')` is for.
+class _DoorWords extends ConsumerStatefulWidget {
+  const _DoorWords();
+
+  @override
+  ConsumerState<_DoorWords> createState() => _DoorWordsState();
+}
+
+class _DoorWordsState extends ConsumerState<_DoorWords> {
+  final _title = TextEditingController();
+  final _body = TextEditingController();
+
+  /// Filled once, not on every rebuild.
+  ///
+  /// A save invalidates the provider, the provider rebuilds this
+  /// widget, and refilling the boxes from the row at that point throws
+  /// away whatever has been typed since. The same rule the console's
+  /// page editor keeps, and for the same reason.
+  bool _loaded = false;
+  bool _busy = false;
+  String? _error;
+  String? _saved;
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _body.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final orgId = ref.read(currentOrgIdProvider);
+    if (orgId == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _saved = null;
+    });
+    try {
+      await ref.read(supabaseProvider).rpc(
+        'org_save_login_page',
+        params: {
+          'p_org_id': orgId,
+          'p_title': _title.text,
+          'p_body': _body.text,
+        },
+      );
+      ref.invalidate(orgLoginPageProvider);
+      if (mounted) setState(() => _saved = 'Saved.');
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Only somebody who speaks for the company. The function refuses
+    // anybody else anyway — this is so a clerk is not shown a form that
+    // will not take.
+    if (!ref.watch(canAdminProvider)) return const SizedBox.shrink();
+
+    final page = ref.watch(orgLoginPageProvider);
+    if (page.hasValue && !_loaded) {
+      _loaded = true;
+      _title.text = (page.value?['title'] as String?) ?? '';
+      _body.text = (page.value?['body'] as String?) ?? '';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: Space.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Words on your sign-in page',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'What your staff read when they arrive at your address. '
+            'Leave a box empty to use ours.',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _title,
+            enabled: !_busy,
+            decoration: const InputDecoration(
+              labelText: 'Heading',
+              hintText: 'Welcome back',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _body,
+            enabled: !_busy,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Line under it',
+              // The company's name is put after this by the screen, so
+              // what is typed here is the half that is theirs to
+              // decide — the same bargain the platform's own copy makes.
+              hintText: 'Sign in to continue to',
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ],
+          if (_saved != null) ...[
+            const SizedBox(height: 8),
+            Text(_saved!, style: TextStyle(color: context.colors.success)),
+          ],
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton(
+              onPressed: _busy ? null : _save,
+              child: const Text('Save'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

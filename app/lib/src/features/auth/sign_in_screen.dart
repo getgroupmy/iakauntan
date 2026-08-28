@@ -297,8 +297,31 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// screen is in, from `site_pages()`. Null until it arrives and null
   /// if nobody has written it, and both mean the same thing here: use
   /// the sentence the product shipped with.
-  SitePage? get _copy =>
-      ref.watch(sitePagesProvider).valueOrNull?[_slug];
+  SitePage? get _copy {
+    final platform = ref.watch(sitePagesProvider).valueOrNull?[_slug];
+    if (widget.scope != SignInScope.workspace || _isSignUp) return platform;
+
+    // `0349`. The words over a company's own door are the company's to
+    // write, and the platform's `login` row is what a company that has
+    // written nothing gets. Carried on the workspace lookup rather than
+    // fetched separately: that call is already in flight for the name
+    // and the mark on this exact screen, and a second round trip here
+    // is a second visible pause on the one page where a pause shows.
+    //
+    // Field by field, not row by row. A company that wrote a heading
+    // and left the lead-in alone should keep ours underneath theirs
+    // rather than lose it.
+    final workspace = ref.watch(workspaceHostProvider).valueOrNull;
+    final title = workspace?['login_title'] as String?;
+    final body = workspace?['login_body'] as String?;
+    if (title == null && body == null) return platform;
+    return SitePage(
+      slug: 'login',
+      title: title ?? platform?.title,
+      body: body ?? platform?.body,
+      isPublished: true,
+    );
+  }
 
   /// Which of the three auth pages this screen is currently showing.
   ///

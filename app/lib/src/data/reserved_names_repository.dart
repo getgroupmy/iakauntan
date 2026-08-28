@@ -345,3 +345,28 @@ final inboxProvider =
         .limit(200),
   );
 });
+
+/// The words this company has written over its own door.
+///
+/// `0349`. Null until it lands and null for a company that has written
+/// nothing, and both mean the same thing to the editor: the boxes start
+/// empty and the door keeps saying what the platform wrote.
+///
+/// A visitor at the door does not read this. `workspace_by_host`
+/// carries the same two fields to somebody with no session at all,
+/// which is who the page is for; this is the company's own view of what
+/// it has written, and it is behind RLS.
+final orgLoginPageProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
+  final orgId = ref.watch(currentOrgIdProvider);
+  if (orgId == null) return null;
+  final rows = Repo.rows(
+    await ref
+        .watch(supabaseProvider)
+        .from('org_login_pages')
+        .select('title, body')
+        .eq('org_id', orgId)
+        .limit(1),
+  );
+  return rows.isEmpty ? null : rows.first;
+});
