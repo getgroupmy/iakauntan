@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/platform_live.dart';
+import '../../core/page_waiting.dart';
 import '../../core/safe_link.dart';
 import '../../data/site_pages_repository.dart';
 import 'landing_content.dart';
@@ -33,18 +34,30 @@ class LandingScreen extends ConsumerWidget {
     ref.watch(platformLiveProvider);
 
     final fetched = ref.watch(landingContentProvider);
-    // While it loads, and if it fails, show the built-in copy rather
-    // than a spinner or an error: the sign-in button is on this page and
-    // somebody may be trying to reach their books.
+    final pages = ref.watch(sitePagesProvider);
+
+    // The circle until both have answered, and the built-in copy only
+    // if one of them never does.
+    //
+    // This used to draw the built-in copy while it loaded as well, on
+    // the argument that the sign-in button is on this page and somebody
+    // may be trying to reach their books. That is still the right
+    // answer for a payload that is *not coming* — hence the fallback
+    // below, unchanged — but it made every visit to an operator's front
+    // page start with our poster and replace it with theirs half a
+    // second later, which is a different product appearing and then
+    // leaving.
+    if (!allSettled([fetched, pages])) return const PageWaiting();
+
     return Scaffold(
       body: SafeArea(
         child: LandingPage(
           content: fetched.valueOrNull ?? LandingContent.fallback,
           // Which of Terms, Privacy and Contact the operator has
-          // published. Empty while it loads and empty if it fails, so
-          // the footer draws whatever links it can and never waits.
-          pages: ref.watch(sitePagesProvider).valueOrNull?.keys.toSet() ??
-              const {},
+          // published. Empty if it fails, so the footer draws whatever
+          // links it can rather than holding the page for a list of
+          // three links.
+          pages: pages.valueOrNull?.keys.toSet() ?? const {},
         ),
       ),
     );

@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/env.dart';
 import '../../core/platform_live.dart';
+import '../../core/page_waiting.dart';
 import '../../core/providers.dart';
 import '../../data/reserved_names_repository.dart';
 import '../../data/site_pages_repository.dart';
@@ -258,13 +259,12 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// An error counts as settled. A payload that is never coming is a
   /// real answer — draw what the product shipped with — and it is only
   /// the *waiting* that has no honest rendering.
-  bool get _settled {
-    bool done(AsyncValue<Object?> v) => v.hasValue || v.hasError;
-    return done(ref.watch(landingContentProvider)) &&
-        done(ref.watch(workspaceHostProvider)) &&
-        done(ref.watch(workspaceLookupProvider)) &&
-        done(ref.watch(sitePagesProvider));
-  }
+  bool get _settled => allSettled([
+    ref.watch(landingContentProvider),
+    ref.watch(workspaceHostProvider),
+    ref.watch(workspaceLookupProvider),
+    ref.watch(sitePagesProvider),
+  ]);
 
   /// The wording an operator wrote for whichever of the two moods this
   /// screen is in, from `site_pages()`. Null until it arrives and null
@@ -813,16 +813,11 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     final scheme = Theme.of(context).colorScheme;
     final wide = MediaQuery.sizeOf(context).width >= 900;
 
-    // Nothing at all until there is something true to draw. A blank
-    // page for the length of one round trip is a page that is loading;
-    // the shipped labels and no panel, replaced a moment later, is a
+    // Nothing but the circle until there is something true to draw.
+    // A page that is loading looks like a page that is loading; the
+    // shipped labels and no panel, replaced a moment later, is a
     // different product appearing and then leaving.
-    if (!_settled) {
-      return Scaffold(
-        backgroundColor: scheme.surface,
-        body: const SizedBox.expand(),
-      );
-    }
+    if (!_settled) return const PageWaiting();
 
     final form = Center(
       child: SingleChildScrollView(

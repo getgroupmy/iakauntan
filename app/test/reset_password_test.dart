@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:iakauntan/src/core/providers.dart';
 import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/features/auth/reset_password_screen.dart';
+import 'package:iakauntan/src/features/landing/landing_content.dart';
 
 void main() {
   group('password rules', () {
@@ -27,13 +28,25 @@ void main() {
 
   group('the reset screen', () {
     // The screen is deliberately reachable with no organization and no
-    // repository, so it is pumped with nothing but an auth user. Anything
-    // it needed beyond that would be a bug: somebody arriving here has
-    // forgotten their password, not chosen a company.
+    // repository, so it is pumped with nothing but an auth user and the
+    // platform's own brand. Anything beyond that would be a bug:
+    // somebody arriving here has forgotten their password, not chosen a
+    // company.
+    //
+    // The brand is not a company. It is anon-readable, it is what the
+    // operator calls the product, and this page puts it on screen twice
+    // — so the page waits for it rather than drawing the name we ship
+    // with and swapping it a moment later.
     Widget harness() => ProviderScope(
           overrides: [
             currentUserProvider.overrideWithValue(null),
             authStateProvider.overrideWith((_) => const Stream<AuthState>.empty()),
+            // Returned rather than awaited: a `FutureOr` that is
+            // already a value settles on the first frame, so these
+            // tests keep asserting what one `pumpWidget` draws.
+            landingContentProvider.overrideWith(
+              (ref) => const LandingContent(published: true),
+            ),
           ],
           child: MaterialApp(
             theme: AppTheme.light(),

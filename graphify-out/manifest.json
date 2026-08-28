@@ -70,12 +70,12 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1787896548.1855135,
+    "mtime": 1787898619.3901823,
     "ast_hash": "e9da75ce305feaa436e7b810678877ad",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787896548.1855135,
+    "mtime": 1787898619.3901823,
     "ast_hash": "5f6ab676004c4a564275c11d3c36bd83",
     "semantic_hash": ""
   },
@@ -120,8 +120,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1787896761.6182542,
-    "ast_hash": "8c231f69f630b8915c222eb7c4776abb",
+    "mtime": 1787899870.628143,
+    "ast_hash": "9fe48e4c96240ade14e1f4604ee802f3",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -740,7 +740,7 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory.sql": {
-    "mtime": 1787896548.5919268,
+    "mtime": 1787898620.198182,
     "ast_hash": "235e8d046227d64cfa9f25c67ce02fe6",
     "semantic_hash": ""
   },
@@ -795,7 +795,7 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787896548.1855135,
+    "mtime": 1787898619.3901823,
     "ast_hash": "88487044bd70760e0f9e09692a971598",
     "semantic_hash": ""
   },
@@ -980,13 +980,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/reset_password_screen.dart": {
-    "mtime": 1787822945.4905899,
-    "ast_hash": "a93e8e2984736e2b27f853443773aecd",
+    "mtime": 1787899920.6392944,
+    "ast_hash": "6109df3366e3b27dcd12b005f4792bfd",
     "semantic_hash": ""
   },
   "app/test/reset_password_test.dart": {
-    "mtime": 1786785756.626488,
-    "ast_hash": "b5a1c59eedc658dd8886ae44401ab75e",
+    "mtime": 1787900026.2766533,
+    "ast_hash": "8ae8c317e7a0d077ec978f0098fcfc2a",
     "semantic_hash": ""
   },
   "vercel.json": {
@@ -4400,8 +4400,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/landing_screen.dart": {
-    "mtime": 1787822945.4950595,
-    "ast_hash": "8cdd79fd8afa2fdc6f8ba90b2118211a",
+    "mtime": 1787900096.0031765,
+    "ast_hash": "e7e3d4f3533f2d9985500123a0cf27b9",
     "semantic_hash": ""
   },
   "app/test/landing_content_test.dart": {
@@ -4945,18 +4945,18 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/site_page_screen.dart": {
-    "mtime": 1787826617.5720034,
-    "ast_hash": "556f7b1ad3d4ef0f9bc50dbbbc5eb4e0",
+    "mtime": 1787900102.5449243,
+    "ast_hash": "8b613601dd84c5139ba57c82a8664411",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/unknown_workspace_screen.dart": {
-    "mtime": 1787822945.4950595,
-    "ast_hash": "2295b8378a2967811543a3759ed672c0",
+    "mtime": 1787900108.913314,
+    "ast_hash": "5f9c6084963d8972458e31b31c01b376",
     "semantic_hash": ""
   },
   "app/test/company_door_sign_in_test.dart": {
-    "mtime": 1787896548.187927,
-    "ast_hash": "8e07ae891d99150b3e2d4b000ca4f383",
+    "mtime": 1787899173.63563,
+    "ast_hash": "87f0ca6e245a49e0a86667e3ae124816",
     "semantic_hash": ""
   },
   "app/test/router_refresh_test.dart": {
@@ -5035,8 +5035,8 @@
     "semantic_hash": ""
   },
   "app/test/signin_page_copy_test.dart": {
-    "mtime": 1787829351.470541,
-    "ast_hash": "8eb2025d319dfd2ff6734ab525e0a80f",
+    "mtime": 1787899280.3993654,
+    "ast_hash": "fe12223fd1f11fb17155600e42a6b9f8",
     "semantic_hash": ""
   },
   "supabase/migrations/0336_the_sign_in_page_is_not_our_poster.sql": {
@@ -5155,7 +5155,7 @@
     "semantic_hash": ""
   },
   "app/test/name_purposes_test.dart": {
-    "mtime": 1787896548.187927,
+    "mtime": 1787898619.3901823,
     "ast_hash": "eadbfc8fe09e6264259d768a3693a960",
     "semantic_hash": ""
   },
@@ -5165,7 +5165,7 @@
     "semantic_hash": ""
   },
   "supabase/tests/name_purposes.sql": {
-    "mtime": 1787896548.5919268,
+    "mtime": 1787898620.198182,
     "ast_hash": "cbb69734784f49bf1a2cff922e6a1f32",
     "semantic_hash": ""
   },
@@ -5175,23 +5175,33 @@
     "semantic_hash": ""
   },
   "supabase/migrations/0346_the_module_this_address_opens.sql": {
-    "mtime": 1787896548.5919268,
+    "mtime": 1787898620.198182,
     "ast_hash": "92c7d547c7e90dd22f65d60976c2d3bc",
     "semantic_hash": ""
   },
   "supabase/migrations/0347_the_email_before_the_password.sql": {
-    "mtime": 1787896548.5919268,
+    "mtime": 1787898620.198182,
     "ast_hash": "9ded70c312988f3a85a2971d9a6a9e59",
     "semantic_hash": ""
   },
   "supabase/tests/email_before_password.sql": {
-    "mtime": 1787896548.5919268,
+    "mtime": 1787898620.198182,
     "ast_hash": "1e45ac20a8f8b66245b519ac4b36eb23",
     "semantic_hash": ""
   },
   "app/test/password_dialog_test.dart": {
-    "mtime": 1787896699.9175937,
-    "ast_hash": "1fafc754f61f5890806f52285c21fce5",
+    "mtime": 1787899127.280188,
+    "ast_hash": "ac202b15444a7291814612e5f3b319b8",
+    "semantic_hash": ""
+  },
+  "app/lib/src/core/page_waiting.dart": {
+    "mtime": 1787899846.0704107,
+    "ast_hash": "7a72653c8931b6b5a9c0ef40c59a5987",
+    "semantic_hash": ""
+  },
+  "app/test/pages_wait_for_their_words_test.dart": {
+    "mtime": 1787900062.2945828,
+    "ast_hash": "789499808c0e6233e6199b596cbc7549",
     "semantic_hash": ""
   }
 }

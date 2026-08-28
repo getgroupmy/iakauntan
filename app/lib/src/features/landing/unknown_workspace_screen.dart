@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/safe_link.dart';
 import 'landing_content.dart';
+import '../../core/page_waiting.dart';
 
 /// What a visitor gets at a subdomain nobody holds.
 ///
@@ -26,7 +27,13 @@ class UnknownWorkspaceScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final brand = ref.watch(landingContentProvider).valueOrNull;
+    final fetched = ref.watch(landingContentProvider);
+
+    // Every line on this page has an operator's version and a shipped
+    // one, and until the payload lands it drew four shipped ones.
+    if (!settled(fetched)) return const PageWaiting();
+
+    final brand = fetched.valueOrNull;
 
     final title = brand?.unknownTitle ?? LandingContent.defaultUnknownTitle;
     final body = brand?.unknownBody ?? LandingContent.defaultUnknownBody;

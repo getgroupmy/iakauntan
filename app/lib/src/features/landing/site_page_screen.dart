@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/platform_live.dart';
+import '../../core/page_waiting.dart';
 import '../../data/site_pages_repository.dart';
 import 'landing_content.dart';
 import 'landing_tokens.dart';
@@ -32,8 +33,17 @@ class SitePageScreen extends ConsumerWidget {
     ref.watch(platformLiveProvider);
 
     final scheme = Theme.of(context).colorScheme;
-    final brand = ref.watch(landingContentProvider).valueOrNull;
-    final page = ref.watch(sitePagesProvider).valueOrNull?[slug];
+    final fetched = ref.watch(landingContentProvider);
+    final pages = ref.watch(sitePagesProvider);
+
+    // "There is nothing here yet" is the right thing to say about a
+    // page nobody has written. It is the wrong thing to say about one
+    // that has not arrived yet, and this drew it either way — so the
+    // policy an operator did write flashed past as its own absence.
+    if (!allSettled([fetched, pages])) return const PageWaiting();
+
+    final brand = fetched.valueOrNull;
+    final page = pages.valueOrNull?[slug];
 
     return Scaffold(
       backgroundColor: scheme.surface,

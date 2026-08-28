@@ -7,6 +7,7 @@ import '../../core/env.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../landing/landing_content.dart';
+import '../../core/page_waiting.dart';
 
 /// Where a password reset link lands.
 ///
@@ -84,6 +85,10 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
+
+    // The wordmark is on this page twice, and `?? Env.appName` drew the
+    // name we ship with until the operator's landed.
+    if (!settled(ref.watch(landingContentProvider))) return const PageWaiting();
 
     return Scaffold(
       body: Center(
