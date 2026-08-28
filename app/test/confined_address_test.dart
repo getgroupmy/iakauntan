@@ -169,7 +169,10 @@ void main() {
     });
 
     test('and signing out still lands at the door', () {
-      expect(go('/dashboard', signedIn: false), '/signin');
+      // `/login` since `0348`: a company's own address has its own page
+      // of sign-in copy, and the door somebody is put back on is that
+      // one rather than the platform's front desk.
+      expect(go('/dashboard', signedIn: false), '/login');
     });
   });
 

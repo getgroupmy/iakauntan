@@ -113,5 +113,9 @@ String defaultSitePageTitle(String slug) => switch (slug) {
   'contact' => 'Contact us',
   'signin' => 'Welcome back',
   'signup' => 'Create your account',
+  // `0348`. The same words as `signin` out of the box, because the
+  // page starts as a copy of it and an operator who has not edited it
+  // yet should not be able to tell.
+  'login' => 'Welcome back',
   _ => slug,
 };

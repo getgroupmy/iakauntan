@@ -127,6 +127,19 @@ const platformConsoleSections = <ConsoleSection>[
     primary: false,
     page: SitePageTab(slug: 'signin'),
   ),
+  // `0348`. The sign-in form at a company's own address, which is a
+  // different room with the same furniture: nobody arriving at
+  // `sinar.iakauntan.com` is wondering what the product is. Its own
+  // row of copy, edited here exactly as the platform's own is.
+  (
+    group: 'Website & brand',
+    label: 'Login page',
+    icon: Icons.meeting_room_outlined,
+    selectedIcon: Icons.meeting_room,
+    path: '/admin/page/login',
+    primary: false,
+    page: SitePageTab(slug: 'login'),
+  ),
   (
     group: 'Website & brand',
     label: 'Sign up page',

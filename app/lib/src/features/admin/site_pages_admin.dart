@@ -26,8 +26,8 @@ import 'landing_cms.dart';
 class SitePageTab extends ConsumerStatefulWidget {
   const SitePageTab({super.key, required this.slug});
 
-  /// One of `signin`, `signup`, `terms`, `privacy`, `contact`. The
-  /// saver refuses anything else, and the table refuses it again.
+  /// One of `signin`, `signup`, `login`, `terms`, `privacy`, `contact`.
+  /// The saver refuses anything else, and the table refuses it again.
   final String slug;
 
   @override
@@ -57,7 +57,9 @@ class _SitePageTabState extends ConsumerState<SitePageTab> {
 
   /// Whether this page is one the footer links to.
   ///
-  /// The two auth pages are wording on a screen that always draws.
+  /// The three auth pages are wording on a screen that always draws —
+  /// `login` joined them in `0348`, and gating it would leave a blank
+  /// heading over the form at every company address at once.
   bool get _gated => const {'terms', 'privacy', 'contact'}.contains(widget.slug);
 
   @override

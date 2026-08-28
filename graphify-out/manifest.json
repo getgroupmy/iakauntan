@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1787898619.3901823,
-    "ast_hash": "5f6ab676004c4a564275c11d3c36bd83",
+    "mtime": 1787903759.3058043,
+    "ast_hash": "2bcc52014a97bad76b7d6374e3505f92",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -115,13 +115,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
-    "mtime": 1787822945.4865897,
-    "ast_hash": "c089bf132e540c0dbf34e65252f7db87",
+    "mtime": 1787903803.9332159,
+    "ast_hash": "ce184c4b924391f6f3d8d8e8d30ddd7e",
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
-    "mtime": 1787899870.628143,
-    "ast_hash": "9fe48e4c96240ade14e1f4604ee802f3",
+    "mtime": 1787903989.9785168,
+    "ast_hash": "f8fb86f05f5674df22e5a036c694831a",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
@@ -4800,8 +4800,8 @@
     "semantic_hash": ""
   },
   "app/test/router_redirect_test.dart": {
-    "mtime": 1787822945.5065897,
-    "ast_hash": "60c56c2fdb7ea153d52de0df5ba39cb0",
+    "mtime": 1787903932.1543777,
+    "ast_hash": "e3fa8396fad56d62733bf3af4b73073d",
     "semantic_hash": ""
   },
   "supabase/migrations/0323_attachments_become_a_module.sql": {
@@ -4940,13 +4940,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/site_pages_admin.dart": {
-    "mtime": 1787829265.4376001,
-    "ast_hash": "c7215e8be1a7bc0e76abb4a649f15869",
+    "mtime": 1787903812.0684228,
+    "ast_hash": "8f4b28e0beba691aeb613a343a5cfc61",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/site_page_screen.dart": {
-    "mtime": 1787900102.5449243,
-    "ast_hash": "8b613601dd84c5139ba57c82a8664411",
+    "mtime": 1787903803.932955,
+    "ast_hash": "814a666b5690ca7e0e037c1cb0fceb64",
     "semantic_hash": ""
   },
   "app/lib/src/features/landing/unknown_workspace_screen.dart": {
@@ -4955,8 +4955,8 @@
     "semantic_hash": ""
   },
   "app/test/company_door_sign_in_test.dart": {
-    "mtime": 1787899173.63563,
-    "ast_hash": "87f0ca6e245a49e0a86667e3ae124816",
+    "mtime": 1787903954.5757685,
+    "ast_hash": "6cc2ac4047e302f157e8d4a3c1e67fc7",
     "semantic_hash": ""
   },
   "app/test/router_refresh_test.dart": {
@@ -5010,8 +5010,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/site_pages.sql": {
-    "mtime": 1787822946.0305898,
-    "ast_hash": "7c73172d0bc51dd8195571a87c132fd4",
+    "mtime": 1787903704.1228943,
+    "ast_hash": "19102b6ee9fdeb9e0a16dd5c5967c8dc",
     "semantic_hash": ""
   },
   "supabase/tests/unknown_workspace_page.sql": {
@@ -5115,8 +5115,8 @@
     "semantic_hash": ""
   },
   "app/test/confined_address_test.dart": {
-    "mtime": 1787829188.1842175,
-    "ast_hash": "480b37fc259038452bfe5c38098a455a",
+    "mtime": 1787904380.317054,
+    "ast_hash": "8040abab125d8d097d72c5f091a67159",
     "semantic_hash": ""
   },
   "supabase/migrations/0342_a_name_held_and_a_name_pointed.sql": {
@@ -5155,8 +5155,8 @@
     "semantic_hash": ""
   },
   "app/test/name_purposes_test.dart": {
-    "mtime": 1787898619.3901823,
-    "ast_hash": "eadbfc8fe09e6264259d768a3693a960",
+    "mtime": 1787904380.31733,
+    "ast_hash": "16e01d403a1e6f7d0e07b8a94fd78f46",
     "semantic_hash": ""
   },
   "supabase/migrations/0344_a_name_for_us_and_a_name_for_nobody.sql": {
@@ -5202,6 +5202,11 @@
   "app/test/pages_wait_for_their_words_test.dart": {
     "mtime": 1787901050.7361856,
     "ast_hash": "7fe75f0053947a14b2a8c2e3ae240e51",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0348_a_door_of_its_own.sql": {
+    "mtime": 1787903666.5500667,
+    "ast_hash": "04f4018ea9def82c4203724050c9fe33",
     "semantic_hash": ""
   }
 }

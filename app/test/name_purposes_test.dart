@@ -211,12 +211,16 @@ void main() {
     });
 
     test('a refused session is signed out, so the form keeps them', () {
-      // What the router sees after a refusal: no session, at /signin,
-      // at a company's door. It must leave them exactly there — the
+      // What the router sees after a refusal: no session, at the door,
+      // at a company's address. It must leave them exactly there — the
       // dialog is on that screen.
+      //
+      // `/login` since `0348`. A company's address never shows
+      // `/signin` at all now, so asserting about that path here would
+      // be asserting about a screen nobody at this address can reach.
       expect(
         routeFor(
-          path: '/signin',
+          path: '/login',
           signedIn: false,
           recovering: false,
           hasOrg: null,

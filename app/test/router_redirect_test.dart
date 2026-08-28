@@ -168,6 +168,7 @@ void main() {
       '/',
       '/welcome',
       '/signin',
+      '/login',
       '/dashboard',
       '/sales',
       '/settings',
@@ -223,6 +224,7 @@ void main() {
   });
 
   _companyDoor();
+  _theTwoDoors();
 }
 
 /// `0333`. A company's own address opens on the sign-in form.
@@ -231,6 +233,12 @@ void main() {
 /// paid for its own address did not buy one, and somebody who typed
 /// `sinar.iakauntan.com` came looking for Sinar. Only `/` moves — a
 /// signed-in visitor deeper in the app must not be bounced out of it.
+///
+/// The form it lands on is `/login` since `0348`, not `/signin`: same
+/// screen, and a page of copy written for the people who work there
+/// rather than for somebody deciding whether to buy an accounting
+/// system. `_theTwoDoors` below is about which of the two an address
+/// gets; this group is still about which addresses move at all.
 void _companyDoor() {
   group('a company\'s own door', () {
     test('sends the front page to the sign-in form', () {
@@ -243,7 +251,7 @@ void _companyDoor() {
           isPlatformAdmin: null,
           atCompanyDoor: true,
         ),
-        '/signin',
+        '/login',
       );
     });
 
@@ -286,7 +294,7 @@ void _companyDoor() {
           isPlatformAdmin: null,
           atCompanyDoor: true,
         ),
-        '/signin',
+        '/login',
       );
     });
 
@@ -303,12 +311,14 @@ void _companyDoor() {
       );
     });
 
-    test('and /signin itself is not a loop', () {
+    test('and the door it sends them to is not a loop', () {
       // The one mistake in this function that cannot be recovered from
-      // outside: a redirect whose destination redirects back.
+      // outside: a redirect whose destination redirects back. `/signin`
+      // at a company's address moves once, to `/login`, and `/login`
+      // stays put — which is the pair `_theTwoDoors` walks in full.
       expect(
         routeFor(
-          path: '/signin',
+          path: '/login',
           signedIn: false,
           recovering: false,
           hasOrg: null,
@@ -317,6 +327,97 @@ void _companyDoor() {
         ),
         isNull,
       );
+    });
+  });
+}
+
+/// Two doors, and an address has exactly one of them.
+///
+/// `0348` gives a company's own address its own page of sign-in copy,
+/// which means a second route drawing the same form. Two routes that
+/// each redirect to the other is the one mistake here that bricks the
+/// product rather than merely getting it wrong, so the last test walks
+/// them.
+///
+/// The hold is the other half. `atCompanyDoor` is false while the host
+/// lookup is in flight, and a rule that acts on it before the answer
+/// lands sends a company's own staff to the platform's door and moves
+/// them to theirs a moment later — with the wrong heading over the form
+/// in between, which is exactly the flicker the rest of this session
+/// went to some trouble to remove.
+void _theTwoDoors() {
+  group('two doors, one to an address', () {
+    String? at(
+      String path, {
+      bool door = false,
+      bool known = true,
+      bool signedIn = false,
+    }) => routeFor(
+      path: path,
+      signedIn: signedIn,
+      recovering: false,
+      hasOrg: true,
+      isPlatformAdmin: false,
+      atCompanyDoor: door,
+      doorKnown: known,
+    );
+
+    test("a company's address opens its own door", () {
+      expect(at('/signin', door: true), '/login');
+      expect(at('/login', door: true), isNull);
+    });
+
+    test('and the bare domain opens ours', () {
+      expect(at('/login'), '/signin');
+      expect(at('/signin'), isNull);
+    });
+
+    test("and `/` at a company's address is the form, not a shopfront", () {
+      expect(at('/', door: true), '/login');
+      expect(at('/'), isNull);
+    });
+
+    test('signing out leaves you at the door you came in by', () {
+      expect(at('/dashboard', door: true), '/login');
+      expect(at('/dashboard'), '/');
+    });
+
+    test('neither door moves anybody while the lookup is in flight', () {
+      expect(at('/login', known: false), isNull);
+      expect(at('/signin', known: false), isNull);
+    });
+
+    test('and a session at either one goes to the books', () {
+      expect(at('/login', signedIn: true, door: true), '/dashboard');
+      expect(at('/signin', signedIn: true), '/dashboard');
+      // Held for the reason the signed-out pair are: the books are a
+      // different screen at a confined address.
+      expect(at('/login', signedIn: true, known: false), isNull);
+    });
+
+    test('and neither one leads to the other and back', () {
+      for (final door in [true, false]) {
+        for (final known in [true, false]) {
+          for (final signedIn in [true, false]) {
+            for (final start in ['/', '/signin', '/login', '/dashboard']) {
+              var here = start;
+              final seen = <String>{here};
+              for (var hop = 0; hop < 10; hop++) {
+                final next =
+                    at(here, door: door, known: known, signedIn: signedIn);
+                if (next == null) break;
+                expect(
+                  seen.add(next),
+                  isTrue,
+                  reason: 'loop from $start: $seen — door: $door, '
+                      'known: $known, signedIn: $signedIn',
+                );
+                here = next;
+              }
+            }
+          }
+        }
+      }
     });
   });
 }

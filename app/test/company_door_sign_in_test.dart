@@ -260,4 +260,74 @@ void main() {
       expect(find.text('Email'), findsNothing);
     });
   });
+
+  group('the login page, which is a door of its own', () {
+    // `0348`. The same screen at a company's own address, reading a
+    // second row of copy rather than the platform's.
+    //
+    // Two audiences and one row of words was the problem: `signin` is
+    // written for somebody at `iakauntan.com` who may not have an
+    // account yet, and nobody arriving at `sinar.iakauntan.com` is
+    // wondering what the product is. An operator could write for one of
+    // them or the other and not for both.
+    //
+    // A scope on the existing screen and not a second screen, which is
+    // what makes this worth asserting: the wiring is one getter, and a
+    // getter that reads the wrong slug is invisible until somebody
+    // edits a page and watches nothing change.
+    Widget wrapScoped(SignInScope scope) => ProviderScope(
+          overrides: [
+            workspaceHostProvider.overrideWith(
+              (ref) => const {'name': 'Sinar Teknologi Sdn Bhd'},
+            ),
+            workspaceLookupProvider.overrideWith(
+              (ref) => (
+                host: WorkspaceHost.found,
+                workspace: const {'name': 'Sinar Teknologi Sdn Bhd'},
+              ),
+            ),
+            landingContentProvider.overrideWith(
+              (ref) => const LandingContent(
+                published: true,
+                signinShowHeading: true,
+              ),
+            ),
+            sitePagesProvider.overrideWith(
+              (ref) => const {
+                'signin': SitePage(
+                  slug: 'signin',
+                  title: 'The platform desk',
+                  body: 'Sign in to',
+                  isPublished: false,
+                ),
+                'login': SitePage(
+                  slug: 'login',
+                  title: 'The company desk',
+                  body: 'Sign in to',
+                  isPublished: false,
+                ),
+              },
+            ),
+          ],
+          child: MaterialApp(home: SignInScreen(scope: scope)),
+        );
+
+    testWidgets('draws its own words, not the platform\'s',
+        (tester) async {
+      await tester.pumpWidget(wrapScoped(SignInScope.workspace));
+      await tester.pumpAndSettle();
+
+      expect(find.text('The company desk'), findsOneWidget);
+      expect(find.text('The platform desk'), findsNothing);
+    });
+
+    testWidgets('and the platform door still draws the platform\'s',
+        (tester) async {
+      await tester.pumpWidget(wrapScoped(SignInScope.platform));
+      await tester.pumpAndSettle();
+
+      expect(find.text('The platform desk'), findsOneWidget);
+      expect(find.text('The company desk'), findsNothing);
+    });
+  });
 }

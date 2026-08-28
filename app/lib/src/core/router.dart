@@ -261,7 +261,7 @@ String? routeFor({
   // not a shopfront — a stranger who typed it was looking for Sinar,
   // not for what iAkauntan is — so its `/` is the sign-in form. Only
   // `/`: a signed-in visitor on any other route is left alone.
-  if (path == '/') return atCompanyDoor ? '/signin' : null;
+  if (path == '/') return atCompanyDoor ? '/login' : null;
   // Kept because it was the address for a while and links to it exist.
   // One redirect, not a second copy of the page.
   if (path == '/welcome') return '/';
@@ -281,8 +281,22 @@ String? routeFor({
   // out go" depend on a second rule further up the function, and this
   // is the rule that is asserted.
   if (!signedIn) {
-    if (path == '/signin') return null;
-    return atCompanyDoor ? '/signin' : '/';
+    // Two doors, and an address has exactly one of them. `/signin` is
+    // the platform's front desk, written for somebody who may not have
+    // an account yet; `/login` is a company's own, written for people
+    // who work there. Whichever address this is, the other one is a
+    // redirect rather than a second page to keep in step.
+    //
+    // Held until the lookup answers. `atCompanyDoor` is false while it
+    // is in flight, and acting on that would send a company's own staff
+    // to the platform's door and move them to theirs a moment later —
+    // with the wrong heading over the form in between.
+    if (path == '/signin' || path == '/login') {
+      if (!doorKnown) return null;
+      final door = atCompanyDoor ? '/login' : '/signin';
+      return path == door ? null : door;
+    }
+    return atCompanyDoor ? '/login' : '/';
   }
 
   // Signed in, and the door checks that may undo it are still running.
@@ -309,7 +323,9 @@ String? routeFor({
   // them off it, which they watch happen. Once the answer is in, the
   // hop to the dashboard and the hop from there to the till resolve as
   // one chain and nothing in between is ever drawn.
-  if (path == '/signin') return doorKnown ? '/dashboard' : null;
+  if (path == '/signin' || path == '/login') {
+    return doorKnown ? '/dashboard' : null;
+  }
 
   // Organizations may still be loading; hold the current route until we
   // know whether the user has any books to open. The same goes for
@@ -435,6 +451,23 @@ final routerProvider = Provider<GoRouter>((ref) {
           // routes, so /signin stays the one address anybody links to.
           startOnRegister: state.uri.queryParameters['mode'] == 'register',
         ),
+      ),
+      // The same screen at a company's own address, reading its own
+      // page of copy — `0348`'s sixth `site_pages` row rather than the
+      // `signin` one.
+      //
+      // The same widget and not a copy of it. What differs between the
+      // platform's door and a company's is a heading and a lead-in;
+      // everything else — the two-step email, the refusals, the hold
+      // around the sign-in — is the part that must not drift, and a
+      // second seven-hundred-line screen is how it would.
+      //
+      // No `mode` here. Joining the platform is not something a
+      // company's door offers, which is the rule `0336` set and the
+      // reason the register link is absent from it already.
+      GoRoute(
+        path: '/login',
+        builder: (_, __) => const SignInScreen(scope: SignInScope.workspace),
       ),
       // Outside the shell and outside auth, like the signing and share
       // pages: no navigation rail, no company switcher, nothing but the

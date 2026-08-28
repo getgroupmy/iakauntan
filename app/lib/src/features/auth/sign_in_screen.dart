@@ -216,14 +216,41 @@ String notTheirDoorMessage(String? whose) => whose == null
     : "That account is not on $whose's team. Sign in at iakauntan.com "
         'to reach your own books.';
 
+/// Whose door this screen is drawing.
+///
+/// The same form, the same checks and the same refusals; what changes
+/// is the page of copy over it. `0348` gives a company's own address a
+/// `login` row of its own beside `signin`, because the two are written
+/// for different people: somebody at `iakauntan.com` may not have an
+/// account yet, and somebody at `sinar.iakauntan.com` works there.
+///
+/// A scope rather than a second screen, deliberately. The two-step
+/// email, the vetting, the password box and the wording of every
+/// refusal are the parts that must not drift apart, and a second copy
+/// of this file is exactly how they would.
+enum SignInScope {
+  /// `/signin`, at the bare domain.
+  platform,
+
+  /// `/login`, at a company's or a module's own address.
+  workspace,
+}
+
 class SignInScreen extends ConsumerStatefulWidget {
-  const SignInScreen({super.key, this.startOnRegister = false});
+  const SignInScreen({
+    super.key,
+    this.startOnRegister = false,
+    this.scope = SignInScope.platform,
+  });
 
   /// Whether to open on the sign-up form rather than the sign-in one.
   ///
   /// The landing page offers both, and somebody who pressed "Create an
   /// account" should not have to find the toggle once they arrive.
   final bool startOnRegister;
+
+  /// Which page of copy to draw. See [SignInScope].
+  final SignInScope scope;
 
   @override
   ConsumerState<SignInScreen> createState() => SignInScreenState();
@@ -271,7 +298,18 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// if nobody has written it, and both mean the same thing here: use
   /// the sentence the product shipped with.
   SitePage? get _copy =>
-      ref.watch(sitePagesProvider).valueOrNull?[_isSignUp ? 'signup' : 'signin'];
+      ref.watch(sitePagesProvider).valueOrNull?[_slug];
+
+  /// Which of the three auth pages this screen is currently showing.
+  ///
+  /// Sign-up is always the platform's: `0336` took the offer of an
+  /// account off a company's door, so there is no workspace sign-up
+  /// page to write and nothing that would draw it.
+  String get _slug => _isSignUp
+      ? 'signup'
+      : widget.scope == SignInScope.workspace
+      ? 'login'
+      : 'signin';
 
   /// The words before the name, when nobody has written their own.
   ///
