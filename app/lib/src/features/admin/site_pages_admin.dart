@@ -151,6 +151,24 @@ class _SitePageTabState extends ConsumerState<SitePageTab> {
                   const SizedBox(height: Space.lg),
                   const _DemoAccountsCard(),
                 ],
+                // `0350`. The same three cards for a company's door,
+                // against that page's own columns — the point of those
+                // columns being that a switch flicked here does not
+                // move the sign-in page.
+                //
+                // Three and not four. The demo logins are the
+                // platform's own account fixtures and have no business
+                // on a tenant's page: somebody arriving at Sinar's
+                // address should not be offered a way into a
+                // demonstration company.
+                if (widget.slug == 'login') ...[
+                  const SizedBox(height: Space.lg),
+                  const _SigninPanelCard(login: true),
+                  const SizedBox(height: Space.lg),
+                  const _SigninWordsCard(login: true),
+                  const SizedBox(height: Space.lg),
+                  const LandingSectionsCard(kind: 'login'),
+                ],
                 const SizedBox(height: Space.lg),
               ],
             ),
@@ -318,7 +336,22 @@ class _DemoAccountsCardState extends ConsumerState<_DemoAccountsCard> {
 /// it is drawn, which is a different question and belongs next to the
 /// other three whethers.
 class _SigninPanelCard extends ConsumerStatefulWidget {
-  const _SigninPanelCard();
+  const _SigninPanelCard({this.login = false});
+
+  /// Whether this card dresses the login page rather than the sign-in
+  /// one.
+  ///
+  /// `0350`. The two pages have separate columns, so this switches
+  /// which set the card reads and writes — a card drawn on both tabs
+  /// against one set of columns would have made a switch flicked here
+  /// change the other page without saying so.
+  ///
+  /// Two of the switches are missing in the login case, and their
+  /// absence is the point rather than an omission: a company's door
+  /// always draws that company's own mark, whatever the platform's logo
+  /// and name switches say, and it never offers an account. Switches
+  /// that cannot change what is on the screen are worse than none.
+  final bool login;
 
   @override
   ConsumerState<_SigninPanelCard> createState() => _SigninPanelCardState();
@@ -326,6 +359,9 @@ class _SigninPanelCard extends ConsumerStatefulWidget {
 
 class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
   final _headline = TextEditingController();
+
+  /// `signin` or `login`, in front of every column this card touches.
+  String get _p => widget.login ? 'login' : 'signin';
 
   /// Whether the box has been filled from the row yet.
   ///
@@ -345,7 +381,7 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
     final row = ref.watch(landingPageAdminProvider).valueOrNull;
     if (!_loaded && row != null) {
       _loaded = true;
-      _headline.text = '${row['signin_headline'] ?? ''}';
+      _headline.text = '${row['${_p}_headline'] ?? ''}';
     }
     bool on(String key) => row?[key] == true;
 
@@ -366,31 +402,39 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: Space.sm),
+            // Absent on the login page. A company's door draws that
+            // company's mark whether these are on or off — taking
+            // Sinar's logo off Sinar's door because *we* turned ours
+            // off would be the wrong reading — so on that tab these two
+            // would be switches with nothing behind them.
+            if (!widget.login) ...[
+              _Switch(
+                value: on('signin_show_logo'),
+                busy: _busy,
+                title: 'Your logo',
+                subtitle: 'On the panel beside the form, and above the '
+                    'form on a phone. A company signing in at its own '
+                    'subdomain always sees its own, whichever way this '
+                    'is set.',
+                onChanged: (v) => _save({'signin_show_logo': v}),
+              ),
+              _Switch(
+                value: on('signin_show_name'),
+                busy: _busy,
+                title: 'Your name beside it',
+                subtitle: 'Separate from the logo, because a logo that '
+                    'already has the name in it does not want the word '
+                    'next to it.',
+                onChanged: (v) => _save({'signin_show_name': v}),
+              ),
+            ],
             _Switch(
-              value: on('signin_show_logo'),
-              busy: _busy,
-              title: 'Your logo',
-              subtitle: 'On the panel beside the form, and above the form '
-                  'on a phone. A company signing in at its own subdomain '
-                  'always sees its own, whichever way this is set.',
-              onChanged: (v) => _save({'signin_show_logo': v}),
-            ),
-            _Switch(
-              value: on('signin_show_name'),
-              busy: _busy,
-              title: 'Your name beside it',
-              subtitle: 'Separate from the logo, because a logo that '
-                  'already has the name in it does not want the word next '
-                  'to it.',
-              onChanged: (v) => _save({'signin_show_name': v}),
-            ),
-            _Switch(
-              value: on('signin_show_headline'),
+              value: on('${_p}_show_headline'),
               busy: _busy,
               title: 'The headline',
               subtitle: 'The large line on the panel. Its wording is the '
                   'box below.',
-              onChanged: (v) => _save({'signin_show_headline': v}),
+              onChanged: (v) => _save({'${_p}_show_headline': v}),
             ),
             const SizedBox(height: Space.sm),
             TextField(
@@ -410,30 +454,34 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
               child: OutlinedButton.icon(
                 onPressed: _busy
                     ? null
-                    : () => _save({'signin_headline': _headline.text}),
+                    : () => _save({'${_p}_headline': _headline.text}),
                 icon: const Icon(Icons.save_outlined, size: 18),
                 label: const Text('Save headline'),
               ),
             ),
             const Divider(height: Space.lg),
             _Switch(
-              value: on('signin_show_heading'),
+              value: on('${_p}_show_heading'),
               busy: _busy,
               title: 'The heading above the form',
               subtitle: 'The line and sentence you edit at the top of this '
                   'screen. Off, the form has no heading at all.',
-              onChanged: (v) => _save({'signin_show_heading': v}),
+              onChanged: (v) => _save({'${_p}_show_heading': v}),
             ),
-            _Switch(
-              value: on('signin_show_register'),
-              busy: _busy,
-              title: 'Offer an account',
-              subtitle: 'Draws "New to us? Create an account" under the '
-                  'button. Off, somebody can still reach the form at '
-                  '/signin?mode=register, and the way back from it is '
-                  'always drawn.',
-              onChanged: (v) => _save({'signin_show_register': v}),
-            ),
+            // Also absent on the login page: `0336` took the offer of
+            // an account off a company's door, so there is no link here
+            // to switch.
+            if (!widget.login)
+              _Switch(
+                value: on('signin_show_register'),
+                busy: _busy,
+                title: 'Offer an account',
+                subtitle: 'Draws "New to us? Create an account" under '
+                    'the button. Off, somebody can still reach the form '
+                    'at /signin?mode=register, and the way back from it '
+                    'is always drawn.',
+                onChanged: (v) => _save({'signin_show_register': v}),
+              ),
           ],
         ),
       ),
@@ -493,7 +541,11 @@ class _Switch extends StatelessWidget {
 /// box means "the word the product ships with", because a form whose
 /// fields have no labels is not a cleaner form.
 class _SigninWordsCard extends ConsumerStatefulWidget {
-  const _SigninWordsCard();
+  const _SigninWordsCard({this.login = false});
+
+  /// Whether this card writes the login page's words rather than the
+  /// sign-in page's. See [_SigninPanelCard.login].
+  final bool login;
 
   @override
   ConsumerState<_SigninWordsCard> createState() => _SigninWordsCardState();
@@ -567,8 +619,47 @@ class _SigninWordsCardState extends ConsumerState<_SigninWordsCard> {
     ),
   ];
 
+  /// The login page's four, and why it is four rather than eight.
+  ///
+  /// `0350`. There is no sign-up form at a company's door, so the name
+  /// box, the two prompts and the sign-up button have nothing to label;
+  /// what is left is the two boxes, the forgotten-password link and the
+  /// button. Every one of them is blankable, so "leave a box empty to
+  /// get the word under it" holds for all four.
+  static const _loginFields =
+      <({String column, String label, String ships, bool notNull})>[
+    (
+      column: 'login_email_label',
+      label: 'Email box',
+      ships: 'Email',
+      notNull: false,
+    ),
+    (
+      column: 'login_password_label',
+      label: 'Password box',
+      ships: 'Password',
+      notNull: false,
+    ),
+    (
+      column: 'login_forgot_label',
+      label: 'The forgotten-password link',
+      ships: 'Forgot password?',
+      notNull: false,
+    ),
+    (
+      column: 'login_sign_in_label',
+      label: 'The sign-in button',
+      ships: 'Sign in',
+      notNull: false,
+    ),
+  ];
+
+  List<({String column, String label, String ships, bool notNull})>
+      get _showing => widget.login ? _loginFields : _fields;
+
   final _controllers = <String, TextEditingController>{
-    for (final f in _fields) f.column: TextEditingController(),
+    for (final f in [..._fields, ..._loginFields])
+      f.column: TextEditingController(),
   };
   bool _loaded = false;
   bool _busy = false;
@@ -586,7 +677,7 @@ class _SigninWordsCardState extends ConsumerState<_SigninWordsCard> {
     final row = ref.watch(landingPageAdminProvider).valueOrNull;
     if (!_loaded && row != null) {
       _loaded = true;
-      for (final f in _fields) {
+      for (final f in _showing) {
         _controllers[f.column]!.text = '${row[f.column] ?? ''}';
       }
     }
@@ -607,7 +698,7 @@ class _SigninWordsCardState extends ConsumerState<_SigninWordsCard> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: Space.sm),
-            for (final f in _fields) ...[
+            for (final f in _showing) ...[
               TextField(
                 controller: _controllers[f.column],
                 decoration: InputDecoration(
@@ -637,7 +728,7 @@ class _SigninWordsCardState extends ConsumerState<_SigninWordsCard> {
     // the shipped word back, and the saver reads only an *absent* key
     // as "leave it alone".
     final patch = <String, dynamic>{
-      for (final f in _fields)
+      for (final f in _showing)
         f.column: _controllers[f.column]!.text.trim().isEmpty && f.notNull
             ? f.ships
             : _controllers[f.column]!.text,

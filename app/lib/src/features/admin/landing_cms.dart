@@ -496,6 +496,7 @@ class LandingSectionsCard extends ConsumerWidget {
   bool get _reasons => kind == 'reason';
   bool get _badges => kind == 'badge';
   bool get _signin => kind == 'signin';
+  bool get _login => kind == 'login';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -503,6 +504,7 @@ class LandingSectionsCard extends ConsumerWidget {
       'reason' => landingReasonsAdminProvider,
       'badge' => landingBadgesAdminProvider,
       'signin' => landingSigninPointsAdminProvider,
+      'login' => landingLoginPointsAdminProvider,
       _ => landingSectionsAdminProvider,
     });
     return Card(
@@ -515,7 +517,9 @@ class LandingSectionsCard extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    _signin
+                    _login
+                        ? 'The points beside a company\'s own form'
+                        : _signin
                         ? 'The points beside the form'
                         : _badges
                         ? 'What it files under'
@@ -546,14 +550,14 @@ class LandingSectionsCard extends ConsumerWidget {
                 }
                 if (rows.isEmpty) {
                   return EmptyState(
-                    icon: _signin
+                    icon: _signin || _login
                         ? Icons.checklist_outlined
                         : _badges
                         ? Icons.verified_outlined
                         : _reasons
                         ? Icons.thumb_up_outlined
                         : Icons.article_outlined,
-                    title: _signin
+                    title: _signin || _login
                         ? 'No points beside the form'
                         : _badges
                         ? 'No badges written yet'
@@ -564,7 +568,7 @@ class LandingSectionsCard extends ConsumerWidget {
                     // the product ships with. The sign-in panel does
                     // not: nothing there is drawn unless somebody put
                     // it there, which is what 0336 is about.
-                    message: _signin
+                    message: _signin || _login
                         ? 'Nothing is shown beside the sign-in form '
                               'unless you add it and switch it on.'
                         : 'The page shows the copy iAkauntan ships '

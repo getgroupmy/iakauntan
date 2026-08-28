@@ -304,6 +304,14 @@ final landingSigninPointsAdminProvider =
   (ref) => ref.watch(landingAdminProvider).landingSections(kind: 'signin'),
 );
 
+/// The bullets beside a company's own door (`0350`). A fifth `kind`,
+/// for the reason the fourth exists: the login page is dressed
+/// separately from the sign-in page, so its list is its own.
+final landingLoginPointsAdminProvider =
+    FutureProvider<List<Map<String, dynamic>>>(
+  (ref) => ref.watch(landingAdminProvider).landingSections(kind: 'login'),
+);
+
 final landingBadgesAdminProvider =
     FutureProvider<List<Map<String, dynamic>>>(
   (ref) => ref.watch(landingAdminProvider).landingSections(kind: 'badge'),

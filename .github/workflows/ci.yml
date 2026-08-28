@@ -138,6 +138,7 @@ jobs:
                    supabase/tests/demo_accounts_switch.sql \
                    supabase/tests/signin_page_copy.sql \
                    supabase/tests/signin_page_words.sql \
+                   supabase/tests/login_page_words.sql \
                    supabase/tests/held_and_pointed_names.sql \
                    supabase/tests/scheme_roles.sql \
                    supabase/tests/name_purposes.sql \

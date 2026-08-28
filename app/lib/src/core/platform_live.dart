@@ -88,6 +88,10 @@ final Map<String, List<ProviderOrFamily>> _watchers = {
     // of this list, editing one refreshed the landing page's three
     // bands and not the list the operator was actually looking at.
     landingSigninPointsAdminProvider,
+    // 0350's fifth, and left out of this list it would have had the
+    // same fault the fourth did: editing a company's bullet refreshing
+    // somebody else's list.
+    landingLoginPointsAdminProvider,
     landingContentProvider,
   ],
   // 0334's five pages: the wording on the two auth screens and the

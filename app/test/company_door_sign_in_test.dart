@@ -289,7 +289,11 @@ void main() {
             landingContentProvider.overrideWith(
               (ref) => const LandingContent(
                 published: true,
+                // Both, because the point of the pair is that each
+                // scope reads its own: with only one of them on, this
+                // would pass for whichever scope happened to be right.
                 signinShowHeading: true,
+                loginShowHeading: true,
               ),
             ),
             sitePagesProvider.overrideWith(
@@ -359,7 +363,9 @@ void main() {
             landingContentProvider.overrideWith(
               (ref) => const LandingContent(
                 published: true,
-                signinShowHeading: true,
+                // `0350`: the login page has its own switch, and this
+                // screen is drawing the login page.
+                loginShowHeading: true,
               ),
             ),
             sitePagesProvider.overrideWith(
@@ -422,6 +428,61 @@ void main() {
         find.text('Sign in to continue to Sinar Teknologi Sdn Bhd.'),
         findsOneWidget,
       );
+    });
+  });
+
+  group('and the two pages are dressed apart', () {
+    // `0350`. The console's Sign in page carries switches, labels and
+    // bullets; the Login page carried none of them, and the reason they
+    // could not simply be drawn on both tabs is that every one of them
+    // wrote the same `signin_*` column. A switch flicked under "Login
+    // page" would have changed the platform's own sign-in screen
+    // without saying so.
+    //
+    // So each scope reads its own set, and this is the assertion that
+    // says so: one brand, the two sets set to opposite things, and each
+    // screen shows only what its own set asked for.
+    const brand = LandingContent(
+      published: true,
+      signinShowHeadline: true,
+      signinHeadline: 'The platform headline',
+      signinEmailLabel: 'Platform email',
+      signinForgotLabel: 'Platform forgot',
+      loginShowHeadline: true,
+      loginHeadline: 'The company headline',
+      loginEmailLabel: 'Company email',
+      loginForgotLabel: 'Company forgot',
+    );
+
+    Widget wrapScope(SignInScope scope) => ProviderScope(
+          overrides: [
+            workspaceHostProvider.overrideWith((ref) => null),
+            workspaceLookupProvider.overrideWith(
+              (ref) => (host: WorkspaceHost.platform, workspace: null),
+            ),
+            landingContentProvider.overrideWith((ref) => brand),
+            sitePagesProvider.overrideWith((ref) => const {}),
+          ],
+          child: MaterialApp(home: SignInScreen(scope: scope)),
+        );
+
+    testWidgets('the platform door wears the platform\'s', (tester) async {
+      await tester.pumpWidget(wrapScope(SignInScope.platform));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Platform email'), findsOneWidget);
+      expect(find.text('Platform forgot'), findsOneWidget);
+      expect(find.text('Company email'), findsNothing);
+    });
+
+    testWidgets('and a company door wears its own', (tester) async {
+      await tester.pumpWidget(wrapScope(SignInScope.workspace));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Company email'), findsOneWidget);
+      expect(find.text('Company forgot'), findsOneWidget);
+      expect(find.text('Platform email'), findsNothing);
+      expect(find.text('Platform forgot'), findsNothing);
     });
   });
 }

@@ -369,6 +369,14 @@ class LandingContent {
     this.signinForgotLabel,
     this.signinRegisterPrompt,
     this.signinSigninPrompt,
+    this.loginShowHeadline = false,
+    this.loginShowHeading = false,
+    this.loginHeadline,
+    this.loginEmailLabel,
+    this.loginPasswordLabel,
+    this.loginForgotLabel,
+    this.loginSignInLabel,
+    this.loginPoints = const [],
   });
 
   final bool published;
@@ -615,6 +623,28 @@ class LandingContent {
   final String? signinNameLabel;
   final String? signinForgotLabel;
 
+  /// The same seven again, for the login page.
+  ///
+  /// `0350`. A workspace address is dressed separately from the
+  /// platform's own sign-in screen, because the two are written for
+  /// different people — and because a console tab whose switches
+  /// silently moved the *other* page's would be the worst kind of
+  /// working.
+  ///
+  /// Seven and not thirteen. `show_logo` and `show_name` are already
+  /// decided at a company's door, which always draws its own mark;
+  /// `show_register`, the two prompts and `name_label` all belong to an
+  /// offer of an account that `0336` took off a door. A switch that
+  /// cannot change what is on the screen is worse than no switch.
+  final bool loginShowHeadline;
+  final bool loginShowHeading;
+  final String? loginHeadline;
+  final String? loginEmailLabel;
+  final String? loginPasswordLabel;
+  final String? loginForgotLabel;
+  final String? loginSignInLabel;
+  final List<LandingSection> loginPoints;
+
   /// The two sentences under the button: the one offering an account,
   /// and the one back to signing in.
   final String? signinRegisterPrompt;
@@ -760,6 +790,14 @@ LandingContent parseLandingContent(Object? raw) {
       signinForgotLabel: brandStr('signin_forgot_label'),
       signinRegisterPrompt: brandStr('signin_register_prompt'),
       signinSigninPrompt: brandStr('signin_signin_prompt'),
+      loginShowHeadline: brandBool('login_show_headline'),
+      loginShowHeading: brandBool('login_show_heading'),
+      loginHeadline: brandStr('login_headline'),
+      loginEmailLabel: brandStr('login_email_label'),
+      loginPasswordLabel: brandStr('login_password_label'),
+      loginForgotLabel: brandStr('login_forgot_label'),
+      loginSignInLabel: brandStr('login_sign_in_label'),
+      loginPoints: blocks('login_points'),
       // 0337. These two have been on the table since 0290 and were
       // read out of `page` only, so an unpublished site fell back to
       // the literals — on the one screen that draws unpublished.
@@ -968,6 +1006,14 @@ LandingContent parseLandingContent(Object? raw) {
     signinForgotLabel: brandStr('signin_forgot_label'),
     signinRegisterPrompt: brandStr('signin_register_prompt'),
     signinSigninPrompt: brandStr('signin_signin_prompt'),
+    loginShowHeadline: brandBool('login_show_headline'),
+    loginShowHeading: brandBool('login_show_heading'),
+    loginHeadline: brandStr('login_headline'),
+    loginEmailLabel: brandStr('login_email_label'),
+    loginPasswordLabel: brandStr('login_password_label'),
+    loginForgotLabel: brandStr('login_forgot_label'),
+    loginSignInLabel: brandStr('login_sign_in_label'),
+    loginPoints: blocks('login_points'),
   );
 }
 

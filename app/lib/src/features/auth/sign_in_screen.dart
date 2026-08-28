@@ -362,6 +362,41 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// platform that has turned everything off.
   LandingContent? get _brand => ref.watch(landingContentProvider).valueOrNull;
 
+  /// Whether this screen is dressing a company's door rather than the
+  /// platform's front desk.
+  ///
+  /// `0350` gives the login page its own copy of the seven settings
+  /// that mean anything at a workspace address, so every read of them
+  /// below goes through one of the getters that follow rather than
+  /// naming a column directly. Eight `widget.scope ==` checks scattered
+  /// through the build method would be eight places to forget one.
+  ///
+  /// Sign-up is never a door's: `0336` took the offer of an account off
+  /// a company's address, so the form can only be in its sign-in mood
+  /// here — and if that ever changes, this says which settings it would
+  /// be reading.
+  bool get _ownDoor =>
+      widget.scope == SignInScope.workspace && !_isSignUp;
+
+  String? get _emailLabel =>
+      _ownDoor ? _brand?.loginEmailLabel : _brand?.signinEmailLabel;
+  String? get _passwordLabel =>
+      _ownDoor ? _brand?.loginPasswordLabel : _brand?.signinPasswordLabel;
+  String? get _forgotLabel =>
+      _ownDoor ? _brand?.loginForgotLabel : _brand?.signinForgotLabel;
+  String? get _signInLabel =>
+      _ownDoor ? _brand?.loginSignInLabel : _brand?.signInLabel;
+  bool get _showHeading => _ownDoor
+      ? (_brand?.loginShowHeading ?? false)
+      : (_brand?.signinShowHeading ?? false);
+  bool get _showHeadline => _ownDoor
+      ? (_brand?.loginShowHeadline ?? false)
+      : (_brand?.signinShowHeadline ?? false);
+  String? get _headline =>
+      _ownDoor ? _brand?.loginHeadline : _brand?.signinHeadline;
+  List<LandingSection> get _points =>
+      (_ownDoor ? _brand?.loginPoints : _brand?.signinPoints) ?? const [];
+
   /// Whether the logo is drawn, and whether the name is.
   ///
   /// Two questions since `0338`: a logo that already contains the
@@ -469,8 +504,8 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     barrierDismissible: false,
     builder: (dialogContext) => PasswordDialog(
       email: _email.text.trim(),
-      label: _brand?.signinPasswordLabel ?? 'Password',
-      action: _brand?.signInLabel ?? 'Sign in',
+      label: _passwordLabel ?? 'Password',
+      action: _signInLabel ?? 'Sign in',
       onSubmit: (password) => _signInWithPassword(password, dialogContext),
     ),
   );
@@ -896,7 +931,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   _Brand(logo: _showLogo, name: _showName),
                   const SizedBox(height: 32),
                 ],
-                if (_brand?.signinShowHeading ?? false) ...[
+                if (_showHeading) ...[
                   Text(
                     _copy?.title ??
                         (_isSignUp ? 'Create your account' : 'Welcome back'),
@@ -946,7 +981,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   onFieldSubmitted: (_) =>
                       _asksEmailFirst ? _checkEmail() : null,
                   decoration: InputDecoration(
-                    labelText: _brand?.signinEmailLabel ?? 'Email',
+                    labelText: _emailLabel ?? 'Email',
                     prefixIcon: const Icon(Icons.mail_outline),
                   ),
                   validator: (v) {
@@ -964,7 +999,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   autofillHints: const [AutofillHints.password],
                   onFieldSubmitted: (_) => _submit(),
                   decoration: InputDecoration(
-                    labelText: _brand?.signinPasswordLabel ?? 'Password',
+                    labelText: _passwordLabel ?? 'Password',
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(
@@ -987,7 +1022,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                     child: TextButton(
                       onPressed: _busy ? null : _resetPassword,
                       child: Text(
-                        _brand?.signinForgotLabel ?? 'Forgot password?',
+                        _forgotLabel ?? 'Forgot password?',
                       ),
                     ),
                   ),
@@ -1019,7 +1054,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                       // button leads to.
                       : Text(_isSignUp
                           ? (_brand?.registerLabel ?? 'Create account')
-                          : (_brand?.signInLabel ?? 'Sign in')),
+                          : (_signInLabel ?? 'Sign in')),
                 ),
                 // Everything below the Sign in button is about joining
                 // the platform, and none of it belongs at a company's
@@ -1106,10 +1141,10 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       ink: scheme.onPrimary,
       showLogo: _showLogo,
       showName: _showName,
-      headline: (_brand?.signinShowHeadline ?? false)
-          ? (_brand?.signinHeadline ?? LandingContent.defaultSigninHeadline)
+      headline: _showHeadline
+          ? (_headline ?? LandingContent.defaultSigninHeadline)
           : null,
-      points: _brand?.signinPoints ?? const [],
+      points: _points,
     );
 
     if (!wide || hero.isEmpty) return Scaffold(body: form);
