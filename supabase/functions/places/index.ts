@@ -46,6 +46,34 @@ import { requireEnv } from "../_shared/env.ts";
 const AUTOCOMPLETE = "https://places.googleapis.com/v1/places:autocomplete";
 const DETAILS = "https://places.googleapis.com/v1/places/";
 
+/// Google's own words for why it said no.
+///
+/// A status on its own is not a diagnosis. `403` from this API means
+/// any of four different things -- Places API (New) not enabled on the
+/// project, an HTTP-referrer restriction on a key called from a server
+/// that sends no referrer, an API restriction that omits this API, or
+/// billing not enabled -- and Google names which one in the body. The
+/// first version of this function logged the number and threw the
+/// sentence away, so the only way to tell those four apart was to go
+/// and look in the Cloud console. It is in the log now.
+///
+/// The body carries no credential: the key travels in a header and
+/// Google does not echo it back.
+async function refusal(call: string, res: Response): Promise<Error> {
+  const body = await res.text().catch(() => "");
+  let said = body.slice(0, 500);
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: { message?: string; status?: string };
+    };
+    const e = parsed.error ?? {};
+    if (e.status || e.message) {
+      said = [e.status, e.message].filter(Boolean).join(": ");
+    }
+  } catch { /* not JSON; the raw body is what there is */ }
+  return new Error(`places ${call} ${res.status}${said ? ` -- ${said}` : ""}`);
+}
+
 /// One suggestion, as the screen wants it: a line to show in bold and a
 /// line under it. Google's own split, not one we compute.
 interface Suggestion {
@@ -149,7 +177,7 @@ async function suggest(
     body: JSON.stringify(body),
   });
 
-  if (!res.ok) throw new Error(`places autocomplete ${res.status}`);
+  if (!res.ok) throw await refusal("autocomplete", res);
   const data = await res.json() as Record<string, unknown>;
   const raw = (data.suggestions ?? []) as Array<Record<string, unknown>>;
 
@@ -184,7 +212,7 @@ async function details(
     },
   });
 
-  if (!res.ok) throw new Error(`places details ${res.status}`);
+  if (!res.ok) throw await refusal("details", res);
   return toAddress(await res.json() as Record<string, unknown>);
 }
 
