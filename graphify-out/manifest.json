@@ -260,9 +260,9 @@
     "semantic_hash": "e58e35578f6071bf209f21ce15e74f45"
   },
   "app/lib/src/features/onboarding/create_org_screen.dart": {
-    "mtime": 1786785756.622488,
-    "ast_hash": "76366d000addf0bd77f8a44839f730c2",
-    "semantic_hash": "76366d000addf0bd77f8a44839f730c2"
+    "mtime": 1787929780.5398164,
+    "ast_hash": "3848fca1ecef10f7827022552e15ede7",
+    "semantic_hash": ""
   },
   "app/lib/src/features/reports/reports_screen.dart": {
     "mtime": 1787822945.4985898,
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1787907563.1079376,
-    "ast_hash": "ef6e739f3ebb1bfbb61df7ecf6a9ee13",
+    "mtime": 1787929788.1360683,
+    "ast_hash": "06120456874df70e08618b1b74b2f1bf",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -5227,6 +5227,36 @@
   "supabase/tests/login_page_words.sql": {
     "mtime": 1787907549.4744089,
     "ast_hash": "c8addfaf4f1429e3391662c6e04657e5",
+    "semantic_hash": ""
+  },
+  "app/lib/src/data/places_repository.dart": {
+    "mtime": 1787929591.7294738,
+    "ast_hash": "5a16a07862122d533f2349fc885a4c5e",
+    "semantic_hash": ""
+  },
+  "app/test/company_country_and_address_test.dart": {
+    "mtime": 1787929735.3614705,
+    "ast_hash": "6e4979c92e6306e0281e22d6713d4cd8",
+    "semantic_hash": ""
+  },
+  "supabase/functions/places/index.ts": {
+    "mtime": 1787929399.7784145,
+    "ast_hash": "611ca26668ab713c78d0a1607c9bc8ef",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0351_which_country_the_company_is_in.sql": {
+    "mtime": 1787929507.8458042,
+    "ast_hash": "b3612ef338e4c651afb9286e59a6e25c",
+    "semantic_hash": ""
+  },
+  "supabase/tests/company_country.sql": {
+    "mtime": 1787929554.046147,
+    "ast_hash": "23426657b992671e5b85d1c08eb989f6",
+    "semantic_hash": ""
+  },
+  "docs/address-suggestions.md": {
+    "mtime": 1787930015.3845623,
+    "ast_hash": "cfe3b4808de3c027a32e9c9243a8ac41",
     "semantic_hash": ""
   }
 }

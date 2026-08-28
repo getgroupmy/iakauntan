@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/places_repository.dart';
 
 /// First-run setup. One call to create_organization() stands up the whole
 /// tenant: chart of accounts, SST codes, fiscal calendar and pipeline.
@@ -23,8 +24,26 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   final _address = TextEditingController();
   final _city = TextEditingController();
   final _postcode = TextEditingController();
+  /// Only drawn outside Malaysia, where the state list does not apply.
+  final _state = TextEditingController();
   final _phone = TextEditingController();
   final _email = TextEditingController();
+
+  /// The country, asked before anything else.
+  ///
+  /// Null means the question has not been answered yet, and the form is
+  /// not drawn until it has. That is the whole reason it is a separate
+  /// step rather than one more field: the answer changes what the rest
+  /// of the form is asking about, and a company in Singapore filling in
+  /// an SSM number before being asked where it is has already been
+  /// asked the wrong question.
+  ///
+  /// Three letters, which is what `organizations.country_code` stores.
+  /// [_alpha2] is the same country in the two-letter form Google Places
+  /// wants, carried separately rather than derived — `ref_countries`
+  /// holds both and a mapping written here would be a second list.
+  String? _country;
+  String? _alpha2;
 
   String _entityType = 'sdn_bhd';
   String? _stateCode;
@@ -33,6 +52,14 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   int _fiscalYearEndMonth = 12;
   bool _busy = false;
   String? _error;
+
+  /// Whether the Malaysian half of this form applies.
+  ///
+  /// SSM registration, an LHDN TIN, SST and the state list are
+  /// Malaysian instruments, and a company in Singapore has none of
+  /// them. Asking anyway is how a form teaches somebody that it was not
+  /// written for them.
+  bool get _malaysian => _country == 'MYS';
 
   static const _entityTypes = {
     'sdn_bhd': 'Sendirian Berhad (Sdn Bhd)',
@@ -54,7 +81,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   void dispose() {
     for (final c in [
       _name, _registrationNo, _tin, _sstNo,
-      _address, _city, _postcode, _phone, _email,
+      _address, _city, _postcode, _state, _phone, _email,
     ]) {
       c.dispose();
     }
@@ -78,7 +105,11 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
           'p_registration_no': _emptyToNull(_registrationNo.text),
           'p_tin': _emptyToNull(_tin.text),
           'p_msic_code': _msicCode,
-          'p_state_code': _stateCode,
+          // One argument, two sources: inside Malaysia it is a code
+          // from `ref_states`, and outside it is whatever was typed.
+          // The column is free text, so both are honest; what would not
+          // be is storing a Malaysian code for a Thai province.
+          'p_state_code': _malaysian ? _stateCode : _emptyToNull(_state.text),
           'p_city': _emptyToNull(_city.text),
           'p_postcode': _emptyToNull(_postcode.text),
           'p_address_line1': _emptyToNull(_address.text),
@@ -87,6 +118,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
           'p_is_sst_registered': _sstRegistered,
           'p_sst_registration_no': _emptyToNull(_sstNo.text),
           'p_fiscal_year_end_month': _fiscalYearEndMonth,
+          'p_country_code': _country,
         },
       );
 
@@ -103,12 +135,46 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
     }
   }
 
+  /// The `ref_states` code for a state name Google returned, or null.
+  ///
+  /// Matched on the name because that is all Places gives — and left
+  /// null when nothing matches rather than guessed, since a wrong state
+  /// on a company record is worse than an empty one somebody fills in.
+  String? _stateFor(String? name) {
+    if (name == null) return null;
+    final wanted = name.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+    if (wanted.isEmpty) return null;
+    for (final s in ref.read(_statesProvider).valueOrNull ?? const []) {
+      final have = '${s['name']}'.toLowerCase().replaceAll(
+            RegExp(r'[^a-z]'), '');
+      if (have == wanted) return s['code'] as String?;
+    }
+    return null;
+  }
+
+  void _chooseCountry(String code, String alpha2) => setState(() {
+    _country = code;
+    _alpha2 = alpha2;
+    // A state chosen for one country means nothing in another, and the
+    // list itself is Malaysian. Cleared rather than carried.
+    _stateCode = null;
+    if (!_malaysian) {
+      _sstRegistered = false;
+      _sstNo.clear();
+    }
+  });
+
   static String? _emptyToNull(String value) =>
       value.trim().isEmpty ? null : value.trim();
 
   @override
   Widget build(BuildContext context) {
     final statesAsync = ref.watch(_statesProvider);
+
+    // First question first. Everything below reads the answer — which
+    // fields to draw, which country the address box suggests in — so
+    // there is nothing sensible to show before it.
+    if (_country == null) return _CountryStep(onChosen: _chooseCountry);
 
     return Scaffold(
       appBar: AppBar(
@@ -196,9 +262,18 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
 
                 const SizedBox(height: 24),
                 const SectionHeader('Address'),
-                TextFormField(
+                AddressField(
                   controller: _address,
-                  decoration: const InputDecoration(labelText: 'Address'),
+                  country: _alpha2,
+                  // What a chosen suggestion fills in. The street line
+                  // goes in the box somebody was typing in; the rest
+                  // land in their own boxes, which is the point of
+                  // suggesting rather than pasting one long string.
+                  onChosen: (a) => setState(() {
+                    if (a.city != null) _city.text = a.city!;
+                    if (a.postcode != null) _postcode.text = a.postcode!;
+                    if (_malaysian) _stateCode = _stateFor(a.state);
+                  }),
                 ),
                 const SizedBox(height: 14),
                 _Row2(
@@ -214,23 +289,35 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                statesAsync.when(
-                  data: (states) => DropdownButtonFormField<String>(
-                    value: _stateCode,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'State'),
-                    items: [
-                      for (final s in states)
-                        DropdownMenuItem(
-                          value: s['code'] as String,
-                          child: Text(s['name'] as String),
-                        ),
-                    ],
-                    onChanged: (v) => setState(() => _stateCode = v),
+                // `ref_states` is the thirteen states and three federal
+                // territories of Malaysia. Offering that list to a
+                // company in Thailand would be offering it a wrong
+                // answer, so elsewhere the box is a box.
+                if (_malaysian)
+                  statesAsync.when(
+                    data: (states) => DropdownButtonFormField<String>(
+                      value: _stateCode,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'State'),
+                      items: [
+                        for (final s in states)
+                          DropdownMenuItem(
+                            value: s['code'] as String,
+                            child: Text(s['name'] as String),
+                          ),
+                      ],
+                      onChanged: (v) => setState(() => _stateCode = v),
+                    ),
+                    loading: () => const LinearProgressIndicator(),
+                    error: (e, _) => Text('Could not load states: $e'),
+                  )
+                else
+                  TextFormField(
+                    controller: _state,
+                    textCapitalization: TextCapitalization.words,
+                    decoration:
+                        const InputDecoration(labelText: 'State or province'),
                   ),
-                  loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => Text('Could not load states: $e'),
-                ),
 
                 const SizedBox(height: 24),
                 const SectionHeader('Contact'),
@@ -355,4 +442,265 @@ class _Row2 extends StatelessWidget {
       ],
     );
   }
+}
+
+/// The first question: which country the company is in.
+///
+/// Its own screen rather than a field at the top of the form, because
+/// the answer changes what the form asks. A company in Singapore
+/// scrolling past SSM registration and an LHDN TIN before reaching the
+/// country box has already been told the product was not written for
+/// it; asking first is the difference between a form that adapts and
+/// one that apologises.
+///
+/// Malaysia is offered as a shortcut and is not preselected. A default
+/// on this question is a country most people would not have chosen and
+/// would not notice choosing.
+class _CountryStep extends ConsumerStatefulWidget {
+  const _CountryStep({required this.onChosen});
+
+  /// Called with the three-letter code the column stores and the
+  /// two-letter one Google Places wants.
+  final void Function(String code, String alpha2) onChosen;
+
+  @override
+  ConsumerState<_CountryStep> createState() => _CountryStepState();
+}
+
+class _CountryStepState extends ConsumerState<_CountryStep> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final countries = ref.watch(countriesProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Where is your company?'),
+        actions: [
+          TextButton.icon(
+            onPressed: () => ref.read(supabaseProvider).auth.signOut(),
+            icon: const Icon(Icons.logout, size: 18),
+            label: const Text('Sign out'),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: PageBody(
+          maxWidth: 520,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'The rest of the setup depends on this — the tax numbers '
+                'a company is asked for are not the same everywhere.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Search',
+                  prefixIcon: Icon(Icons.search),
+                ),
+                onChanged: (v) => setState(() => _query = v.trim()),
+              ),
+              const SizedBox(height: 12),
+              AsyncView<List<Map<String, dynamic>>>(
+                value: countries,
+                onRetry: () => ref.invalidate(countriesProvider),
+                builder: (rows) {
+                  final wanted = _query.toLowerCase();
+                  final shown = [
+                    for (final c in rows)
+                      if (wanted.isEmpty ||
+                          '${c['name']}'.toLowerCase().contains(wanted) ||
+                          '${c['alpha2']}'.toLowerCase() == wanted ||
+                          '${c['code']}'.toLowerCase() == wanted)
+                        c,
+                  ];
+                  if (shown.isEmpty) {
+                    return const EmptyState(
+                      icon: Icons.public_off,
+                      title: 'No country by that name',
+                      message: 'Try the country in English, or its two '
+                          'letter code.',
+                    );
+                  }
+                  return Card(
+                    child: Column(
+                      children: [
+                        for (final c in shown)
+                          ListTile(
+                            title: Text('${c['name']}'),
+                            trailing: Text(
+                              '${c['alpha2']}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            onTap: () => widget.onChosen(
+                              '${c['code']}',
+                              '${c['alpha2']}',
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// An address box that suggests, and fills the boxes beside it.
+///
+/// Typed straight through when nothing comes back — the field is a
+/// `TextFormField` underneath and the form works without a single
+/// suggestion, which is what a deployment with no Places key gets and
+/// what everybody gets when Google is unreachable.
+///
+/// Public because the same box belongs on the contact and outlet
+/// editors eventually, and because a widget a test can pump on its own
+/// is a widget a test can pump on its own.
+class AddressField extends ConsumerStatefulWidget {
+  const AddressField({
+    super.key,
+    required this.controller,
+    required this.onChosen,
+    this.country,
+    this.label = 'Address',
+  });
+
+  final TextEditingController controller;
+
+  /// The rest of the address, for the boxes this one does not own.
+  final void Function(PlaceAddress address) onChosen;
+
+  /// Two letters, so suggestions stay in the country somebody chose.
+  /// Null asks the world, which is the honest answer before the
+  /// question has been answered.
+  final String? country;
+  final String label;
+
+  @override
+  ConsumerState<AddressField> createState() => AddressFieldState();
+}
+
+class AddressFieldState extends ConsumerState<AddressField> {
+  List<PlaceSuggestion> _suggestions = const [];
+  bool _busy = false;
+
+  /// One token for the keystrokes leading to one chosen address.
+  ///
+  /// Places bills a session as a unit: the same token across every
+  /// keystroke and the final details fetch is one charge, and a fresh
+  /// token per keystroke is one charge each. Renewed after a choice,
+  /// because that choice closed the session.
+  String _session = _newSession();
+
+  /// The query the last request was for.
+  ///
+  /// Answers arrive out of order — a three-letter query can come back
+  /// after the five-letter one that followed it, and the list would go
+  /// backwards under somebody still typing. A reply for anything but
+  /// the current text is dropped.
+  String _inFlightFor = '';
+
+  static String _newSession() =>
+      DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+
+  Future<void> _look(String text) async {
+    final q = text.trim();
+    _inFlightFor = q;
+    if (q.length < 3) {
+      if (_suggestions.isNotEmpty) setState(() => _suggestions = const []);
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      final res = await ref.read(placesProvider).suggest(
+        q,
+        country: widget.country,
+        session: _session,
+      );
+      if (!mounted || _inFlightFor != q) return;
+      setState(() => _suggestions = res.suggestions);
+    } catch (_) {
+      // A box that will not take an address because the suggester is
+      // down is worse than one with no suggestions.
+      if (mounted) setState(() => _suggestions = const []);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _choose(PlaceSuggestion s) async {
+    setState(() {
+      _suggestions = const [];
+      _busy = true;
+    });
+    try {
+      final address = await ref
+          .read(placesProvider)
+          .address(s.id, session: _session);
+      if (!mounted) return;
+      if (address != null) {
+        widget.controller.text = address.line1 ?? s.line;
+        widget.onChosen(address);
+      } else {
+        widget.controller.text = s.line;
+      }
+    } catch (_) {
+      if (mounted) widget.controller.text = s.line;
+    } finally {
+      // Whatever happened, that session is over.
+      _session = _newSession();
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      TextFormField(
+        controller: widget.controller,
+        onChanged: _look,
+        decoration: InputDecoration(
+          labelText: widget.label,
+          suffixIcon: _busy
+              ? const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : null,
+        ),
+      ),
+      if (_suggestions.isNotEmpty)
+        Card(
+          margin: const EdgeInsets.only(top: 4),
+          child: Column(
+            children: [
+              for (final s in _suggestions)
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.place_outlined, size: 18),
+                  title: Text(s.line),
+                  subtitle: s.detail.isEmpty ? null : Text(s.detail),
+                  onTap: () => _choose(s),
+                ),
+            ],
+          ),
+        ),
+    ],
+  );
 }
