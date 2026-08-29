@@ -1,0 +1,29 @@
+# Does nothing, on purpose.
+#
+# Every job in this repository has been failing two seconds after it is
+# created, with no steps run, no logs written and no billable time --
+# across three workflows, two branches and four trigger types, since
+# 2026-08-28 16:52 UTC. Nothing in a repository can do that, and the
+# alternative explanation is an account-level stop, but "nothing in the
+# repository" was an inference rather than a measurement.
+#
+# This measures it. One job, one step, no checkout, no toolchain, no
+# secrets, no network, no concurrency group, no `needs`. If this fails
+# the same way, no change to any workflow file can help and the account
+# is the answer. If it runs, the fault is in `ci.yml` after all and this
+# says so by contrast.
+#
+# Delete once the question is settled.
+name: Canary
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  canary:
+    name: Does nothing
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "A runner started and executed a step."
