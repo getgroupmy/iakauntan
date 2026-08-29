@@ -516,6 +516,10 @@ class CorpCharge {
     this.amountSecured,
     this.propertyCharged,
     this.satisfiedOn,
+    this.currency = 'MYR',
+    this.ranking,
+    this.satisfactionFiledOn,
+    this.notes,
   });
 
   final String id;
@@ -527,6 +531,12 @@ class CorpCharge {
   final double? amountSecured;
   final String? propertyCharged;
   final DateTime? satisfiedOn;
+
+  // The rest of the row, for the sheet that edits it.
+  final String currency;
+  final String? ranking;
+  final DateTime? satisfactionFiledOn;
+  final String? notes;
 
   bool get isSatisfied => satisfiedOn != null;
 
@@ -548,6 +558,10 @@ class CorpCharge {
             : Fmt.toDouble(j['amount_secured']),
         propertyCharged: j['property_charged']?.toString(),
         satisfiedOn: Fmt.parseDate(j['satisfied_on']),
+        currency: j['currency']?.toString() ?? 'MYR',
+        ranking: j['ranking']?.toString(),
+        satisfactionFiledOn: Fmt.parseDate(j['satisfaction_filed_on']),
+        notes: j['notes']?.toString(),
       );
 }
 

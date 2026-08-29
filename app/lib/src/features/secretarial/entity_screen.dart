@@ -13,6 +13,7 @@ import '../../data/corp_repository.dart';
 import '../shared/attachments_card.dart';
 import 'document_pdf.dart';
 import 'beneficial_owner_sheet.dart';
+import 'charge_sheet.dart';
 import 'officer_sheet.dart';
 
 /// One company's file: the statutory registers the Companies Act 2016
@@ -744,38 +745,98 @@ class _Charges extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final charges = ref.watch(corpChargesProvider(entityId));
+    final canWrite = ref.watch(canWriteProvider);
 
     return SingleChildScrollView(
       child: PageBody(
         maxWidth: 900,
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(Space.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        child: AsyncView(
+          value: charges,
+          onRetry: () => ref.invalidate(corpChargesProvider(entityId)),
+          loading: const LinearProgressIndicator(),
+          builder: (list) {
+            final outstanding = list.where((c) => !c.isSatisfied).toList();
+            final satisfied = list.where((c) => c.isSatisfied).toList();
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SectionHeader(
-                  'Register of charges',
-                  subtitle: 'Section 357. A charge must be registered within '
-                      'thirty days of creation (s.352) or it is void against '
-                      'the liquidator.',
-                ),
-                AsyncView(
-                  value: charges,
-                  onRetry: () => ref.invalidate(corpChargesProvider(entityId)),
-                  loading: const LinearProgressIndicator(),
-                  builder: (list) => list.isEmpty
-                      ? const Text('No charges registered.')
-                      : Column(children: [
-                          for (var i = 0; i < list.length; i++) ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(Space.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SectionHeader(
+                          'Register of charges',
+                          subtitle:
+                              'Section 357. A charge must be registered '
+                              'within thirty days of creation (s.352) or it '
+                              'is void against the liquidator.',
+                          action: canWrite
+                              ? FilledButton.tonalIcon(
+                                  key: const ValueKey('register-charge'),
+                                  onPressed: () => showChargeSheet(
+                                    context,
+                                    entityId: entityId,
+                                  ),
+                                  icon: const Icon(Icons.add, size: 18),
+                                  label: const Text('Register'),
+                                )
+                              : null,
+                        ),
+                        if (outstanding.isEmpty)
+                          const Text('No charges outstanding.')
+                        else
+                          for (var i = 0; i < outstanding.length; i++) ...[
                             if (i > 0) const Divider(height: 1),
-                            _ChargeRow(charge: list[i]),
+                            _ChargeRow(
+                              charge: outstanding[i],
+                              onTap: canWrite
+                                  ? () => showChargeSheet(
+                                        context,
+                                        entityId: entityId,
+                                        charge: outstanding[i],
+                                      )
+                                  : null,
+                            ),
                           ],
-                        ]),
+                      ],
+                    ),
+                  ),
                 ),
+                // Satisfied charges stay on the register. s.357 requires
+                // it kept, and a charge that was discharged last year is
+                // part of what a lender's solicitor is searching for.
+                if (satisfied.isNotEmpty) ...[
+                  const SizedBox(height: Space.lg),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(Space.lg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SectionHeader('Satisfied'),
+                          for (final c in satisfied)
+                            _ChargeRow(
+                              charge: c,
+                              onTap: canWrite
+                                  ? () => showChargeSheet(
+                                        context,
+                                        entityId: entityId,
+                                        charge: c,
+                                      )
+                                  : null,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: Space.xxl),
               ],
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -783,9 +844,10 @@ class _Charges extends ConsumerWidget {
 }
 
 class _ChargeRow extends StatelessWidget {
-  const _ChargeRow({required this.charge});
+  const _ChargeRow({required this.charge, this.onTap});
 
   final CorpCharge charge;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -794,7 +856,9 @@ class _ChargeRow extends StatelessWidget {
         .bodySmall
         ?.copyWith(color: context.scheme.onSurfaceVariant);
 
-    return Padding(
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
       padding: const EdgeInsets.symmetric(vertical: Space.sm),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -840,6 +904,7 @@ class _ChargeRow extends StatelessWidget {
           if (charge.amountSecured != null)
             SizedBox(width: 130, child: Money(charge.amountSecured)),
         ],
+      ),
       ),
     );
   }

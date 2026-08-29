@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iakauntan/src/features/secretarial/beneficial_owner_sheet.dart';
+import 'package:iakauntan/src/features/secretarial/charge_sheet.dart';
 import 'package:iakauntan/src/features/secretarial/officer_sheet.dart';
 import 'package:iakauntan/src/features/secretarial/person_editor.dart';
 
@@ -175,6 +176,7 @@ void main() {
   });
 
   beneficialOwners();
+  charges();
 
   group('the roles the register knows', () {
     test('every role in the enum has words', () {
@@ -371,6 +373,160 @@ void beneficialOwners() {
         otherControl: '  ',
       );
       expect(v['other_control'], isNull);
+    });
+  });
+}
+
+/// The register of charges.
+///
+/// `corp_charges` has had a table, RLS, an audit trigger and
+/// `saveCorpCharge` since `0061` with nothing calling it, so a company
+/// could not record a charge it must lodge within thirty days.
+///
+/// The thirty days are the reason this file exists at all. s.352 does
+/// not impose a late fee: a charge not registered in time is **void
+/// against the liquidator**, so the security a lender believes it holds
+/// is absent at the only moment it is ever needed. That arithmetic had
+/// no assertion anywhere until now.
+void charges() {
+  group('the thirty days (s.352)', () {
+    test('run from the date of the instrument', () {
+      expect(
+        registrationDeadline(DateTime(2026, 8, 1)),
+        DateTime(2026, 8, 31),
+      );
+      // Across a month boundary, and across February.
+      expect(
+        registrationDeadline(DateTime(2026, 2, 10)),
+        DateTime(2026, 3, 12),
+      );
+    });
+
+    test('thirty days, not a month', () {
+      // A month would be 31 days from 1 August and 28 from 1 February.
+      // The Act says thirty, and a charge lodged on day 31 in the
+      // belief that "a month" was meant is void.
+      final due = registrationDeadline(DateTime(2026, 8, 1));
+      expect(due.difference(DateTime(2026, 8, 1)).inDays, 30);
+    });
+
+    test('a charge lodged inside the window is not overdue', () {
+      expect(
+        registrationOverdue(
+          DateTime(2026, 8, 1),
+          registeredOn: DateTime(2026, 8, 20),
+          asAt: DateTime(2026, 12, 1),
+        ),
+        isFalse,
+        reason: 'lodged in time stays in time however long ago it was',
+      );
+    });
+
+    test('the last day is still in time', () {
+      // Asked on the deadline itself: the thirty days have not yet run
+      // out, and telling a secretary the charge is void on the morning
+      // they can still lodge it is the worst possible moment to be
+      // wrong by one day.
+      expect(
+        registrationOverdue(
+          DateTime(2026, 8, 1),
+          asAt: DateTime(2026, 8, 31),
+        ),
+        isFalse,
+      );
+    });
+
+    test('the day after is not', () {
+      expect(
+        registrationOverdue(
+          DateTime(2026, 8, 1),
+          asAt: DateTime(2026, 9, 1),
+        ),
+        isTrue,
+      );
+    });
+  });
+
+  group('what a charge is', () {
+    final created = DateTime(2026, 8, 1);
+
+    test('an amount nobody recorded is null, not nought', () {
+      // A charge securing an unrecorded amount is not a charge securing
+      // nothing, and an all-monies debenture has no figure at all.
+      expect(amountOf(''), isNull);
+      expect(amountOf('   '), isNull);
+      expect(amountOf('abc'), isNull);
+      expect(amountOf('-1'), isNull);
+      expect(amountOf('250000'), 250000);
+      expect(amountOf('250,000.50'), 250000.5,
+          reason: 'typed the way somebody reads it off an instrument');
+    });
+
+    test('a satisfaction cannot be filed for an unsatisfied charge', () {
+      // The date was entered, then the satisfaction turned out not to
+      // have happened. Keeping it leaves a memorandum of satisfaction
+      // against a charge that is still outstanding, which is the one
+      // thing on this register a chargee would litigate about.
+      final v = chargeValues(
+        entityId: 'e1',
+        chargeeName: 'Maybank Berhad',
+        createdOn: created,
+        satisfactionFiledOn: DateTime(2026, 9, 1),
+      );
+      expect(v['satisfied_on'], isNull);
+      expect(v['satisfaction_filed_on'], isNull);
+    });
+
+    test('and a satisfied one carries both dates', () {
+      final v = chargeValues(
+        entityId: 'e1',
+        chargeeName: 'Maybank Berhad',
+        createdOn: created,
+        satisfiedOn: DateTime(2026, 9, 1),
+        satisfactionFiledOn: DateTime(2026, 9, 8),
+      );
+      expect(v['satisfied_on'], '2026-09-01');
+      expect(v['satisfaction_filed_on'], '2026-09-08');
+    });
+
+    test('the whole instrument reaches its own columns', () {
+      final v = chargeValues(
+        entityId: 'e1',
+        chargeeName: '  Maybank Berhad  ',
+        createdOn: created,
+        chargeNo: 'C123456',
+        chargeType: 'Fixed and floating',
+        registeredOn: DateTime(2026, 8, 15),
+        amountSecured: 250000,
+        propertyCharged: 'The whole undertaking',
+        ranking: 'First',
+        notes: 'Facility agreement dated 30 July 2026',
+      );
+      expect(v['chargee_name'], 'Maybank Berhad', reason: 'trimmed');
+      expect(v['created_on'], '2026-08-01');
+      expect(v['registered_on'], '2026-08-15');
+      expect(v['charge_no'], 'C123456');
+      expect(v['charge_type'], 'Fixed and floating');
+      expect(v['amount_secured'], 250000);
+      expect(v['currency'], 'MYR');
+      expect(v['property_charged'], 'The whole undertaking');
+      expect(v['ranking'], 'First');
+      expect(v['notes'], 'Facility agreement dated 30 July 2026');
+    });
+
+    test('boxes left empty are null rather than empty strings', () {
+      final v = chargeValues(
+        entityId: 'e1',
+        chargeeName: 'Maybank Berhad',
+        createdOn: created,
+        chargeNo: '   ',
+        propertyCharged: '',
+        ranking: '  ',
+        notes: '',
+      );
+      for (final k in ['charge_no', 'property_charged', 'ranking', 'notes']) {
+        expect(v[k], isNull, reason: k);
+      }
     });
   });
 }
