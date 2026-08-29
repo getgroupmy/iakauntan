@@ -12,6 +12,7 @@ import '../../data/corp_models.dart';
 import '../../data/corp_repository.dart';
 import '../shared/attachments_card.dart';
 import 'document_pdf.dart';
+import 'beneficial_owner_sheet.dart';
 import 'officer_sheet.dart';
 
 /// One company's file: the statutory registers the Companies Act 2016
@@ -563,51 +564,113 @@ class _BeneficialOwners extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final owners = ref.watch(corpBeneficialOwnersProvider(entityId));
+    final canWrite = ref.watch(canWriteProvider);
 
     return SingleChildScrollView(
       child: PageBody(
         maxWidth: 900,
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(Space.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        child: AsyncView(
+          value: owners,
+          onRetry: () =>
+              ref.invalidate(corpBeneficialOwnersProvider(entityId)),
+          loading: const LinearProgressIndicator(),
+          builder: (list) {
+            final current = list.where((o) => o.isCurrent).toList();
+            final ceased = list.where((o) => !o.isCurrent).toList();
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SectionHeader(
-                  'Register of beneficial owners',
-                  subtitle: 'Section 60B, in force since 1 April 2024. The '
-                      'company must keep this and notify the Registrar within '
-                      'fourteen days of obtaining the information.',
-                ),
-                AsyncView(
-                  value: owners,
-                  onRetry: () =>
-                      ref.invalidate(corpBeneficialOwnersProvider(entityId)),
-                  loading: const LinearProgressIndicator(),
-                  builder: (list) {
-                    final current = list.where((o) => o.isCurrent).toList();
-                    if (current.isEmpty) {
-                      return Text(
-                        'Nobody entered. A company with no beneficial owner '
-                        'identified must record the steps it took to find '
-                        'one — an empty register is itself a statement.',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: context.scheme.onSurfaceVariant),
-                      );
-                    }
-                    return Column(children: [
-                      for (var i = 0; i < current.length; i++) ...[
-                        if (i > 0) const Divider(height: 1),
-                        _OwnerRow(owner: current[i]),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(Space.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SectionHeader(
+                          'Register of beneficial owners',
+                          subtitle:
+                              'Section 60B, in force since 1 April 2024. The '
+                              'company must keep this and notify the Registrar '
+                              'within fourteen days of obtaining the '
+                              'information.',
+                          action: canWrite
+                              ? FilledButton.tonalIcon(
+                                  key: const ValueKey('declare-owner'),
+                                  onPressed: () => showBeneficialOwnerSheet(
+                                    context,
+                                    entityId: entityId,
+                                  ),
+                                  icon: const Icon(Icons.person_add_outlined,
+                                      size: 18),
+                                  label: const Text('Declare'),
+                                )
+                              : null,
+                        ),
+                        if (current.isEmpty)
+                          Text(
+                            'Nobody entered. A company with no beneficial '
+                            'owner identified must record the steps it took '
+                            'to find one — an empty register is itself a '
+                            'statement.',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                    color: context.scheme.onSurfaceVariant),
+                          )
+                        else
+                          for (var i = 0; i < current.length; i++) ...[
+                            if (i > 0) const Divider(height: 1),
+                            _OwnerRow(
+                              owner: current[i],
+                              onTap: canWrite
+                                  ? () => showBeneficialOwnerSheet(
+                                        context,
+                                        entityId: entityId,
+                                        owner: current[i],
+                                      )
+                                  : null,
+                            ),
+                          ],
                       ],
-                    ]);
-                  },
+                    ),
+                  ),
                 ),
+                // Kept rather than dropped. s.60B requires the register
+                // to be *kept*, and somebody who controlled the company
+                // until last year is part of what it records; showing
+                // only the current entries answers "who controls this
+                // company" and silently loses "who did".
+                if (ceased.isNotEmpty) ...[
+                  const SizedBox(height: Space.lg),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(Space.lg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SectionHeader('Ceased'),
+                          for (final o in ceased)
+                            _OwnerRow(
+                              owner: o,
+                              onTap: canWrite
+                                  ? () => showBeneficialOwnerSheet(
+                                        context,
+                                        entityId: entityId,
+                                        owner: o,
+                                      )
+                                  : null,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: Space.xxl),
               ],
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -615,9 +678,10 @@ class _BeneficialOwners extends ConsumerWidget {
 }
 
 class _OwnerRow extends StatelessWidget {
-  const _OwnerRow({required this.owner});
+  const _OwnerRow({required this.owner, this.onTap});
 
   final CorpBeneficialOwner owner;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -626,7 +690,9 @@ class _OwnerRow extends StatelessWidget {
         .bodySmall
         ?.copyWith(color: context.scheme.onSurfaceVariant);
 
-    return Padding(
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
       padding: const EdgeInsets.symmetric(vertical: Space.sm),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -637,12 +703,17 @@ class _OwnerRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(owner.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      decoration: owner.isCurrent
+                          ? null
+                          : TextDecoration.lineThrough,
+                    )),
                 const SizedBox(height: 2),
                 Text(owner.identifier ?? '—', style: muted),
                 for (final g in owner.grounds)
                   Text('· $g', style: muted),
-                if (owner.notifiedOn == null)
+                if (owner.isCurrent && owner.notifiedOn == null)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text('Not yet notified to the Registrar',
@@ -659,6 +730,7 @@ class _OwnerRow extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w600)),
             ),
         ],
+      ),
       ),
     );
   }
