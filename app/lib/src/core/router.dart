@@ -84,6 +84,7 @@ import '../features/documents/shared_document_page.dart';
 import '../features/settings/email_screen.dart';
 import '../features/secretarial/signing_page.dart';
 import '../features/secretarial/entity_screen.dart';
+import '../features/secretarial/people_screen.dart';
 import '../features/secretarial/secretarial_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/hr/claims_screen.dart';
@@ -827,6 +828,13 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: 'new',
                 parentNavigatorKey: _rootKey,
                 builder: (_, __) => const CorpEntityEditor(),
+              ),
+              // Before ':id', because a path parameter would otherwise
+              // swallow it and open a company called "people".
+              GoRoute(
+                path: 'people',
+                parentNavigatorKey: _rootKey,
+                builder: (_, __) => const CorpPeopleScreen(),
               ),
               GoRoute(
                 path: ':id/edit',

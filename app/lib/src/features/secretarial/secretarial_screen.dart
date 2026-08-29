@@ -28,6 +28,15 @@ class SecretarialScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Company secretarial'),
         actions: [
+          // The people are a list of their own because they outlive any
+          // one company: a director resigns from one board and sits on
+          // another with the same NRIC and the same file.
+          TextButton.icon(
+            key: const ValueKey('open-people'),
+            onPressed: () => context.go('/secretarial/people'),
+            icon: const Icon(Icons.badge_outlined, size: 18),
+            label: const Text('People'),
+          ),
           if (canWrite)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.md),

@@ -12,6 +12,7 @@ import '../../data/corp_models.dart';
 import '../../data/corp_repository.dart';
 import '../shared/attachments_card.dart';
 import 'document_pdf.dart';
+import 'officer_sheet.dart';
 
 /// One company's file: the statutory registers the Companies Act 2016
 /// requires a secretary to keep, and the documents drawn from them.
@@ -176,6 +177,7 @@ class _Officers extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final officers = ref.watch(corpOfficersProvider(entityId));
+    final canWrite = ref.watch(canWriteProvider);
 
     return AsyncView(
       value: officers,
@@ -196,16 +198,44 @@ class _Officers extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SectionHeader(
+                        SectionHeader(
                           'Register of directors, managers and secretaries',
                           subtitle: 'Companies Act 2016, section 57',
+                          action: canWrite
+                              ? FilledButton.tonalIcon(
+                                  key: const ValueKey('appoint-officer'),
+                                  onPressed: () => showOfficerSheet(
+                                    context,
+                                    entityId: entityId,
+                                  ),
+                                  icon: const Icon(Icons.person_add_outlined,
+                                      size: 18),
+                                  label: const Text('Appoint'),
+                                )
+                              : null,
                         ),
                         if (current.isEmpty)
-                          const Text('No officers on the register.')
+                          // A register with nobody on it is a company
+                          // in breach of s.196, not an empty list, so
+                          // it says which.
+                          const Text(
+                            'Nobody is on the register. A company must have '
+                            'at least one director who ordinarily resides in '
+                            'Malaysia.',
+                          )
                         else
                           for (var i = 0; i < current.length; i++) ...[
                             if (i > 0) const Divider(height: 1),
-                            _OfficerRow(officer: current[i]),
+                            _OfficerRow(
+                              officer: current[i],
+                              onTap: canWrite
+                                  ? () => showOfficerSheet(
+                                        context,
+                                        entityId: entityId,
+                                        officer: current[i],
+                                      )
+                                  : null,
+                            ),
                           ],
                       ],
                     ),
@@ -220,7 +250,17 @@ class _Officers extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const SectionHeader('Ceased'),
-                          for (final o in past) _OfficerRow(officer: o),
+                          for (final o in past)
+                            _OfficerRow(
+                              officer: o,
+                              onTap: canWrite
+                                  ? () => showOfficerSheet(
+                                        context,
+                                        entityId: entityId,
+                                        officer: o,
+                                      )
+                                  : null,
+                            ),
                         ],
                       ),
                     ),
@@ -237,9 +277,10 @@ class _Officers extends ConsumerWidget {
 }
 
 class _OfficerRow extends StatelessWidget {
-  const _OfficerRow({required this.officer});
+  const _OfficerRow({required this.officer, this.onTap});
 
   final CorpOfficer officer;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -248,7 +289,9 @@ class _OfficerRow extends StatelessWidget {
         .bodySmall
         ?.copyWith(color: context.scheme.onSurfaceVariant);
 
-    return Padding(
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
       padding: const EdgeInsets.symmetric(vertical: Space.sm),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -302,6 +345,7 @@ class _OfficerRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

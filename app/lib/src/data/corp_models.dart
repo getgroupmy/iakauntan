@@ -116,6 +116,18 @@ class CorpPerson {
     this.isResident = true,
     this.idVerifiedOn,
     this.isPep = false,
+    this.formerName,
+    this.passportCountry,
+    this.gender,
+    this.incorporatedIn,
+    this.line1,
+    this.line2,
+    this.city,
+    this.postcode,
+    this.stateCode,
+    this.country,
+    this.idDocumentType,
+    this.kycNotes,
   });
 
   final String id;
@@ -132,6 +144,23 @@ class CorpPerson {
   final bool isResident;
   final DateTime? idVerifiedOn;
   final bool isPep;
+
+  // The editable parts. `address` above is those four joined for
+  // display; an editor needs them apart, because a person moves house
+  // one line at a time and a joined string cannot be typed back into
+  // the columns it came from.
+  final String? formerName;
+  final String? passportCountry;
+  final String? gender;
+  final String? incorporatedIn;
+  final String? line1;
+  final String? line2;
+  final String? city;
+  final String? postcode;
+  final String? stateCode;
+  final String? country;
+  final String? idDocumentType;
+  final String? kycNotes;
 
   bool get isCorporate => kind == 'corporate';
 
@@ -160,6 +189,18 @@ class CorpPerson {
         isResident: j['is_resident_in_malaysia'] != false,
         idVerifiedOn: Fmt.parseDate(j['id_verified_on']),
         isPep: j['is_pep'] == true,
+        formerName: j['former_name']?.toString(),
+        passportCountry: j['passport_country']?.toString(),
+        gender: j['gender']?.toString(),
+        incorporatedIn: j['incorporated_in']?.toString(),
+        line1: j['address_line1']?.toString(),
+        line2: j['address_line2']?.toString(),
+        city: j['city']?.toString(),
+        postcode: j['postcode']?.toString(),
+        stateCode: j['state_code']?.toString(),
+        country: j['country']?.toString(),
+        idDocumentType: j['id_document_type']?.toString(),
+        kycNotes: j['kyc_notes']?.toString(),
       );
 }
 
