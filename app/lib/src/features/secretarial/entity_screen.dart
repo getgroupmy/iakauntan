@@ -15,6 +15,8 @@ import 'document_pdf.dart';
 import 'beneficial_owner_sheet.dart';
 import 'charge_sheet.dart';
 import 'officer_sheet.dart';
+import 'share_class_sheet.dart';
+import 'share_event_sheet.dart';
 
 /// One company's file: the statutory registers the Companies Act 2016
 /// requires a secretary to keep, and the documents drawn from them.
@@ -387,6 +389,8 @@ class _Members extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final members = ref.watch(corpMembersProvider(entityId));
     final events = ref.watch(corpShareEventsProvider(entityId));
+    final classes = ref.watch(corpShareClassesProvider(entityId));
+    final canWrite = ref.watch(canWriteProvider);
 
     return SingleChildScrollView(
       child: PageBody(
@@ -431,7 +435,24 @@ class _Members extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SectionHeader('Share movements'),
+                    SectionHeader(
+                      'Share movements',
+                      subtitle: 'What the register above is computed from. '
+                          'A movement entered wrongly is corrected by a '
+                          'movement the other way, which is what the '
+                          'paperwork does too.',
+                      action: canWrite
+                          ? FilledButton.tonalIcon(
+                              key: const ValueKey('record-share-event'),
+                              onPressed: () => showShareEventSheet(
+                                context,
+                                entityId: entityId,
+                              ),
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Record'),
+                            )
+                          : null,
+                    ),
                     AsyncView(
                       value: events,
                       onRetry: () =>
@@ -447,9 +468,110 @@ class _Members extends ConsumerWidget {
                 ),
               ),
             ),
+            const SizedBox(height: Space.lg),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(Space.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SectionHeader(
+                      'Classes of shares',
+                      subtitle: 'Par value and authorised capital were '
+                          'abolished by the 2016 Act, so a class is its '
+                          'code, its currency and the rights attached.',
+                      action: canWrite
+                          ? FilledButton.tonalIcon(
+                              key: const ValueKey('add-share-class-tab'),
+                              onPressed: () => showShareClassSheet(
+                                context,
+                                entityId: entityId,
+                              ),
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Add'),
+                            )
+                          : null,
+                    ),
+                    AsyncView(
+                      value: classes,
+                      onRetry: () =>
+                          ref.invalidate(corpShareClassesProvider(entityId)),
+                      loading: const LinearProgressIndicator(),
+                      builder: (list) => list.isEmpty
+                          ? const Text('No class of shares yet.')
+                          : Column(children: [
+                              for (var i = 0; i < list.length; i++) ...[
+                                if (i > 0) const Divider(height: 1),
+                                _ShareClassRow(
+                                  shareClass: list[i],
+                                  onTap: canWrite
+                                      ? () => showShareClassSheet(
+                                            context,
+                                            entityId: entityId,
+                                            shareClass: list[i],
+                                          )
+                                      : null,
+                                ),
+                              ],
+                            ]),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: Space.xxl),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ShareClassRow extends StatelessWidget {
+  const _ShareClassRow({required this.shareClass, this.onTap});
+
+  final Map<String, dynamic> shareClass;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context)
+        .textTheme
+        .bodySmall
+        ?.copyWith(color: context.scheme.onSurfaceVariant);
+    final votes = shareClass['votes_per_share'];
+    final rights = shareClass['rights'] as String?;
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: Space.sm),
+        child: Row(children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${shareClass['code']} \u00b7 ${shareClass['name']}',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(
+                  '${shareClass['currency']} \u00b7 '
+                  '${votes == 1 ? 'one vote' : '${Fmt.plain(votes)} votes'} a share'
+                  '${shareClass['is_redeemable'] == true ? ' \u00b7 redeemable' : ''}',
+                  style: muted,
+                ),
+                if (rights != null && rights.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(rights, style: muted),
+                  ),
+              ],
+            ),
+          ),
+          if (onTap != null)
+            Icon(Icons.chevron_right,
+                size: 18, color: context.scheme.onSurfaceVariant),
+        ]),
       ),
     );
   }

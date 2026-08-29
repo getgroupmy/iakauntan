@@ -108,6 +108,23 @@ extension RepoCorp on Repo {
           .eq('entity_id', entityId)
           .order('code'));
 
+  /// A class of shares. Every movement points at one, so a company
+  /// with none cannot allot anything -- which is why this is here and
+  /// not only in a settings screen somebody has to find first.
+  Future<void> saveCorpShareClass(Map<String, dynamic> values, {String? id}) =>
+      id == null
+          ? client
+              .from('corp_share_classes')
+              .insert({...values, 'org_id': orgId})
+          : client.from('corp_share_classes').update(values).eq('id', id);
+
+  /// Events are inserted and never amended.
+  ///
+  /// The register is computed from them the way the ledger computes
+  /// balances from journals, and `0061` says why: a register that can
+  /// be edited directly is one that will drift from the returns already
+  /// lodged. A movement entered wrongly is corrected by a movement the
+  /// other way, which is also what the paperwork does.
   Future<void> addCorpShareEvent(Map<String, dynamic> values) =>
       client.from('corp_share_events').insert({...values, 'org_id': orgId});
 

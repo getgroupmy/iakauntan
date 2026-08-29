@@ -1259,6 +1259,11 @@ final corpMembersProvider = FutureProvider.autoDispose
       return requireRepo(ref).corpRegisterOfMembers(id);
     });
 
+final corpShareClassesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, id) {
+  return requireRepo(ref).corpShareClasses(id);
+});
+
 final corpShareEventsProvider = FutureProvider.autoDispose
     .family<List<CorpShareEvent>, String>((ref, id) {
       return requireRepo(ref).corpShareEvents(id);

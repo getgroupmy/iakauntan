@@ -3,6 +3,8 @@ import 'package:iakauntan/src/features/secretarial/beneficial_owner_sheet.dart';
 import 'package:iakauntan/src/features/secretarial/charge_sheet.dart';
 import 'package:iakauntan/src/features/secretarial/officer_sheet.dart';
 import 'package:iakauntan/src/features/secretarial/person_editor.dart';
+import 'package:iakauntan/src/features/secretarial/share_class_sheet.dart';
+import 'package:iakauntan/src/features/secretarial/share_event_sheet.dart';
 
 /// Putting somebody on a statutory register.
 ///
@@ -177,6 +179,7 @@ void main() {
 
   beneficialOwners();
   charges();
+  shares();
 
   group('the roles the register knows', () {
     test('every role in the enum has words', () {
@@ -527,6 +530,216 @@ void charges() {
       for (final k in ['charge_no', 'property_charged', 'ranking', 'notes']) {
         expect(v[k], isNull, reason: k);
       }
+    });
+  });
+}
+
+/// The register of members, and the movements it is computed from.
+///
+/// `corp_register_of_members` and the `check_share_event` trigger have
+/// been in `0064` since the schema went in, and `supabase/tests/
+/// secretarial.sql` already holds the arithmetic against them: who
+/// gains the shares, who is left with what, the percentage, the issued
+/// capital, and that nobody can transfer shares they do not hold.
+///
+/// What was missing was any way to put a movement in. These press the
+/// Dart half — the shape sent to `corp_share_events`, whose party rules
+/// are a CHECK constraint. Send the wrong shape and the insert is
+/// refused with a sentence about `corp_share_events_parties_ck`, which
+/// is true and no help to the person who typed it.
+void shares() {
+  group('which parties a movement has', () {
+    test('an allotment has a transferee and no transferor', () {
+      // The shares did not exist before an allotment, so there is
+      // nobody to have held them.
+      expect(eventHasFrom('allotment'), isFalse);
+      expect(eventHasTo('allotment'), isTrue);
+    });
+
+    test('a cancellation has a transferor and no transferee', () {
+      // And they do not exist after it.
+      expect(eventHasFrom('cancellation'), isTrue);
+      expect(eventHasTo('cancellation'), isFalse);
+    });
+
+    test('transfer, transmission and conversion have both', () {
+      for (final t in ['transfer', 'transmission', 'conversion']) {
+        expect(eventHasFrom(t), isTrue, reason: t);
+        expect(eventHasTo(t), isTrue, reason: t);
+      }
+    });
+
+    test('a transferor chosen and then the type changed is dropped', () {
+      // The failure this exists for: a secretary starts a transfer,
+      // picks the transferor, then realises it is an allotment and
+      // changes the type. The transferor is still selected in the
+      // dropdown, and sending it fails the CHECK constraint.
+      final v = shareEventValues(
+        entityId: 'e', shareClassId: 'c',
+        eventType: 'allotment',
+        eventDate: DateTime(2026, 3, 1),
+        quantity: 1000,
+        fromPersonId: 'seller',
+        toPersonId: 'buyer',
+      );
+      expect(v['from_person_id'], isNull);
+      expect(v['to_person_id'], 'buyer');
+    });
+
+    test('a transferee left over on a cancellation is dropped', () {
+      final v = shareEventValues(
+        entityId: 'e', shareClassId: 'c',
+        eventType: 'cancellation',
+        eventDate: DateTime(2026, 3, 1),
+        quantity: 500,
+        fromPersonId: 'holder',
+        toPersonId: 'buyer',
+      );
+      expect(v['from_person_id'], 'holder');
+      expect(v['to_person_id'], isNull);
+    });
+  });
+
+  group('the consideration', () {
+    test('a price a share times the quantity is the total', () {
+      // What the s.78 return reports. Asking for it twice is asking two
+      // fields to agree, and they will not: somebody who changes the
+      // quantity does not revisit a total typed five fields ago.
+      expect(considerationFor(1.50, 1000), 1500.00);
+    });
+
+    test('it is rounded to the sen, not left long', () {
+      // 0.3333 a share on 3000 shares is 999.9 exactly, but 0.1 on
+      // three shares is 0.30000000000000004 in binary floating point,
+      // and total_consideration is numeric(18,2).
+      expect(considerationFor(0.1, 3), 0.30);
+      expect(considerationFor(1.0 / 3.0, 7), 2.33);
+    });
+
+    test('no price means no total, not zero', () {
+      // Shares issued for a consideration other than cash have one
+      // under s.78(2), and it is a sentence rather than a number. A
+      // zero total would assert they were issued for nothing.
+      expect(considerationFor(null, 1000), isNull);
+      final v = shareEventValues(
+        entityId: 'e', shareClassId: 'c',
+        eventType: 'allotment',
+        eventDate: DateTime(2026, 3, 1),
+        quantity: 1000,
+        toPersonId: 'buyer',
+        isCash: false,
+        considerationNote: 'Transfer of the Jalan Ampang premises',
+      );
+      expect(v['consideration_per_share'], isNull);
+      expect(v['total_consideration'], isNull);
+      expect(v['consideration_note'], 'Transfer of the Jalan Ampang premises');
+    });
+
+    test('a note typed and then the cash toggle flipped back is dropped', () {
+      // s.78(2) wants to know what the consideration was when it was
+      // not cash, and only then. A note left on a cash allotment says
+      // the company took something it did not.
+      final v = shareEventValues(
+        entityId: 'e', shareClassId: 'c',
+        eventType: 'allotment',
+        eventDate: DateTime(2026, 3, 1),
+        quantity: 1000,
+        toPersonId: 'buyer',
+        pricePerShare: 1.0,
+        isCash: true,
+        considerationNote: 'Transfer of the Jalan Ampang premises',
+      );
+      expect(v['consideration_note'], isNull);
+      expect(v['total_consideration'], 1000.00);
+    });
+  });
+
+  group('what belongs to a transfer only', () {
+    test('Form 32A, the duty and the stamp certificate are kept', () {
+      final v = shareEventValues(
+        entityId: 'e', shareClassId: 'c',
+        eventType: 'transfer',
+        eventDate: DateTime(2026, 3, 1),
+        quantity: 200,
+        fromPersonId: 'seller',
+        toPersonId: 'buyer',
+        pricePerShare: 2.0,
+        instrumentRef: '32A/2026/004',
+        stampDuty: 1.20,
+        stampCertificateNo: 'STMP-889',
+      );
+      expect(v['instrument_ref'], '32A/2026/004');
+      expect(v['stamp_duty'], 1.20);
+      expect(v['stamp_certificate_no'], 'STMP-889');
+    });
+
+    test('and dropped on every other kind of movement', () {
+      // The failure this exists for: the sheet is reused for the next
+      // movement and the instrument number carries over. An allotment
+      // filed against Form 32A/2026/004 points at an instrument of
+      // transfer that does not exist, and stamp duty on it asserts a
+      // payment to the Collector that was never made.
+      for (final t in ['allotment', 'transmission', 'cancellation',
+                       'conversion']) {
+        final v = shareEventValues(
+          entityId: 'e', shareClassId: 'c',
+          eventType: t,
+          eventDate: DateTime(2026, 3, 1),
+          quantity: 200,
+          fromPersonId: eventHasFrom(t) ? 'seller' : null,
+          toPersonId: eventHasTo(t) ? 'buyer' : null,
+          instrumentRef: '32A/2026/004',
+          stampDuty: 1.20,
+          stampCertificateNo: 'STMP-889',
+        );
+        expect(v['instrument_ref'], isNull, reason: t);
+        expect(v['stamp_duty'], isNull, reason: t);
+        expect(v['stamp_certificate_no'], isNull, reason: t);
+      }
+    });
+  });
+
+  group('what a class of shares is', () {
+    test('the code is upper case, because it is filed under', () {
+      // `corp_share_classes` is unique on (entity_id, code). A class
+      // entered as `ord` on one company and `ORD` on the next is two
+      // names for one thing, and the uniqueness constraint will not
+      // notice.
+      final v = shareClassValues(
+        entityId: 'e', code: '  ord ', name: 'Ordinary',
+        currency: 'myr', votesPerShare: 1,
+      );
+      expect(v['code'], 'ORD');
+      expect(v['currency'], 'MYR');
+    });
+
+    test('a blank name means the default, not a class with no name', () {
+      final v = shareClassValues(
+        entityId: 'e', code: 'ORD', name: '   ',
+        currency: 'MYR', votesPerShare: 1,
+      );
+      expect(v['name'], 'Ordinary');
+    });
+
+    test('blank rights are null, not an empty string', () {
+      final v = shareClassValues(
+        entityId: 'e', code: 'ORD', name: 'Ordinary',
+        currency: 'MYR', votesPerShare: 1, rights: '   ',
+      );
+      expect(v['rights'], isNull);
+    });
+
+    test('zero votes is a real answer', () {
+      // A non-voting preference share is the ordinary case, not a
+      // mistake. Refusing zero would make the class unrecordable.
+      expect(votesOf('0'), 0);
+      expect(votesOf('1.5'), 1.5);
+    });
+
+    test('negative votes and nonsense are refused', () {
+      expect(votesOf('-1'), isNull);
+      expect(votesOf(''), isNull);
+      expect(votesOf('one'), isNull);
     });
   });
 }
