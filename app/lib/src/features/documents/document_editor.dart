@@ -34,6 +34,32 @@ import 'share_dialog.dart';
 /// One editor for every document type in both cycles. What changes
 /// between them — which contacts are selectable, whether posting writes a
 /// journal, whether MyInvois applies — comes from DocTypeMeta.
+/// What a party has on deposit, altogether.
+///
+/// `deposits_held_for` returns the open notes with something left on
+/// them, so the sum is what could be set against this document — not
+/// what was ever taken.
+double depositsHeldTotal(Iterable<Map<String, dynamic>> rows) => double.parse(
+      rows
+          .fold<double>(
+            0,
+            (a, r) => a + (double.tryParse('${r['balance'] ?? 0}') ?? 0),
+          )
+          .toStringAsFixed(2),
+    );
+
+/// How the held deposits read on the banner.
+///
+/// The count is named because two deposits and one of twice the size
+/// settle differently: each note is applied on its own, and somebody
+/// looking at a single figure would expect one action.
+String depositsHeldLabel(List<Map<String, dynamic>> rows) {
+  final total = Fmt.money(depositsHeldTotal(rows));
+  return rows.length == 1
+      ? '$total held on deposit'
+      : '$total held on ${rows.length} deposits';
+}
+
 class DocumentEditor extends ConsumerStatefulWidget {
   const DocumentEditor({super.key, required this.docType, this.documentId});
 
@@ -1114,6 +1140,15 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                       // chosen, and only when a limit was actually set.
                       if (_kind.isSales && _contactId != null && !_isPosted)
                         _CreditBanner(contactId: _contactId!),
+                      // What this party already has on deposit.
+                      // `deposits_held_for` calls itself "the number
+                      // somebody needs before raising the invoice the
+                      // deposit was taken for", and nothing read it —
+                      // so the invoice went out for the full amount
+                      // and somebody remembered the deposit later, or
+                      // did not.
+                      if (_contactId != null && !_isPosted)
+                        _DepositBanner(contactId: _contactId!),
                       if (transferred && !_isPosted)
                         _TransferredBanner(status: _fulfilment),
                       // Only where a rule covers it. On a deployment
@@ -1292,6 +1327,66 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
 /// Silent when no limit is set, when the organization has credit control
 /// off, and when there is room left — a line saying "RM 8,000 available"
 /// on every invoice is a line nobody reads.
+/// What this party already has sitting with the company.
+///
+/// Shown while the document can still be changed, because the point is
+/// to raise it knowing about the deposit rather than to be told
+/// afterwards. Silent when there is none, which is most documents.
+class _DepositBanner extends ConsumerWidget {
+  const _DepositBanner({required this.contactId});
+
+  final String contactId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final held = ref.watch(depositsHeldForProvider(contactId)).valueOrNull;
+    if (held == null || held.isEmpty) return const SizedBox.shrink();
+
+    final total = depositsHeldTotal(held);
+    if (total <= 0) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(Space.lg),
+          child: Row(
+            children: [
+              Icon(
+                Icons.savings_outlined,
+                size: 20,
+                color: context.colors.info,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      depositsHeldLabel(held),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: context.colors.info,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Apply it from the Deposits screen once this is '
+                      'posted — it settles against the invoice rather '
+                      'than coming off the lines.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CreditBanner extends ConsumerWidget {
   const _CreditBanner({required this.contactId});
 
