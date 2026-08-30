@@ -8678,6 +8678,21 @@ extension RepoFoodCourt on Repo {
   )).toString();
 
   /// Whose dish this is. Null puts it back on the court itself.
+  /// Which items belong to which stall.
+  ///
+  /// Read raw rather than through [Item]: `stall_id` is not on the
+  /// model, and putting it there would send it back on every save from
+  /// the item editor, which knows nothing about stalls and would blank
+  /// it.
+  Future<List<Map<String, dynamic>>> itemStalls() async => Repo.rows(
+    await client
+        .from('items')
+        .select('id, code, name, stall_id')
+        .eq('org_id', orgId)
+        .isFilter('deleted_at', null)
+        .order('code'),
+  );
+
   Future<void> setItemStall(String itemId, String? stallId) async =>
       await callRpc(
         'set_item_stall',

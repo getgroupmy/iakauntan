@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'stall_items_dialog.dart';
 
 /// What a stall's row says under its name.
 ///
@@ -192,12 +193,32 @@ class _StallListState extends ConsumerState<_StallList> {
                 leading: CircleAvatar(child: Text('${row['code']}')),
                 title: Text('${row['name']}'),
                 subtitle: Text(stallSummary(row)),
-                trailing: row['is_active'] == true
-                    ? null
-                    : const Chip(
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (row['is_active'] != true)
+                      const Chip(
                         label: Text('Closed'),
                         visualDensity: VisualDensity.compact,
                       ),
+                    // Which dishes are this stall's. Nothing could say
+                    // so until now, and a stall that owns no dish
+                    // settles for nothing however much the court takes.
+                    TextButton(
+                      key: ValueKey('stall-items-${row['id']}'),
+                      onPressed: () async {
+                        if (await showStallItems(
+                          context,
+                          stall: row,
+                          stalls: rows,
+                        )) {
+                          _reload();
+                        }
+                      },
+                      child: const Text('Dishes'),
+                    ),
+                  ],
+                ),
                 onTap: () => _edit(row),
               );
             },

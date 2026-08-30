@@ -2328,6 +2328,12 @@ final posItemAvailabilityProvider = FutureProvider.autoDispose
 /// Every unit of measure the platform knows. Reference data, so it is
 /// held rather than autoDisposed: the list is the same on every screen
 /// that asks and does not change while somebody is looking at it.
+/// Every item with the stall it belongs to, for the food court.
+final itemStallsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+  (ref) => requireRepo(ref).itemStalls(),
+);
+
 final uomCodesProvider = FutureProvider<List<Map<String, dynamic>>>(
   (ref) => requireRepo(ref).uomCodes(),
 );
