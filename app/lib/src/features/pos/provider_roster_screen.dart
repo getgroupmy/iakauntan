@@ -309,6 +309,7 @@ class _WeekSheetState extends ConsumerState<_WeekSheet> {
     final ok = await runWithFeedback(
       context,
       successMessage: 'Saved',
+      doing: "Change a provider's working hours",
       action: () => ref
           .read(repoProvider)!
           .setPosProviderHours(widget.providerId, weekRows(_week)),

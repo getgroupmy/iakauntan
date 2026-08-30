@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/repository.dart';
+import 'denials.dart';
 import 'format.dart';
 import 'providers.dart';
 import 'theme.dart';
@@ -628,9 +630,15 @@ class PageBody extends StatelessWidget {
 
 /// Shows a snackbar for a Future, surfacing errors rather than swallowing
 /// them. Returns true when the action completed.
+/// Runs an action, says what happened, and writes down a refusal.
+///
+/// [doing] names what was being attempted, for the security log. It is
+/// the screen's word for it, because the sentence coming back says what
+/// the database thought rather than what the person was trying to do.
 Future<bool> runWithFeedback(
   BuildContext context, {
   required Future<void> Function() action,
+  String? doing,
   // Nullable so an action whose own result is the confirmation can stay
   // quiet. Sending a chat message is the case that forced it: a snackbar
   // saying "Sent" after every line, above a message that is visibly
@@ -667,6 +675,13 @@ Future<bool> runWithFeedback(
   // messenger captured above outlives it.
   final success = context.colors.success;
   final danger = context.colors.danger;
+  // Read before awaiting, for the same reason as the colours: the
+  // widget that supplied this context may be gone by the time the
+  // action returns.
+  final repo = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(repoProvider);
 
   try {
     await action();
@@ -687,7 +702,26 @@ Future<bool> runWithFeedback(
           duration: const Duration(seconds: 6),
         ),
       );
+    // 0235: a refusal cannot record itself, because the exception that
+    // carries it unwinds the transaction the record would be written
+    // in. So the client reports it back. Not awaited, and it swallows
+    // its own failures — a log write that made somebody wait, or that
+    // replaced the server's sentence with one about logging, would be
+    // worse than the gap it closes.
+    if (looksLikeARefusal(err)) unawaited(_writeDown(repo, err, doing));
     return false;
+  }
+}
+
+Future<void> _writeDown(Repo? repo, Object err, String? doing) async {
+  if (repo == null) return;
+  try {
+    await repo.reportDenied(
+      deniedAction(err, doing: doing),
+      deniedDetail(err),
+    );
+  } catch (_) {
+    // Rate-limited on the server, and nobody is waiting on it.
   }
 }
 

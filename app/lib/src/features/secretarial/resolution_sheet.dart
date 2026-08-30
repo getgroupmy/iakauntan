@@ -296,6 +296,7 @@ class _ResolutionSheetState extends ConsumerState<_ResolutionSheet> {
     final ok = await runWithFeedback(
       context,
       successMessage: 'Recorded',
+      doing: 'Record a resolution',
       action: () => ref.read(repoProvider)!.saveCorpResolution(
         resolutionValues(
           entityId: widget.entityId,
@@ -350,6 +351,7 @@ class _ResolutionSheetState extends ConsumerState<_ResolutionSheet> {
     final done = await runWithFeedback(
       context,
       successMessage: 'Removed',
+      doing: 'Remove a resolution',
       action: () =>
           ref.read(repoProvider)!.deleteCorpResolution(row['id'] as String),
     );

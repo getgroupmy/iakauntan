@@ -279,6 +279,7 @@ class _LineEditorState extends ConsumerState<_LineEditor> {
       action: () =>
           ref.read(repoProvider)!.setBudgetLines(id, budgetLinePayload(_lines)),
       successMessage: 'Budget changed',
+      doing: 'Change a budget',
     );
     if (mounted) setState(() => _saving = false);
     if (ok && mounted) {

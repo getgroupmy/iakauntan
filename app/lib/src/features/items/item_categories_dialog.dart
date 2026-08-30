@@ -94,6 +94,7 @@ class _CategoriesDialog extends ConsumerWidget {
                           final done = await runWithFeedback(
                             context,
                             successMessage: 'Removed',
+                            doing: 'Remove an item category',
                             action: () =>
                                 ref.read(repoProvider)!.deleteItemCategory(id),
                           );

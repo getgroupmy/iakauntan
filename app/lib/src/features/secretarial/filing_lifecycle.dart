@@ -127,6 +127,7 @@ class _StepDialogState extends ConsumerState<_StepDialog> {
             reference: ssmReferenceOf(_reference.text),
           ),
       successMessage: 'Lodged',
+      doing: 'Lodge a statutory filing',
     );
     if (mounted) setState(() => _saving = false);
     if (ok && mounted) {
