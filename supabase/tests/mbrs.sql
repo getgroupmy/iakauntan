@@ -345,4 +345,98 @@ begin
   raise notice 'mbrs: all three exemption grounds tested in both directions';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- 5. The default mapping, subtype by subtype
+--
+-- `app.fs_default_element` decides which line of the statements every
+-- account lands on when the company has written no override, and until
+-- now nothing asserted a single one of its arms. It is also mirrored in
+-- the app, in `fs_mapping.dart`, so the mapping screen can show what an
+-- account will do before anybody overrides it -- and a mirror that
+-- drifts shows the wrong thing confidently.
+--
+-- Every subtype is checked, so changing one here fails this file and
+-- sends somebody to the copy.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  r record;
+  v_got text;
+begin
+  for r in
+    select * from (values
+      -- Accumulated depreciation deliberately lands on the same element
+      -- as the cost it relieves: the face of the statement shows
+      -- carrying amount and the split is a note.
+      ('fixed_asset',              'PropertyPlantAndEquipment'),
+      ('accumulated_depreciation', 'PropertyPlantAndEquipment'),
+      ('other_asset',              'OtherNonCurrentAssets'),
+      ('inventory',                'Inventories'),
+      ('accounts_receivable',      'TradeAndOtherReceivables'),
+      ('bank',                     'CashAndCashEquivalents'),
+      ('cash',                     'CashAndCashEquivalents'),
+      ('current_asset',            'OtherCurrentAssets'),
+      ('accounts_payable',         'TradeAndOtherPayables'),
+      ('tax_payable',              'CurrentTaxLiabilities'),
+      ('current_liability',        'OtherCurrentLiabilities'),
+      ('long_term_liability',      'LoansAndBorrowings'),
+      ('other_liability',          'OtherNonCurrentLiabilities'),
+      ('share_capital',            'ShareCapital'),
+      ('reserves',                 'Reserves'),
+      ('retained_earnings',        'RetainedEarnings'),
+      -- Drawings are debit-natural equity, so they come back negative
+      -- and correctly reduce retained earnings.
+      ('drawings',                 'RetainedEarnings'),
+      ('sales',                    'Revenue'),
+      ('cost_of_sales',            'CostOfSales'),
+      ('other_income',             'OtherIncome'),
+      ('operating_expense',        'AdministrativeExpenses'),
+      ('payroll_expense',          'StaffCosts'),
+      ('depreciation_expense',     'DepreciationAndAmortisation'),
+      ('finance_cost',             'FinanceCosts'),
+      ('other_expense',            'OtherOperatingExpenses'),
+      ('tax_expense',              'TaxExpense')
+    ) as t(subtype, element)
+  loop
+    -- The type is deliberately wrong for most of these: the function
+    -- reads the subtype first, and an account whose type was mistyped
+    -- still has to land where its subtype says.
+    v_got := app.fs_default_element('asset'::app.account_type,
+                                    r.subtype::app.account_subtype);
+    perform pg_temp.check_eq('default element for ' || r.subtype,
+      v_got, r.element);
+  end loop;
+
+  -- An account created without a subtype still lands somewhere
+  -- defensible rather than vanishing off the face of the statement.
+  perform pg_temp.check_eq('no subtype, asset',
+    app.fs_default_element('asset'::app.account_type, null::app.account_subtype), 'OtherCurrentAssets');
+  perform pg_temp.check_eq('no subtype, liability',
+    app.fs_default_element('liability'::app.account_type, null::app.account_subtype),
+    'OtherCurrentLiabilities');
+  perform pg_temp.check_eq('no subtype, equity',
+    app.fs_default_element('equity'::app.account_type, null::app.account_subtype), 'Reserves');
+  perform pg_temp.check_eq('no subtype, revenue',
+    app.fs_default_element('revenue'::app.account_type, null::app.account_subtype), 'OtherIncome');
+  perform pg_temp.check_eq('no subtype, expense',
+    app.fs_default_element('expense'::app.account_type, null::app.account_subtype),
+    'OtherOperatingExpenses');
+
+  -- Every element the mapping names has to exist in the taxonomy, or
+  -- the override's foreign key would refuse what the default happily
+  -- produces.
+  if exists (
+    select 1 from unnest(enum_range(null::app.account_subtype)) s
+     where app.fs_default_element('asset'::app.account_type, s) is not null
+       and not exists (
+         select 1 from public.mbrs_elements e
+          where e.code = app.fs_default_element('asset'::app.account_type, s))
+  ) then
+    raise exception
+      'FAIL: a subtype defaults to an element that is not in mbrs_elements';
+  end if;
+
+  raise notice 'mbrs: every subtype maps to an element that exists';
+end $$;
+
 rollback;

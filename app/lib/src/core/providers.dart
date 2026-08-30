@@ -1743,6 +1743,14 @@ final mbrsElementsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).mbrsElements();
 });
 
+/// The deviations from the default MBRS mapping, and only those. An
+/// empty list means a standard chart mapped the standard way, not an
+/// unmapped one.
+final fsAccountMapProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).fsAccountMap();
+});
+
 // ---------------------------------------------------------------------
 // Service desk
 //

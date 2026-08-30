@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import 'fs_mapping.dart';
 import 'mtool_csv.dart';
 
 /// One set of accounts, from mapping to lodgement.
@@ -28,6 +29,22 @@ class FilingScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Financial statements'),
         actions: [
+          // What the export is built from. `fs_account_map` holds the
+          // deviations from the default mapping and nothing could read
+          // or write one, so a chart that does not match the default
+          // reported wrongly with no remedy in the product.
+          IconButton(
+            key: const ValueKey('fs-mapping'),
+            tooltip: 'How the chart reports',
+            icon: const Icon(Icons.account_tree_outlined),
+            onPressed: () async {
+              if (await showFsMapping(context)) {
+                // The statements on this screen are the export, so
+                // remapping an account moves what is shown here too.
+                ref.invalidate(fsExportProvider(filingId));
+              }
+            },
+          ),
           IconButton(
             tooltip: 'Export for mTool',
             icon: const Icon(Icons.download_outlined),
