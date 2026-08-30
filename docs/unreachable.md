@@ -515,7 +515,7 @@ writing this section.** `deleteCorpResolution` went into
 ever called it — the same defect arriving fresh, from the same hand
 that was documenting it. That is what the warning about
 `depositNoteProvider` above is describing, and it is worth saying that
-it caught the person who wrote the warning. Closed at `df9e5e5`, with
+it caught the person who wrote the warning. Closed at `a7baa66`, with
 a removal that says what it takes with it: a resolution once passed is
 a matter of record, and anything generated from it stays and quietly
 stops naming what authorised it.
