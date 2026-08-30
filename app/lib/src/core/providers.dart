@@ -2246,6 +2246,12 @@ final posDriversProvider =
     );
 
 /// What each driver carried on one trading day. 0259.
+/// One day of delivering, per outlet. 0280.
+final posDeliveryDayProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, DateTime>(
+      (ref, date) => requireRepo(ref).posDeliveryDay(date),
+    );
+
 final posDriverRunsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTime>(
       (ref, date) => requireRepo(ref).posDriverRuns(date),

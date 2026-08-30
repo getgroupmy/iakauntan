@@ -10,6 +10,7 @@ import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'delivery_setup_screen.dart';
 import 'delivery_sheet.dart';
+import 'delivery_day_dialog.dart';
 
 /// Everything that has left the kitchen and not arrived yet.
 ///
@@ -183,6 +184,15 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
       appBar: AppBar(
         title: const Text('Deliveries'),
         actions: [
+          // What actually happened. The board shows what is out right
+          // now; both day reports were written and neither reached a
+          // screen, so a shop could not say how many runs it made.
+          IconButton(
+            key: const ValueKey('delivery-day'),
+            tooltip: 'The day’s deliveries',
+            icon: const Icon(Icons.insights_outlined),
+            onPressed: () => showDeliveryDay(context),
+          ),
           IconButton(
             tooltip: 'Zones and drivers',
             icon: const Icon(Icons.tune),
