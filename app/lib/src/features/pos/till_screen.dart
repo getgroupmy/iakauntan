@@ -12,6 +12,7 @@ import '../../data/repository.dart';
 import 'assign_table.dart';
 import 'channels.dart';
 import 'delivery_sheet.dart';
+import 'sold_out_dialog.dart';
 import 'take_it_off.dart';
 import 'discount_sheet.dart';
 import 'receipt_view.dart';
@@ -1337,6 +1338,17 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       appBar: AppBar(
         title: const Text('Till'),
         actions: [
+          // The 86 list, whole. Stopping and resuming a dish have been
+          // reachable from a long press on the menu; the list of what
+          // is off — and who took it off — was not, so it existed only
+          // as greyed tiles scattered through a menu.
+          if (_outletId != null)
+            IconButton(
+              key: const ValueKey('sold-out'),
+              tooltip: 'Sold out today',
+              icon: const Icon(Icons.no_food_outlined),
+              onPressed: () => showSoldOut(context, _outletId!),
+            ),
           registers.maybeWhen(
             data: (rows) => PosRegisterPicker(
               registers: rows,
