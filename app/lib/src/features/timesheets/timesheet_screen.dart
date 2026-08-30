@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import 'billing_rate_sheet.dart';
 
 /// Time recorded, and time turned into an invoice.
 ///
@@ -40,7 +41,7 @@ class _TimesheetScreenState extends ConsumerState<TimesheetScreen> {
     final period = (from: _from, to: _to);
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Timesheets'),
@@ -71,6 +72,7 @@ class _TimesheetScreenState extends ConsumerState<TimesheetScreen> {
             tabs: [
               Tab(text: 'My week'),
               Tab(text: 'Unbilled'),
+              Tab(text: 'Rates'),
             ],
           ),
         ),
@@ -78,6 +80,7 @@ class _TimesheetScreenState extends ConsumerState<TimesheetScreen> {
           children: [
             _MyTime(period: period),
             _Unbilled(period: period),
+            const _Rates(),
           ],
         ),
       ),
@@ -340,5 +343,70 @@ class _ProjectTile extends ConsumerWidget {
       ref.invalidate(timesheetReportProvider(period));
       ref.invalidate(documentsProvider);
     }
+  }
+}
+
+/// What everybody charges.
+///
+/// `billing_rates` has been in `0164` with a provider reading it and
+/// nothing displaying it, and nothing anywhere adding a row -- so the
+/// rate card was invisible and unmaintainable, and every hour had its
+/// rate typed in by hand.
+class _Rates extends ConsumerWidget {
+  const _Rates();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rates = ref.watch(billingRatesProvider);
+    final canWrite = ref.watch(canWriteProvider);
+
+    return Scaffold(
+      floatingActionButton: canWrite
+          ? FloatingActionButton.extended(
+              key: const ValueKey('add-rate'),
+              onPressed: () => showBillingRateSheet(context),
+              icon: const Icon(Icons.add),
+              label: const Text('Record a rate'),
+            )
+          : null,
+      body: AsyncView(
+        value: rates,
+        onRetry: () => ref.invalidate(billingRatesProvider),
+        builder: (list) {
+          if (list.isEmpty) {
+            return const EmptyState(
+              icon: Icons.price_change_outlined,
+              title: 'No rates recorded',
+              message: 'Record what each person charges, and the rate stops '
+                  'being something typed from memory onto every entry.',
+            );
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.only(bottom: 88),
+            itemCount: list.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, i) {
+              final r = list[i];
+              final project = r['projects'] as Map<String, dynamic>?;
+              return ListTile(
+                title: Text(
+                  rateScope(r['project_id'] as String?),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  [
+                    if (project != null) '${project['code']} · ${project['name']}',
+                    'from ${Fmt.date(DateTime.parse(r['effective_from'] as String))}',
+                    if (r['notes'] != null) '${r['notes']}',
+                  ].join(' · '),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                trailing: Money(r['hourly_rate'] as num?, bold: true),
+              );
+            },
+          );
+        },
+      ),
+    );
   }
 }

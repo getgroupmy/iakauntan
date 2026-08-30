@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'matter_billing.dart';
 
 /// A single matter: client money held, time recorded and disbursements.
 ///
@@ -456,17 +457,43 @@ class _TimeTab extends ConsumerWidget {
     final entries = ref.watch(timeEntriesProvider(matterId));
     final canWrite = ref.watch(canWriteProvider);
 
+    // What could be invoiced today. Shown on the button because the
+    // question a partner asks of this screen is how much is sitting
+    // here unbilled, and until now the screen could not answer it.
+    final unbilled = entries.valueOrNull
+            ?.where((e) => e.isBillable && !e.isBilled) ??
+        const <TimeEntry>[];
+
     return Scaffold(
-      floatingActionButton: canWrite
-          ? FloatingActionButton.extended(
-              onPressed: () => showDialog<void>(
-                context: context,
-                builder: (_) => _TimeDialog(matterId: matterId),
-              ),
-              icon: const Icon(Icons.timer_outlined),
-              label: const Text('Record time'),
-            )
-          : null,
+      floatingActionButton: !canWrite
+          ? null
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (unbilled.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: Space.sm),
+                    child: FloatingActionButton.extended(
+                      key: const ValueKey('bill-time'),
+                      heroTag: 'bill-time',
+                      onPressed: () =>
+                          showBillMatterSheet(context, matterId: matterId),
+                      icon: const Icon(Icons.request_quote_outlined),
+                      label: Text('Bill ${Fmt.money(billableTotal(unbilled))}'),
+                    ),
+                  ),
+                FloatingActionButton.extended(
+                  heroTag: 'record-time',
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => _TimeDialog(matterId: matterId),
+                  ),
+                  icon: const Icon(Icons.timer_outlined),
+                  label: const Text('Record time'),
+                ),
+              ],
+            ),
       body: AsyncView(
         value: entries,
         onRetry: () => ref.invalidate(timeEntriesProvider(matterId)),
@@ -475,7 +502,8 @@ class _TimeTab extends ConsumerWidget {
             return const EmptyState(
               icon: Icons.timer_outlined,
               title: 'No time recorded',
-              message: 'Record time as you work so it can be billed later.',
+              message: 'Record time as you work. Once there is billable '
+                  'time here, it can be invoiced from this tab.',
             );
           }
           return ListView.separated(

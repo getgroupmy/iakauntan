@@ -250,9 +250,9 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/legal/matter_detail_screen.dart": {
-    "mtime": 1786785756.622488,
-    "ast_hash": "d61dd551a936090c929fc27270de1f9a",
-    "semantic_hash": "d61dd551a936090c929fc27270de1f9a"
+    "mtime": 1788112024.5473528,
+    "ast_hash": "7d89d0538a811fed2b6d0602780343e9",
+    "semantic_hash": ""
   },
   "app/lib/src/features/legal/matters_screen.dart": {
     "mtime": 1786785756.622488,
@@ -2775,8 +2775,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/timesheets/timesheet_screen.dart": {
-    "mtime": 1786937168.3800116,
-    "ast_hash": "9595969f9c8440ec3385f000f7174189",
+    "mtime": 1788112050.6281576,
+    "ast_hash": "854fc7540575550e3f5585c4938592b7",
     "semantic_hash": ""
   },
   "app/test/timesheet_test.dart": {
@@ -5342,6 +5342,21 @@
   "app/test/property_write_test.dart": {
     "mtime": 1788106559.4771605,
     "ast_hash": "bc850b7924a0143fe8c78a643f1223d5",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/legal/matter_billing.dart": {
+    "mtime": 1788112292.4409916,
+    "ast_hash": "02f26053291de5c15d1304cd15f2a7d1",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/timesheets/billing_rate_sheet.dart": {
+    "mtime": 1788112326.5352156,
+    "ast_hash": "28ce5cf6ad953c13af3040b660a55242",
+    "semantic_hash": ""
+  },
+  "app/test/matter_billing_test.dart": {
+    "mtime": 1788112306.9507012,
+    "ast_hash": "e3838c06b595828d0612770e97eb6374",
     "semantic_hash": ""
   }
 }
