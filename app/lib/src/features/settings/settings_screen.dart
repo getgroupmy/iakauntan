@@ -20,6 +20,7 @@ import 'company_group_card.dart';
 import 'sst_card.dart';
 import 'notifications_card.dart';
 import 'warehouses_card.dart';
+import 'credit_ledger_dialog.dart';
 import 'einvoice_credentials.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -720,6 +721,15 @@ class _CreditBalance extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+          // The only question anybody asks of a prepaid balance. The
+          // ledger has recorded every movement all along and nothing
+          // read it, so the number went down and nobody could see what
+          // took it.
+          TextButton(
+            key: const ValueKey('credit-ledger'),
+            onPressed: () => showCreditLedger(context),
+            child: const Text('Where it went'),
           ),
         ],
       ),
