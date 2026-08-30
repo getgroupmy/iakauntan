@@ -18,6 +18,57 @@ select 'rpc', p.proname, pg_get_function_identity_arguments(p.oid)
 
 then grep each name across both source trees.
 
+**A second sweep, added in the pass at `be06a0c`, and worth more than
+the first.** The SQL check above finds what the *database* can do and
+nobody calls. It cannot see the layer where most of this actually
+hides: a repository method or a Riverpod provider that wraps a function
+the check counts as reached, and is itself called by nothing. Run both:
+
+```python
+# Run from app/. Both sweeps are the same shape: collect the names a
+# file declares, then count references to each one everywhere else.
+import re, os, collections
+
+def unreferenced(declaring_file, pattern, call_shape):
+    names = set(re.findall(pattern, open(declaring_file).read(), re.M))
+    seen = collections.Counter()
+    for root, _, files in os.walk('lib/src'):
+        for f in files:
+            path = os.path.join(root, f)
+            if not f.endswith('.dart') or path.endswith(declaring_file):
+                continue
+            text = open(path).read()
+            for n in names:
+                seen[n] += len(re.findall(call_shape(n), text))
+    return sorted(n for n in names if seen[n] == 0)
+
+print(unreferenced(
+    'lib/src/data/repository.dart',
+    r'\n  (?:Future<[^>]*>|Future|void|String|bool|num|double|int|'
+    r'List<[^>]*>|Map<[^>]*>)\??\s+([a-z][A-Za-z0-9_]*)\s*\(',
+    lambda n: r'\b' + re.escape(n) + r'\s*\('))
+
+print(unreferenced(
+    'lib/src/core/providers.dart',
+    r'^final ([a-zA-Z0-9_]+Provider)\b',
+    lambda n: r'\b' + re.escape(n) + r'\b'))
+```
+
+Sixteen of the eighteen gaps closed in that pass were invisible to the
+SQL check and obvious to this one. `bankTransfersProvider` is the type
+specimen: it read the transfer register, and its only reference
+anywhere was an `invalidate` in the dialog that creates a transfer — so
+the RPC behind it counted as reached while a transfer, once made, left
+the app entirely.
+
+Two traps in the provider sweep. A provider is a false positive when
+the screen reads the same thing through the repository directly —
+four of the eleven it reports at `be06a0c` are that, so check each one
+for a bare `.methodName(` before believing it. And a provider *you*
+add and never watch is the same defect arriving fresh:
+`depositNoteProvider` was added and removed inside one pass for
+exactly that reason.
+
 Two traps in doing it naively, both hit on the first pass:
 
 - **Searching only for `'quoted_name'` misses PostgREST embeds.** A table
@@ -178,6 +229,122 @@ was exactly that case.
   `resync_bank_balance` from the opening-balance import in `0151`. The
   entry was stale rather than the code.
 
+### The pass at `be06a0c`
+
+Eighteen commits, sixteen of them found by the provider and repository
+sweeps rather than by the SQL check. Grouped by what a user could not
+do.
+
+**Nobody could record the thing the module is for.**
+
+- **An hour.** `0164` widened `time_entries` off matters and onto
+  projects for a reason it wrote down — the table "is welded to law
+  firms... a consultant, an engineer, an architect or an agency —
+  everyone else who sells hours — cannot record a minute". The widening
+  landed and the form did not. The only way in stayed the matter tab on
+  the legal screen, so a firm without the legal module had a Timesheets
+  screen with three tabs, an empty state inviting people to record
+  hours, and nothing that could write one. Everything downstream —
+  billing a project, billing a matter, utilisation, the rate card —
+  waited on rows nobody could make.
+- **Whose dish it is.** `items.stall_id` is stamped onto every POS sale
+  line and `pos_stall_takings` counts only lines that carry one.
+  `setItemStall` had no caller, so every line was stamped null and the
+  food court's Settling tab was empty for every tenant that ever used
+  it. The stalls, the commission percentage and the settlement runs
+  were all built and could not produce a ringgit between them.
+- **How big a carton is.** `ref_uom_factors` leaves the packaging codes
+  out on purpose — "a box is only as big as whatever is in it" — and
+  `item_uom_packs` is where a shop says so. Nothing could write one, so
+  `app.uom_qty` fell through to a reference factor that deliberately
+  does not exist for a packaging code.
+- **A budget line.** The budget grid's own empty state told people to
+  "fill it from last year and then change the lines that matter", and
+  the grid was read-only. The only budget anybody could have was last
+  year's actuals times a percentage.
+
+**Nobody could take something back.**
+
+- **An invoice, a deposit, a transfer, a draft.** Four undos in the
+  schema with no caller between them. `void_sales_document`,
+  `void_deposit`, `void_bank_transfer` and the soft delete behind
+  `deleteDocument`. The only remedy for any of them was a manual
+  journal against a document that stayed on the ledger looking real.
+- **A stock transfer, a recurring template.** `cancel_stock_transfer`
+  takes only a draft and had no caller, so a draft typed by mistake sat
+  on the list forever. `update_recurring_template` re-points a schedule
+  at a newer document — the only way a schedule can follow a price rise,
+  since it holds a copy rather than a link — and had no caller either,
+  so the remedy was to delete the schedule and lose its run history.
+- **A voucher, a delivery.** `remove_pos_sale_promotion` and
+  `clear_pos_delivery`, neither called. A code typed against the wrong
+  bill stayed on it until tender; an address taken for what turned out
+  to be a collection could be corrected but never removed, so the ride
+  stayed on the total.
+- **The LHDN credentials.** `clear_einvoice_credentials` had no caller,
+  so a client id and secret could be overwritten and never removed. A
+  company leaving, or changing intermediary, had no way to take them
+  out, and the secret stayed server-side indefinitely.
+
+**Nobody could see what the system already knew.**
+
+- **The transfer register.** `bankTransfersProvider` read it and
+  nothing watched it. A transfer, once made, was not listed, not
+  printable and not voidable.
+- **What a landed cost run is made of.** `landedCostChargesProvider`
+  and `landedCostTargetsProvider`, both unwatched. The run showed what
+  it would put onto the stock and never which freight, which duty, to
+  which account, over which bills — and `upsert_landed_cost_run` amends
+  a draft in place, a path nothing called, so correcting a mistyped
+  figure meant re-entering everything.
+- **Why the forecast moved an invoice.** `customer_payment_lags` was
+  written for exactly that — "so somebody can see why the forecast moved
+  an invoice and argue with it" — and `lagLabel` was written to phrase
+  it. Neither had a caller, while the toggle in the app bar went on
+  claiming the forecast used how late each customer actually pays.
+- **The day's deliveries.** `pos_delivery_day` had no provider at all
+  and `posDriverRunsProvider` was watched by nothing. A shop recorded
+  every driver, run, fee and delivery time and could report none of it.
+- **The 86 list.** Stopping and resuming a dish were reachable from a
+  long press; `pos_stopped_items` was not, so the list existed only as
+  greyed tiles scattered through a menu and nobody could see who had
+  taken a dish off.
+- **The attendance month.** `attendanceProvider` reads it and nothing
+  watched it. My HR showed today and only today, so an employee could
+  not check the month before payroll ran on it and nobody in HR could
+  answer who had been late.
+- **Who holds a ticket.** `assign_ticket` and `escalate_ticket`, in
+  `0194` since the lifecycle landed, neither called. A ticket sat in
+  whatever queue routing put it in, `escalation_level` never left zero,
+  and the header did not say who owned it.
+
+**Two statutory ones, which are the ones that would have hurt.**
+
+- **How the chart maps to MBRS.** `fs_account_map` holds the deviations
+  from `app.fs_default_element`, and `fsAccountMap`, `setFsAccountMap`
+  and `mbrsElements` all had no caller. A standard chart needs no
+  deviation, which is why it went unnoticed — but a company that
+  repurposed an account, or created one without a subtype, had its
+  figures land wherever the default decided, and the numbers lodged
+  with SSM would be wrong with no remedy in the product. The default
+  mapping is now mirrored in Dart so the screen can show what an
+  account will do, and `mbrs.sql` asserts all twenty-six of its arms —
+  nothing asserted one before — plus that every element it produces
+  exists in `mbrs_elements`, since the override's foreign key would
+  otherwise refuse what the default happily emits.
+- **What a set of accounts says.** `fs_filings` carries the auditor,
+  the firm number, the signatory, the report date, the opinion, the
+  going-concern emphasis, the PD 3/2018 headcount and the directors'
+  dates. `createFsFiling` sets three of them, once, and
+  `updateFsFiling` had no caller — so the rest could never be entered
+  at all, and the exemption card answered "cannot tell" forever because
+  the headcount could not be supplied after the filing was made.
+
+**Applying a deposit** (`apply_deposit`) rounds the set out: a deposit
+could be given back or kept and never set against the invoice it was
+taken for, which is the ordinary outcome, so the liability stood
+against an invoice reading as unpaid.
+
 ## Correct: the database owns these
 
 Not gaps. Written by triggers or SECURITY DEFINER functions, or read
@@ -215,6 +382,47 @@ writing down so the next pass does not chase them again.
   kitchen's portions and what is left of them, asserted in
   `pos_recipes.sql` and behind no screen.
 
+### 2. What the sweeps still find at `be06a0c`
+
+Seven repository methods with no caller:
+
+- **`acceptInvitation`** is the *token* path into a company, and it is
+  not the only one. `app.handle_new_user` claims a pending invitation
+  the moment somebody signs up at the invited address, which is how
+  every member has actually joined, so this is a missing e-mail link
+  rather than a missing screen. Building the screen without the link
+  would give nobody anything to paste.
+- **`chatEndCall`, `chatFileBytes`, `chatMarkDelivered`, `notifyPush`,
+  `reportDenied`** — plumbing behind features that work by other
+  routes. Worth a pass of their own to decide whether each is a gap or
+  dead weight; assuming either without reading is how the last entry on
+  this list got written twice.
+- **`setRegisterDefaultChannel`** has nowhere to live: registers are
+  picked all over the app and administered nowhere. It needs a register
+  settings screen, which is the actual gap.
+
+Eleven providers nothing watches, of which four are false positives —
+the screen reads the same thing through the repository directly:
+`stockTransferLinesProvider`, `itemModifierGroupIdsProvider`,
+`posRecipeLinesProvider`, `contactMembershipsProvider`. That leaves
+seven where nothing reads the data at all:
+
+- **`creditLedger`** — the OCR credit ledger. Scanning charges are
+  taken and the ledger behind them cannot be read.
+- **`depositsHeldFor`** — what a party has on deposit, which is the
+  figure somebody wants *before* raising the invoice the deposit was
+  taken for. The apply sheet reaches the deposit from the other end.
+- **`chatUnread`**, **`itemConversionOutputs`**, **`posQueueDay`**,
+  **`posRecipeRequirement`**, **`posServiceProviders`**.
+
+`attendance` was an eighth until this pass, and is now the attendance
+month.
+
+Both lists were produced by the sweeps at the top of this file. Run
+them again before believing this section: it is the part that goes
+stale first, and the entry above about `corp_issued_capital` is what
+that looks like when it does.
+
 ## Why this keeps happening
 
 Of the eleven capabilities built in the sessions before this check, nine
@@ -222,5 +430,22 @@ were already in the schema with nothing able to reach them. Schema lands
 ahead of behaviour in this codebase, consistently, and the gap is
 invisible to every other check: the migrations apply, the tests pass,
 the analyzer is clean, and the screens that exist all work.
+
+The pass at `be06a0c` says the same thing louder. Eighteen commits,
+sixteen of them closing something the database had been able to do for
+months. Not one was found by a failing test, a failing analyzer or a
+red CI run, because none of those can see it — a function nobody calls
+is indistinguishable from a function nobody needs, to every automated
+check this repository has.
+
+Three of them were worse than unreachable, and those are the ones to
+learn from: the screen said the thing it could not do. The budget grid
+told people to "change the lines that matter" and had no editor. The
+cash forecast's app bar claimed it used how late each customer actually
+pays and could not show a single figure. The Timesheets screen invited
+people to record hours against a project and had no way to write one. A
+promise a screen cannot keep is not a gap in the schema's reach — it is
+the product telling a user something untrue, and it will not turn up in
+a migration review.
 
 Run this check before planning a block of work, not after.
