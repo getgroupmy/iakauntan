@@ -76,6 +76,67 @@ class ChargeDraft {
   };
 }
 
+/// Whether a draft can still be rewritten.
+///
+/// `upsert_landed_cost_run` refuses anything else in its own words:
+/// "That run is already %, and what it did to the stock cannot be
+/// rewritten by editing it." A posted run is undone by cancelling it,
+/// not by editing what it was.
+bool runIsAmendable(String? status) => status == 'draft';
+
+/// What one charge on a saved run reads as.
+///
+/// `landed_cost_charges` has been readable since the module went in and
+/// nothing displayed a row of it, so a run showed what it would put on
+/// the stock and never what was being spread — the freight, the duty
+/// and the account each was coded to.
+String chargeLine(Map<String, dynamic> row) {
+  final account = row['accounts'] as Map?;
+  return [
+    '${row['description']}',
+    if (account != null) '${account['code']} ${account['name']}',
+    chargeBasis('${row['basis']}'),
+  ].join(' · ');
+}
+
+/// How a charge is spread, in words rather than the enum.
+///
+/// `app.landed_cost_basis` has exactly two arms, and `value` is what
+/// the column defaults to — which is also the right thing to say about
+/// a row that came back with nothing in it.
+String chargeBasis(String? basis) =>
+    basis == 'quantity' ? 'by quantity' : 'by value';
+
+/// What the run is spreading, altogether.
+double chargesTotal(Iterable<Map<String, dynamic>> rows) => double.parse(
+      rows
+          .fold<double>(
+            0,
+            (a, r) => a + (double.tryParse('${r['amount'] ?? 0}') ?? 0),
+          )
+          .toStringAsFixed(2),
+    );
+
+/// The saved charges, as drafts the dialog can edit.
+List<ChargeDraft> draftsOf(Iterable<Map<String, dynamic>> rows) {
+  final list = [
+    for (final r in rows)
+      ChargeDraft(
+        description: '${r['description'] ?? ''}',
+        amount: double.tryParse('${r['amount'] ?? 0}') ?? 0,
+        basis: '${r['basis'] ?? 'value'}',
+        accountId: r['account_id'] as String?,
+      ),
+  ];
+  // A run with nothing on it still needs a row to type into, which is
+  // what a fresh dialog starts with.
+  return list.isEmpty ? [ChargeDraft()] : list;
+}
+
+/// Which bills a saved run covers.
+List<String> billIdsOf(Iterable<Map<String, dynamic>> targets) =>
+    [for (final t in targets) '${t['bill_id']}'];
+
 /// Whether a run is worth sending to the server yet.
 ///
 /// Checked here as well as on the server so somebody typing sees the
@@ -158,18 +219,42 @@ class LandedCostScreen extends ConsumerWidget {
 
 /// Writing a run down: which bills, and what is being spread over them.
 class _RunDialog extends ConsumerStatefulWidget {
-  const _RunDialog();
+  const _RunDialog({
+    this.run,
+    this.bills = const [],
+    this.charges = const [],
+  });
+
+  /// The run being rewritten, or null when one is being written.
+  final Map<String, dynamic>? run;
+
+  /// What it covers and what it spreads now. Passed in rather than read
+  /// here because the sheet has already read them to show them.
+  final List<String> bills;
+  final List<ChargeDraft> charges;
 
   @override
   ConsumerState<_RunDialog> createState() => _RunDialogState();
 }
 
 class _RunDialogState extends ConsumerState<_RunDialog> {
-  final _bills = <String>[];
-  final _charges = <ChargeDraft>[ChargeDraft()];
+  late final List<String> _bills;
+  late final List<ChargeDraft> _charges;
   final _notes = TextEditingController();
-  DateTime _date = DateTime.now();
+  late DateTime _date;
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _bills = [...widget.bills];
+    _charges = widget.charges.isEmpty ? [ChargeDraft()] : [...widget.charges];
+    final run = widget.run;
+    _date = run == null
+        ? DateTime.now()
+        : DateTime.tryParse('${run['run_date']}') ?? DateTime.now();
+    _notes.text = '${run?['notes'] ?? ''}';
+  }
 
   @override
   void dispose() {
@@ -185,6 +270,10 @@ class _RunDialogState extends ConsumerState<_RunDialog> {
       context,
       successMessage: 'Saved',
       action: () => repo.saveLandedCostRun(
+        // With an id the function deletes the run's bills and charges
+        // and writes these instead, which is what makes correcting a
+        // typo something other than starting again.
+        id: widget.run?['id'] as String?,
         date: _date,
         bills: _bills,
         charges: [for (final c in _charges) c.toJson()],
@@ -215,7 +304,11 @@ class _RunDialogState extends ConsumerState<_RunDialog> {
     final accounts = ref.watch(accountsProvider).valueOrNull ?? const <Account>[];
 
     return AlertDialog(
-      title: const Text('A landed cost run'),
+      title: Text(
+        widget.run == null
+            ? 'A landed cost run'
+            : 'Change ${widget.run!['run_no']}',
+      ),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
@@ -452,8 +545,16 @@ class _RunSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final id = '${run['id']}';
-    final draft = '${run['status']}' == 'draft';
+    final draft = runIsAmendable('${run['status']}');
     final preview = ref.watch(landedCostPreviewProvider(id));
+    // What is being spread, and over which bills. Both have been
+    // readable since the module went in and neither was shown, so a run
+    // said what it would put on the stock and never what it was made
+    // of.
+    final charges = ref.watch(landedCostChargesProvider(id)).valueOrNull ??
+        const <Map<String, dynamic>>[];
+    final targets = ref.watch(landedCostTargetsProvider(id)).valueOrNull ??
+        const <Map<String, dynamic>>[];
 
     return SafeArea(
       child: Padding(
@@ -473,6 +574,40 @@ class _RunSheet extends ConsumerWidget {
                 StatusChip('${run['status']}', compact: true),
               ],
             ),
+            if (charges.isNotEmpty) ...[
+              const SizedBox(height: Space.sm),
+              for (final c in charges)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          chargeLine(c),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      Money(num.tryParse('${c['amount'] ?? 0}')),
+                    ],
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Spread over ${targets.length} '
+                        'bill${targets.length == 1 ? '' : 's'}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    Money(chargesTotal(charges), bold: true),
+                  ],
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+            ],
             const Divider(height: 1),
             Flexible(
               child: AsyncView<List<Map<String, dynamic>>>(
@@ -515,6 +650,15 @@ class _RunSheet extends ConsumerWidget {
                       onPressed: () => _cancel(context, ref, id),
                       child: const Text('Throw it away'),
                     ),
+                    const SizedBox(width: Space.sm),
+                    // Correcting a mistyped freight figure used to mean
+                    // throwing the run away and re-entering every bill
+                    // and every charge.
+                    TextButton(
+                      key: const ValueKey('amend-run'),
+                      onPressed: () => _amend(context, ref, charges, targets),
+                      child: const Text('Change it'),
+                    ),
                     const Spacer(),
                     FilledButton.icon(
                       onPressed: () => _post(context, ref, id),
@@ -539,6 +683,30 @@ class _RunSheet extends ConsumerWidget {
       action: () => repo.postLandedCostRun(id),
     );
     if (ok && context.mounted) Navigator.of(context).pop(true);
+  }
+
+  Future<void> _amend(
+    BuildContext context,
+    WidgetRef ref,
+    List<Map<String, dynamic>> charges,
+    List<Map<String, dynamic>> targets,
+  ) async {
+    final id = '${run['id']}';
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _RunDialog(
+        run: run,
+        bills: billIdsOf(targets),
+        charges: draftsOf(charges),
+      ),
+    );
+    if (saved != true || !context.mounted) return;
+    ref
+      ..invalidate(landedCostRunsProvider(null))
+      ..invalidate(landedCostPreviewProvider(id))
+      ..invalidate(landedCostChargesProvider(id))
+      ..invalidate(landedCostTargetsProvider(id));
+    Navigator.of(context).pop(true);
   }
 
   Future<void> _cancel(BuildContext context, WidgetRef ref, String id) async {
