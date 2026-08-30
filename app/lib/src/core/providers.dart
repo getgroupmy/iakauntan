@@ -2523,6 +2523,12 @@ final stockTransferLinesProvider = FutureProvider.autoDispose
       (ref, id) => requireRepo(ref).stockTransferLines(id),
     );
 
+/// What a shop files its items under. 0003.
+final itemCategoriesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).itemCategories(),
+    );
+
 /// The conversions a company keeps. 0265.
 final itemConversionsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(

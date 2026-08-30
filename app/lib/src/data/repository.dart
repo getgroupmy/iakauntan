@@ -7058,6 +7058,52 @@ extension RepoPos on Repo {
         .eq('is_active', true),
   );
 
+  /// What a shop files its items under.
+  ///
+  /// `item_categories` has been in 0003 since the first migration, and
+  /// nothing in the app could read it, write it or show it — so
+  /// `items.category_id` was null for every item anybody typed, and the
+  /// kitchen router's "everything in this category" arm had no
+  /// categories to route.
+  Future<List<Map<String, dynamic>>> itemCategories() async => Repo.rows(
+    await client
+        .from('item_categories')
+        .select('id, code, name, parent_id')
+        .eq('org_id', orgId)
+        .order('name'),
+  );
+
+  Future<String> saveItemCategory({
+    String? id,
+    required String code,
+    required String name,
+    String? parentId,
+  }) async {
+    final values = <String, dynamic>{
+      'org_id': orgId,
+      'code': code,
+      'name': name,
+      'parent_id': parentId,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+    if (id == null) {
+      final row = await client
+          .from('item_categories')
+          .insert(values)
+          .select('id')
+          .single();
+      return '${row['id']}';
+    }
+    await client.from('item_categories').update(values).eq('id', id);
+    return id;
+  }
+
+  /// Removes one. The children come up a level and the items that were
+  /// in it end up filed under nothing — both are `on delete set null`
+  /// in 0003, and neither is something this call decides.
+  Future<void> deleteItemCategory(String id) async =>
+      await client.from('item_categories').delete().eq('id', id);
+
   Future<List<Map<String, dynamic>>> posServiceProviders(
     String outletId,
   ) async => Repo.rows(

@@ -7,6 +7,8 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'item_categories.dart';
+import 'item_categories_dialog.dart';
 import 'item_prices_dialog.dart';
 import 'item_packs_dialog.dart';
 import 'item_variants_dialog.dart';
@@ -41,6 +43,12 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
               tooltip: 'Questions a dish comes with',
               icon: const Icon(Icons.help_outline, size: 20),
               onPressed: () => showModifierGroups(context),
+            ),
+          if (canWrite)
+            IconButton(
+              tooltip: 'Categories',
+              icon: const Icon(Icons.folder_outlined, size: 20),
+              onPressed: () => showItemCategories(context),
             ),
           if (canWrite)
             IconButton(
@@ -210,6 +218,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
   late String _uom;
   late String _classification;
   String? _salesTaxCodeId;
+  String? _categoryId;
   bool _trackInventory = true;
   String _tracking = 'none';
   bool _saving = false;
@@ -233,6 +242,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
     _uom = i?.uomCode ?? 'C62';
     _classification = i?.classificationCode ?? '022';
     _salesTaxCodeId = i?.salesTaxCodeId;
+    _categoryId = i?.categoryId;
     _trackInventory = i?.trackInventory ?? true;
     _tracking = i?.tracking ?? 'none';
     if (i == null) _suggestCode();
@@ -296,6 +306,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
             trackInventory: _itemType == 'stock' && _trackInventory,
             tracking: _trackInventory ? _tracking : 'none',
             salesTaxCodeId: _salesTaxCodeId,
+            categoryId: _categoryId,
           ),
           id: widget.item?.id,
         );
@@ -388,6 +399,44 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                     ),
                   ),
                 ]),
+                const SizedBox(height: 12),
+                // Filed under. `items.category_id` has been on the
+                // table since 0003 and this is the first field that
+                // ever set it — until now every item anybody typed was
+                // filed under nothing.
+                Consumer(
+                  builder: (context, ref, _) {
+                    final all =
+                        ref.watch(itemCategoriesProvider).valueOrNull ??
+                        const <Map<String, dynamic>>[];
+                    return DropdownButtonFormField<String?>(
+                      value: all.any((c) => c['id'] == _categoryId)
+                          ? _categoryId
+                          : null,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Filed under',
+                        helperText: 'How a kitchen sends every drink to one '
+                            'counter without naming them one at a time.',
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Nothing in particular'),
+                        ),
+                        for (final c in all)
+                          DropdownMenuItem<String?>(
+                            value: c['id'] as String?,
+                            child: Text(
+                              categoryPath(all, c['id'] as String?),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (v) => setState(() => _categoryId = v),
+                    );
+                  },
+                ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   value: _salesTaxCodeId,
