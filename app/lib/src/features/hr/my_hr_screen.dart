@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'attendance_month.dart';
 
 /// Self-service. Everything here is scoped to the person signed in, and
 /// the scoping is the database's job — an employee simply cannot read
@@ -132,6 +133,19 @@ class _ClockCard extends ConsumerWidget {
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
+                ),
+              ),
+              // The month behind today. The card has only ever shown
+              // the current day, so nobody could check their own
+              // attendance before payroll ran on it.
+              IconButton(
+                key: const ValueKey('my-attendance-month'),
+                tooltip: 'This month',
+                icon: const Icon(Icons.calendar_month_outlined),
+                onPressed: () => showAttendanceMonth(
+                  context,
+                  employeeId: employee.id,
+                  name: 'You',
                 ),
               ),
               if (!done)

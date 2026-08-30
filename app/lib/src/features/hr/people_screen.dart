@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'attendance_month.dart';
 
 /// The company directory. Everyone can see who works here; only HR and
 /// the person themselves get the full record behind it, which is why
@@ -30,6 +31,17 @@ class _PeopleScreenState extends ConsumerState<PeopleScreen> {
       appBar: AppBar(
         title: const Text('People'),
         actions: [
+          // Everybody's month. `attendance_records` has carried the
+          // lateness and the overtime all along and nothing listed
+          // them, so who was late was a question the HR module could
+          // not answer.
+          if (canManageHr)
+            IconButton(
+              key: const ValueKey('attendance-month'),
+              tooltip: 'Attendance this month',
+              icon: const Icon(Icons.fingerprint),
+              onPressed: () => showAttendanceMonth(context),
+            ),
           if (canManageHr)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.md),
