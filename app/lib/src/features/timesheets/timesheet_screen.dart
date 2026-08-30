@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'billing_rate_sheet.dart';
+import 'time_entry_sheet.dart';
 
 /// Time recorded, and time turned into an invoice.
 ///
@@ -93,10 +94,39 @@ class _MyTime extends ConsumerWidget {
 
   final ({DateTime from, DateTime to}) period;
 
+  /// Re-read everything an hour moves: this tab, the unbilled figure
+  /// next door, and the utilisation the report is built from.
+  void _refresh(WidgetRef ref) {
+    ref.invalidate(myTimeEntriesProvider(period));
+    ref.invalidate(timesheetReportProvider(period));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final entries = ref.watch(myTimeEntriesProvider(period));
+    final canWrite = ref.watch(canWriteProvider);
 
+    return Scaffold(
+      floatingActionButton: canWrite
+          ? FloatingActionButton.extended(
+              key: const ValueKey('record-time'),
+              onPressed: () async {
+                if (await showTimeEntrySheet(context)) _refresh(ref);
+              },
+              icon: const Icon(Icons.timer_outlined),
+              label: const Text('Record time'),
+            )
+          : null,
+      body: _body(context, ref, entries, canWrite),
+    );
+  }
+
+  Widget _body(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<List<Map<String, dynamic>>> entries,
+    bool canWrite,
+  ) {
     return AsyncView(
       value: entries,
       onRetry: () => ref.invalidate(myTimeEntriesProvider(period)),
@@ -135,10 +165,12 @@ class _MyTime extends ConsumerWidget {
             ),
             Expanded(
               child: ListView.separated(
+                padding: const EdgeInsets.only(bottom: 88),
                 itemCount: list.length,
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (context, i) {
                   final e = list[i];
+                  final billed = e['is_billed'] == true;
                   final project = e['projects'] as Map<String, dynamic>?;
                   final matter = e['matters'] as Map<String, dynamic>?;
                   final against =
@@ -146,6 +178,20 @@ class _MyTime extends ConsumerWidget {
                       matter?['name'] as String? ??
                       'Not chargeable to anyone';
                   return ListTile(
+                    // A billed hour is a line on an invoice somebody has
+                    // been sent; changing it here would move the hours
+                    // and leave the invoice where it was.
+                    onTap: !canWrite || !timeEntryIsEditable(billed)
+                        ? null
+                        : () async {
+                            if (await showTimeEntrySheet(
+                              context,
+                              id: e['id'] as String,
+                              existing: e,
+                            )) {
+                              _refresh(ref);
+                            }
+                          },
                     title: Text(
                       e['description'] as String? ?? '—',
                       style: const TextStyle(fontWeight: FontWeight.w600),
@@ -161,7 +207,7 @@ class _MyTime extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Money(e['amount'] as num?, bold: true),
-                        if (e['is_billed'] == true)
+                        if (billed)
                           const StatusChip('billed', compact: true)
                         else if (e['is_billable'] != true)
                           const StatusChip('internal', compact: true),
