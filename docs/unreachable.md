@@ -440,10 +440,42 @@ Nine repository methods with no caller, one of them a false positive:
   rather than a missing screen. Building the screen without the link
   would give nobody anything to paste.
 - **`chatEndCall`, `chatFileBytes`, `chatMarkDelivered`, `notifyPush`,
-  `reportDenied`** — plumbing behind features that work by other
-  routes. Worth a pass of their own to decide whether each is a gap or
-  dead weight; assuming either without reading is how the
-  `corp_issued_capital` entry above came to be written twice.
+  `reportDenied`** were listed together as "plumbing behind features
+  that work by other routes", with a note that each needed reading
+  before being called a gap or dead weight. Read. They were five
+  different things:
+
+  - **`notifyPush` is a false positive**, and a new shape of one. It is
+    called twice — from `chatSendMessage` and from the attachment
+    upload — and both callers are *inside `repository.dart`*, which the
+    sweep excludes as a declaring file. `callRpc` is the same blind
+    spot at a scale nobody could miss; this one is small enough to
+    miss. **Check a reported method for callers within its own file
+    before believing it.**
+  - **`reportDenied` was the most serious gap in this register.** `0235`
+    built a security log whose `denied` kind exists precisely because
+    "a refusal cannot record itself" — the exception unwinds the
+    transaction the record would be written in — so the client has to
+    report it back. Nothing did. Every refusal the server made was
+    invisible to the log built to hold them. Closed by reporting from
+    `runWithFeedback`'s catch, which is the one place every refusal in
+    this app already passes through.
+  - **`chatMarkDelivered` was a promise the screen made.** `chat_screen`
+    draws three receipt states — one tick sent, two grey delivered, two
+    blue read — and nothing ever marked delivered, so a message went
+    from one tick straight to two blue. The middle state exists to tell
+    a colleague whose phone is off from one who has read it and not
+    replied, and it could never appear. Closed from the conversation
+    list, which is what fetched the messages and so is what knows they
+    arrived.
+  - **`chatEndCall`** is still open, and is a real one: join, decline
+    and leave are all called, and ending a call — hanging up on
+    everybody rather than leaving them to it — is not.
+  - **`chatFileBytes`** is probably dead weight. `chatFileUrl` returns a
+    short-lived signed URL and is what the attachment viewer uses;
+    downloading the bytes into the app would only be for writing a file
+    to a device, which nothing here does. Left rather than deleted, and
+    named here so the next pass does not re-derive it.
 - **`setRegisterDefaultChannel`** has nowhere to live: registers are
   picked all over the app and administered nowhere. It needs a register
   settings screen, which is the actual gap.

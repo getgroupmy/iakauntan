@@ -12,6 +12,7 @@ import 'call_incoming.dart';
 import 'chat_attachments.dart';
 import 'chat_group.dart';
 import 'chat_live.dart';
+import 'chat_receipts.dart';
 
 /// Talking to people, in the app the work is already in.
 ///
@@ -90,15 +91,46 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 // ---------------------------------------------------------------------
 // The list
 // ---------------------------------------------------------------------
-class _ConversationList extends ConsumerWidget {
+class _ConversationList extends ConsumerStatefulWidget {
   const _ConversationList({required this.selectedId, required this.onOpen});
 
   final String? selectedId;
   final ValueChanged<String> onOpen;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ConversationList> createState() => _ConversationListState();
+}
+
+class _ConversationListState extends ConsumerState<_ConversationList> {
+  /// What this device has already said it holds. Marking delivered does
+  /// not change `unread`, so without this the list would say it again
+  /// on every rebuild, for ever.
+  final _told = <String>{};
+
+  /// The list is what fetched the messages, so the list is what knows
+  /// they arrived. Fire and forget: nobody is waiting on a tick turning
+  /// grey on somebody else's phone, and invalidating afterwards would
+  /// only fetch the same rows back.
+  void _reportDelivery(List<Map<String, dynamic>> conversations) {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    for (final id in newlyDelivered(conversations, _told)) {
+      _told.add(id);
+      repo.chatMarkDelivered(id).catchError((_) {});
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedId = widget.selectedId;
+    final onOpen = widget.onOpen;
     final conversations = ref.watch(chatConversationsProvider);
+    final arrived = conversations.valueOrNull;
+    if (arrived != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _reportDelivery(arrived);
+      });
+    }
 
     return Column(
       children: [
@@ -249,7 +281,7 @@ class _ConversationList extends ConsumerWidget {
     );
     if (id == null) return;
     ref.invalidate(chatConversationsProvider);
-    onOpen(id);
+    widget.onOpen(id);
   }
 
   Future<void> _startOne(BuildContext context, WidgetRef ref) async {
@@ -274,7 +306,7 @@ class _ConversationList extends ConsumerWidget {
     );
     if (ok && id != null) {
       ref.invalidate(chatConversationsProvider);
-      onOpen(id!);
+      widget.onOpen(id!);
     }
   }
 }
