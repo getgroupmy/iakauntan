@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import 'filing_details.dart';
 import 'fs_mapping.dart';
 import 'mtool_csv.dart';
 
@@ -390,6 +391,20 @@ class _Actions extends ConsumerWidget {
       spacing: Space.sm,
       runSpacing: Space.sm,
       children: [
+        // The auditor, the opinion, the headcount and the dates the
+        // directors approved and circulated them: everything a set of
+        // accounts says besides its figures, and none of it enterable
+        // until now.
+        OutlinedButton.icon(
+          key: const ValueKey('filing-details'),
+          onPressed: () async {
+            if (await showFilingDetails(context, filing: filing)) {
+              _refresh(ref);
+            }
+          },
+          icon: const Icon(Icons.edit_note_outlined, size: 18),
+          label: const Text('What they say'),
+        ),
         if (status == 'draft')
           FilledButton.icon(
             onPressed: () => _freeze(context, ref),
