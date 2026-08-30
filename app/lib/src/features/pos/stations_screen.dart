@@ -320,6 +320,18 @@ class _Body extends ConsumerWidget {
             ),
           ),
           OutletChannels(outletId: outletId),
+          const SectionHeader('And what each till assumes'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              'A kiosk in the corner is takeaway and the waiter\u2019s tablet '
+              'is dine-in, so nobody has to say so on every sale \u2014 and a '
+              'control set on every sale is a control that gets set wrong. '
+              'A till left as the shop\u2019s default follows it.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          RegisterChannels(outletId: outletId),
           const SectionHeader('The last thirty days'),
           const ChannelMix(),
           const SectionHeader('What goes where'),
