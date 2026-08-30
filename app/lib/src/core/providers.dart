@@ -1274,6 +1274,12 @@ final corpBeneficialOwnersProvider = FutureProvider.autoDispose
       return requireRepo(ref).corpBeneficialOwners(id);
     });
 
+/// The resolutions a company has passed. 0062.
+final corpResolutionsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, id) {
+      return requireRepo(ref).corpResolutions(id);
+    });
+
 final corpChargesProvider = FutureProvider.autoDispose
     .family<List<CorpCharge>, String>((ref, id) {
       return requireRepo(ref).corpCharges(id);

@@ -149,6 +149,31 @@ extension RepoCorp on Repo {
               .insert({...values, 'org_id': orgId})
           : client.from('corp_beneficial_owners').update(values).eq('id', id);
 
+  /// The resolutions a company has passed.
+  ///
+  /// `corp_resolutions` has been in 0062 since the corporate
+  /// secretarial module was built, with three other tables pointing at
+  /// it -- a filing, a share event and a generated document each carry
+  /// a `resolution_id` -- and nothing in the app could read or write
+  /// one. So an allotment could never name the board resolution that
+  /// authorised it.
+  Future<List<Map<String, dynamic>>> corpResolutions(String entityId) async =>
+      Repo.rows(await client
+          .from('corp_resolutions')
+          .select()
+          .eq('entity_id', entityId)
+          .order('passed_on', ascending: false));
+
+  Future<void> saveCorpResolution(
+    Map<String, dynamic> values, {
+    String? id,
+  }) => id == null
+      ? client.from('corp_resolutions').insert({...values, 'org_id': orgId})
+      : client.from('corp_resolutions').update(values).eq('id', id);
+
+  Future<void> deleteCorpResolution(String id) =>
+      client.from('corp_resolutions').delete().eq('id', id);
+
   Future<List<CorpCharge>> corpCharges(String entityId) async =>
       Repo.rows(await client
               .from('corp_charges')

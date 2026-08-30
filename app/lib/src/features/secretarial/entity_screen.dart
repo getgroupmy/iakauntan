@@ -16,6 +16,7 @@ import 'beneficial_owner_sheet.dart';
 import 'charge_sheet.dart';
 import 'officer_sheet.dart';
 import 'share_class_sheet.dart';
+import 'resolution_sheet.dart';
 import 'share_event_sheet.dart';
 
 /// One company's file: the statutory registers the Companies Act 2016
@@ -57,7 +58,7 @@ class CorpEntityScreen extends ConsumerWidget {
                 icon: Icons.error_outline, title: 'Company not found');
           }
           return DefaultTabController(
-            length: 6,
+            length: 7,
             child: Column(
               children: [
                 const TabBar(
@@ -69,6 +70,7 @@ class CorpEntityScreen extends ConsumerWidget {
                     Tab(text: 'Members'),
                     Tab(text: 'Beneficial owners'),
                     Tab(text: 'Charges'),
+                    Tab(text: 'Resolutions'),
                     Tab(text: 'Documents'),
                   ],
                 ),
@@ -79,6 +81,7 @@ class CorpEntityScreen extends ConsumerWidget {
                     _Members(entityId: entityId),
                     _BeneficialOwners(entityId: entityId),
                     _Charges(entityId: entityId),
+                    _Resolutions(entityId: entityId),
                     _Documents(entityId: entityId),
                   ]),
                 ),
@@ -854,6 +857,86 @@ class _OwnerRow extends StatelessWidget {
             ),
         ],
       ),
+      ),
+    );
+  }
+}
+
+/// The minute book.
+///
+/// `corp_resolutions` carried every field a minute needs -- who was in
+/// the chair, who was present, the count for and against -- and had no
+/// reader or writer at all. A filing, a share event and a generated
+/// document each carry a `resolution_id` and none of them could ever
+/// be pointed at anything.
+class _Resolutions extends ConsumerWidget {
+  const _Resolutions({required this.entityId});
+
+  final String entityId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final resolutions = ref.watch(corpResolutionsProvider(entityId));
+    final canWrite = ref.watch(canWriteProvider);
+
+    return SingleChildScrollView(
+      child: PageBody(
+        maxWidth: 900,
+        child: AsyncView(
+          value: resolutions,
+          onRetry: () => ref.invalidate(corpResolutionsProvider(entityId)),
+          loading: const LinearProgressIndicator(),
+          builder: (list) => Card(
+            child: Padding(
+              padding: const EdgeInsets.all(Space.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SectionHeader(
+                    'Resolutions',
+                    subtitle: 'What the directors and the members have '
+                        'resolved. A written resolution is circulated for '
+                        'signature under s.297 rather than put to a '
+                        'meeting; a special resolution needs three quarters '
+                        'of the votes cast under s.292(1).',
+                    action: canWrite
+                        ? FilledButton.tonalIcon(
+                            key: const ValueKey('record-resolution'),
+                            onPressed: () => showResolutionSheet(
+                              context,
+                              entityId: entityId,
+                            ),
+                            icon: const Icon(Icons.add, size: 18),
+                            label: const Text('Record'),
+                          )
+                        : null,
+                  ),
+                  if (list.isEmpty)
+                    const Text('Nothing has been resolved yet.')
+                  else
+                    for (var i = 0; i < list.length; i++) ...[
+                      if (i > 0) const Divider(height: 1),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('${list[i]['title']}'),
+                        subtitle: Text(resolutionLine(list[i])),
+                        trailing: list[i]['reference'] == null
+                            ? null
+                            : Text('${list[i]['reference']}'),
+                        onTap: canWrite
+                            ? () => showResolutionSheet(
+                                  context,
+                                  entityId: entityId,
+                                  resolution: list[i],
+                                )
+                            : null,
+                      ),
+                    ],
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
