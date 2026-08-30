@@ -8,6 +8,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import 'item_prices_dialog.dart';
+import 'item_packs_dialog.dart';
 import 'item_variants_dialog.dart';
 import 'modifier_groups_dialog.dart';
 import 'stock_card_dialog.dart';
@@ -159,6 +160,16 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                       key: ValueKey('variants-${item.id}'),
                       onPressed: () => showItemVariants(context, item),
                       child: const Text('Variants'),
+                    ),
+                    // How big a carton of this thing is. The reference
+                    // table leaves packaging units out on purpose, so
+                    // until a shop says, a quantity written in cartons
+                    // has nothing to convert by.
+                    const SizedBox(width: Space.sm),
+                    TextButton(
+                      key: ValueKey('packs-${item.id}'),
+                      onPressed: () => showItemPacks(context, item),
+                      child: const Text('Packs'),
                     ),
                   ],
                 ]),

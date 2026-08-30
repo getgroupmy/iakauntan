@@ -2325,6 +2325,13 @@ final posItemAvailabilityProvider = FutureProvider.autoDispose
     );
 
 /// The units an item's quantities may be written in. 0264.
+/// Every unit of measure the platform knows. Reference data, so it is
+/// held rather than autoDisposed: the list is the same on every screen
+/// that asks and does not change while somebody is looking at it.
+final uomCodesProvider = FutureProvider<List<Map<String, dynamic>>>(
+  (ref) => requireRepo(ref).uomCodes(),
+);
+
 final itemUomOptionsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, itemId) => requireRepo(ref).itemUomOptions(itemId),
