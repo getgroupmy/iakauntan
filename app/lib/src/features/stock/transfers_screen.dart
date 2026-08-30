@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'conversion_outputs.dart';
 
 /// Where a transfer has got to, in the words a warehouse uses.
 ///
@@ -607,7 +608,7 @@ class _ConversionListState extends ConsumerState<_ConversionList> {
   Future<void> _run(Map<String, dynamic> row) async {
     final times = await showDialog<num>(
       context: context,
-      builder: (ctx) => _TimesDialog(name: '${row['name']}'),
+      builder: (ctx) => _TimesDialog(row: row),
     );
     if (times == null || !mounted) return;
     final done = await runWithFeedback(
@@ -659,6 +660,10 @@ class _ConversionListState extends ConsumerState<_ConversionList> {
           itemBuilder: (context, i) {
             final row = rows[i];
             return ListTile(
+              // The same sheet the play button opens. Nothing is cut up
+              // until "Do it" is pressed, so this is how a conversion
+              // that has been switched off can still be read.
+              onTap: () => _run(row),
               title: Text('${row['name']}'),
               subtitle: Text(
                 '${row['from_quantity']} ${row['from_uom_code']} '
@@ -873,17 +878,28 @@ class _ConversionSheetState extends ConsumerState<_ConversionSheet> {
   }
 }
 
-class _TimesDialog extends StatefulWidget {
-  const _TimesDialog({required this.name});
+/// What a conversion makes, before anybody agrees to make it.
+///
+/// The list could only ever say "3 things". This is the sheet that
+/// names them, scales them by the number typed, and shows how the
+/// input's value is split between them.
+class _TimesDialog extends ConsumerStatefulWidget {
+  const _TimesDialog({required this.row});
 
-  final String name;
+  final Map<String, dynamic> row;
 
   @override
-  State<_TimesDialog> createState() => _TimesDialogState();
+  ConsumerState<_TimesDialog> createState() => _TimesDialogState();
 }
 
-class _TimesDialogState extends State<_TimesDialog> {
+class _TimesDialogState extends ConsumerState<_TimesDialog> {
   final _times = TextEditingController(text: '1');
+
+  @override
+  void initState() {
+    super.initState();
+    _times.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
@@ -893,13 +909,101 @@ class _TimesDialogState extends State<_TimesDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final row = widget.row;
+    final id = row['id'] as String;
+    final active = row['is_active'] == true;
+    final times = timesOf(_times.text);
+    final blocked = conversionBlockedBecause(isActive: active, times: times);
+    final outputs = ref.watch(itemConversionOutputsProvider(id));
+
+    final fromQty = num.tryParse('${row['from_quantity'] ?? 0}') ?? 0;
+    final needed = consumedQuantity(fromQuantity: fromQty, times: times ?? 0);
+    final onHand = num.tryParse('${row['on_hand'] ?? 0}') ?? 0;
+    final short = times != null &&
+        looksShortInTheStore(onHand: onHand, needed: needed);
+
+    final small = Theme.of(context).textTheme.bodySmall;
+
     return AlertDialog(
-      title: Text(widget.name),
-      content: TextField(
-        controller: _times,
-        keyboardType: TextInputType.number,
-        autofocus: true,
-        decoration: const InputDecoration(labelText: 'How many times'),
+      title: Text('${row['name']}'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _times,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'How many times'),
+              ),
+              const SizedBox(height: Space.md),
+              Text(
+                times == null
+                    ? 'Takes ${Fmt.qty(fromQty)} ${row['from_uom_code']} '
+                          '${row['from_item']} each time.'
+                    : 'Takes ${Fmt.qty(needed)} ${row['from_uom_code']} '
+                          '${row['from_item']} and makes:',
+                style: small,
+              ),
+              const SizedBox(height: Space.sm),
+              AsyncView(
+                value: outputs,
+                onRetry: () =>
+                    ref.invalidate(itemConversionOutputsProvider(id)),
+                builder: (rows) {
+                  if (rows.isEmpty) {
+                    return Text('Nothing — nobody said what comes out.',
+                        style: small);
+                  }
+                  final share = declaredShare(rows);
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final o in rows)
+                        ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('${o['item_name']}'),
+                          subtitle: Text(outputLine(o, times ?? 1)),
+                        ),
+                      // Only worth saying when it is wrong. Anything
+                      // `upsert_item_conversion` accepted comes to a
+                      // hundred; a split that has drifted has been
+                      // costing everything wrongly since it did.
+                      if (share != 100)
+                        Text(
+                          'The shares come to ${Fmt.qty(share)}%, not 100. '
+                          'What comes out is being costed against a bird '
+                          'that is not the whole bird.',
+                          style: small?.copyWith(color: context.colors.warning),
+                        ),
+                    ],
+                  );
+                },
+              ),
+              if (short) ...[
+                const SizedBox(height: Space.sm),
+                Text(
+                  'There may not be that much of it in the store — '
+                  '${Fmt.qty(onHand)} across every store, and this needs '
+                  '${Fmt.qty(needed)}.',
+                  style: small?.copyWith(color: context.colors.warning),
+                ),
+              ],
+              if (blocked != null) ...[
+                const SizedBox(height: Space.sm),
+                Text(
+                  blocked,
+                  style: small?.copyWith(color: context.colors.danger),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
       actions: [
         TextButton(
@@ -907,8 +1011,9 @@ class _TimesDialogState extends State<_TimesDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: () =>
-              Navigator.of(context).pop(num.tryParse(_times.text.trim()) ?? 1),
+          onPressed: blocked != null
+              ? null
+              : () => Navigator.of(context).pop(times),
           child: const Text('Do it'),
         ),
       ],
