@@ -11,6 +11,14 @@ import '../../data/repository.dart';
 /// Where a transfer has got to, in the words a warehouse uses.
 ///
 /// Pure and exported so the list, the detail sheet and the tests agree.
+/// Whether a transfer can still be called off.
+///
+/// `cancel_stock_transfer` takes only a draft: once the van is loaded
+/// the stock has moved, and the answer is to "send it back the other
+/// way rather than pretending it did not". A draft typed by mistake
+/// had no way out at all until this reached the screen.
+bool transferIsCancellable(String? status) => status == 'draft';
+
 String transferState(String? status) => switch (status) {
   'draft' => 'Being written',
   'sent' => 'On its way',
@@ -119,6 +127,26 @@ class _TransferListState extends ConsumerState<_TransferList> {
     if (saved == true) _reload();
   }
 
+  Future<void> _cancel(Map<String, dynamic> row) async {
+    final ok = await confirm(
+      context,
+      title: 'Call off ${row['transfer_no']}?',
+      message:
+          'Nothing has left the store yet, so nothing moves back. The '
+          'transfer stays on the list marked cancelled.',
+      confirmLabel: 'Call it off',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    final done = await runWithFeedback(
+      context,
+      action: () =>
+          ref.read(repoProvider)!.cancelStockTransfer(row['id'] as String),
+      successMessage: 'Called off',
+    );
+    if (done) _reload();
+  }
+
   Future<void> _send(Map<String, dynamic> row) async {
     final done = await runWithFeedback(
       context,
@@ -193,6 +221,13 @@ class _TransferListState extends ConsumerState<_TransferList> {
                           ? context.colors.warning.withValues(alpha: 0.15)
                           : null,
                     ),
+                    if (transferIsCancellable(status))
+                      IconButton(
+                        key: const ValueKey('cancel-transfer'),
+                        icon: const Icon(Icons.close),
+                        tooltip: 'Call it off',
+                        onPressed: () => _cancel(row),
+                      ),
                     if (status == 'draft')
                       IconButton(
                         icon: const Icon(Icons.send_outlined),

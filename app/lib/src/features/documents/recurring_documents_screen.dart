@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'recurring_template_dialog.dart';
 
 /// Invoices and bills that raise themselves.
 ///
@@ -153,6 +154,12 @@ class _ScheduleTile extends ConsumerWidget {
     onChanged();
   }
 
+  Future<void> _retemplate(BuildContext context) async {
+    if (await showRecurringTemplateDialog(context, schedule: row)) {
+      onChanged();
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final active = row['is_active'] == true;
@@ -218,6 +225,9 @@ class _ScheduleTile extends ConsumerWidget {
               onSelected: (v) => switch (v) {
                 'pause' => _setActive(ref, context, false),
                 'resume' => _setActive(ref, context, true),
+                // A schedule holds a copy of the document, so a price
+                // rise reaches it only by pointing it at a newer one.
+                'template' => _retemplate(context),
                 _ => _delete(ref, context),
               },
               itemBuilder: (_) => [
@@ -225,6 +235,10 @@ class _ScheduleTile extends ConsumerWidget {
                   const PopupMenuItem(value: 'pause', child: Text('Pause'))
                 else
                   const PopupMenuItem(value: 'resume', child: Text('Resume')),
+                const PopupMenuItem(
+                  value: 'template',
+                  child: Text('Bill from another document'),
+                ),
                 const PopupMenuItem(value: 'delete', child: Text('Delete')),
               ],
             ),
