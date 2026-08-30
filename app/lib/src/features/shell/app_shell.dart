@@ -68,6 +68,44 @@ List<MenuSection<T>> groupByModule<T>(
   ];
 }
 
+/// What a waiting count reads as on a badge.
+///
+/// Capped, because the badge is a nudge rather than a figure: past a
+/// point the exact number changes nothing about what you do next, and
+/// a four-digit badge stops being a badge and starts being a shape.
+String badgeLabel(int count) => count > 99 ? '99+' : '$count';
+
+/// Whether a destination is the one the unread count belongs to.
+bool destCarriesUnread(String path) => path == '/chat';
+
+/// What the "More" slot carries on a phone.
+///
+/// `chatUnreadProvider` says it is "for the badge on the rail" and
+/// there was no badge anywhere -- the count was derived, summed and
+/// thrown away. On a phone the problem is worse than a missing badge:
+/// Chat is not a primary destination, so its badge would sit inside a
+/// sheet nobody opens unless they already knew there was something in
+/// it. The count moves to "More", which is the only thing on that bar
+/// able to say it.
+///
+/// Nought where this company does not hold Chat at all, and nought
+/// where Chat has a slot of its own -- the badge would then be shown
+/// twice, once against the thing and once against the drawer it is
+/// not in.
+/// An icon with a count on it, or the icon as it was.
+Widget _badged(Widget icon, int count) =>
+    count > 0 ? Badge(label: Text(badgeLabel(count)), child: icon) : icon;
+
+int unreadOnMore({
+  required Iterable<String> reachable,
+  required Iterable<String> primary,
+  required int unread,
+}) {
+  if (!reachable.any(destCarriesUnread)) return 0;
+  if (primary.any(destCarriesUnread)) return 0;
+  return unread;
+}
+
 class _Dest {
   const _Dest(
     this.label,
@@ -897,6 +935,9 @@ class AppShell extends ConsumerWidget {
     // to say what they have in common — 0293's switch is about a menu
     // somebody can read, and a heading over a 72-pixel column is not
     // one.
+    // The count `chatUnreadProvider` has always derived, finally put
+    // where its own doc comment said it was for.
+    final unread = ref.watch(chatUnreadProvider);
     final grouped =
         extended && (ref.watch(navGroupingProvider).valueOrNull ?? false);
     final groupNames =
@@ -950,6 +991,7 @@ class AppShell extends ConsumerWidget {
                                   dests: dests,
                                   selected: _selectedIndexIn(dests),
                                   groupNames: groupNames,
+                                  unread: unread,
                                   onSelected: (i) => context.go(dests[i].path),
                                 )
                               : NavigationRail(
@@ -972,8 +1014,18 @@ class AppShell extends ConsumerWidget {
                                   destinations: [
                                     for (final d in dests)
                                       NavigationRailDestination(
-                                        icon: Icon(d.icon),
-                                        selectedIcon: Icon(d.selectedIcon),
+                                        icon: _badged(
+                                          Icon(d.icon),
+                                          destCarriesUnread(d.path)
+                                              ? unread
+                                              : 0,
+                                        ),
+                                        selectedIcon: _badged(
+                                          Icon(d.selectedIcon),
+                                          destCarriesUnread(d.path)
+                                              ? unread
+                                              : 0,
+                                        ),
                                         label: Text(d.label),
                                       ),
                                   ],
@@ -1006,6 +1058,12 @@ class AppShell extends ConsumerWidget {
     if (primary.isEmpty) primary.add(dests.first);
     final selected = dests[_selectedIndexIn(dests)];
     final primaryIndex = primary.indexOf(selected);
+    final unread = ref.watch(chatUnreadProvider);
+    final onMore = unreadOnMore(
+      reachable: [for (final d in dests) d.path],
+      primary: [for (final d in primary) d.path],
+      unread: unread,
+    );
 
     return Scaffold(
       body: child,
@@ -1018,6 +1076,7 @@ class AppShell extends ConsumerWidget {
             _showMoreSheet(
               context,
               dests,
+              unread: unread,
               groupNames:
                   ref
                       .read(moduleLabelsProvider)
@@ -1031,12 +1090,18 @@ class AppShell extends ConsumerWidget {
         destinations: [
           for (final d in primary)
             NavigationDestination(
-              icon: Icon(d.icon),
-              selectedIcon: Icon(d.selectedIcon),
+              icon: _badged(
+                Icon(d.icon),
+                destCarriesUnread(d.path) ? unread : 0,
+              ),
+              selectedIcon: _badged(
+                Icon(d.selectedIcon),
+                destCarriesUnread(d.path) ? unread : 0,
+              ),
               label: d.label,
             ),
-          const NavigationDestination(
-            icon: Icon(Icons.more_horiz),
+          NavigationDestination(
+            icon: _badged(const Icon(Icons.more_horiz), onMore),
             label: 'More',
           ),
         ],
@@ -1057,6 +1122,7 @@ class AppShell extends ConsumerWidget {
     List<_Dest> dests, {
     required Map<String, String> groupNames,
     required bool grouped,
+    int unread = 0,
   }) {
     final rest = dests.where((d) => !d.primary).toList();
     showModalBottomSheet<void>(
@@ -1098,6 +1164,9 @@ class AppShell extends ConsumerWidget {
                   ListTile(
                     leading: Icon(d.icon),
                     title: Text(d.label),
+                    trailing: destCarriesUnread(d.path) && unread > 0
+                        ? Badge(label: Text(badgeLabel(unread)))
+                        : null,
                     onTap: () {
                       Navigator.pop(ctx);
                       context.go(d.path);
@@ -1142,12 +1211,14 @@ class _GroupedRail extends StatelessWidget {
     required this.selected,
     required this.groupNames,
     required this.onSelected,
+    this.unread = 0,
   });
 
   final List<_Dest> dests;
   final int selected;
   final Map<String, String> groupNames;
   final void Function(int index) onSelected;
+  final int unread;
 
   @override
   Widget build(BuildContext context) {
@@ -1177,6 +1248,7 @@ class _GroupedRail extends StatelessWidget {
                 // the index off the section would navigate somewhere
                 // else entirely.
                 selected: dests.indexOf(d) == selected,
+                unread: destCarriesUnread(d.path) ? unread : 0,
                 onTap: () => onSelected(dests.indexOf(d)),
               ),
           ],
@@ -1232,6 +1304,7 @@ class RailTile extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.unread = 0,
   });
 
   final IconData icon;
@@ -1239,6 +1312,9 @@ class RailTile extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
+
+  /// How many are waiting behind this one. Nought draws nothing.
+  final int unread;
 
   @override
   Widget build(BuildContext context) {
@@ -1278,6 +1354,7 @@ class RailTile extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (unread > 0) Badge(label: Text(badgeLabel(unread))),
               ],
             ),
           ),
