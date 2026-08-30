@@ -7,6 +7,7 @@ import '../../data/models.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import 'recipe_requirement_dialog.dart';
 
 /// How a recipe line reads on one line of the editor.
 ///
@@ -170,6 +171,22 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // The reasoning behind the number beside it. The
+                    // requirement list is described in the repository
+                    // as "the list that explains why the countdown
+                    // says four", and nothing called it — so the
+                    // number was shown and never its reason.
+                    if (label != null)
+                      IconButton(
+                        key: ValueKey('why-${row['item_id']}'),
+                        tooltip: 'Why',
+                        icon: const Icon(Icons.help_outline, size: 18),
+                        onPressed: () => showRecipeRequirement(
+                          context,
+                          itemId: '${row['item_id']}',
+                          name: '${row['item_name']}',
+                        ),
+                      ),
                     if (label != null)
                       Chip(
                         label: Text(label),
