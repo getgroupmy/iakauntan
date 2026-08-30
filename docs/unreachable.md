@@ -402,17 +402,31 @@ writing down so the next pass does not chase them again.
 
 ### 1. Smaller, but real
 
-- **`item_categories`** — no editor.
-- **`corp_resolutions`** — the register itself, as opposed to the
-  generated documents.
 - **Reference pickers**: `ref_countries`, `ref_msic_codes`,
   `ref_tax_types`, `ref_einvoice_types`, `ref_exemption_reasons` are
   typed by hand where they are used at all.
-- **`pos_item_portions`** — new since the last pass, from `0264`. A
-  kitchen's portions and what is left of them, asserted in
-  `pos_recipes.sql` and behind no screen.
 
-### 2. What the sweeps still find at `142c05b`
+Two entries came off this list at `832dc9e`, and one was wrong to be on
+it in the first place:
+
+- **`item_categories`** is closed. It had been in `0003` — the first
+  migration in the repository — self-referencing through `parent_id`
+  and wired to `items.category_id`, and nothing in the app could read
+  it, write it or show it. `Item.categoryId` was on the model and in
+  `toJson` the whole time; no field ever set it. Worse than a missing
+  editor: `0215`'s kitchen router routes *a whole category* to a
+  counter, so its first arm had nothing to route.
+- **`corp_resolutions`** is closed. Three tables carry a
+  `resolution_id` — `corp_filings`, `corp_share_events`,
+  `corp_documents` — and none of them could ever be pointed at
+  anything, because no resolution could be recorded.
+- **`pos_item_portions`** was a false positive and should not have been
+  listed. It has three callers, all of them SQL: `pos_item_availability`
+  (which the recipes screen does read), `pos_can_sell`, and the till's
+  own guard. It is a building block, not a screen that is missing.
+  Written down so the next pass does not chase it.
+
+### 2. What the sweeps still find at `832dc9e`
 
 Nine repository methods with no caller, one of them a false positive:
 
@@ -437,11 +451,14 @@ Nine repository methods with no caller, one of them a false positive:
   platform-catalogue repositories. Platform-side rather than tenant-side
   and not read since the sweep first reached those files.
 
-Eleven providers nothing watches, of which four are false positives —
-the screen reads the same thing through the repository directly:
+**The provider sweep now finds nothing real.** Re-run after this pass
+it reports four names, and all four are the known false positive — the
+screen reads the same thing through the repository directly:
 `stockTransferLinesProvider`, `itemModifierGroupIdsProvider`,
-`posRecipeLinesProvider`, `contactMembershipsProvider`. That leaves
-seven where nothing reads the data at all:
+`posRecipeLinesProvider`, `contactMembershipsProvider`. Check each for
+a bare `.methodName(` before believing any future report of them.
+
+It reported eleven at `142c05b`, seven of them real:
 
 - **`creditLedger`** — the OCR credit ledger. Scanning charges are
   taken and the ledger behind them cannot be read.
@@ -453,6 +470,55 @@ seven where nothing reads the data at all:
 
 `attendance` was an eighth until this pass, and is now the attendance
 month.
+
+**All seven are now closed**, at `f9aabfb` through `f37c8ea`. In order:
+
+- **`creditLedger`** → "Where it went" on the credit balance
+  (`c27dfb6`).
+- **`depositsHeldFor`** → a deposit banner beside the credit banner in
+  the document editor, so the figure is there before the invoice goes
+  out rather than after (`5cd9816`).
+- **`posRecipeRequirement`** → the "Why" beside the countdown, which
+  the repository already described as "the list that explains why the
+  countdown says four" (`f9aabfb`).
+- **`itemConversionOutputs`** → the conversions list could say a
+  chicken becomes "3 things" and never which three
+  (`1d94086`). `supabase/tests/stock_transfers.sql` asserts the order
+  the cost shares come back in "because the screen edits them in
+  place"; the screen did not exist.
+- **`posQueueDay`** → `0257` argues that the paper by the door was
+  worth replacing because it "does not exist at all by Monday, so
+  nobody ever learns whether Saturday's wait is twenty minutes or
+  fifty". The function that answers it was watched by nothing
+  (`d692db0`).
+- **`posServiceProviders`** → the sharpest of the seven, and the reason
+  this sweep is worth running. `book_appointment` asks
+  `app.pos_provider_is_open`, which is an `exists` over
+  `pos_provider_hours`. A provider with no rows there is open at **no**
+  time. Nothing could write those rows — the table had no reader and no
+  writer at all — so every booking a new salon tried to make was
+  refused, by name: "Siti does not work then, or is away." Closed at
+  `2c03404`, with the week, the time off and the people themselves.
+- **`chatUnread`** → the provider's own doc comment says "for the badge
+  on the rail". There was no badge, on the rail or anywhere else
+  (`f37c8ea`).
+
+Two of those seven were the same defect as the three named at the foot
+of this file: not merely unreachable, but *contradicted by what the
+screen said*. `chatUnread` documented a badge that did not exist, and
+`pos_provider_is_open`'s refusal named a member of staff for a fact
+nobody had ever been able to enter.
+
+**The method sweep caught one of mine, in this pass, while I was
+writing this section.** `deleteCorpResolution` went into
+`corp_repository.dart` with the rest of the minute book and no button
+ever called it — the same defect arriving fresh, from the same hand
+that was documenting it. That is what the warning about
+`depositNoteProvider` above is describing, and it is worth saying that
+it caught the person who wrote the warning. Closed at `df9e5e5`, with
+a removal that says what it takes with it: a resolution once passed is
+a matter of record, and anything generated from it stays and quietly
+stops naming what authorised it.
 
 Both lists were produced by the sweeps at the top of this file. Run
 them again before believing this section: it is the part that goes
@@ -469,19 +535,31 @@ the analyzer is clean, and the screens that exist all work.
 
 The pass at `142c05b` says the same thing louder. Nineteen commits,
 seventeen of them closing something the database had been able to do
-for months. Not one was found by a failing test, a failing analyzer or a
-red CI run, because none of those can see it — a function nobody calls
+for months. The pass that followed it, `5cd9816` to `832dc9e`, closed
+seven more, and one of them had been sitting in the schema since
+`0003` — the first migration this repository ever had.
+
+Not one was found by a failing test, a failing analyzer or a red CI
+run, because none of those can see it — a function nobody calls
 is indistinguishable from a function nobody needs, to every automated
 check this repository has.
 
-Three of them were worse than unreachable, and those are the ones to
+Five of them were worse than unreachable, and those are the ones to
 learn from: the screen said the thing it could not do. The budget grid
 told people to "change the lines that matter" and had no editor. The
 cash forecast's app bar claimed it used how late each customer actually
 pays and could not show a single figure. The Timesheets screen invited
-people to record hours against a project and had no way to write one. A
-promise a screen cannot keep is not a gap in the schema's reach — it is
-the product telling a user something untrue, and it will not turn up in
-a migration review.
+people to record hours against a project and had no way to write one.
+The chat provider's own doc comment described a badge on the rail, and
+there was no badge. And the worst of them was not a screen at all:
+`book_appointment` refused every booking a new salon made, and blamed a
+named member of staff — "Siti does not work then, or is away" — for
+hours nobody had any way to enter.
+
+A promise a screen cannot keep is not a gap in the schema's reach — it
+is the product telling a user something untrue, and it will not turn up
+in a migration review. When the untrue thing is a refusal that names a
+person, it is not even recoverable by the user: there is nothing they
+can do differently.
 
 Run this check before planning a block of work, not after.

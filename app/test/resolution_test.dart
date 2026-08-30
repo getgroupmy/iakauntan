@@ -298,6 +298,28 @@ void main() {
     });
   });
 
+  group('what removing one takes with it', () {
+    test('anything generated from it stays, and stops naming it', () {
+      // corp_documents, corp_filings and corp_share_events all
+      // reference it `on delete set null`.
+      expect(
+        resolutionDeletionWarning(const {'title': 'Allotment'}),
+        'Anything generated from it stays, and stops naming the '
+        'resolution that authorised it.',
+      );
+    });
+
+    test('and a signed one says so first', () {
+      expect(
+        resolutionDeletionWarning(const {
+          'title': 'Allotment',
+          'is_signed': true,
+        }),
+        startsWith('This one has been signed.'),
+      );
+    });
+  });
+
   group('what a row says under its title', () {
     test('the kind, the date and whether it carried', () {
       expect(

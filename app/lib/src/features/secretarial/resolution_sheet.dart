@@ -124,6 +124,22 @@ String? resolutionBlockedBecause({
   return null;
 }
 
+/// What removing one takes with it.
+///
+/// A resolution once passed is a matter of record and this is not an
+/// undo — it is for one typed by mistake. `corp_documents`,
+/// `corp_filings` and `corp_share_events` all reference it `on delete
+/// set null`, so anything generated from it stays and quietly stops
+/// naming what authorised it. That is worth saying before it happens.
+String resolutionDeletionWarning(Map<String, dynamic> row) {
+  final signed = row['is_signed'] == true;
+  return signed
+      ? 'This one has been signed. Anything generated from it stays, and '
+            'stops naming the resolution that authorised it.'
+      : 'Anything generated from it stays, and stops naming the '
+            'resolution that authorised it.';
+}
+
 /// What a resolution's row says under its title.
 String resolutionLine(Map<String, dynamic> row) {
   final parts = <String>[resolutionKindName(row['kind'] as String?)];
@@ -304,6 +320,41 @@ class _ResolutionSheetState extends ConsumerState<_ResolutionSheet> {
     );
     if (mounted) setState(() => _saving = false);
     if (ok && mounted) {
+      ref.invalidate(corpResolutionsProvider(widget.entityId));
+      Navigator.of(context).pop(true);
+    }
+  }
+
+  Future<void> _remove() async {
+    final row = widget.resolution;
+    if (row == null) return;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Remove ${row['title']}?'),
+        content: Text(resolutionDeletionWarning(row)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Keep it'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+    setState(() => _saving = true);
+    final done = await runWithFeedback(
+      context,
+      successMessage: 'Removed',
+      action: () =>
+          ref.read(repoProvider)!.deleteCorpResolution(row['id'] as String),
+    );
+    if (mounted) setState(() => _saving = false);
+    if (done && mounted) {
       ref.invalidate(corpResolutionsProvider(widget.entityId));
       Navigator.of(context).pop(true);
     }
@@ -520,6 +571,12 @@ class _ResolutionSheetState extends ConsumerState<_ResolutionSheet> {
         ),
       ),
       actions: [
+        if (widget.resolution != null)
+          TextButton(
+            key: const ValueKey('resolution-delete'),
+            onPressed: _saving ? null : _remove,
+            child: const Text('Remove'),
+          ),
         TextButton(
           onPressed: _saving ? null : () => Navigator.of(context).pop(false),
           child: const Text('Cancel'),
