@@ -900,8 +900,13 @@ class Repo {
     await client
         .from('bank_transfers')
         .select(
-          '*, from_account:bank_accounts!bank_transfers_from_account_id_fkey(name), '
-          'to_account:bank_accounts!bank_transfers_to_account_id_fkey(name)',
+          // The currency of each end as well as its name: the two
+          // amounts are in different money on a cross-border transfer,
+          // and one prefix on both would be a lie about one of them.
+          '*, from_account:bank_accounts!bank_transfers_from_account_id_fkey'
+          '(name, currency), '
+          'to_account:bank_accounts!bank_transfers_to_account_id_fkey'
+          '(name, currency)',
         )
         .eq('org_id', orgId)
         .order('transfer_date', ascending: false)

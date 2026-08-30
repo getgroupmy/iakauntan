@@ -8,6 +8,7 @@ import '../../core/widgets.dart';
 import 'reconciliation_history_dialog.dart';
 import 'statement_import.dart';
 import 'transfer_dialog.dart';
+import 'transfers_history_dialog.dart';
 
 /// Reconciling a bank account against its statement.
 ///
@@ -98,6 +99,16 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
                 if (done == true) _refresh();
               },
             ),
+          // The register of them, which was written and never read: a
+          // transfer, once made, left the app entirely.
+          IconButton(
+            key: const ValueKey('transfers-history'),
+            tooltip: 'Transfers made',
+            icon: const Icon(Icons.receipt_long_outlined),
+            onPressed: () async {
+              if (await showTransfersHistory(context)) await _refresh();
+            },
+          ),
           if (canPost)
             IconButton(
               tooltip: 'Import statement',

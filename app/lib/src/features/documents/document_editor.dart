@@ -24,6 +24,7 @@ import 'line_draft.dart';
 import 'line_editor.dart';
 import 'settlement_dialog.dart';
 import 'transfer.dart';
+import 'void_document.dart';
 import 'credit_dialog.dart';
 import 'transfer_dialog.dart';
 import 'repeat_dialog.dart';
@@ -617,6 +618,46 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         .valueOrNull;
   }
 
+  String? get _voidBlocked => voidBlockedBecause(
+        status: _status,
+        paidAmount: _paidAmount,
+        einvoiceStatus: _einvoiceStatus,
+      );
+
+  Future<void> _void() async {
+    final id = widget.documentId;
+    if (id == null) return;
+    final reason = await askVoidReason(context, docNo: _docNo);
+    if (reason == null || !mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.voidSalesDocument(id, reason),
+      successMessage: 'Voided and reversed',
+    );
+    if (ok && mounted) {
+      refreshLedgerData(ref);
+      setState(() => _loading = true);
+      await _load();
+    }
+  }
+
+  Future<void> _discard() async {
+    final id = widget.documentId;
+    if (id == null) return;
+    if (!await askDiscard(context, docNo: _docNo) || !mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.deleteDocument(_kind, id),
+      successMessage: 'Discarded',
+    );
+    if (ok && mounted) {
+      refreshLedgerData(ref);
+      Navigator.of(context).maybePop();
+    }
+  }
+
   Future<void> _submitForApproval() async {
     final id = await _save(silent: true);
     if (id == null || !mounted) return;
@@ -842,6 +883,25 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           label: _kind.isSales ? 'Receive payment' : 'Pay',
           icon: Icons.payments_outlined,
           onTap: canPost ? _settle : null,
+        ),
+      // Taking one back. Sales only, because `void_sales_document` is
+      // the only void in the schema -- there is no purchase equivalent,
+      // and a bill entered in error is corrected with the supplier.
+      // The item is shown disabled with its reason rather than hidden,
+      // so somebody looking for it learns why it is not on.
+      if (!_isNew && _isPosted && _kind.isSales && canPost)
+        (
+          label: _voidBlocked ?? 'Void this ${_meta.singular.toLowerCase()}',
+          icon: Icons.block_outlined,
+          onTap: _saving || _voidBlocked != null ? null : _void,
+        ),
+      // A draft has never reached the ledger, so it is thrown away
+      // rather than voided.
+      if (!_isNew && canWrite && canDiscard(_status))
+        (
+          label: 'Discard',
+          icon: Icons.delete_outline,
+          onTap: _saving ? null : _discard,
         ),
     ];
 

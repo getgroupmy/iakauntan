@@ -48,6 +48,23 @@ String? depositOutcome(Map<String, dynamic> row) {
   return parts.isEmpty ? null : parts.join(', ');
 }
 
+/// Why this deposit cannot be undone, or null when it can be.
+///
+/// `void_deposit` will only take one nothing has been done with:
+/// "Deposit % has already been used: % applied, % given back, % kept.
+/// Undo those first." Once part of it has settled an invoice, the way
+/// back is to undo that -- a note vanishing from under a posted
+/// settlement would leave the settlement pointing at nothing.
+String? depositVoidBlockedBecause(Map<String, dynamic> row) {
+  if ('${row['status']}' == 'void') return 'This one is already void.';
+  final amount = num.tryParse('${row['amount'] ?? 0}') ?? 0;
+  final balance = num.tryParse('${row['balance'] ?? 0}') ?? 0;
+  if (balance != amount) {
+    return 'Part of it has been used. Undo that first.';
+  }
+  return null;
+}
+
 /// What one line of a deposit's history says.
 String depositEvent(Map<String, dynamic> row) {
   final what = switch ('${row['happened']}') {
@@ -413,6 +430,18 @@ class _DepositSheet extends ConsumerWidget {
                   ],
                 ),
               ),
+            // Undoing the note itself, as against settling it. Offered
+            // only while nothing has been done with it, which is the
+            // only state `void_deposit` takes.
+            if (depositVoidBlockedBecause(note) == null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const ValueKey('void-deposit'),
+                  onPressed: () => _voidIt(context, ref, id),
+                  child: const Text('It was never taken — void it'),
+                ),
+              ),
           ],
         ),
       ),
@@ -454,6 +483,65 @@ class _DepositSheet extends ConsumerWidget {
       balance: balance,
     );
     if (done && context.mounted) Navigator.of(context).pop(true);
+  }
+
+  /// Undo the note itself. `void_deposit` reverses the posting, puts
+  /// the bank balance back, and insists on a reason.
+  Future<void> _voidIt(BuildContext context, WidgetRef ref, String id) async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Void ${note['deposit_no']}'),
+        content: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'The posting is reversed and the bank balance goes back '
+                'to where it was. Use this when the money never arrived, '
+                'not when it is being given back.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: Space.md),
+              TextField(
+                key: const ValueKey('void-deposit-reason'),
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Why',
+                  hintText: 'The cheque was never banked',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Keep it'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final r = controller.text.trim();
+              if (r.isNotEmpty) Navigator.of(ctx).pop(r);
+            },
+            child: const Text('Void it'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null || !context.mounted) return;
+
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Voided and reversed',
+      action: () => repo.voidDeposit(id, reason),
+    );
+    if (ok && context.mounted) Navigator.of(context).pop(true);
   }
 
   Future<void> _settle(
