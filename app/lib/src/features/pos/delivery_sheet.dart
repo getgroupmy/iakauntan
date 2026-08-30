@@ -60,6 +60,10 @@ String deliveryStatus(String? status) => switch (status) {
 Future<DeliveryAnswer?> showDeliverySheet(
   BuildContext context, {
   Map<String, dynamic> existing = const {},
+  // Offered only where the caller has something to remove and the
+  // database will take it back: `clear_pos_delivery` refuses a bill
+  // that is tendered and a run a driver already has.
+  Future<void> Function()? onRemove,
 }) => showModalBottomSheet<DeliveryAnswer>(
   context: context,
   isScrollControlled: true,
@@ -67,14 +71,15 @@ Future<DeliveryAnswer?> showDeliverySheet(
     padding: EdgeInsets.only(
       bottom: MediaQuery.of(context).viewInsets.bottom,
     ),
-    child: _DeliverySheet(existing: existing),
+    child: _DeliverySheet(existing: existing, onRemove: onRemove),
   ),
 );
 
 class _DeliverySheet extends ConsumerStatefulWidget {
-  const _DeliverySheet({required this.existing});
+  const _DeliverySheet({required this.existing, this.onRemove});
 
   final Map<String, dynamic> existing;
+  final Future<void> Function()? onRemove;
 
   @override
   ConsumerState<_DeliverySheet> createState() => _DeliverySheetState();
@@ -243,6 +248,18 @@ class _DeliverySheetState extends ConsumerState<_DeliverySheet> {
                   : null,
               child: const Text('Save the address'),
             ),
+            if (widget.onRemove != null) ...[
+              const SizedBox(height: 4),
+              TextButton(
+                key: const ValueKey('clear-delivery'),
+                onPressed: () async {
+                  final remove = widget.onRemove!;
+                  Navigator.of(context).pop();
+                  await remove();
+                },
+                child: const Text('It is not going anywhere — take it off'),
+              ),
+            ],
           ],
         ),
       ),

@@ -12,6 +12,7 @@ import '../../data/repository.dart';
 import 'assign_table.dart';
 import 'channels.dart';
 import 'delivery_sheet.dart';
+import 'take_it_off.dart';
 import 'discount_sheet.dart';
 import 'receipt_view.dart';
 import 'modifier_sheet.dart';
@@ -412,7 +413,18 @@ class _TillScreenState extends ConsumerState<TillScreen> {
     // taken rather than from an empty form.
     final existing = await ref.read(posDeliveryForProvider(id).future);
     if (!mounted) return;
-    final answer = await showDeliverySheet(context, existing: existing);
+    final saleStatus =
+        ref.read(posSaleProvider(id)).valueOrNull?['status'] as String?;
+    final canClear = existing.isNotEmpty &&
+        deliveryCanBeCleared(
+          saleStatus: saleStatus,
+          deliveryStatus: existing['status'] as String?,
+        );
+    final answer = await showDeliverySheet(
+      context,
+      existing: existing,
+      onRemove: canClear ? () => _clearDelivery(id) : null,
+    );
     if (answer == null || !mounted) return;
 
     Map<String, dynamic> got = const {};
@@ -498,6 +510,42 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       context,
       successMessage: 'Voucher applied',
       action: () => repo.applyPosCoupon(id, code),
+    );
+    if (!ok || !mounted) return;
+    ref
+      ..invalidate(posSaleProvider(id))
+      ..invalidate(posSalePromotionsProvider(id));
+  }
+
+  /// Take the run back off the bill.
+  ///
+  /// `clear_pos_delivery` will only do it while the bill is parked and
+  /// no driver has it — after that "the run happened", and the way to
+  /// record what went wrong is to mark it failed.
+  Future<void> _clearDelivery(String id) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Taken off — nothing is being delivered',
+      action: () => repo.clearPosDelivery(id),
+    );
+    if (!ok || !mounted) return;
+    ref
+      ..invalidate(posSaleProvider(id))
+      ..invalidate(posDeliveryForProvider(id));
+  }
+
+  /// Take a voucher back off. Deleting the row is the whole of it: no
+  /// line was ever rewritten, so there is no price to put back.
+  Future<void> _removePromotion(Map<String, dynamic> promo) async {
+    final id = _saleId;
+    final repo = ref.read(repoProvider);
+    if (id == null || repo == null) return;
+    final ok = await runWithFeedback(
+      context,
+      successMessage: 'Taken off',
+      action: () => repo.removePosSalePromotion('${promo['id']}'),
     );
     if (!ok || !mounted) return;
     ref
@@ -1373,6 +1421,7 @@ class _TillScreenState extends ConsumerState<TillScreen> {
             onLineAction: _lineAction,
             onOpenOrder: _openOrder,
             onPark: _park,
+            onRemovePromotion: _removePromotion,
           );
         },
       );
@@ -1405,6 +1454,7 @@ class _Register extends ConsumerWidget {
     required this.onLineAction,
     required this.onOpenOrder,
     required this.onPark,
+    required this.onRemovePromotion,
   });
 
   final String registerId;
@@ -1438,6 +1488,11 @@ class _Register extends ConsumerWidget {
   /// the shop printed is not a cashier's decision, and the two are
   /// granted differently.
   final VoidCallback onCoupon;
+
+  /// Taking one back off. A code typed against the wrong bill is the
+  /// ordinary reason, and until this reached the screen the only way
+  /// out was to void the bill and start it again.
+  final ValueChanged<Map<String, dynamic>> onRemovePromotion;
 
   /// Taking the address a bill is going to. On the same menu as the
   /// voucher and the discount, because all three are things done to a
@@ -1515,6 +1570,7 @@ class _Register extends ConsumerWidget {
           onLineAction: onLineAction,
           onOpenOrder: onOpenOrder,
           onPark: onPark,
+          onRemovePromotion: onRemovePromotion,
           compact: compact,
         );
         final finder = _Finder(
@@ -1724,6 +1780,7 @@ class _Basket extends ConsumerWidget {
     required this.onLineAction,
     required this.onOpenOrder,
     required this.onPark,
+    required this.onRemovePromotion,
     required this.compact,
   });
 
@@ -1746,6 +1803,11 @@ class _Basket extends ConsumerWidget {
   /// the shop printed is not a cashier's decision, and the two are
   /// granted differently.
   final VoidCallback onCoupon;
+
+  /// Taking one back off. A code typed against the wrong bill is the
+  /// ordinary reason, and until this reached the screen the only way
+  /// out was to void the bill and start it again.
+  final ValueChanged<Map<String, dynamic>> onRemovePromotion;
 
   /// Taking the address a bill is going to. On the same menu as the
   /// voucher and the discount, because all three are things done to a
@@ -1852,6 +1914,10 @@ class _Basket extends ConsumerWidget {
     );
     final billDiscountReason = sale.maybeWhen(
       data: (row) => row?['bill_discount_reason'] as String?,
+      orElse: () => null,
+    );
+    final saleStatus = sale.maybeWhen(
+      data: (row) => row?['status'] as String?,
       orElse: () => null,
     );
     // What the shop's own rules took off, one row each. Read as a list
@@ -2110,23 +2176,35 @@ class _Basket extends ConsumerWidget {
                 // still shown, with the reason, because it was typed in
                 // and a cashier who cannot see it cannot explain it.
                 for (final p in promos) ...[
-                  if (posNum(p['amount']) > 0)
-                    _AmountRow('${p['name']}', -posNum(p['amount']))
-                  else
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${p['name']} · ${p['blocked_reason'] ?? ''}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: context.colors.warning,
-                            ),
-                          ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: posNum(p['amount']) > 0
+                            ? _AmountRow(
+                                '${p['name']}',
+                                -posNum(p['amount']),
+                              )
+                            : Text(
+                                '${p['name']} · ${p['blocked_reason'] ?? ''}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.colors.warning,
+                                ),
+                              ),
+                      ),
+                      // A blocked voucher is still a row somebody typed
+                      // in, so it comes off the same way a live one
+                      // does: taking it back is how they undo it.
+                      if (promotionCanBeRemoved(saleStatus))
+                        IconButton(
+                          key: ValueKey('remove-promo-${p['id']}'),
+                          tooltip: 'Take it off',
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.close, size: 16),
+                          onPressed: () => onRemovePromotion(p),
                         ),
-                      ],
-                    ),
+                    ],
+                  ),
                   const SizedBox(height: 4),
                 ],
                 // The ride, on its own row above the total. It is added
