@@ -1975,6 +1975,21 @@ final posServiceProvidersProvider = FutureProvider.autoDispose
       (ref, outletId) => requireRepo(ref).posServiceProviders(outletId),
     );
 
+/// The week somebody works. 0217.
+///
+/// Empty means booked at no time, not booked at any time: the check is
+/// an `exists` over this table.
+final posProviderHoursProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, providerId) => requireRepo(ref).posProviderHours(providerId),
+    );
+
+/// And when they are away. 0217.
+final posProviderTimeOffProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, providerId) => requireRepo(ref).posProviderTimeOff(providerId),
+    );
+
 /// What is being made and what is ready, for the screen customers
 /// watch. Keyed on the outlet: the board belongs to the shop, not to
 /// the kiosk that happens to be showing it.

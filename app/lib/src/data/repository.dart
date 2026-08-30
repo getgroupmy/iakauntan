@@ -7069,6 +7069,110 @@ extension RepoPos on Repo {
         .order('name'),
   );
 
+  /// Somebody who does the work, and who can be booked.
+  ///
+  /// `employee_id` and `user_id` are both optional on purpose: a chair
+  /// may be rented by somebody who is not on the payroll and a studio's
+  /// Saturday cover may not have a login.
+  Future<String> savePosServiceProvider({
+    String? id,
+    required String outletId,
+    required String code,
+    required String name,
+    String? employeeId,
+    bool isActive = true,
+  }) async {
+    final values = <String, dynamic>{
+      'org_id': orgId,
+      'outlet_id': outletId,
+      'code': code,
+      'name': name,
+      'employee_id': employeeId,
+      'is_active': isActive,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+    if (id == null) {
+      final row = await client
+          .from('pos_service_providers')
+          .insert(values)
+          .select('id')
+          .single();
+      return '${row['id']}';
+    }
+    await client.from('pos_service_providers').update(values).eq('id', id);
+    return id;
+  }
+
+  /// The week somebody works.
+  ///
+  /// `app.pos_provider_is_open` asks whether the slot falls inside a
+  /// block on that weekday with `exists`, so a provider with no rows at
+  /// all is open at no time and every booking for them is refused.
+  Future<List<Map<String, dynamic>>> posProviderHours(
+    String providerId,
+  ) async => Repo.rows(
+    await client
+        .from('pos_provider_hours')
+        .select()
+        .eq('provider_id', providerId)
+        .order('weekday')
+        .order('starts_at'),
+  );
+
+  /// Writes the week whole.
+  ///
+  /// Deleted and re-inserted rather than merged, because the week is
+  /// edited as one thing and the unique index on
+  /// `(provider_id, weekday, starts_at)` makes a partial update refuse
+  /// on rows that are only being moved.
+  Future<void> setPosProviderHours(
+    String providerId,
+    List<Map<String, dynamic>> blocks,
+  ) async {
+    await client
+        .from('pos_provider_hours')
+        .delete()
+        .eq('provider_id', providerId);
+    if (blocks.isEmpty) return;
+    await client.from('pos_provider_hours').insert([
+      for (final b in blocks)
+        {
+          'org_id': orgId,
+          'provider_id': providerId,
+          'weekday': b['weekday'],
+          'starts_at': b['starts_at'],
+          'ends_at': b['ends_at'],
+        },
+    ]);
+  }
+
+  /// When somebody is away. Overlaps a slot and the slot is refused.
+  Future<List<Map<String, dynamic>>> posProviderTimeOff(
+    String providerId,
+  ) async => Repo.rows(
+    await client
+        .from('pos_provider_time_off')
+        .select()
+        .eq('provider_id', providerId)
+        .order('starts_at', ascending: false),
+  );
+
+  Future<void> addPosProviderTimeOff({
+    required String providerId,
+    required DateTime startsAt,
+    required DateTime endsAt,
+    String? reason,
+  }) async => await client.from('pos_provider_time_off').insert({
+    'org_id': orgId,
+    'provider_id': providerId,
+    'starts_at': startsAt.toUtc().toIso8601String(),
+    'ends_at': endsAt.toUtc().toIso8601String(),
+    'reason': reason,
+  });
+
+  Future<void> deletePosProviderTimeOff(String id) async =>
+      await client.from('pos_provider_time_off').delete().eq('id', id);
+
   /// Sells a slot. Refuses an overlap, a slot outside the hours the
   /// provider works, and one while they are away — all three in the
   /// database, so a second device booking the same minute loses.
