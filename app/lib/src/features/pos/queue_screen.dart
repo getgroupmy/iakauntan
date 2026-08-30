@@ -9,6 +9,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import 'queue_day_dialog.dart';
 
 /// The line at the door.
 ///
@@ -203,7 +204,19 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
     final outlets = ref.watch(posOutletsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Queue')),
+      appBar: AppBar(
+        title: const Text('Queue'),
+        actions: [
+          // The line is only half of it. The other half is what the
+          // line did, which the paper by the door could never say.
+          IconButton(
+            key: const ValueKey('queue-day'),
+            icon: const Icon(Icons.insights_outlined),
+            tooltip: 'What the line did',
+            onPressed: () => showQueueDay(context),
+          ),
+        ],
+      ),
       floatingActionButton: _outletId == null
           ? null
           : FloatingActionButton.extended(
