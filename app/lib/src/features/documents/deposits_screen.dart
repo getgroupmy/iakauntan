@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'deposit_apply_sheet.dart';
 
 /// Which way the money went, in the words a shop uses.
 String depositKind(String? kind) =>
@@ -396,9 +397,18 @@ class _DepositSheet extends ConsumerWidget {
                       child: const Text('Give it back'),
                     ),
                     const Spacer(),
-                    FilledButton.tonal(
+                    TextButton(
                       onPressed: () => _settle(context, ref, id, 'forfeit'),
                       child: const Text('Keep it'),
+                    ),
+                    const SizedBox(width: Space.sm),
+                    // The ordinary outcome, and so the emphasised one:
+                    // the job got done, the invoice went out, and the
+                    // money already held pays part of it.
+                    FilledButton(
+                      key: const ValueKey('apply-deposit'),
+                      onPressed: () => _apply(context, ref, id, balance),
+                      child: const Text('Apply to a document'),
                     ),
                   ],
                 ),
@@ -407,6 +417,43 @@ class _DepositSheet extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// The contact and the currency come off the note itself: the list
+  /// this sheet was opened from names the party but not which contact
+  /// row it is, and `apply_deposit` refuses a document belonging to
+  /// anybody else.
+  Future<void> _apply(
+    BuildContext context,
+    WidgetRef ref,
+    String id,
+    num balance,
+  ) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+
+    Map<String, dynamic> full;
+    try {
+      full = await repo.depositNote(id);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+      return;
+    }
+    if (!context.mounted) return;
+
+    final done = await showApplyDepositSheet(
+      context,
+      depositId: id,
+      kind: '${full['kind']}',
+      contactId: '${full['contact_id']}',
+      currency: '${full['currency']}',
+      balance: balance,
+    );
+    if (done && context.mounted) Navigator.of(context).pop(true);
   }
 
   Future<void> _settle(

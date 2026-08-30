@@ -2424,6 +2424,11 @@ final depositsHeldForProvider = FutureProvider.autoDispose
       (ref, contactId) => requireRepo(ref).depositsHeldFor(contactId),
     );
 
+final depositNoteProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, String>(
+      (ref, id) => requireRepo(ref).depositNote(id),
+    );
+
 final depositHistoryProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, id) => requireRepo(ref).depositHistory(id),

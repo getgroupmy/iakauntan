@@ -8893,6 +8893,23 @@ extension RepoDeposits on Repo {
   Future<List<Map<String, dynamic>>> depositHistory(String id) async =>
       Repo.rows(await callRpc('deposit_history', params: {'p_id': id}));
 
+  /// One deposit note, whole.
+  ///
+  /// `deposit_notes_list` gives the party by name, which is enough to
+  /// read a list and not enough to spend one: `apply_deposit` refuses a
+  /// document belonging to anybody else and one written in another
+  /// currency, so setting a deposit against an invoice needs the
+  /// contact and the currency off the note itself.
+  Future<Map<String, dynamic>> depositNote(String id) async =>
+      Map<String, dynamic>.from(
+        await client
+            .from('deposit_notes')
+            .select()
+            .eq('id', id)
+            .eq('org_id', orgId)
+            .single(),
+      );
+
   /// [kind] is 'customer' or 'supplier'.
   Future<String> createDeposit({
     required String kind,
