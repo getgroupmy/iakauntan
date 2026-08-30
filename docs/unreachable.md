@@ -18,44 +18,62 @@ select 'rpc', p.proname, pg_get_function_identity_arguments(p.oid)
 
 then grep each name across both source trees.
 
-**A second sweep, added in the pass at `be06a0c`, and worth more than
+**A second sweep, added in the pass at `142c05b`, and worth more than
 the first.** The SQL check above finds what the *database* can do and
 nobody calls. It cannot see the layer where most of this actually
 hides: a repository method or a Riverpod provider that wraps a function
 the check counts as reached, and is itself called by nothing. Run both:
 
 ```python
-# Run from app/. Both sweeps are the same shape: collect the names a
-# file declares, then count references to each one everywhere else.
+# Run from app/. Both sweeps are the same shape: collect the names some
+# files declare, then count references to each one everywhere else.
 import re, os, collections
 
-def unreferenced(declaring_file, pattern, call_shape):
-    names = set(re.findall(pattern, open(declaring_file).read(), re.M))
+DATA = 'lib/src/data'
+# Every repository file, not just repository.dart. Writing this against
+# repository.dart alone missed corp_repository.dart, ocr_repository.dart
+# and two more — and `corpOpenFiling`, the whole statutory filing
+# lifecycle, was sitting in one of them.
+REPOS = [os.path.join(DATA, f) for f in os.listdir(DATA)
+         if f.endswith('.dart') and f not in ('models.dart', 'corp_models.dart')]
+METHOD = (r'\n  (?:Future<[^>]*>|Future|Stream<[^>]*>|void|String|bool|num|'
+          r'double|int|List<[^>]*>|Map<[^>]*>)\??\s+([a-z][A-Za-z0-9_]*)\s*\(')
+
+def unreferenced(declaring, pattern, call_shape):
+    names = {}
+    for d in declaring:
+        for n in re.findall(pattern, open(d).read(), re.M):
+            names.setdefault(n, d)
     seen = collections.Counter()
     for root, _, files in os.walk('lib/src'):
         for f in files:
             path = os.path.join(root, f)
-            if not f.endswith('.dart') or path.endswith(declaring_file):
+            if not f.endswith('.dart') or path in declaring:
                 continue
             text = open(path).read()
             for n in names:
                 seen[n] += len(re.findall(call_shape(n), text))
-    return sorted(n for n in names if seen[n] == 0)
+    out = collections.defaultdict(list)
+    for n, d in names.items():
+        if seen[n] == 0:
+            out[d].append(n)
+    return {d: sorted(v) for d, v in sorted(out.items())}
 
-print(unreferenced(
-    'lib/src/data/repository.dart',
-    r'\n  (?:Future<[^>]*>|Future|void|String|bool|num|double|int|'
-    r'List<[^>]*>|Map<[^>]*>)\??\s+([a-z][A-Za-z0-9_]*)\s*\(',
-    lambda n: r'\b' + re.escape(n) + r'\s*\('))
-
-print(unreferenced(
-    'lib/src/core/providers.dart',
-    r'^final ([a-zA-Z0-9_]+Provider)\b',
-    lambda n: r'\b' + re.escape(n) + r'\b'))
+print(unreferenced(REPOS, METHOD,
+                   lambda n: r'\b' + re.escape(n) + r'\s*\('))
+print(unreferenced(['lib/src/core/providers.dart'],
+                   r'^final ([a-zA-Z0-9_]+Provider)\b',
+                   lambda n: r'\b' + re.escape(n) + r'\b'))
 ```
 
-Sixteen of the eighteen gaps closed in that pass were invisible to the
-SQL check and obvious to this one. `bankTransfersProvider` is the type
+The two have to be read together, not separately. `creditLedger` lives
+in `ocr_repository.dart` and *is* called — by `creditLedgerProvider`,
+which nothing watches. The method sweep alone clears it; the provider
+sweep alone does not say what it is. Neither sweep on its own would
+have found it.
+
+Seventeen of the nineteen gaps closed in that pass were invisible to
+the SQL check and obvious to this one. `bankTransfersProvider` is the type
 specimen: it read the transfer register, and its only reference
 anywhere was an `invalidate` in the dialog that creates a transfer — so
 the RPC behind it counted as reached while a transfer, once made, left
@@ -63,7 +81,7 @@ the app entirely.
 
 Two traps in the provider sweep. A provider is a false positive when
 the screen reads the same thing through the repository directly —
-four of the eleven it reports at `be06a0c` are that, so check each one
+four of the eleven it reports at `142c05b` are that, so check each one
 for a bare `.methodName(` before believing it. And a provider *you*
 add and never watch is the same defect arriving fresh:
 `depositNoteProvider` was added and removed inside one pass for
@@ -229,11 +247,11 @@ was exactly that case.
   `resync_bank_balance` from the opening-balance import in `0151`. The
   entry was stale rather than the code.
 
-### The pass at `be06a0c`
+### The pass at `142c05b`
 
-Eighteen commits, sixteen of them found by the provider and repository
-sweeps rather than by the SQL check. Grouped by what a user could not
-do.
+Nineteen commits, seventeen of them found by the provider and
+repository sweeps rather than by the SQL check. Grouped by what a user
+could not do.
 
 **Nobody could record the thing the module is for.**
 
@@ -340,6 +358,18 @@ do.
   at all, and the exemption card answered "cannot tell" forever because
   the headcount could not be supplied after the filing was made.
 
+- **A statutory filing's own life.** `corp_upcoming_filings` computes
+  every deadline the Companies Act imposes and leaves `filing_id` null
+  until somebody opens one. `corpOpenFiling` and `corpMarkLodged` had
+  no caller, so `corp_filings` could never leave the state the
+  computation put it in: a practice could not say it was working on an
+  Annual Return, or record that one was lodged on a date with an SSM
+  reference, and the screen went on showing filed deadlines as overdue
+  for as long as the company existed. Found only after the method sweep
+  was widened past `repository.dart` — it lives in
+  `corp_repository.dart`, which the first version of the check never
+  opened.
+
 **Applying a deposit** (`apply_deposit`) rounds the set out: a deposit
 could be given back or kept and never set against the invoice it was
 taken for, which is the ordinary outcome, so the liability stood
@@ -382,10 +412,13 @@ writing down so the next pass does not chase them again.
   kitchen's portions and what is left of them, asserted in
   `pos_recipes.sql` and behind no screen.
 
-### 2. What the sweeps still find at `be06a0c`
+### 2. What the sweeps still find at `142c05b`
 
-Seven repository methods with no caller:
+Nine repository methods with no caller, one of them a false positive:
 
+- **`callRpc`** is the helper every repository file calls RPCs through.
+  It is referenced hundreds of times *inside* the files the sweep
+  excludes, which is exactly what it is for.
 - **`acceptInvitation`** is the *token* path into a company, and it is
   not the only one. `app.handle_new_user` claims a pending invitation
   the moment somebody signs up at the invited address, which is how
@@ -395,11 +428,14 @@ Seven repository methods with no caller:
 - **`chatEndCall`, `chatFileBytes`, `chatMarkDelivered`, `notifyPush`,
   `reportDenied`** — plumbing behind features that work by other
   routes. Worth a pass of their own to decide whether each is a gap or
-  dead weight; assuming either without reading is how the last entry on
-  this list got written twice.
+  dead weight; assuming either without reading is how the
+  `corp_issued_capital` entry above came to be written twice.
 - **`setRegisterDefaultChannel`** has nowhere to live: registers are
   picked all over the app and administered nowhere. It needs a register
   settings screen, which is the actual gap.
+- **`landingPreview`** and **`navGrouping`**, in the landing and
+  platform-catalogue repositories. Platform-side rather than tenant-side
+  and not read since the sweep first reached those files.
 
 Eleven providers nothing watches, of which four are false positives —
 the screen reads the same thing through the repository directly:
@@ -431,9 +467,9 @@ ahead of behaviour in this codebase, consistently, and the gap is
 invisible to every other check: the migrations apply, the tests pass,
 the analyzer is clean, and the screens that exist all work.
 
-The pass at `be06a0c` says the same thing louder. Eighteen commits,
-sixteen of them closing something the database had been able to do for
-months. Not one was found by a failing test, a failing analyzer or a
+The pass at `142c05b` says the same thing louder. Nineteen commits,
+seventeen of them closing something the database had been able to do
+for months. Not one was found by a failing test, a failing analyzer or a
 red CI run, because none of those can see it — a function nobody calls
 is indistinguishable from a function nobody needs, to every automated
 check this repository has.
