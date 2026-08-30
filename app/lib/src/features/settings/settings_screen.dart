@@ -20,6 +20,7 @@ import 'company_group_card.dart';
 import 'sst_card.dart';
 import 'notifications_card.dart';
 import 'warehouses_card.dart';
+import 'einvoice_credentials.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -222,6 +223,57 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
     }
   }
 
+  /// Take them back out. Removing the credentials of the environment
+  /// the company is actually submitting to switches submission off with
+  /// them, for the reason written above `_save`: a company enabled with
+  /// no credentials is marked live against a submitter that cannot log
+  /// in.
+  Future<void> _clear() async {
+    final alsoDisables = removingLeavesItLive(
+      enabled: _enabled,
+      environment: _environment,
+      current: widget.org.einvoiceEnvironment,
+    );
+    final ok = await askRemoveCredentials(
+      context,
+      environment: _environment,
+      alsoDisables: alsoDisables,
+    );
+    if (!ok || !mounted) return;
+
+    setState(() => _saving = true);
+    final done = await runWithFeedback(
+      context,
+      action: () async {
+        final repo = ref.read(repoProvider)!;
+        await repo.clearEinvoiceCredentials(_environment);
+        if (alsoDisables) {
+          await ref
+              .read(supabaseProvider)
+              .from('organizations')
+              .update({
+                'einvoice_enabled': false,
+                'einvoice_client_id': null,
+              })
+              .eq('id', widget.org.id);
+        }
+      },
+      successMessage: 'Removed',
+    );
+
+    if (mounted) setState(() => _saving = false);
+    if (done && mounted) {
+      setState(() {
+        if (alsoDisables) _enabled = false;
+        _clientId.clear();
+        _clientSecret.clear();
+      });
+      ref.invalidate(organizationsProvider);
+      refreshOrganization(ref);
+      ref.invalidate(einvoiceStatusProvider);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final missingTin = (widget.org.tin ?? '').isEmpty;
@@ -292,6 +344,17 @@ class _EinvoiceCardState extends ConsumerState<_EinvoiceCard> {
               ),
             ),
             const SizedBox(height: 16),
+            if (widget.canEdit)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const ValueKey('clear-einvoice-credentials'),
+                  onPressed: _saving ? null : _clear,
+                  child: Text(
+                    'Remove the $_environment credentials',
+                  ),
+                ),
+              ),
             if (widget.canEdit)
               Align(
                 alignment: Alignment.centerRight,
