@@ -305,6 +305,170 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- The running balance, which is the only figure on a statement that can
+-- be checked against the rest of the statement (0369)
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.br_org('Balance Chain Sdn Bhd');
+  v_bank uuid; v_rcp uuid;
+  r jsonb; v_msg text; v_said text;
+begin
+  select bank_id, receipt_id into v_bank, v_rcp
+    from pg_temp.bank_with_receipt(v_org, 1000);
+
+  -- A statement that adds up, with two lines on its last day — which is
+  -- what makes the closing figure a choice rather than a lookup.
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-04-01','description','Opening',
+                       'amount',500,'running_balance',500),
+    jsonb_build_object('transaction_date','2026-04-02','description','Rent',
+                       'amount',-200,'running_balance',300),
+    jsonb_build_object('transaction_date','2026-04-03','description','Sale',
+                       'amount',300,'running_balance',600),
+    jsonb_build_object('transaction_date','2026-04-03','description','Fee',
+                       'amount',-20,'running_balance',580)));
+  perform pg_temp.check_eq('four lines imported', (r->>'imported')::numeric, 4);
+  perform pg_temp.check_eq('and three links of the chain were checked',
+    (r->>'balance_checks')::numeric, 3);
+  perform pg_temp.check_eq('the balance is stored, not merely read',
+    (select running_balance from public.bank_transactions
+      where bank_account_id = v_bank and transaction_date = date '2026-04-02'),
+    300);
+  -- The last line of the last day, not the first one on it. Both are
+  -- dated 3 April and only one of them is what the account holds.
+  perform pg_temp.check_eq('and the closing figure comes back',
+    (r->>'closing_balance')::numeric, 580);
+  -- Compared as text: the helper has no date overload, and the JSON is
+  -- what the app reads anyway.
+  perform pg_temp.check_eq('dated', r->>'closing_date', '2026-04-03');
+
+  -- The failure the whole thing exists for: a line the paste clipped.
+  -- Without the chain this imports cleanly and the account is short by
+  -- 200 for as long as it takes somebody to find it.
+  begin
+    perform public.import_bank_transactions(v_bank, jsonb_build_array(
+      jsonb_build_object('transaction_date','2026-05-01','description','A',
+                         'amount',100,'running_balance',700),
+      jsonb_build_object('transaction_date','2026-05-03','description','C',
+                         'amount',50,'running_balance',550)));
+    raise exception 'FAIL: a statement with a hole in it was imported';
+  exception when sqlstate '23514' then
+    v_said := sqlerrm;
+  end;
+  perform pg_temp.check_true('a missing line is refused',
+    v_said like '%running balance%');
+  perform pg_temp.check_true('and the message names the line to go and look at',
+    v_said like '%line 2%' and v_said like '%line 1%');
+  perform pg_temp.check_eq('and nothing from that statement landed',
+    (select count(*) from public.bank_transactions
+      where bank_account_id = v_bank and transaction_date >= date '2026-05-01'),
+    0);
+
+  -- Newest-first is an ordinary export. Checked forwards it fails on its
+  -- first pair, and the message would blame a missing line for what is
+  -- only the order.
+  --
+  -- Two lines on its top day as well, and going this way round the
+  -- closing figure is the first of them rather than the last.
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-06-03','description','Z2',
+                       'amount',100,'running_balance',900),
+    jsonb_build_object('transaction_date','2026-06-03','description','Z',
+                       'amount',300,'running_balance',800),
+    jsonb_build_object('transaction_date','2026-06-02','description','Y',
+                       'amount',-200,'running_balance',500),
+    jsonb_build_object('transaction_date','2026-06-01','description','X',
+                       'amount',500,'running_balance',700)));
+  perform pg_temp.check_eq('a newest-first statement imports', (r->>'imported')::numeric, 4);
+  perform pg_temp.check_eq('and its chain is checked too',
+    (r->>'balance_checks')::numeric, 3);
+  perform pg_temp.check_eq('with the closing figure taken from the top of it',
+    (r->>'closing_balance')::numeric, 900);
+
+  -- And a hole in one running the other way is caught the same.
+  begin
+    perform public.import_bank_transactions(v_bank, jsonb_build_array(
+      jsonb_build_object('transaction_date','2026-07-03','description','Z',
+                         'amount',300,'running_balance',900),
+      jsonb_build_object('transaction_date','2026-07-01','description','X',
+                         'amount',500,'running_balance',100)));
+    raise exception 'FAIL: a hole in a newest-first statement was imported';
+  exception when sqlstate '23514' then
+    v_msg := sqlerrm;
+  end;
+  perform pg_temp.check_true('a newest-first hole is refused too',
+    v_msg like '%running balance%');
+
+  -- A statement with no balance column at all still imports. The check
+  -- is worth having; it is not worth refusing every bank that does not
+  -- print one.
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-08-01','description','No column',
+                       'amount',75)));
+  perform pg_temp.check_eq('an unbalanced statement still imports',
+    (r->>'imported')::numeric, 1);
+  perform pg_temp.check_eq('and claims no checks it did not make',
+    (r->>'balance_checks')::numeric, 0);
+  perform pg_temp.check_true('nor a closing figure it does not have',
+    (r->>'closing_balance') is null);
+
+  -- A gap in the middle breaks the chain rather than failing it: one
+  -- link short, not a refusal.
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-09-01','description','A',
+                       'amount',10,'running_balance',10),
+    jsonb_build_object('transaction_date','2026-09-02','description','B',
+                       'amount',10),
+    jsonb_build_object('transaction_date','2026-09-03','description','C',
+                       'amount',10,'running_balance',30)));
+  perform pg_temp.check_eq('a blank balance breaks the chain, not the import',
+    (r->>'imported')::numeric, 3);
+  perform pg_temp.check_eq('and no link is claimed across the gap',
+    (r->>'balance_checks')::numeric, 0);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Two withdrawals that look like one, and one that looks like two
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.br_org('Twice Over Sdn Bhd');
+  v_bank uuid; v_rcp uuid; r jsonb;
+begin
+  select bank_id, receipt_id into v_bank, v_rcp
+    from pg_temp.bank_with_receipt(v_org, 1000);
+
+  -- Two RM 50 cash withdrawals on one day, same machine, same wording.
+  -- Ordinary, and until 0369 the second one was dropped every time and
+  -- the account was short by fifty ringgit with nothing to say so.
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-04-10','description','ATM CASH',
+                       'amount',-50,'running_balance',950),
+    jsonb_build_object('transaction_date','2026-04-10','description','ATM CASH',
+                       'amount',-50,'running_balance',900)));
+  perform pg_temp.check_eq('both genuine withdrawals land',
+    (r->>'imported')::numeric, 2);
+  perform pg_temp.check_eq('and neither is called a duplicate',
+    (r->>'skipped')::numeric, 0);
+
+  -- The same paste again. Both balances already exist, so both are the
+  -- lines already here rather than two more of them.
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-04-10','description','ATM CASH',
+                       'amount',-50,'running_balance',950),
+    jsonb_build_object('transaction_date','2026-04-10','description','ATM CASH',
+                       'amount',-50,'running_balance',900)));
+  perform pg_temp.check_eq('re-importing the overlap adds nothing',
+    (r->>'imported')::numeric, 0);
+  perform pg_temp.check_eq('and skips both', (r->>'skipped')::numeric, 2);
+  perform pg_temp.check_eq('the account holds two lines, not four',
+    (select count(*) from public.bank_transactions
+      where bank_account_id = v_bank and transaction_date = date '2026-04-10'),
+    2);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Reachability
 -- ---------------------------------------------------------------------
 do $$

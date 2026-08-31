@@ -1431,6 +1431,64 @@ multiplies them.
   makes this a nudge and not an alarm. Anything tighter is a decision
   about GitHub Actions minutes in `send-email.yml`, not about reminders.
 
+- **The column that proves the others** (`bank_transactions.running_balance`).
+  A column since `0006`, written by nothing. `0085`'s import reads a
+  date, an amount, a description and a reference out of each statement
+  row and drops the balance the bank printed beside them.
+
+  This is the *nothing reads it at all* case, and it is the one where
+  that shape does real damage — because a running balance is not another
+  figure to record. It is the only figure on a statement that can be
+  checked against the rest of the statement. Every other column is a
+  claim; the balance is the arithmetic those claims have to satisfy.
+
+  Two failures were live because of it, and both are silent.
+
+  A line that never arrives. A paste that clips the last rows, an export
+  that pages at fifty, a row the parser could not read: the import
+  reports what it took and cannot say anything about what it did not.
+  The account is short by that transaction, `complete_bank_reconciliation`
+  correctly refuses to close, and the person holding the difference has
+  no idea which line to go and find. `0369` walks the chain — this
+  balance is the last one plus this amount — and refuses the statement
+  naming the two lines it cannot bridge.
+
+  And the opposite, caused by the fix for the first. `0085` skips a row
+  identical to one already on the account so an overlapping month does
+  not double its shared days. But two identical lines on one day are
+  ordinary — two RM 50 cash withdrawals, two standing orders to the same
+  payee — and the importer could not tell those from a re-import. It
+  dropped the second one every time. The running balance separates them:
+  two genuine withdrawals have two different balances after them, the
+  same line imported twice has the same balance both times. So the
+  balance goes into the key and both failures close at once.
+
+  Two things the mutation run taught. Statements come both ways round,
+  and a newest-first export checked forwards fails on its very first
+  pair — the message would blame a missing line for what is only the
+  order, which is worse than no check, so the direction is read off the
+  dates and the chain is walked the way the statement runs. And the
+  closing figure is a *choice* rather than a lookup: with two lines on
+  the last day it is the last of them going forwards and the first of
+  them going backwards. The fixture had strictly decreasing dates and
+  the mutant that ignores direction survived — not dead code, a missing
+  case, for the fourth time in this document.
+
+  The closing balance is handed back and fills the statement-balance
+  field. `bank_reconciliation_status` subtracts a number somebody types
+  from the books, so a slip in it is a difference that is not there —
+  and the hunt for it goes through the lines, which are fine.
+
+- **And one left deliberately unwritten.** `bank_transactions.value_date`
+  is the day funds become good, which differs from the transaction date
+  on a cheque deposit. `0369` records the balance beside it and not this,
+  because nothing would read it: the ledger dates the receipt, the
+  matcher measures nearness to the transaction date, and the statement
+  balance already reflects the bank's own treatment. Recording a column
+  to no consequence is the failure this sweep exists to find, not a
+  smaller version of the fix. The place to delete this paragraph is the
+  day something needs it.
+
 ## What the second write does
 
 A `before insert or update` trigger that judges the **row** rather than

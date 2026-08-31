@@ -15,6 +15,7 @@ class StatementRow {
     required this.amount,
     this.description,
     this.reference,
+    this.balance,
   });
 
   final DateTime date;
@@ -24,6 +25,16 @@ class StatementRow {
   final String? description;
   final String? reference;
 
+  /// The account balance after this line, as the bank printed it.
+  ///
+  /// Null where the statement has no balance column, which is ordinary.
+  /// Where it is present it is the only figure on the paste that can be
+  /// checked against the rest of the paste, and `0369` checks it: a line
+  /// the parser dropped or the paste clipped fails the chain on the line
+  /// after the hole, instead of turning up a month later as a difference
+  /// nobody can place.
+  final double? balance;
+
   Map<String, dynamic> toJson() => {
         'transaction_date':
             '${date.year.toString().padLeft(4, '0')}-'
@@ -32,6 +43,7 @@ class StatementRow {
         'amount': amount,
         'description': description,
         'reference': reference,
+        'running_balance': balance,
       };
 }
 
@@ -58,6 +70,10 @@ const _creditNames = ['credit', 'deposit', 'credit amount', 'in', 'cr'];
 const _descNames = ['description', 'details', 'particulars', 'narrative',
                     'transaction description', 'remarks'];
 const _refNames = ['reference', 'ref', 'cheque', 'cheque no', 'transaction ref'];
+// "Baki" because half the local exports are in Malay, and a balance
+// column read as nothing is a check that quietly does not happen.
+const _balanceNames = ['balance', 'running balance', 'closing balance',
+                       'ledger balance', 'balance (rm)', 'baki'];
 
 /// Reads a pasted CSV statement.
 ///
@@ -83,6 +99,7 @@ StatementParse parseStatement(String text) {
   final creditAt = find(_creditNames);
   final descAt = find(_descNames);
   final refAt = find(_refNames);
+  final balanceAt = find(_balanceNames);
 
   if (dateAt < 0) {
     return StatementParse(const [], [
@@ -131,6 +148,10 @@ StatementParse parseStatement(String text) {
       amount: amount,
       description: at(descAt).isEmpty ? null : at(descAt),
       reference: at(refAt).isEmpty ? null : at(refAt),
+      // Not a problem when it is missing or unreadable: a broken link
+      // stops the chain rather than failing it, and a statement with no
+      // balance column still imports.
+      balance: balanceAt < 0 ? null : _number(at(balanceAt)),
     ));
   }
 

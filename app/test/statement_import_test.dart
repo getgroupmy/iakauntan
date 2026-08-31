@@ -127,13 +127,85 @@ not a date,Bad,500.00
     });
   });
 
-  test('the row serialises the way the importer expects', () {
-    final row = StatementRow(
-      date: DateTime(2026, 3, 6),
-      amount: -250.5,
-      description: 'Cheque',
-    );
-    expect(row.toJson()['transaction_date'], '2026-03-06');
-    expect(row.toJson()['amount'], -250.5);
+  group('the balance column', () {
+    // The only figure on a statement that can be checked against the
+    // rest of the statement, and until 0369 it was read as nothing. It
+    // is what lets the importer find a line the paste clipped, and what
+    // tells two identical withdrawals on one day from the same line
+    // pasted twice.
+    test('is read, under any of the names a bank prints on it', () {
+      for (final header in const [
+        'Date,Description,Amount,Balance',
+        'Date,Description,Amount,Running Balance',
+        'Date,Description,Amount,Ledger Balance',
+        'Date,Description,Amount,Baki',
+      ]) {
+        final parsed = parseStatement('$header\n'
+            '06/03/2026,Deposit,1000.00,"5,432.10"');
+        expect(parsed.rows.single.balance, 5432.10, reason: header);
+      }
+    });
+
+    test('and an overdrawn account reads as negative', () {
+      // Brackets and a minus sign both, because statements use both and
+      // an overdraft read as a positive balance breaks the chain on the
+      // next line rather than on itself.
+      final parsed = parseStatement('''
+Date,Description,Amount,Balance
+06/03/2026,Charge,-25.00,(120.00)
+07/03/2026,Charge,-25.00,-145.00
+''');
+      expect(parsed.rows[0].balance, -120.00);
+      expect(parsed.rows[1].balance, -145.00);
+    });
+
+    test('a statement without one still imports', () {
+      // Plenty of exports have no balance column. Refusing those would
+      // trade a check nobody had for an import everybody did.
+      final parsed = parseStatement('''
+Date,Description,Amount
+06/03/2026,Deposit,1000.00
+''');
+      expect(parsed.problems, isEmpty);
+      expect(parsed.rows.single.balance, isNull);
+    });
+
+    test('and a blank cell breaks the chain rather than failing it', () {
+      final parsed = parseStatement('''
+Date,Description,Amount,Balance
+06/03/2026,Deposit,1000.00,1000.00
+07/03/2026,Deposit,500.00,
+08/03/2026,Deposit,500.00,2000.00
+''');
+      expect(parsed.rows.length, 3);
+      expect(parsed.rows[1].balance, isNull);
+      expect(parsed.rows[2].balance, 2000.00);
+    });
+  });
+
+  group('the row serialises the way the importer expects', () {
+    test('date, amount and balance under the names the function reads', () {
+      final row = StatementRow(
+        date: DateTime(2026, 3, 6),
+        amount: -250.5,
+        description: 'Cheque',
+        balance: 749.5,
+      );
+      expect(row.toJson()['transaction_date'], '2026-03-06');
+      expect(row.toJson()['amount'], -250.5);
+      // Named for the column, not for the Dart field: `import_bank_
+      // transactions` reads `running_balance` out of each row and a key
+      // it does not recognise is a check that silently does not run.
+      expect(row.toJson()['running_balance'], 749.5);
+    });
+
+    test('and carries the balance as null rather than omitting it', () {
+      // `->> 'running_balance'` on an absent key and on a JSON null both
+      // come back null, so either would do — asserted so that a future
+      // shortening of toJson is a decision rather than an accident.
+      final row = StatementRow(date: DateTime(2026, 3, 6), amount: 10);
+      expect(row.toJson().containsKey('running_balance'), isTrue);
+      expect(row.toJson()['running_balance'], isNull);
+    });
   });
 }

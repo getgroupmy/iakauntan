@@ -241,13 +241,35 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
     if (!mounted) return;
     // Skipped lines and unreadable lines are both reported. A statement
     // that half-imports quietly reconciles to the wrong number.
+    final checks = (result['balance_checks'] as num? ?? 0).toInt();
     final parts = <String>[
       '${result['imported']} imported',
       if ((result['skipped'] as num? ?? 0) > 0)
         '${result['skipped']} already there',
+      // Worth saying out loud. It is the difference between a paste
+      // that looks right and one the statement's own arithmetic agrees
+      // with, and somebody who pastes a balance column deserves to know
+      // the check happened rather than to assume it.
+      if (checks > 0) 'balance follows on $checks lines',
       if (parsed.problems.isNotEmpty)
         '${parsed.problems.length} could not be read',
     ];
+
+    // The figure the difference gets measured against, taken from the
+    // bank instead of typed. `bank_reconciliation_status` subtracts the
+    // statement balance from the books, so a slip in it is a difference
+    // that is not there — and the search for it goes through the lines,
+    // which are fine.
+    final closing = (result['closing_balance'] as num?)?.toDouble();
+    final closingDate = result['closing_date'] as String?;
+    if (closing != null) {
+      _statementBalance.text = closing.toStringAsFixed(2);
+      final on = DateTime.tryParse(closingDate ?? '');
+      if (on != null) _asAt = on;
+      parts.add('closing ${Fmt.money(closing)}'
+          '${on == null ? '' : ' at ${Fmt.date(on)}'}');
+    }
+
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(parts.join(' · '))));
     await _refresh();
