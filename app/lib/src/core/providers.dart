@@ -1290,6 +1290,13 @@ final corpOfficersProvider = FutureProvider.autoDispose
       return requireRepo(ref).corpOfficers(id);
     });
 
+/// Who at a company may be stood in for. Asked of the database, which
+/// is the same list `0380`'s guard will accept.
+final corpPrincipalsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, entityId) {
+  return requireRepo(ref).corpPrincipalsForAlternate(entityId);
+});
+
 final corpMembersProvider = FutureProvider.autoDispose
     .family<List<CorpMember>, String>((ref, id) {
       return requireRepo(ref).corpRegisterOfMembers(id);

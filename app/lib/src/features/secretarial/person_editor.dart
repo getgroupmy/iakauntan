@@ -65,8 +65,6 @@ Map<String, dynamic> personValues({
   String? city,
   String? stateCode,
   String? country,
-  String? idDocumentType,
-  DateTime? idVerifiedOn,
   bool isPep = false,
   String? kycNotes,
 }) {
@@ -96,8 +94,12 @@ Map<String, dynamic> personValues({
     'city': city,
     'state_code': stateCode,
     'country': country,
-    'id_document_type': idDocumentType,
-    'id_verified_on': idVerifiedOn == null ? null : Fmt.iso(idVerifiedOn),
+    // Neither the document nor the day it was seen is written here.
+    // `0380` made customer due diligence a record of an act by a
+    // person — this document, seen by this individual, on this day —
+    // and `verify_person_identity` is what writes all three together.
+    // A form that could type the date on its own could assert a check
+    // nobody carried out.
     'is_pep': isPep,
     'kyc_notes': kycNotes,
   };
@@ -124,7 +126,6 @@ class _PersonEditorState extends ConsumerState<_PersonEditor> {
       ? widget.person!.gender
       : null;
   late DateTime? _dob = widget.person?.dateOfBirth;
-  late DateTime? _verifiedOn = widget.person?.idVerifiedOn;
   bool _saving = false;
 
   static const _genders = ['female', 'male'];
@@ -154,7 +155,6 @@ class _PersonEditorState extends ConsumerState<_PersonEditor> {
     _ctl('postcode', p?.postcode);
     _ctl('city', p?.city);
     _ctl('country', p?.country ?? 'Malaysia');
-    _ctl('id_document_type', p?.idDocumentType);
     _ctl('kyc_notes', p?.kycNotes);
   }
 
@@ -200,8 +200,6 @@ class _PersonEditorState extends ConsumerState<_PersonEditor> {
       city: _blank('city'),
       stateCode: _stateCode,
       country: _blank('country'),
-      idDocumentType: _blank('id_document_type'),
-      idVerifiedOn: _verifiedOn,
       isPep: _pep,
       kycNotes: _blank('kyc_notes'),
     );
@@ -493,22 +491,7 @@ class _PersonEditorState extends ConsumerState<_PersonEditor> {
                   'Know your client',
                   subtitle: 'What the firm holds to say who this is',
                 ),
-                TextFormField(
-                  controller: _ctl('id_document_type'),
-                  enabled: !_saving,
-                  decoration: const InputDecoration(
-                    labelText: 'Identity document sighted',
-                    hintText: 'NRIC, passport, certificate of incorporation',
-                  ),
-                ),
-                const SizedBox(height: Space.md),
-                StatutoryDateField(
-                  label: 'Verified on',
-                  value: _verifiedOn,
-                  enabled: !_saving,
-                  lastDate: DateTime.now(),
-                  onChanged: (d) => setState(() => _verifiedOn = d),
-                ),
+                _VerificationTile(person: widget.person, enabled: !_saving),
                 const SizedBox(height: Space.sm),
                 CheckboxListTile(
                   key: const ValueKey('person-pep'),
@@ -614,4 +597,117 @@ class StatutoryDateField extends StatelessWidget {
           child: Text(value == null ? 'Not set' : Fmt.date(value)),
         ),
       );
+}
+
+/// The identity check, as a record of who did it.
+///
+/// It used to be two form fields — a document name and a date — saved
+/// with everything else, which meant the register could say a check had
+/// been made without saying by whom. `corp_persons.id_verified_by` was
+/// a column nothing wrote. Since `0380` the date and the verifier are
+/// written together by `verify_person_identity`, so this is an action
+/// rather than a field.
+class _VerificationTile extends ConsumerStatefulWidget {
+  const _VerificationTile({required this.person, required this.enabled});
+
+  final CorpPerson? person;
+  final bool enabled;
+
+  @override
+  ConsumerState<_VerificationTile> createState() => _VerificationTileState();
+}
+
+class _VerificationTileState extends ConsumerState<_VerificationTile> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.person;
+    if (p == null) {
+      // A person who does not exist yet cannot have been verified, and
+      // saying so is better than a disabled control with no explanation.
+      return Text(
+        'Save this person first, then record the identity check against '
+        'them.',
+        style: Theme.of(context).textTheme.bodySmall,
+      );
+    }
+
+    final verified = p.idVerifiedOn != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          verified
+              ? '${p.idDocumentType ?? 'Document'} sighted '
+                  '${Fmt.date(p.idVerifiedOn)}'
+              : 'No identity check recorded.',
+          style: TextStyle(
+            fontWeight: verified ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+        const SizedBox(height: Space.xs),
+        Row(children: [
+          TextButton(
+            onPressed: widget.enabled && !_busy ? () => _record(p) : null,
+            child: Text(verified ? 'Record another check' : 'Record a check'),
+          ),
+          if (verified)
+            TextButton(
+              onPressed: widget.enabled && !_busy ? () => _withdraw(p) : null,
+              child: const Text('Withdraw'),
+            ),
+        ]),
+      ],
+    );
+  }
+
+  Future<void> _record(CorpPerson p) async {
+    final document = await promptForText(
+      context,
+      title: 'What was sighted?',
+      label: 'Identity document',
+      confirmLabel: 'Record it',
+      suggestions: const [
+        'NRIC',
+        'Passport',
+        'Certificate of incorporation',
+      ],
+    );
+    if (document == null || !mounted) return;
+
+    setState(() => _busy = true);
+    await runWithFeedback(
+      context,
+      action: () => ref
+          .read(repoProvider)!
+          .verifyPersonIdentity(p.id, documentType: document),
+      // Says who, because that is the whole of what changed about this.
+      successMessage: 'Recorded against you, today.',
+    );
+    if (mounted) setState(() => _busy = false);
+    ref.invalidate(corpPersonsProvider);
+  }
+
+  Future<void> _withdraw(CorpPerson p) async {
+    final go = await confirm(
+      context,
+      title: 'Withdraw the check?',
+      message: 'The register will show no identity check for '
+          '${p.fullName}. Do this when it was recorded against the wrong '
+          'person or the document turned out not to be theirs.',
+      confirmLabel: 'Withdraw',
+      destructive: true,
+    );
+    if (!go || !mounted) return;
+
+    setState(() => _busy = true);
+    await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.unverifyPersonIdentity(p.id),
+      successMessage: 'Withdrawn',
+    );
+    if (mounted) setState(() => _busy = false);
+    ref.invalidate(corpPersonsProvider);
+  }
 }

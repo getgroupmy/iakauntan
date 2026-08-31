@@ -105,13 +105,51 @@ extension RepoCorp on Repo {
       {bool includeResigned = true}) async {
     var q = client
         .from('corp_officers')
-        .select('*, corp_persons(full_name, nric, passport_no, registration_no)')
+        .select('*, corp_persons(full_name, nric, passport_no, '
+            'registration_no), '
+            // Whose place an alternate acts in, by name, because "acting
+            // as an alternate" without one is what `0380` is about.
+            'principal:corp_officers!corp_officers_alternate_for_fkey('
+            'corp_persons(full_name))')
         .eq('entity_id', entityId);
     if (!includeResigned) q = q.isFilter('resigned_on', null);
     return Repo.rows(await q.order('appointed_on', ascending: false))
         .map(CorpOfficer.fromJson)
         .toList();
   }
+
+  /// Who at this company can be stood in for: sitting officers who are
+  /// not themselves standing in for somebody. From the database rather
+  /// than filtered here, because the same list is what
+  /// `app.corp_officer_alternate_guard` will accept.
+  Future<List<Map<String, dynamic>>> corpPrincipalsForAlternate(
+    String entityId, {
+    String? exclude,
+  }) async =>
+      Repo.rows(await callRpc('corp_principals_for_alternate', params: {
+        'p_entity': entityId,
+        'p_exclude': exclude,
+      }));
+
+  /// Records a CDD check as what it is: this document, seen by this
+  /// individual, on this day. `id_verified_by` is stamped from the
+  /// session, which is why the date cannot be typed into the person
+  /// editor any more.
+  Future<void> verifyPersonIdentity(
+    String personId, {
+    required String documentType,
+    DateTime? verifiedOn,
+    String? notes,
+  }) =>
+      callRpc('verify_person_identity', params: {
+        'p_person': personId,
+        'p_document_type': documentType,
+        'p_verified_on': verifiedOn == null ? null : Fmt.iso(verifiedOn),
+        'p_notes': notes,
+      });
+
+  Future<void> unverifyPersonIdentity(String personId) =>
+      callRpc('unverify_person_identity', params: {'p_person': personId});
 
   Future<void> saveCorpOfficer(Map<String, dynamic> values, {String? id}) =>
       id == null

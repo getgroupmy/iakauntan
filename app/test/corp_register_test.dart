@@ -82,10 +82,89 @@ void main() {
         kind: 'individual',
         fullName: 'Nurul',
         dateOfBirth: DateTime(1990, 1, 2),
-        idVerifiedOn: DateTime(2026, 8, 28),
       );
       expect(v['date_of_birth'], '1990-01-02');
-      expect(v['id_verified_on'], '2026-08-28');
+    });
+
+    test('and the identity check is not one of them', () {
+      // Customer due diligence is a record of an act by a person:
+      // this document, seen by this individual, on this day. `0380`
+      // writes all three together through `verify_person_identity`,
+      // and a form that could still send the date on its own could
+      // assert a check nobody carried out.
+      final v = personValues(kind: 'individual', fullName: 'Nurul');
+      expect(v.containsKey('id_verified_on'), isFalse);
+      expect(v.containsKey('id_verified_by'), isFalse);
+      expect(v.containsKey('id_document_type'), isFalse);
+    });
+  });
+
+  group('who stands in for whom', () {
+    final appointed = DateTime(2020, 3, 1);
+
+    test('an alternate director names their principal', () {
+      final v = officerValues(
+        entityId: 'e1',
+        personId: 'p1',
+        role: 'alternate_director',
+        appointedOn: appointed,
+        alternateFor: 'officer-lim',
+      );
+      expect(v['alternate_for'], 'officer-lim');
+    });
+
+    test('and the form will not send one without', () {
+      // s.208: an alternate votes in their principal's place and not as
+      // well as them, so a board's quorum cannot be worked out from a
+      // register that does not say whose place it was.
+      expect(
+        officerBlockedBecause(role: 'alternate_director'),
+        contains('particular director'),
+      );
+      expect(
+        officerBlockedBecause(
+            role: 'alternate_director', alternateFor: 'officer-lim'),
+        isNull,
+      );
+    });
+
+    test('a role that stands in for nobody is not asked', () {
+      // Asking a chairman whose place they act in invites an answer
+      // that means nothing, and the register would then carry it.
+      expect(roleStandsInForSomebody('chairman'), isFalse);
+      expect(roleStandsInForSomebody('director'), isFalse);
+      expect(roleStandsInForSomebody('alternate_director'), isTrue);
+      expect(roleStandsInForSomebody('secretary'), isTrue);
+      expect(officerBlockedBecause(role: 'director'), isNull);
+    });
+
+    test('and a principal set on one is dropped on the way out', () {
+      // Somebody moved from alternate to director keeping a principal
+      // would be a director standing in for another director, which
+      // the register has no way to read.
+      final v = officerValues(
+        entityId: 'e1',
+        personId: 'p1',
+        role: 'director',
+        appointedOn: appointed,
+        alternateFor: 'officer-lim',
+      );
+      expect(v['alternate_for'], isNull);
+    });
+
+    test('and the flag is never sent at all', () {
+      // `is_alternate` and the role said the same thing twice, set
+      // independently by this screen. `0380` derives it from
+      // `alternate_for`, so sending it would be the screen asserting
+      // something it is not the authority on.
+      final v = officerValues(
+        entityId: 'e1',
+        personId: 'p1',
+        role: 'alternate_director',
+        appointedOn: appointed,
+        alternateFor: 'officer-lim',
+      );
+      expect(v.containsKey('is_alternate'), isFalse);
     });
   });
 

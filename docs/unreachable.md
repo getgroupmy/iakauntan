@@ -2034,3 +2034,55 @@ person is a candidate for the same reading. The policy decides which rows
 that person may touch; if the columns on the row belong to *different*
 people, the policy has not said so and cannot. `appraisal_goals_all` had
 it too and is fixed in the same migration.
+
+## Two columns that record who
+
+`corp_officers.alternate_for` and `corp_persons.id_verified_by` are the
+same finding twice. Each is the half of a statutory record that names a
+person, and each sat beside a column that was faithfully written — so
+the register said *that* something happened and never *who*.
+
+- The officer sheet offered "Acting as an alternate" as a tick box, and
+  the role enum carried `alternate_director`. Neither says whose place
+  the alternate acts in. Under s.208 an alternate votes **instead of**
+  their principal, not as well as them, so whether a board had a quorum
+  — the question a resolution's validity turns on — cannot be answered
+  from the register at all.
+- The person editor recorded `id_document_type` and `id_verified_on`,
+  and nothing ever wrote `id_verified_by`. Customer due diligence is a
+  record of an act by a person: this document, seen by this individual,
+  on this day. A date with no name is an assertion that somebody, at
+  some point, was satisfied. `0378`'s `lodged_by` was the same shape and
+  is fixed the same way — the column is stamped from the session by the
+  function that does the thing, and the date cannot be written without
+  it.
+
+Three things fell out of `0380`:
+
+- **`is_alternate` stops being typed.** It and `role =
+  'alternate_director'` were two ways of saying one thing, set
+  independently by one screen, and `0188`'s seed set neither. It is now
+  derived from `alternate_for`, which leaves room for the case the
+  boolean existed for and the enum cannot express — a deputy secretary —
+  while making the two impossible to contradict.
+- **`on delete set null` is not a cessation rule.** It is about a row
+  being deleted, and an officer who resigns is dated rather than
+  deleted, so the register went on showing somebody standing in for a
+  director who left in March. The cascade is written as one event: the
+  alternate ceases with the principal, moves when the principal's date
+  is corrected, and comes back if the principal is reinstated — but only
+  where the cessation was the principal's doing, which the borrowed
+  reason on the row is what distinguishes. A stand-in who resigned on
+  their own account, on the very same day, is left alone. Both of those
+  were surviving mutants before they were fixtures.
+- **The picker asks the database who is eligible.** Filtering the
+  already-loaded officer list in Dart would be a second implementation
+  of the guard's own rule; `corp_principals_for_alternate` is the same
+  list the guard accepts.
+
+One mutant is kept alive deliberately, and the reasoning is the same
+judgement `0375` records: the cascade's "judge the change, not the row"
+early return stops a write, and is unobservable only because
+`app.write_audit_log` already drops an update whose diff is empty.
+Arriving at a correct audit trail through a second guard downstream is
+not the same as not touching rows nobody asked to change.

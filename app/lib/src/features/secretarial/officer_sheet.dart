@@ -45,6 +45,15 @@ String officerRoleName(String code) => officerRoles[code] ?? code;
 /// And a reason belongs to a cessation. Kept without a date it is a
 /// note about a resignation that has not happened, sitting on somebody
 /// still in office.
+///
+/// `is_alternate` is deliberately not sent. It used to be a tick box
+/// beside a role that already said the same thing, which is two sources
+/// of truth for one fact; since `0380` the database derives it from
+/// `alternate_for`, and sending it here would be the screen asserting
+/// something it is not the authority on. The principal goes with the
+/// officer only where the role can have one — an alternate director
+/// acts in a named director's place under s.208, and a chairman does
+/// not stand in for anybody.
 Map<String, dynamic> officerValues({
   required String entityId,
   required String personId,
@@ -52,7 +61,7 @@ Map<String, dynamic> officerValues({
   required DateTime appointedOn,
   DateTime? resignedOn,
   String? cessationReason,
-  bool isAlternate = false,
+  String? alternateFor,
   DateTime? consentReceivedOn,
   DateTime? declarationReceivedOn,
   String? licenceNo,
@@ -69,7 +78,7 @@ Map<String, dynamic> officerValues({
     'appointed_on': Fmt.iso(appointedOn),
     'resigned_on': ceased ? Fmt.iso(resignedOn) : null,
     'cessation_reason': ceased ? cessationReason : null,
-    'is_alternate': isAlternate,
+    'alternate_for': roleStandsInForSomebody(role) ? alternateFor : null,
     'consent_received_on':
         consentReceivedOn == null ? null : Fmt.iso(consentReceivedOn),
     'declaration_received_on':
@@ -86,6 +95,33 @@ Map<String, dynamic> officerValues({
 /// of a prescribed body or hold a licence from the Registrar. Nobody
 /// else needs one, so nobody else is asked.
 bool roleNeedsLicence(String role) => role == 'secretary';
+
+/// Which roles act in somebody else's place.
+///
+/// s.208 of the Companies Act 2016: an alternate director is appointed
+/// by a particular director to act instead of them — with that
+/// director's vote, and not as well as it, which is why whether a board
+/// had a quorum cannot be worked out from a register that does not name
+/// the principal. A deputy secretary stands in the same way. Nobody
+/// else does, and asking would invite an answer that means nothing.
+bool roleStandsInForSomebody(String role) =>
+    role == 'alternate_director' || role == 'secretary';
+
+/// Whether this appointment can be saved, in the words to show if not.
+///
+/// Null when it is fine. The one rule worth catching before the round
+/// trip is the one whose refusal would otherwise arrive as a database
+/// error on a form where the answer is a dropdown away.
+String? officerBlockedBecause({
+  required String role,
+  String? alternateFor,
+}) {
+  if (role == 'alternate_director' && alternateFor == null) {
+    return 'An alternate director acts in a particular director\'s place. '
+        'Say whose.';
+  }
+  return null;
+}
 
 /// Appoint somebody to a company's register, or amend an appointment.
 Future<bool> showOfficerSheet(
@@ -118,7 +154,7 @@ class _OfficerSheetState extends ConsumerState<_OfficerSheet> {
 
   late String? _personId = widget.officer?.personId;
   late String _role = widget.officer?.role ?? 'director';
-  late bool _isAlternate = widget.officer?.isAlternate ?? false;
+  late String? _alternateFor = widget.officer?.alternateFor;
   late DateTime? _appointedOn = widget.officer?.appointedOn;
   late DateTime? _resignedOn = widget.officer?.resignedOn;
   late DateTime? _consentOn = widget.officer?.consentReceivedOn;
@@ -156,6 +192,13 @@ class _OfficerSheetState extends ConsumerState<_OfficerSheet> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_personId == null || _appointedOn == null) return;
+    final blocked =
+        officerBlockedBecause(role: _role, alternateFor: _alternateFor);
+    if (blocked != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(blocked)));
+      return;
+    }
 
     setState(() => _saving = true);
     final values = officerValues(
@@ -167,7 +210,7 @@ class _OfficerSheetState extends ConsumerState<_OfficerSheet> {
       cessationReason: _cessationReason.text.trim().isEmpty
           ? null
           : _cessationReason.text.trim(),
-      isAlternate: _isAlternate,
+      alternateFor: _alternateFor,
       consentReceivedOn: _consentOn,
       declarationReceivedOn: _declarationOn,
       licenceNo:
@@ -273,15 +316,17 @@ class _OfficerSheetState extends ConsumerState<_OfficerSheet> {
                     ),
                   ),
 
-                const SizedBox(height: Space.sm),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: _isAlternate,
-                  onChanged: _saving
-                      ? null
-                      : (v) => setState(() => _isAlternate = v ?? false),
-                  title: const Text('Acting as an alternate'),
-                ),
+                if (roleStandsInForSomebody(_role)) ...[
+                  const SizedBox(height: Space.sm),
+                  _PrincipalField(
+                    entityId: widget.entityId,
+                    exclude: widget.officer?.id,
+                    value: _alternateFor,
+                    required_: _role == 'alternate_director',
+                    enabled: !_saving,
+                    onChanged: (v) => setState(() => _alternateFor = v),
+                  ),
+                ],
                 TextFormField(
                   controller: _designation,
                   enabled: !_saving,
@@ -403,6 +448,67 @@ class _OfficerSheetState extends ConsumerState<_OfficerSheet> {
               : Text(_isNew ? 'Appoint' : 'Save'),
         ),
       ],
+    );
+  }
+}
+
+/// Whose place this officer acts in.
+///
+/// The list comes from `corp_principals_for_alternate` rather than from
+/// the officers already loaded, because it is the same list the guard in
+/// `0380` will accept — sitting officers who are not themselves standing
+/// in for somebody, and never the appointment being edited. A picker
+/// that offers a name the database refuses is worse than no picker.
+class _PrincipalField extends ConsumerWidget {
+  const _PrincipalField({
+    required this.entityId,
+    required this.value,
+    required this.required_,
+    required this.enabled,
+    required this.onChanged,
+    this.exclude,
+  });
+
+  final String entityId;
+  final String? exclude;
+  final String? value;
+  final bool required_;
+  final bool enabled;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final people = ref.watch(corpPrincipalsProvider(entityId)).valueOrNull ??
+        const <Map<String, dynamic>>[];
+    final ids = people.map((p) => p['officer_id'] as String).toSet();
+
+    return DropdownButtonFormField<String>(
+      key: const ValueKey('officer-alternate-for'),
+      // A principal who has since resigned is off the list, and showing
+      // their id as a selected value the dropdown cannot render would
+      // throw. Falling back to nothing selected says the truth: the
+      // place they stood in has gone.
+      value: ids.contains(value) ? value : null,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: required_ ? 'Standing in for *' : 'Standing in for',
+        helperText: required_
+            ? 'An alternate votes in their principal\'s place and not as '
+                'well, so quorum depends on knowing whose.'
+            : 'Leave empty unless this is a deputy appointment.',
+      ),
+      items: [
+        const DropdownMenuItem(value: null, child: Text('Nobody')),
+        for (final p in people)
+          DropdownMenuItem(
+            value: p['officer_id'] as String,
+            child: Text(
+              '${p['full_name']} · ${officerRoleName(p['role'].toString())}',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+      onChanged: enabled ? onChanged : null,
     );
   }
 }

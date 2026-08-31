@@ -135,6 +135,7 @@ jobs:
                    supabase/tests/document_dates.sql \
                    supabase/tests/bill_credit.sql \
                    supabase/tests/appraisals.sql \
+                   supabase/tests/alternates_and_verification.sql \
                    supabase/tests/corp_particulars.sql \
                    supabase/tests/decline_and_lodge.sql \
                    supabase/tests/lot_report.sql \

@@ -219,6 +219,8 @@ class CorpOfficer {
     this.licenceBody,
     this.licenceExpiresOn,
     this.isAlternate = false,
+    this.alternateFor,
+    this.alternateForName,
   });
 
   final String id;
@@ -234,6 +236,15 @@ class CorpOfficer {
   final String? licenceBody;
   final DateTime? licenceExpiresOn;
   final bool isAlternate;
+
+  /// Whose place this officer acts in. s.208 of the Companies Act 2016:
+  /// an alternate director is appointed by a particular director and
+  /// votes instead of them rather than as well, so a register that does
+  /// not name the principal cannot answer whether the board had a
+  /// quorum. `isAlternate` is derived from this by the database since
+  /// `0380` and is never sent from here.
+  final String? alternateFor;
+  final String? alternateForName;
 
   bool get isCurrent => resignedOn == null;
 
@@ -271,6 +282,12 @@ class CorpOfficer {
       licenceBody: j['licence_body']?.toString(),
       licenceExpiresOn: Fmt.parseDate(j['licence_expires_on']),
       isAlternate: j['is_alternate'] == true,
+      alternateFor: j['alternate_for'] as String?,
+      alternateForName: j['principal'] is Map
+          ? (j['principal']['corp_persons'] is Map
+              ? j['principal']['corp_persons']['full_name']?.toString()
+              : null)
+          : null,
     );
   }
 }
