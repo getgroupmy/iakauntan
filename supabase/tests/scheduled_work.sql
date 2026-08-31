@@ -103,6 +103,7 @@ declare
     'app.purge_audit_history',
     'app.close_attendance_day',
     'app.expire_carried_leave',
+    'app.queue_activity_reminders',
     'app.roll_leave_year',
     'app.roll_einvoice_consolidation',
     'public.chat_expire_calls',

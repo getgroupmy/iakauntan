@@ -1403,3 +1403,30 @@ multiplies them.
   a customer's balance posts into cash and the aged listing — which
   reconciles against the control account — stops agreeing with the
   ledger without saying why.
+
+- **The reminder that never arrived** (`activities.reminder_at`,
+  `reminder_sent`). Columns since `0008`, written by nothing, read by
+  nothing, offered on no screen. A salesperson who set a reminder to
+  ring somebody back was reminded by nothing, and the column recording
+  that the reminder had gone stayed false because it had.
+
+  `0356`'s shape one table over, with the difference that
+  `ticket_sla_sweep` at least existed to be scheduled — here the sweep
+  had to be written as well as driven. It queues into `email_outbox`
+  rather than inventing a notification table, because the outbox exists,
+  is drained, carries a dedupe key, and is already how this system tells
+  somebody something.
+
+  Two decisions the tests hold. The reminder goes to `assigned_to` and
+  an activity assigned to nobody is skipped rather than sent to whoever
+  created it — a reminder addressed to somebody who did not ask for it
+  is how people learn to ignore them. And a completed or cancelled
+  activity is never reminded about: being told to make a call you made
+  yesterday teaches people the reminders are wrong, and after that the
+  useful ones are ignored too.
+
+  The latency is written down rather than pretended away. Fifteen
+  minutes to queue plus the outbox's own half-hourly drain means a
+  reminder set for half past nine arrives some time before eleven, which
+  makes this a nudge and not an alarm. Anything tighter is a decision
+  about GitHub Actions minutes in `send-email.yml`, not about reminders.
