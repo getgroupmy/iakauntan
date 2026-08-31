@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788157295.0088916,
-    "ast_hash": "d47773acbfda3fe5eace1947bb0d008f",
+    "mtime": 1788161058.3505886,
+    "ast_hash": "9c19829bfe7695731ccd000002c7e760",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788160543.2634733,
-    "ast_hash": "52761749e2da56c2794248e49d19df36",
+    "mtime": 1788161058.3522182,
+    "ast_hash": "7416335b72bebb29284fcd488ec38182",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788157295.0048916,
-    "ast_hash": "0e437e7567f134b52967c02d4d2d9b28",
+    "mtime": 1788162124.1801527,
+    "ast_hash": "67ff7bcc845f9e0d5618a05f926c1321",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788160730.411086,
-    "ast_hash": "6e4178386b2347bc13fcb5ccecb3bbc1",
+    "mtime": 1788162411.5767019,
+    "ast_hash": "3d43020f530dd581e51b2f56376aea24",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -4850,13 +4850,13 @@
     "semantic_hash": ""
   },
   "cloudflare/email-router/worker.js": {
-    "mtime": 1787822945.5156734,
-    "ast_hash": "b73f48a69613902cac1d75608ae489d3",
+    "mtime": 1788161909.7119093,
+    "ast_hash": "1f57cce2cef395b51d3db632580ea28c",
     "semantic_hash": ""
   },
   "supabase/functions/receive-email/index.ts": {
-    "mtime": 1787822946.0048814,
-    "ast_hash": "db185e327ef4997d1b9dbe45c0347ed3",
+    "mtime": 1788162109.9857593,
+    "ast_hash": "feca5c169ab3e000ea230e741463c354",
     "semantic_hash": ""
   },
   "supabase/migrations/0327_a_door_with_your_name_on_it.sql": {
@@ -4870,8 +4870,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/mailbox.sql": {
-    "mtime": 1787822946.0265896,
-    "ast_hash": "ec4649b85b4e0c77d562d985c50db955",
+    "mtime": 1788161695.0843303,
+    "ast_hash": "11cd2ff78695575b5454740481a78382",
     "semantic_hash": ""
   },
   "supabase/tests/workspace_address.sql": {
@@ -4880,8 +4880,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/reserved_names_repository.dart": {
-    "mtime": 1788157295.0088916,
-    "ast_hash": "7afca5615ed1dfbab34103c3c96c07fe",
+    "mtime": 1788162170.416368,
+    "ast_hash": "85858c9cec1d961cf9eed223bd12c069",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/reservations_admin.dart": {
@@ -4890,8 +4890,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/mail/inbox_screen.dart": {
-    "mtime": 1787822945.4950595,
-    "ast_hash": "acb030793bf1f09eefc2301b838f8567",
+    "mtime": 1788162200.380358,
+    "ast_hash": "4c565603e67b73dbdb19bbfbe30abd60",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/addresses_card.dart": {
@@ -5727,6 +5727,41 @@
   "supabase/tests/run_locally.sh": {
     "mtime": 1788158897.5169868,
     "ast_hash": "17e4fe0578fd6688436dbde8a356b4f1",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/mail/attachments.dart": {
+    "mtime": 1788162290.3158166,
+    "ast_hash": "aa807415d6ac168c9b49f459698b6aec",
+    "semantic_hash": ""
+  },
+  "app/test/mail_attachments_test.dart": {
+    "mtime": 1788162229.441185,
+    "ast_hash": "d5222fabf84efa7317ae671f36736245",
+    "semantic_hash": ""
+  },
+  "cloudflare/email-router/mime.js": {
+    "mtime": 1788162068.0803835,
+    "ast_hash": "f034351f170cbe91cf18405f18894900",
+    "semantic_hash": ""
+  },
+  "cloudflare/email-router/mime_test.js": {
+    "mtime": 1788162043.621888,
+    "ast_hash": "5f328425c204f37486d86f7866cc3131",
+    "semantic_hash": ""
+  },
+  "supabase/functions/_shared/mail_files.ts": {
+    "mtime": 1788162099.7842166,
+    "ast_hash": "5d7202fbc8ea85de5f25cd033c9d9001",
+    "semantic_hash": ""
+  },
+  "supabase/functions/_shared/mail_files_test.ts": {
+    "mtime": 1788162099.786004,
+    "ast_hash": "4d184fc10dd14db911fbdd7c204875c1",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0354_the_bill_somebody_emailed_you.sql": {
+    "mtime": 1788161710.674708,
+    "ast_hash": "b044f32b771b3b9ec82158834ba78f48",
     "semantic_hash": ""
   }
 }
