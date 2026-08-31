@@ -1837,6 +1837,8 @@ class AttendanceRecord {
     this.otMinutes = 0,
     this.clockInMethod,
     this.clockInAddress,
+    this.isAdjusted = false,
+    this.adjustmentReason,
   });
 
   final String id;
@@ -1850,6 +1852,12 @@ class AttendanceRecord {
   final int otMinutes;
   final String? clockInMethod;
   final String? clockInAddress;
+
+  /// Somebody in HR changed these times, and said why. 0363. The
+  /// question anybody asks about a corrected timesheet is not what it
+  /// says now.
+  final bool isAdjusted;
+  final String? adjustmentReason;
 
   factory AttendanceRecord.fromJson(Map<String, dynamic> j) {
     final emp = j['employees'];
@@ -1868,6 +1876,8 @@ class AttendanceRecord {
           Fmt.toInt(j['ot_holiday_minutes']),
       clockInMethod: j['clock_in_method']?.toString(),
       clockInAddress: j['clock_in_address']?.toString(),
+      isAdjusted: j['is_adjusted'] == true,
+      adjustmentReason: j['adjustment_reason']?.toString(),
     );
   }
 }

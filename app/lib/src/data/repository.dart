@@ -3822,6 +3822,30 @@ extension RepoExtras on Repo {
     },
   );
 
+  /// Corrects a day's clock times, saying who changed it and why.
+  ///
+  /// 0363. `clock_out` only ever touches today's record, so the
+  /// `incomplete` day 0360 marks — a clock-in with no clock-out — had
+  /// no way back. HR only, a reason is required, and a day inside a
+  /// closed pay period is refused because its overtime has been paid.
+  Future<Map<String, dynamic>?> adjustAttendance({
+    required String recordId,
+    required DateTime clockIn,
+    DateTime? clockOut,
+    required String reason,
+  }) async {
+    final out = await callRpc(
+      'adjust_attendance',
+      params: {
+        'p_record': recordId,
+        'p_clock_in': clockIn.toUtc().toIso8601String(),
+        'p_clock_out': clockOut?.toUtc().toIso8601String(),
+        'p_reason': reason,
+      },
+    );
+    return out is Map<String, dynamic> ? out : null;
+  }
+
   Future<List<TimeEntry>> timeEntries(String matterId) async {
     final data = await client
         .from('time_entries')
