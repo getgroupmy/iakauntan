@@ -85,8 +85,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/widgets.dart": {
-    "mtime": 1788157295.0088916,
-    "ast_hash": "645b3c011f6d36c3393f0393363f8fe4",
+    "mtime": 1788188557.3589063,
+    "ast_hash": "e8b68c60908921c0a0dab7daca63bab0",
     "semantic_hash": ""
   },
   "app/lib/src/data/attachments_repository.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788186584.8305151,
-    "ast_hash": "ecee56fa7249cd37466e75d6d2dbbe99",
+    "mtime": 1788188372.8713577,
+    "ast_hash": "b84e48244c922511b2198fcc95a496f8",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -135,9 +135,9 @@
     "semantic_hash": "10171f35b93a487b87bbedf1c2359f9d"
   },
   "app/lib/src/features/crm/pipeline_screen.dart": {
-    "mtime": 1786785756.6144881,
-    "ast_hash": "4f623d1d57305b949d43f5b234458fed",
-    "semantic_hash": "4f623d1d57305b949d43f5b234458fed"
+    "mtime": 1788188461.041619,
+    "ast_hash": "7e954b811ab015374d78f90c4f24da52",
+    "semantic_hash": ""
   },
   "app/lib/src/features/dashboard/dashboard_screen.dart": {
     "mtime": 1787822945.4905899,
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788186500.0959313,
-    "ast_hash": "becb06d1bc5ffbb0cd6d8f5943b0166e",
+    "mtime": 1788187985.0453334,
+    "ast_hash": "445feaefa91828e4fe734ca1526bdea4",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788187147.4441547,
-    "ast_hash": "d77dfc258e272ebf0e4e87d07b795f86",
+    "mtime": 1788188889.2515182,
+    "ast_hash": "7e547918f4681182a2175c681eda48a3",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -1425,8 +1425,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/crm/leads_screen.dart": {
-    "mtime": 1786785756.6144881,
-    "ast_hash": "68816d2e8ed3b64938331c4378974044",
+    "mtime": 1788188557.3591242,
+    "ast_hash": "85d8fdb04657faaf76524a56d58f4fb1",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/appraisal_goals_dialog.dart": {
@@ -6047,6 +6047,36 @@
   "supabase/tests/matter_closing.sql": {
     "mtime": 1788186799.185751,
     "ast_hash": "3dd66c8c1aa270bf1fcd8274bc7617a6",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/crm/close_deal_dialog.dart": {
+    "mtime": 1788188429.361698,
+    "ast_hash": "dc388f9d3b45331e907204af39ddac2c",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/crm/deal_outcome.dart": {
+    "mtime": 1788188351.9987376,
+    "ast_hash": "ce7c633b3b2c627ade136f77d3e1f385",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/crm/win_loss_dialog.dart": {
+    "mtime": 1788188473.2348194,
+    "ast_hash": "bcd68cf7004194df112e7c04b5636045",
+    "semantic_hash": ""
+  },
+  "app/test/deal_outcome_test.dart": {
+    "mtime": 1788188352.0029151,
+    "ast_hash": "396838281d1048acd60682a197dcd712",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0373_a_deal_died_and_nobody_asked_why.sql": {
+    "mtime": 1788188318.011484,
+    "ast_hash": "75038bf8b07c4d3cf56c92ad8cccc403",
+    "semantic_hash": ""
+  },
+  "supabase/tests/win_loss.sql": {
+    "mtime": 1788188228.8231754,
+    "ast_hash": "7b4c7c2a1a0205286f32965c9bd7f242",
     "semantic_hash": ""
   }
 }
