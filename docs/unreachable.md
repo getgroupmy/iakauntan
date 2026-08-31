@@ -539,7 +539,7 @@ it. `0219` says what it holds: "Money crossed a counter for each of
 these, so they are listed rather than logged and forgotten." A till
 with no signal took a sale, the batch was refused when the signal came
 back, and the only trace was a row nothing could read. Closed at
-`33dc7d0`.
+`941b946`.
 
 The narrow sweep reported eleven at `142c05b`, seven of them real:
 
