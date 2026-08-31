@@ -61,9 +61,47 @@ def unreferenced(declaring, pattern, call_shape):
 
 print(unreferenced(REPOS, METHOD,
                    lambda n: r'\b' + re.escape(n) + r'\s*\('))
-print(unreferenced(['lib/src/core/providers.dart'],
-                   r'^final ([a-zA-Z0-9_]+Provider)\b',
-                   lambda n: r'\b' + re.escape(n) + r'\b'))
+# The provider sweep, which cannot use `unreferenced` above.
+#
+# Seventeen files declare providers, not one, and running this against
+# providers.dart alone hid `posOfflineProblemsProvider` -- the sales a
+# till took and the server refused -- for exactly as long as the method
+# sweep hid corpOpenFiling by opening only repository.dart. The same
+# mistake, one layer up.
+#
+# But excluding every declaring file, the way `unreferenced` does, would
+# then hide a provider declared in providers.dart and watched from
+# chat_live.dart, which also declares one. So this counts references
+# everywhere and subtracts the declaration itself.
+PROVIDER = r'^final ([a-zA-Z0-9_]+Provider)\b'
+declares, names = [], {}
+for root, _, files in os.walk('lib/src'):
+    for f in sorted(files):
+        if not f.endswith('.dart'):
+            continue
+        path = os.path.join(root, f)
+        found = re.findall(PROVIDER, open(path).read(), re.M)
+        if found:
+            declares.append(path)
+        for n in found:
+            names.setdefault(n, path)
+
+seen = collections.Counter()
+for root, _, files in os.walk('lib/src'):
+    for f in files:
+        if not f.endswith('.dart'):
+            continue
+        path = os.path.join(root, f)
+        text = open(path).read()
+        for n in names:
+            hits = len(re.findall(r'\b' + re.escape(n) + r'\b', text))
+            if path == names[n]:
+                hits -= len(re.findall(r'^final ' + re.escape(n) + r'\b',
+                                       text, re.M))
+            seen[n] += hits
+
+print(f'{len(declares)} files declare providers; {len(names)} providers.')
+print(sorted(n for n in names if seen[n] == 0))
 ```
 
 The two have to be read together, not separately. `creditLedger` lives
@@ -486,14 +524,24 @@ Nine repository methods with no caller, one of them a false positive:
   platform-catalogue repositories. Platform-side rather than tenant-side
   and not read since the sweep first reached those files.
 
-**The provider sweep now finds nothing real.** Re-run after this pass
-it reports four names, and all four are the known false positive — the
-screen reads the same thing through the repository directly:
-`stockTransferLinesProvider`, `itemModifierGroupIdsProvider`,
-`posRecipeLinesProvider`, `contactMembershipsProvider`. Check each for
-a bare `.methodName(` before believing any future report of them.
+**The provider sweep, widened, now finds nothing real.** It reports
+four names across all seventeen declaring files, and all four are the
+known false positive — the screen reads the same thing through the
+repository directly: `stockTransferLinesProvider`,
+`itemModifierGroupIdsProvider`, `posRecipeLinesProvider`,
+`contactMembershipsProvider`. Check each for a bare `.methodName(`
+before believing any future report of them.
 
-It reported eleven at `142c05b`, seven of them real:
+Widening it found one more, and it was the worst of the pass.
+**`posOfflineProblemsProvider`** — declared in `offline_controller.dart`
+rather than in `providers.dart`, so the narrow sweep never looked at
+it. `0219` says what it holds: "Money crossed a counter for each of
+these, so they are listed rather than logged and forgotten." A till
+with no signal took a sale, the batch was refused when the signal came
+back, and the only trace was a row nothing could read. Closed at
+`33dc7d0`.
+
+The narrow sweep reported eleven at `142c05b`, seven of them real:
 
 - **`creditLedger`** — the OCR credit ledger. Scanning charges are
   taken and the ledger behind them cannot be read.
@@ -554,6 +602,20 @@ it caught the person who wrote the warning. Closed at `a7baa66`, with
 a removal that says what it takes with it: a resolution once passed is
 a matter of record, and anything generated from it stays and quietly
 stops naming what authorised it.
+
+**Both platform-side methods turned out to be a third false positive of
+the same shape as `notifyPush`.** `landingPreview` is called by
+`landingPreviewProvider` and `navGrouping` by `navGroupingProvider`,
+each declared in the very file that declares the method — which the
+method sweep excludes. Both providers are watched: one by the landing
+console, one by the shell itself. So the method sweep's blind spot is
+not one odd case, it is a category: **a method whose only caller is a
+provider beside it.** Check for that before believing any report.
+
+That leaves four names, and none is a screen anybody is missing:
+`callRpc` and `notifyPush` are that blind spot, `chatFileBytes` is
+probably dead weight, and `acceptInvitation` needs an e-mail link that
+does not exist.
 
 Both lists were produced by the sweeps at the top of this file. Run
 them again before believing this section: it is the part that goes
