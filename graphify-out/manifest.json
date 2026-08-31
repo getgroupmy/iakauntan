@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788184998.765401,
-    "ast_hash": "d9a76c1d6765e0068921d9aec359be80",
+    "mtime": 1788186584.8305151,
+    "ast_hash": "ecee56fa7249cd37466e75d6d2dbbe99",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -250,8 +250,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/legal/matter_detail_screen.dart": {
-    "mtime": 1788173823.976897,
-    "ast_hash": "a990e532088e96639290ca23236ea25f",
+    "mtime": 1788186611.330634,
+    "ast_hash": "682529680f6af9fefeb16ef9ff5fa49a",
     "semantic_hash": ""
   },
   "app/lib/src/features/legal/matters_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788184853.986707,
-    "ast_hash": "a04c641a837c6039f78f16b67210b12c",
+    "mtime": 1788186500.0959313,
+    "ast_hash": "becb06d1bc5ffbb0cd6d8f5943b0166e",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788185653.310411,
-    "ast_hash": "be27c57e321eea9e47f1adf3c7bdaf31",
+    "mtime": 1788187147.4441547,
+    "ast_hash": "d77dfc258e272ebf0e4e87d07b795f86",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6027,6 +6027,26 @@
   "supabase/tests/departures.sql": {
     "mtime": 1788184866.2273574,
     "ast_hash": "40784d82f32bc280d7d7ac07660d1f9e",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/legal/matter_closing.dart": {
+    "mtime": 1788186570.3866317,
+    "ast_hash": "4a3e888e2c082347e9c0dc6c1b2b736e",
+    "semantic_hash": ""
+  },
+  "app/test/matter_closing_test.dart": {
+    "mtime": 1788186570.390588,
+    "ast_hash": "d156a5d19e3d3572cb660a33abfda3ae",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0372_a_matter_that_could_never_be_closed.sql": {
+    "mtime": 1788186842.3355703,
+    "ast_hash": "05a6765670a9449f5fafefc2985355b8",
+    "semantic_hash": ""
+  },
+  "supabase/tests/matter_closing.sql": {
+    "mtime": 1788186799.185751,
+    "ast_hash": "3dd66c8c1aa270bf1fcd8274bc7617a6",
     "semantic_hash": ""
   }
 }
