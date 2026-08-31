@@ -2397,3 +2397,31 @@ message. The general rule, now three times over: **a refusal test has to
 name which guard spoke**, or it passes with that guard deleted — and in
 this case it would have passed after a discount journal had already been
 posted for an allocation that never landed.
+
+## The guard I kept forgetting to run
+
+`scripts/check_embeds.py` failed CI on the 0384 push, and nothing local
+had caught it: a PostgREST embed lives inside a string literal, so the
+Dart analyzer cannot see it, the widget tests do not talk to a database,
+and the SQL tests do not know what the client asks for. Its own header
+says it reached a live site twice before it existed.
+
+`0384` added `sales_documents(doc_no)` to the opportunities select.
+`opportunities.quotation_id` points at `sales_documents` **and**
+`sales_documents.opportunity_id` points back, so PostgREST can join the
+two either way round and refuses the whole request rather than guessing
+— taking out the pipeline screen. Naming the constraint fixes it:
+`sales_documents!opportunities_quotation_id_fkey(doc_no)`.
+
+The lesson is procedural, so it is written down here rather than learned
+again. **Any commit that adds or edits a `.select()` with an embed must
+run the checker before pushing**, against the same throwaway Postgres
+`run_locally.sh` leaves behind:
+
+    ./supabase/tests/run_locally.sh --keep
+    python3 scripts/check_embeds.py \
+      "postgres://postgres@/postgres?host=/var/tmp&port=5599"
+
+It answers in a second and prints the file and line. There are ninety-
+seven pairs of tables in this schema that can be joined more than one
+way; the odds of a new embed landing on one are not small.

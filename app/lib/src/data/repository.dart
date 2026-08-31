@@ -3143,7 +3143,11 @@ class Repo {
   Future<List<Opportunity>> opportunities({String? status = 'open'}) async {
     var query = client
         .from('opportunities')
-        .select('*, contacts(name), sales_documents(doc_no)')
+        // The constraint is named because `sales_documents.opportunity_id`
+        // points back at `opportunities`, so PostgREST can join these two
+        // tables either way round and refuses to guess (PGRST201).
+        .select('*, contacts(name), '
+            'sales_documents!opportunities_quotation_id_fkey(doc_no)')
         .eq('org_id', orgId)
         .isFilter('deleted_at', null);
     if (status != null && status != 'all') query = query.eq('status', status);
