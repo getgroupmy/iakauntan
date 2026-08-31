@@ -1239,3 +1239,82 @@ data, a shop can create a voucher tender today, and it behaves like a
 card. The enum value being unwritten in any migration is what a
 data-driven table looks like from a sweep, which is worth knowing before
 the next one of these produces the same false positive.
+
+## A seventh sweep: a column one side of the wire uses and the other cannot
+
+The enum sweeps ask which *values* of a column are unreachable. This
+one asks the same question of the column itself, and it turns out to
+have two distinct answers that need telling apart.
+
+```python
+# Every column of every base table, against app/lib and the edge
+# functions, and against the migrations with the declaration blanked
+# out. Then read the list by hand: the mechanical part cannot tell the
+# two cases below apart, and the difference is the whole finding.
+```
+
+- **The engine reads it and nothing can set it.** The gap is entirely
+  on the app side, the arithmetic is already right, and the fix is a
+  form field. This is the valuable case.
+- **Nothing reads it at all.** A column somebody declared and never
+  wired up. Mostly harmless — until it is a control, at which point the
+  name on the column is a promise nothing keeps.
+
+Both showed up, and one of each was statutory:
+
+- **The four payroll figures nothing could enter.**
+  `employees.cp38_monthly` is deducted on top of PCB and remitted with
+  it by `post_payroll_run`; `zakat_monthly` is passed into the PCB
+  calculation as a rebate, and `statutory.sql` has asserted since it was
+  written that PCB falls by the zakat paid — on data nothing could
+  enter. The two `epf_voluntary_*_rate` columns are added to the
+  contributions. All four were read and none appeared on any screen. A
+  CP38 direction from LHDN had nowhere to go, so the arrears were not
+  deducted and the return was filed short; zakat left at zero over-taxes
+  a Muslim employee every month of the year.
+
+  The voluntary rate is the one worth the module of its own, because it
+  is a **unit** trap rather than a typo. The engine divides by 100, so
+  two points above the statutory rate is `2`. `0.02` is refused now, in
+  both directions, with the sentence saying which unit is meant —
+  otherwise it contributes a two-hundredth of what was meant, looks
+  plausible on every payslip, and is discovered at retirement.
+
+- **A control nothing enforced.** `contacts.credit_hold` has been a
+  column since `0003` and no SQL read it and no screen set it, sitting
+  beside the whole of `0086`'s credit control doing nothing. `0362`
+  makes it refuse an invoice whatever the organization's mode says,
+  because a hold is somebody's instruction rather than arithmetic, and
+  the asymmetry with the limit is deliberate: the limit obeys the mode,
+  the hold overrides it.
+
+- **And a state this document's own work had stranded.** `0360` made
+  `incomplete` reachable and `clock_out` only ever touches *today's*
+  record, so the day it marked could never be closed. `0027` had
+  anticipated the correction and got as far as `is_adjusted`,
+  `adjusted_by` and `adjustment_reason`, which nothing had ever written.
+  `0363` writes them.
+
+  Worth recording as a caution: closing a gap can open one, and this one
+  was opened by the pass immediately before it. The check is the same
+  question asked of the new state — once `incomplete` exists, what
+  leaves it?
+
+Two things the mutation runs taught, both about arithmetic that turned
+out to be less shared than it looked:
+
+- Rewiring `clock_out` through `app.recompute_attendance` turned an
+  existing assertion from `present` to `late`, which was not a bug in
+  either. Clocking out must not make somebody retrospectively late —
+  lateness is a fact about the morning — and a correction must, because
+  the arrival time is what changed. The two callers now say which they
+  want, and the flag exists because the test refused to let them be the
+  same.
+- The local harness reads CI's SQL test list out of the workflow, and
+  the guard added to that workflow introduced a second `for f in
+  supabase/tests/...` loop over a glob. The non-greedy match found the
+  glob first, ran nothing, and printed "all SQL assertions passed (0
+  files)" in green. Only the count gave it away. It now takes the loop
+  naming the most files and refuses to report success on an empty run —
+  which is the failure the guard exists to catch, arriving from the
+  other side of it.

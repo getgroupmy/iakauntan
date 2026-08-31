@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788171018.0162315,
-    "ast_hash": "1d7c169090d68e5f26db94b47aeff67f",
+    "mtime": 1788177650.6704617,
+    "ast_hash": "cfbbfc235a97351ee60fc34d4e86da7a",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788175115.9855318,
-    "ast_hash": "094de31a4fa9dd7ace91a91a36cad848",
+    "mtime": 1788177650.6869116,
+    "ast_hash": "f4150e26d67cd67530dab02f9594ec59",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -125,8 +125,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
-    "mtime": 1788157295.0128915,
-    "ast_hash": "7af3c95f52c1d85935568a29772bc273",
+    "mtime": 1788176817.1825647,
+    "ast_hash": "f1c54b000062f3f62c1808f8f7dea526",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contacts_screen.dart": {
@@ -190,8 +190,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/employee_editor.dart": {
-    "mtime": 1786785756.618488,
-    "ast_hash": "933349285dfb8e5eb7c031a351bb6470",
+    "mtime": 1788175860.6799898,
+    "ast_hash": "a6a56ea1ba7caf0378842c0158643aeb",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/hr_setup_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788175162.8277526,
-    "ast_hash": "f4ea1c1edda5f8f2f449565d09af6495",
+    "mtime": 1788177602.1810055,
+    "ast_hash": "fdb00d47a4a48048820a376e6e4ec70a",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1310,8 +1310,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/credit_control.sql": {
-    "mtime": 1786522212.6001945,
-    "ast_hash": "4b0ea210ffd152db10f25984df389ddc",
+    "mtime": 1788176686.2971818,
+    "ast_hash": "849744224e65d240a7bafc5c499266d6",
     "semantic_hash": ""
   },
   "app/lib/src/features/stock/stock_take_screen.dart": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788175477.5419724,
-    "ast_hash": "95e70aaec7a075284fc91044025a7fd0",
+    "mtime": 1788178179.002133,
+    "ast_hash": "447717ae943dcaf34baa064f1c0d10f8",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -5405,8 +5405,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/attendance_month.dart": {
-    "mtime": 1788157295.0128915,
-    "ast_hash": "020b11a9bbc7ed7e28e2273453d8470d",
+    "mtime": 1788177772.0221088,
+    "ast_hash": "a8f7fd10a608f9fee43f195d20bec9e8",
     "semantic_hash": ""
   },
   "app/lib/src/features/items/item_packs_dialog.dart": {
@@ -5725,8 +5725,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/run_locally.sh": {
-    "mtime": 1788158897.5169868,
-    "ast_hash": "17e4fe0578fd6688436dbde8a356b4f1",
+    "mtime": 1788176287.130347,
+    "ast_hash": "8a25376fd1c96eff9a5d18bbb1f6566e",
     "semantic_hash": ""
   },
   "app/lib/src/features/mail/attachments.dart": {
@@ -5887,6 +5887,41 @@
   "supabase/tests/pos_on_account.sql": {
     "mtime": 1788172559.1438823,
     "ast_hash": "3add9f9a62f320d8efb5f58aa5004f29",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/standing_deductions.dart": {
+    "mtime": 1788175978.7874823,
+    "ast_hash": "e77ca420b0f998c03adf62293c6ff2cb",
+    "semantic_hash": ""
+  },
+  "app/test/attendance_correction_test.dart": {
+    "mtime": 1788177728.9235113,
+    "ast_hash": "85da8f6676b9f6aeb4a2dbc8e8be911b",
+    "semantic_hash": ""
+  },
+  "app/test/standing_deductions_test.dart": {
+    "mtime": 1788175832.2557383,
+    "ast_hash": "ce9fc76e9f2e4b6e35ded70e69321c05",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0362_a_customer_put_on_stop.sql": {
+    "mtime": 1788176686.2842677,
+    "ast_hash": "265e105fed65be3ee7736b5c1234e797",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0363_correcting_a_day_that_was_never_closed.sql": {
+    "mtime": 1788177481.1619122,
+    "ast_hash": "b39b951d1f4a3957142ca665703b500a",
+    "semantic_hash": ""
+  },
+  "supabase/tests/attendance_adjust.sql": {
+    "mtime": 1788177602.1660986,
+    "ast_hash": "da18bb3f1a245671eea00cb62ddfa3d6",
+    "semantic_hash": ""
+  },
+  "supabase/tests/payroll_voluntary_epf.sql": {
+    "mtime": 1788175939.5587776,
+    "ast_hash": "ebca3e60a9b712de6b4091074be95c30",
     "semantic_hash": ""
   }
 }
