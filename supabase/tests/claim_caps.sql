@@ -176,6 +176,103 @@ begin
   perform pg_temp.check_true('and the cap it broke',
     v_msg like '%50.00%');
 
+  -- ------------------------------------------------------------------
+  -- A claim measured rather than stated
+  -- ------------------------------------------------------------------
+  -- 0368. `is_mileage`, `rate_per_unit`, `unit_label` and the line's
+  -- `quantity` and `rate` had all existed since 0027 and none had ever
+  -- been read, so a company reimbursing sixty sen a kilometre had its
+  -- people do the multiplication in their heads and type the ringgit.
+  -- The distance — the one thing anybody could check against a map —
+  -- was not recorded at all.
+  declare
+    v_km    uuid;
+    v_claim uuid;
+    v_line  uuid;
+    -- Shadowed rather than reused: a nested block cannot assign to the
+    -- outer ones, and two variables with one name is worse than two
+    -- names.
+    v_no    boolean;
+    v_said  text;
+  begin
+    insert into public.claim_types
+      (org_id, code, name, is_mileage, rate_per_unit, unit_label)
+    values (v_org, 'KM', 'Mileage', true, 0.60, 'kilometre')
+    returning id into v_km;
+
+    insert into public.expense_claims
+      (org_id, claim_no, employee_id, claim_date, title, status, total_amount)
+    values (v_org, 'CL-KM', v_emp, date '2026-07-01', 'Client visits',
+            'draft', 0)
+    returning id into v_claim;
+
+    -- The amount typed is deliberately wrong, and deliberately ignored.
+    insert into public.expense_claim_lines
+      (org_id, claim_id, line_no, claim_type_id, expense_date, description,
+       quantity, amount)
+    values (v_org, v_claim, 1, v_km, date '2026-07-01', 'Ipoh and back',
+            120, 999)
+    returning id into v_line;
+
+    perform pg_temp.check_eq('a mileage line is priced from the distance',
+      (select amount from public.expense_claim_lines where id = v_line),
+      72.00);
+    perform pg_temp.check_eq('at the rate the type carried that day',
+      (select rate from public.expense_claim_lines where id = v_line), 0.60);
+
+    -- Raising the rate must not restate what has already been claimed:
+    -- the amount was agreed at the rate of the day, and a report that
+    -- re-multiplies disagrees with the payslip that paid it.
+    update public.claim_types set rate_per_unit = 0.70 where id = v_km;
+    perform pg_temp.check_eq('and a later rate rise leaves it alone',
+      (select amount from public.expense_claim_lines where id = v_line),
+      72.00);
+    -- And correcting the distance on it re-prices at the rate the line
+    -- carries, not today's. The mutation run found this: with only the
+    -- amount checked after the rise, always re-reading the type's rate
+    -- broke nothing, because nothing had touched the line. Fixing a
+    -- typo in a distance must not silently re-rate the claim.
+    update public.expense_claim_lines set quantity = 130 where id = v_line;
+    perform pg_temp.check_eq('correcting the distance keeps the old rate',
+      (select amount from public.expense_claim_lines where id = v_line),
+      78.00);
+
+    -- But the next claim gets the new one.
+    insert into public.expense_claim_lines
+      (org_id, claim_id, line_no, claim_type_id, expense_date, description,
+       quantity)
+    values (v_org, v_claim, 2, v_km, date '2026-07-08', 'Taiping', 100);
+    perform pg_temp.check_eq('while the next line takes the new rate',
+      (select amount from public.expense_claim_lines
+        where claim_id = v_claim and line_no = 2), 70.00);
+
+    -- Distance is not optional on a type claimed by the kilometre.
+    v_no := false;
+    begin
+      insert into public.expense_claim_lines
+        (org_id, claim_id, line_no, claim_type_id, expense_date, description,
+         amount)
+      values (v_org, v_claim, 3, v_km, date '2026-07-09', 'Somewhere', 40);
+    exception when others then v_no := true; v_said := sqlerrm;
+    end;
+    perform pg_temp.check_true('a mileage line without a distance is refused',
+      v_no);
+    -- Named in the shop's own words, because "quantity required" does
+    -- not tell somebody it is kilometres they are being asked for.
+    perform pg_temp.check_true('in the unit the type names: ' || coalesce(v_said, ''),
+      v_said like '%kilometre%');
+
+    -- And an ordinary type is untouched by any of it: the amount typed
+    -- is the amount.
+    insert into public.expense_claim_lines
+      (org_id, claim_id, line_no, claim_type_id, expense_date, description,
+       amount)
+    values (v_org, v_claim, 4, v_free, date '2026-07-10', 'Parking', 12.50);
+    perform pg_temp.check_eq('an ordinary claim still states its own amount',
+      (select amount from public.expense_claim_lines
+        where claim_id = v_claim and line_no = 4), 12.50);
+  end;
+
   perform pg_temp.sign_out();
 end $$;
 

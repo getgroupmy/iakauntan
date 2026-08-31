@@ -10,6 +10,7 @@ import '../../data/models.dart';
 import '../../data/repository.dart';
 import '../shared/attachments_card.dart';
 import '../shared/receipt_capture.dart';
+import 'mileage_claim.dart';
 
 /// Expense claims, and the two ways one gets settled.
 ///
@@ -350,7 +351,22 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
   final _title = TextEditingController();
   final _description = TextEditingController();
   final _amount = TextEditingController();
+  final _quantity = TextEditingController();
   String? _typeId;
+
+  /// The claim type row behind `_typeId`, or null while the list is
+  /// still arriving — which is a first frame rather than an error, and
+  /// is why every function in `mileage_claim.dart` takes a nullable.
+  Map<String, dynamic>? _selectedType(
+    AsyncValue<List<Map<String, dynamic>>> types,
+  ) {
+    final list = types.valueOrNull;
+    if (list == null || _typeId == null) return null;
+    for (final t in list) {
+      if (t['id'] == _typeId) return t;
+    }
+    return null;
+  }
   final DateTime _date = DateTime.now();
   bool _saving = false;
   bool _payWithPayroll = true;
@@ -368,6 +384,7 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
     _title.dispose();
     _description.dispose();
     _amount.dispose();
+    _quantity.dispose();
     super.dispose();
   }
 
@@ -418,18 +435,29 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
                     (v ?? '').trim().isEmpty ? 'Describe the expense' : null,
               ),
               const SizedBox(height: Space.md),
-              TextFormField(
-                controller: _amount,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                    labelText: 'Amount (RM) *', prefixText: 'RM '),
-                validator: (v) {
-                  final n = double.tryParse((v ?? '').trim());
-                  if (n == null || n <= 0) return 'Enter an amount';
-                  return null;
-                },
-              ),
+              // 0368. A mileage type is claimed by the distance and
+              // priced by the database, so asking for a ringgit figure
+              // here would ask for a number that is then ignored — and
+              // the distance, the one thing anybody could check against
+              // a map, would go unrecorded.
+              if (isMileage(_selectedType(types)))
+                _MileageField(
+                  controller: _quantity,
+                  claimType: _selectedType(types),
+                )
+              else
+                TextFormField(
+                  controller: _amount,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Amount (RM) *', prefixText: 'RM '),
+                  validator: (v) {
+                    final n = double.tryParse((v ?? '').trim());
+                    if (n == null || n <= 0) return 'Enter an amount';
+                    return null;
+                  },
+                ),
               const SizedBox(height: Space.md),
               _ReceiptPicker(
                 files: _receipts,
@@ -493,7 +521,14 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
               'claim_type_id': _typeId,
               'expense_date': Fmt.iso(_date),
               'description': _description.text.trim(),
-              'amount': double.parse(_amount.text.trim()),
+              // The distance for a measured type; the database prices
+              // it and ignores anything sent as an amount. Sending both
+              // would be two numbers that should agree and are stored
+              // separately, which is the failure 0368 exists to remove.
+              if (isMileage(_selectedType(ref.read(claimTypesProvider))))
+                'quantity': double.parse(_quantity.text.trim())
+              else
+                'amount': double.parse(_amount.text.trim()),
             }
           ],
           payWithPayroll: _payWithPayroll,
@@ -788,6 +823,54 @@ class _Step extends StatelessWidget {
           ),
         ),
       ]),
+    );
+  }
+}
+
+/// The distance box on a claim measured by the kilometre.
+///
+/// Says what it comes to as the number is typed. The database computes
+/// the figure that is stored — two numbers that should agree and are
+/// stored separately are two numbers that will not — and this is the
+/// same arithmetic for the one thing a form has to do: tell somebody
+/// what they are about to claim before they send it.
+class _MileageField extends StatefulWidget {
+  const _MileageField({required this.controller, required this.claimType});
+
+  final TextEditingController controller;
+  final Map<String, dynamic>? claimType;
+
+  @override
+  State<_MileageField> createState() => _MileageFieldState();
+}
+
+class _MileageFieldState extends State<_MileageField> {
+  @override
+  Widget build(BuildContext context) {
+    final comes = mileageAmount(
+      claimType: widget.claimType,
+      quantity: widget.controller.text,
+    );
+    final rate = (widget.claimType?['rate_per_unit'] as num?)?.toDouble() ?? 0;
+    final unit = (widget.claimType?['unit_label'] as String?)?.trim();
+
+    return TextFormField(
+      controller: widget.controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      onChanged: (_) => setState(() {}),
+      decoration: InputDecoration(
+        labelText: claimQuantityLabel(widget.claimType),
+        suffixText: unit == null || unit.isEmpty ? null : unit,
+        helperText: comes != null
+            ? 'Comes to ${Fmt.money(comes)}'
+            : rate > 0
+            ? 'At ${Fmt.money(rate)} each'
+            : null,
+      ),
+      validator: (v) => mileageBlockedBecause(
+        claimType: widget.claimType,
+        quantity: v ?? '',
+      ),
     );
   }
 }
