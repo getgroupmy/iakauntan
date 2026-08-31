@@ -412,6 +412,171 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- The other side of it
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org    uuid := pg_temp.test_org('Diskaun Pembekal Sdn Bhd');
+  v_sup    uuid;
+  v_bank   uuid;
+  v_terms  uuid;
+  v_bill   uuid;
+  v_second uuid;
+  v_old    uuid;
+  v_pay    uuid;
+  v_ap     numeric;
+  v_inc    numeric;
+  v_said   text;
+  v_today  date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+begin
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', current_date)::date);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-1', 'Pembekal Sdn Bhd', 'supplier') returning id into v_sup;
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, currency)
+  values (v_org, (select id from public.accounts
+                   where org_id = v_org and code = '1110'),
+          'Current account', 'Maybank', 'MYR')
+  returning id into v_bank;
+
+  v_terms := pg_temp.sd_terms(v_org, '2-10-N30', 30, 'net', 2, 10);
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status, payment_term_id)
+  values (v_org, 'bill', 'BILL-1', v_today, v_sup, 'MYR', 1, 'draft',
+          v_terms)
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, account_id)
+  values (v_org, v_bill, 1, 'item', 'Materials', 1, 1000,
+          (select id from public.accounts
+            where org_id = v_org and code = '5100'));
+  perform public.post_purchase_document(v_bill);
+
+  perform pg_temp.check_eq('the bill takes its due date from the terms',
+    (select due_date from public.purchase_documents where id = v_bill)::text,
+    (v_today + 30)::text);
+
+  insert into public.purchase_payments
+    (org_id, payment_no, payment_date, contact_id, bank_account_id,
+     amount, unapplied_amount, currency, exchange_rate)
+  values (v_org, 'PAY-1', v_today, v_sup, v_bank, 980, 980, 'MYR', 1)
+  returning id into v_pay;
+  perform public.post_purchase_payment(v_pay);
+
+  perform public.allocate_payment_with_discount(v_pay, v_bill, 980, 20);
+
+  perform pg_temp.check_eq('the bill is settled',
+    (select balance_amount from public.purchase_documents where id = v_bill),
+    0);
+
+  -- The mirror of the sales assertion. Without the posting the payable
+  -- would be understated by twenty ringgit — the books showing less
+  -- owed than the creditors ledger, which is the disagreement that
+  -- flatters the balance sheet.
+  select coalesce(sum(l.credit - l.debit), 0) into v_ap
+    from public.gl_lines l
+    join public.accounts a on a.id = l.account_id
+   where a.org_id = v_org and a.code = '2110';
+  perform pg_temp.check_eq('and the payable is clear in the ledger too',
+    round(v_ap, 2), 0);
+
+  select coalesce(sum(l.credit - l.debit), 0) into v_inc
+    from public.gl_lines l
+    join public.accounts a on a.id = l.account_id
+   where a.org_id = v_org and a.code = '4900';
+  -- Income, not a reduction of cost: it is earned by paying sooner,
+  -- and putting it against Purchases would move it into cost of sales.
+  perform pg_temp.check_eq('with the discount as other income',
+    round(v_inc, 2), 20);
+  perform pg_temp.check_eq('and nothing against purchases',
+    (select coalesce(sum(l.debit - l.credit), 0) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+       join public.gl_entries e on e.id = l.entry_id
+      where a.org_id = v_org and a.code = '5100'
+        and e.description like 'Settlement discount%'), 0);
+
+  -- And the same refusals, so the two sides cannot drift apart. On a
+  -- second bill, because the first is settled and the discount on
+  -- nothing outstanding is nothing — which would refuse this for a
+  -- different reason and prove nothing about the rule under test.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status, payment_term_id)
+  values (v_org, 'bill', 'BILL-2', v_today, v_sup, 'MYR', 1, 'draft',
+          v_terms)
+  returning id into v_second;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, account_id)
+  values (v_org, v_second, 1, 'item', 'More materials', 1, 500,
+          (select id from public.accounts
+            where org_id = v_org and code = '5100'));
+  perform public.post_purchase_document(v_second);
+
+  begin
+    perform public.allocate_payment_with_discount(v_pay, v_second, 495, 10);
+    raise exception 'FAIL: more was taken than is owed on the bill';
+  exception when sqlstate '23514' then
+    v_said := sqlerrm;
+  end;
+  perform pg_temp.check_true('no more than is owed',
+    v_said like '%more than is owed on BILL-2%');
+
+  begin
+    perform public.allocate_payment_with_discount(v_pay, v_second, 480, 20);
+    raise exception 'FAIL: more was taken than the terms allow';
+  exception when sqlstate '23514' then
+    v_said := sqlerrm;
+  end;
+  perform pg_temp.check_true('and no more than the terms allow',
+    v_said like '%allow 10.00 as a settlement discount, not 20.00%');
+
+  -- A bill old enough that the window has closed.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status, payment_term_id)
+  values (v_org, 'bill', 'BILL-3', v_today - 40, v_sup, 'MYR', 1, 'draft',
+          v_terms)
+  returning id into v_old;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     unit_price, account_id)
+  values (v_org, v_old, 1, 'item', 'Old materials', 1, 500,
+          (select id from public.accounts
+            where org_id = v_org and code = '5100'));
+  perform public.post_purchase_document(v_old);
+
+  begin
+    perform public.allocate_payment_with_discount(v_pay, v_old, 490, 10);
+    raise exception 'FAIL: an expired supplier discount was taken';
+  exception when sqlstate '23514' then
+    v_said := sqlerrm;
+  end;
+  perform pg_temp.check_true('a supplier discount that ran out is not one',
+    v_said like '%ran out on%');
+
+  -- And an outsider takes none of it.
+  perform pg_temp.sign_in_as(pg_temp.another_user('outsider@sdp.test'));
+  begin
+    perform public.allocate_payment_with_discount(v_pay, v_second, 100, 0);
+    raise exception 'FAIL: an outsider allocated a payment';
+  exception when sqlstate '42501' then
+    v_said := sqlerrm;
+  end;
+  -- The message: `create_gl_entry` refuses an outsider too, so a test
+  -- taking any refusal would pass with this function's guard removed.
+  perform pg_temp.check_true('and is refused before anything is read',
+    v_said like '%not permitted to allocate a payment%');
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Who may
 -- ---------------------------------------------------------------------
 do $$
@@ -477,6 +642,10 @@ begin
     not has_function_privilege('anon',
       'public.allocate_with_discount(uuid, uuid, numeric, numeric, date)',
       'execute'));
+  perform pg_temp.check_true('and the purchase side of it',
+    not has_function_privilege('anon',
+      'public.allocate_payment_with_discount(uuid, uuid, numeric, numeric, '
+      'date)', 'execute'));
   perform pg_temp.check_true('while a signed-in user may take one',
     has_function_privilege('authenticated',
       'public.allocate_with_discount(uuid, uuid, numeric, numeric, date)',

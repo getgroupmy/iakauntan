@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'fx.dart';
+import 'settlement_discount.dart';
 
 /// Records a customer receipt or a supplier payment and allocates it
 /// against open documents. Both directions share this dialog because the
@@ -56,6 +57,15 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
 
   /// Amount being applied to each open document.
   final Map<String, double> _allocations = {};
+
+  /// Settlement discount taken on each, where the terms offer one.
+  /// `0385`: this cannot be written without the journal that posts it,
+  /// so it goes to the database with the allocation rather than after.
+  final Map<String, double> _discounts = {};
+
+  /// What each document's terms offer today, asked of the database
+  /// because the terms and the arithmetic are its.
+  final Map<String, DiscountOffer> _offers = {};
 
   /// Rate at which the money actually moved, which is not the rate the
   /// invoice was raised at — the difference between the two is the whole
@@ -158,7 +168,12 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
             exchangeRate: exchangeRate,
             allocations: [
               for (final e in _allocations.entries)
-                if (e.value > 0) (documentId: e.key, amount: e.value),
+                if (e.value > 0)
+                  (
+                    documentId: e.key,
+                    amount: e.value,
+                    discount: _discounts[e.key] ?? 0,
+                  ),
             ],
           ),
       successMessage:
@@ -254,6 +269,8 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                 onChanged: (v) => setState(() {
                   _contactId = v;
                   _allocations.clear();
+                  _discounts.clear();
+                  _offers.clear();
                 }),
               ),
               const SizedBox(height: 14),
@@ -261,6 +278,8 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                 kind: widget.kind,
                 contactId: _contactId!,
                 allocations: _allocations,
+                discounts: _discounts,
+                offers: _offers,
                 preselect: widget.preselectDocumentId,
                 onChanged: () => setState(() {}),
               ),
@@ -483,6 +502,8 @@ class _OpenDocuments extends ConsumerStatefulWidget {
     required this.kind,
     required this.contactId,
     required this.allocations,
+    required this.discounts,
+    required this.offers,
     required this.onChanged,
     this.preselect,
   });
@@ -490,6 +511,8 @@ class _OpenDocuments extends ConsumerStatefulWidget {
   final DocKind kind;
   final String contactId;
   final Map<String, double> allocations;
+  final Map<String, double> discounts;
+  final Map<String, DiscountOffer> offers;
   final VoidCallback onChanged;
   final String? preselect;
 
@@ -499,6 +522,25 @@ class _OpenDocuments extends ConsumerStatefulWidget {
 
 class _OpenDocumentsState extends ConsumerState<_OpenDocuments> {
   bool _seeded = false;
+  final Set<String> _asked = {};
+
+  /// What each document's terms offer, asked once per document. The
+  /// terms and the arithmetic are the database's — a screen that
+  /// offered a discount the ledger would refuse is worse than one that
+  /// offered none.
+  Future<void> _askOffers(List<BusinessDocument> docs) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    for (final d in docs) {
+      if (!_asked.add(d.id)) continue;
+      final row = await repo.settlementDiscount(d.id);
+      if (row == null || !mounted) continue;
+      final offer = DiscountOffer.fromJson(row);
+      if (offer.isOffered) {
+        setState(() => widget.offers[d.id] = offer);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -527,6 +569,9 @@ class _OpenDocumentsState extends ConsumerState<_OpenDocuments> {
           );
         }
 
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _askOffers(list));
+
         // Preselect the document the user came from, once.
         if (!_seeded) {
           _seeded = true;
@@ -549,12 +594,23 @@ class _OpenDocumentsState extends ConsumerState<_OpenDocuments> {
               _AllocationRow(
                 doc: doc,
                 amount: widget.allocations[doc.id] ?? 0,
+                discount: widget.discounts[doc.id] ?? 0,
+                offer: widget.offers[doc.id],
                 onChanged: (value) {
                   if (value <= 0) {
                     widget.allocations.remove(doc.id);
+                    widget.discounts.remove(doc.id);
                   } else {
                     widget.allocations[doc.id] =
                         value.clamp(0, doc.balanceAmount);
+                  }
+                  widget.onChanged();
+                },
+                onDiscount: (value) {
+                  if (value <= 0) {
+                    widget.discounts.remove(doc.id);
+                  } else {
+                    widget.discounts[doc.id] = value;
                   }
                   widget.onChanged();
                 },
@@ -570,12 +626,21 @@ class _AllocationRow extends StatefulWidget {
   const _AllocationRow({
     required this.doc,
     required this.amount,
+    required this.discount,
+    required this.offer,
     required this.onChanged,
+    required this.onDiscount,
   });
 
   final BusinessDocument doc;
   final double amount;
+  final double discount;
+
+  /// What this document's terms offer today, as the database works it
+  /// out. Null where they offer nothing, which is the ordinary case.
+  final DiscountOffer? offer;
   final ValueChanged<double> onChanged;
+  final ValueChanged<double> onDiscount;
 
   @override
   State<_AllocationRow> createState() => _AllocationRowState();
@@ -613,10 +678,14 @@ class _AllocationRowState extends State<_AllocationRow> {
   Widget build(BuildContext context) {
     final doc = widget.doc;
     final selected = widget.amount > 0;
+    final offer = widget.offer;
+    final said = describeOffer(
+        offer, (v) => Fmt.money(v, currency: doc.currency));
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
+      child: Column(children: [
+      Row(
         children: [
           Checkbox(
             value: selected,
@@ -654,6 +723,39 @@ class _AllocationRowState extends State<_AllocationRow> {
           ),
         ],
       ),
+      // Only where the terms actually offer one, and only on a document
+      // being settled. A line on every row saying no discount is
+      // available is noise pretending to be information.
+      if (said != null && selected)
+        Padding(
+          padding: const EdgeInsets.only(left: 48, top: 2, bottom: 4),
+          child: Row(children: [
+            Expanded(
+              child: Text(
+                said,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: offer!.stillOpen ? context.colors.success : null,
+                ),
+              ),
+            ),
+            if (offer.stillOpen)
+              TextButton(
+                onPressed: widget.discount > 0
+                    ? () => widget.onDiscount(0)
+                    : () {
+                        // Both figures at once: the cash is what is
+                        // left after the discount, and setting one
+                        // without the other is how the allocation comes
+                        // to more than is owed.
+                        widget.onDiscount(offer.discount);
+                        widget.onChanged(doc.balanceAmount - offer.discount);
+                      },
+                child: Text(widget.discount > 0 ? 'Undo' : 'Take it'),
+              ),
+          ]),
+        ),
+      ]),
     );
   }
 }

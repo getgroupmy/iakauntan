@@ -1668,6 +1668,22 @@ class Repo {
     return id.toString();
   }
 
+  /// The purchase side of the same thing: Dr Payable, Cr Other Income.
+  Future<String> allocatePaymentWithDiscount({
+    required String paymentId,
+    required String billId,
+    required num amount,
+    num? discount,
+  }) async {
+    final id = await callRpc('allocate_payment_with_discount', params: {
+      'p_payment': paymentId,
+      'p_bill': billId,
+      'p_amount': amount,
+      'p_discount': discount,
+    });
+    return id.toString();
+  }
+
   /// What a run would charge, per asset, before anything is posted.
   Future<List<DepreciationLine>> depreciationPreview(DateTime asAt) async {
     final data = await callRpc(
@@ -2899,7 +2915,8 @@ class Repo {
     required String contactId,
     required double amount,
     required DateTime date,
-    required List<({String documentId, double amount})> allocations,
+    required List<({String documentId, double amount, double discount})>
+        allocations,
     String? bankAccountId,
     String? paymentModeCode,
     String? reference,
@@ -2938,22 +2955,27 @@ class Repo {
 
     final settlementId = row['id'] as String;
 
-    if (allocations.isNotEmpty) {
-      await client.from('payment_allocations').insert([
-        for (final a in allocations)
-          {
-            'org_id': orgId,
-            if (isReceipt)
-              'receipt_id': settlementId
-            else
-              'payment_id': settlementId,
-            if (isReceipt)
-              'invoice_id': a.documentId
-            else
-              'bill_id': a.documentId,
-            'amount': a.amount,
-          },
-      ]);
+    // Every allocation goes through the function, discounted or not.
+    // Writing them straight into `payment_allocations` was the path
+    // that could carry a discount nothing posted — `0385`'s guard
+    // refuses that now, and one path means the discount cannot be
+    // written by a route that forgets the journal.
+    for (final a in allocations) {
+      if (isReceipt) {
+        await allocateWithDiscount(
+          receiptId: settlementId,
+          invoiceId: a.documentId,
+          amount: a.amount,
+          discount: a.discount > 0 ? a.discount : null,
+        );
+      } else {
+        await allocatePaymentWithDiscount(
+          paymentId: settlementId,
+          billId: a.documentId,
+          amount: a.amount,
+          discount: a.discount > 0 ? a.discount : null,
+        );
+      }
     }
 
     await callRpc(

@@ -2425,3 +2425,44 @@ run the checker before pushing**, against the same throwaway Postgres
 It answers in a second and prints the file and line. There are ninety-
 seven pairs of tables in this schema that can be joined more than one
 way; the odds of a new embed landing on one are not small.
+
+## The other side of the discount, and the mutant left in the database
+
+`0385`'s own header describes both sides of a settlement discount — Dr
+4300 Cr Receivable when a customer takes one, Dr Payable Cr Other Income
+when the company takes one from a supplier — and built only the first.
+That is a worse artefact than a migration claiming less, because the
+next person reads the prose and not the body. `0386` builds the second:
+`allocate_payment_with_discount`, with the same four refusals as the
+sales side so the two cannot drift apart.
+
+The account is the decision worth recording. The discount a company
+takes for paying early is credited to **4900 Other Income**, not against
+**5100 Purchases**. It is earned by paying sooner, not by buying more
+cheaply; putting it against Purchases would move it into cost of sales
+and restate a cost the stock valuation is built on. The test asserts
+that nothing lands against 5100 for it.
+
+`recordSettlement` in the client wrote its allocations straight into
+`payment_allocations` and then posted — the one path that could carry a
+discount with no journal behind it. `0385`'s `discount_entry_id` guard
+refuses that now, so the dialog routes **every** allocation, discounted
+or not, through these two functions. One path means the discount cannot
+be written by a route that forgets the ledger.
+
+### A failure that was mine, not the code's
+
+The first full-suite run after 0386 reported `FAIL: an expired supplier
+discount was taken`, and the guard was plainly there in the file. It was
+in the file and not in the database: I had run the suite with `--keep`,
+which skips `bootstrap` and `migrate` and reuses the cluster the
+previous mutation run left behind — still carrying its last mutant, `if
+false then` where the expiry check belongs.
+
+`--keep` is for the embed checker, which needs a database that already
+exists, and for re-running one test file while iterating. **A run whose
+result you intend to act on must not use it**, and a mutation run must
+be followed by a clean rebuild before the suite is believed again. The
+useful part: the deployed body is the truth, and `select prosrc from
+pg_proc` settles in one query whether the database is running the code
+you are reading.
