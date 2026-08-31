@@ -105,8 +105,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788179664.0982213,
-    "ast_hash": "e599abb7a8e0a925c548971e98b52a4c",
+    "mtime": 1788184018.9144802,
+    "ast_hash": "efc6ae63f46edd557cc6e0605cf1f938",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
@@ -195,8 +195,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/hr_setup_screen.dart": {
-    "mtime": 1788178662.0213943,
-    "ast_hash": "517b82d40d0315808ad8ee75fd48477d",
+    "mtime": 1788184012.1172416,
+    "ast_hash": "bb557d724c376aeb5f99f16c16335da7",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/leave_screen.dart": {
@@ -220,8 +220,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/payslip_screen.dart": {
-    "mtime": 1787201675.6595778,
-    "ast_hash": "a707a85667dab2aff07a507f7647460b",
+    "mtime": 1788184018.9168203,
+    "ast_hash": "2e1e97d9cdef0f843fd0ee5f759307cf",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/people_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788180348.9455388,
-    "ast_hash": "7dc5ab889f57891d00cd4e55dd85dab9",
+    "mtime": 1788184144.2919414,
+    "ast_hash": "98682b15a510a571c8c768025ab675bf",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788183595.0972593,
-    "ast_hash": "d15bdb18dbeee38dc8ac413287a327e9",
+    "mtime": 1788184607.1750398,
+    "ast_hash": "f9dc41d44820b8c85ef05fc958fe589b",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -4290,8 +4290,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/payroll_run.sql": {
-    "mtime": 1787822946.0265896,
-    "ast_hash": "af2df7b7596ba2149a22db0ceae7808b",
+    "mtime": 1788184144.3068995,
+    "ast_hash": "5e45f569d3a84f13aaa5fbd847390021",
     "semantic_hash": ""
   },
   "supabase/tests/payslip_access.sql": {
@@ -5992,6 +5992,16 @@
   "supabase/migrations/0369_the_column_that_proves_the_others.sql": {
     "mtime": 1788183267.067705,
     "ast_hash": "d57921bb6acac326ddf0d2dee823215e",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0370_the_levy_charged_on_the_wrong_wage.sql": {
+    "mtime": 1788184290.0228665,
+    "ast_hash": "c1e22a8cfbb3dbaf11ef65fb7b6fa2a1",
+    "semantic_hash": ""
+  },
+  "supabase/tests/hrdf_levy.sql": {
+    "mtime": 1788184120.902486,
+    "ast_hash": "309c46e7fb94192fb2218e32fcccccd2",
     "semantic_hash": ""
   }
 }
