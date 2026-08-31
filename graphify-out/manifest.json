@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788208083.605323,
-    "ast_hash": "72ac47cbf5025ad306fc753af0253cf6",
+    "mtime": 1788211375.085182,
+    "ast_hash": "57f9263877b0f2e03aef3b4d70a26383",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788206467.8141274,
-    "ast_hash": "29404ffe00b223e22f1c0b7cf25f6866",
+    "mtime": 1788209229.8372965,
+    "ast_hash": "c1cf50f021442cec9e64af3df35b8f04",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788208805.6199534,
-    "ast_hash": "2132db5d16b979caf63c09ec32bac612",
+    "mtime": 1788211766.3081295,
+    "ast_hash": "2729c40fd1e9814e63cef30663744cfc",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -2730,8 +2730,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/property/site_screen.dart": {
-    "mtime": 1788157295.0248916,
-    "ast_hash": "49c3128b884132e2ddaebaeb5c91bb7b",
+    "mtime": 1788211488.916113,
+    "ast_hash": "c8da9c8e342b1cf318c972ec29e65c3e",
     "semantic_hash": ""
   },
   "app/test/property_test.dart": {
@@ -2760,8 +2760,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/property.sql": {
-    "mtime": 1787197084.9361181,
-    "ast_hash": "19e0d0fc18a5ee664a8721a184d231a0",
+    "mtime": 1788209408.6607955,
+    "ast_hash": "9b7e5f031937767bf5b012d190864c69",
     "semantic_hash": ""
   },
   "supabase/tests/tenant_foreign_keys.sql": {
@@ -5320,8 +5320,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/property/statutory_charge_sheet.dart": {
-    "mtime": 1788157295.0248916,
-    "ast_hash": "5688fe49d01af36d1659bdd27c9b8c23",
+    "mtime": 1788211462.5112262,
+    "ast_hash": "9b4ff09b4c473530a4c1dd2e993a3ebc",
     "semantic_hash": ""
   },
   "app/lib/src/features/property/strata_sheet.dart": {
@@ -6297,6 +6297,26 @@
   "supabase/migrations/0386_the_other_side_of_the_discount.sql": {
     "mtime": 1788208070.310179,
     "ast_hash": "b1b9433680257824fb76b1c38acb949a",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/property/statutory_charge_payment.dart": {
+    "mtime": 1788211351.7522027,
+    "ast_hash": "db74ddcf25bbc93732d113dd60c5d419",
+    "semantic_hash": ""
+  },
+  "app/test/statutory_charge_payment_test.dart": {
+    "mtime": 1788211351.7537456,
+    "ast_hash": "ee0d5b3650aca39c6d20e931b82f399c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0387_the_quit_rent_that_was_paid_by_typing_a_date.sql": {
+    "mtime": 1788211297.9811566,
+    "ast_hash": "dd85950a54134fddc47599662d3e4c9f",
+    "semantic_hash": ""
+  },
+  "supabase/tests/statutory_charges.sql": {
+    "mtime": 1788209939.7494388,
+    "ast_hash": "7cb2a4041943a44e19bed4a18dd9016a",
     "semantic_hash": ""
   }
 }
