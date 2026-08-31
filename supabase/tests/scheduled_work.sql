@@ -186,4 +186,71 @@ begin
     v_n >= 2);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- And the nightly run actually does the HR work wired into it
+-- ---------------------------------------------------------------------
+--
+-- `run_daily_jobs` wraps its per-organization work in an exception
+-- handler that turns any failure into a `raise warning`. That is the
+-- right choice — a company whose roster is in a state the attendance
+-- pass cannot read must not stop the recurring invoices behind it — and
+-- it means a genuine bug in either function is swallowed into a log
+-- nobody reads.
+--
+-- Reachability is asserted above and is not the same claim. This is the
+-- run, on a company that holds the module, with data that should move.
+-- Without it, `close_attendance_day` and `expire_carried_leave` could
+-- each raise on every organization every night and every test here
+-- would still pass.
+do $$
+declare
+  v_org   uuid;
+  v_shift uuid;
+  v_emp   uuid;
+  v_type  uuid;
+  v_yday  date := current_date - 1;
+begin
+  v_org := pg_temp.test_org('Kerja Malam Sdn Bhd', array['hr']);
+
+  insert into public.work_shifts
+    (org_id, code, name, start_time, end_time, work_days, is_default)
+  values (v_org, 'DAY', 'Office hours', '09:00', '18:00',
+          array[0,1,2,3,4,5,6], true)
+  returning id into v_shift;
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, employment_status)
+  values (v_org, 'E-1', 'Siti', v_yday - 90, 'active') returning id into v_emp;
+  insert into public.employee_shifts (org_id, employee_id, shift_id, effective_from)
+  values (v_org, v_emp, v_shift, v_yday - 90);
+
+  -- Every weekday is a working day for this shift, so yesterday is one
+  -- whatever day the suite happens to run on.
+  insert into public.attendance_records
+    (org_id, employee_id, work_date, shift_id, clock_in, status)
+  values (v_org, v_emp, v_yday, v_shift,
+          (v_yday + time '09:00') at time zone 'Asia/Kuala_Lumpur', 'present');
+
+  insert into public.leave_types
+    (org_id, code, name, default_days, max_carry_forward,
+     carry_forward_expiry_months)
+  values (v_org, 'AL', 'Annual', 14, 5, 1) returning id into v_type;
+  insert into public.leave_balances
+    (org_id, employee_id, leave_type_id, leave_year, entitled_days,
+     carried_forward, taken_days)
+  values (v_org, v_emp, v_type, extract(year from current_date)::integer,
+          14, 5, 0);
+
+  perform app.run_daily_jobs(current_date);
+
+  perform pg_temp.check_eq(
+    'the nightly run marks yesterday''s forgotten punch-out',
+    (select r.status::text from public.attendance_records r
+      where r.employee_id = v_emp and r.work_date = v_yday), 'incomplete');
+  perform pg_temp.check_eq('and lapses the carried leave that was due to',
+    (select b.carried_forward from public.leave_balances b
+      where b.employee_id = v_emp and b.leave_type_id = v_type), 0.00);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
