@@ -10,6 +10,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/places_repository.dart';
 import '../../data/repository.dart';
+import 'msic_picker.dart';
 
 bool _present(String? s) => s != null && s.trim().isNotEmpty;
 
@@ -365,13 +366,36 @@ class _CompanyDialogState extends ConsumerState<_CompanyDialog> {
                 ),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _msic,
-                enabled: !_saving,
-                decoration: const InputDecoration(
-                  labelText: 'MSIC code',
-                  hintText: '62010',
-                ),
+              // Picked, not typed. A wrong MSIC code is a misstatement
+              // on the incorporation and on every annual return after
+              // it, and it is not a thing anybody types correctly from
+              // memory.
+              Consumer(
+                builder: (context, ref, _) {
+                  final all =
+                      ref.watch(msicCodesProvider).valueOrNull ??
+                      const <Map<String, dynamic>>[];
+                  return ListTile(
+                    key: const ValueKey('company-msic'),
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('What the business does'),
+                    subtitle: Text(msicSummary(all, _msic.text)),
+                    trailing: const Icon(Icons.search, size: 18),
+                    onTap: _saving
+                        ? null
+                        : () async {
+                            final picked = await pickMsicCode(
+                              context,
+                              current: _msic.text.trim().isEmpty
+                                  ? null
+                                  : _msic.text.trim(),
+                            );
+                            if (picked != null) {
+                              setState(() => _msic.text = picked);
+                            }
+                          },
+                  );
+                },
               ),
               const Divider(height: Space.xl),
               Text(

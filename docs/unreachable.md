@@ -440,9 +440,19 @@ writing down so the next pass does not chase them again.
 
 ### 1. Smaller, but real
 
-- **Reference pickers**: `ref_countries`, `ref_msic_codes`,
-  `ref_tax_types`, `ref_einvoice_types`, `ref_exemption_reasons` are
-  typed by hand where they are used at all.
+- **Reference pickers**: `ref_countries`, `ref_tax_types`,
+  `ref_einvoice_types`, `ref_exemption_reasons` are typed by hand where
+  they are used at all.
+
+  **`ref_msic_codes` came off this list, and it was the worst of them.**
+  Not merely typed by hand: the onboarding form declared an `_msicCode`,
+  sent it to `create_organization`, and *nothing ever assigned it*, so
+  every company created through that form was registered with no
+  business activity at all. The company card asked for the five digits
+  in a free-text box, against a table seeded in `0011` with a trigram
+  index on the description put there so it could be searched by what a
+  business actually does. A wrong MSIC code is a misstatement on the
+  incorporation and on every annual return after it.
 
 Two entries came off this list at `832dc9e`, and one was wrong to be on
 it in the first place:

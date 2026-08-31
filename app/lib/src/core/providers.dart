@@ -2529,6 +2529,12 @@ final stockTransferLinesProvider = FutureProvider.autoDispose
       (ref, id) => requireRepo(ref).stockTransferLines(id),
     );
 
+/// The MSIC 2008 codes SSM registers a business activity under. 0002.
+final msicCodesProvider =
+    FutureProvider<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).msicCodes(),
+    );
+
 /// What a shop files its items under. 0003.
 final itemCategoriesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(

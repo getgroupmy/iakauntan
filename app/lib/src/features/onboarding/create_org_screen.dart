@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/places_repository.dart';
+import '../settings/msic_picker.dart';
 
 /// First-run setup. One call to create_organization() stands up the whole
 /// tenant: chart of accounts, SST codes, fiscal calendar and pipeline.
@@ -233,6 +234,37 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                       DropdownMenuItem(value: e.key, child: Text(e.value)),
                   ],
                   onChanged: (v) => setState(() => _entityType = v ?? 'sdn_bhd'),
+                ),
+                const SizedBox(height: 14),
+                // `_msicCode` was declared here and sent to
+                // `create_organization`, and nothing ever set it — so
+                // every company created through this form was
+                // registered with no business activity at all, against
+                // a list of them seeded in 0011.
+                Consumer(
+                  builder: (context, ref, _) {
+                    final all =
+                        ref.watch(msicCodesProvider).valueOrNull ??
+                        const <Map<String, dynamic>>[];
+                    return ListTile(
+                      key: const ValueKey('org-msic'),
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('What the business does'),
+                      subtitle: Text(msicSummary(all, _msicCode)),
+                      trailing: const Icon(Icons.search, size: 18),
+                      onTap: _busy
+                          ? null
+                          : () async {
+                              final picked = await pickMsicCode(
+                                context,
+                                current: _msicCode,
+                              );
+                              if (picked != null) {
+                                setState(() => _msicCode = picked);
+                              }
+                            },
+                    );
+                  },
                 ),
                 const SizedBox(height: 14),
                 _Row2(

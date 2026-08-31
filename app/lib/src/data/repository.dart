@@ -618,6 +618,23 @@ class Repo {
     return _rows(data);
   }
 
+  /// The MSIC 2008 business activity codes SSM registers a company
+  /// under.
+  ///
+  /// `ref_msic_codes` has been in `0002` since the second migration,
+  /// seeded in `0011`, with a trigram index on the description so it
+  /// can be searched by what a business actually does. Nothing read
+  /// it: the onboarding form declared an `_msicCode` that nothing ever
+  /// set, and the company card asked for the five digits in a free-text
+  /// box.
+  Future<List<Map<String, dynamic>>> msicCodes() async => _rows(
+    await client
+        .from('ref_msic_codes')
+        .select('code, description, category')
+        .eq('is_active', true)
+        .order('code'),
+  );
+
   // ------------------------------------------------------------------
   // Foreign exchange
   // ------------------------------------------------------------------
