@@ -3987,6 +3987,36 @@ extension RepoHr on Repo {
         : Employee.fromJson(Map<String, dynamic>.from(row));
   }
 
+  /// Takes somebody off the payroll.
+  ///
+  /// Not part of `saveEmployee`, and deliberately: `calculate_payroll_run`
+  /// goes by `last_working_date`, so a departure is a statement about
+  /// pay rather than a field on a form, and `0371` refuses the halves.
+  Future<void> recordDeparture({
+    required String employeeId,
+    required DateTime lastWorkingDay,
+    required String kind,
+    String? reason,
+    DateTime? resignationDate,
+  }) => callRpc(
+    'record_departure',
+    params: {
+      'p_employee': employeeId,
+      'p_last_working_date': Fmt.iso(lastWorkingDay),
+      'p_status': kind,
+      'p_reason': reason,
+      'p_resignation_date':
+          resignationDate == null ? null : Fmt.iso(resignationDate),
+    },
+  );
+
+  /// Undoes one. A resignation withdrawn and a departure recorded
+  /// against the wrong person are both ordinary.
+  Future<void> reinstateEmployee(String employeeId) => callRpc(
+    'reinstate_employee',
+    params: {'p_employee': employeeId},
+  );
+
   Future<String> saveEmployee(Map<String, dynamic> values, {String? id}) async {
     if (id != null) {
       await client.from('employees').update(values).eq('id', id);

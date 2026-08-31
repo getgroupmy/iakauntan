@@ -8,6 +8,8 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'departure.dart';
+import 'departure_dialog.dart';
 import 'employee_records.dart';
 import 'standing_deductions.dart';
 import 'tax_year_section.dart';
@@ -42,6 +44,15 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
   bool _epf = true, _socso = true, _eis = true, _pcb = true, _hrdf = true;
   bool _saving = false;
   bool _loaded = false;
+
+  /// The day they last worked, when they have left.
+  ///
+  /// Held because it decides two things on this form: the status
+  /// dropdown is hidden — `record_departure` owns the status once
+  /// somebody has gone, and offering it here is how the record came to
+  /// disagree with the payroll run in the first place — and
+  /// `employment_status` is left out of the save entirely.
+  DateTime? _leftOn;
 
   TextEditingController _ctl(String key, [String? initial]) =>
       _c.putIfAbsent(key, () => TextEditingController(text: initial));
@@ -78,7 +89,13 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
         _blankIfZero(e.epfVoluntaryEmployerRate);
     _ctl('bank_name').text = e.bankName ?? '';
     _ctl('bank_account_no').text = e.bankAccountNo ?? '';
-    _status = e.employmentStatus;
+    _leftOn = e.lastWorkingDate;
+    // Never a leaving value: those come from `record_departure`, and a
+    // dropdown showing one is a dropdown offering to change it.
+    _status = departureKinds.containsKey(e.employmentStatus) ||
+            e.employmentStatus == 'notice'
+        ? 'active'
+        : e.employmentStatus;
     _type = e.employmentType;
     _marital = e.maritalStatus;
     _residency = e.residencyStatus;
@@ -224,26 +241,40 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
                             },
                             onChanged: (v) => setState(() => _type = v!),
                           ),
-                          _dropdown<String>(
-                            label: 'Status',
-                            value: _status,
-                            items: const {
-                              'probation': 'Probation',
-                              'active': 'Confirmed',
-                              'notice': 'Serving notice',
-                              'resigned': 'Resigned',
-                              'terminated': 'Terminated',
-                              'retired': 'Retired',
-                              'suspended': 'Suspended',
-                            },
-                            onChanged: (v) => setState(() => _status = v!),
-                          ),
+                          // The three leaving statuses and `notice` are
+                          // not on this list any more. Choosing one set a
+                          // field `calculate_payroll_run` has never read,
+                          // so the record said Resigned and the next run
+                          // paid them in full — see `0371`. A departure
+                          // is a last working day, and it is asked for
+                          // below where the date can be given with it.
+                          if (_leftOn == null)
+                            _dropdown<String>(
+                              label: 'Status',
+                              value: _status,
+                              items: const {
+                                'probation': 'Probation',
+                                'active': 'Confirmed',
+                                'suspended': 'Suspended',
+                              },
+                              onChanged: (v) => setState(() => _status = v!),
+                            )
+                          else
+                            const SizedBox.shrink(),
                         ]),
                         _DateField(
                           label: 'Joined on *',
                           value: _hireDate,
                           onChanged: (d) => setState(() => _hireDate = d),
                         ),
+                        if (employee != null)
+                          _DepartureRow(
+                            employee: employee,
+                            onChanged: () {
+                              _loaded = false;
+                              ref.invalidate(employeeProvider);
+                            },
+                          ),
                       ],
                     ),
                     _Section(
@@ -442,7 +473,10 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
       'department_id': _departmentId,
       'position_id': _positionId,
       'employment_type': _type,
-      'employment_status': _status,
+      // Omitted once they have left. The status and the last working day
+      // are one fact and `record_departure` writes both; sending half of
+      // it from here is exactly what `0371` refuses.
+      if (_leftOn == null) 'employment_status': _status,
       'hire_date': Fmt.iso(_hireDate),
       'basic_salary':
           double.tryParse(_ctl('basic_salary').text.trim()) ?? 0,
@@ -510,6 +544,62 @@ class _Section extends StatelessWidget {
               ...children,
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Whether they have left, and the way to say so.
+///
+/// A row rather than a field, because a departure is not an attribute of
+/// a person: it is the thing that takes them off the payroll.
+/// `calculate_payroll_run` reads `last_working_date` and has never read
+/// `employment_status`, so until `0371` a leaver marked in the dropdown
+/// kept being paid, kept having EPF and PCB remitted, and kept being
+/// paid by the bank file.
+class _DepartureRow extends ConsumerWidget {
+  const _DepartureRow({required this.employee, required this.onChanged});
+
+  final Employee employee;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final left = employee.lastWorkingDate;
+    if (left == null) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          key: const ValueKey('record-departure'),
+          icon: const Icon(Icons.logout, size: 18),
+          label: const Text('Record a departure'),
+          onPressed: () async {
+            if (await showDepartureDialog(context, employee: employee)) {
+              onChanged();
+            }
+          },
+        ),
+      );
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(top: Space.sm),
+      child: ListTile(
+        leading: const Icon(Icons.logout),
+        title: Text('Last working day ${Fmt.date(left)}'),
+        subtitle: Text(
+          '${Fmt.label(employee.employmentStatus)} · not on any payroll '
+          'run after that day',
+        ),
+        trailing: TextButton(
+          key: const ValueKey('reinstate'),
+          onPressed: () async {
+            if (await confirmReinstate(context, ref, employee: employee)) {
+              onChanged();
+            }
+          },
+          child: const Text('Reinstate'),
         ),
       ),
     );

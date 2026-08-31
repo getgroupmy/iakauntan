@@ -455,10 +455,13 @@ begin
           date '1988-01-01', 'citizen', 'notice')
   returning id into v_notice;
   insert into public.employees
+  -- With a last working day, because `0371` will not accept a leaver
+  -- without one: the payroll run goes by the date and not by the status,
+  -- so a resignation with no date is somebody still being paid.
     (org_id, employee_no, full_name, hire_date, basic_salary,
-     date_of_birth, residency_status, employment_status)
+     date_of_birth, residency_status, employment_status, last_working_date)
   values (v_org, 'E4', 'Devi', date '2018-01-01', 7000,
-          date '1985-01-01', 'citizen', 'resigned')
+          date '1985-01-01', 'citizen', 'resigned', date '2025-12-31')
   returning id into v_gone;
 
   v_dash := public.module_dashboard(v_org);

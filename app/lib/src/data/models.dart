@@ -1735,6 +1735,7 @@ class Employee {
     this.employmentStatus = 'active',
     this.employmentType = 'full_time',
     this.hireDate,
+    this.lastWorkingDate,
     this.basicSalary = 0,
     this.nric,
     this.epfNo,
@@ -1764,6 +1765,12 @@ class Employee {
   final String employmentStatus;
   final String employmentType;
   final DateTime? hireDate;
+
+  /// The day they last worked, and the only thing the payroll run reads
+  /// when deciding whether to pay somebody. `employment_status` is not
+  /// consulted by `calculate_payroll_run` at all, which is why `0371`
+  /// refuses to let the two say different things.
+  final DateTime? lastWorkingDate;
   final double basicSalary;
   final String? nric;
   final String? epfNo;
@@ -1818,6 +1825,7 @@ class Employee {
       employmentStatus: j['employment_status']?.toString() ?? 'active',
       employmentType: j['employment_type']?.toString() ?? 'full_time',
       hireDate: Fmt.parseDate(j['hire_date']),
+      lastWorkingDate: Fmt.parseDate(j['last_working_date']),
       basicSalary: Fmt.toDouble(j['basic_salary']),
       nric: j['nric']?.toString(),
       epfNo: j['epf_no']?.toString(),

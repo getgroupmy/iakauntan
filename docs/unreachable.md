@@ -1518,6 +1518,51 @@ multiplies them.
   part of `0370` no assertion covers, because migrations apply in order
   onto an empty database and there is no history there to backfill.
 
+- **A control that appeared to have been applied**
+  (`employees.last_working_date`, `resignation_date`,
+  `termination_reason`). The worst find in this document, and it is a
+  different failure from everything above it.
+
+  The employee editor has offered Resigned, Terminated and Retired since
+  it was written. `calculate_payroll_run` has never read
+  `employment_status`. It picks who to pay by date — `last_working_date
+  is null or >= period_start` — and nothing could set that date. So
+  somebody marked a leaver Resigned, the record said Resigned, every
+  list said Resigned, and the next payroll run paid them a full month's
+  salary, contributed EPF and SOCSO on it, deducted and remitted PCB
+  against their tax file, and the bank payment file sent the money to
+  their account. Every month, until somebody noticed.
+
+  Everything else in these sweeps is an **absence**: nothing happens,
+  and an option missing from a menu is at least indistinguishable from
+  one that was never built. This is a **falsehood**. The person did the
+  thing the software asked of them and the software did the opposite of
+  what they asked — and every screen downstream agreed with it.
+
+  The fix that suggests itself is to make the engine read the status
+  too, so either one stops the payment. `0371` does not, and the reason
+  is the general one: two sources of truth for one fact is how they come
+  to disagree. A leaver excluded by status with no last day cannot be
+  paid the days they *did* work in their final month, which is a
+  different wrong answer arriving quietly. The date stays the only thing
+  the engine reads, and a trigger refuses to let the two say different
+  things.
+
+  Judging the change and not the row, deliberately, and this is the
+  second use of that note. Every record ever set through the old
+  dropdown is sitting in a leaving status with no date, and refusing to
+  save one until the question is answered would mean nobody can correct
+  a phone number on a colleague who left last year. The trigger fires
+  when the departure is being declared or moved, which is the moment the
+  question is answerable; a `do` block names the existing ones instead.
+
+  And the sixth sweep gets one back. `app.employment_status` has carried
+  `notice` since `0025` and the dropdown offered it beside the rest,
+  which made it a thing somebody typed. Serving notice is exactly "has
+  resigned, and the last working day has not arrived", so
+  `record_departure` derives it — the value now means something no other
+  value means.
+
 - **And one left deliberately unwritten.** `bank_transactions.value_date`
   is the day funds become good, which differs from the transaction date
   on a cheque deposit. `0369` records the balance beside it and not this,
