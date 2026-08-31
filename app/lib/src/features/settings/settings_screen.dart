@@ -12,6 +12,7 @@ import '../../data/ocr_repository.dart';
 import '../../data/platform_catalog_repository.dart';
 import '../../data/repository.dart';
 import '../auth/reset_password_screen.dart' show validatePassword;
+import '../team/invitations.dart';
 import 'addresses_card.dart';
 import 'claim_approval_card.dart';
 import 'branches_card.dart';
@@ -2329,6 +2330,22 @@ class _AboutCard extends ConsumerWidget {
                 label: const Text('Change password'),
               ),
             const SizedBox(height: 8),
+            // Somebody who already had an account when they were
+            // invited has no other way in. `app.handle_new_user` claims
+            // a pending invitation at *signup*, so the accidental path
+            // only ever worked for people who did not have an account
+            // yet — an accountant taking on a second company's books
+            // was invited, never told, and the row expired in a
+            // fortnight.
+            OutlinedButton.icon(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => const _JoinCompanyDialog(),
+              ),
+              icon: const Icon(Icons.group_add_outlined, size: 18),
+              label: const Text('Join another company'),
+            ),
+            const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: () async {
                 await ref.read(supabaseProvider).auth.signOut();
@@ -2662,6 +2679,112 @@ class _WaysToPay extends ConsumerWidget {
               ],
             ),
           ),
+      ],
+    );
+  }
+}
+
+/// Taking up an invitation with the code somebody was given.
+///
+/// The check before the round trip is a courtesy, not a control. What
+/// decides is `accept_invitation`, and the rule that matters is one
+/// this side cannot evaluate: the caller has to be signed in as the
+/// address the invitation names. That is `0353`'s answer to a token
+/// that every member of the inviting company can read.
+class _JoinCompanyDialog extends ConsumerStatefulWidget {
+  const _JoinCompanyDialog();
+
+  @override
+  ConsumerState<_JoinCompanyDialog> createState() => _JoinCompanyState();
+}
+
+class _JoinCompanyState extends ConsumerState<_JoinCompanyDialog> {
+  final _code = TextEditingController();
+  bool _busy = false;
+  String? _said;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _join() async {
+    final blocked = joinBlockedBecause(_code.text);
+    if (blocked != null) {
+      setState(() => _said = blocked);
+      return;
+    }
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    setState(() {
+      _busy = true;
+      _said = null;
+    });
+    try {
+      final orgId = await repo.acceptInvitation(cleanCode(_code.text));
+      if (!mounted) return;
+      // Open the company they have just joined, rather than leaving
+      // them on the settings screen of the one they were already in
+      // wondering whether it worked.
+      ref.invalidate(organizationsProvider);
+      ref.read(currentOrgIdProvider.notifier).select(orgId);
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _said = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Join another company'),
+      content: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Paste the invitation code you were sent. It only works for '
+              'the address you are signed in as.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: Space.md),
+            TextField(
+              controller: _code,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Invitation code'),
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+            ),
+            if (_said != null) ...[
+              const SizedBox(height: Space.sm),
+              Text(
+                _said!,
+                style: TextStyle(fontSize: 12, color: context.colors.danger),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _join,
+          child: _busy
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Join'),
+        ),
       ],
     );
   }

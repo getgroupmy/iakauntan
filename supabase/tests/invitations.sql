@@ -38,6 +38,10 @@ declare
   v_owner_em text;
   v_id       uuid;
   v_id2      uuid;
+  v_stolen   text;
+  v_wanted   uuid;
+  v_dual     uuid;
+  v_said     text;
   v_token    text;
   v_role     text;
   v_demoted  boolean;
@@ -60,11 +64,20 @@ begin
   -- ==================================================================
   -- An invitation can actually be issued
   -- ==================================================================
-  v_id := public.invite_member(v_org, 'Joiner@Example.test', 'sales');
-  select * into r from public.org_members where id = v_id;
+  -- `0353`: the raw token comes back from the call, once. What is
+  -- stored is its digest, because every member of the company can read
+  -- this column.
+  v_token := public.invite_member(v_org, 'Joiner@Example.test', 'sales');
+  select * into r from public.org_members
+   where org_id = v_org and invited_email = 'joiner@example.test';
+  v_id := r.id;
   perform pg_temp.check_true('an invitation is issued', v_id is not null);
-  perform pg_temp.check_eq('with a token to accept it with',
-    length(r.invite_token), 64);
+  perform pg_temp.check_true('and hands back a token to accept it with',
+    v_token is not null and length(v_token) = 64);
+  perform pg_temp.check_eq('while what is stored is a digest of it',
+    r.invite_token, app.corp_token_hash(v_token));
+  perform pg_temp.check_true('which is not the token',
+    r.invite_token <> v_token);
   perform pg_temp.check_eq('the address, folded to lower case',
     r.invited_email::text, 'joiner@example.test');
   perform pg_temp.check_eq('the role it was offered at', r.role::text, 'sales');
@@ -75,7 +88,6 @@ begin
   perform pg_temp.check_true('and it runs out in a fortnight',
     r.invite_expires_at between now() + interval '13 days'
                            and now() + interval '15 days');
-  v_token := r.invite_token;
 
   -- ==================================================================
   -- Who may send one
@@ -162,10 +174,8 @@ begin
   -- An admin still administers: a member who is not the owner can be
   -- re-roled, which is what the "already a member" branch is for.
   perform pg_temp.sign_in_as(v_admin);
-  perform pg_temp.check_eq('an admin may still change a member''s role',
-    public.invite_member(v_org, 'clerk@example.test', 'viewer'),
-    (select id from public.org_members
-      where org_id = v_org and user_id = v_clerk));
+  perform pg_temp.check_true('an admin may still change a member''s role',
+    public.invite_member(v_org, 'clerk@example.test', 'viewer') is null);
   perform pg_temp.check_eq('and the role took', 
     (select role::text from public.org_members
       where org_id = v_org and user_id = v_clerk), 'viewer');
@@ -215,8 +225,9 @@ begin
   -- An invitation that has run out is refused even though it is still
   -- sitting there unaccepted.
   perform pg_temp.sign_in_as(v_owner);
-  v_id2 := public.invite_member(v_org, 'late@example.test', 'viewer');
-  select invite_token into v_token from public.org_members where id = v_id2;
+  v_token := public.invite_member(v_org, 'late@example.test', 'viewer');
+  select id into v_id2 from public.org_members
+   where org_id = v_org and invited_email = 'late@example.test';
   update public.org_members
      set invite_expires_at = now() - interval '1 day' where id = v_id2;
   perform pg_temp.sign_in_as(pg_temp.another_user('late@example.test'));
@@ -242,9 +253,10 @@ begin
   -- behaviour worth keeping: somebody invited before they had an
   -- account is a member the moment they make one.
   perform pg_temp.sign_in_as(v_owner);
-  v_id2 := public.invite_member(v_org, 'fresh@example.test', 'purchaser');
+  perform public.invite_member(v_org, 'fresh@example.test', 'purchaser');
   perform pg_temp.another_user('fresh@example.test');
-  select * into r from public.org_members where id = v_id2;
+  select * into r from public.org_members
+   where org_id = v_org and invited_email = 'fresh@example.test';
   perform pg_temp.check_eq('an invitation in date is claimed at signup',
     r.status::text, 'active');
   perform pg_temp.check_eq('at the role it was issued with',
@@ -271,6 +283,125 @@ begin
   perform pg_temp.check_eq('a second invitation makes a second row',
     (select count(*) from public.org_members
       where org_id = v_org and invited_email = 'twice@example.test'), 2);
+
+
+  -- ==================================================================
+  -- The escalation `0353` closes
+  --
+  -- Written as the attack, in order, because the point is not that the
+  -- refusal exists but that this exact sequence stops working:
+  --
+  --   1. a viewer -- the least trusted role there is -- reads a pending
+  --      invitation's token off `org_members`, which
+  --      `org_members_select` lets any member of the company do;
+  --   2. they hand it to anybody at all;
+  --   3. that person, never invited and at an address nobody typed,
+  --      calls accept_invitation and lands in the company at the role
+  --      the invitation named.
+  --
+  -- It ran. A stranger from another domain became an `admin` on a row
+  -- still addressed to somebody else. Two things stop it now and both
+  -- are asserted: what the viewer can read is a digest, and the caller
+  -- has to be signed in as the address on the invitation.
+  -- ==================================================================
+  -- The account exists *before* the invitation, which is the whole
+  -- reason `accept_invitation` exists: `app.handle_new_user` claims a
+  -- pending invitation at signup, so somebody who signs up afterwards
+  -- never reaches this function. Somebody who already had an account —
+  -- an accountant keeping a second company's books — has no other way
+  -- in, and that is the person this path is for.
+  v_wanted := pg_temp.another_user('wanted@example.test');
+
+  perform pg_temp.sign_in_as(v_owner);
+  v_token := public.invite_member(v_org, 'wanted@example.test', 'admin');
+  select * into r from public.org_members
+   where org_id = v_org and invited_email = 'wanted@example.test';
+  perform pg_temp.check_eq('an existing account is invited, not enrolled',
+    r.status::text, 'invited');
+
+  perform pg_temp.sign_in_as(v_clerk);
+  begin
+    set local role authenticated;
+    v_role := current_user;
+    select invite_token into v_stolen from public.org_members
+     where org_id = v_org and invited_email = 'wanted@example.test';
+  end;
+  reset role;
+  perform pg_temp.check_eq('the theft ran under row level security',
+    v_role, 'authenticated');
+
+  -- Not "cannot read it". The column is still readable by any member,
+  -- and saying otherwise here would be asserting a policy this
+  -- migration did not change. What it is now is useless.
+  perform pg_temp.check_true('a member can still read the column',
+    v_stolen is not null);
+  perform pg_temp.check_true('but what is in it is not the token',
+    v_stolen <> v_token);
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('outsider@elsewhere.test'));
+  begin
+    perform public.accept_invitation(v_stolen);
+    v_took := true;
+  exception when others then v_took := false;
+  end;
+  perform pg_temp.check_true('so what a member can read will not open the door',
+    not v_took);
+
+  -- And the raw token, in the wrong hands, does not either. This is the
+  -- half that matters when a link is forwarded rather than stolen from
+  -- the table.
+  begin
+    perform public.accept_invitation(v_token);
+    v_took := true;
+  exception when sqlstate '42501' then v_took := false;
+  end;
+  perform pg_temp.check_true('nor does the real token in the wrong hands',
+    not v_took);
+  perform pg_temp.check_eq('and the invitation is still waiting',
+    (select status::text from public.org_members
+      where org_id = v_org and invited_email = 'wanted@example.test'),
+    'invited');
+
+  -- The person it was addressed to walks in.
+  perform pg_temp.sign_in_as(v_wanted);
+  perform pg_temp.check_eq('the address it names may take it',
+    public.accept_invitation(v_token), v_org);
+  perform pg_temp.check_eq('at the role it offered',
+    (select role::text from public.org_members
+      where org_id = v_org and invited_email = 'wanted@example.test'), 'admin');
+
+  -- Somebody already inside gets a sentence rather than a constraint
+  -- name.
+  perform pg_temp.sign_in_as(v_owner);
+  v_token := public.invite_member(v_org, 'clerk@example.test', 'viewer');
+  perform pg_temp.check_true('re-roling a member issues no token to accept',
+    v_token is null);
+
+  -- And the narrow case where a live invitation and a membership exist
+  -- for the same person at once. `invite_member` will not make one --
+  -- an address that is already a member is re-roled instead -- but the
+  -- insert policy on `org_members` lets an admin add somebody by hand,
+  -- and doing that after an invitation was sent leaves both. Accepting
+  -- then lands on the unique key over (org_id, user_id), whose name is
+  -- not a sentence anybody can act on.
+  v_dual := pg_temp.another_user('dual@example.test');
+  v_token := public.invite_member(v_org, 'dual@example.test', 'sales');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_dual, 'viewer', 'active', now());
+
+  perform pg_temp.sign_in_as(v_dual);
+  begin
+    perform public.accept_invitation(v_token);
+    v_said := null;
+  exception when others then v_said := sqlerrm;
+  end;
+  perform pg_temp.check_true('accepting twice over is refused',
+    v_said is not null);
+  perform pg_temp.check_true('and says so in words, not in an index name',
+    v_said not like '%org_members_org_id_user_id%');
+  perform pg_temp.check_eq('their role is the one they already had',
+    (select role::text from public.org_members
+      where org_id = v_org and user_id = v_dual), 'viewer');
 
   perform pg_temp.sign_out();
 end $$;

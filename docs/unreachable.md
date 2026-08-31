@@ -727,3 +727,37 @@ Run this check before planning a block of work, not after.
   silently corrects a figure teaches nobody that something posted
   against the bank's GL account without going through the total.
 
+- **Taking up an invitation** (`accept_invitation`), and what looking for
+  its caller found. The function has had none since `0022`. The only
+  invitation that ever worked was the accidental one:
+  `app.handle_new_user` claims a pending row when somebody *signs up* at
+  that address, so an accountant who already had an account could be
+  invited to a second company, never hear about it, and watch the row
+  expire in a fortnight. No e-mail carries the token and no screen
+  showed it.
+
+  Looking for the caller found the reason it was safer without one, and
+  this is the sweep's best result so far, because it is not a missing
+  feature — it is a hole. Reproduced on a database rather than reasoned
+  about: a `viewer` reads a pending invitation's `invite_token` straight
+  off `org_members`, which `org_members_select` lets any member of the
+  company do; `accept_invitation` checks the token, the status and the
+  expiry and never checks who is calling; so the viewer hands the token
+  to anybody at all and that person — never invited, at an address
+  nobody typed — becomes an `admin` on a row still addressed to somebody
+  else. The unique key on `(org_id, user_id)` stops the viewer using it
+  themselves, which is luck: it means the escalation needs a second
+  account.
+
+  `0353` brings the invitation onto the idiom `0070` already
+  established for signing links — the token is stored as a digest and
+  returned raw exactly once — and adds the check the function was
+  missing: the caller must be signed in as the address the invitation
+  names. `invite_member` hands the raw token back so there is something
+  to give somebody, the Team screen shows it once, and Settings takes
+  one.
+
+  **The lesson for the sweep**: a function with no caller is not always
+  a feature waiting to be reached. Read what it would do before reaching
+  it.
+

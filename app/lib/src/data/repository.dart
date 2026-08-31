@@ -3665,17 +3665,26 @@ extension RepoExtras on Repo {
         .order('sort_order'),
   );
 
-  Future<void> inviteMember(String email, String role) => callRpc(
-    'invite_member',
-    params: {'p_org_id': orgId, 'p_email': email, 'p_role': role},
-  );
+  /// Invites somebody, and hands back the raw invitation token once.
+  ///
+  /// Null when the address was already a member and the call only
+  /// changed their role — there is nothing for them to accept. `0353`
+  /// returns the token because nothing else can: what is stored is a
+  /// digest, and no e-mail carries it.
+  Future<String?> inviteMember(String email, String role) async {
+    final data = await callRpc(
+      'invite_member',
+      params: {'p_org_id': orgId, 'p_email': email, 'p_role': role},
+    );
+    return data?.toString();
+  }
 
-  Future<void> changeMemberRole(String memberId, String role) =>
-      client.from('org_members').update({'role': role}).eq('id', memberId);
-
-  Future<void> removeMember(String memberId) =>
-      client.from('org_members').delete().eq('id', memberId);
-
+  /// Take up an invitation to another company, and return its id.
+  ///
+  /// For somebody who already had an account when they were invited.
+  /// `app.handle_new_user` claims a pending invitation at signup, so
+  /// anybody who signs up afterwards never reaches this — and anybody
+  /// who did not had, until now, no way in at all.
   Future<String> acceptInvitation(String token) async {
     final data = await callRpc(
       'accept_invitation',
@@ -3683,6 +3692,12 @@ extension RepoExtras on Repo {
     );
     return data as String;
   }
+
+  Future<void> changeMemberRole(String memberId, String role) =>
+      client.from('org_members').update({'role': role}).eq('id', memberId);
+
+  Future<void> removeMember(String memberId) =>
+      client.from('org_members').delete().eq('id', memberId);
 
   // ------------------------------------------------------------------
   // Legal firm module

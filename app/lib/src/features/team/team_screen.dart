@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
@@ -8,6 +9,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import 'access_types_card.dart';
+import 'invitations.dart';
 import 'audit_trail_card.dart';
 
 /// Who is in the company and what they may do. Inviting someone creates
@@ -285,19 +287,30 @@ class _InviteDialogState extends ConsumerState<_InviteDialog> {
 
   Future<void> _invite() async {
     if (!_formKey.currentState!.validate()) return;
+    final email = _email.text.trim();
     setState(() => _saving = true);
 
+    String? token;
+    // `runWithFeedback` reports the failure; the token is what this
+    // call is for, so it is captured on the way through rather than
+    // read back afterwards — `0353` stores a digest and there is no
+    // reading it back.
     final ok = await runWithFeedback(
       context,
-      action: () =>
-          ref.read(repoProvider)!.inviteMember(_email.text.trim(), _role),
-      successMessage: 'Invitation created for ${_email.text.trim()}',
+      action: () async {
+        token = await ref.read(repoProvider)!.inviteMember(email, _role);
+      },
+      successMessage: 'Invitation created for $email',
     );
 
     if (mounted) setState(() => _saving = false);
     if (ok && mounted) {
       ref.invalidate(teamProvider);
       Navigator.pop(context);
+      await showDialog<void>(
+        context: context,
+        builder: (_) => _InvitationIssued(email: email, token: token),
+      );
     }
   }
 
@@ -319,7 +332,13 @@ class _InviteDialogState extends ConsumerState<_InviteDialog> {
                 autofocus: true,
                 decoration: const InputDecoration(
                   labelText: 'Email address *',
-                  helperText: 'They join this company when they register',
+                  // Both halves, because they are two different
+                  // journeys and the old text described only one of
+                  // them: somebody without an account joins by
+                  // registering at this address, and somebody who
+                  // already has one joins with the code this produces.
+                  helperText: 'They join when they register, or with the '
+                      'code you are about to be given',
                 ),
                 validator: (v) {
                   final value = (v ?? '').trim();
@@ -727,6 +746,81 @@ class _AccessDurationDialogState extends State<_AccessDurationDialog> {
         FilledButton(
           onPressed: () => Navigator.pop(context, _days),
           child: const Text('Grant access'),
+        ),
+      ],
+    );
+  }
+}
+
+/// The code, handed over once.
+///
+/// No e-mail carries it. `invite_member` returns the raw token and
+/// `0353` stores only a digest, so this dialog is the only moment it
+/// exists anywhere — which is said on the dialog, because somebody who
+/// closes it expecting to find the code again later will not.
+///
+/// A code to type rather than a link to click, and that is a decision
+/// rather than a shortcut: a link carrying a credential ends up in a
+/// browser history, in a referer header, and in the preview a chat app
+/// fetches on the sender's behalf.
+class _InvitationIssued extends StatelessWidget {
+  const _InvitationIssued({required this.email, required this.token});
+
+  final String email;
+  final String? token;
+
+  @override
+  Widget build(BuildContext context) {
+    final code = token;
+    return AlertDialog(
+      title: Text(hasCodeToGive(code) ? 'Invitation created' : 'Role changed'),
+      content: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(invitedOutcome(email: email, token: code)),
+            if (hasCodeToGive(code)) ...[
+              const SizedBox(height: Space.md),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(Space.md),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(Radii.md),
+                ),
+                child: SelectableText(
+                  code!,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                ),
+              ),
+              const SizedBox(height: Space.sm),
+              Text(
+                'This is the only time it is shown. If it is lost, invite '
+                'them again and a fresh code replaces this one.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        if (hasCodeToGive(code))
+          TextButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: code!));
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Code copied')),
+              );
+            },
+            icon: const Icon(Icons.copy, size: 18),
+            label: const Text('Copy'),
+          ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Done'),
         ),
       ],
     );
