@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788190192.1940207,
-    "ast_hash": "adc7ada982e5e730a37ec1466bb03a82",
+    "mtime": 1788192771.4878397,
+    "ast_hash": "88a120c772e5418e8ad69237dcd95602",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788190179.250068,
-    "ast_hash": "1569006f37e06159c4bdf66da3ca06cd",
+    "mtime": 1788192771.4868867,
+    "ast_hash": "cac80585bebe207c48410b3ae2a9c1ae",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -150,8 +150,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1788190229.8012815,
-    "ast_hash": "7d19bc15ec3f54b577f0ab8d310b7b76",
+    "mtime": 1788192794.7498996,
+    "ast_hash": "cb5066f8d71e23cc542d0e74d9132833",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788189720.3604722,
-    "ast_hash": "661ff7a167d114fe2ef210996ad92c6d",
+    "mtime": 1788192368.4284458,
+    "ast_hash": "0113831b116e0191f3921f2453f2dd4b",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788191605.6649652,
-    "ast_hash": "a11cdd64950e7c3cffb9fa856523ad3b",
+    "mtime": 1788193112.1056023,
+    "ast_hash": "404e98d29734d79f5a3ea2dbe169cbb9",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -3990,8 +3990,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/credit_dialog.dart": {
-    "mtime": 1787822945.4905899,
-    "ast_hash": "d3c9c13a1ba74f24d91f03e084bc3e23",
+    "mtime": 1788192794.7492566,
+    "ast_hash": "84684f27246e8a34068dede7ab566d6e",
     "semantic_hash": ""
   },
   "app/test/credit_note_test.dart": {
@@ -6107,6 +6107,16 @@
   "supabase/migrations/0375_the_parked_bill_that_never_expired.sql": {
     "mtime": 1788191515.2944603,
     "ast_hash": "6d4f49235d533ef36d530267733bf4ed",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0376_a_supplier_credit_attached_to_the_bill.sql": {
+    "mtime": 1788192735.8836865,
+    "ast_hash": "9f7c8c0b34a0a6422d4abfd0b5369606",
+    "semantic_hash": ""
+  },
+  "supabase/tests/bill_credit.sql": {
+    "mtime": 1788192652.9332116,
+    "ast_hash": "65ca3d449cc0f4b596ad4dc4e8880ca9",
     "semantic_hash": ""
   }
 }
