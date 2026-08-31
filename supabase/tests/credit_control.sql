@@ -161,6 +161,85 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- On stop, which is not a small limit
+-- ---------------------------------------------------------------------
+-- 0362. `credit_hold` was a column nothing read for three hundred and
+-- fifty migrations. A hold is a person's instruction rather than
+-- arithmetic, so unlike the limit it applies whatever the
+-- organization's mode says — otherwise the effect of a checkbox would
+-- depend on a setting three screens away, and whoever ticked it would
+-- have no way to know which they had.
+do $$
+declare
+  v_org  uuid;
+  v_cust uuid;
+  v_inv  uuid;
+  v_cn   uuid;
+  v_refused boolean;
+  v_msg  text;
+begin
+  v_org := pg_temp.test_org('Kedai Tahan Kredit');
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  -- Warn, deliberately: the weaker of the two modes, so what is proved
+  -- below is the hold and not the limit.
+  update public.organizations set credit_control = 'warn' where id = v_org;
+
+  insert into public.contacts
+    (org_id, code, name, contact_type, credit_limit, credit_hold)
+  values (v_org, 'C-STOP', 'Syarikat Lambat Bayar', 'customer', 0, true)
+  returning id into v_cust;
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, contact_id, doc_date, status,
+     total_amount, base_total_amount, balance_amount)
+  values (v_org, 'invoice', 'INV-STOP-1', v_cust, current_date, 'draft',
+          100, 100, 100)
+  returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_inv, 1, 'More on account', 1, 100);
+
+  v_refused := false;
+  begin
+    perform public.post_sales_document(v_inv);
+  exception when others then v_refused := true; v_msg := sqlerrm;
+  end;
+  perform pg_temp.check_true(
+    'an invoice to somebody on stop is refused, even in warn mode',
+    v_refused);
+  -- The sentence names the customer. "Credit hold" on its own leaves
+  -- whoever is posting a batch to work out which of forty it was.
+  perform pg_temp.check_true('and says who: ' || coalesce(v_msg, ''),
+    v_msg like '%Lambat Bayar%');
+
+  -- Credits still go through, which is 0086's reasoning unchanged: the
+  -- customer on stop is exactly the one most likely to need one, and
+  -- blocking it would leave the balance that caused the hold
+  -- uncorrectable.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, contact_id, doc_date, status,
+     total_amount, base_total_amount, balance_amount)
+  values (v_org, 'credit_note', 'CN-STOP-1', v_cust, current_date, 'draft',
+          50, 50, 50)
+  returning id into v_cn;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_cn, 1, 'Return', 1, 50);
+  perform public.post_sales_document(v_cn);
+  perform pg_temp.check_true('but a credit note still posts',
+    (select gl_entry_id is not null from public.sales_documents where id = v_cn));
+
+  -- And the control: take the hold off and the same invoice posts. The
+  -- refusal above is about the hold rather than about the document.
+  update public.contacts set credit_hold = false where id = v_cust;
+  perform public.post_sales_document(v_inv);
+  perform pg_temp.check_true('taking the hold off lets it through',
+    (select gl_entry_id is not null from public.sales_documents where id = v_inv));
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Reachability
 -- ---------------------------------------------------------------------
 do $$

@@ -32,6 +32,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
 
   String _contactType = 'customer';
   String? _priceLevelId;
+  bool _creditHold = false;
   String? _linkedOrgId;
   bool _statementBusy = false;
   String _entityType = 'sdn_bhd';
@@ -100,6 +101,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         _c('city').text = contact.city ?? '';
         _c('postcode').text = contact.postcode ?? '';
         _c('creditLimit').text = contact.creditLimit.toStringAsFixed(2);
+        _creditHold = contact.creditHold;
         _contactType = contact.contactType;
         _priceLevelId = contact.priceLevelId;
         _entityType = contact.entityType;
@@ -211,6 +213,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         stateCode: _stateCode,
         entityType: _entityType,
         creditLimit: double.tryParse(_c('creditLimit').text) ?? 0,
+        creditHold: _creditHold,
         priceLevelId: _priceLevelId,
       );
 
@@ -564,6 +567,23 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                           helperText: 'Zero means no limit',
                         ),
                       ),
+                      // Only for customers, and only ever set by hand.
+                      // 0362 makes it refuse an invoice whatever the
+                      // organization's credit control mode says, because
+                      // a hold is somebody's instruction rather than
+                      // arithmetic — so it must not be possible to end
+                      // up on stop by accident.
+                      if (_contactType != 'supplier')
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: _creditHold,
+                          onChanged: (v) => setState(() => _creditHold = v),
+                          title: const Text('On credit hold'),
+                          subtitle: const Text(
+                            'Refuses a new invoice until it is taken off. '
+                            'Credit notes and receipts still go through.',
+                          ),
+                        ),
                       const SizedBox(height: 14),
                       // Only for customers: a price level is what we
                       // charge, not what a supplier charges us.

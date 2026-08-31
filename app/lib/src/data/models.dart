@@ -180,6 +180,7 @@ class Contact {
     this.countryCode = 'MYS',
     this.currency = 'MYR',
     this.creditLimit = 0,
+    this.creditHold = false,
     this.paymentTermId,
     this.priceLevelId,
     this.isActive = true,
@@ -225,6 +226,12 @@ class Contact {
   final String countryCode;
   final String currency;
   final double creditLimit;
+
+  /// No further credit until somebody takes it off. Unlike the limit,
+  /// which the organization's `credit_control` mode decides whether to
+  /// enforce, a hold refuses an invoice either way: it is a person's
+  /// instruction rather than arithmetic. Credit notes still post.
+  final bool creditHold;
   final String? paymentTermId;
 
   /// Which price list this customer buys on. Null falls back to the
@@ -263,6 +270,7 @@ class Contact {
     countryCode: j['country_code']?.toString() ?? 'MYS',
     currency: j['currency']?.toString() ?? 'MYR',
     creditLimit: Fmt.toDouble(j['credit_limit']),
+    creditHold: j['credit_hold'] == true,
     paymentTermId: j['payment_term_id'] as String?,
     priceLevelId: j['price_level_id'] as String?,
     isActive: j['is_active'] != false,
@@ -295,6 +303,7 @@ class Contact {
     countryCode: countryCode,
     currency: currency,
     creditLimit: creditLimit,
+    creditHold: creditHold,
     paymentTermId: paymentTermId,
     priceLevelId: priceLevelId,
     isActive: isActive,
@@ -322,6 +331,7 @@ class Contact {
     'country_code': countryCode,
     'currency': currency,
     'credit_limit': creditLimit,
+    'credit_hold': creditHold,
     'price_level_id': priceLevelId,
     'is_active': isActive,
     'entity_type': entityType,
