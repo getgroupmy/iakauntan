@@ -1128,3 +1128,62 @@ both are worth keeping:
   `on_account` came to mean nothing for nine migrations. Before trusting
   that an enum is handled, find the `else` and the `_ =>` and ask what
   falls into them.
+
+### The whole list, mechanically
+
+The three passes above each found their enum by hand. The general
+version is short and worth keeping, because it produced a list of seven
+in one run:
+
+```python
+# Every `create type app.X as enum` and every `add value`, against the
+# migrations with the declarations blanked out, and against app/lib and
+# the edge functions. A value that appears in neither is a state
+# nothing can ever produce.
+```
+
+    activity_type       task
+    pay_frequency       semi_monthly
+    attendance_status   absent, on_leave, incomplete
+    clock_method        biometric
+    corp_filing_status  awaiting_signature
+    pos_shift_status    counting
+    pos_tender_kind     voucher
+
+Not all seven are gaps, and saying which are is the whole value of the
+list. `biometric` needs hardware nobody has wired up and is honestly
+unbuilt. `voucher` is a `pos_tender_types` row a shop can create today
+and it behaves like a card, which is right. `semi_monthly` was the
+subject of `0359` and is now constrained away rather than pretended at.
+The three under `attendance_status` were the real find.
+
+- **The day nobody clocked in** (`0360`). `clock_out` sets
+  `public_holiday`, `rest_day`, `late` or `present`, and that is every
+  write `attendance_records.status` has ever had. The three it could not
+  produce are the three about somebody who was *not* there, and they
+  fail in the two different ways this document keeps distinguishing:
+
+  `incomplete` is a **falsehood**. A row with a clock-in and no
+  clock-out keeps `status = 'present'` with `worked_minutes = 0`, so a
+  register grouped by status — which is what a register is for — counts
+  a forgotten punch-out as an ordinary day's attendance.
+
+  `absent` and `on_leave` are **absences**, and the shape of an absence
+  here is that there is no row at all. "Who was away yesterday" had no
+  answer. It is also why the payroll's unpaid-leave arithmetic reads
+  `leave_requests` directly: attendance could not tell it.
+
+  `close_attendance_day` runs from the nightly job over yesterday.
+  Nobody without a roster is marked, on the reasoning `0264` used for
+  `block_out_of_stock` and `0355` for an empty ticket team: a control
+  nobody maintains must not start refusing, and a red mark against every
+  employee in a company that has not filled the roster in is worse than
+  no mark at all.
+
+  The mutation run earned its keep twice. It killed the roster, rest-day,
+  holiday and punch-out branches, and it left `status = 'approved'`
+  alive — the fixture's only leave request was already approved, so
+  nothing noticed when the check was relaxed. The missing case is the
+  employee who asked for the day, was refused, and did not come in
+  anyway: without it, a rejected request would have excused the absence
+  it was refused for.
