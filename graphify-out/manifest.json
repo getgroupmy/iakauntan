@@ -100,8 +100,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/corp_repository.dart": {
-    "mtime": 1788194315.4990582,
-    "ast_hash": "5b4d9059112796f954c92c55dcbd5e13",
+    "mtime": 1788195700.1883533,
+    "ast_hash": "b318aced0787d2daf0ed77cb7e50e2c4",
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
@@ -275,8 +275,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/entity_screen.dart": {
-    "mtime": 1788194385.8758292,
-    "ast_hash": "50c5ecc33544183e03af0053e28ee0f8",
+    "mtime": 1788195716.5340574,
+    "ast_hash": "9675257e617a5f0c94c416f2216542f7",
     "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/secretarial_screen.dart": {
@@ -285,9 +285,9 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/signing_page.dart": {
-    "mtime": 1786785756.622488,
-    "ast_hash": "2035aaeef1dbeb043e2087101b179517",
-    "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
+    "mtime": 1788195753.6717422,
+    "ast_hash": "407352c97e35845a66dab790df64dd6c",
+    "semantic_hash": ""
   },
   "app/lib/src/features/settings/settings_screen.dart": {
     "mtime": 1788160634.707136,
@@ -740,8 +740,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory.sql": {
-    "mtime": 1788157295.1024518,
-    "ast_hash": "235e8d046227d64cfa9f25c67ce02fe6",
+    "mtime": 1788196057.502967,
+    "ast_hash": "521442a3a5e4451ce883fd0ccc166103",
     "semantic_hash": ""
   },
   ".claude/CLAUDE.md": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788193989.4478023,
-    "ast_hash": "eef3791be8130356173ba74c4415da36",
+    "mtime": 1788195486.8336818,
+    "ast_hash": "cc7bf271d50e4464bd8ca524c55f4885",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788194684.9086418,
-    "ast_hash": "1c69cfd80dae94dad2d7cd9eaef07e5c",
+    "mtime": 1788196158.0759614,
+    "ast_hash": "f050c09c3ffbc84a0766636ac66e23a2",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6132,6 +6132,16 @@
   "supabase/tests/corp_particulars.sql": {
     "mtime": 1788194064.7009087,
     "ast_hash": "3ba939cef9a2727d2b652a1c0d3ad7be",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0378_saying_no_and_who_lodged_it.sql": {
+    "mtime": 1788195680.3801055,
+    "ast_hash": "8666dd230fd4a564fedbd9903e40b0a7",
+    "semantic_hash": ""
+  },
+  "supabase/tests/decline_and_lodge.sql": {
+    "mtime": 1788195526.681155,
+    "ast_hash": "e93d5c6f3b53aa92f662f15eb3b0d3e1",
     "semantic_hash": ""
   }
 }
