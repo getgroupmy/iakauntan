@@ -105,8 +105,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788177650.6704617,
-    "ast_hash": "cfbbfc235a97351ee60fc34d4e86da7a",
+    "mtime": 1788179664.0982213,
+    "ast_hash": "e599abb7a8e0a925c548971e98b52a4c",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
@@ -125,8 +125,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
-    "mtime": 1788176817.1825647,
-    "ast_hash": "f1c54b000062f3f62c1808f8f7dea526",
+    "mtime": 1788179679.7789032,
+    "ast_hash": "0ad19806bff56a3ff85ea8f6b3a657ba",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contacts_screen.dart": {
@@ -195,8 +195,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/hr_setup_screen.dart": {
-    "mtime": 1786785756.618488,
-    "ast_hash": "83d25307c742bfe501127418eab215ef",
+    "mtime": 1788178662.0213943,
+    "ast_hash": "517b82d40d0315808ad8ee75fd48477d",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/leave_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788177602.1810055,
-    "ast_hash": "fdb00d47a4a48048820a376e6e4ec70a",
+    "mtime": 1788180348.9455388,
+    "ast_hash": "7dc5ab889f57891d00cd4e55dd85dab9",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788178179.002133,
-    "ast_hash": "447717ae943dcaf34baa064f1c0d10f8",
+    "mtime": 1788180567.806275,
+    "ast_hash": "30cab34cfc0f408930d167a692756017",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -5805,8 +5805,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/scheduled_work.sql": {
-    "mtime": 1788174547.269593,
-    "ast_hash": "e44f069615df4191d3937ace2bb52f6e",
+    "mtime": 1788180223.0240498,
+    "ast_hash": "6e71d109df691618332a150b8bb8f400",
     "semantic_hash": ""
   },
   "app/lib/src/features/legal/matter_transfer.dart": {
@@ -5922,6 +5922,51 @@
   "supabase/tests/payroll_voluntary_epf.sql": {
     "mtime": 1788175939.5587776,
     "ast_hash": "ebca3e60a9b712de6b4091074be95c30",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/contacts/control_account.dart": {
+    "mtime": 1788179640.472166,
+    "ast_hash": "103903920468679f1912287621e475a9",
+    "semantic_hash": ""
+  },
+  "app/test/control_account_test.dart": {
+    "mtime": 1788179640.4740844,
+    "ast_hash": "1eae24ef40fa90284d7d06ee10626871",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0364_the_claim_cap_that_was_only_a_number.sql": {
+    "mtime": 1788178622.1104727,
+    "ast_hash": "312e90317703ac14b4395fa277f0f2a7",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0365_the_leave_type_rules_that_were_only_labels.sql": {
+    "mtime": 1788179409.8564627,
+    "ast_hash": "965617043adb78d16eee65d5460e89ed",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0366_the_reminder_that_never_arrived.sql": {
+    "mtime": 1788180363.0693278,
+    "ast_hash": "1989b9380c54bce1ff596ae1500384f4",
+    "semantic_hash": ""
+  },
+  "supabase/tests/activity_reminders.sql": {
+    "mtime": 1788180348.9342532,
+    "ast_hash": "6f1adb8fd51167a00c64fdc4b52aa77b",
+    "semantic_hash": ""
+  },
+  "supabase/tests/claim_caps.sql": {
+    "mtime": 1788178567.2559667,
+    "ast_hash": "ba13aac24e78f558db6ec3e33b2c564e",
+    "semantic_hash": ""
+  },
+  "supabase/tests/control_accounts.sql": {
+    "mtime": 1788179740.2120569,
+    "ast_hash": "18c976ac41fc3dc519c33c55f34180b7",
+    "semantic_hash": ""
+  },
+  "supabase/tests/leave_type_rules.sql": {
+    "mtime": 1788179387.4815485,
+    "ast_hash": "f30354cfdd315ba13d82e8c28749e963",
     "semantic_hash": ""
   }
 }
