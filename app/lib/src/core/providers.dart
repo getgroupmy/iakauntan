@@ -2529,6 +2529,12 @@ final stockTransferLinesProvider = FutureProvider.autoDispose
       (ref, id) => requireRepo(ref).stockTransferLines(id),
     );
 
+/// Why a supply is exempt, in LHDN's own list. 0002.
+final exemptionReasonsProvider =
+    FutureProvider<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).exemptionReasons(),
+    );
+
 /// The MSIC 2008 codes SSM registers a business activity under. 0002.
 final msicCodesProvider =
     FutureProvider<List<Map<String, dynamic>>>(

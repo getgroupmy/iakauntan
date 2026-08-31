@@ -22,6 +22,7 @@ import 'notifications_card.dart';
 import 'warehouses_card.dart';
 import 'credit_ledger_dialog.dart';
 import 'einvoice_credentials.dart';
+import 'tax_exemption.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -1986,6 +1987,7 @@ class _TaxCodeDialogState extends ConsumerState<_TaxCodeDialog> {
   final _rate = TextEditingController();
   late String _taxType;
   late bool _exempt;
+  String? _exemptionReason;
   bool _saving = false;
 
   bool get _isNew => widget.existing == null;
@@ -1999,6 +2001,7 @@ class _TaxCodeDialogState extends ConsumerState<_TaxCodeDialog> {
     _rate.text = t == null ? '' : t.rate.toStringAsFixed(2);
     _taxType = t?.taxTypeCode ?? '06';
     _exempt = t?.isExempt ?? false;
+    _exemptionReason = t?.exemptionReason;
   }
 
   @override
@@ -2011,12 +2014,18 @@ class _TaxCodeDialogState extends ConsumerState<_TaxCodeDialog> {
 
   double? get _parsedRate => double.tryParse(_rate.text.trim());
 
+  String? get _blocked => exemptionBlockedBecause(
+    isExempt: _exempt,
+    reason: _exemptionReason,
+  );
+
   bool get _valid =>
       _code.text.trim().isNotEmpty &&
       _name.text.trim().isNotEmpty &&
       _parsedRate != null &&
       _parsedRate! >= 0 &&
-      _parsedRate! <= 100;
+      _parsedRate! <= 100 &&
+      _blocked == null;
 
   Future<void> _save() async {
     setState(() => _saving = true);
@@ -2030,6 +2039,10 @@ class _TaxCodeDialogState extends ConsumerState<_TaxCodeDialog> {
               rate: _parsedRate!,
               taxTypeCode: _taxType,
               isExempt: _exempt,
+              exemptionReason: exemptionOf(
+                isExempt: _exempt,
+                reason: _exemptionReason,
+              ),
             )
           : repo.updateTaxCode(
               widget.existing!.id,
@@ -2038,6 +2051,10 @@ class _TaxCodeDialogState extends ConsumerState<_TaxCodeDialog> {
               rate: _parsedRate!,
               taxTypeCode: _taxType,
               isExempt: _exempt,
+              exemptionReason: exemptionOf(
+                isExempt: _exempt,
+                reason: _exemptionReason,
+              ),
             ),
       successMessage: _isNew ? 'Tax code added' : 'Tax code saved',
     );
@@ -2135,6 +2152,45 @@ class _TaxCodeDialogState extends ConsumerState<_TaxCodeDialog> {
               title: const Text('Exempt'),
               subtitle: const Text('Shown on the document as exempt, not zero'),
             ),
+            // Only where it applies, and required there. An exempt line
+            // that does not say what exempts it is an e-Invoice LHDN
+            // has nothing to check the claim against.
+            if (_exempt)
+              Consumer(
+                builder: (context, ref, _) {
+                  final all =
+                      ref.watch(exemptionReasonsProvider).valueOrNull ??
+                      const <Map<String, dynamic>>[];
+                  return DropdownButtonFormField<String?>(
+                    key: const ValueKey('tax-exemption-reason'),
+                    value: all.any((r) => r['code'] == _exemptionReason)
+                        ? _exemptionReason
+                        : null,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'What exempts it',
+                      helperText: 'LHDN puts this on the line.',
+                    ),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Not said'),
+                      ),
+                      for (final r in all)
+                        DropdownMenuItem<String?>(
+                          value: r['code'] as String?,
+                          child: Text(
+                            exemptionLabel(r),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: _saving
+                        ? null
+                        : (v) => setState(() => _exemptionReason = v),
+                  );
+                },
+              ),
             if (!_isNew) ...[
               const Divider(height: Space.xl),
               Row(

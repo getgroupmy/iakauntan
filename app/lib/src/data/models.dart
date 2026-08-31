@@ -762,6 +762,7 @@ class TaxCode {
     required this.taxTypeCode,
     this.isDefault = false,
     this.isExempt = false,
+    this.exemptionReason,
   });
 
   final String id;
@@ -772,6 +773,11 @@ class TaxCode {
   final bool isDefault;
   final bool isExempt;
 
+  /// Why it is exempt, as a `ref_exemption_reasons` code. LHDN puts it
+  /// on the exempt line; `0015_einvoice_prepare` carries it through as
+  /// `tax_exemption_reason`.
+  final String? exemptionReason;
+
   factory TaxCode.fromJson(Map<String, dynamic> j) => TaxCode(
     id: j['id'] as String,
     code: j['code']?.toString() ?? '',
@@ -780,6 +786,7 @@ class TaxCode {
     taxTypeCode: j['tax_type_code']?.toString() ?? '06',
     isDefault: j['is_default'] == true,
     isExempt: j['is_exempt'] == true,
+    exemptionReason: j['exemption_reason'] as String?,
   );
 }
 

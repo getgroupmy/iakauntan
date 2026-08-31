@@ -440,9 +440,16 @@ writing down so the next pass does not chase them again.
 
 ### 1. Smaller, but real
 
-- **Reference pickers**: `ref_countries`, `ref_tax_types`,
-  `ref_einvoice_types`, `ref_exemption_reasons` are typed by hand where
-  they are used at all.
+- **Reference pickers**: `ref_countries`, `ref_tax_types` and
+  `ref_einvoice_types` are typed by hand where they are used at all.
+
+  **`ref_exemption_reasons` came off this list too, and it was not a
+  picker that was missing — it was the field.** The tax code editor had
+  a switch saying a code is exempt and nowhere to say why, so
+  `tax_codes.exemption_reason` was null on every code any company ever
+  created. `0015_einvoice_prepare` carries that column onto the
+  e-Invoice line as `tax_exemption_reason`, which is where LHDN reads
+  the ground for the claim. An exempt code now has to name one.
 
   **`ref_msic_codes` came off this list, and it was the worst of them.**
   Not merely typed by hand: the onboarding form declared an `_msicCode`,

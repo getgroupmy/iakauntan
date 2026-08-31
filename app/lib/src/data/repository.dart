@@ -422,6 +422,7 @@ class Repo {
     required double rate,
     String taxTypeCode = '06',
     bool isExempt = false,
+    String? exemptionReason,
   }) => client.from('tax_codes').insert({
     'org_id': orgId,
     'code': code,
@@ -429,6 +430,7 @@ class Repo {
     'rate': rate,
     'tax_type_code': taxTypeCode,
     'is_exempt': isExempt,
+    'exemption_reason': exemptionReason,
   });
 
   Future<void> updateTaxCode(
@@ -438,6 +440,7 @@ class Repo {
     required double rate,
     required String taxTypeCode,
     required bool isExempt,
+    String? exemptionReason,
   }) => client
       .from('tax_codes')
       .update({
@@ -446,6 +449,7 @@ class Repo {
         'rate': rate,
         'tax_type_code': taxTypeCode,
         'is_exempt': isExempt,
+        'exemption_reason': exemptionReason,
       })
       .eq('id', id)
       .eq('org_id', orgId);
@@ -617,6 +621,21 @@ class Repo {
     final data = await client.from('ref_states').select().order('code');
     return _rows(data);
   }
+
+  /// Why a supply is exempt, in LHDN's own list.
+  ///
+  /// `ref_exemption_reasons` was seeded in `0011` with the Sales Tax
+  /// and Service Tax exemption orders, and nothing read it — so a tax
+  /// code could be marked exempt and `tax_codes.exemption_reason`
+  /// stayed null, which is the field `0015_einvoice_prepare` carries
+  /// onto the e-Invoice line as `tax_exemption_reason`.
+  Future<List<Map<String, dynamic>>> exemptionReasons() async => _rows(
+    await client
+        .from('ref_exemption_reasons')
+        .select('code, description')
+        .eq('is_active', true)
+        .order('code'),
+  );
 
   /// The MSIC 2008 business activity codes SSM registers a company
   /// under.
