@@ -113,6 +113,7 @@ jobs:
                    supabase/tests/scheduled_work.sql \
                    supabase/tests/hr_manager_role.sql \
                    supabase/tests/document_types.sql \
+                   supabase/tests/pos_on_account.sql \
                    supabase/tests/inventory_forecast.sql \
                    supabase/tests/pos.sql \
                    supabase/tests/pos_retail.sql \

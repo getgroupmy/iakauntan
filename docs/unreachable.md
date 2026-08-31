@@ -1045,3 +1045,38 @@ Nobody files a bug against a feature they have no way to know is there.
 The fix is always the same shape — read the enum rather than copy it,
 assert the cover in both directions, and name each deliberate exclusion
 next to the reason it is one.
+
+### And once more, over the tender kinds
+
+`app.pos_tender_kind` lists seven ways a counter sale can be paid for.
+`complete_pos_sale` recognised exactly one of them — `cash` — and
+everything else fell into a single `else`. That is right for a card and
+an e-wallet and a bank transfer, all of which are money that has
+arrived. It is wrong for **`on_account`**, which is a promise.
+
+- **The sale nobody paid for** (`on_account`). The sale raised its
+  invoice, then wrote and posted a receipt for the whole basket, so the
+  receivable the invoice had just created was cleared by a payment
+  nobody had made — into the current account, because an on-account
+  tender has no bank account and `post_receipt_internal` falls through
+  to `1120`. A shop running accounts for regulars would show cash it
+  never took, a debtors ledger that never grew, and a phantom deposit on
+  every account sale in the bank reconciliation.
+
+  This one is worth studying rather than just fixing, because it breaks
+  the pattern the three sweeps above share. Those were **absences**: a
+  menu entry missing, an option unofferable, a function nothing called.
+  This is a **falsehood** — the sale completes, the journal balances,
+  the till reconciles, and the books state a transaction that did not
+  happen. An absence is invisible; a falsehood is worse, because
+  everything downstream reads it as true and agrees with it.
+
+  It is also invisible to every sweep in this document. `on_account` is
+  named by the enum, reachable from the app, and covered by tests that
+  pass. The only thing that finds it is asking what a value *means*, one
+  value at a time, and noticing that the code has an answer for six of
+  the seven. `0357` gives it the seventh.
+
+  The one honest general lesson: a `case` or an `if/else` over an enum
+  where the last branch is `else` is a place where a new value gets a
+  silent default. Grep for those before trusting an enum is handled.
