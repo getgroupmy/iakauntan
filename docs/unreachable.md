@@ -2268,3 +2268,60 @@ is what the client will be asked for; time already on a bill does not
 count twice; a voided invoice never billed; and a matter with an agreed
 fee of nought is a firm that agreed to act for nothing, which is its own
 decision and not something to report back to it.
+
+## Two figures for one deal
+
+`opportunities.quotation_id` has carried its own instructions since
+`0008`:
+
+    -- Set when the deal is converted into a quotation/invoice
+
+Nothing set it. The pipeline and the sales ledger were two accounts of
+the same deal with nothing joining them: a deal was marked won, somebody
+raised a quotation from the contact screen, and the only thing tying
+them together was that both happened on the same afternoon.
+
+The forecast is what goes wrong, and it goes wrong silently.
+`opportunities.amount` is typed early and round — sixty thousand,
+because that is the size of the job. The quotation that goes out weeks
+later says 48,250, because by then somebody has priced it. The weighted
+pipeline, the forecast and every "how does the quarter look" answer come
+off the first figure; the invoice, the ledger and the cash come off the
+second. Nothing compared them, so a pipeline could be twelve thousand
+out on one deal and the two facts never meet — the deal closes, the
+invoice is right, and the forecast was wrong.
+
+`quote_opportunity` raises the document **from** the deal, so both start
+as one number. `report_pipeline_quote_mismatch` finds the ones that have
+since drifted, which is ordinary — a quote gets revised — and is exactly
+what a sales manager wants told.
+
+### A rule two migrations apart
+
+`0374` made `valid_until` mean something: a lapsed quotation will not
+transfer to an order, because the price was an offer and the offer ran
+out. A deal marked **won** against a lapsed quotation is the same
+mistake one screen earlier — the pipeline says the customer accepted,
+and what they accepted cannot be turned into anything. `0384`'s guard is
+that rule reaching back up the workflow, and its message names
+`extend_document_validity`, which is `0374`'s way through.
+
+It deliberately does **not** refuse a won deal with no quotation at all.
+Plenty of business is won on a phone call and invoiced directly, and a
+CRM that will not record that is a CRM people keep outside the system.
+
+### AFTER, not BEFORE
+
+The guard is an AFTER trigger, and the reason is worth keeping. `0009`'s
+`track_stage` is a BEFORE trigger that derives `status` from the stage a
+deal was moved into, and `close_opportunity` closes a deal by moving its
+stage. A BEFORE trigger on the same row runs before or after that one
+depending on nothing but their names — `opportunities_won_quote_ck`
+sorts ahead of `track_stage`, so it saw a status that had not been
+worked out yet and let every lapsed quotation through. An AFTER trigger
+sees the row as it will be stored, whatever else ran.
+
+This is the third time in this document that trigger ordering has been
+the bug rather than the rule. The general form: **a BEFORE trigger
+cannot read a column another BEFORE trigger derives.** If the rule is
+about the final state of the row, it belongs in AFTER.

@@ -1213,6 +1213,8 @@ class Opportunity {
     this.status = 'open',
     this.expectedCloseDate,
     this.currency = 'MYR',
+    this.quotationId,
+    this.quotationNo,
   });
 
   final String id;
@@ -1228,6 +1230,15 @@ class Opportunity {
   final String status;
   final DateTime? expectedCloseDate;
   final String currency;
+
+  /// The quotation this deal was priced on. A column since `0008` with
+  /// a comment saying it is set when the deal is converted, and nothing
+  /// set it — so the forecast came off `amount` and the invoice off the
+  /// quotation, and the two never met.
+  final String? quotationId;
+  final String? quotationNo;
+
+  bool get isQuoted => quotationId != null;
 
   factory Opportunity.fromJson(Map<String, dynamic> j) {
     final contact = j['contacts'];
@@ -1245,6 +1256,10 @@ class Opportunity {
       status: j['status']?.toString() ?? 'open',
       expectedCloseDate: Fmt.parseDate(j['expected_close_date']),
       currency: j['currency']?.toString() ?? 'MYR',
+      quotationId: j['quotation_id'] as String?,
+      quotationNo: j['sales_documents'] is Map
+          ? j['sales_documents']['doc_no']?.toString()
+          : null,
     );
   }
 }

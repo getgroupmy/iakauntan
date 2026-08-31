@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'close_deal_dialog.dart';
+import 'quote_mismatch_dialog.dart';
 import 'win_loss_dialog.dart';
 
 /// Kanban board over the sales pipeline. Cards drag between stages; the
@@ -24,6 +25,15 @@ class PipelineScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Sales pipeline'),
         actions: [
+          // What the forecast is wrong by. The pipeline figure was
+          // typed early and round; the quotation was priced later, and
+          // nothing compared them before `0384`.
+          IconButton(
+            key: const ValueKey('quote-mismatch'),
+            tooltip: 'Deals that no longer match their quotation',
+            icon: const Icon(Icons.difference_outlined),
+            onPressed: () => showPipelineQuoteMismatch(context),
+          ),
           // The board says how much is in the pipeline. This says why it
           // keeps leaving, which is what the reasons `0373` started
           // collecting are for — a field with no reader is the same
@@ -230,14 +240,36 @@ class _StageColumn extends StatelessWidget {
   }
 }
 
-class _DealCard extends StatelessWidget {
+class _DealCard extends ConsumerWidget {
   const _DealCard({required this.deal, required this.draggable});
 
   final Opportunity deal;
   final bool draggable;
 
+  Future<void> _quote(BuildContext context, WidgetRef ref) async {
+    final go = await confirm(
+      context,
+      title: 'Quote ${deal.name}?',
+      message: 'A quotation goes out to ${deal.contactName ?? 'the '
+          'customer'} at ${Fmt.money(deal.amount, currency: deal.currency)}, '
+          'valid for thirty days, and this deal is linked to it. Price it '
+          'properly on the document; the deal follows.',
+      confirmLabel: 'Raise it',
+    );
+    if (!go || !context.mounted) return;
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.quoteOpportunity(deal.id),
+      successMessage: 'Quotation raised and linked.',
+    );
+    if (ok) {
+      ref.invalidate(opportunitiesProvider);
+      ref.invalidate(pipelineQuoteMismatchProvider);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final card = Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(Space.md),
@@ -249,12 +281,26 @@ class _DealCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            deal.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-          ),
+          Row(children: [
+            Expanded(
+              child: Text(
+                deal.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+            ),
+            if (draggable && !deal.isQuoted && deal.status == 'open')
+              IconButton(
+                tooltip: 'Raise a quotation',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.request_quote_outlined, size: 16),
+                onPressed: () => _quote(context, ref),
+              ),
+          ]),
           if (deal.contactName != null) ...[
             const SizedBox(height: 4),
             Text(
@@ -287,6 +333,22 @@ class _DealCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text(
                   Fmt.date(deal.expectedCloseDate),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ],
+          // The quotation the figure came off. A deal with one can be
+          // checked against what was actually sent; a deal without is
+          // somebody's estimate, and the card says which.
+          if (deal.quotationNo != null) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.request_quote_outlined, size: 12),
+                const SizedBox(width: 4),
+                Text(
+                  deal.quotationNo!,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],

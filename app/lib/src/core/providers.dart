@@ -522,6 +522,13 @@ final einvoicesProvider = FutureProvider.autoDispose
       return requireRepo(ref).einvoices(status: status);
     });
 
+/// Open deals whose figure has drifted from the quotation attached to
+/// them. What the forecast is wrong by, and nothing could ask before.
+final pipelineQuoteMismatchProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).pipelineQuoteMismatch();
+});
+
 final pipelineStagesProvider = FutureProvider<List<PipelineStage>>((ref) {
   return requireRepo(ref).pipelineStages();
 });

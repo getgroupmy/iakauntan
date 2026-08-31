@@ -3102,7 +3102,7 @@ class Repo {
   Future<List<Opportunity>> opportunities({String? status = 'open'}) async {
     var query = client
         .from('opportunities')
-        .select('*, contacts(name)')
+        .select('*, contacts(name), sales_documents(doc_no)')
         .eq('org_id', orgId)
         .isFilter('deleted_at', null);
     if (status != null && status != 'all') query = query.eq('status', status);
@@ -3131,6 +3131,44 @@ class Repo {
 
   Future<void> moveOpportunity(String id, String stageId) =>
       client.from('opportunities').update({'stage_id': stageId}).eq('id', id);
+
+  /// Raises a quotation from a deal and links the two.
+  ///
+  /// An RPC and not two writes, because the whole point is that the
+  /// pipeline figure and the quoted figure start as one number.
+  /// `opportunities.quotation_id` carried a comment saying it was set
+  /// when this happened and nothing set it, so the forecast came off
+  /// one figure and the invoice off another.
+  Future<String> quoteOpportunity(
+    String opportunityId, {
+    DateTime? validUntil,
+    String? description,
+  }) async {
+    final id = await callRpc('quote_opportunity', params: {
+      'p_opportunity': opportunityId,
+      'p_valid_until': validUntil == null ? null : Fmt.iso(validUntil),
+      'p_description': description,
+    });
+    return id.toString();
+  }
+
+  /// Attaches a quotation that already exists, or detaches the one
+  /// there is. Attaching takes the deal's figure from the document:
+  /// that is the priced answer, and the deal's was a guess.
+  Future<void> linkOpportunityQuotation(
+    String opportunityId,
+    String? documentId,
+  ) =>
+      callRpc('link_opportunity_quotation', params: {
+        'p_opportunity': opportunityId,
+        'p_document': documentId,
+      });
+
+  /// Open deals whose figure no longer matches the quotation attached
+  /// to them — which is exactly what a forecast is silently wrong by.
+  Future<List<Map<String, dynamic>>> pipelineQuoteMismatch() async =>
+      _rows(await callRpc('report_pipeline_quote_mismatch',
+          params: {'p_org': orgId}));
 
   /// Closes a deal, with the reason the pipeline never asked for.
   ///
