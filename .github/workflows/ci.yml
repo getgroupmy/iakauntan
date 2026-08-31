@@ -79,6 +79,34 @@ jobs:
         with:
           version: 2.114.0
 
+      # The list below is hand-kept, and a hand-kept list of tests goes
+      # stale in the one direction that is invisible: a file added to
+      # `supabase/tests/` and not added here is never run, and reads
+      # from outside exactly like a test that passes. This is the same
+      # bargain the `notOffered` and `notRaisable` constants in the Dart
+      # tests make — the list is the claim, and something checks it.
+      #
+      # Kept as a list rather than a `for f in supabase/tests/*.sql`
+      # because the order matters to nobody but the reasons do: several
+      # entries below were added with a commit explaining what they
+      # assert, and a glob would delete that history's anchor.
+      - name: Every assertion file is in the list below
+        run: |
+          set -euo pipefail
+          missing=()
+          for f in supabase/tests/*.sql; do
+            # `_helpers.sql` and `_local_stack.sql` are included by the
+            # others rather than run, the same underscore convention the
+            # function type-check step uses.
+            case "$(basename "$f")" in _*) continue ;; esac
+            grep -qF "$f" .github/workflows/ci.yml || missing+=("$f")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error::%s is not run by CI. Add it to the list in the database job.\n' "${missing[@]}"
+            exit 1
+          fi
+          echo "all $(ls supabase/tests/*.sql | grep -cv '/_') assertion files are run"
+
       # A throwaway local stack, so the assertions run against the
       # migrations in this commit rather than whatever the hosted project
       # happens to be at.
@@ -426,6 +454,27 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+
+      # The same guard the database job carries, for the same reason.
+      # The list below is hand-kept because each entry is worth a
+      # paragraph explaining what the test exists to catch, and a glob
+      # would take the paragraphs with it. This makes the list's
+      # completeness a thing that fails rather than a thing somebody
+      # notices — and the job's own comment further down records that a
+      # hand-kept list here already went stale once, when `call-token`
+      # was added and went un-type-checked for months.
+      - name: Every Deno test file is in the list below
+        run: |
+          set -euo pipefail
+          missing=()
+          while IFS= read -r f; do
+            grep -qF "$f" .github/workflows/ci.yml || missing+=("$f")
+          done < <(find supabase/functions cloudflare -name '*_test.ts' -o -name '*_test.js' | sort)
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error::%s is not run by CI. Add it to the list in the edge job.\n' "${missing[@]}"
+            exit 1
+          fi
+
       - run: deno check supabase/functions/_shared/origin_test.ts
       - run: deno test supabase/functions/_shared/origin_test.ts
       - run: deno check supabase/functions/_shared/scheduler_test.ts
