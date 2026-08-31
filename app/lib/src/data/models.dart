@@ -1715,6 +1715,10 @@ class Employee {
     this.epfNo,
     this.socsoNo,
     this.incomeTaxNo,
+    this.cp38Monthly = 0,
+    this.zakatMonthly = 0,
+    this.epfVoluntaryEmployeeRate = 0,
+    this.epfVoluntaryEmployerRate = 0,
     this.bankName,
     this.bankAccountNo,
     this.maritalStatus = 'single',
@@ -1740,6 +1744,24 @@ class Employee {
   final String? epfNo;
   final String? socsoNo;
   final String? incomeTaxNo;
+
+  /// What LHDN has directed be deducted on top of the month's PCB.
+  /// `calculate_payroll_run` deducts it and `post_payroll_run` remits
+  /// `pcb + cp38` together, and until this reached the editor there was
+  /// nowhere to put a CP38 direction when one arrived.
+  final double cp38Monthly;
+
+  /// Zakat deducted monthly, which is a rebate against PCB rather than
+  /// another deduction: the engine passes it into the PCB calculation.
+  /// Left at zero, a Muslim employee paying zakat over-pays PCB every
+  /// month of the year.
+  final double zakatMonthly;
+
+  /// Contributions above the statutory rate, as percentages of the EPF
+  /// wage. An employer contributing 15% rather than 13% enters 2 here,
+  /// not 0.02 — `epf_voluntary_employer_rate` is divided by 100.
+  final double epfVoluntaryEmployeeRate;
+  final double epfVoluntaryEmployerRate;
   final String? bankName;
   final String? bankAccountNo;
   final String maritalStatus;
@@ -1776,6 +1798,12 @@ class Employee {
       epfNo: j['epf_no']?.toString(),
       socsoNo: j['socso_no']?.toString(),
       incomeTaxNo: j['income_tax_no']?.toString(),
+      cp38Monthly: Fmt.toDouble(j['cp38_monthly']),
+      zakatMonthly: Fmt.toDouble(j['zakat_monthly']),
+      epfVoluntaryEmployeeRate:
+          Fmt.toDouble(j['epf_voluntary_employee_rate']),
+      epfVoluntaryEmployerRate:
+          Fmt.toDouble(j['epf_voluntary_employer_rate']),
       bankName: j['bank_name']?.toString(),
       bankAccountNo: j['bank_account_no']?.toString(),
       maritalStatus: j['marital_status']?.toString() ?? 'single',

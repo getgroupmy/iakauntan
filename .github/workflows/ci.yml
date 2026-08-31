@@ -116,6 +116,7 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           for f in supabase/tests/statutory.sql supabase/tests/ledger.sql \
                    supabase/tests/payroll_run.sql \
+                   supabase/tests/payroll_voluntary_epf.sql \
                    supabase/tests/sst_summary.sql \
                    supabase/tests/payroll_periods.sql \
                    supabase/tests/payslip_access.sql \

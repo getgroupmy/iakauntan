@@ -100,8 +100,19 @@ ci_tests() {
   python3 - "$ROOT" <<'PY'
 import re, sys
 t = open(sys.argv[1] + '/.github/workflows/ci.yml').read()
-m = re.search(r'for f in (supabase/tests/.*?); do', t, re.S)
-print('\n'.join(re.findall(r'supabase/tests/[a-z0-9_]+\.sql', m.group(1))))
+# Every `for f in ... ; do` in the file, and the one that names the most
+# test files wins. There is more than one now: the job also carries a
+# guard step looping over `supabase/tests/*.sql` to check none has been
+# left out of the list, and a non-greedy match found that one first — so
+# this read a glob, ran nothing, and printed "all SQL assertions passed
+# (0 files)". Which is the exact failure the guard exists to catch,
+# arriving from the other side.
+best = []
+for m in re.finditer(r'for f in (supabase/tests/.*?); do', t, re.S):
+    found = re.findall(r'supabase/tests/[a-z0-9_]+\.sql', m.group(1))
+    if len(found) > len(best):
+        best = found
+print('\n'.join(best))
 PY
 }
 
@@ -113,6 +124,13 @@ main() {
 
   local files failed=0 out
   if [ $# -gt 0 ]; then files="$*"; else files="$(ci_tests)"; fi
+  # A run that finds no tests is not a run that passed. This printed
+  # "all SQL assertions passed (0 files)" once, in green, and only the
+  # count gave it away.
+  if [ -z "$files" ]; then
+    echo "no assertion files found in .github/workflows/ci.yml" >&2
+    exit 1
+  fi
   for f in $files; do
     out=$($PSQL -q -v ON_ERROR_STOP=1 -f "$ROOT/$f" 2>&1 \
             | grep -E '^psql.*ERROR:' | head -3 || true)

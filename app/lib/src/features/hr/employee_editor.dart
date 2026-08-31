@@ -9,6 +9,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import 'employee_records.dart';
+import 'standing_deductions.dart';
 import 'tax_year_section.dart';
 
 /// Create or amend an employee. The statutory identifiers are not
@@ -66,6 +67,15 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
     _ctl('epf_no').text = e.epfNo ?? '';
     _ctl('socso_no').text = e.socsoNo ?? '';
     _ctl('income_tax_no').text = e.incomeTaxNo ?? '';
+    // Zero reads as blank rather than as "0". Most employees have none
+    // of these, and a form pre-filled with four zeroes invites somebody
+    // to think they mean something.
+    _ctl('cp38_monthly').text = _blankIfZero(e.cp38Monthly);
+    _ctl('zakat_monthly').text = _blankIfZero(e.zakatMonthly);
+    _ctl('epf_voluntary_employee_rate').text =
+        _blankIfZero(e.epfVoluntaryEmployeeRate);
+    _ctl('epf_voluntary_employer_rate').text =
+        _blankIfZero(e.epfVoluntaryEmployerRate);
     _ctl('bank_name').text = e.bankName ?? '';
     _ctl('bank_account_no').text = e.bankAccountNo ?? '';
     _status = e.employmentStatus;
@@ -274,6 +284,38 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
                         ]),
                       ],
                     ),
+                    // Read by `calculate_payroll_run` since 0031 and
+                    // settable nowhere until now. A CP38 direction that
+                    // arrives in the post had no box to go in, and the
+                    // arrears were simply never deducted; zakat is a
+                    // rebate against PCB rather than another deduction,
+                    // so leaving it at zero over-taxes the employee
+                    // every month of the year.
+                    _Section(
+                      title: 'Standing deductions',
+                      subtitle: 'Left blank unless LHDN or the employee '
+                          'has asked for them',
+                      children: [
+                        _row([
+                          _standing('cp38_monthly', 'CP38 instalment',
+                              helper: 'Deducted on top of PCB and remitted '
+                                  'with it'),
+                          _standing('zakat_monthly', 'Monthly zakat',
+                              helper: 'Reduces PCB rather than adding to '
+                                  'the deductions'),
+                        ]),
+                        _row([
+                          _standing('epf_voluntary_employee_rate',
+                              'Voluntary EPF — employee %',
+                              rate: true,
+                              helper: 'Above the statutory rate. 2 means '
+                                  'two per cent'),
+                          _standing('epf_voluntary_employer_rate',
+                              'Voluntary EPF — employer %',
+                              rate: true),
+                        ]),
+                      ],
+                    ),
                     // Only once the employee exists: both of these hang
                     // off an employee id, and there is nothing sensible
                     // to attach them to before Save.
@@ -315,6 +357,31 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
                 ),
         ),
       );
+
+  static String _blankIfZero(double v) =>
+      v == 0 ? '' : v.toString().replaceFirst(RegExp(r'\.0$'), '');
+
+  /// A standing figure, validated by the rules in
+  /// `standing_deductions.dart` rather than by `_text`'s generic
+  /// number check. The extra rule the rate needs — that a fraction is
+  /// not a percentage — is the one mistake here that nothing else
+  /// would catch.
+  Widget _standing(String key, String label,
+      {bool rate = false, String? helper}) {
+    return TextFormField(
+      controller: _ctl(key),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: helper,
+        helperMaxLines: 2,
+        prefixText: rate ? null : Fmt.prefix('MYR'),
+        suffixText: rate ? '%' : null,
+      ),
+      validator: (v) =>
+          rate ? voluntaryRateProblem(v ?? '') : standingAmountProblem(v ?? ''),
+    );
+  }
 
   Widget _text(String key, String label,
       {bool required = false, bool number = false, String? helper}) {
@@ -389,6 +456,12 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
       'eis_eligible': _eis,
       'pcb_eligible': _pcb,
       'hrdf_eligible': _hrdf,
+      ...standingDeductionValues(
+        cp38: _ctl('cp38_monthly').text,
+        zakat: _ctl('zakat_monthly').text,
+        voluntaryEmployee: _ctl('epf_voluntary_employee_rate').text,
+        voluntaryEmployer: _ctl('epf_voluntary_employer_rate').text,
+      ),
     };
 
     final ok = await runWithFeedback(
