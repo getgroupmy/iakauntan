@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788201625.5977278,
-    "ast_hash": "3e16f75395b93a8bc9f715b5c40d435d",
+    "mtime": 1788202846.8548133,
+    "ast_hash": "ebe22bf49a5844658eab44bb05a5ef1f",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788201608.0018053,
-    "ast_hash": "ce7491d1197c150cae29885207c780a1",
+    "mtime": 1788202837.8854904,
+    "ast_hash": "9c0c180a3f3459b3a34d06847d042750",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788201625.5955267,
-    "ast_hash": "644ff643d2b9ebc0511a9e3fa169e50a",
+    "mtime": 1788202837.8873906,
+    "ast_hash": "48144bbcedf5fd4d84759227ff507688",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788201078.4665751,
-    "ast_hash": "1f40677d6b56b57b84f036c3268c000d",
+    "mtime": 1788202284.4376016,
+    "ast_hash": "46009425fdf5126fc05ecb7ba782fe28",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1245,8 +1245,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/assets/assets_screen.dart": {
-    "mtime": 1786851522.6107306,
-    "ast_hash": "bb441c87a66897afb970535787d0b8e1",
+    "mtime": 1788202933.1434972,
+    "ast_hash": "30e64b8ee8a755016171995a23a775e1",
     "semantic_hash": ""
   },
   "app/lib/src/features/assets/depreciation_dialog.dart": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788202052.515552,
-    "ast_hash": "d12d8e562d64fabb7be608e9eadeb19c",
+    "mtime": 1788203156.5996177,
+    "ast_hash": "f21dfd10b9f5c2f13e2f77f25e9105d6",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6217,6 +6217,21 @@
   "supabase/tests/hiring.sql": {
     "mtime": 1788201460.7879007,
     "ast_hash": "fb05377b13b2bfd85152f32ae3b28a79",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/assets/capitalise_dialog.dart": {
+    "mtime": 1788202921.0549939,
+    "ast_hash": "dad194394ccdd1e4c0e6341220202e60",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0382_the_asset_that_came_from_nowhere.sql": {
+    "mtime": 1788202734.5316653,
+    "ast_hash": "5d4a4e7f4a7efec7b252e8bd652f1b6a",
+    "semantic_hash": ""
+  },
+  "supabase/tests/capitalisation.sql": {
+    "mtime": 1788202679.8556526,
+    "ast_hash": "c98ed17cb9b23bdebdb1c4e65f1d80ea",
     "semantic_hash": ""
   }
 }
