@@ -110,6 +110,7 @@ jobs:
                    supabase/tests/demo_accounts.sql \
                    supabase/tests/payroll_chart.sql \
                    supabase/tests/ticketing.sql \
+                   supabase/tests/scheduled_work.sql \
                    supabase/tests/inventory_forecast.sql \
                    supabase/tests/pos.sql \
                    supabase/tests/pos_retail.sql \

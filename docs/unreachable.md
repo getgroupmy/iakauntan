@@ -888,3 +888,66 @@ variance is exactly the thing `0274` wrote a column to make possible,
 and until now nothing would have noticed if a later edit had "simplified"
 it to `v > 0`. Something does now.
 
+
+## A fifth sweep: a function nothing ever starts
+
+The first four ask who *may* call something. This one asks who *does* —
+and specifically the case where the answer was meant to be a clock.
+
+The other four sweeps are blind to it by construction. A periodic
+function is reached by nothing in `app/lib` and nothing in
+`supabase/functions`, correctly, because a scheduler is neither. It has
+its grants revoked from `authenticated` and `anon`, correctly, for the
+same reason. It has a test file that calls it and passes. Every signal
+those sweeps read says the function is fine, and it has never once run.
+
+```sql
+-- Run against a migrated database. What the scheduler can get to,
+-- starting from the cron commands and walking through the bodies.
+-- `supabase/tests/scheduled_work.sql` is this, as an assertion.
+select jobname, schedule, command from cron.job;
+```
+
+Grep found five functions no Dart and no Deno names: `pos_item_portions`
+and `corp_issued_capital` are called from inside other SQL and are fine,
+`chat_expire_calls` and `prune_device_tokens` were the subject of `0147`
+and are in the nightly run, and the fifth was not.
+
+- **The SLA clock nobody wound** (`ticket_sla_sweep`). `0193` wrote it
+  over business hours, public holidays and four states that do not run
+  Monday to Friday. `0194` built the ticket lifecycle around it. `0195`
+  calls it once while seeding a demo. `supabase/tests/ticketing.sql`
+  asserts its arithmetic to the minute, and a comment in that file
+  reasons about not re-alerting "every five minutes" — the author
+  assumed a scheduler that was never written. Nothing in production ever
+  called it.
+
+  The deadlines themselves were right: `response_due_at` is computed
+  when the ticket is raised and `ticketing.sql` proves it. What never
+  happened was the moment they passed. `response_breached` stayed false
+  forever, no `sla_breach` row was ever written, and a support manager
+  reading the board saw nothing wrong with it while every promise on it
+  had gone. `0356` schedules it every five minutes — its own job, so a
+  failure in it cannot take the recurring invoices down with it, and
+  five rather than nightly because `sla_targets.response_minutes` only
+  has to be greater than zero and a fifteen-minute P1 is an ordinary
+  line in a support contract.
+
+  Two indexes come with it. The cron command passes no organization, so
+  the sweep runs across every tenant at once and `tickets_open_deadlines`
+  — leading on `org_id` — cannot serve it; two hundred and eighty-eight
+  scans of the ticket table a day is not a cost worth carrying. Both new
+  predicates exclude tickets already marked, so a ticket leaves the
+  index the moment the sweep has dealt with it.
+
+`supabase/tests/scheduled_work.sql` is the sweep kept. It walks out from
+the `cron.job` commands through the function bodies and asserts that
+each of the twelve functions whose only correct caller is a scheduler is
+somewhere in what it reaches. The list of twelve is the claim, and a
+periodic function added without a line in it is not covered — the same
+bargain as adding a test file to `ci.yml`.
+
+It also asserts the cadence, because "scheduled" and "scheduled often
+enough" are different facts and only one of them was ever in doubt; and
+that the sweep works in the shape the scheduler calls it in, with no
+argument, across every tenant at once, which `ticketing.sql` never did.
