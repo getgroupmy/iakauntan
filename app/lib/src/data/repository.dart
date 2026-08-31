@@ -6922,6 +6922,36 @@ extension RepoTicketing on Repo {
     );
   }
 
+  /// Issue a link the requester can read and reply on.
+  ///
+  /// The token comes back exactly once and is never stored in the clear,
+  /// so a caller that loses it issues a new link rather than looking the
+  /// old one up — `0094`'s rule, and the reason there is one live link
+  /// per ticket.
+  Future<String> shareTicket(
+    String id, {
+    int validDays = 30,
+    String? email,
+  }) async =>
+      (await callRpc('share_ticket', params: {
+        'p_ticket': id,
+        'p_valid_days': validDays,
+        if (email != null && email.trim().isNotEmpty) 'p_email': email.trim(),
+      })) as String;
+
+  Future<List<Map<String, dynamic>>> ticketShareLinks(String id) async =>
+      Repo._rows(
+        await client
+            .from('ticket_share_links')
+            .select()
+            .eq('ticket_id', id)
+            .eq('org_id', orgId)
+            .order('created_at', ascending: false),
+      );
+
+  Future<int> revokeTicketShare(String id) async =>
+      (await callRpc('revoke_ticket_share', params: {'p_ticket': id})) as int;
+
   Future<void> escalateTicket(
     String id,
     String kind, {

@@ -144,6 +144,7 @@ jobs:
                    supabase/tests/statutory_charges.sql \
                    supabase/tests/employee_documents.sql \
                    supabase/tests/project_budget.sql \
+                   supabase/tests/ticket_share.sql \
                    supabase/tests/corp_particulars.sql \
                    supabase/tests/decline_and_lodge.sql \
                    supabase/tests/lot_report.sql \

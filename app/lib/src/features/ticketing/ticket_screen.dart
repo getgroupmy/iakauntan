@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'ticket_routing_sheet.dart';
+import 'ticket_share_dialog.dart';
 
 /// One ticket: what was asked, what was said, and what may happen next.
 ///
@@ -81,6 +82,21 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
           data: (t) => Text((t['ticket_no'] ?? 'Ticket') as String),
           orElse: () => const Text('Ticket'),
         ),
+        actions: [
+          // The requester's own door. `0192` built the half of the
+          // conversation they write and nothing could reach it, so a
+          // customer could not answer a question about their own
+          // ticket.
+          ticket.maybeWhen(
+            data: (t) => IconButton(
+              key: const ValueKey('ticket-share'),
+              tooltip: 'Send the requester a link',
+              icon: const Icon(Icons.share_outlined),
+              onPressed: () => showTicketShareDialog(context, t),
+            ),
+            orElse: () => const SizedBox.shrink(),
+          ),
+        ],
       ),
       body: AsyncView(
         value: ticket,

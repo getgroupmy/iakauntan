@@ -304,6 +304,31 @@ begin
            -- internal notes and line cost deliberately left out.
            -- `supabase/tests/document_share.sql` asserts both absences.
            'open_shared_document',
+           -- 0390, and the pair of them are the reader and the writer
+           -- of one conversation. `ticket_comments.author_contact_id`
+           -- has existed since `0192` with a check constraint demanding
+           -- exactly one author, and nothing ever wrote it — so the
+           -- customer who raised a ticket could not say anything on it.
+           --
+           -- `open_shared_ticket` takes a token and returns one ticket
+           -- and the comments on it that are not internal. That filter
+           -- is the reason the function exists: `is_internal` defaults
+           -- to true and `0192` calls it the most dangerous boolean in
+           -- a helpdesk. No assignee, no SLA deadline, no agent named,
+           -- nothing about any other ticket or any other customer.
+           'open_shared_ticket',
+           -- The writer. It appends one comment as the ticket's own
+           -- requester contact, always visible, and lifts the ticket
+           -- off `pending` so the clock that was paused while the
+           -- company waited runs again. It deliberately does not touch
+           -- `first_response_at`: that target is a promise about how
+           -- quickly the company would answer, and stopping it on the
+           -- customer's own message would report a target met that
+           -- nobody met. It writes nothing else and reads nothing else.
+           -- `supabase/tests/ticket_share.sql` asserts the internal
+           -- note never leaves, the response clock is untouched, and an
+           -- expired or revoked link takes no reply.
+           'reply_to_shared_ticket',
            -- 0235. Reachable before anybody has signed in, because the
            -- only moment a rejected password can be reported is before
            -- there is a session. It is built to be safe rather than
@@ -422,7 +447,7 @@ begin
   --
   -- So assert the exposure. A share link that has silently stopped
   -- working is found by a customer, not by us.
-  perform pg_temp.check_eq('and the eleven that need anon still have it',
+  perform pg_temp.check_eq('and the thirteen that need anon still have it',
     (select count(*)
        from pg_proc p
        join pg_namespace n on n.oid = p.pronamespace
@@ -431,6 +456,10 @@ begin
         and has_function_privilege('anon', p.oid, 'execute')
         and p.proname in ('corp_open_signing_link', 'corp_sign_with_link',
                           'open_shared_document', 'report_failed_sign_in',
+                          -- A ticket link that has silently stopped
+                          -- working is found by a customer who thinks
+                          -- they are being ignored.
+                          'open_shared_ticket', 'reply_to_shared_ticket',
                           -- A QR sticker that has silently stopped
                           -- working is found by a customer holding a
                           -- phone at a table, which is worse than being
@@ -454,14 +483,24 @@ begin
                           -- email first is found by a shift standing at
                           -- a till typing a password nobody will take.
                           'may_sign_in_here')),
-    11);
+    13);
 
   perform pg_temp.check_true('and the link tables stay shut to anon',
     not exists (
       select 1 from information_schema.role_table_grants
        where grantee = 'anon'
          and table_name in ('corp_signing_links', 'corp_signatures',
-                            'corp_signature_requests', 'corp_documents')));
+                            'corp_signature_requests', 'corp_documents',
+                            -- `document_share_links` and, since `0390`,
+                            -- `ticket_share_links`. Both hold a column
+                            -- of token hashes, and Supabase's default
+                            -- privileges grant `anon` every table
+                            -- privilege — so the revoke in the
+                            -- migration is the only thing between an
+                            -- anonymous request and every live link in
+                            -- the system.
+                            'document_share_links',
+                            'ticket_share_links')));
 
   -- The whole permission layer hangs off this one predicate, and the
   -- twenty-six guards written as `if not app.can_x(...) then raise` only

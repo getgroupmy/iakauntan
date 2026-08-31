@@ -2649,3 +2649,76 @@ two legitimate jobs — the embed checker needs an existing database, and
 re-running one file while iterating should not cost two minutes — but it
 can no longer report on a schema that exists nowhere except in that
 cluster. A note in a document did not stop me doing it; a refusal does.
+
+## The customer who could not reply to their own ticket
+
+`0192` built `ticket_comments` with two author columns and a check
+constraint saying exactly one must be filled:
+
+    constraint ticket_comments_one_author check (
+      (author_user_id is not null)::int
+      + (author_contact_id is not null)::int = 1)
+
+`author_contact_id` had never been written. `add_ticket_comment` always
+sets `author_user_id` to `auth.uid()` and there is no other writer, so
+the requester half of every conversation in the helpdesk was
+unreachable: staff talked to each other on the ticket and the customer
+who raised it could not say a word. `app.ticket_channel` carries `email`
+and `web` for the same reason and with the same result.
+
+The mechanism was already built twice — `0070` for a director signing a
+resolution, `0094` for a customer reading an invoice — so it is reused
+rather than rewritten: a long random token, only the hash stored, one
+live link at a time, an expiry, and the open recorded because that is
+the only evidence the link reached anybody.
+
+Three rules make it correct rather than merely possible.
+
+**An internal note never leaves the building.** `is_internal` defaults to
+true and `0192`'s own comment calls it "the single most dangerous boolean
+in a helpdesk". The reader filters on it, and a requester's reply is
+`false` unconditionally rather than by default — a customer's message
+landing as an internal note would be invisible to the person who sent it.
+
+**A customer's message is not the company's first response.**
+`add_ticket_comment` stops the first-response clock on the first visible
+comment. Had the requester's own reply done that, the SLA report would
+show a target met that nobody met: the same falsehood shape as `0385`'s
+discount and `0387`'s paid date, a control that appears to have been
+applied. It is written past deliberately and the test asserts the
+absence.
+
+**A reply takes the ticket off the customer's hands.** `pending` pauses
+the SLA clock, which is right while the company waits for an answer and
+wrong the moment the answer arrives. The reply goes through the same
+transition machinery a member uses, so the paused minutes and the
+deadline move identically; on a resolved or closed ticket it reopens,
+which is what `reopened_count` counts.
+
+### The guard that duplicated itself
+
+`transition_ticket` carries the paused-minutes arithmetic and the
+permission check in one body. The requester's path needs the arithmetic
+and cannot pass the check. Copying the body would have been the fast
+answer and is how two copies come to disagree about how long a ticket
+was paused, so the arithmetic moved into
+`app.transition_ticket_internal` and `transition_ticket` was re-issued
+as the guard and a call. Worth saying because the first draft of the
+migration *claimed* that in prose while leaving the old body in place —
+the exact fault `0386`'s header was written about.
+
+### A revoke the local harness cannot see
+
+`revoke all on public.ticket_share_links from anon` is load-bearing in
+production, where Supabase's default privileges grant `anon` every table
+privilege on a new public table. `_local_stack.sql` does not install
+those defaults, so locally `anon` has no grant, the revoke is a no-op,
+and deleting it is a mutant no assertion here can kill. It is asserted in
+`statutory.sql` anyway — the check holds where it matters and costs
+nothing where it does not — and recorded here because that file's own
+header warns this is where the stubs stop being the real thing.
+
+Nineteen mutants; seventeen killed on the first pass, two needed
+assertions that were missing (the resolution note the requester is shown,
+and the link table's own row policy), and one is the unkillable revoke
+above.

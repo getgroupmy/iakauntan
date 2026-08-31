@@ -398,6 +398,14 @@ final priceLevelsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
 });
 
 /// Every project with its budget and what has been spent against it.
+/// Links issued for one ticket, newest first.
+///
+/// "Did they ever open it?" is the question somebody asks a week later,
+/// and the open count is the only evidence the link reached anybody.
+final ticketShareLinksProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+        (ref, ticketId) => requireRepo(ref).ticketShareLinks(ticketId));
+
 final projectBudgetProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, bool>((ref, includeClosed) =>
         requireRepo(ref).projectBudgets(includeClosed: includeClosed));

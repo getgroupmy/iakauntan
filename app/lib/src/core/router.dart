@@ -81,6 +81,7 @@ import '../features/reports/group_reports_screen.dart';
 import '../features/reports/reports_screen.dart';
 import '../features/secretarial/entity_editor.dart';
 import '../features/documents/shared_document_page.dart';
+import '../features/ticketing/shared_ticket_page.dart';
 import '../features/settings/email_screen.dart';
 import '../features/secretarial/signing_page.dart';
 import '../features/secretarial/entity_screen.dart';
@@ -228,7 +229,11 @@ String? routeFor({
   // The other page that works with no account: a customer opening a
   // link to their own invoice.
   if (path.startsWith('/share/')) return null;
-  // And the third: somebody at a table with a phone and a QR sticker.
+  // And a customer replying to their own support ticket, for the same
+  // reason: they will not sign up to an accounting system to answer a
+  // question about their printer.
+  if (path.startsWith('/ticket/')) return null;
+  // And the fourth: somebody at a table with a phone and a QR sticker.
   // 0262's functions authorise themselves against the token, and a
   // customer will not sign up to an accounting system to order a teh
   // tarik.
@@ -509,6 +514,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/share/:token',
         builder: (_, state) =>
             SharedDocumentPage(token: state.pathParameters['token']!),
+      ),
+      // And a customer reading — and replying to — their own support
+      // ticket. `0192` built the requester's half of the conversation
+      // and nothing could write it, so the person who raised a ticket
+      // could not say anything on it.
+      GoRoute(
+        path: '/ticket/:token',
+        builder: (_, state) =>
+            SharedTicketPage(token: state.pathParameters['token']!),
       ),
       // The menu on the sticker. No shell, no sign-in, nothing but the
       // shop's own list and a basket.
