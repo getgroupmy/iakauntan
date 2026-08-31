@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788192771.4878397,
-    "ast_hash": "88a120c772e5418e8ad69237dcd95602",
+    "mtime": 1788198746.5259945,
+    "ast_hash": "e013cd6dc74b37b00218e0dc7dc378ca",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788190097.9608808,
-    "ast_hash": "e6e3659ca61e82ed2d1dba12776c9ffb",
+    "mtime": 1788198598.4465322,
+    "ast_hash": "85d41fd92fe23c162d905274f6287f44",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788192771.4868867,
-    "ast_hash": "cac80585bebe207c48410b3ae2a9c1ae",
+    "mtime": 1788198746.5233555,
+    "ast_hash": "9fcae28ba9ad4836cebed1991e5619f9",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -230,8 +230,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/talent_screen.dart": {
-    "mtime": 1786785756.618488,
-    "ast_hash": "7c2777503fe1e289728ec74ab252b6a0",
+    "mtime": 1788198914.0857978,
+    "ast_hash": "cf013e891fd6bb30ed2eb06daee26a8e",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/tax_year_section.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788195486.8336818,
-    "ast_hash": "cc7bf271d50e4464bd8ca524c55f4885",
+    "mtime": 1788196784.0494168,
+    "ast_hash": "14899a66cead0b5fc4b4ef1db6294d44",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788196158.0759614,
-    "ast_hash": "f050c09c3ffbc84a0766636ac66e23a2",
+    "mtime": 1788199152.3833797,
+    "ast_hash": "aea9f55ab13c167e6bca350e1ea5be14",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6142,6 +6142,36 @@
   "supabase/tests/decline_and_lodge.sql": {
     "mtime": 1788195526.681155,
     "ast_hash": "e93d5c6f3b53aa92f662f15eb3b0d3e1",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/appraisal_cycles_dialog.dart": {
+    "mtime": 1788198860.2433624,
+    "ast_hash": "15bd9346c320e66e42b3973338c5df05",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/appraisal_part.dart": {
+    "mtime": 1788198729.0214643,
+    "ast_hash": "b32b40ba9c487e391938fa46f73af92f",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/appraisal_review.dart": {
+    "mtime": 1788198815.8513596,
+    "ast_hash": "00ae6db7a483d1d3aca43d3ec94ea36a",
+    "semantic_hash": ""
+  },
+  "app/test/appraisal_part_test.dart": {
+    "mtime": 1788198729.0216365,
+    "ast_hash": "6a96b9237c7db0d67850fd2f6caf32f0",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0379_the_appraisal_you_could_write_for_yourself.sql": {
+    "mtime": 1788198673.7162557,
+    "ast_hash": "4c0a0a6189eaaeccf6687c3a414af87b",
+    "semantic_hash": ""
+  },
+  "supabase/tests/appraisals.sql": {
+    "mtime": 1788198688.9873521,
+    "ast_hash": "a77c7bb768b597286131581a3f29f3af",
     "semantic_hash": ""
   }
 }
