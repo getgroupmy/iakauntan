@@ -114,6 +114,7 @@ jobs:
                    supabase/tests/hr_manager_role.sql \
                    supabase/tests/document_types.sql \
                    supabase/tests/pos_on_account.sql \
+                   supabase/tests/matter_transfer.sql \
                    supabase/tests/inventory_forecast.sql \
                    supabase/tests/pos.sql \
                    supabase/tests/pos_retail.sql \

@@ -1080,3 +1080,51 @@ arrived. It is wrong for **`on_account`**, which is a promise.
   The one honest general lesson: a `case` or an `if/else` over an enum
   where the last branch is `else` is a place where a new value gets a
   silent default. Grep for those before trusting an enum is handled.
+
+### A pair of enum values that only mean anything together
+
+`app.client_txn_type` has six values and the matter screen's dropdown
+offers four. `refund` and `transfer_to_office` are there; `transfer_in`
+and `transfer_out` — "moved from another matter", says `0021`'s own
+comment — never were. `matter_detail_screen.dart` even has a
+`_isMoneyIn` that already knows `transfer_in` counts as money in, which
+is where the design stopped.
+
+- **The client's money, moved between their own matters** (`0358`). A
+  client finishes a conveyance with a balance still held and starts a
+  tenancy; the deposit follows them. Without this the firm's only route
+  is to refund it out of the client account and take it back in — two
+  bank movements to record a transfer that never left the bank, and a
+  withdrawal from a client account that did not have to happen.
+
+  What makes this one different from the missing document types is that
+  **the fix could not be a dropdown entry**. A `transfer_out` on its own
+  is money taken off a matter and put nowhere: posted exactly like a
+  payment, reconcilable against nothing, and indistinguishable from the
+  correct version until somebody adds up the client account. Two more
+  menu items would have made the wrong thing the easy thing. So the
+  pair is written by one function or not at all, and the enum values
+  stay unofferable individually on purpose.
+
+  `0021` built the overdraw control as a **deferrable** constraint
+  trigger. That was foresight — a paired write needs both legs to land
+  before the balances are checked — and this is the thing it was
+  foreseeing.
+
+Two findings came out of the mutation run rather than the reading, and
+both are worth keeping:
+
+- **A deferred trigger does not refuse in time.** Removing
+  `transfer_between_matters`' own balance check made the test fail while
+  `assert_client_funds` stayed completely silent, because
+  `deferrable initially deferred` means it fires at commit and the test
+  never commits. That is not a test artefact: any session that does
+  several things before committing gets the same silence, and by the
+  time the trigger speaks the caller has acted on a transfer that is
+  about to be rejected. The trigger is the control; the check is the
+  refusal. Neither is redundant.
+- **`if/else` over an enum hides the next value.** `complete_pos_sale`
+  matched `cash` and put everything else in one `else`; that is how
+  `on_account` came to mean nothing for nine migrations. Before trusting
+  that an enum is handled, find the `else` and the `_ =>` and ask what
+  falls into them.

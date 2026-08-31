@@ -8,6 +8,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import 'matter_billing.dart';
+import 'matter_transfer.dart';
 
 /// A single matter: client money held, time recorded and disbursements.
 ///
@@ -153,13 +154,33 @@ class _ClientLedgerTab extends ConsumerWidget {
 
     return Scaffold(
       floatingActionButton: canPost
-          ? FloatingActionButton.extended(
-              onPressed: () => showDialog<void>(
-                context: context,
-                builder: (_) => _ClientMoneyDialog(matterId: matterId),
-              ),
-              icon: const Icon(Icons.add),
-              label: const Text('Client money'),
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Small, and above the primary one. Moving a balance
+                // between a client's own matters is an occasional act;
+                // recording money in and out is the daily one.
+                FloatingActionButton.small(
+                  heroTag: 'move-client-money',
+                  tooltip: 'Move to another matter',
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => _MoveClientMoneyDialog(matterId: matterId),
+                  ),
+                  child: const Icon(Icons.swap_horiz),
+                ),
+                const SizedBox(height: Space.sm),
+                FloatingActionButton.extended(
+                  heroTag: 'add-client-money',
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => _ClientMoneyDialog(matterId: matterId),
+                  ),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Client money'),
+                ),
+              ],
             )
           : null,
       body: AsyncView(
@@ -441,6 +462,185 @@ class _ClientMoneyDialogState extends ConsumerState<_ClientMoneyDialog> {
                   width: 18,
                   child: CircularProgressIndicator(strokeWidth: 2))
               : const Text('Record and post'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Moving a client's balance from this matter to another of theirs.
+///
+/// 0358 writes it as a paired `transfer_out` and `transfer_in`, posted
+/// together, so nothing leaves the client account — what moves is which
+/// matter the firm holds the money against.
+///
+/// The destination list can only contain the same client's other
+/// matters. The server refuses anything else, and refusing is the right
+/// behaviour, but the ordinary way this goes wrong is a mistyped matter
+/// number in a list where both are open: a list that cannot hold the
+/// wrong answer beats a refusal after the fact.
+class _MoveClientMoneyDialog extends ConsumerStatefulWidget {
+  const _MoveClientMoneyDialog({required this.matterId});
+
+  final String matterId;
+
+  @override
+  ConsumerState<_MoveClientMoneyDialog> createState() =>
+      _MoveClientMoneyDialogState();
+}
+
+class _MoveClientMoneyDialogState
+    extends ConsumerState<_MoveClientMoneyDialog> {
+  final _amount = TextEditingController();
+  final _description = TextEditingController();
+  Matter? _to;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  double get _held {
+    final list =
+        ref.read(clientTransactionsProvider(widget.matterId)).value ??
+            const <ClientTransaction>[];
+    return list.fold<double>(0, (sum, t) => sum + t.amount);
+  }
+
+  Future<void> _move(Matter from) async {
+    final to = _to;
+    if (to == null) return;
+    setState(() => _saving = true);
+    final ok = await runWithFeedback(
+      context,
+      pendingMessage: 'Moving it…',
+      successMessage: 'Moved to ${to.matterNo}',
+      action: () => ref.read(repoProvider)!.transferBetweenMatters(
+        fromMatterId: from.id,
+        toMatterId: to.id,
+        amount: double.tryParse(_amount.text) ?? 0,
+        // Today, with no picker. A transfer between matters is a
+        // bookkeeping act done at the moment somebody does it, and
+        // backdating one into a closed period is refused by period
+        // control anyway — an option that only ever produces a refusal
+        // is not an option.
+        date: DateTime.now(),
+        description: _description.text.trim(),
+      ),
+    );
+    if (mounted) setState(() => _saving = false);
+    if (ok && mounted) {
+      refreshMatter(ref, widget.matterId);
+      // The other matter's ledger moved too, and somebody may well be
+      // about to open it.
+      ref.invalidate(clientTransactionsProvider(to.id));
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final matters =
+        ref.watch(mattersProvider((status: 'all', search: ''))).value ??
+            const <Matter>[];
+    final from = matters.where((m) => m.id == widget.matterId).firstOrNull;
+    if (from == null) {
+      return const AlertDialog(
+        title: Text('Move client money'),
+        content: Text('This matter is still loading.'),
+      );
+    }
+
+    final destinations = transferDestinations(matters, from);
+    final held = _held;
+    final blocked = transferBlockedBecause(
+      held: held,
+      amount: double.tryParse(_amount.text) ?? 0,
+      to: _to,
+    );
+
+    return AlertDialog(
+      title: const Text('Move to another matter'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              transferBlurb(from, _to),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            if (destinations.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: Space.md),
+                child: Text(
+                  '${from.clientName ?? 'This client'} has no other matter '
+                  'to move it to. Client money may only move between '
+                  'matters of the same client.',
+                  style: TextStyle(color: context.colors.warning),
+                ),
+              )
+            else
+              DropdownButtonFormField<Matter>(
+                value: _to,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'To matter'),
+                items: [
+                  for (final m in destinations)
+                    DropdownMenuItem(
+                      value: m,
+                      child: Text('${m.matterNo} — ${m.name}'),
+                    ),
+                ],
+                onChanged: (v) => setState(() => _to = v),
+              ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _amount,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                labelText: 'Amount *',
+                prefixText: Fmt.prefix('MYR'),
+                helperText: '${Fmt.money(held)} held on ${from.matterNo}',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _description,
+              decoration: const InputDecoration(
+                labelText: 'Why',
+                hintText: 'Balance follows the client',
+              ),
+            ),
+            if (blocked != null && destinations.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                blocked,
+                style: TextStyle(color: context.colors.danger, fontSize: 12),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving || blocked != null ? null : () => _move(from),
+          child: _saving
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Move it'),
         ),
       ],
     );

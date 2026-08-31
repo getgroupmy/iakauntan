@@ -3797,6 +3797,31 @@ extension RepoExtras on Repo {
     await callRpc('post_client_transaction', params: {'p_id': row['id']});
   }
 
+  /// Moves client money from one of a client's matters to another.
+  ///
+  /// 0358. Both legs at once, because one `transfer_out` on its own is
+  /// money taken off a matter and put nowhere. The server refuses a
+  /// transfer between different clients and one the source matter does
+  /// not hold; `matter_transfer.dart` asks the same two questions first
+  /// so the answer arrives before the amount is typed rather than after.
+  Future<void> transferBetweenMatters({
+    required String fromMatterId,
+    required String toMatterId,
+    required double amount,
+    required DateTime date,
+    String? description,
+  }) => callRpc(
+    'transfer_between_matters',
+    params: {
+      'p_from': fromMatterId,
+      'p_to': toMatterId,
+      'p_amount': amount,
+      'p_date': Fmt.iso(date),
+      if (description != null && description.isNotEmpty)
+        'p_description': description,
+    },
+  );
+
   Future<List<TimeEntry>> timeEntries(String matterId) async {
     final data = await client
         .from('time_entries')
