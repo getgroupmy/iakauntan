@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788216822.698197,
-    "ast_hash": "d23f07c1d582c58d3f1cb79ce1faf1af",
+    "mtime": 1788219339.7576344,
+    "ast_hash": "178d9b4e11c4bcfb98e88c2b6af0565a",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1788157295.0088916,
-    "ast_hash": "3c1101b9cf49929abd933e8e4c8c7e6f",
+    "mtime": 1788219263.356419,
+    "ast_hash": "dceead7a17ab868b51f0873f818bb8b3",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788216822.697435,
-    "ast_hash": "1b29732dc3f13f2aee25f3a6cd9990c8",
+    "mtime": 1788219339.759325,
+    "ast_hash": "14369b9a132c2065531fb40d4825da8d",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -740,8 +740,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory.sql": {
-    "mtime": 1788196057.502967,
-    "ast_hash": "521442a3a5e4451ce883fd0ccc166103",
+    "mtime": 1788219005.6624186,
+    "ast_hash": "8d09e84885b0c3674d52583750009197",
     "semantic_hash": ""
   },
   ".claude/CLAUDE.md": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788214548.9682949,
-    "ast_hash": "61767dd40d099aa076a8e3e8c3cd4ba7",
+    "mtime": 1788217491.6723323,
+    "ast_hash": "6edc2b9f6216c34b9a6f011a7024fba0",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788217176.948451,
-    "ast_hash": "3430498557dc2cf3c89269f541498d27",
+    "mtime": 1788219746.3006039,
+    "ast_hash": "7b3628255020eeda3753d0d7419230aa",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -3055,8 +3055,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/ticketing/ticket_screen.dart": {
-    "mtime": 1788163479.8375452,
-    "ast_hash": "745ae162e9c4915f3a7e956ab5abf947",
+    "mtime": 1788219377.2069027,
+    "ast_hash": "184ff2147c1dd5aaf02ff5c7d8e57860",
     "semantic_hash": ""
   },
   "app/lib/src/features/ticketing/tickets_screen.dart": {
@@ -6357,6 +6357,31 @@
   "supabase/tests/project_budget.sql": {
     "mtime": 1788215613.3864093,
     "ast_hash": "e6ab94f0645284d187054d3cb7ecb2b9",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/ticketing/shared_ticket_page.dart": {
+    "mtime": 1788219263.3541486,
+    "ast_hash": "51332011cef09977e0e596a097c8ae5e",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/ticketing/ticket_share_dialog.dart": {
+    "mtime": 1788219362.6987262,
+    "ast_hash": "16509c393a002aa5191b87100bae32dd",
+    "semantic_hash": ""
+  },
+  "app/test/ticket_share_test.dart": {
+    "mtime": 1788219418.89003,
+    "ast_hash": "b98ba67f58eecea4a1a1befe7594b9e7",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0390_the_customer_who_could_not_reply.sql": {
+    "mtime": 1788219161.484569,
+    "ast_hash": "e81799ad4125d79bd7865c54cb14cde9",
+    "semantic_hash": ""
+  },
+  "supabase/tests/ticket_share.sql": {
+    "mtime": 1788219005.6626108,
+    "ast_hash": "0d917b54bc38e6e0d66ff2a3e96ac810",
     "semantic_hash": ""
   }
 }
