@@ -628,13 +628,13 @@ class PageBody extends StatelessWidget {
   }
 }
 
-/// Shows a snackbar for a Future, surfacing errors rather than swallowing
-/// them. Returns true when the action completed.
-/// Runs an action, says what happened, and writes down a refusal.
+/// Shows a snackbar for a Future, surfacing errors rather than
+/// swallowing them. Returns true when the action completed.
 ///
-/// [doing] names what was being attempted, for the security log. It is
-/// the screen's word for it, because the sentence coming back says what
-/// the database thought rather than what the person was trying to do.
+/// It is also where a refusal gets written down. [doing] names what was
+/// being attempted, for the security log, because the sentence coming
+/// back says what the database thought rather than what the person was
+/// trying to do.
 Future<bool> runWithFeedback(
   BuildContext context, {
   required Future<void> Function() action,
@@ -678,10 +678,18 @@ Future<bool> runWithFeedback(
   // Read before awaiting, for the same reason as the colours: the
   // widget that supplied this context may be gone by the time the
   // action returns.
-  final repo = ProviderScope.containerOf(
-    context,
-    listen: false,
-  ).read(repoProvider);
+  //
+  // Guarded, because `containerOf` throws where there is no scope
+  // above the context. Every screen in this app has one — but this is
+  // the function every screen shows its errors through, and turning
+  // "the server said no" into a crash to record that the server said
+  // no would be the worst possible trade.
+  Repo? repo;
+  try {
+    repo = ProviderScope.containerOf(context, listen: false).read(repoProvider);
+  } catch (_) {
+    repo = null;
+  }
 
   try {
     await action();
