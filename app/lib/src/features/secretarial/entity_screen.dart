@@ -15,6 +15,7 @@ import 'document_pdf.dart';
 import 'beneficial_owner_sheet.dart';
 import 'charge_sheet.dart';
 import 'officer_sheet.dart';
+import 'particulars_sheet.dart';
 import 'share_class_sheet.dart';
 import 'resolution_sheet.dart';
 import 'share_event_sheet.dart';
@@ -38,6 +39,24 @@ class CorpEntityScreen extends ConsumerWidget {
         ),
         title: Text(entity.valueOrNull?.name ?? 'Company'),
         actions: [
+          // The three changes that are events rather than edits. Kept
+          // off the editor deliberately: `0377` refuses a rename or an
+          // office move made as a plain update, because each starts a
+          // clock and a rename has to keep the former name.
+          if (ref.watch(canWriteProvider))
+            TextButton.icon(
+              key: const ValueKey('change-particulars'),
+              onPressed: () async {
+                final e = entity.valueOrNull;
+                if (e == null) return;
+                if (await showParticularsSheet(context, entity: e)) {
+                  ref.invalidate(corpEntityProvider(entityId));
+                  ref.invalidate(corpFilingsProvider);
+                }
+              },
+              icon: const Icon(Icons.published_with_changes, size: 18),
+              label: const Text('Change of particulars'),
+            ),
           if (ref.watch(canWriteProvider))
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.md),

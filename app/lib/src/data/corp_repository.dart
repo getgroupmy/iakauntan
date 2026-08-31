@@ -24,6 +24,66 @@ extension RepoCorp on Repo {
         : CorpEntity.fromJson(Map<String, dynamic>.from(row));
   }
 
+  /// Renaming a company, which is an event rather than an edit.
+  ///
+  /// `0377` refuses a bare rename: s.28 is lodged within fourteen days
+  /// and s.28(4) puts the former name on the company's documents for
+  /// twelve months, so both the old name and the date have to be kept.
+  /// Returns the id of the filing it opened.
+  Future<String> changeCompanyName(
+    String entityId,
+    String newName, {
+    DateTime? resolvedOn,
+  }) async => (await callRpc(
+    'change_company_name',
+    params: {
+      'p_entity': entityId,
+      'p_new_name': newName,
+      'p_resolved_on': resolvedOn == null ? null : Fmt.iso(resolvedOn),
+    },
+  )).toString();
+
+  /// The other door: the record catching up with what was always true.
+  /// No former name, no filing, no clock.
+  Future<void> correctCompanyName(String entityId, String name) => callRpc(
+    'correct_company_name',
+    params: {'p_entity': entityId, 'p_name': name},
+  );
+
+  /// Moving the registered office. Lodged under s.46(3) within fourteen
+  /// days. Returns the filing it opened.
+  Future<String> changeRegisteredOffice(
+    String entityId,
+    String address, {
+    DateTime? effectiveOn,
+  }) async => (await callRpc(
+    'change_registered_office',
+    params: {
+      'p_entity': entityId,
+      'p_address': address,
+      'p_effective_on': effectiveOn == null ? null : Fmt.iso(effectiveOn),
+    },
+  )).toString();
+
+  Future<void> correctRegisteredOffice(String entityId, String address) =>
+      callRpc(
+        'correct_registered_office',
+        params: {'p_entity': entityId, 'p_address': address},
+      );
+
+  /// Adopting a constitution by special resolution under s.32(1); the
+  /// copy is lodged within thirty days under s.32(3).
+  Future<String> adoptConstitution(
+    String entityId, {
+    DateTime? adoptedOn,
+  }) async => (await callRpc(
+    'adopt_constitution',
+    params: {
+      'p_entity': entityId,
+      'p_adopted_on': adoptedOn == null ? null : Fmt.iso(adoptedOn),
+    },
+  )).toString();
+
   Future<String> saveCorpEntity(Map<String, dynamic> values,
       {String? id}) async {
     if (id != null) {

@@ -1788,6 +1788,49 @@ multiplies them.
   assertion is written as the outcome ("the refusal leaves no half-built
   note"), which holds either way.
 
+- **A statutory event made through a form field**
+  (`corp_entities.former_names`, `registered_office_changed_on`,
+  `constitution_adopted_on`). Columns since `0061`, none ever written.
+
+  `0063` had already done the hard part: it knows a change of registered
+  office is s.46(3) and fourteen days, that a change of name is s.28 and
+  fourteen days, and `corp_open_filing` freezes a computed obligation
+  into a row somebody can work on. What was missing was the *event*. The
+  entity editor writes `name` and `registered_office` as ordinary text
+  boxes, so a company could be renamed by typing over it and no clock
+  started.
+
+  Losing the former name is the sharper half, and the reason is s.28(4):
+  for **twelve months** from a change of name, the former name must
+  appear beside the new one on every document the company issues. Typing
+  over the field loses the old name *and* the date twelve months would
+  be counted from, so every document after it is defective and nothing
+  in the record can say so.
+
+  The design decision worth recording is the **two doors**. A company
+  changing its name and a secretary fixing a typo look identical to a
+  form and are nothing alike on a file: one is an event with a deadline
+  and a twelve-month obligation, the other is the record catching up
+  with what was always true. Each gets its own function, the trigger
+  refuses anything else, and `0038`'s audit trail then shows which door
+  was used — which is precisely what an inspection asks. The registered
+  office is guarded the same way even though it is the softer case,
+  because one rule for the sharp case and another for the soft one is a
+  rule nobody can remember.
+
+  A mechanism note. `correct_company_name` writes the name without the
+  date, which is exactly what the trigger refuses, so it announces
+  itself with a transaction-local `set_config` that it clears on the
+  next line. The clearing is the point and it is asserted: leaving the
+  marker standing would let the next bare update in the same transaction
+  ride through on it, which in an RPC that does two things is a rename
+  nobody authorised.
+
+  `adopt_constitution` needed a filing type `0063` does not have —
+  s.32(1) allows adoption by special resolution and s.32(3) requires the
+  copy lodged within **thirty** days, not the fourteen most of the
+  others use. Asserted as its own number for that reason.
+
 - **Two left where they are, and why.** `organizations.trial_ends_at`
   and the `trial_days` platform setting are the vestige of a business
   model this system does not have. Nothing enters the `trial` status —
