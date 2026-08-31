@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788190527.1758142,
-    "ast_hash": "4e82de658e81f8245a4aa1181e13d4c5",
+    "mtime": 1788191605.6649652,
+    "ast_hash": "a11cdd64950e7c3cffb9fa856523ad3b",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -5880,8 +5880,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_counting.sql": {
-    "mtime": 1788175083.3634453,
-    "ast_hash": "f5ab0bd43b21e66f0fa11fbbc75cf15e",
+    "mtime": 1788191515.2947037,
+    "ast_hash": "0b2e74b9591fc8a27a848ba5a9efbb75",
     "semantic_hash": ""
   },
   "supabase/tests/pos_on_account.sql": {
@@ -6102,6 +6102,11 @@
   "supabase/tests/document_dates.sql": {
     "mtime": 1788189852.702827,
     "ast_hash": "59f2f64151ac33d4d55552539225172b",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0375_the_parked_bill_that_never_expired.sql": {
+    "mtime": 1788191515.2944603,
+    "ast_hash": "6d4f49235d533ef36d530267733bf4ed",
     "semantic_hash": ""
   }
 }
