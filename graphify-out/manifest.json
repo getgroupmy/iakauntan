@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788136118.219618,
-    "ast_hash": "13d181609d2b5f277ba5416751e785a4",
+    "mtime": 1788136753.9117997,
+    "ast_hash": "d47773acbfda3fe5eace1947bb0d008f",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1787822945.4865897,
-    "ast_hash": "89c06a57e79091c53e3640eb16e55b56",
+    "mtime": 1788136753.9085438,
+    "ast_hash": "cde63563565af21936ad6afb04ca7ae1",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788136118.2033854,
-    "ast_hash": "e2c91ab6ae0ffc306ef01c198ed8718a",
+    "mtime": 1788136753.9111743,
+    "ast_hash": "b5eb0402a181595056c2cb2482709c4e",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": "2035aaeef1dbeb043e2087101b179517"
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1788126248.2218382,
-    "ast_hash": "04d1ae45105bc8e451aeaea81f33873f",
+    "mtime": 1788136813.388417,
+    "ast_hash": "f2848aff15c55e088d21374bdec212d4",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788136632.9852064,
-    "ast_hash": "d183e7822374be07cce07f9d11e78062",
+    "mtime": 1788137178.2194006,
+    "ast_hash": "1f7cc4f38ec27cb2f8bd10a92299d290",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -5667,6 +5667,16 @@
   "app/test/no_scope_feedback_test.dart": {
     "mtime": 1788135752.8926597,
     "ast_hash": "78ca62f76c1d0445d86fbaa7208868a5",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/settings/tax_exemption.dart": {
+    "mtime": 1788136906.3313303,
+    "ast_hash": "1dbc578cf71e4d9960308d990fb333cc",
+    "semantic_hash": ""
+  },
+  "app/test/tax_exemption_test.dart": {
+    "mtime": 1788136837.2123525,
+    "ast_hash": "090f928a05df6b2ea0d550c5e7e911d9",
     "semantic_hash": ""
   }
 }
