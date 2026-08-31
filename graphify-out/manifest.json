@@ -100,8 +100,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/corp_repository.dart": {
-    "mtime": 1788157295.0088916,
-    "ast_hash": "310586585bca0645863a17b57b51f1f2",
+    "mtime": 1788194315.4990582,
+    "ast_hash": "5b4d9059112796f954c92c55dcbd5e13",
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
@@ -270,13 +270,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/entity_editor.dart": {
-    "mtime": 1786785756.622488,
-    "ast_hash": "f6071149b884abb0a3eb114e391db379",
-    "semantic_hash": "f6071149b884abb0a3eb114e391db379"
+    "mtime": 1788194282.117503,
+    "ast_hash": "803e2214f5660db0395325cf725e59ad",
+    "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/entity_screen.dart": {
-    "mtime": 1788157295.0288916,
-    "ast_hash": "39c0789f2d4ba417667bce668a73912a",
+    "mtime": 1788194385.8758292,
+    "ast_hash": "50c5ecc33544183e03af0053e28ee0f8",
     "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/secretarial_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788192368.4284458,
-    "ast_hash": "0113831b116e0191f3921f2453f2dd4b",
+    "mtime": 1788193989.4478023,
+    "ast_hash": "eef3791be8130356173ba74c4415da36",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788193112.1056023,
-    "ast_hash": "404e98d29734d79f5a3ea2dbe169cbb9",
+    "mtime": 1788194684.9086418,
+    "ast_hash": "1c69cfd80dae94dad2d7cd9eaef07e5c",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6117,6 +6117,21 @@
   "supabase/tests/bill_credit.sql": {
     "mtime": 1788192652.9332116,
     "ast_hash": "65ca3d449cc0f4b596ad4dc4e8880ca9",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/secretarial/particulars_sheet.dart": {
+    "mtime": 1788194353.108082,
+    "ast_hash": "cb7829fddd31b56074315bebb581829c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0377_the_changes_ssm_has_to_be_told_about.sql": {
+    "mtime": 1788194255.2159038,
+    "ast_hash": "d232293f7e07afd19585e22d6d4c7ffe",
+    "semantic_hash": ""
+  },
+  "supabase/tests/corp_particulars.sql": {
+    "mtime": 1788194064.7009087,
+    "ast_hash": "3ba939cef9a2727d2b652a1c0d3ad7be",
     "semantic_hash": ""
   }
 }
