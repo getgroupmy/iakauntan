@@ -1217,3 +1217,25 @@ The three under `attendance_status` were the real find.
   selling". The assertion now checks the words, and the mutant dies on
   the constraint's own error text, which makes the point better than
   the comment does.
+
+The last two of the seven are recorded here as decisions rather than
+closed, for the same reason `fs_disclosures` is:
+
+- **`corp_filing_status.awaiting_signature`** needs a link that does not
+  exist. Signature requests hang off `corp_documents`; a filing links
+  only to a `corp_resolution`, and there is no path from one to the
+  other. Worse, `ensure_corp_filing`'s `on conflict do update` resets
+  anything that is not `lodged` or `approved` back to `in_preparation`,
+  so the state would be clobbered the next time the deadline engine ran
+  over it. Reaching it properly means designing the filing-to-document
+  link and teaching that upsert which states it may not overwrite —
+  a feature, not a gap to close, and inventing half of it would put a
+  status on a statutory filing that the engine then silently reverses.
+- **`clock_method.biometric`** needs a fingerprint reader nobody has
+  wired up. It is honestly unbuilt and there is nothing to close.
+
+And `pos_tender_kind.voucher` is not a gap at all: `pos_tender_types` is
+data, a shop can create a voucher tender today, and it behaves like a
+card. The enum value being unwritten in any migration is what a
+data-driven table looks like from a sweep, which is worth knowing before
+the next one of these produces the same false positive.
