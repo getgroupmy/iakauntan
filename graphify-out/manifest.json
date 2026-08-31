@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788202846.8548133,
-    "ast_hash": "ebe22bf49a5844658eab44bb05a5ef1f",
+    "mtime": 1788204521.3622806,
+    "ast_hash": "15b55628eda34b3fea1208d1b968762b",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788202837.8854904,
-    "ast_hash": "9c0c180a3f3459b3a34d06847d042750",
+    "mtime": 1788204521.3601542,
+    "ast_hash": "5b5572b3fcd0dd13fa69d9ae4102ef69",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788202837.8873906,
-    "ast_hash": "48144bbcedf5fd4d84759227ff507688",
+    "mtime": 1788204633.9030538,
+    "ast_hash": "9ee50643a7f94431a1472452123b68b4",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -255,9 +255,9 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/legal/matters_screen.dart": {
-    "mtime": 1786785756.622488,
-    "ast_hash": "e58e35578f6071bf209f21ce15e74f45",
-    "semantic_hash": "e58e35578f6071bf209f21ce15e74f45"
+    "mtime": 1788204666.0356355,
+    "ast_hash": "eec34034ebdac7c64fa53bfe98be8a57",
+    "semantic_hash": ""
   },
   "app/lib/src/features/onboarding/create_org_screen.dart": {
     "mtime": 1788157295.0248916,
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788202284.4376016,
-    "ast_hash": "46009425fdf5126fc05ecb7ba782fe28",
+    "mtime": 1788203387.3473527,
+    "ast_hash": "8edac5c5d2d03609aae2dcb8351056bd",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788203156.5996177,
-    "ast_hash": "f21dfd10b9f5c2f13e2f77f25e9105d6",
+    "mtime": 1788204906.1837218,
+    "ast_hash": "7bd47304f91f18a9a5a50e166cedd206",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -2790,8 +2790,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/timesheets.sql": {
-    "mtime": 1786936942.965101,
-    "ast_hash": "04c88f804b1dd752f3a5afb6705f1051",
+    "mtime": 1788204409.5844502,
+    "ast_hash": "3524bdfbf749e66b01710bb2170508d0",
     "semantic_hash": ""
   },
   "docs/timesheets.md": {
@@ -4240,8 +4240,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/client_account.sql": {
-    "mtime": 1787822946.0225897,
-    "ast_hash": "dc61c29c2480dc3d8408fbc8a6732e2d",
+    "mtime": 1788204409.5837183,
+    "ast_hash": "8e3fc6d4ee601f50aa1ee59dc85c5491",
     "semantic_hash": ""
   },
   "supabase/tests/clock_out.sql": {
@@ -4280,8 +4280,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/matter_billing.sql": {
-    "mtime": 1787822946.0265896,
-    "ast_hash": "4297dfc84c4b951dd5d71ca12f72a247",
+    "mtime": 1788204409.5839899,
+    "ast_hash": "c3f5cb62e9b6e4a76cfb339e11c3b1cc",
     "semantic_hash": ""
   },
   "supabase/tests/payroll_periods.sql": {
@@ -5875,8 +5875,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/matter_transfer.sql": {
-    "mtime": 1788173385.330641,
-    "ast_hash": "ed2ecabaa481a5609c1f00904ed4c5b9",
+    "mtime": 1788204409.5842862,
+    "ast_hash": "3d022a813e795ae8a7df7921245b2287",
     "semantic_hash": ""
   },
   "supabase/tests/pos_counting.sql": {
@@ -6045,8 +6045,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/matter_closing.sql": {
-    "mtime": 1788186799.185751,
-    "ast_hash": "3dd66c8c1aa270bf1fcd8274bc7617a6",
+    "mtime": 1788204409.5841486,
+    "ast_hash": "ff0190136564a4463cf200efc8f6fc9b",
     "semantic_hash": ""
   },
   "app/lib/src/features/crm/close_deal_dialog.dart": {
@@ -6232,6 +6232,31 @@
   "supabase/tests/capitalisation.sql": {
     "mtime": 1788202679.8556526,
     "ast_hash": "c98ed17cb9b23bdebdb1c4e65f1d80ea",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/legal/matter_conflicts.dart": {
+    "mtime": 1788204554.8027973,
+    "ast_hash": "b7c42362e45d279ca26dd591591d6e77",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/legal/over_agreed_fee_dialog.dart": {
+    "mtime": 1788204666.0399232,
+    "ast_hash": "c1390c1db8df8e8729f8240cdaad1e20",
+    "semantic_hash": ""
+  },
+  "app/test/matter_conflicts_test.dart": {
+    "mtime": 1788204554.804417,
+    "ast_hash": "fb8b9f03bf5c9b01bb32279dd94e5f1c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0383_the_conflict_nobody_could_check.sql": {
+    "mtime": 1788204278.3383155,
+    "ast_hash": "9992ed9e4b5b1db12a9293768ccd17cd",
+    "semantic_hash": ""
+  },
+  "supabase/tests/matter_conflicts.sql": {
+    "mtime": 1788204066.44838,
+    "ast_hash": "e9dffe9331cb51a93db4a613ac7d3596",
     "semantic_hash": ""
   }
 }
