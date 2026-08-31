@@ -192,24 +192,107 @@ void main() {
     });
   });
 
-  // The dialog itself is deliberately not pumped here, and that is a
-  // retreat rather than a decision I like.
+  // The dialog is pumped below, and the note that stood here said it
+  // could not be. Keeping what it recorded, because the wrong diagnosis
+  // is the interesting half.
   //
-  // Three tests did pump it — open `showRefusal`, assert the title and
-  // the message, tap OK. They passed in four seconds when this file was
-  // run alone and hung until the ten-minute per-test timeout when the
-  // whole suite ran, taking CI's twenty-minute job down with them.
-  // Neither holding and awaiting the dialog's future nor pumping a
-  // fixed number of frames instead of `pumpAndSettle` fixed it:
-  // something on this screen does not reach quiescence with a route
-  // above it, and I did not find what.
+  // Three tests opened `showRefusal`, asserted the title and the
+  // message and tapped OK. They passed in four seconds when this file
+  // was run alone and hung to the ten-minute per-test timeout when the
+  // whole suite ran, taking CI's twenty-minute job down with them. That
+  // was read as "something on this screen does not reach quiescence
+  // with a route above it", and every attempt after that looked for a
+  // way to make it settle: awaiting the dialog's future, pumping a
+  // fixed number of frames instead of `pumpAndSettle`. None worked,
+  // because none of them was the problem.
   //
-  // A flaky test that can hang a twenty-minute job is worse than no
-  // test — it costs every future run and teaches everyone to re-run
-  // rather than to read. So what is asserted here is the wording, which
-  // is pure and cannot hang, and `sign_in_screen.dart` keeps
-  // `showRefusal` as its own method so whoever works out the quiescence
-  // problem has a seam to pump.
+  // It was never a settling problem. `showRefusal` returns
+  // `showDialog`'s future, and that future completes when the dialog is
+  // *dismissed* — so awaiting it blocks on the OK tap two lines further
+  // down, before the run reaches a single pump. Awaiting it was not one
+  // of the fixes tried; it was the bug.
+  //
+  // What separated the two was measuring the hung process rather than
+  // watching it: eleven minutes elapsed against four seconds of CPU. A
+  // screen that will not settle spins. This one sat still, which is
+  // what a future nobody will complete looks like. `unawaited` is the
+  // whole of the fix.
+  //
+  // The reasoning in the old note still stands where it applies: a test
+  // that can hang a twenty-minute job is worse than no test. What it
+  // bought was the wrong thing — asserting only the pure half and
+  // leaving the seam — when what the symptom deserved was ten minutes
+  // with `ps`.
+
+  group('and a refusal, on the screen', () {
+    // The dialog, pumped. The note above says why this took two goes.
+    Widget door() => ProviderScope(
+          overrides: [
+            workspaceHostProvider.overrideWith(
+              (ref) async => {'name': 'Sinar Teknologi Sdn Bhd'},
+            ),
+            workspaceLookupProvider.overrideWith(
+              (ref) async => (
+                host: WorkspaceHost.found,
+                workspace: {'name': 'Sinar Teknologi Sdn Bhd'},
+              ),
+            ),
+            sitePagesProvider.overrideWith((ref) async => const {}),
+            landingContentProvider.overrideWith(
+              (ref) async => const LandingContent(published: true),
+            ),
+          ],
+          child: const MaterialApp(home: SignInScreen()),
+        );
+
+    // Not awaited, and that is the whole of the fix. `showRefusal`
+    // returns `showDialog`'s future and that future completes when the
+    // dialog is *dismissed* — so awaiting it here waits for a tap this
+    // line is standing in front of, and the run blocks before it ever
+    // reaches a pump. Idle, not busy: the earlier attempt spent four
+    // seconds of CPU and then sat still until the per-test timeout,
+    // which is what a never-completing await looks like and not what a
+    // screen that will not settle looks like.
+    Future<void> open(WidgetTester tester, {required String message}) async {
+      await tester.pumpWidget(door());
+      await tester.pumpAndSettle();
+      unawaited(
+        tester
+            .state<SignInScreenState>(find.byType(SignInScreen))
+            .showRefusal(title: 'Not your workspace', message: message),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('says whose door it is', (tester) async {
+      await open(tester, message: notTheirDoorMessage('Sinar Teknologi'));
+
+      expect(find.text('Not your workspace'), findsOneWidget);
+      expect(
+        find.textContaining("not on Sinar Teknologi's team"),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('and where to go instead', (tester) async {
+      await open(tester, message: notTheirDoorMessage(null));
+
+      expect(find.textContaining('iakauntan.com'), findsOneWidget);
+      expect(find.textContaining("'s team"), findsNothing);
+    });
+
+    testWidgets('and OK is a way out of it', (tester) async {
+      await open(tester, message: notTheirDoorMessage('Sinar'));
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'OK'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      // And the door is still there behind it, not left blank.
+      expect(find.byType(SignInScreen), findsOneWidget);
+    });
+  });
 
   group('nothing before the operator\'s page has landed', () {
     // The complaint: for a split second the sign-in page is the one we
