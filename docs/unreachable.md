@@ -1603,6 +1603,53 @@ multiplies them.
   now carries both halves of that sentence: a voided receipt is not money
   held, and a draft one still is.
 
+- **A pipeline that recorded that deals died and not why**
+  (`opportunities.won_reason`, `lost_reason`, `competitor`, and
+  `leads.lost_reason`). Columns since `0008`, none ever written.
+
+  Dragging a card onto Closed Lost calls `moveOpportunity`, which is one
+  `update` of `stage_id`; `0009`'s trigger then writes the status and
+  stamps the close date, and that is the whole of it. The board knew a
+  deal died, on what day, for how much. Not why.
+
+  Worth being precise about why that is the expensive one. Every other
+  figure on a pipeline is arithmetic anybody could redo from the
+  invoices afterwards. The reason is the only thing that has to be
+  captured at the moment it is known, because a week later nobody
+  remembers and the salesperson has moved on. "We lost forty per cent of
+  them on price" is a decision about pricing; "we lost forty of them" is
+  a number.
+
+  `0373` refuses a lost or abandoned close without a reason, and does
+  not ask on a win. The asymmetry is the design: an optional field on a
+  form nobody has time for is a field that stays empty, and the report
+  built on it stays empty with it — while no decision is waiting on why
+  somebody said yes, so winning stays the fast path.
+
+  The sixth sweep gets another one back. `opportunities.status` has
+  allowed `abandoned` since `0008` and `pipeline_stages.stage_type`
+  allows only ('open','won','lost'), so the trigger that derives status
+  from stage type could never produce it. Lost is a customer buying
+  elsewhere — there is a competitor and a price. Abandoned went quiet, or
+  the firm walked away, and a pipeline calling those the same thing
+  reports a loss rate that is not true. The card still lands in the
+  Closed Lost column, because a board with no column for it would have
+  nowhere to put the card; the status is what separates them and what
+  the report groups by.
+
+  `report_win_loss` exists because otherwise this pass would have
+  finished by adding a field with no reader, which is the failure it set
+  out to fix wearing different clothes.
+
+  Two smaller notes. Closing goes through the stage first and the status
+  second, in two statements, because `0009`'s trigger writes `status`
+  from the stage whenever `stage_id` changes and would overwrite a
+  single combined update. And the mutation run found the fixture short
+  again — nothing passed a stage to `reopen_opportunity`, so the guard
+  keeping a reopened deal out of a closed column was never exercised;
+  without it an open deal sits in the Closed Lost column and the board
+  disagrees with the status.
+
 - **Two left where they are, and why.** `organizations.trial_ends_at`
   and the `trial_days` platform setting are the vestige of a business
   model this system does not have. Nothing enters the `trial` status —
@@ -1628,6 +1675,16 @@ multiplies them.
   to no consequence is the failure this sweep exists to find, not a
   smaller version of the fix. The place to delete this paragraph is the
   day something needs it.
+
+  `einvoice_documents.rejection_reason` and `retry_count` are the same
+  judgement reached the same way. The rejection path in `status.ts`
+  already stores LHDN's `validationSteps` in `validation_errors`, and
+  the screen unpacks the nested shape LHDN actually returns and lists
+  them — so a third column holding a prose summary of the same thing is
+  a second place for it to be wrong. `retry_count` is superseded by a
+  manual resubmit, which is the right control for a filing: an automatic
+  retry of a document LHDN rejected on its contents submits the same
+  wrong document again.
 
 ## What the second write does
 

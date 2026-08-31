@@ -763,6 +763,109 @@ Future<bool> confirm(
   return result ?? false;
 }
 
+/// Asks for a sentence, and will not take an empty one.
+///
+/// The counterpart to [confirm] for the actions where "are you sure" is
+/// the wrong question. A lost deal, a lost lead, a voided bill: what the
+/// record needs is not consent, it is the reason, captured at the moment
+/// it is known — a week later nobody remembers.
+///
+/// Returns null when cancelled, and never returns blank: the button is
+/// disabled until something has been typed, because an optional reason
+/// is a reason nobody gives and a report built on it stays empty.
+Future<String?> promptForText(
+  BuildContext context, {
+  required String title,
+  required String label,
+  String confirmLabel = 'Save',
+  List<String> suggestions = const [],
+}) =>
+    showDialog<String>(
+      context: context,
+      builder: (ctx) => _TextPrompt(
+        title: title,
+        label: label,
+        confirmLabel: confirmLabel,
+        suggestions: suggestions,
+      ),
+    );
+
+class _TextPrompt extends StatefulWidget {
+  const _TextPrompt({
+    required this.title,
+    required this.label,
+    required this.confirmLabel,
+    required this.suggestions,
+  });
+
+  final String title;
+  final String label;
+  final String confirmLabel;
+  final List<String> suggestions;
+
+  @override
+  State<_TextPrompt> createState() => _TextPromptState();
+}
+
+class _TextPromptState extends State<_TextPrompt> {
+  final _c = TextEditingController();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SizedBox(
+        width: 400,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (widget.suggestions.isNotEmpty) ...[
+              Wrap(
+                spacing: Space.xs,
+                children: [
+                  for (final s in widget.suggestions)
+                    ChoiceChip(
+                      label: Text(s),
+                      selected: _c.text == s,
+                      onSelected: (_) => setState(() => _c.text = s),
+                    ),
+                ],
+              ),
+              const SizedBox(height: Space.md),
+            ],
+            TextField(
+              controller: _c,
+              autofocus: true,
+              decoration: InputDecoration(labelText: widget.label),
+              maxLines: 2,
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, null),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _c.text.trim().isEmpty
+              ? null
+              : () => Navigator.pop(context, _c.text.trim()),
+          child: Text(widget.confirmLabel),
+        ),
+      ],
+    );
+  }
+}
+
 /// A label beside a value, for the read-only halves of settings cards.
 ///
 /// The value is selectable: a registration number or a TIN exists to be

@@ -6,6 +6,8 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'close_deal_dialog.dart';
+import 'win_loss_dialog.dart';
 
 /// Kanban board over the sales pipeline. Cards drag between stages; the
 /// database trigger rewrites probability, status and stage history.
@@ -22,6 +24,16 @@ class PipelineScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Sales pipeline'),
         actions: [
+          // The board says how much is in the pipeline. This says why it
+          // keeps leaving, which is what the reasons `0373` started
+          // collecting are for — a field with no reader is the same
+          // failure in a different place.
+          IconButton(
+            key: const ValueKey('win-loss'),
+            tooltip: 'Why deals closed',
+            onPressed: () => showWinLoss(context),
+            icon: const Icon(Icons.query_stats_outlined),
+          ),
           IconButton(
             tooltip: 'Refresh',
             onPressed: () {
@@ -90,6 +102,24 @@ class PipelineScreen extends ConsumerWidget {
                             canWrite: canWrite,
                             onDrop: (deal) async {
                               if (deal.stageId == stage.id) return;
+                              // Dropping on a closed column is the
+                              // moment the reason is known, so it is the
+                              // moment to ask. Before `0373` this was
+                              // the same one-field update as any other
+                              // move, and `lost_reason` stayed empty for
+                              // every deal the company ever lost.
+                              if (stage.stageType != 'open') {
+                                final done = await showCloseDealDialog(
+                                  context,
+                                  deal: deal,
+                                  stageType: stage.stageType,
+                                );
+                                if (done) {
+                                  ref.invalidate(opportunitiesProvider);
+                                  ref.invalidate(dashboardProvider);
+                                }
+                                return;
+                              }
                               await ref
                                   .read(repoProvider)!
                                   .moveOpportunity(deal.id, stage.id);

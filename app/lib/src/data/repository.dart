@@ -3073,6 +3073,59 @@ class Repo {
   Future<void> moveOpportunity(String id, String stageId) =>
       client.from('opportunities').update({'stage_id': stageId}).eq('id', id);
 
+  /// Closes a deal, with the reason the pipeline never asked for.
+  ///
+  /// Not `moveOpportunity` to a closed column: that writes the status
+  /// and the close date and nothing else, which is how
+  /// `won_reason`/`lost_reason`/`competitor` stayed empty from `0008`
+  /// until `0373`. Lost and abandoned are refused without a reason.
+  Future<void> closeOpportunity({
+    required String id,
+    required String outcome,
+    String? reason,
+    String? competitor,
+    DateTime? closedOn,
+  }) => callRpc(
+    'close_opportunity',
+    params: {
+      'p_opportunity': id,
+      'p_outcome': outcome,
+      'p_reason': reason,
+      'p_competitor': competitor,
+      'p_closed_on': closedOn == null ? null : Fmt.iso(closedOn),
+    },
+  );
+
+  /// Puts a closed deal back on the board, in an open column.
+  Future<void> reopenOpportunity(String id, {String? stageId}) => callRpc(
+    'reopen_opportunity',
+    params: {'p_opportunity': id, 'p_stage': stageId},
+  );
+
+  /// Why deals closed, by outcome and reason, with the money and the
+  /// competitors named. The thing the reasons are collected for.
+  Future<List<Map<String, dynamic>>> winLoss({
+    required DateTime from,
+    required DateTime to,
+  }) async => _rows(
+    await callRpc(
+      'report_win_loss',
+      params: {
+        'p_org_id': orgId,
+        'p_from': Fmt.iso(from),
+        'p_to': Fmt.iso(to),
+      },
+    ),
+  );
+
+  Future<void> closeLead(String id, String reason) => callRpc(
+    'close_lead',
+    params: {'p_lead': id, 'p_reason': reason},
+  );
+
+  Future<void> reopenLead(String id) =>
+      callRpc('reopen_lead', params: {'p_lead': id});
+
   Future<void> saveOpportunity(
     Map<String, dynamic> values, {
     String? id,

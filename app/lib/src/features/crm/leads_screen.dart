@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import 'deal_outcome.dart';
 
 /// The top of the funnel.
 ///
@@ -101,6 +102,8 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
                   canWrite: canWrite,
                   onEdit: () => _edit(list[i]),
                   onConvert: () => _convert(list[i]),
+                  onLose: () => _lose(list[i]),
+                  onReopen: () => _reopen(list[i]),
                 ),
               ),
       ),
@@ -113,6 +116,40 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
       builder: (_) => _LeadDialog(lead: lead),
     );
     if (saved == true) ref.invalidate(leadsProvider(_status));
+  }
+
+  /// Losing a lead, with the reason asked for at the moment it is known.
+  ///
+  /// A list of dead leads with no reasons on it is a list nobody reads
+  /// twice, and `leads.lost_reason` had been a column since `0008` with
+  /// nothing to write it.
+  Future<void> _lose(Map<String, dynamic> lead) async {
+    final reason = await promptForText(
+      context,
+      title: 'Why did it come to nothing?',
+      label: 'Reason',
+      confirmLabel: 'Mark as lost',
+      // The same list a deal is closed with, so the two halves of the
+      // funnel can be read together rather than in two vocabularies.
+      suggestions: lostReasons,
+    );
+    if (reason == null || reason.trim().isEmpty || !mounted) return;
+    final ok = await runWithFeedback(
+      context,
+      action: () =>
+          ref.read(repoProvider)!.closeLead(lead['id'] as String, reason),
+      successMessage: 'Marked as lost',
+    );
+    if (ok) ref.invalidate(leadsProvider(_status));
+  }
+
+  Future<void> _reopen(Map<String, dynamic> lead) async {
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.reopenLead(lead['id'] as String),
+      successMessage: 'Back on the list',
+    );
+    if (ok) ref.invalidate(leadsProvider(_status));
   }
 
   Future<void> _convert(Map<String, dynamic> lead) async {
@@ -132,6 +169,8 @@ class _LeadTile extends StatelessWidget {
   const _LeadTile({
     required this.lead,
     required this.canWrite,
+    required this.onLose,
+    required this.onReopen,
     required this.onEdit,
     required this.onConvert,
   });
@@ -140,6 +179,8 @@ class _LeadTile extends StatelessWidget {
   final bool canWrite;
   final VoidCallback onEdit;
   final VoidCallback onConvert;
+  final VoidCallback onLose;
+  final VoidCallback onReopen;
 
   @override
   Widget build(BuildContext context) {
@@ -188,6 +229,22 @@ class _LeadTile extends StatelessWidget {
           FilledButton.tonal(
             onPressed: onConvert,
             child: const Text('Convert'),
+          ),
+          IconButton(
+            key: const ValueKey('lose-lead'),
+            tooltip: 'It came to nothing',
+            icon: const Icon(Icons.do_not_disturb_on_outlined, size: 18),
+            onPressed: onLose,
+          ),
+        ],
+        // And back, because `convert_lead` has said "reopen it first"
+        // since `0093` about a state nothing could leave.
+        if (canWrite && status == 'lost') ...[
+          const SizedBox(width: Space.sm),
+          TextButton(
+            key: const ValueKey('reopen-lead'),
+            onPressed: onReopen,
+            child: const Text('Reopen'),
           ),
         ],
       ]),
@@ -285,7 +342,11 @@ class _LeadDialogState extends ConsumerState<_LeadDialog> {
                       value: 'qualified', child: Text('Qualified')),
                   DropdownMenuItem(
                       value: 'unqualified', child: Text('Unqualified')),
-                  DropdownMenuItem(value: 'lost', child: Text('Lost')),
+                  // `lost` is not offered here. Setting it from a
+                  // dropdown left `leads.lost_reason` empty for every
+                  // lead a company ever gave up on — see `0373`. Losing
+                  // one is done from the list, where the reason can be
+                  // asked for with it.
                 ],
                 onChanged: (v) => setState(() => _status = v ?? 'new'),
               ),
