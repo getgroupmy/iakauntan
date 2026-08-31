@@ -1001,3 +1001,47 @@ manager runs payroll and does not get `can_post`, `can_read_ledger`,
 having, since a role that grants too little is a complaint on the first
 day and a role that quietly grants the ledger is a segregation-of-duties
 failure nobody sees until an auditor asks who could post.
+
+### The same sweep, run over the document types
+
+`docTypes` in `app/lib/src/features/documents/doc_types.dart` is the
+table one editor serves the whole sales and purchase cycle from, and it
+is the same shape of hand-written list as `memberRoles`: eleven rows
+against fifteen enum values across `sales_doc_type` and
+`purchase_doc_type`. Three of the four missing were fully implemented in
+SQL and unreachable from the app; the fourth is genuinely unfinished and
+stays out.
+
+- **`refund_note`** — LHDN e-Invoice type **04**. MyInvois recognises 01
+  Invoice, 02 Credit Note, 03 Debit Note and 04 Refund Note; `0015` maps
+  all four and raises on anything else, `0013` gives a refund note the
+  same negative sign a credit note gets, `0096` ages it and
+  `report_sst_summary` counts its output tax. A company using this could
+  issue three of the four statutory documents, and nothing said which
+  one was missing.
+- **`purchase_debit_note`** — the supplier billing for an undercharge.
+  `0013` posts it, `0096` ages it beside the bill it belongs to, and
+  `report_sst_summary` counts its input tax. The missing row was a
+  claimable tax credit with no way to enter it.
+- **`proforma`** — posts nothing, correctly. `0081` has accepted
+  `proforma → invoice` since it was written and `transferTargets` in
+  Dart has listed it; with no way to raise the source, the path was
+  never once walked.
+- **`purchase_return`** stays out, and is the useful contrast. No
+  posting path accepts it — `0013` and `0097` both list the purchase
+  types they will post and it is not among them. The word does appear in
+  the migrations, as a `stock_movement_type`: the goods going back,
+  which is a movement rather than a document. A row for it would put an
+  entry in the menu that raises a draft nothing can post, with the
+  refusal arriving after the lines are typed. `notRaisable` in
+  `app/test/doc_types_test.dart` is where to delete it from.
+
+The pattern across all three sweeps of this kind is worth stating on its
+own, because it is not the one the earlier passes were looking for. A
+list in Dart of something the database enumerates does not fail loudly
+when it falls behind; it fails as an **absence**, and an option that is
+not in a menu is indistinguishable from an option that does not exist.
+Nobody files a bug against a feature they have no way to know is there.
+The fix is always the same shape — read the enum rather than copy it,
+assert the cover in both directions, and name each deliberate exclusion
+next to the reason it is one.

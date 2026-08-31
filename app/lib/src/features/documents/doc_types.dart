@@ -39,6 +39,19 @@ const docTypes = <String, DocTypeMeta>{
     icon: Icons.request_quote_outlined,
     kind: DocKind.sales,
   ),
+  // A price in writing that is not a tax invoice: what an importer's
+  // bank asks for before it opens a letter of credit, and what a
+  // customer's procurement department raises a purchase order against.
+  // `0081` has known `proforma → invoice` all along and so does
+  // `transferTargets`; this row is the only reason neither could be
+  // reached. It posts nothing, which is the whole point — a proforma
+  // that wrote a journal would be an invoice with a softer name.
+  'proforma': DocTypeMeta(
+    plural: 'Proforma Invoices',
+    singular: 'Proforma Invoice',
+    icon: Icons.description_outlined,
+    kind: DocKind.sales,
+  ),
   'sales_order': DocTypeMeta(
     plural: 'Sales Orders',
     singular: 'Sales Order',
@@ -72,6 +85,21 @@ const docTypes = <String, DocTypeMeta>{
     plural: 'Debit Notes',
     singular: 'Debit Note',
     icon: Icons.redo_outlined,
+    kind: DocKind.sales,
+    posts: true,
+    einvoice: true,
+  ),
+  // LHDN's fourth document type, and the one that was missing.
+  // MyInvois recognises 01 Invoice, 02 Credit Note, 03 Debit Note and
+  // 04 Refund Note; `0015` maps all four and the app could raise three.
+  // A refund note is money actually returned rather than a balance
+  // written down, which is why it is not a credit note: `0013` gives it
+  // the same negative sign and `0096` ages it the same way, and the
+  // difference is what the customer got back.
+  'refund_note': DocTypeMeta(
+    plural: 'Refund Notes',
+    singular: 'Refund Note',
+    icon: Icons.currency_exchange_outlined,
     kind: DocKind.sales,
     posts: true,
     einvoice: true,
@@ -117,6 +145,21 @@ const docTypes = <String, DocTypeMeta>{
     plural: 'Purchase Credit Notes',
     singular: 'Purchase Credit Note',
     icon: Icons.undo_outlined,
+    kind: DocKind.purchase,
+    posts: true,
+  ),
+  // The supplier's debit note: an undercharge they are now billing for.
+  // `0013` posts it, `0096` ages it alongside the bill it belongs to,
+  // and `report_sst_summary` counts its input tax — so leaving it out
+  // here did not merely hide a menu entry, it put a claimable input tax
+  // credit out of reach.
+  //
+  // Not an e-Invoice. It is the supplier's document, and submitting it
+  // would be filing somebody else's under our TIN.
+  'purchase_debit_note': DocTypeMeta(
+    plural: 'Purchase Debit Notes',
+    singular: 'Purchase Debit Note',
+    icon: Icons.redo_outlined,
     kind: DocKind.purchase,
     posts: true,
   ),

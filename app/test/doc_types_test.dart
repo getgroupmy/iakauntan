@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iakauntan/src/data/models.dart';
 import 'package:iakauntan/src/features/documents/doc_types.dart';
@@ -33,6 +35,88 @@ void main() {
       // Nothing left over: a type in neither list is a type the switcher
       // cannot reach, which is how a document becomes unraisable.
       expect(sales.union(purchase), docTypes.keys.toSet());
+    });
+  });
+
+  group('against the two enums the database keeps', () {
+    /// The values of one `create type app.X as enum`, read out of the
+    /// migration that declares it. Read rather than copied: a copied
+    /// list is one that drifts, and the drift is what this group is
+    /// for — three types were fully implemented in SQL and had no row
+    /// in the table, so the app could neither raise them nor name them.
+    Set<String> enumValues(String file, String type) {
+      final sql = File('../supabase/migrations/$file').readAsStringSync();
+      final block = RegExp(
+        'create type app\\.$type as enum \\(([^)]*)\\)',
+        dotAll: true,
+      ).firstMatch(sql);
+      expect(block, isNotNull, reason: '$type moved; this test is stale');
+      return RegExp("'([a-z_]+)'")
+          .allMatches(block!.group(1)!)
+          .map((m) => m.group(1)!)
+          .toSet();
+    }
+
+    /// `purchase_return`, and why it is named here rather than offered.
+    ///
+    /// It is the one value of the seven that no posting path accepts:
+    /// `0013` and `0097` both list the purchase types they will post and
+    /// it is not among them. The word appears in the migrations, but as
+    /// a `stock_movement_type` — the goods going back — which is a
+    /// different enum and a movement rather than a document.
+    ///
+    /// Giving it a row would put an entry in the menu that raises a
+    /// document nothing can post: a draft that stays a draft, with the
+    /// refusal arriving after the lines are typed. It stays out until
+    /// something posts it, and this is where to delete it from.
+    const notRaisable = {'purchase_return'};
+
+    test('the sales table offers every type the database can post', () {
+      final inSql = enumValues('0005_sales.sql', 'sales_doc_type');
+      expect(inSql.length, greaterThan(6));
+
+      final offered = docTypesFor(DocKind.sales).map((e) => e.key).toSet();
+      expect(
+        inSql.difference(offered).difference(notRaisable),
+        isEmpty,
+        reason: 'a sales document the database allows and nothing can raise',
+      );
+      // And the other way: a type no enum value matches is a 22P02 the
+      // moment somebody presses Save.
+      expect(offered.difference(inSql), isEmpty);
+    });
+
+    test('and the purchase table does too', () {
+      final inSql = enumValues('0006_purchases_inventory.sql',
+          'purchase_doc_type');
+      expect(inSql.length, greaterThan(5));
+
+      final offered = docTypesFor(DocKind.purchase).map((e) => e.key).toSet();
+      expect(
+        inSql.difference(offered).difference(notRaisable),
+        isEmpty,
+        reason: 'a purchase document the database allows and nothing can raise',
+      );
+      expect(offered.difference(inSql), isEmpty);
+    });
+
+    test('all four of LHDN\'s e-Invoice types can be raised', () {
+      // 0015 maps exactly these to 01, 02, 03 and 04, and raises on
+      // anything else. Named literally rather than derived from the same
+      // map, because the claim is about MyInvois rather than about us:
+      // a company that can issue an invoice, a credit note and a debit
+      // note and not a refund note is short of a statutory document, and
+      // deriving the list from `docTypes` would make that unsayable.
+      final submittable = {
+        for (final e in docTypes.entries)
+          if (e.value.einvoice) e.key,
+      };
+      expect(submittable, {
+        'invoice',
+        'credit_note',
+        'debit_note',
+        'refund_note',
+      });
     });
   });
 
