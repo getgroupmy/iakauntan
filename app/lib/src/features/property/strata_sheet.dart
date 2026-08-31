@@ -51,8 +51,13 @@ double? rateOf(String text) {
 
 /// The denominator, as the Schedule of Parcels states it.
 double? totalShareUnitsOf(String text) {
-  if (text.trim().isEmpty) return null;
   final v = double.tryParse(text.trim());
+  // Nought is refused here and allowed by `shareUnitsOf`, which is the
+  // one character between them: every share in the scheme is
+  // `share_units / total_share_units`, so a zero denominator is not a
+  // scheme with nothing allocated — it is a division nobody can do.
+  //
+  // No empty-string guard: `double.tryParse('')` is already null.
   if (v == null || v <= 0) return null;
   return v;
 }

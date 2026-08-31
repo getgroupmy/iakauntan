@@ -51,8 +51,16 @@ double? shareUnitsOf(String text) {
   return v;
 }
 
+/// The floor area of a parcel, as a number.
+///
+/// Nought is refused where [shareUnitsOf] allows it, and the two sitting
+/// one character apart is deliberate rather than careless: a parcel can
+/// carry no share units — common property does — and a parcel of no
+/// area is not a parcel.
+///
+/// No empty-string guard. `double.tryParse('')` is already null, so one
+/// would be a branch nothing could tell apart from its absence.
 double? sqftOf(String text) {
-  if (text.trim().isEmpty) return null;
   final v = double.tryParse(text.trim());
   if (v == null || v <= 0) return null;
   return v;

@@ -88,6 +88,57 @@ void main() {
       expect(shareUnitsOf('-1'), isNull);
       expect(shareUnitsOf('nought'), isNull);
     });
+
+    test('but nought is, because a parcel can carry none', () {
+      // Common property and anything non-chargeable. This is the one
+      // character that separates `shareUnitsOf` from
+      // `totalShareUnitsOf` below, and the two sit in different files.
+      expect(shareUnitsOf('0'), 0);
+    });
+  });
+
+  group('the denominator of the Schedule of Parcels', () {
+    test('is the figure the schedule states', () {
+      expect(totalShareUnitsOf('1000'), 1000);
+      expect(totalShareUnitsOf('  281.125 '), 281.125);
+    });
+
+    test('and may not be nought, where a parcel may', () {
+      // Every share in the scheme is `share_units / total_share_units`.
+      // A zero denominator is not a scheme with nothing allocated — it
+      // is a division nobody can do, and the sheet has to refuse it
+      // before it reaches the apportionment rather than after.
+      expect(totalShareUnitsOf('0'), isNull);
+      expect(totalShareUnitsOf('-1'), isNull);
+    });
+
+    test('a schedule nobody has entered yet is absent, not nought', () {
+      // Null is "not stated". `scheduleIsComplete` reads it as
+      // incomplete, which is a different answer from a scheme whose
+      // parcels genuinely add to nothing.
+      expect(totalShareUnitsOf(''), isNull);
+      expect(totalShareUnitsOf('   '), isNull);
+      expect(totalShareUnitsOf('the whole block'), isNull);
+    });
+  });
+
+  group('the floor area of a parcel', () {
+    test('is what was measured', () {
+      expect(sqftOf('1250'), 1250);
+      expect(sqftOf(' 980.5 '), 980.5);
+    });
+
+    test('and a parcel of no area is not a parcel', () {
+      // Unlike share units, where nought is a real allocation. Area is
+      // the thing that exists.
+      expect(sqftOf('0'), isNull);
+      expect(sqftOf('-40'), isNull);
+    });
+
+    test('while one nobody has measured is simply unknown', () {
+      expect(sqftOf(''), isNull);
+      expect(sqftOf('   '), isNull);
+    });
   });
 
   group('what common property is', () {
