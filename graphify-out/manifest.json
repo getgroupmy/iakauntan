@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788213826.3674839,
-    "ast_hash": "8db3deb19c0f9efd2e50bc579692a48a",
+    "mtime": 1788216822.698197,
+    "ast_hash": "d23f07c1d582c58d3f1cb79ce1faf1af",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788213900.6012592,
-    "ast_hash": "b34fc7bc32c4317e436fb4fecece8f4a",
+    "mtime": 1788216822.697435,
+    "ast_hash": "1b29732dc3f13f2aee25f3a6cd9990c8",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788212051.352327,
-    "ast_hash": "287e235448b0bb76d5007b4de2e87a1c",
+    "mtime": 1788214548.9682949,
+    "ast_hash": "61767dd40d099aa076a8e3e8c3cd4ba7",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788214286.7922792,
-    "ast_hash": "523a6a12d697330d8cd4ac2f6efe1b04",
+    "mtime": 1788217176.948451,
+    "ast_hash": "3430498557dc2cf3c89269f541498d27",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -2775,8 +2775,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/timesheets/timesheet_screen.dart": {
-    "mtime": 1788157295.0328915,
-    "ast_hash": "297ccea3d65ae5a645a47539aff882a1",
+    "mtime": 1788216867.9994066,
+    "ast_hash": "87231fca3c41a59c4118710067cc5b22",
     "semantic_hash": ""
   },
   "app/test/timesheet_test.dart": {
@@ -5725,8 +5725,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/run_locally.sh": {
-    "mtime": 1788189678.3573902,
-    "ast_hash": "7de3e99174823f8665f365c64282738a",
+    "mtime": 1788215712.8554099,
+    "ast_hash": "caa0577e5915b9bd9d1b20be3f32d2a4",
     "semantic_hash": ""
   },
   "app/lib/src/features/mail/attachments.dart": {
@@ -6337,6 +6337,26 @@
   "supabase/tests/employee_documents.sql": {
     "mtime": 1788213630.6766703,
     "ast_hash": "1ce19e511808ff4112aaa797e3220217",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/timesheets/project_budget.dart": {
+    "mtime": 1788216843.3814,
+    "ast_hash": "8241ad9ed2cb533e16fb7c1caa4af209",
+    "semantic_hash": ""
+  },
+  "app/test/project_budget_test.dart": {
+    "mtime": 1788216894.9677432,
+    "ast_hash": "d3cafa7c17661abb2af3e156a209384c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0389_the_project_budget_nobody_could_overrun.sql": {
+    "mtime": 1788216762.6324265,
+    "ast_hash": "8703657b404355e6bf9b8a8ff673687c",
+    "semantic_hash": ""
+  },
+  "supabase/tests/project_budget.sql": {
+    "mtime": 1788215613.3864093,
+    "ast_hash": "e6ab94f0645284d187054d3cb7ecb2b9",
     "semantic_hash": ""
   }
 }
