@@ -496,6 +496,10 @@ class FixedAsset {
     this.disposalDate,
     this.disposalProceeds,
     this.notes,
+    this.purchaseDocumentId,
+    this.purchaseDocNo,
+    this.supplierId,
+    this.supplierName,
   });
 
   final String id;
@@ -525,6 +529,19 @@ class FixedAsset {
   final DateTime? disposalDate;
   final double? disposalProceeds;
   final String? notes;
+
+  /// The bill this came from, and who it was bought from. Both were
+  /// columns nothing wrote until `0382`, so the register and the fixed
+  /// asset accounts in the ledger had no way to be compared — the
+  /// reconciliation an auditor opens with.
+  final String? purchaseDocumentId;
+  final String? purchaseDocNo;
+  final String? supplierId;
+  final String? supplierName;
+
+  /// Whether the cost in the register can be traced to a posted bill.
+  /// A typed-in asset is not wrong, but nothing can check it.
+  bool get isTraceable => purchaseDocumentId != null;
 
   double get netBookValue => cost - accumulatedDepreciation;
   bool get isDisposed => status == 'disposed';
@@ -562,8 +579,20 @@ class FixedAsset {
         ? null
         : Fmt.toDouble(j['disposal_proceeds']),
     notes: j['notes'] as String?,
+    purchaseDocumentId: j['purchase_document_id'] as String?,
+    purchaseDocNo: j['purchase_documents'] is Map
+        ? j['purchase_documents']['doc_no']?.toString()
+        : null,
+    supplierId: j['supplier_id'] as String?,
+    supplierName:
+        j['contacts'] is Map ? j['contacts']['name']?.toString() : null,
   );
 
+  // `purchase_document_id`, `purchase_line_id` and `supplier_id` are
+  // deliberately not sent. They are written once, by
+  // `capitalise_bill_line`, out of the row the asset came from; an
+  // editor that could change them afterwards could point an asset at a
+  // bill it did not come from, which is worse than pointing at none.
   Map<String, dynamic> toJson() => {
     'asset_no': assetNo,
     'name': name,

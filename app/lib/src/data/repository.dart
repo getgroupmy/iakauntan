@@ -1566,7 +1566,7 @@ class Repo {
   Future<List<FixedAsset>> fixedAssets({bool includeDisposed = false}) async {
     var q = client
         .from('fixed_assets')
-        .select()
+        .select('*, purchase_documents(doc_no), contacts(name)')
         .eq('org_id', orgId)
         .isFilter('deleted_at', null);
     if (!includeDisposed) q = q.neq('status', 'disposed');
@@ -1586,6 +1586,46 @@ class Repo {
               .single();
     return FixedAsset.fromJson(data);
   }
+
+  /// Makes a fixed asset out of a posted bill line.
+  ///
+  /// The cost, the acquisition date, the supplier and the account come
+  /// from the line rather than being asked for again — which is the
+  /// point: `purchase_document_id` was a column nothing wrote, so the
+  /// register and the fixed asset accounts had no way to be compared,
+  /// and a typo in the cost went unnoticed for the life of the asset.
+  Future<String> capitaliseBillLine(
+    String lineId, {
+    required String assetNo,
+    String? name,
+    String? category,
+    String method = 'straight_line',
+    int? usefulLifeMonths,
+    num? ratePercent,
+    num residualValue = 0,
+  }) async {
+    final id = await callRpc('capitalise_bill_line', params: {
+      'p_line': lineId,
+      'p_asset_no': assetNo,
+      'p_name': name,
+      'p_category': category,
+      'p_method': method,
+      'p_useful_life_months': usefulLifeMonths,
+      'p_rate_percent': ratePercent,
+      'p_residual_value': residualValue,
+    });
+    return id.toString();
+  }
+
+  /// Posted bill lines coded to a fixed asset account with nothing in
+  /// the register against them.
+  Future<List<Map<String, dynamic>>> uncapitalisedPurchases({
+    DateTime? asAt,
+  }) async =>
+      _rows(await callRpc('report_uncapitalised_purchases', params: {
+        'p_org': orgId,
+        'p_as_at': asAt == null ? null : Fmt.iso(asAt),
+      }));
 
   /// What a run would charge, per asset, before anything is posted.
   Future<List<DepreciationLine>> depreciationPreview(DateTime asAt) async {

@@ -463,6 +463,14 @@ final fixedAssetsProvider = FutureProvider.autoDispose
       return requireRepo(ref).fixedAssets(includeDisposed: includeDisposed);
     });
 
+/// Posted bill lines coded to a fixed asset account with nothing in
+/// the register against them — the reconciliation an auditor opens
+/// with, which the data could not answer before `0382`.
+final uncapitalisedPurchasesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).uncapitalisedPurchases();
+});
+
 final depreciationPreviewProvider = FutureProvider.autoDispose
     .family<List<DepreciationLine>, DateTime>((ref, asAt) {
       return requireRepo(ref).depreciationPreview(asAt);

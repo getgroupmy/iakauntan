@@ -137,6 +137,7 @@ jobs:
                    supabase/tests/appraisals.sql \
                    supabase/tests/alternates_and_verification.sql \
                    supabase/tests/hiring.sql \
+                   supabase/tests/capitalisation.sql \
                    supabase/tests/corp_particulars.sql \
                    supabase/tests/decline_and_lodge.sql \
                    supabase/tests/lot_report.sql \

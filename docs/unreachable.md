@@ -2135,3 +2135,66 @@ since `0046`: a bucket, a row, a lifecycle and a policy. A second place
 for a file to be missing from is not an improvement. The place to delete
 this paragraph is the day the applicant screen grows an attachments
 section, which is where a CV belongs.
+
+## Two records of the same money that could not be compared
+
+`fixed_assets.purchase_document_id` and `fixed_assets.supplier_id` have
+been columns since `0084`. Neither is on the asset editor, in the Dart
+model, or written by anything.
+
+The cost of that is not a missing field on a form. The asset register and
+the fixed asset accounts in the general ledger are two records of the
+same money, and **the reconciliation between them is the one an auditor
+opens with**. Without knowing which asset came from which bill it cannot
+be done at all.
+
+The failure it lets through is quiet by construction. A bill line coded
+to Plant and equipment puts 12,500 in 1510. Somebody opens the asset
+editor and types 12,000 — the difference being a delivery line, or the
+tax, or a slip. The balance sheet shows 12,500, the register adds to
+12,000, depreciation runs on the smaller figure for five years, and
+nothing anywhere says so.
+
+`0382` inverts the entry: `capitalise_bill_line` makes the asset **out
+of** the line. The cost is the line's own net amount, the acquisition
+date is the bill's, the supplier is the bill's supplier, and the asset's
+`asset_account_id` is the account the line was actually posted to. The
+register and the ledger agree because they come from the same row,
+rather than because two people chose the same account twice.
+
+Three refusals, and each names a different kind of wrong:
+
+- **A line capitalised twice.** One line is one lot of money; a second
+  asset from it is the same cost depreciated twice, and a balance sheet
+  over-stated by exactly the figure nobody is looking for. The rule is
+  a partial unique index rather than a check in the function, so a
+  deleted asset frees the line again.
+- **An unposted bill.** An asset whose cost is not in the ledger can
+  never be reconciled to it.
+- **A line coded somewhere else.** A line charged to Repairs and
+  maintenance and then put in the register is the two records
+  disagreeing on purpose. The refusal names the account, because the
+  fix is to correct the coding on the bill and that is a different
+  screen.
+
+Nothing is posted. Creating an asset never has — the register is a
+memorandum record and the bill's own posting already put the money in
+the asset account — and a capitalisation that posted again would double
+the asset.
+
+`report_uncapitalised_purchases` is the same reconciliation from the
+ledger's end: posted bill lines coded to a fixed asset account with
+nothing in the register claiming them. It is a question the data could
+not previously answer in either direction.
+
+### The mutation run's two lessons here
+
+Both survivors were fixtures asking for a value the row would have held
+anyway. `line_subtotal` and `line_total` are the same number on an
+untaxed line, so "the cost is the net, not the gross" asserted nothing
+until a taxed bill existed — and getting that wrong capitalises
+recoverable input tax, over-stating the asset by the amount the company
+is getting back. And two permission tests were passing because the call
+under them was refused by `fixed_assets_method_needs_its_figure` before
+the permission was ever reached; a refusal test has to make a call that
+would otherwise succeed.
