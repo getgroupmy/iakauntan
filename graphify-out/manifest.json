@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788207243.2691655,
-    "ast_hash": "4fb49af59caf8764ff2a3336c9f7582f",
+    "mtime": 1788208083.605323,
+    "ast_hash": "72ac47cbf5025ad306fc753af0253cf6",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -170,8 +170,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/settlement_dialog.dart": {
-    "mtime": 1786785756.6144881,
-    "ast_hash": "54e8d576a3c6581569fb886bd93db69d",
+    "mtime": 1788208168.2486982,
+    "ast_hash": "131d607233c5add9f2b7e990f2d83e69",
     "semantic_hash": ""
   },
   "app/lib/src/features/einvoice/einvoice_screen.dart": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788207540.5358784,
-    "ast_hash": "9ecc1dcd633f38e51805dbb1d7c8505f",
+    "mtime": 1788208805.6199534,
+    "ast_hash": "2132db5d16b979caf63c09ec32bac612",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6290,8 +6290,13 @@
     "semantic_hash": ""
   },
   "supabase/tests/settlement_discount.sql": {
-    "mtime": 1788207088.6547737,
-    "ast_hash": "62c91641bf0d9f8f572d36bf2ff30aee",
+    "mtime": 1788208017.3563814,
+    "ast_hash": "ea85da9837dc8bf6d115d30b37962bf4",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0386_the_other_side_of_the_discount.sql": {
+    "mtime": 1788208070.310179,
+    "ast_hash": "b1b9433680257824fb76b1c38acb949a",
     "semantic_hash": ""
   }
 }
