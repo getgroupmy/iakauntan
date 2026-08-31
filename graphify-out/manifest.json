@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788205846.196064,
-    "ast_hash": "68f602d2081f032872fef54c9dc1a400",
+    "mtime": 1788213826.3674839,
+    "ast_hash": "8db3deb19c0f9efd2e50bc579692a48a",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788211375.085182,
-    "ast_hash": "57f9263877b0f2e03aef3b4d70a26383",
+    "mtime": 1788213900.6012592,
+    "ast_hash": "b34fc7bc32c4317e436fb4fecece8f4a",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -225,8 +225,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/people_screen.dart": {
-    "mtime": 1788157295.0168915,
-    "ast_hash": "d164f9aa49373dea5d854110ae9c9e01",
+    "mtime": 1788213826.3815796,
+    "ast_hash": "960c3b451aa86ea8d49421607132ae4e",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/talent_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788209229.8372965,
-    "ast_hash": "c1cf50f021442cec9e64af3df35b8f04",
+    "mtime": 1788212051.352327,
+    "ast_hash": "287e235448b0bb76d5007b4de2e87a1c",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788211766.3081295,
-    "ast_hash": "2729c40fd1e9814e63cef30663744cfc",
+    "mtime": 1788214286.7922792,
+    "ast_hash": "523a6a12d697330d8cd4ac2f6efe1b04",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -1435,8 +1435,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/employee_records.dart": {
-    "mtime": 1786785756.618488,
-    "ast_hash": "afec4ed2de42220d033fb6029fed0b29",
+    "mtime": 1788213880.1485856,
+    "ast_hash": "19a9dad5492f8de1a8f5aee51188528d",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/interviews_dialog.dart": {
@@ -6317,6 +6317,26 @@
   "supabase/tests/statutory_charges.sql": {
     "mtime": 1788209939.7494388,
     "ast_hash": "7cb2a4041943a44e19bed4a18dd9016a",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/expiring_documents.dart": {
+    "mtime": 1788213924.9273098,
+    "ast_hash": "a1e18228dcd4548cebfdbc58b3f86c59",
+    "semantic_hash": ""
+  },
+  "app/test/expiring_documents_test.dart": {
+    "mtime": 1788213948.3429408,
+    "ast_hash": "de097f694485195ec8bc4f668277ec3f",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0388_the_permit_that_expired_and_nobody_was_looking.sql": {
+    "mtime": 1788213762.37083,
+    "ast_hash": "8cb27b19e09e4470a338b7ca996e153a",
+    "semantic_hash": ""
+  },
+  "supabase/tests/employee_documents.sql": {
+    "mtime": 1788213630.6766703,
+    "ast_hash": "1ce19e511808ff4112aaa797e3220217",
     "semantic_hash": ""
   }
 }
