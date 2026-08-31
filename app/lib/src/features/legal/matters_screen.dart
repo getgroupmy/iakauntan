@@ -8,6 +8,8 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'matter_conflicts.dart';
+import 'over_agreed_fee_dialog.dart';
 
 /// Matter list for a law firm. The headline figure is client funds held,
 /// because that is the number a firm is answerable for.
@@ -35,6 +37,15 @@ class _MattersScreenState extends ConsumerState<MattersScreen> {
       appBar: AppBar(
         title: const Text('Matters'),
         actions: [
+          // Fixed-fee files that have gone past what the client was
+          // told. `agreed_fee` was a column nothing read, so a firm
+          // found out from the client.
+          IconButton(
+            key: const ValueKey('matters-over-fee'),
+            tooltip: 'Over the agreed fee',
+            icon: const Icon(Icons.price_change_outlined),
+            onPressed: () => showMattersOverAgreedFee(context),
+          ),
           if (canWrite)
             Padding(
               padding: const EdgeInsets.only(right: 12),
@@ -191,10 +202,20 @@ class _MatterDialogState extends ConsumerState<_MatterDialog> {
   final _rate = TextEditingController(text: '450');
   final _deposit = TextEditingController();
   final _courtRef = TextEditingController();
+  final _opposing = TextEditingController();
+  final _agreedFee = TextEditingController();
+  final _conflictNote = TextEditingController();
 
   String? _clientId;
   String _matterType = 'conveyancing';
   bool _saving = false;
+
+  /// What the firm already has that touches these parties. Asked of
+  /// the database as the client and the other side are chosen, because
+  /// the answer is what decides whether a written reason is required —
+  /// and finding out after pressing Open is finding out too late.
+  List<MatterConflict> _conflicts = const [];
+  bool _checking = false;
 
   static const _types = {
     'conveyancing': 'Conveyancing',
@@ -209,29 +230,80 @@ class _MatterDialogState extends ConsumerState<_MatterDialog> {
 
   @override
   void dispose() {
-    for (final c in [_name, _rate, _deposit, _courtRef]) {
+    for (final c in [
+      _name,
+      _rate,
+      _deposit,
+      _courtRef,
+      _opposing,
+      _agreedFee,
+      _conflictNote,
+    ]) {
       c.dispose();
     }
     super.dispose();
   }
 
+  Future<void> _recheck() async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    setState(() => _checking = true);
+    try {
+      final rows = await repo.checkMatterConflict(
+        clientId: _clientId,
+        opposingParty: _opposing.text.trim().isEmpty
+            ? null
+            : _opposing.text.trim(),
+      );
+      if (mounted) {
+        setState(() => _conflicts =
+            rows.map(MatterConflict.fromJson).toList());
+      }
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // One last look, in case somebody typed the other side and pressed
+    // Open in the same second. The database asks again regardless; this
+    // is so the answer arrives as a question rather than a refusal.
+    await _recheck();
+    if (!mounted) return;
+    final why = matterBlockedBecause(
+      name: _name.text,
+      clientId: _clientId,
+      conflicts: _conflicts,
+      conflictNote: _conflictNote.text,
+    );
+    if (why != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(why)));
+      return;
+    }
+
     setState(() => _saving = true);
 
+    final me = ref.read(currentUserProvider)?.id;
     final ok = await runWithFeedback(
       context,
-      action: () => ref.read(repoProvider)!.createMatter({
-        'name': _name.text.trim(),
-        'client_id': _clientId,
-        'matter_type': _matterType,
-        'court_reference': _courtRef.text.trim().isEmpty
-            ? null
-            : _courtRef.text.trim(),
-        'hourly_rate': double.tryParse(_rate.text) ?? 0,
-        'deposit_required': double.tryParse(_deposit.text) ?? 0,
-        'responsible_solicitor': ref.read(currentUserProvider)?.id,
-      }),
+      action: () => ref.read(repoProvider)!.openMatter(
+            name: _name.text.trim(),
+            clientId: _clientId!,
+            opposingParty: _opposing.text.trim().isEmpty
+                ? null
+                : _opposing.text.trim(),
+            matterType: _matterType,
+            feeEarner: me,
+            responsible: me,
+            agreedFee: double.tryParse(_agreedFee.text.trim()),
+            hourlyRate: double.tryParse(_rate.text) ?? 0,
+            conflictNote: _conflictNote.text.trim().isEmpty
+                ? null
+                : _conflictNote.text.trim(),
+          ),
       successMessage: 'Matter opened',
     );
 
@@ -278,8 +350,33 @@ class _MatterDialogState extends ConsumerState<_MatterDialog> {
                     for (final c in clients)
                       DropdownMenuItem(value: c.id, child: Text(c.name)),
                   ],
-                  onChanged: (v) => setState(() => _clientId = v),
+                  onChanged: (v) {
+                    setState(() => _clientId = v);
+                    _recheck();
+                  },
                   validator: (v) => v == null ? 'Choose a client' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _opposing,
+                  decoration: const InputDecoration(
+                    labelText: 'Other side',
+                    hintText: 'The party this file is against',
+                    helperText: 'Checked against every file the firm has, '
+                        'both ways round.',
+                  ),
+                  onEditingComplete: _recheck,
+                  onTapOutside: (_) => _recheck(),
+                ),
+                if (_checking)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: LinearProgressIndicator(minHeight: 2),
+                  ),
+                if (_conflicts.isNotEmpty) _ConflictPanel(
+                  conflicts: _conflicts,
+                  note: _conflictNote,
+                  enabled: !_saving,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
@@ -318,11 +415,28 @@ class _MatterDialogState extends ConsumerState<_MatterDialog> {
                   ),
                 ]),
                 const SizedBox(height: 12),
-                TextFormField(
-                  controller: _courtRef,
-                  decoration:
-                      const InputDecoration(labelText: 'Court reference'),
-                ),
+                Row(children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _agreedFee,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Agreed fee',
+                        prefixText: 'RM ',
+                        helperText: 'A fixed fee, if one was quoted.',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _courtRef,
+                      decoration:
+                          const InputDecoration(labelText: 'Court reference'),
+                    ),
+                  ),
+                ]),
               ],
             ),
           ),
@@ -343,6 +457,64 @@ class _MatterDialogState extends ConsumerState<_MatterDialog> {
               : const Text('Open matter'),
         ),
       ],
+    );
+  }
+}
+
+/// What the firm already has that touches these parties, and the box
+/// that has to be filled in before the file can be opened anyway.
+///
+/// Shown rather than saved for the refusal, because Rule 3 of the Legal
+/// Profession (Practice and Etiquette) Rules 1978 is a judgement a
+/// solicitor makes and not one a form makes for them — but the file is
+/// what is looked at afterwards, so the judgement gets written down.
+class _ConflictPanel extends StatelessWidget {
+  const _ConflictPanel({
+    required this.conflicts,
+    required this.note,
+    required this.enabled,
+  });
+
+  final List<MatterConflict> conflicts;
+  final TextEditingController note;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.colors.warning.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'This would put the firm on both sides',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: context.colors.warning,
+            ),
+          ),
+          const SizedBox(height: 4),
+          for (final c in conflicts)
+            Text('• ${describeConflict(c)}',
+                style: const TextStyle(fontSize: 12)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: note,
+            enabled: enabled,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Why this is clear *',
+              helperText: 'Kept on the file. Consent obtained, unrelated '
+                  'retainer, information barrier in place.',
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1077,6 +1077,12 @@ final mattersProvider = FutureProvider.autoDispose
       return requireRepo(ref).matters(status: args.status, search: args.search);
     });
 
+/// Fixed-fee matters that have gone past what was agreed.
+final mattersOverAgreedFeeProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).mattersOverAgreedFee();
+});
+
 final matterSummaryProvider = FutureProvider.autoDispose<List<MatterSummary>>((
   ref,
 ) {

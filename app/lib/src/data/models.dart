@@ -1599,6 +1599,9 @@ class Matter {
     this.depositRequired = 0,
     this.openedDate,
     this.currency = 'MYR',
+    this.opposingParty,
+    this.feeEarner,
+    this.agreedFee,
   });
 
   final String id;
@@ -1616,6 +1619,19 @@ class Matter {
   final DateTime? openedDate;
   final String currency;
 
+  /// Who is on the other side. The column a conflict check reads, and
+  /// nothing wrote it before `0383` — so "do we act for the people this
+  /// file is against" had no answer in the data.
+  final String? opposingParty;
+
+  /// Who does the work, as against the responsible solicitor who
+  /// supervises it. An open file has one, because time is recorded by
+  /// whoever is signed in.
+  final String? feeEarner;
+
+  /// What a fixed-fee client was told it would cost.
+  final double? agreedFee;
+
   factory Matter.fromJson(Map<String, dynamic> j) {
     final client = j['contacts'];
     return Matter(
@@ -1628,6 +1644,10 @@ class Matter {
       matterType: j['matter_type'] as String?,
       practiceArea: j['practice_area'] as String?,
       courtReference: j['court_reference'] as String?,
+      opposingParty: j['opposing_party'] as String?,
+      feeEarner: j['fee_earner'] as String?,
+      agreedFee:
+          j['agreed_fee'] == null ? null : Fmt.toDouble(j['agreed_fee']),
       hourlyRate: Fmt.toDouble(j['hourly_rate']),
       estimatedFees: Fmt.toDouble(j['estimated_fees']),
       depositRequired: Fmt.toDouble(j['deposit_required']),

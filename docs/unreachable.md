@@ -2198,3 +2198,73 @@ is getting back. And two permission tests were passing because the call
 under them was refused by `fixed_assets_method_needs_its_figure` before
 the permission was ever reached; a refusal test has to make a call that
 would otherwise succeed.
+
+## A rule that could not be asked
+
+`matters.opposing_party` has been a column since `0021` and nothing
+wrote it. That is not a missing field: it is the column a **conflict
+check** reads, and without it the question had no answer in the data at
+all.
+
+Rule 3 of the Legal Profession (Practice and Etiquette) Rules 1978 stops
+an advocate and solicitor acting against a client's interest, and the
+commonest way a firm walks into one is not subtlety — it is a second
+partner opening a file, on a Tuesday, against a company the firm already
+acts for. Every matter recorded who the client was. Not one recorded who
+was on the other side.
+
+`0383`'s check runs **both** directions, because a conflict has two
+shapes and checking one is checking neither:
+
+- the proposed opposing party is somebody the firm acts for now;
+- the proposed client is somebody the firm has acted against.
+
+Two decisions worth writing down:
+
+- **The way through is required, not offered.** A conflict can be waived
+  by informed consent in some circumstances and cannot in others, and
+  that judgement is a solicitor's. A refusal with no way through would
+  be worse than none: somebody would leave `opposing_party` empty to
+  open the file, and the column would go back to being what it was. So
+  the file opens with a written reason, which is what the Bar Council
+  looks at afterwards. Whitespace is not a reason, and the mutation run
+  is what made that a fixture.
+- **The name match is generous on purpose.** `app.conflict_key` folds
+  case, punctuation, and the entity suffixes people vary — Sdn Bhd,
+  Berhad, Bhd — and the ampersand-versus-"and" that splits one firm's
+  name into two. A check that misses one is worth nothing; being asked
+  about the wrong ABC costs ten seconds, and that is the failure it errs
+  towards.
+
+The regex for those suffixes had to match **whole words** rather than
+"whitespace then the word": "Holdings Berhad" is two suffixes sharing
+one separator, and a pattern that eats the separator strips the first
+and then cannot see the second. The test caught it on the first run.
+
+### The parameter that could not change an answer
+
+`check_matter_conflict` was written with an "exclude this matter"
+parameter, for re-checking a file that already exists. Working through
+the fixture showed it can never fire: the first arm asks whether any
+file's *client* is the proposed opponent and the second whether any
+file's *opponent* is the proposed client, so a matter's own pairing is
+the one thing it cannot match. It was removed rather than left in —
+a parameter that cannot change an answer is one somebody will
+eventually rely on.
+
+### The other two columns
+
+`fee_earner` is who does the work, as against the responsible solicitor
+who supervises it. Time is recorded against a matter by whoever is
+signed in, so without one nothing says whose file it is when they are on
+leave. An open matter now needs one — judged on the change, so files
+opened before the rule stay editable — and five existing fixtures had to
+name one, which is the rule doing its job rather than a cost of it.
+
+`agreed_fee` is what a fixed-fee client was told the matter would cost.
+Billing past it is **reported, not refused**: fees get renegotiated and
+a disbursement is not a fee. Unbilled time counts, because the question
+is what the client will be asked for; time already on a bill does not
+count twice; a voided invoice never billed; and a matter with an agreed
+fee of nought is a firm that agreed to act for nothing, which is its own
+decision and not something to report back to it.

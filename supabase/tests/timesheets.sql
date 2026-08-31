@@ -196,8 +196,9 @@ begin
   -- A matter of this company's own, so the assertion below is about the
   -- rule and not about whether a fixture happened to leave one lying
   -- around.
-  insert into public.matters (org_id, matter_no, name, client_id)
-  values (v_org, 'M-001', 'A matter', v_client) returning id into v_matter;
+  insert into public.matters (org_id, matter_no, name, client_id, fee_earner)
+  values (v_org, 'M-001', 'A matter', v_client, v_owner)
+  returning id into v_matter;
   begin
     insert into public.time_entries
       (org_id, project_id, matter_id, user_id, entry_date, description,

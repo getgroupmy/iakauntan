@@ -53,11 +53,15 @@ begin
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'CL1', 'Puan Aminah', 'customer') returning id into v_them;
 
-  insert into public.matters (org_id, matter_no, name, client_id, opened_date)
-  values (v_org, 'M-1', 'Sale of a house', v_them, date '2026-01-05')
+  insert into public.matters
+    (org_id, matter_no, name, client_id, opened_date, fee_earner)
+  values (v_org, 'M-1', 'Sale of a house', v_them, date '2026-01-05',
+          pg_temp.test_user())
   returning id into v_sale;
-  insert into public.matters (org_id, matter_no, name, client_id, opened_date)
-  values (v_org, 'M-2', 'A quiet file', v_them, date '2026-01-05')
+  insert into public.matters
+    (org_id, matter_no, name, client_id, opened_date, fee_earner)
+  values (v_org, 'M-2', 'A quiet file', v_them, date '2026-01-05',
+          pg_temp.test_user())
   returning id into v_quiet;
 
   -- Five thousand on account for the conveyance.
@@ -180,9 +184,10 @@ begin
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'CL1', 'A client', 'customer') returning id into v_them;
-  insert into public.matters (org_id, matter_no, name, client_id, opened_date)
+  insert into public.matters
+    (org_id, matter_no, name, client_id, opened_date, fee_earner)
   values (v_org, 'M-1', 'A file that came to nothing', v_them,
-          date '2026-01-05')
+          date '2026-01-05', pg_temp.test_user())
   returning id into v_m;
 
   -- Six hours nobody will ever bill, and a search fee.
@@ -213,8 +218,10 @@ begin
   -- `status <> 'void'`, so closing reads the same rows or the screen and
   -- the refusal disagree about the same file.
   -- ------------------------------------------------------------------
-  insert into public.matters (org_id, matter_no, name, client_id, opened_date)
-  values (v_org, 'M-2', 'A receipt entered twice', v_them, date '2026-01-05')
+  insert into public.matters
+    (org_id, matter_no, name, client_id, opened_date, fee_earner)
+  values (v_org, 'M-2', 'A receipt entered twice', v_them, date '2026-01-05',
+          pg_temp.test_user())
   returning id into v_void;
   insert into public.client_account_transactions
     (org_id, matter_id, transaction_no, transaction_date, transaction_type,
@@ -229,8 +236,10 @@ begin
   -- And a draft one is, which is the other half of the same sentence. A
   -- receipt somebody has entered and not posted is a receipt they think
   -- they have; refusing is the safe direction to be wrong in.
-  insert into public.matters (org_id, matter_no, name, client_id, opened_date)
-  values (v_org, 'M-3', 'A receipt not yet posted', v_them, date '2026-01-05')
+  insert into public.matters
+    (org_id, matter_no, name, client_id, opened_date, fee_earner)
+  values (v_org, 'M-3', 'A receipt not yet posted', v_them, date '2026-01-05',
+          pg_temp.test_user())
   returning id into v_draft;
   insert into public.client_account_transactions
     (org_id, matter_id, transaction_no, transaction_date, transaction_type,

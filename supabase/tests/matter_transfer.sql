@@ -63,13 +63,19 @@ begin
 
   -- Her conveyance, finished, with a balance still held; and her new
   -- tenancy, which is where she wants it.
-  insert into public.matters (org_id, matter_no, name, client_id)
-  values (v_org, 'M-1', 'Sale of a house', v_them) returning id into v_sale;
-  insert into public.matters (org_id, matter_no, name, client_id)
-  values (v_org, 'M-2', 'A tenancy', v_them) returning id into v_lease;
+  -- `fee_earner` since `0383`: an open file is somebody's, because
+  -- time is recorded by whoever is signed in and without one nothing
+  -- says whose matter it is when they are away.
+  insert into public.matters (org_id, matter_no, name, client_id, fee_earner)
+  values (v_org, 'M-1', 'Sale of a house', v_them, pg_temp.test_user())
+  returning id into v_sale;
+  insert into public.matters (org_id, matter_no, name, client_id, fee_earner)
+  values (v_org, 'M-2', 'A tenancy', v_them, pg_temp.test_user())
+  returning id into v_lease;
   -- Somebody else's matter entirely.
-  insert into public.matters (org_id, matter_no, name, client_id)
-  values (v_org, 'M-3', 'A dispute', v_other) returning id into v_theirs;
+  insert into public.matters (org_id, matter_no, name, client_id, fee_earner)
+  values (v_org, 'M-3', 'A dispute', v_other, pg_temp.test_user())
+  returning id into v_theirs;
 
   insert into public.client_account_transactions
     (org_id, matter_id, transaction_no, transaction_date, transaction_type,

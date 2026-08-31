@@ -3839,18 +3839,62 @@ extension RepoExtras on Repo {
     return Repo._rows(data).map(MatterSummary.fromJson).toList();
   }
 
-  Future<String> createMatter(Map<String, dynamic> values) async {
-    final row = await client
-        .from('matters')
-        .insert({
-          ...values,
-          'org_id': orgId,
-          'matter_no': await nextDocumentNumber('matter'),
-        })
-        .select()
-        .single();
-    return row['id'] as String;
+  /// Files the firm has open or closed that touch these parties.
+  ///
+  /// Both directions: matters where the firm acts for the proposed
+  /// opposing party, and matters where it has acted against the
+  /// proposed client. Asked of the database, which is where the rule
+  /// lives — `matters.opposing_party` was a column nothing wrote, so
+  /// until `0383` this question had no answer at all.
+  Future<List<Map<String, dynamic>>> checkMatterConflict({
+    String? clientId,
+    String? opposingParty,
+  }) async =>
+      Repo._rows(await callRpc('check_matter_conflict', params: {
+        'p_org': orgId,
+        'p_client': clientId,
+        'p_opposing_party': opposingParty,
+      }));
+
+  /// Opens a file, having asked. An RPC and not an insert, because the
+  /// conflict check is the point: Rule 3 of the Legal Profession
+  /// (Practice and Etiquette) Rules 1978 is what a firm walks into
+  /// when a second partner opens a file against a company it acts for.
+  Future<String> openMatter({
+    required String name,
+    required String clientId,
+    String? matterNo,
+    String? opposingParty,
+    String? matterType,
+    String? feeEarner,
+    String? responsible,
+    num? agreedFee,
+    num hourlyRate = 0,
+    String? conflictNote,
+  }) async {
+    final id = await callRpc('open_matter', params: {
+      'p_org': orgId,
+      'p_matter_no': matterNo ?? await nextDocumentNumber('matter'),
+      'p_name': name,
+      'p_client': clientId,
+      'p_opposing_party': opposingParty,
+      'p_matter_type': matterType,
+      'p_fee_earner': feeEarner,
+      'p_responsible': responsible,
+      'p_agreed_fee': agreedFee,
+      'p_hourly_rate': hourlyRate,
+      'p_conflict_note': conflictNote,
+    });
+    return id.toString();
   }
+
+  /// Fixed-fee matters where billed plus unbilled time has passed the
+  /// agreed fee. Reported and not refused: fees get renegotiated, and a
+  /// firm that hears about it from the client heard from the wrong
+  /// person.
+  Future<List<Map<String, dynamic>>> mattersOverAgreedFee() async =>
+      Repo._rows(await callRpc('report_matters_over_agreed_fee',
+          params: {'p_org': orgId}));
 
   /// Closes a file, and says what it left unbilled.
   ///
