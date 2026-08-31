@@ -268,13 +268,24 @@ extension RepoCorp on Repo {
         'p_trigger_date': Fmt.iso(triggerDate),
       }) as String;
 
-  Future<void> corpMarkLodged(String filingId,
-          {required DateTime lodgedOn, String? reference}) =>
-      client.from('corp_filings').update({
-        'status': 'lodged',
-        'lodged_on': Fmt.iso(lodgedOn),
-        'ssm_reference': reference,
-      }).eq('id', filingId);
+  /// Records a lodgement.
+  ///
+  /// A function rather than a table update since `0378`: the only check
+  /// this ever had — that the date is not in the future — lived here in
+  /// Dart, and it now records who lodged it and what SSM charged, which
+  /// nothing did.
+  Future<void> corpMarkLodged(
+    String filingId, {
+    required DateTime lodgedOn,
+    String? reference,
+    num? feePaid,
+  }) =>
+      callRpc('corp_mark_lodged', params: {
+        'p_filing': filingId,
+        'p_lodged_on': Fmt.iso(lodgedOn),
+        'p_reference': reference,
+        'p_fee_paid': feePaid,
+      });
 
   // ------------------------------------------------------------------
   // Documents
@@ -356,6 +367,18 @@ extension RepoCorpSignatures on Repo {
   /// The database records the time, the hash and the caller. Nothing
   /// about the evidence comes from here, because a signature record the
   /// signer can write is not evidence of anything.
+  /// Refusing to sign, with the reason.
+  ///
+  /// `declined` has been in `app.signature_status` since `0069` and
+  /// nothing could produce it, so a director who would not sign looked
+  /// exactly like one who had not opened the email — and the difference
+  /// is whether to chase or to redo the resolution.
+  Future<void> corpDeclineSignature(String signatureId, String reason) =>
+      callRpc(
+        'corp_decline_signature',
+        params: {'p_signature_id': signatureId, 'p_reason': reason},
+      );
+
   Future<void> corpSignDocument(String signatureId, String signedName) =>
       client.rpc('corp_sign_document',
           params: {'p_signature_id': signatureId, 'p_signed_name': signedName});

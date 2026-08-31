@@ -260,7 +260,7 @@ begin
       select 1 from pg_policies
        where tablename = 'payslip_access_requests' and cmd <> 'SELECT'));
 
-  -- Eight functions are deliberately open to an unauthenticated caller,
+  -- Nine functions are deliberately open to an unauthenticated caller,
   -- and each earned its place by someone who has no account needing to
   -- do exactly one thing: a director signing one resolution, a customer
   -- reading one invoice they were sent a link to, and — since 0262 — a
@@ -284,6 +284,22 @@ begin
          and p.proname not in (
            'corp_open_signing_link',
            'corp_sign_with_link',
+           -- 0378, and it is the pair of the one above rather than a
+           -- new door. `app.signature_status` has had `declined` since
+           -- `0069` and nothing could produce it, so a director reading
+           -- a resolution on a link could sign it or close the tab —
+           -- and a line that stays pending for ever reads at the other
+           -- end as an email nobody opened.
+           --
+           -- It reaches exactly what signing reaches and no more: the
+           -- token resolves the one signature line, the same checks
+           -- apply (a valid, unused, unexpired link on a pending line
+           -- of a request that has not been withdrawn), and the link is
+           -- spent either way so it cannot be used to sign after
+           -- refusing. It writes a status and a reason on one row.
+           -- `supabase/tests/decline_and_lodge.sql` asserts the refusal
+           -- and what it does not do.
+           'corp_decline_with_link',
            -- Takes a share token and returns one sales document, with
            -- internal notes and line cost deliberately left out.
            -- `supabase/tests/document_share.sql` asserts both absences.

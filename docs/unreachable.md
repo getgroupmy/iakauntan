@@ -1831,6 +1831,48 @@ multiplies them.
   copy lodged within **thirty** days, not the fourteen most of the
   others use. Asserted as its own number for that reason.
 
+- **A request that could only be signed** (`corp_signatures.decline_reason`,
+  and `app.signature_status.declined`). The enum has had the value since
+  `0069` and the word appears nowhere else — not in the migrations, the
+  app or the edge functions.
+
+  So a director who will not sign a resolution has no way to say so, and
+  the line stays `pending`: identical, to the secretary chasing it, to a
+  director who has not opened the email. That is the worst of the
+  readings, because the two call for opposite actions — send a reminder,
+  or redo the resolution. Withdrawal existed and is not the same thing:
+  withdrawing is the company taking the request back, declining is the
+  signatory refusing it, and a file that cannot tell those apart cannot
+  show that a director dissented.
+
+  Offered through both doors signing has, including `0070`'s scoped
+  link — somebody reading the document on a link who cannot say no will
+  simply not reply. Which meant adding a name to `statutory.sql`'s anon
+  allowlist, and that check did its job: the full suite failed on
+  "nothing new is exposed to anon" before the entry was written. The
+  allowlist demands a justification in prose, which is the right price
+  for a function a stranger can call.
+
+- **A statutory lodgement recorded by an update statement**
+  (`corp_filings.lodged_by`, `fee_paid`). Columns since `0062`, never
+  written, and the app marked a lodgement with a bare `update` of three
+  fields — so the only check it had, that the date is not in the future,
+  lived in Dart. A rule enforced only in Dart is not enforced.
+
+  `lodged_by` is whose filing it was, which a practice with four people
+  and a hundred companies needs the day one turns out to be wrong.
+  `fee_paid` is the SSM fee the practice paid for the client and
+  recharges: unrecorded, it is never billed, and a fee nobody wrote down
+  is a fee nobody invoices.
+
+  A trap worth recording for the next test. The guard measures the
+  company's day — `now() at time zone 'Asia/Kuala_Lumpur'` — and the
+  first version of the assertion used the server's `current_date`.
+  Postgres runs in UTC here and Malaysia is UTC+8, so for eight hours of
+  every day those are different dates, and the test passed all morning
+  and failed all evening. A test of a Malaysian business rule has to
+  keep Malaysian time.
+
 - **Two left where they are, and why.** `organizations.trial_ends_at`
   and the `trial_days` platform setting are the vestige of a business
   model this system does not have. Nothing enters the `trial` status —

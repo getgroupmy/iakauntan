@@ -1700,6 +1700,16 @@ class _SignatureRow extends ConsumerWidget {
               tooltip: 'Send a signing link',
               onPressed: () => _link(context, ref),
             ),
+            // The other answer. Without it a director who will not sign
+            // is indistinguishable from one who has not read the email,
+            // and the secretary cannot tell whether to chase or to redo
+            // the resolution.
+            IconButton(
+              key: const ValueKey('decline-signature'),
+              icon: const Icon(Icons.do_not_disturb_alt, size: 18),
+              tooltip: 'They will not sign',
+              onPressed: () => _decline(context, ref),
+            ),
           ],
         ],
       ),
@@ -1718,6 +1728,29 @@ class _SignatureRow extends ConsumerWidget {
       action: () =>
           ref.read(repoProvider)!.corpSignDocument(signature.id, name),
       successMessage: 'Signed',
+    );
+    ref.invalidate(corpSignaturesProvider(documentId));
+  }
+
+  /// Refusing to sign, which nothing could record until `0378`.
+  ///
+  /// The reason is required: a line that says only "declined" leaves the
+  /// secretary the same phone call to make, and this is the moment the
+  /// answer is known.
+  Future<void> _decline(BuildContext context, WidgetRef ref) async {
+    final why = await promptForText(
+      context,
+      title: 'Why is ${signature.personName} not signing?',
+      label: 'Reason',
+      confirmLabel: 'Record the refusal',
+    );
+    if (why == null || !context.mounted) return;
+
+    await runWithFeedback(
+      context,
+      action: () =>
+          ref.read(repoProvider)!.corpDeclineSignature(signature.id, why),
+      successMessage: 'Recorded',
     );
     ref.invalidate(corpSignaturesProvider(documentId));
   }
