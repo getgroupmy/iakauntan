@@ -34,6 +34,11 @@
 #
 #   supabase/tests/run_locally.sh            # migrations, then every test
 #   supabase/tests/run_locally.sh --keep     # skip the rebuild, tests only
+#
+# `--keep` refuses if the migrations on disk have changed since the
+# database was built: the cluster a mutation run leaves behind still
+# holds its last mutant, and a suite run against it reports a failure
+# that is not in the code.
 #   supabase/tests/run_locally.sh a.sql b.sql
 #
 # Needs postgresql-16 and pg_cron installed, and root (initdb refuses to
@@ -83,6 +88,14 @@ SQL
   $PSQL -q -v ON_ERROR_STOP=1 -f "$ROOT/supabase/tests/_local_stack.sql" >/dev/null
 }
 
+# A fingerprint of every migration file's contents.
+#
+# Recorded when the database is built and checked when `--keep` skips
+# the rebuild, because the trap below has been walked into three times.
+migration_stamp() {
+  cat "$ROOT"/supabase/migrations/*.sql | md5sum | cut -d' ' -f1
+}
+
 migrate() {
   local f err
   for f in "$ROOT"/supabase/migrations/*.sql; do
@@ -91,7 +104,33 @@ migrate() {
       echo "MIGRATION FAILED  $(basename "$f")"; echo "$err"; exit 1
     fi
   done
+  migration_stamp > "$PGDATA/iak_migration_stamp"
   echo "migrations applied"
+}
+
+# Refuse to run assertions against a database older than the migrations.
+#
+# `--keep` exists for two good reasons: `scripts/check_embeds.py` needs
+# a database that already exists, and re-running one test file while
+# iterating should not cost two minutes. It has a bad third use, which
+# is running the suite on a cluster left behind by a mutation run — the
+# mutant is still in the database, the file on disk is innocent, and the
+# failure looks like a real one for as long as it takes to work out that
+# the deployed function is not the code being read.
+#
+# So: the stamp. If the migrations have changed since the database was
+# built, say so and stop, rather than reporting on a schema that no
+# longer exists anywhere but in this cluster.
+check_stamp() {
+  local want have
+  want="$(migration_stamp)"
+  have="$(cat "$PGDATA/iak_migration_stamp" 2>/dev/null || true)"
+  if [ "$want" != "$have" ]; then
+    echo "--keep refused: this database was built from different" >&2
+    echo "migrations than the ones on disk. Re-run without --keep." >&2
+    echo "(A mutation run leaves its last mutant in the database.)" >&2
+    exit 1
+  fi
 }
 
 # The list CI runs, read out of the workflow rather than kept in step by
@@ -120,7 +159,7 @@ main() {
   local keep=0
   if [ "${1:-}" = "--keep" ]; then keep=1; shift; fi
   start_cluster
-  if [ $keep -eq 0 ]; then bootstrap; migrate; fi
+  if [ $keep -eq 0 ]; then bootstrap; migrate; else check_stamp; fi
 
   local files failed=0 out
   if [ $# -gt 0 ]; then files="$*"; else files="$(ci_tests)"; fi

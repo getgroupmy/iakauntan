@@ -1117,6 +1117,47 @@ class Repo {
         .order('code'),
   );
 
+  /// Create or amend a project.
+  ///
+  /// `projects` had no writer at all until `0389` — the table was
+  /// reachable only from a database connection, while four screens read
+  /// it and one of them said "No projects yet" with no way to make one.
+  Future<void> saveProject(Map<String, dynamic> values, {String? id}) async {
+    if (id == null) {
+      await client.from('projects').insert({...values, 'org_id': orgId});
+    } else {
+      await client
+          .from('projects')
+          .update({...values, 'updated_at': DateTime.now().toIso8601String()})
+          .eq('id', id)
+          .eq('org_id', orgId);
+    }
+  }
+
+  /// Every project, with the budget beside what the ledger has against
+  /// it.
+  Future<List<Map<String, dynamic>>> projectBudgets({
+    bool includeClosed = false,
+  }) async => _rows(
+    await callRpc('report_project_budget',
+        params: {'p_org_id': orgId, 'p_include_closed': includeClosed}),
+  );
+
+  /// Close a job.
+  ///
+  /// Refused while billable hours on it have never been invoiced,
+  /// unless [writeOff] says the decision not to charge has been taken —
+  /// `0176`'s refusal for a matter holding client money, one table over.
+  Future<void> closeProject(String id, {bool writeOff = false}) async {
+    await callRpc('close_project',
+        params: {'p_project': id, 'p_write_off': writeOff});
+  }
+
+  /// Reopen one. The write-off is not undone: that was a decision.
+  Future<void> reopenProject(String id) async {
+    await callRpc('reopen_project', params: {'p_project': id});
+  }
+
   // ------------------------------------------------------------------
   // Stock
   // ------------------------------------------------------------------

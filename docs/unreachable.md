@@ -2593,3 +2593,59 @@ the function, so making the index non-unique changed nothing any
 assertion could see — while a row written straight through PostgREST
 would have created two successors and left "which is current" with two
 answers. The fixture now writes one directly.
+
+## The project budget nobody could overrun
+
+`projects.budget_amount` has been a column since `0088` and the word
+appears nowhere else in the repository — not in another migration, not
+in the client, not in a report.
+
+The reason turned out to be one step further back. Nothing writes *any*
+column of `projects`. Four screens read the table, and the timesheet
+screen's own empty state says "No projects yet — a project is what hours
+are recorded against and what they are billed to" while offering no way
+to make one. A project had to be inserted by hand, by somebody with a
+database connection. `budget_amount` was not an unused column; it was
+the visible end of a table with no front door.
+
+The report reads **cost from the ledger**, not from the documents. A bill
+line tagged to the project, an approved expense claim and a journal
+somebody posted by hand all land in `gl_lines` with a `project_code`;
+reading the documents instead would have counted the ones this module
+knows about and silently missed the rest. Unbilled time is counted
+separately and added to neither side — it is revenue not yet raised, and
+putting it in cost or in revenue flatters one of them.
+
+Closing a job is `0176`'s refusal one table over: a project does not
+close over billable hours nobody invoiced. The reasoning transfers
+exactly — a closed project drops out of every picker, so those hours can
+never afterwards be selected, invoiced, or found without going looking,
+and they were marked billable, which is to say somebody meant to charge
+for them. Writing the time off is offered as a deliberate answer rather
+than discovered by being refused, and it marks the entries non-billable
+rather than deleting them: the hours were worked, and the utilisation
+report counts what people did, not what was charged.
+
+### Two ways this file's own tooling lied to me
+
+**A volatile function in a `where` clause runs per row.** The fixture for
+"an unposted journal does not count" was written as
+
+    update public.gl_entries set status = 'draft'
+     where id = pg_temp.pb_post_returning(v_org, 'JOB-1', '5100', 9999);
+
+which posted the journal once for every row `gl_entries` was scanned —
+four times — and then drafted whichever one it matched last. The cost
+assertion failed with a number that made no sense until the call was
+lifted into a variable.
+
+**`--keep` ran the suite against a mutant.** Three times this session I
+ran `run_locally.sh --keep` on a cluster a mutation run had left behind,
+read a failure that was not in the code, and spent minutes on it. The
+guard I kept writing in prose is now in the script: `migrate` stamps the
+data directory with an md5 of every migration file, and `--keep` refuses
+when the stamp does not match what is on disk. `--keep` still does its
+two legitimate jobs — the embed checker needs an existing database, and
+re-running one file while iterating should not cost two minutes — but it
+can no longer report on a schema that exists nowhere except in that
+cluster. A note in a document did not stop me doing it; a refusal does.

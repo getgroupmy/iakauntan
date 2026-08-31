@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'billing_rate_sheet.dart';
+import 'project_budget.dart';
 import 'time_entry_sheet.dart';
 
 /// Time recorded, and time turned into an invoice.
@@ -47,6 +48,15 @@ class _TimesheetScreenState extends ConsumerState<TimesheetScreen> {
         appBar: AppBar(
           title: const Text('Timesheets'),
           actions: [
+            // `projects.budget_amount` has been a column since `0088`
+            // and nothing compared anything against it. This is where
+            // it is read, and where a project can be made at all.
+            IconButton(
+              key: const ValueKey('project-budgets'),
+              tooltip: 'Job costing',
+              icon: const Icon(Icons.donut_small_outlined),
+              onPressed: () => showProjectBudgets(context),
+            ),
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: OutlinedButton.icon(
@@ -239,13 +249,25 @@ class _Unbilled extends ConsumerWidget {
       onRetry: () => ref.invalidate(projectsProvider),
       builder: (list) {
         if (list.isEmpty) {
-          return const EmptyState(
+          return EmptyState(
             icon: Icons.folder_outlined,
             title: 'No projects yet',
             message:
                 'A project is what hours are recorded against and what they '
                 'are billed to. Give it a client, and the time on it can be '
                 'invoiced.',
+            // The empty state used to say this and offer no way to act
+            // on it: nothing in the client wrote to `projects` at all.
+            action: FilledButton.icon(
+              key: const ValueKey('project-new-empty'),
+              onPressed: () async {
+                if (await showProjectEditor(context)) {
+                  ref.invalidate(projectsProvider);
+                }
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('New project'),
+            ),
           );
         }
         return ListView(
@@ -259,6 +281,19 @@ class _Unbilled extends ConsumerWidget {
               orElse: () => const SizedBox.shrink(),
             ),
             for (final p in list) _ProjectTile(project: p, period: period),
+            Padding(
+              padding: const EdgeInsets.all(Space.lg),
+              child: OutlinedButton.icon(
+                key: const ValueKey('project-new'),
+                onPressed: () async {
+                  if (await showProjectEditor(context)) {
+                    ref.invalidate(projectsProvider);
+                  }
+                },
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('New project'),
+              ),
+            ),
           ],
         );
       },

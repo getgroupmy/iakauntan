@@ -397,6 +397,11 @@ final priceLevelsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).priceLevels();
 });
 
+/// Every project with its budget and what has been spent against it.
+final projectBudgetProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, bool>((ref, includeClosed) =>
+        requireRepo(ref).projectBudgets(includeClosed: includeClosed));
+
 final projectsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).projects();
 });
