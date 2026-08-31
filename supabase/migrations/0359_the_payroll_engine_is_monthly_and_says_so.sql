@@ -42,6 +42,36 @@
 -- engine, because nothing reads it as one.
 -- =====================================================================
 
+-- Named before it is refused.
+--
+-- A plain `add constraint` on a database holding a non-conforming row
+-- fails with `check constraint "pay_periods_whole_month" is violated by
+-- some row` — which is true, unhelpful, and stops the whole migration
+-- run behind it. Both sanctioned creators make whole calendar months
+-- (`ensure_pay_period` from a year and a month, the demo seed by
+-- looping them), so the only way to hold one is to have inserted it
+-- through the API by hand. If somebody has, this says which and why
+-- rather than leaving them to work it out from a constraint name.
+do $do$
+declare v_bad text;
+begin
+  select string_agg(code, ', ' order by code) into v_bad
+    from public.pay_periods
+   where extract(day from period_start) <> 1
+      or period_end <> (period_start + interval '1 month' - interval '1 day')::date
+      or frequency <> 'monthly';
+  if v_bad is not null then
+    raise exception
+      'These pay periods are not whole calendar months: %. The '
+      'statutory engine reads monthly EPF, SOCSO, EIS and PCB tables '
+      'and never reads a period''s frequency, so a shorter one is '
+      'calculated at monthly rates. Correct or delete them, then run '
+      'this migration again.', v_bad
+      using errcode = '23514';
+  end if;
+end
+$do$;
+
 alter table public.pay_periods drop constraint if exists pay_periods_whole_month;
 alter table public.pay_periods add constraint pay_periods_whole_month check (
   -- The first of a month, to the last day of that same month. Written
