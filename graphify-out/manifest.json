@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788161058.3505886,
-    "ast_hash": "9c19829bfe7695731ccd000002c7e760",
+    "mtime": 1788163250.9532816,
+    "ast_hash": "86225e4a121811adf5d73751a6636c4f",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -80,8 +80,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
-    "mtime": 1787830863.7776163,
-    "ast_hash": "00ccfcd31009404593e9d9a10a31cb68",
+    "mtime": 1788165375.4937756,
+    "ast_hash": "006ef1c384f158b677d611b0acc2a81e",
     "semantic_hash": ""
   },
   "app/lib/src/core/widgets.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788161058.3522182,
-    "ast_hash": "7416335b72bebb29284fcd488ec38182",
+    "mtime": 1788163250.9366329,
+    "ast_hash": "5a56dd01f2666128c4a69b265e02c8e9",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -145,7 +145,7 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/doc_types.dart": {
-    "mtime": 1786940319.6705728,
+    "mtime": 1788166261.190847,
     "ast_hash": "e74fa263a916083920a9b24f82929124",
     "semantic_hash": ""
   },
@@ -160,7 +160,7 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/line_draft.dart": {
-    "mtime": 1787822945.4905899,
+    "mtime": 1788165878.4855032,
     "ast_hash": "0e9c6ae084616632b43259290407d6e4",
     "semantic_hash": ""
   },
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788162411.5767019,
-    "ast_hash": "3d43020f530dd581e51b2f56376aea24",
+    "mtime": 1788165545.5348065,
+    "ast_hash": "2a0d7c244601ec3056d68cff8f4e2978",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -3055,13 +3055,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/ticketing/ticket_screen.dart": {
-    "mtime": 1788157295.0328915,
-    "ast_hash": "698093f73c75f46af9fa3f1d70e6d290",
+    "mtime": 1788163479.8375452,
+    "ast_hash": "745ae162e9c4915f3a7e956ab5abf947",
     "semantic_hash": ""
   },
   "app/lib/src/features/ticketing/tickets_screen.dart": {
-    "mtime": 1787042222.5390007,
-    "ast_hash": "fc51b4f8a46b08b512cdeadaf3563513",
+    "mtime": 1788163424.3511293,
+    "ast_hash": "2bd3b35dff3a9d78ece2021037ebc5cb",
     "semantic_hash": ""
   },
   "app/test/ticket_transitions_test.dart": {
@@ -3090,8 +3090,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/ticketing.sql": {
-    "mtime": 1787822946.0345898,
-    "ast_hash": "743b41a8eabb0ffd7c4952607679cbd8",
+    "mtime": 1788162988.7747521,
+    "ast_hash": "76f765dc824a4b751d75c0a8a6ce1842",
     "semantic_hash": ""
   },
   "app/test/settings_no_org_test.dart": {
@@ -4020,8 +4020,8 @@
     "semantic_hash": ""
   },
   "app/test/multi_uom_line_test.dart": {
-    "mtime": 1787822945.5065897,
-    "ast_hash": "90d78789ae1699e616ac9ec933319dd3",
+    "mtime": 1788165830.6854677,
+    "ast_hash": "08879b82306430d631bcb2d9e08f5531",
     "semantic_hash": ""
   },
   "supabase/migrations/0270_sell_in_cartons_stock_in_pieces.sql": {
@@ -4085,13 +4085,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/budgets_screen.dart": {
-    "mtime": 1788157295.0288916,
-    "ast_hash": "df1d1344df939bc1c7ac0695dbd360f0",
+    "mtime": 1788165467.341573,
+    "ast_hash": "cb7866b40a61ece06a1f15d3398a65f4",
     "semantic_hash": ""
   },
   "app/test/budgets_test.dart": {
-    "mtime": 1787822945.5025897,
-    "ast_hash": "430b1c1995b6437b8ac489abfcc4c1f1",
+    "mtime": 1788165421.6596465,
+    "ast_hash": "df41106915a8adb5632254e6ead6cf1e",
     "semantic_hash": ""
   },
   "supabase/migrations/0274_the_number_the_board_agreed.sql": {
@@ -4105,13 +4105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/cheques_screen.dart": {
-    "mtime": 1787822945.4905899,
-    "ast_hash": "648b709d222d4f476d0622ab1900faa6",
+    "mtime": 1788165520.530211,
+    "ast_hash": "841cc9cd11c52c62a1bc7a2e4783a224",
     "semantic_hash": ""
   },
   "app/test/cheques_test.dart": {
-    "mtime": 1787822945.5025897,
-    "ast_hash": "daf9c9ff4fe43370a6aab4b788a58e75",
+    "mtime": 1788165421.6599634,
+    "ast_hash": "c4df19227c3c35c51c5750560a7ffb40",
     "semantic_hash": ""
   },
   "supabase/migrations/0275_the_cheque_dated_next_month.sql": {
@@ -4125,13 +4125,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/cash_forecast_screen.dart": {
-    "mtime": 1788157295.0288916,
-    "ast_hash": "9197e4a9ddcffb6c9af5d4fe04d13517",
+    "mtime": 1788165474.923299,
+    "ast_hash": "94b5b3bdc8f79a5749b078bda4c0eb72",
     "semantic_hash": ""
   },
   "app/test/cash_forecast_test.dart": {
-    "mtime": 1788157295.0328915,
-    "ast_hash": "d340f3f6c2507b10455dcb3e293fa455",
+    "mtime": 1788165421.6598003,
+    "ast_hash": "69797fb09d80070177af93aad10ee50a",
     "semantic_hash": ""
   },
   "supabase/migrations/0276_the_week_the_money_runs_out.sql": {
@@ -4145,13 +4145,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/stock/bundles_screen.dart": {
-    "mtime": 1787822945.4985898,
-    "ast_hash": "32472a8e6d429746d1786a8b207c3384",
+    "mtime": 1788165498.822023,
+    "ast_hash": "62cc9f6a8991507b884760efdb45a724",
     "semantic_hash": ""
   },
   "app/test/bundles_test.dart": {
-    "mtime": 1787822945.5025897,
-    "ast_hash": "7a5d2450b17132ca424f79f14879a4d2",
+    "mtime": 1788165421.659893,
+    "ast_hash": "dc2a9d533e192401790fc19b396914e5",
     "semantic_hash": ""
   },
   "supabase/migrations/0277_the_gift_set_that_is_six_other_things.sql": {
@@ -5325,8 +5325,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/property/strata_sheet.dart": {
-    "mtime": 1788157295.0248916,
-    "ast_hash": "6b30acad6183bfdc2a883e7d8a29cee5",
+    "mtime": 1788166664.7536702,
+    "ast_hash": "8b2d8cb7f8f50ae0ca5c35d52196d257",
     "semantic_hash": ""
   },
   "app/lib/src/features/property/tenancy_sheet.dart": {
@@ -5335,13 +5335,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/property/unit_sheet.dart": {
-    "mtime": 1788157295.0248916,
-    "ast_hash": "45d776a4b34d7a9ff5c202e7eee8ff3d",
+    "mtime": 1788166681.9565527,
+    "ast_hash": "7654921ae5a47a2846b1fe2256ab4982",
     "semantic_hash": ""
   },
   "app/test/property_write_test.dart": {
-    "mtime": 1788157295.0368915,
-    "ast_hash": "bc850b7924a0143fe8c78a643f1223d5",
+    "mtime": 1788166559.0874684,
+    "ast_hash": "aadd742d826398b36744b579d11d6c04",
     "semantic_hash": ""
   },
   "app/lib/src/features/legal/matter_billing.dart": {
@@ -5365,8 +5365,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/ticketing/ticket_routing_sheet.dart": {
-    "mtime": 1788157295.0328915,
-    "ast_hash": "2c03efbb30ff83efe28a363abb6ffbfe",
+    "mtime": 1788163575.8152788,
+    "ast_hash": "e19413d89a6e55df5f71ea0c1a5474a8",
     "semantic_hash": ""
   },
   "app/test/deposit_apply_test.dart": {
@@ -5375,8 +5375,8 @@
     "semantic_hash": ""
   },
   "app/test/ticket_routing_test.dart": {
-    "mtime": 1788157295.0368915,
-    "ast_hash": "61822c52e27c3ddd94a80035ba54e85f",
+    "mtime": 1788163539.5551972,
+    "ast_hash": "98e7d5f1195e84cb3fb03e2d8aa3abaa",
     "semantic_hash": ""
   },
   "app/lib/src/features/banking/transfers_history_dialog.dart": {
@@ -5762,6 +5762,31 @@
   "supabase/migrations/0354_the_bill_somebody_emailed_you.sql": {
     "mtime": 1788161710.674708,
     "ast_hash": "b044f32b771b3b9ec82158834ba78f48",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/ticketing/teams.dart": {
+    "mtime": 1788163651.446111,
+    "ast_hash": "8f45f26fc889500ddfaa456366e8b31e",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/ticketing/teams_screen.dart": {
+    "mtime": 1788163400.0460646,
+    "ast_hash": "0b4b5a446dea19e8dbb461ac86acc93e",
+    "semantic_hash": ""
+  },
+  "app/test/doc_types_test.dart": {
+    "mtime": 1788166188.3494203,
+    "ast_hash": "99381b664ffee56b1989edf0ee588f65",
+    "semantic_hash": ""
+  },
+  "app/test/ticket_teams_test.dart": {
+    "mtime": 1788163640.4224446,
+    "ast_hash": "13b3cc87f779e6674ecfb054a3dfc49c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0355_who_is_actually_on_the_team.sql": {
+    "mtime": 1788163145.0867167,
+    "ast_hash": "9ed034bc93f12c94bf259bf37f184f23",
     "semantic_hash": ""
   }
 }
