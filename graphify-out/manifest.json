@@ -185,8 +185,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/claims_screen.dart": {
-    "mtime": 1786785756.618488,
-    "ast_hash": "dd69e238128becba31218f01a710b1ae",
+    "mtime": 1788181538.8759024,
+    "ast_hash": "4739bfe008e34b490715c0baaa73ebfc",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/employee_editor.dart": {
@@ -1275,18 +1275,18 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/banking/reconciliation_screen.dart": {
-    "mtime": 1788159325.8999488,
-    "ast_hash": "421af411a85435bb6e9608b73de004f4",
+    "mtime": 1788182888.7785165,
+    "ast_hash": "efd8f39cf287aeca715332eb1ff271fd",
     "semantic_hash": ""
   },
   "app/lib/src/features/banking/statement_import.dart": {
-    "mtime": 1786785756.6144881,
-    "ast_hash": "97ffca06d7e42c21f61caeb50db78108",
+    "mtime": 1788182859.6900144,
+    "ast_hash": "53972b89dd8ca92ca4d6ac009d767606",
     "semantic_hash": ""
   },
   "app/test/statement_import_test.dart": {
-    "mtime": 1786785756.626488,
-    "ast_hash": "c895c2906625e38f4623b9bd9dfe2eb1",
+    "mtime": 1788182914.8331351,
+    "ast_hash": "f63111be021c218bde26455f3f294040",
     "semantic_hash": ""
   },
   "supabase/migrations/0085_bank_reconciliation.sql": {
@@ -1295,8 +1295,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/bank_reconciliation.sql": {
-    "mtime": 1786852616.0107524,
-    "ast_hash": "cc1bf7d579c374b31a73bbfec3ddecca",
+    "mtime": 1788183181.0362723,
+    "ast_hash": "533be251f6a2f91e535ee91bf2ce63ad",
     "semantic_hash": ""
   },
   "app/test/no_dead_interpolation_test.dart": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788180567.806275,
-    "ast_hash": "30cab34cfc0f408930d167a692756017",
+    "mtime": 1788183595.0972593,
+    "ast_hash": "d15bdb18dbeee38dc8ac413287a327e9",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -5805,8 +5805,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/scheduled_work.sql": {
-    "mtime": 1788180223.0240498,
-    "ast_hash": "6e71d109df691618332a150b8bb8f400",
+    "mtime": 1788181130.7463083,
+    "ast_hash": "3e05ab3628e221e39ecc4ca0b3b109ac",
     "semantic_hash": ""
   },
   "app/lib/src/features/legal/matter_transfer.dart": {
@@ -5845,8 +5845,8 @@
     "semantic_hash": ""
   },
   "supabase/migrations/0359_the_payroll_engine_is_monthly_and_says_so.sql": {
-    "mtime": 1788174183.6857965,
-    "ast_hash": "d311c7e2d55cca0eba4b66fa82285db1",
+    "mtime": 1788180690.965365,
+    "ast_hash": "064de74146d643938e3e323a8f0dc678",
     "semantic_hash": ""
   },
   "supabase/migrations/0360_the_day_nobody_clocked_in.sql": {
@@ -5955,8 +5955,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/claim_caps.sql": {
-    "mtime": 1788178567.2559667,
-    "ast_hash": "ba13aac24e78f558db6ec3e33b2c564e",
+    "mtime": 1788181468.349314,
+    "ast_hash": "b3f307c7eb41c210d5f09bac5c69838e",
     "semantic_hash": ""
   },
   "supabase/tests/control_accounts.sql": {
@@ -5965,8 +5965,33 @@
     "semantic_hash": ""
   },
   "supabase/tests/leave_type_rules.sql": {
-    "mtime": 1788179387.4815485,
-    "ast_hash": "f30354cfdd315ba13d82e8c28749e963",
+    "mtime": 1788180876.6960845,
+    "ast_hash": "fd06d22c4f0bf7ae98e1e5695ae0d071",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/mileage_claim.dart": {
+    "mtime": 1788181499.766857,
+    "ast_hash": "69b081723a8528365eecfb8a048354a3",
+    "semantic_hash": ""
+  },
+  "app/test/mileage_claim_test.dart": {
+    "mtime": 1788181499.7683291,
+    "ast_hash": "5a3f55b92b2a663a6661097dc39e77f1",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0367_a_rule_that_only_judges_the_change.sql": {
+    "mtime": 1788180876.6820736,
+    "ast_hash": "d809038df41054cb856ee7e6320196d3",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0368_a_claim_measured_rather_than_stated.sql": {
+    "mtime": 1788181337.2503207,
+    "ast_hash": "935b4426563c44fcdac1f2051c3ff8b8",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0369_the_column_that_proves_the_others.sql": {
+    "mtime": 1788183267.067705,
+    "ast_hash": "d57921bb6acac326ddf0d2dee823215e",
     "semantic_hash": ""
   }
 }
