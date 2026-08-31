@@ -98,6 +98,52 @@ begin
       where org_id = v_org and request_no = 'LV-3'), 1);
 
   -- ------------------------------------------------------------------
+  -- And a rule that tightens does not strand what is already filed
+  -- ------------------------------------------------------------------
+  -- 0367. The trigger fires on update as well as insert, and a leave
+  -- request is updated several times after it is filed — approved,
+  -- rejected, cancelled, its dates corrected. Judging the row rather
+  -- than the change means a company that files half days and then marks
+  -- the type whole-days-only cannot approve or even cancel the requests
+  -- in flight: refused by a rule about something nobody is changing.
+  update public.leave_types set allow_half_day = false where id = v_half;
+  update public.leave_requests set status = 'approved'
+   where org_id = v_org and request_no = 'LV-1';
+  perform pg_temp.check_eq(
+    'a half day already filed can still be approved after the policy '
+    'tightens',
+    (select status::text from public.leave_requests
+      where org_id = v_org and request_no = 'LV-1'), 'approved');
+
+  -- But a new one under the tightened rule is refused, which is what
+  -- makes the above about the change rather than about the trigger
+  -- having been switched off.
+  v_refused := false;
+  begin
+    insert into public.leave_requests
+      (org_id, request_no, employee_id, leave_type_id, start_date, end_date,
+       total_days, is_half_day, half_day_period, status)
+    values (v_org, 'LV-4', v_emp, v_half, date '2026-05-07', date '2026-05-07',
+            0.5, true, 'morning', 'submitted');
+  exception when others then v_refused := true;
+  end;
+  perform pg_temp.check_true('and a new half day of it is refused', v_refused);
+
+  -- And asking for half a day of an existing whole-day request is the
+  -- change, so it is judged.
+  v_refused := false;
+  begin
+    update public.leave_requests
+       set is_half_day = true, half_day_period = 'morning', total_days = 0.5
+     where org_id = v_org and request_no = 'LV-3';
+  exception when others then v_refused := true;
+  end;
+  perform pg_temp.check_true(
+    'as is turning a whole day into half of one', v_refused);
+
+  update public.leave_types set allow_half_day = true where id = v_half;
+
+  -- ------------------------------------------------------------------
   -- Carried leave that lapses
   -- ------------------------------------------------------------------
   insert into public.leave_types

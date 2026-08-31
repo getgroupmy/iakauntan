@@ -1430,3 +1430,41 @@ multiplies them.
   reminder set for half past nine arrives some time before eleven, which
   makes this a nudge and not an alarm. Anything tighter is a decision
   about GitHub Actions minutes in `send-email.yml`, not about reminders.
+
+## What the second write does
+
+A `before insert or update` trigger that judges the **row** rather than
+the **change** is a trap, and it is invisible in every test that writes
+a row once.
+
+`0365`'s half-day rule had it. A leave request is updated several times
+after it is filed — approved, rejected, cancelled, its dates corrected —
+and every one of those fires the trigger, which sees a row that already
+says half a day. So a company that files half days and *then* marks the
+type whole-days-only would find the requests in flight could no longer
+be approved or even cancelled: refused by a rule about something nobody
+was changing, with no way out but editing the policy back. Any
+tightening of any policy expressed this way applies retrospectively to
+rows filed under the old one, which is not what changing a setting
+means. `0367` makes it judge the change.
+
+Worth running over the others written in the same pass, because the
+answer differs and the reasoning is the point:
+
+- `enforce_claim_caps` on the claim: guarded on the transition into
+  `submitted`, so an approval — which sets `approved` — returns
+  immediately. An approval must never re-litigate a cap the company has
+  already accepted.
+- `enforce_claim_caps` on the lines: fires whenever the parent is
+  `submitted`, which is correct. Editing a line of a claim still
+  awaiting a decision is exactly what the cap should judge, and an
+  approved claim's lines are outside it because the parent is no longer
+  `submitted`.
+- `enforce_credit_limit`: acts only on `gl_entry_id` going non-null, so
+  everything after posting is untouched.
+- `pay_periods_whole_month`: a check constraint re-evaluated on every
+  write, which is harmless because a conforming row stays conforming —
+  closing a period does not move its dates.
+
+The question to ask of each is not "does this refuse what it should"
+but "what happens on the second write to a row that already fails it".
