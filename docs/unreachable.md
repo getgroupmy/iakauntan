@@ -127,13 +127,28 @@ anywhere was an `invalidate` in the dialog that creates a transfer — so
 the RPC behind it counted as reached while a transfer, once made, left
 the app entirely.
 
-Two traps in the provider sweep. A provider is a false positive when
-the screen reads the same thing through the repository directly —
-four of the eleven it reports at `142c05b` are that, so check each one
-for a bare `.methodName(` before believing it. And a provider *you*
-add and never watch is the same defect arriving fresh:
-`depositNoteProvider` was added and removed inside one pass for
-exactly that reason.
+One trap in the provider sweep, and it is not the one it looks like.
+
+A provider *seems* to be a false positive when the screen reads the
+same thing through the repository directly — four of the eleven the
+sweep reported at `142c05b` were that, and they were written off on
+those grounds and carried forward as known-good through several passes.
+Going back to check each one found the opposite. The screen calling
+`repo.posRecipeLines(id)` and awaiting it is not evidence that
+`posRecipeLinesProvider` is reached; it is evidence that nothing needs
+it. All four were dead declarations wrapping a call somebody else was
+already making, which is the *other* thing this section warns about —
+"a provider you add and never watch is the same defect arriving fresh:
+`depositNoteProvider` was added and removed inside one pass for exactly
+that reason." Same defect, and it had been sitting in the register
+labelled as an exception to itself.
+
+So the check is not "does the screen call the method". It is "does
+anything watch this provider", and if nothing does, the provider goes —
+whether or not the capability behind it is reachable another way.
+`contactMembershipsProvider`, `itemModifierGroupIdsProvider`,
+`posRecipeLinesProvider` and `stockTransferLinesProvider` were all
+deleted on those grounds.
 
 Two traps in doing it naively, both hit on the first pass:
 
@@ -760,4 +775,11 @@ Run this check before planning a block of work, not after.
   **The lesson for the sweep**: a function with no caller is not always
   a feature waiting to be reached. Read what it would do before reaching
   it.
+
+- **Deleted rather than reached: `chatFileBytes`.** It downloads a chat
+  attachment into memory, and every screen that shows one asks
+  `chatFileUrl` for a signed link and opens it — images included. There
+  was no capability behind it going unused, only a second way to do
+  something already done, so it went. Not every name a sweep returns is
+  a gap; some are just code nobody needs.
 

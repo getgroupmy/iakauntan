@@ -2061,14 +2061,6 @@ final posModifierOptionsProvider = FutureProvider.autoDispose
       (ref, groupId) => requireRepo(ref).posModifierOptions(groupId),
     );
 
-/// Which questions a dish is sold with. Separate from
-/// [itemModifierOptionsProvider], which is what the till asks and drops
-/// anything retired — the editor has to show what is actually attached.
-final itemModifierGroupIdsProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String>(
-      (ref, itemId) => requireRepo(ref).itemModifierGroupIds(itemId),
-    );
-
 /// What was chosen on the lines of a sale. Keyed on the sale rather
 /// than the line so the basket makes one round trip instead of one per
 /// line.
@@ -2108,12 +2100,6 @@ final membershipBalanceProvider = FutureProvider.autoDispose
 final membershipBillingGapsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
       (ref) => requireRepo(ref).membershipBillingGaps(),
-    );
-
-/// What a customer is on, for the till.
-final contactMembershipsProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String>(
-      (ref, contactId) => requireRepo(ref).contactMemberships(contactId),
     );
 
 /// What the till owes LHDN and has not filed.
@@ -2333,12 +2319,6 @@ final posRecipesProvider =
       (ref) => requireRepo(ref).posRecipes(),
     );
 
-/// The lines of one recipe. 0264.
-final posRecipeLinesProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String>(
-      (ref, recipeId) => requireRepo(ref).posRecipeLines(recipeId),
-    );
-
 /// What one of a dish actually draws, sub-recipes exploded. 0264.
 final posRecipeRequirementProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
@@ -2521,12 +2501,6 @@ final landedCostTargetsProvider = FutureProvider.autoDispose
 final stockTransfersProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String?>(
       (ref, status) => requireRepo(ref).stockTransfers(status: status),
-    );
-
-/// The lines on one. 0265.
-final stockTransferLinesProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String>(
-      (ref, id) => requireRepo(ref).stockTransferLines(id),
     );
 
 /// Why a supply is exempt, in LHDN's own list. 0002.

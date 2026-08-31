@@ -2424,9 +2424,6 @@ class Repo {
   Future<String> chatFileUrl(String storagePath) =>
       client.storage.from('chat').createSignedUrl(storagePath, 60 * 60);
 
-  Future<Uint8List> chatFileBytes(String storagePath) =>
-      client.storage.from('chat').download(storagePath);
-
   /// Storage rejects a key with characters it cannot round-trip, and a
   /// name typed on a phone is not a key. The original is kept in
   /// `file_name` and is what the reader sees.
