@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788204521.3622806,
-    "ast_hash": "15b55628eda34b3fea1208d1b968762b",
+    "mtime": 1788205846.196064,
+    "ast_hash": "68f602d2081f032872fef54c9dc1a400",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788204521.3601542,
-    "ast_hash": "5b5572b3fcd0dd13fa69d9ae4102ef69",
+    "mtime": 1788205832.051043,
+    "ast_hash": "98b812ee1966c34e6dcc0724c9f559ae",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788204633.9030538,
-    "ast_hash": "9ee50643a7f94431a1472452123b68b4",
+    "mtime": 1788205846.195348,
+    "ast_hash": "7b5abbc58c3b9fa33bd535041e627de9",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -135,8 +135,8 @@
     "semantic_hash": "10171f35b93a487b87bbedf1c2359f9d"
   },
   "app/lib/src/features/crm/pipeline_screen.dart": {
-    "mtime": 1788188461.041619,
-    "ast_hash": "7e954b811ab015374d78f90c4f24da52",
+    "mtime": 1788205913.9137754,
+    "ast_hash": "726c96bb4ee95aeff7e9d594d2b2d49c",
     "semantic_hash": ""
   },
   "app/lib/src/features/dashboard/dashboard_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788203387.3473527,
-    "ast_hash": "8edac5c5d2d03609aae2dcb8351056bd",
+    "mtime": 1788205108.1071053,
+    "ast_hash": "bd1fc103af5f8e200a59f569e4643801",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788204906.1837218,
-    "ast_hash": "7bd47304f91f18a9a5a50e166cedd206",
+    "mtime": 1788206185.2437978,
+    "ast_hash": "439c2ce7ca0a54055b34e4e86afe8149",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6257,6 +6257,21 @@
   "supabase/tests/matter_conflicts.sql": {
     "mtime": 1788204066.44838,
     "ast_hash": "e9dffe9331cb51a93db4a613ac7d3596",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/crm/quote_mismatch_dialog.dart": {
+    "mtime": 1788205939.163239,
+    "ast_hash": "12f20ad982d277ac35c5dd3051731229",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0384_the_deal_and_the_quotation_it_was_won_on.sql": {
+    "mtime": 1788205939.1750793,
+    "ast_hash": "4d85c2fa5b60b80c37c9262380905c52",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pipeline_quotes.sql": {
+    "mtime": 1788205953.4884331,
+    "ast_hash": "19e0efff7dc274bd842781d9ab62a018",
     "semantic_hash": ""
   }
 }
