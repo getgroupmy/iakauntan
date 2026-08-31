@@ -3070,6 +3070,25 @@ class Repo {
     return _rows(data).map(Opportunity.fromJson).toList();
   }
 
+  /// Sales orders past the delivery date they were given, with what is
+  /// still unshipped. The reader `delivery_date` never had.
+  Future<List<Map<String, dynamic>>> lateOrders({DateTime? asAt}) async => _rows(
+    await callRpc(
+      'report_late_orders',
+      params: {
+        'p_org_id': orgId,
+        'p_as_at': asAt == null ? null : Fmt.iso(asAt),
+      },
+    ),
+  );
+
+  /// Puts a new date on a quotation or proforma whose price has run out.
+  Future<void> extendDocumentValidity(String id, DateTime validUntil) =>
+      callRpc(
+        'extend_document_validity',
+        params: {'p_document': id, 'p_valid_until': Fmt.iso(validUntil)},
+      );
+
   Future<void> moveOpportunity(String id, String stageId) =>
       client.from('opportunities').update({'stage_id': stageId}).eq('id', id);
 

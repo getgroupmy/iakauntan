@@ -132,8 +132,23 @@ main() {
     exit 1
   fi
   for f in $files; do
+    # A file named in ci.yml and not on disk. `psql -f` says
+    #   psql: error: ... No such file or directory
+    # in lower case, which the ERROR: grep below does not match — so a
+    # test renamed on one side and not the other reported green here and
+    # ran nothing. Same shape as the "0 files" hole above, one layer in.
+    if [ ! -f "$ROOT/$f" ]; then
+      echo "FAIL  $f"
+      echo "  named in ci.yml and not on disk"
+      failed=1
+      continue
+    fi
+    # Both cases: `psql:file:12: ERROR:` is a failing assertion, and
+    # `psql: error:` is psql itself refusing to start. A notice that
+    # happens to contain the word would be a false failure, which is the
+    # safe direction to be wrong in.
     out=$($PSQL -q -v ON_ERROR_STOP=1 -f "$ROOT/$f" 2>&1 \
-            | grep -E '^psql.*ERROR:' | head -3 || true)
+            | grep -E '^psql.*([Ee][Rr][Rr][Oo][Rr]):' | head -3 || true)
     if [ -n "$out" ]; then echo "FAIL  $f"; echo "$out"; failed=1; fi
   done
   if [ $failed -eq 0 ]; then

@@ -881,6 +881,8 @@ class BusinessDocument {
     required this.contactId,
     this.contactName,
     this.dueDate,
+    this.validUntil,
+    this.deliveryDate,
     this.reference,
     this.supplierDocNo,
     this.currency = 'MYR',
@@ -912,6 +914,15 @@ class BusinessDocument {
   final String contactId;
   final String? contactName;
   final DateTime? dueDate;
+
+  /// The day a quotation's or proforma's price stops holding. `0374`
+  /// refuses to transfer an offer past it, which is why it is on the
+  /// model at all: a column since `0005` that nothing read.
+  final DateTime? validUntil;
+
+  /// The day delivery was promised, carried forward from the quotation
+  /// through the order to the delivery order.
+  final DateTime? deliveryDate;
   final String? reference;
 
   /// The supplier's own invoice number. Purchase documents only.
@@ -970,6 +981,8 @@ class BusinessDocument {
       contactId: j['contact_id']?.toString() ?? '',
       contactName: contact is Map ? contact['name'] as String? : null,
       dueDate: Fmt.parseDate(j['due_date']),
+      validUntil: Fmt.parseDate(j['valid_until']),
+      deliveryDate: Fmt.parseDate(j['delivery_date']),
       reference: j['reference'] as String?,
       supplierDocNo: j['supplier_doc_no'] as String?,
       currency: j['currency']?.toString() ?? 'MYR',

@@ -1650,6 +1650,57 @@ multiplies them.
   without it an open deal sits in the Closed Lost column and the board
   disagrees with the status.
 
+- **Two dates on a document that nothing honoured**
+  (`sales_documents.valid_until`, `delivery_date`). Columns since `0005`.
+  `valid_until` even carries the comment `-- quotations`, which was the
+  whole of what anybody ever did about it.
+
+  A quotation is an offer, and `transfer_document` would turn a year-old
+  one into a sales order and then an invoice without a word — every
+  figure carried forward, every downstream total agreeing with every
+  other. Nothing in the books would look wrong. The company would simply
+  have done the work at last year's price. A proforma is the same shape
+  with higher stakes: it is what an importer's bank reads before opening
+  a letter of credit, and the validity is part of what the bank relies
+  on.
+
+  `0374` refuses the transfer and names the date, rather than warning.
+  The distinction is the same one `0372` draws: honouring an expired
+  quote is a decision somebody makes, and a warning is a decision nobody
+  makes. `extend_document_validity` is where it gets made and recorded,
+  and it refuses a date already gone — an extension into the past is a
+  typo, and letting one through would put the guard back where it
+  started. A quotation with *no* date is not expired: every quote raised
+  before this migration has none, and refusing them all would break every
+  open quote in every company on the day it applied.
+
+  `delivery_date` is the promise, and it survived nothing — the transfer
+  never carried it from the quotation to the order or from the order to
+  the delivery order, so by the time anybody could act on it the promise
+  was gone. It is carried forward now, and deliberately not onto an
+  invoice: an invoice's delivery date is a fact about a delivery that
+  happened, and copying a promise into one restates history.
+
+  `report_late_orders` is the half that makes it worth recording, and it
+  measures on the lines rather than the status — `quantity_fulfilled` is
+  what the delivery orders actually took, and an order nine tenths
+  shipped is late on the tenth that is not.
+
+  A note about the harness rather than the code. Writing this file's
+  assertions, `run_locally.sh` reported a test file that does not exist
+  as passing: `psql -f` says `psql: error: ... No such file`, in lower
+  case, and the runner grepped for `ERROR:`. So a test renamed on one
+  side of `ci.yml` and not the other would have been green here while
+  running nothing. That is the "0 files in green" hole from earlier, one
+  layer in, and it is fixed the same way — the file has to exist, and the
+  grep is case-insensitive now.
+
+  And one about the fixture. An assertion written as
+  `where id = public.transfer_document(...)` failed with "nothing left to
+  transfer": the planner is free to evaluate a volatile function once per
+  row it scans, and the second call is a second transfer. The call is
+  hoisted into a variable, which is where a volatile function belongs.
+
 - **Two left where they are, and why.** `organizations.trial_ends_at`
   and the `trial_days` platform setting are the vestige of a business
   model this system does not have. Nothing enters the `trial` status —

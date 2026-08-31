@@ -17,6 +17,7 @@ import '../../data/repository.dart';
 import '../shared/attachments_card.dart';
 import '../shared/scan_intake.dart';
 import 'doc_types.dart';
+import 'document_dates.dart';
 import 'email_dialog.dart';
 import 'fx.dart';
 import 'invoice_pdf.dart';
@@ -80,6 +81,12 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   String _docNo = '';
   DateTime _docDate = DateTime.now();
   DateTime? _dueDate;
+
+  /// The day the price stops holding, on a quotation or a proforma, and
+  /// the day delivery was promised. Columns since `0005` that nothing
+  /// set until `0374`.
+  DateTime? _validUntil;
+  DateTime? _deliveryDate;
   String _currency = 'MYR';
 
   /// Null means no rate is known. Distinct from 1, which is a rate — and
@@ -159,6 +166,12 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       if (_isNew) {
         _docNo = await repo.nextDocumentNumber(widget.docType);
         _dueDate = DateTime.now().add(const Duration(days: 30));
+        // A new quotation arrives with a date on it. The alternative is
+        // that it arrives with none and never gets one, which is how a
+        // price came to be held open indefinitely.
+        if (showsValidUntil(widget.docType)) {
+          _validUntil = defaultValidUntil(_docDate);
+        }
         _currency = _base;
         _exchangeRate = 1;
         _rate.text = '1';
@@ -169,6 +182,8 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         _contactId = doc.contactId;
         _docDate = doc.docDate;
         _dueDate = doc.dueDate;
+        _validUntil = doc.validUntil;
+        _deliveryDate = doc.deliveryDate;
         _currency = doc.currency;
         // The stored rate, not today's. This is the figure the ledger
         // posted at and the figure the gain on settlement is measured
@@ -446,6 +461,11 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           'doc_no': _docNo,
           'doc_date': Fmt.iso(_docDate),
           'due_date': _dueDate == null ? null : Fmt.iso(_dueDate!),
+          if (showsValidUntil(widget.docType))
+            'valid_until': _validUntil == null ? null : Fmt.iso(_validUntil!),
+          if (showsDeliveryDate(widget.docType))
+            'delivery_date':
+                _deliveryDate == null ? null : Fmt.iso(_deliveryDate!),
           'contact_id': _contactId,
           'reference': _nullIfBlank(_reference.text),
           if (!_kind.isSales)
@@ -547,6 +567,32 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       defaultTo: (to != null && to.trim().isNotEmpty) ? to.trim() : null,
       buildPdf: _renderPdf,
     );
+  }
+
+  /// Puts a new date on an offer whose price has run out.
+  ///
+  /// A deliberate act with a date somebody chooses, rather than a
+  /// transfer that quietly honours last year's price. The default is
+  /// another thirty days from today, which is what somebody extending a
+  /// quote almost always means.
+  Future<void> _extendValidity() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: defaultValidUntil(DateTime.now()),
+      // Never into the past: `extend_document_validity` refuses it, and
+      // a picker that offers it is a form asking to be rejected.
+      firstDate: DateTime.now(),
+      lastDate: DateTime(DateTime.now().year + 3),
+    );
+    if (picked == null || !mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      action: () =>
+          ref.read(repoProvider)!.extendDocumentValidity(widget.documentId!, picked),
+      successMessage: 'Good until ${Fmt.date(picked)}',
+    );
+    if (ok && mounted) setState(() => _validUntil = picked);
   }
 
   Future<void> _downloadPdf() async {
@@ -964,6 +1010,23 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
         const SizedBox(width: 12),
       ],
 
+      // A quotation whose price has run out. `0374` refuses to transfer
+      // it, and a refusal with no way through is how somebody ends up
+      // voiding the quote and retyping it — so the way through is here,
+      // beside the transfer that will otherwise say no.
+      if (!_isNew &&
+          showsValidUntil(widget.docType) &&
+          quoteExpired(_validUntil))
+        Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: TextButton.icon(
+            key: const ValueKey('extend-validity'),
+            icon: const Icon(Icons.event_repeat_outlined, size: 18),
+            label: const Text('Extend'),
+            onPressed: _saving ? null : _extendValidity,
+          ),
+        ),
+
       // Only once it exists: there is nothing to print from a form that
       // has not been saved, and a PDF of a half-typed invoice is a
       // document somebody could send.
@@ -1170,6 +1233,9 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         contactId: _contactId,
                         docDate: _docDate,
                         dueDate: _dueDate,
+                        docType: widget.docType,
+                        validUntil: _validUntil,
+                        deliveryDate: _deliveryDate,
                         reference: _reference,
                         supplierDocNo: _supplierDocNo,
                         editable: editable,
@@ -1228,6 +1294,14 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         },
                         onDueDate: (d) {
                           setState(() => _dueDate = d);
+                          _markDirty();
+                        },
+                        onValidUntil: (d) {
+                          setState(() => _validUntil = d);
+                          _markDirty();
+                        },
+                        onDeliveryDate: (d) {
+                          setState(() => _deliveryDate = d);
                           _markDirty();
                         },
                         onTextChanged: _markDirty,
@@ -1642,6 +1716,9 @@ class _HeaderCard extends ConsumerWidget {
     required this.contactId,
     required this.docDate,
     required this.dueDate,
+    required this.docType,
+    required this.validUntil,
+    required this.deliveryDate,
     required this.reference,
     required this.supplierDocNo,
     required this.editable,
@@ -1664,6 +1741,8 @@ class _HeaderCard extends ConsumerWidget {
     required this.onContactChanged,
     required this.onDocDate,
     required this.onDueDate,
+    required this.onValidUntil,
+    required this.onDeliveryDate,
     required this.onTextChanged,
   });
 
@@ -1672,6 +1751,13 @@ class _HeaderCard extends ConsumerWidget {
   final String? contactId;
   final DateTime docDate;
   final DateTime? dueDate;
+  final String docType;
+
+  /// The day the price stops holding, and the day delivery was promised.
+  /// Shown only on the document types that carry them — see
+  /// `document_dates.dart`.
+  final DateTime? validUntil;
+  final DateTime? deliveryDate;
   final TextEditingController reference;
   final TextEditingController supplierDocNo;
   final bool editable;
@@ -1694,6 +1780,8 @@ class _HeaderCard extends ConsumerWidget {
   final ValueChanged<Contact> onContactChanged;
   final ValueChanged<DateTime> onDocDate;
   final ValueChanged<DateTime> onDueDate;
+  final ValueChanged<DateTime> onValidUntil;
+  final ValueChanged<DateTime> onDeliveryDate;
   final VoidCallback onTextChanged;
 
   @override
@@ -1762,6 +1850,32 @@ class _HeaderCard extends ConsumerWidget {
         ),
         flex: 1,
       ),
+      // The day the price stops holding. A quotation without one is an
+      // offer with no end, and `0374` will let it become an invoice at
+      // last year's price for as long as anybody likes.
+      if (showsValidUntil(docType))
+        (
+          child: _DateField(
+            label: 'Valid until',
+            value: validUntil,
+            enabled: editable,
+            onChanged: onValidUntil,
+            note: validityNote(docType, validUntil),
+          ),
+          flex: 1,
+        ),
+      // What the customer was told, carried forward by the transfer onto
+      // the order and the delivery order raised from it.
+      if (showsDeliveryDate(docType))
+        (
+          child: _DateField(
+            label: 'Delivery promised',
+            value: deliveryDate,
+            enabled: editable,
+            onChanged: onDeliveryDate,
+          ),
+          flex: 1,
+        ),
       (
         child: _CurrencyField(
           value: currency,
@@ -2057,12 +2171,17 @@ class _DateField extends StatelessWidget {
     required this.value,
     required this.enabled,
     required this.onChanged,
+    this.note,
   });
 
   final String label;
   final DateTime? value;
   final bool enabled;
   final ValueChanged<DateTime> onChanged;
+
+  /// What the date means, where it means something worth saying. Null on
+  /// the ordinary case so a healthy document carries no chatter.
+  final String? note;
 
   @override
   Widget build(BuildContext context) {
@@ -2083,6 +2202,8 @@ class _DateField extends StatelessWidget {
           labelText: label,
           suffixIcon: const Icon(Icons.calendar_today, size: 18),
           enabled: enabled,
+          helperText: note,
+          helperMaxLines: 3,
         ),
         child: Text(Fmt.date(value)),
       ),

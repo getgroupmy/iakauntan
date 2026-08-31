@@ -856,6 +856,16 @@ final intercompanyInboxProvider =
       return requireRepo(ref).intercompanyInbox();
     });
 
+/// Sales orders past the delivery date they were given.
+///
+/// Watched by the sales order list so the button appears only when there
+/// is something behind it — a permanent "Late (0)" is a door onto an
+/// empty room.
+final lateOrdersProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).lateOrders();
+    });
+
 /// How far the move onto this system has got — six imports in the order
 /// they have to be done, and the balance of 3900 as the verdict.
 final migrationProgressProvider =

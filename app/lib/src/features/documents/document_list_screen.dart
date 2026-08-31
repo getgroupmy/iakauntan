@@ -10,6 +10,7 @@ import '../../data/models.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
 import 'doc_types.dart';
+import 'late_orders_dialog.dart';
 import '../shared/scan_intake.dart';
 import '../shared/supplier_from_scan.dart';
 import 'settlement_dialog.dart';
@@ -282,6 +283,25 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                     onPressed: () => context.go('/intercompany'),
                     icon: const Icon(Icons.swap_horiz, size: 18),
                     label: Text('From the group ($waiting)'),
+                  ),
+                );
+              },
+            ),
+          // Only on the sales order list, and only when something is
+          // actually late. A permanent button reading "nothing is late"
+          // is a door onto an empty room; a count is a reason to look.
+          if (widget.docType == 'sales_order')
+            Consumer(
+              builder: (context, ref, _) {
+                final late = ref.watch(lateOrdersProvider).valueOrNull ?? const [];
+                if (late.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: TextButton.icon(
+                    key: const ValueKey('late-orders'),
+                    onPressed: () => showLateOrders(context),
+                    icon: const Icon(Icons.schedule, size: 18),
+                    label: Text('Late (${late.length})'),
                   ),
                 );
               },
