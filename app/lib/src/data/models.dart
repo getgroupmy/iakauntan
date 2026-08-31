@@ -2475,6 +2475,7 @@ class Payslip {
     this.pcb = 0,
     this.zakat = 0,
     this.hrdf = 0,
+    this.hrdfWage = 0,
     this.otHours = 0,
     this.schedulesVerified = false,
     this.lines = const [],
@@ -2503,6 +2504,7 @@ class Payslip {
   final double pcb;
   final double zakat;
   final double hrdf;
+  final double hrdfWage;
   final double otHours;
   final bool schedulesVerified;
   final List<PayslipLine> lines;
@@ -2535,6 +2537,7 @@ class Payslip {
       pcb: Fmt.toDouble(j['pcb']) + Fmt.toDouble(j['cp38']),
       zakat: Fmt.toDouble(j['zakat']),
       hrdf: Fmt.toDouble(j['hrdf']),
+      hrdfWage: Fmt.toDouble(j['hrdf_wage']),
       otHours: Fmt.toDouble(j['ot_hours']),
       schedulesVerified: j['schedules_verified'] == true,
       lines: raw is List

@@ -574,7 +574,8 @@ class _ComponentsTab extends StatelessWidget {
       table: 'salary_components',
       title: 'Allowances and deductions',
       subtitle: 'The liability flags are the point: overtime is charged to '
-          'SOCSO but not to EPF, a travelling allowance usually to neither',
+          'SOCSO but not to EPF, a bonus to EPF but not to the HRD Corp '
+          'levy, a travelling allowance to none of them',
       emptyMessage: 'Add the recurring allowances and deductions you pay.',
       fields: const [
         SetupField('code', 'Code', required: true),
@@ -586,6 +587,12 @@ class _ComponentsTab extends StatelessWidget {
         SetupField('is_epf_liable', 'Charged to EPF', boolean: true),
         SetupField('is_socso_liable', 'Charged to SOCSO', boolean: true),
         SetupField('is_eis_liable', 'Charged to EIS', boolean: true),
+        // The one nothing could set until 0370, and the one that most
+        // often differs from the rest: the PSMB Act counts basic salary
+        // and fixed allowances, so a bonus is EPF wage and is not levy
+        // wage.
+        SetupField('is_hrdf_liable', 'Charged to HRD Corp levy',
+            boolean: true),
         SetupField('is_active', 'Active', boolean: true),
       ],
       titleOf: (r) => r['name']?.toString() ?? '',
@@ -595,6 +602,10 @@ class _ComponentsTab extends StatelessWidget {
           Fmt.money(Fmt.toDouble(r['default_amount'])),
         if (r['is_epf_liable'] == true) 'EPF',
         if (r['is_socso_liable'] == true) 'SOCSO',
+        // Said only when it is off. It defaults on, so the summary line
+        // is worth the space when a component has been taken out of the
+        // levy — which is the deliberate act somebody may need to check.
+        if (r['is_hrdf_liable'] == false) 'no levy',
         if (r['is_taxable'] != true) 'not taxable',
       ].whereType<Object>().join(' · '),
     );

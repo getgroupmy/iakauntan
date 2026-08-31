@@ -1479,6 +1479,45 @@ multiplies them.
   from the books, so a slip in it is a difference that is not there —
   and the hunt for it goes through the lines, which are fine.
 
+- **A statutory rate charged on the wrong base**
+  (`salary_components.is_hrdf_liable`). The most expensive find of this
+  sweep, and the shape it takes is new: not a column nothing reads, but
+  a column nothing reads *sitting in a row of three that everything
+  reads*. `is_taxable`, `is_epf_liable`, `is_socso_liable` and
+  `is_eis_liable` all reach the payslip line and all decide a wage base.
+  The fourth was declared in `0028` beside them and read by nothing, and
+  `0043` charged the HRD Corp levy on the EPF wage instead.
+
+  Those are different wages by statute. The PSMB Act 2001 counts basic
+  salary and fixed allowances; HRD Corp's guidance excludes overtime,
+  commission, bonus and other incentives, service charge, travelling
+  allowance, gratuity, and payments on retirement, retrenchment or
+  termination. EPF is payable on most of them. A bonus is the ordinary
+  case: one or two months' salary once a year, levied at one per cent on
+  wages the Act says are not wages, while the other eleven months agree
+  to the ringgit — which is exactly what kept it invisible.
+
+  Overtime was already outside the figure, and that is the part worth
+  recording. It was outside because EPF is not payable on overtime, so
+  the EPF wage happened to exclude it. A correct number standing on the
+  wrong statute is not a correct number; it is one waiting for the two
+  statutes to disagree.
+
+  `0370` gives `payslip_lines` the fourth flag, sums an `hrdf_wage`
+  beside the other three bases, charges the levy on it, and puts the
+  base on the payslip — so a company disagreeing with a HRD Corp
+  statement can see whether it disagrees about the base or the rate.
+
+  The backfill is the interesting decision. It sets `is_hrdf_liable` to
+  `is_epf_liable` on every existing line — to what was done, not to what
+  was right. A payslip records what was paid and what was remitted, and
+  restating it would leave the stored levy disagreeing with the stored
+  base: a payslip that no longer explains itself. The history now says
+  plainly that the EPF wage was treated as the levy wage, which is also
+  what makes the difference for a past month computable. It is the one
+  part of `0370` no assertion covers, because migrations apply in order
+  onto an empty database and there is no history there to backfill.
+
 - **And one left deliberately unwritten.** `bank_transactions.value_date`
   is the day funds become good, which differs from the transaction date
   on a cheque deposit. `0369` records the balance beside it and not this,

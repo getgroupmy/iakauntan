@@ -47,8 +47,8 @@ declare
 begin
   v_org := pg_temp.test_org('Payroll Wiring Co');
 
-  -- 1.0% of the EPF wage, which is the point of asserting it at all:
-  -- the levy is charged on the EPF wage and not on gross pay.
+  -- 1.0% of the levy's own wage, which is the point of asserting it at
+  -- all: it is charged neither on gross pay nor on the EPF wage.
   insert into public.payroll_settings (org_id, hrdf_category)
   values (v_org, 'mandatory_10plus')
   on conflict (org_id) do update set hrdf_category = excluded.hrdf_category;
@@ -114,11 +114,16 @@ begin
           date '1988-11-02', 'single', 'citizen')
   returning id into v_c;
 
+  -- Travelling allowance: taxable, and outside all four contributions.
+  -- The levy flag is stated rather than left to its default, because
+  -- `0370` made it a decision and the PSMB Act 2001 excludes a
+  -- travelling allowance by name.
   insert into public.salary_components
     (org_id, code, name, kind, default_amount,
-     is_taxable, is_epf_liable, is_socso_liable, is_eis_liable)
+     is_taxable, is_epf_liable, is_socso_liable, is_eis_liable,
+     is_hrdf_liable)
   values (v_org, 'TRAVEL', 'Travel allowance', 'earning', 200,
-          true, false, false, false)
+          true, false, false, false, false)
   returning id into v_comp;
 
   insert into public.employee_salary_components
@@ -184,9 +189,12 @@ begin
   perform pg_temp.check_eq('A SOCSO employer', r.socso_employer, 94.05);
   perform pg_temp.check_eq('A EIS employee', r.eis_employee, 10.75);
   perform pg_temp.check_eq('A EIS employer', r.eis_employer, 10.75);
-  -- 1% of the EPF wage. On gross it would have been 56.75.
-  perform pg_temp.check_eq('A HRDF levy is charged on the EPF wage',
-    r.hrdf, 50.00);
+  -- 1% of the basic salary. On gross it would have been 56.75, and on
+  -- the EPF wage it agrees here only because EPF happens to exclude
+  -- overtime too — `hrdf_levy.sql` is where the two come apart.
+  perform pg_temp.check_eq('A levy wage is the basic salary',
+    r.hrdf_wage, 5000.00);
+  perform pg_temp.check_eq('A HRDF levy is charged on it', r.hrdf, 50.00);
 
   perform pg_temp.check_eq('A CP38 is carried across', r.cp38, 50.00);
   perform pg_temp.check_eq('A zakat is carried across', r.zakat, 25.00);
@@ -312,6 +320,10 @@ begin
   perform pg_temp.check_eq('C SOCSO employee', r.socso_employee, 14.40);
   perform pg_temp.check_eq('C SOCSO employer', r.socso_employer, 50.40);
   perform pg_temp.check_eq('C EIS employee', r.eis_employee, 5.75);
+  -- 2,880 again, and for a different reason than EPF's: the travelling
+  -- allowance is out under the PSMB Act, not because EPF ignores it.
+  perform pg_temp.check_eq('C levy wage excludes the travel allowance',
+    r.hrdf_wage, 2880.00);
   perform pg_temp.check_eq('C HRDF', r.hrdf, 28.80);
 
   v_pcb_c := r.pcb;
