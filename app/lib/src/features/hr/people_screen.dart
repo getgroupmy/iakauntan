@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'attendance_month.dart';
+import 'expiring_documents.dart';
 
 /// The company directory. Everyone can see who works here; only HR and
 /// the person themselves get the full record behind it, which is why
@@ -41,6 +42,16 @@ class _PeopleScreenState extends ConsumerState<PeopleScreen> {
               tooltip: 'Attendance this month',
               icon: const Icon(Icons.fingerprint),
               onPressed: () => showAttendanceMonth(context),
+            ),
+          // The list `0025` built an index for and never wrote. Without
+          // it a lapsing work permit is only findable by opening every
+          // employee — and an expired pass is the company's offence.
+          if (canManageHr)
+            IconButton(
+              key: const ValueKey('expiring-documents'),
+              tooltip: 'Documents expiring',
+              icon: const Icon(Icons.event_busy_outlined),
+              onPressed: () => showExpiringDocuments(context),
             ),
           if (canManageHr)
             Padding(

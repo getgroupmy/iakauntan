@@ -1203,6 +1203,16 @@ final attendanceProvider = FutureProvider.autoDispose
       );
     });
 
+/// Every document running out inside the window.
+///
+/// `0025` built an index for this list and it was never written, so a
+/// lapsing work permit could only be found by opening each employee in
+/// turn — and employing on an expired pass is the company's offence,
+/// not the employee's.
+final expiringDocumentsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, int>(
+        (ref, days) => requireRepo(ref).expiringDocuments(withinDays: days));
+
 final leaveTypesProvider = FutureProvider<List<LeaveType>>((ref) {
   return requireRepo(ref).leaveTypes();
 });

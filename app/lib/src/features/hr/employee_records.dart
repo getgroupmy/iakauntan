@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import 'expiring_documents.dart';
 
 /// The three lists that hang off an employee and had nowhere to live:
 /// dependants, documents and shift assignments.
@@ -501,6 +502,28 @@ class _DocumentDialogState extends ConsumerState<_DocumentDialog> {
         ),
       ),
       actions: [
+        // A renewal is not an edit. Typing over the expiry date loses
+        // the document that was in force until now, and the register a
+        // labour inspection asks for is the history, not the latest
+        // row.
+        if (canRenewDocument(widget.row))
+          TextButton(
+            key: const ValueKey('document-renew'),
+            onPressed: _saving
+                ? null
+                : () async {
+                    final done = await showRenewDocument(
+                      context,
+                      documentId: widget.row!['id'] as String,
+                      currentExpiry:
+                          Fmt.parseDate(widget.row!['expires_date']),
+                    );
+                    if (done && context.mounted) {
+                      Navigator.pop(context, true);
+                    }
+                  },
+            child: const Text('Renew'),
+          ),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),

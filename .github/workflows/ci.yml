@@ -142,6 +142,7 @@ jobs:
                    supabase/tests/pipeline_quotes.sql \
                    supabase/tests/settlement_discount.sql \
                    supabase/tests/statutory_charges.sql \
+                   supabase/tests/employee_documents.sql \
                    supabase/tests/corp_particulars.sql \
                    supabase/tests/decline_and_lodge.sql \
                    supabase/tests/lot_report.sql \

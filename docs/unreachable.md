@@ -2525,3 +2525,71 @@ right answer, because each row re-derives from its own bill; what it
 costs is a row lock on every statutory charge in reach each time any
 bill in the company is paid. Kept for the reason `0380` keeps its own —
 correct and slow is still a defect, even when no assertion can see it.
+
+## The permit that expired and nobody was looking
+
+`0025` created `employee_documents` with an index on
+`(org_id, expires_date)` and a comment directly above it saying what the
+index is for: *"Work permits and professional certificates expire; this
+is what a 'expiring in the next 60 days' list reads."*
+
+There is no such list. There never has been. The index has been sitting
+in every deployment waiting for a report nobody wrote, and the only way
+to find a permit about to lapse was to open each employee's record in
+turn — so a company with sixty staff finds out at a gate, or when
+Immigration asks.
+
+This is a new shape for the ledger of findings here: not an absence and
+not a falsehood, but **a stated intention with nothing behind it**. The
+comment names the report. The index is tuned for it. Anyone reading the
+schema would conclude the feature exists.
+
+Whose problem the gap is decides how the report is written. Employing a
+person whose Pass has expired is an offence by the **employer** under
+s.55B of the Immigration Act 1959/63, charged per employee — the person
+whose permit lapsed is not the one prosecuted. So the report does not
+sort by date. It classifies: an expired permit on an expatriate or
+foreign worker is an `offence` and sorts above everything; an unexpired
+one is a `permit`; everything else is a `renewal`. A first-aid
+certificate that lapsed a fortnight ago and a work pass that lapsed
+yesterday are not the same row, and a list that orders them by date says
+they are.
+
+Three smaller things fell out of reading the table.
+
+`doc_type` was unconstrained text while the dialog offered five fixed
+kinds — so a second writer producing `"Permit"` or `"wp"` would silently
+fall out of any report that groups by kind. `expires_date >= issued_date`
+was enforced in the dialog and nowhere else, which in this project means
+not enforced. And `uploaded_by` had never been written: which of four HR
+administrators filed the copy is exactly the question asked when the
+copy turns out to be of the wrong document. It is now derived on insert
+and **frozen on update** — a column that quietly follows the last editor
+answers a different question from the one it is named for.
+
+### The renewal is what decides whether the list is read
+
+Renewing a permit meant adding a row. The expired one stayed, so the
+expiring list would fill with documents replaced years ago — and a list
+that is mostly noise is a list nobody opens, which is precisely how the
+one entry that mattered goes unread. `supersedes_id` and
+`renew_employee_document` make a renewal say what it replaces; the
+report shows only what nothing supersedes.
+
+Two mutants worth recording from the twenty:
+
+**A refusal that was true for the wrong reason.** Removing the "no such
+document" check did fail the suite — but with `not permitted to renew`,
+because the call fell through to `can_manage_hr(null)`. A person reading
+that message goes looking for a role they already have. The test now
+catches both SQLSTATEs and asserts the sentence, so the mutant fails on
+*which guard spoke* rather than on the fact that something did. That is
+the fourth time this session the same lesson has come round.
+
+**A guard tested only through the front door.** The function refuses
+renewing an already-renewed document with a readable message, and the
+partial unique index refuses it structurally. Every fixture went through
+the function, so making the index non-unique changed nothing any
+assertion could see — while a row written straight through PostgREST
+would have created two successors and left "which is current" with two
+answers. The fixture now writes one directly.

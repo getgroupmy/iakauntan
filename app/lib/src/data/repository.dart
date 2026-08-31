@@ -4191,6 +4191,39 @@ extension RepoExtras on Repo {
 /// HRMS data access. Kept in its own extension so the HR surface can be
 /// read as one piece rather than scattered through the finance methods.
 extension RepoHr on Repo {
+  /// Every employee document running out inside the window.
+  ///
+  /// Current documents only — one a renewal has superseded is not the
+  /// company's problem any more, and leaving those on the list is what
+  /// turns it into something nobody opens.
+  Future<List<Map<String, dynamic>>> expiringDocuments({
+    int withinDays = 60,
+  }) async => Repo._rows(
+    await callRpc('report_expiring_documents',
+        params: {'p_org_id': orgId, 'p_within_days': withinDays}),
+  );
+
+  /// Record a renewal, and retire the document it replaces.
+  ///
+  /// Everything not given again is carried across from the old one: a
+  /// renewed permit is the same permit with new dates, and retyping the
+  /// rest is how it comes out as a different kind from the one it
+  /// replaced.
+  Future<String> renewEmployeeDocument({
+    required String documentId,
+    required DateTime expiresDate,
+    DateTime? issuedDate,
+    String? title,
+    String? notes,
+  }) async =>
+      (await callRpc('renew_employee_document', params: {
+        'p_document': documentId,
+        'p_expires_date': Fmt.iso(expiresDate),
+        if (issuedDate != null) 'p_issued_date': Fmt.iso(issuedDate),
+        if (title != null && title.trim().isNotEmpty) 'p_title': title.trim(),
+        if (notes != null && notes.trim().isNotEmpty) 'p_notes': notes.trim(),
+      })) as String;
+
   // ------------------------------------------------------------------
   // People
   // ------------------------------------------------------------------
