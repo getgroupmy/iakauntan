@@ -80,6 +80,9 @@ class PlatformCatalog {
     String? instructions,
     bool? isActive,
     int? sortOrder,
+    List<String>? countries,
+    List<String>? methods,
+    String? docsUrl,
   }) => client.rpc(
     'platform_save_payment_gateway',
     params: {
@@ -93,8 +96,36 @@ class PlatformCatalog {
       if (instructions != null) 'p_instructions': instructions,
       if (isActive != null) 'p_is_active': isActive,
       if (sortOrder != null) 'p_sort_order': sortOrder,
+      // Sent when the caller passed one, omitted when it did not, which
+      // is the difference `0352` turns on: null leaves the column
+      // alone and `[]` means the gateway sells everywhere. A screen
+      // that always sent `countries` would empty the coverage list of
+      // every gateway somebody merely switched on.
+      if (countries != null) 'p_countries': countries,
+      if (methods != null) 'p_methods': methods,
+      if (docsUrl != null) 'p_docs_url': docsUrl,
     },
   );
+
+  /// The gateways this platform has switched on that sell where a
+  /// company is.
+  ///
+  /// Takes the country in either spelling. `organizations.country_code`
+  /// is alpha-3 and `payment_gateways.countries` is alpha-2, and `0352`
+  /// resolves between them in the database rather than leaving every
+  /// caller to remember — the failure when one forgets is an empty list
+  /// rather than an error, which reads as "there is no way to pay us".
+  ///
+  /// Unlike [paymentGateways] this runs as the caller, so the read
+  /// policy withholds a gateway still being set up. That is the whole
+  /// difference between the two: this is what a tenant may see.
+  Future<List<Map<String, dynamic>>> gatewaysFor(String? country) async =>
+      Repo.rows(
+        await client.rpc(
+          'payment_gateways_for',
+          params: {'p_country': country},
+        ),
+      );
 
   /// Whether the side menu gathers destinations under module headings.
   Future<bool> navGrouping() async {
@@ -131,6 +162,18 @@ final platformModulesAdminProvider =
 final platformGatewaysAdminProvider =
     FutureProvider<List<Map<String, dynamic>>>(
   (ref) => ref.watch(platformCatalogProvider).paymentGateways(),
+);
+
+/// The ways a company in a given country may pay.
+///
+/// A family on the country rather than a read of the current
+/// organization, because the console shows the same list for a country
+/// an operator picked and the settings screen shows it for the one the
+/// company is registered in. One provider, two questions with the same
+/// shape.
+final gatewaysForCountryProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>(
+  (ref, country) => ref.watch(platformCatalogProvider).gatewaysFor(country),
 );
 
 /// True when the side menu should be gathered under module headings.

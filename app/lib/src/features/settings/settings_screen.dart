@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/ocr_repository.dart';
+import '../../data/platform_catalog_repository.dart';
 import '../../data/repository.dart';
 import '../auth/reset_password_screen.dart' show validatePassword;
 import 'addresses_card.dart';
@@ -19,6 +20,7 @@ import 'company_card.dart';
 import 'company_group_card.dart';
 import 'sst_card.dart';
 import 'notifications_card.dart';
+import 'ways_to_pay.dart';
 import 'warehouses_card.dart';
 import 'credit_ledger_dialog.dart';
 import 'einvoice_credentials.dart';
@@ -759,6 +761,8 @@ class _BillingSection extends StatelessWidget {
         _CreditBalance(ocr: ocr),
         const SizedBox(height: 12),
         const _PlatformInvoices(),
+        const SizedBox(height: 12),
+        const _WaysToPay(),
       ],
     );
   }
@@ -831,6 +835,18 @@ class _PlatformInvoicesState extends ConsumerState<_PlatformInvoices> {
   @override
   Widget build(BuildContext context) {
     final invoices = ref.watch(creditInvoicesProvider);
+    // Drawn only when this app can actually start the payment. The
+    // button called `billplz-checkout` unconditionally, so a platform
+    // that had switched on any other gateway offered every tenant a Pay
+    // that failed with whatever the edge function said about missing
+    // credentials. Not knowing yet counts as no: a button that appears
+    // a second later is better than one that was never going to work.
+    final gateways = ref
+            .watch(gatewaysForCountryProvider(
+                ref.watch(currentOrgProvider).valueOrNull?.countryCode))
+            .valueOrNull ??
+        const <Map<String, dynamic>>[];
+    final canPayOnline = hostedCheckout(gateways) != null;
 
     return invoices.maybeWhen(
       data: (rows) {
@@ -870,7 +886,7 @@ class _PlatformInvoicesState extends ConsumerState<_PlatformInvoices> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    if (r['status'] == 'issued')
+                    if (r['status'] == 'issued' && canPayOnline)
                       FilledButton.tonal(
                         onPressed: _busyId == null ? () => _pay(r) : null,
                         child: _busyId == '${r['id']}'
@@ -2568,6 +2584,84 @@ class _ChangePasswordDialogState extends ConsumerState<_ChangePasswordDialog> {
                 )
               : const Text('Change password'),
         ),
+      ],
+    );
+  }
+}
+
+/// Every way this company may settle a platform invoice.
+///
+/// The list comes from `payment_gateways_for`, which answers for the
+/// country the company is registered in. `0292`'s table comment said
+/// the catalogue was readable by a tenant "so that a company can be
+/// shown the ways it may pay", `0295` filled it with forty providers
+/// and where each one sells, and until `0352` gave the reader a caller
+/// none of it reached anybody.
+///
+/// Drawn only when there is something to say. A company whose platform
+/// has switched on the one gateway this app can start a payment with
+/// already has a Pay button above, and repeating "you may pay by card"
+/// under it is noise.
+class _WaysToPay extends ConsumerWidget {
+  const _WaysToPay();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final country = ref.watch(currentOrgProvider).valueOrNull?.countryCode;
+    final gateways =
+        ref.watch(gatewaysForCountryProvider(country)).valueOrNull;
+    // Still loading, or the read failed. Either way this block is an
+    // aside on a settings screen and must not become the reason it
+    // shows an error.
+    if (gateways == null) return const SizedBox.shrink();
+
+    final byHand = payByHandBecause(gateways);
+    if (byHand == null) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'How to pay',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          byHand,
+          style: TextStyle(
+            fontSize: 12,
+            color: context.scheme.onSurfaceVariant,
+          ),
+        ),
+        for (final g in gateways)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${g['name']}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (methodsLine(g).isNotEmpty)
+                  Text(
+                    methodsLine(g),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.scheme.onSurfaceVariant,
+                    ),
+                  ),
+                if (instructionsOf(g) != null)
+                  Text(
+                    instructionsOf(g)!,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+              ],
+            ),
+          ),
       ],
     );
   }

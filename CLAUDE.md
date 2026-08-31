@@ -29,8 +29,12 @@ the branch's latest CI run every 5 minutes and keep it running:
 Do not stop the watch the first time a run turns green; it should also catch
 the next push. Do not poll with `sleep` — schedule it.
 
-CI is the only place the SQL assertions in `supabase/tests/` actually run, so a
-red run is the project's real failure signal, not a formality.
+CI is where the SQL assertions in `supabase/tests/` are authoritative, so a red
+run is the project's real failure signal, not a formality. `supabase/tests/run_locally.sh`
+runs the same list against a throwaway Postgres on this machine in about two
+minutes — use it to find a broken assertion before pushing, not to skip the
+push. It stubs Supabase's `auth` and `storage` schemas, and its own header says
+where the stubs stop being the real thing.
 
 ## graphify
 

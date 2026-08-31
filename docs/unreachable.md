@@ -18,6 +18,16 @@ select 'rpc', p.proname, pg_get_function_identity_arguments(p.oid)
 
 then grep each name across both source trees.
 
+**One thing the SQL check gets wrong, found in the pass that closed
+`payment_gateways_for`.** Grepping a function's name across `app/lib`
+and `supabase/functions` misses the callers inside the database. Three
+names came back unreferenced and only two were gaps: `pos_item_portions`
+is called by `pos_item_availability`, which the till does reach, and no
+Dart will ever mention it. Grep the migrations too, for the call shape
+rather than the bare word — `create function`, `grant` and `comment on`
+all name a function without calling it, and so does the paragraph in the
+header explaining what it is for.
+
 **A second sweep, added in the pass at `142c05b`, and worth more than
 the first.** The SQL check above finds what the *database* can do and
 nobody calls. It cannot see the layer where most of this actually
@@ -677,3 +687,31 @@ person, it is not even recoverable by the user: there is nothing they
 can do differently.
 
 Run this check before planning a block of work, not after.
+
+- **The ways a company may pay** (`payment_gateways_for`). `0292` made
+  `payment_gateways` readable by every signed-in user and said in the
+  table's own comment why — "so that a company can be shown the ways it
+  may pay" — and nothing showed them. What kept the reader from being
+  called is worth writing down, because it is a shape that will happen
+  again: `organizations.country_code` is alpha-3 and
+  `payment_gateways.countries` is alpha-2, so a caller holding 'MYS' got
+  an empty list rather than an error. A mismatch that returns nothing is
+  worse than one that raises; nobody investigates an empty list.
+  `0352` resolves both spellings in the database, and the settings screen
+  now names what a company may pay with.
+
+  The same migration closed the other half. `0295` added `countries`,
+  `methods` and `docs_url` and seeded forty gateways with them, and
+  `platform_save_payment_gateway` was never widened to take them — so a
+  gateway added by hand had no coverage list, a seeded row could not be
+  corrected, and the three check constraints `0295` wrote had never once
+  refused a real caller. A column nobody can write is unreachable in the
+  same way a function nobody calls is, and neither sweep looks for it:
+  the table is read, the function is called, and the argument is missing.
+
+- **Not closed: `resync_bank_balance`.** Called by the opening-balance
+  importers and asserted in `supabase/tests/bank_balance_resync.sql`, so
+  it is exercised — but nothing in the app calls it. A company whose
+  cached `bank_accounts.current_balance` has drifted from the posted
+  ledger can see the wrong number and has no way to rebuild it.
+
