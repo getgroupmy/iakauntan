@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788198746.5259945,
-    "ast_hash": "e013cd6dc74b37b00218e0dc7dc378ca",
+    "mtime": 1788200444.9366772,
+    "ast_hash": "6bb9167d17c07b316fff2c9e5ce30baf",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -95,13 +95,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/corp_models.dart": {
-    "mtime": 1788157295.0088916,
-    "ast_hash": "6f0dcd7525b505ef1aa42133f83ddb88",
+    "mtime": 1788200444.9357753,
+    "ast_hash": "4db5521b4f8cd8c7d7af60d4b5edebea",
     "semantic_hash": ""
   },
   "app/lib/src/data/corp_repository.dart": {
-    "mtime": 1788195700.1883533,
-    "ast_hash": "b318aced0787d2daf0ed77cb7e50e2c4",
+    "mtime": 1788200444.9359815,
+    "ast_hash": "5a3c17ae129bc363215129432837067e",
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788196784.0494168,
-    "ast_hash": "14899a66cead0b5fc4b4ef1db6294d44",
+    "mtime": 1788199383.6821501,
+    "ast_hash": "e723e18bf185a31833a96a86931f4e56",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788199152.3833797,
-    "ast_hash": "aea9f55ab13c167e6bca350e1ea5be14",
+    "mtime": 1788200867.6834817,
+    "ast_hash": "e6d755204a583b9c4271ebab98207541",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -5270,8 +5270,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/officer_sheet.dart": {
-    "mtime": 1788157295.0288916,
-    "ast_hash": "d0b5dbdb34222f829ff5719df67f8b02",
+    "mtime": 1788200464.1336145,
+    "ast_hash": "078e72901fa93a46f55d58fab40cc052",
     "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/people_screen.dart": {
@@ -5280,13 +5280,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/person_editor.dart": {
-    "mtime": 1788157295.0288916,
-    "ast_hash": "8c6d5d9ae5fccf4123696889a3ca0db0",
+    "mtime": 1788200532.7611337,
+    "ast_hash": "90b955f4804e55482695e4d5e209d27d",
     "semantic_hash": ""
   },
   "app/test/corp_register_test.dart": {
-    "mtime": 1788157295.0328915,
-    "ast_hash": "e36cc6f4013424b245353ba17dc31fd4",
+    "mtime": 1788200554.9961057,
+    "ast_hash": "a939889a2585842fe1de0030bb1f2aee",
     "semantic_hash": ""
   },
   "supabase/functions/places/parse.ts": {
@@ -6172,6 +6172,16 @@
   "supabase/tests/appraisals.sql": {
     "mtime": 1788198688.9873521,
     "ast_hash": "a77c7bb768b597286131581a3f29f3af",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0380_the_alternate_standing_in_for_nobody.sql": {
+    "mtime": 1788200385.7502751,
+    "ast_hash": "596c34a97e932a791c9a83468910fbcb",
+    "semantic_hash": ""
+  },
+  "supabase/tests/alternates_and_verification.sql": {
+    "mtime": 1788200349.5122526,
+    "ast_hash": "5955773d6dd477278f3f4318b8c057f3",
     "semantic_hash": ""
   }
 }
