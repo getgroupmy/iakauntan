@@ -951,3 +951,53 @@ It also asserts the cadence, because "scheduled" and "scheduled often
 enough" are different facts and only one of them was ever in doubt; and
 that the sweep works in the shape the scheduler calls it in, with no
 argument, across every tenant at once, which `ticketing.sql` never did.
+
+## A sixth angle: a value the database allows and the app cannot say
+
+The same shape as the fifth, one layer up. A Postgres enum is a list of
+what is *permitted*; a Dart map is a list of what is *offered*. Nothing
+holds the two together, and when they drift the app is the half that
+loses — quietly, because an option that is not in a dropdown looks
+exactly like an option that does not exist.
+
+```python
+# Every `create type app.X as enum` and every `alter type app.X add
+# value` in the migrations, against the map or list the app builds its
+# picker from. Mind the `after` clause: it decides the enum's order,
+# and a reconstruction that appends in file order gets it wrong.
+```
+
+- **The HR manager nobody could appoint** (`app.member_role.hr_manager`).
+  `0024` added it. `app.can_manage_hr` and `app.can_run_payroll` are
+  *defined* by it, `0119` and `0121` route expense claims to it, and
+  `0285` was written for exactly that person — "an owner running their
+  own company, or an outsourced HR administrator". `memberRoles` in
+  `models.dart` never gained the value, and both role dropdowns are
+  built from that map, so for two years the role existed and no company
+  could hand it to anybody. Payroll and leave approval were delegable in
+  the database and admin-only in the app, which is the opposite of what
+  a delegable role is for.
+
+  `employee`, added by the same migration, is deliberately still not
+  offered, and the reason is the opposite one: no SQL anywhere reads it.
+  It is in no `has_org_role` array, no policy and no guard, and
+  self-service is scoped by `app.my_employee_id` rather than by the
+  role — so an `employee` may do precisely what a `viewer` may do.
+  Offering both would sell a distinction the database does not make, and
+  somebody would read "Employee" as narrower than "View Only" and give
+  away more than they meant to. `notOffered` in
+  `app/test/member_roles_test.dart` is where to delete it from when
+  something enforces the difference.
+
+`app/test/member_roles_test.dart` reconstructs the enum from the
+migrations — honouring `after`, which is what puts `hr_manager` fourth
+rather than last — and asserts the cover both ways, plus the order,
+because the map's order is the dropdown's order and reads as descending
+authority. `supabase/tests/hr_manager_role.sql` asserts the other half:
+the sentence beside the new option in the invite dialog is a promise
+about what the database will allow, so it is asserted as one. An HR
+manager runs payroll and does not get `can_post`, `can_read_ledger`,
+`can_write` or `can_admin` with it — the refusals being the half worth
+having, since a role that grants too little is a complaint on the first
+day and a role that quietly grants the ledger is a segregation-of-duties
+failure nobody sees until an auditor asks who could post.

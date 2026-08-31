@@ -111,6 +111,7 @@ jobs:
                    supabase/tests/payroll_chart.sql \
                    supabase/tests/ticketing.sql \
                    supabase/tests/scheduled_work.sql \
+                   supabase/tests/hr_manager_role.sql \
                    supabase/tests/inventory_forecast.sql \
                    supabase/tests/pos.sql \
                    supabase/tests/pos_retail.sql \

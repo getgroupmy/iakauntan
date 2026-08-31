@@ -1252,6 +1252,17 @@ const memberRoles = <String, ({String label, String description})>{
     label: 'Accountant',
     description: 'Prepares and posts to the ledger, closes periods',
   ),
+  // The role three migrations of HRMS assume exists and nothing could
+  // assign. `app.can_manage_hr` and `app.can_run_payroll` name it, 0119
+  // and 0121 route expense claims to it, and 0285 was written for
+  // exactly this person — "an owner running their own company, or an
+  // outsourced HR administrator". Without it here, payroll and leave
+  // approval could only ever be done by a company admin, which is the
+  // opposite of what a delegable HR role is for.
+  'hr_manager': (
+    label: 'HR Manager',
+    description: 'Employees, payroll, leave and claims; cannot open the ledger',
+  ),
   'accounts_clerk': (
     label: 'Accounts Clerk',
     description: 'Prepares documents but cannot post to the ledger',
@@ -1270,6 +1281,21 @@ const memberRoles = <String, ({String label, String description})>{
 };
 
 String roleLabel(String? role) => memberRoles[role]?.label ?? Fmt.label(role);
+
+/// The roles a company may hand to somebody, which is every role except
+/// ownership: that is transferred rather than granted, and offering it
+/// in a dropdown would make "make Siti the owner" a thing an admin
+/// could do to a company they do not own.
+///
+/// Stated once because it was stated twice — the invite dialog and the
+/// row's own dropdown each carried their own `e.key != 'owner'`, and two
+/// copies of a rule are two places for it to stop being true.
+///
+/// Deliberately *not* what an approval rule offers. `rule_editor` names
+/// a role that may approve, and an owner approving their own company's
+/// invoices is the ordinary case rather than a privilege escalation.
+Iterable<MapEntry<String, ({String label, String description})>>
+get assignableRoles => memberRoles.entries.where((e) => e.key != 'owner');
 
 /// What an approval rule covers, in words. A null `docType` means every
 /// document of that kind, which is what the column's null means.

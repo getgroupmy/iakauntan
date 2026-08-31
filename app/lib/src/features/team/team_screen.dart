@@ -150,9 +150,8 @@ class _MemberTile extends ConsumerWidget {
               underline: const SizedBox.shrink(),
               onChanged: (role) => _changeRole(context, ref, role),
               items: [
-                for (final e in memberRoles.entries)
-                  if (e.key != 'owner')
-                    DropdownMenuItem(value: e.key, child: Text(e.value.label)),
+                for (final e in assignableRoles)
+                  DropdownMenuItem(value: e.key, child: Text(e.value.label)),
               ],
             )
           else
@@ -353,9 +352,8 @@ class _InviteDialogState extends ConsumerState<_InviteDialog> {
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Access type'),
                 items: [
-                  for (final e in memberRoles.entries)
-                    if (e.key != 'owner')
-                      DropdownMenuItem(value: e.key, child: Text(e.value.label)),
+                  for (final e in assignableRoles)
+                    DropdownMenuItem(value: e.key, child: Text(e.value.label)),
                 ],
                 onChanged: (v) => setState(() => _role = v ?? 'viewer'),
               ),
