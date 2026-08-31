@@ -102,6 +102,7 @@ declare
     'app.sweep_idempotency_keys',
     'app.purge_audit_history',
     'app.close_attendance_day',
+    'app.expire_carried_leave',
     'app.roll_leave_year',
     'app.roll_einvoice_consolidation',
     'public.chat_expire_calls',

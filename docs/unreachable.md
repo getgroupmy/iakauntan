@@ -1356,3 +1356,30 @@ and which is a policy decision rather than a bug to fix in passing.
 kind of unfinished: the columns for quantity × rate are on
 `expense_claim_lines` already, and what is missing is a screen that
 multiplies them.
+
+- **The leave type's rules, which were only labels** (`0365`).
+  `leave_types.allow_half_day` and `carry_forward_expiry_months`, both
+  since `0027`, both unread. A type marked whole-days-only took half
+  days and the balance moved by 0.5 with nothing said; and carried leave
+  never lapsed.
+
+  The second is the one with a figure in the accounts attached. `0058`
+  wrote the carry-forward cap because "silently rolling everything
+  forward is how leave liability grows unnoticed" — and a cap only
+  bounds one year's roll. A company whose policy is "carry five days,
+  use them by March" carried them and kept them for ever.
+
+  `leave_balances` has one `taken_days` and not one per source, so which
+  days were used cannot be read off the row. The convention that answers
+  it is the ordinary one and the one that favours the employee — carried
+  days go first, because they are the ones with an expiry — which makes
+  what survives exactly `least(taken_days, carried_forward)`, and
+  idempotent by construction.
+
+  A fourth surviving mutant, and the third of the session to point at a
+  missing fixture case rather than dead code. Removing the
+  `carry_forward_expiry_months > 0` filter broke nothing, because
+  `make_interval(months => null)` is null and the date comparison
+  excluded the null type anyway. The case it guards is a company that
+  types **nought** — meaning "no expiry", not "lapses on the first of
+  January". Added, and the mutant dies.
