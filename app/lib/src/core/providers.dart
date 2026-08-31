@@ -717,6 +717,48 @@ final myModuleAccessProvider = FutureProvider<Map<String, String>>((ref) async {
   return repo.myModuleAccess();
 });
 
+/// What the entitlement list and the access map add up to, given plain
+/// values rather than an `AsyncValue`.
+///
+/// Extracted because three callers state the same rule in three
+/// different ways — `.when(loading: () => true)`, `.valueOrNull` with a
+/// null check, and an awaited read — and their own comments say they
+/// agree ("The answer is the same and so is the permissiveness while it
+/// loads"). Nothing made them. Reading a `WidgetRef` back needs a
+/// widget, so none of the three could be called by a unit test either.
+///
+/// **Null is "not known yet", and it reads as yes.** That is the
+/// permissiveness the comments describe, and it is deliberate: a screen
+/// that hid a button because an entitlement had not arrived would hide
+/// it from the person who does hold it. Hiding is a courtesy in every
+/// one of these — `0127`'s restrictive policies are the control, and
+/// they do not care what the client believes.
+///
+/// An access map that has arrived and does not mention the module is a
+/// different thing again, and also yes: that is what the database
+/// answers for a member with no access type at all.
+bool moduleAllowed({
+  required Set<String>? entitled,
+  required Map<String, String>? access,
+  required String code,
+}) {
+  if (entitled != null && !entitled.contains(code)) return false;
+  return (access?[code] ?? 'write') != 'none';
+}
+
+/// Whether this person may change anything in a module, as opposed to
+/// only looking at it.
+///
+/// Deliberately does not ask about the entitlement. Two callers want
+/// this question on its own — a permission is not sold and never
+/// appears in the entitlement list, so asking would deny every one of
+/// them to everybody.
+bool moduleWriteAllowed({
+  required Map<String, String>? access,
+  required String code,
+}) =>
+    (access?[code] ?? 'write') == 'write';
+
 /// Synchronous check for widgets. Treats "still loading" as enabled so
 /// navigation does not flicker on start-up.
 ///
@@ -724,23 +766,11 @@ final myModuleAccessProvider = FutureProvider<Map<String, String>>((ref) async {
 /// have bought the module, and this person must be allowed into it.
 /// Hiding is a courtesy — the restrictive policies 0127 added are the
 /// control, and they do not care what the client believes.
-bool moduleEnabled(WidgetRef ref, String code) {
-  final modules = ref.watch(enabledModulesProvider);
-  final entitled = modules.when(
-    data: (set) => set.contains(code),
-    loading: () => true,
-    error: (_, __) => true,
-  );
-  if (!entitled) return false;
-
-  return ref
-      .watch(myModuleAccessProvider)
-      .when(
-        data: (access) => (access[code] ?? 'write') != 'none',
-        loading: () => true,
-        error: (_, __) => true,
-      );
-}
+bool moduleEnabled(WidgetRef ref, String code) => moduleAllowed(
+  entitled: ref.watch(enabledModulesProvider).valueOrNull,
+  access: ref.watch(myModuleAccessProvider).valueOrNull,
+  code: code,
+);
 
 /// The same question, asked from somewhere that is not a build method.
 ///
@@ -754,12 +784,11 @@ bool moduleEnabled(WidgetRef ref, String code) {
 /// Hiding remains a courtesy either way. The server refuses on its own
 /// account, and 0231 gates every loyalty and membership function on the
 /// module rather than on the till.
-bool moduleEnabledNow(WidgetRef ref, String code) {
-  final modules = ref.read(enabledModulesProvider).valueOrNull;
-  if (modules != null && !modules.contains(code)) return false;
-  final access = ref.read(myModuleAccessProvider).valueOrNull;
-  return (access?[code] ?? 'write') != 'none';
-}
+bool moduleEnabledNow(WidgetRef ref, String code) => moduleAllowed(
+  entitled: ref.read(enabledModulesProvider).valueOrNull,
+  access: ref.read(myModuleAccessProvider).valueOrNull,
+  code: code,
+);
 
 /// Whether this person holds a named permission inside a module — an
 /// action a company can hand out separately, like voiding a sent line.
@@ -779,7 +808,7 @@ Future<bool> permissionHeld(WidgetRef ref, String code) async {
   // is the wrong answer to give quietly, because the database will then
   // refuse and the person will have been walked into it.
   final access = await ref.read(myModuleAccessProvider.future);
-  return (access[code] ?? 'write') == 'write';
+  return moduleWriteAllowed(access: access, code: code);
 }
 
 /// The actions a company can hand out inside the modules it holds.
@@ -794,13 +823,10 @@ final accessPermissionsProvider = FutureProvider<List<Map<String, dynamic>>>((
 
 /// Whether this person may change anything in a module, as opposed to
 /// only looking at it.
-bool moduleWritable(WidgetRef ref, String code) => ref
-    .watch(myModuleAccessProvider)
-    .when(
-      data: (access) => (access[code] ?? 'write') == 'write',
-      loading: () => true,
-      error: (_, __) => true,
-    );
+bool moduleWritable(WidgetRef ref, String code) => moduleWriteAllowed(
+  access: ref.watch(myModuleAccessProvider).valueOrNull,
+  code: code,
+);
 
 // ---------------------------------------------------------------------
 // Team
