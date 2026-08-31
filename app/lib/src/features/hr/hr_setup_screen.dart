@@ -654,6 +654,10 @@ class _ClaimTypesTab extends StatelessWidget {
         SetupField('name', 'Name', required: true),
         SetupField('per_claim_cap', 'Cap per claim', number: true),
         SetupField('monthly_cap', 'Cap per month', number: true),
+        // 0364 enforces all three; offering two of them would leave the
+        // yearly one settable only through the API, which is the
+        // reverse of the asymmetry that migration exists to remove.
+        SetupField('annual_cap', 'Cap per year', number: true),
         SetupField('requires_receipt', 'Needs a receipt', boolean: true),
         SetupField('is_active', 'Active', boolean: true),
       ],

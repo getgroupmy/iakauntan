@@ -1318,3 +1318,41 @@ out to be less shared than it looked:
   naming the most files and refuses to report success on an empty run —
   which is the failure the guard exists to catch, arriving from the
   other side of it.
+
+- **The claim cap that was only a number** (`0364`). `claim_types`
+  carries `per_claim_cap`, `monthly_cap` and `annual_cap`; the HR setup
+  screen offers two of them and prints "up to RM 200" beside the type.
+  No SQL had ever read any of the three.
+
+  This is the sharpest form the second case takes. `credit_hold` did
+  nothing and nothing said otherwise; here a screen shows a limit, so a
+  company sets one believing claims above it will be stopped, and finds
+  out by reading the ledger.
+
+  Two things about it are worth keeping, and both came from being
+  wrong first.
+
+  The obvious place to enforce a cap is the claim becoming `submitted`.
+  That alone enforces nothing, because `createClaim` inserts the claim
+  row as `submitted` **and then** inserts its lines — so the trigger
+  sees a claim with nothing on it and passes. The first version did
+  exactly that and every test went green. The check now hangs off the
+  lines as well, `after` rather than `before`, because a multi-row
+  insert has to have finished for the total to be the total.
+
+  And the mutation that removed the line trigger **survived**, on a warm
+  database, because the file no longer dropped the trigger the previous
+  run had created. Re-run through a full rebuild it died immediately.
+  That is the same trap `create index if not exists` set earlier in this
+  document: a mutation that removes a `create` has to be run against a
+  database that never had it.
+
+`requires_receipt` is left alone deliberately. The receipt is an
+`attachments` row against the claim rather than the line, so "this type
+needs a receipt" and "this claim has one" are questions at different
+grains — one attachment on a five-line claim satisfies it, or does not,
+and which is a policy decision rather than a bug to fix in passing.
+`claim_types.is_mileage`, `rate_per_unit` and `unit_label` are the same
+kind of unfinished: the columns for quantity × rate are on
+`expense_claim_lines` already, and what is missing is a screen that
+multiplies them.
