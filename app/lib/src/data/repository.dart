@@ -6132,6 +6132,85 @@ extension RepoTicketing on Repo {
         .order('name'),
   );
 
+  /// Every team including the retired ones, which the list above hides.
+  ///
+  /// The console is where a retired team is brought back, and a list
+  /// that hid them would be a door that locks behind you — the same
+  /// reasoning `platform_modules` uses in the platform catalogue.
+  Future<List<Map<String, dynamic>>> ticketTeamsAll() async => Repo._rows(
+    await client
+        .from('ticket_teams')
+        .select()
+        .eq('org_id', orgId)
+        .order('name'),
+  );
+
+  Future<void> saveTicketTeam({
+    String? id,
+    required String code,
+    required String name,
+    bool? isActive,
+  }) async {
+    final patch = {
+      'name': name,
+      if (isActive != null) 'is_active': isActive,
+    };
+    if (id != null) {
+      await client.from('ticket_teams').update(patch).eq('id', id);
+      return;
+    }
+    await client.from('ticket_teams').insert({
+      'org_id': orgId,
+      'code': code,
+      ...patch,
+    });
+  }
+
+  /// Who is on a team, leads first.
+  ///
+  /// `0192` built the table and nothing ever wrote a row, so a team was
+  /// a label. `0355` made the list decide who a ticket on that team may
+  /// be handed to.
+  Future<List<Map<String, dynamic>>> ticketTeamRoster(String teamId) async =>
+      Repo._rows(
+        await callRpc('ticket_team_roster', params: {'p_team_id': teamId}),
+      );
+
+  Future<void> addTicketTeamMember(
+    String teamId,
+    String userId, {
+    bool isLead = false,
+  }) =>
+      client.from('ticket_team_members').insert({
+        'org_id': orgId,
+        'team_id': teamId,
+        'user_id': userId,
+        'is_lead': isLead,
+      });
+
+  Future<void> removeTicketTeamMember(String teamId, String userId) => client
+      .from('ticket_team_members')
+      .delete()
+      .eq('team_id', teamId)
+      .eq('user_id', userId);
+
+  /// One lead per team, so making somebody the lead stands the previous
+  /// one down first. The unique index in `0355` refuses two, and a
+  /// refusal an operator has to work out for themselves is a worse
+  /// answer than doing the obvious thing.
+  Future<void> setTicketTeamLead(String teamId, String userId) async {
+    await client
+        .from('ticket_team_members')
+        .update({'is_lead': false})
+        .eq('team_id', teamId)
+        .eq('is_lead', true);
+    await client
+        .from('ticket_team_members')
+        .update({'is_lead': true})
+        .eq('team_id', teamId)
+        .eq('user_id', userId);
+  }
+
   Future<List<Map<String, dynamic>>> ticketCategories() async => Repo._rows(
     await client
         .from('ticket_categories')

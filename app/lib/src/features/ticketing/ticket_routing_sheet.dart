@@ -25,8 +25,24 @@ import '../../data/repository.dart';
 /// organization, and somebody who has been invited but has not accepted
 /// has no `user_id` to name — so the list offered is exactly the set
 /// the server will take.
-List<TeamMember> assignableMembers(Iterable<TeamMember> team) =>
-    team.where((m) => m.status == 'active' && m.userId != null).toList();
+///
+/// Since `0355` there is a second refusal, and `roster` is how this
+/// mirrors it: a ticket on a team whose membership has been filled in
+/// may only be handed to somebody on that team. Null roster means the
+/// list has not arrived, and an *empty* one means the team has nobody
+/// on it — which the database reads as "anybody", so this does too. The
+/// two are different answers and collapsing them would offer nobody at
+/// all on every team that has not been filled in.
+List<TeamMember> assignableMembers(
+  Iterable<TeamMember> team, {
+  List<Map<String, dynamic>>? roster,
+}) {
+  final active =
+      team.where((m) => m.status == 'active' && m.userId != null).toList();
+  if (roster == null || roster.isEmpty) return active;
+  final onTeam = {for (final m in roster) '${m['user_id']}'};
+  return active.where((m) => onTeam.contains(m.userId)).toList();
+}
 
 /// The name against `assignee_id`.
 ///
@@ -117,6 +133,7 @@ Future<bool> showAssignTicketSheet(
   required String ticketId,
   required String status,
   String? assigneeId,
+  String? teamId,
 }) async =>
     await showDialog<bool>(
       context: context,
@@ -124,6 +141,7 @@ Future<bool> showAssignTicketSheet(
         ticketId: ticketId,
         status: status,
         assigneeId: assigneeId,
+        teamId: teamId,
       ),
     ) ??
     false;
@@ -133,11 +151,13 @@ class _AssignSheet extends ConsumerStatefulWidget {
     required this.ticketId,
     required this.status,
     this.assigneeId,
+    this.teamId,
   });
 
   final String ticketId;
   final String status;
   final String? assigneeId;
+  final String? teamId;
 
   @override
   ConsumerState<_AssignSheet> createState() => _AssignSheetState();
@@ -168,7 +188,10 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
   @override
   Widget build(BuildContext context) {
     final team = ref.watch(teamProvider).valueOrNull ?? const <TeamMember>[];
-    final people = assignableMembers(team);
+    final roster = widget.teamId == null
+        ? null
+        : ref.watch(ticketTeamRosterProvider(widget.teamId!)).valueOrNull;
+    final people = assignableMembers(team, roster: roster);
     final opens = statusAfterHandover(widget.status) != widget.status;
 
     return AlertDialog(

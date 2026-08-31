@@ -803,11 +803,8 @@ between them is worth keeping:
 
 - **`inbound_email_attachments`** was a real loss, closed in `0354`. See
   below.
-- **`ticket_team_members`** is a design nobody finished. A support team
-  can be created and routed to, and who is *on* it is recorded nowhere;
-  assignment offers every active member of the company instead. Left as
-  it is for now, and written down here rather than in a comment nobody
-  will find.
+- **`ticket_team_members`** was a design nobody finished, closed in
+  `0355`. See below.
 - **`fs_disclosures`** is the narrative MBRS asks for alongside the
   figures, and filling it needs a disclosure taxonomy this repository
   does not have. Deliberately not invented: making up statutory codes
@@ -833,4 +830,29 @@ between them is worth keeping:
   own so it could be asserted, because every way of getting it wrong is
   quiet in the same direction: an empty attachment list is
   indistinguishable from a message that had none.
+
+- **Who is actually on a support team** (`ticket_team_members`). `0192`
+  created the table, its policies and every grant it needs, and nothing
+  ever wrote a row. Worse, `ticket_teams` was reachable only to *filter*
+  by and to label a row with — there was no way to create one — so every
+  team in existence came from a demo seed, and routing was a label
+  rather than a decision. "Assign it to somebody on Billing" had no
+  answer: `assign_ticket` checked only that the person was an active
+  member of the company.
+
+  `0355` makes the list mean something and, when it is empty, decline
+  to: a ticket on a team whose membership has been filled in may only be
+  handed to somebody on that team, and a team with nobody on it accepts
+  anybody. That degradation is `0264`'s `block_out_of_stock` reasoning —
+  "a warung that has never weighed its rice would find every sale
+  blocked by a number nobody maintains" — and it is the half asserted
+  hardest, on both sides of the wire, because getting it wrong makes
+  every ticket in every company that never opened the list unassignable.
+
+  Two things the pass turned up on the way. A `v_t.team_id is not null`
+  guard that read as obviously necessary and was not — `where team_id =
+  null` is never true, so a ticket on no team already falls through the
+  same way an empty team does — deleted rather than asserted around. And
+  a roster ordering that no test could see, because the fixture had one
+  member in it: "leads first" is only a claim when there are two.
 

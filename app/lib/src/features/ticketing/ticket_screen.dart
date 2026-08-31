@@ -115,6 +115,11 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
                     ticketId: widget.id,
                     status: (t['status'] ?? '') as String,
                     assigneeId: t['assignee_id'] as String?,
+                    // So the list offered is the set the server will
+                    // take: `0355` refuses somebody who is not on the
+                    // team the ticket is with, when that team has a
+                    // list at all.
+                    teamId: t['team_id'] as String?,
                   );
                   if (done) _refresh();
                 },

@@ -44,6 +44,61 @@ void main() {
       final team = [member('u9', name: 'Zul'), member('u1', name: 'Ah Meng')];
       expect(assignableMembers(team).map((m) => m.userId), ['u9', 'u1']);
     });
+
+    // `0355`: a ticket on a team whose membership has been filled in may
+    // only be handed to somebody on that team. The list offered has to
+    // be the set the server will take, and the empty case is the one
+    // that matters — get it wrong and every ticket in every company
+    // that has not filled a team in becomes unassignable.
+    test('and narrows to the team when the team has a list', () {
+      final team = [member('u1'), member('u2'), member('u3')];
+      final ids = assignableMembers(
+        team,
+        roster: [
+          {'user_id': 'u1'},
+          {'user_id': 'u3'},
+        ],
+      ).map((m) => m.userId);
+
+      expect(ids, ['u1', 'u3']);
+    });
+
+    test('a team with nobody on it offers everybody, not nobody', () {
+      // The database reads an empty membership list as "anybody may
+      // take these", so this does too. Collapsing empty into "narrow to
+      // nothing" would empty the dropdown on every team nobody has
+      // filled in.
+      final team = [member('u1'), member('u2')];
+      expect(
+        assignableMembers(team, roster: const []).map((m) => m.userId),
+        ['u1', 'u2'],
+      );
+    });
+
+    test('and a roster that has not arrived yet is not an empty one', () {
+      // Null is "we do not know", and offering nobody while a read is in
+      // flight is a dropdown that empties and refills under somebody.
+      final team = [member('u1'), member('u2')];
+      expect(
+        assignableMembers(team, roster: null).map((m) => m.userId),
+        ['u1', 'u2'],
+      );
+    });
+
+    test('somebody on the team but no longer in the company is still out',
+        () {
+      // Both refusals apply, and the org one is the older and blunter:
+      // `assign_ticket` raises 23503 for a suspended member whatever
+      // team they are on.
+      final team = [member('u1'), member('u2', status: 'suspended')];
+      expect(
+        assignableMembers(team, roster: [
+          {'user_id': 'u1'},
+          {'user_id': 'u2'},
+        ]).map((m) => m.userId),
+        ['u1'],
+      );
+    });
   });
 
   group('who holds it now', () {

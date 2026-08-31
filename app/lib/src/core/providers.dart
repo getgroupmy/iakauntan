@@ -1834,6 +1834,18 @@ final ticketEventsProvider = FutureProvider.autoDispose
       return requireRepo(ref).ticketEvents(id);
     });
 
+/// Every team, retired ones included. The console's list.
+final ticketTeamsAllProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).ticketTeamsAll(),
+    );
+
+/// Who is on one, leads first.
+final ticketTeamRosterProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, teamId) => requireRepo(ref).ticketTeamRoster(teamId),
+    );
+
 final ticketTeamsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
       (ref) => requireRepo(ref).ticketTeams(),

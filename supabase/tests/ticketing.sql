@@ -451,4 +451,120 @@ begin
     not v_took);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Who is actually on the team
+--
+-- `0192` created `ticket_team_members` with policies and grants, and
+-- nothing ever wrote a row — so a team was a label. A ticket routed to
+-- Billing could be handed to anybody in the company, warehouse and
+-- payroll included, and the routing decided nothing.
+--
+-- `0355` makes the list mean something, and the half worth asserting
+-- hardest is how it declines to: a team with nobody on it accepts
+-- anybody, which is what happens today, so a company that never opens
+-- the Members list sees no change. Get that wrong and every ticket in
+-- every company that has not filled one in becomes unassignable.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.desk_org();
+  v_team  uuid;
+  v_empty uuid;
+  v_tkt   uuid;
+  v_on    uuid;
+  v_off   uuid;
+  v_lead_second uuid;
+  v_took  boolean;
+  v_said  text;
+begin
+  v_on  := pg_temp.another_user('onteam@desk.test');
+  v_off := pg_temp.another_user('offteam@desk.test');
+  v_lead_second := pg_temp.another_user('alsoon@desk.test');
+  insert into public.org_members (org_id, user_id, role, status)
+  values (v_org, v_on, 'accounts_clerk', 'active'),
+         (v_org, v_off, 'accounts_clerk', 'active'),
+         (v_org, v_lead_second, 'accounts_clerk', 'active')
+  on conflict do nothing;
+
+  insert into public.ticket_teams (org_id, code, name)
+  values (v_org, 'billing', 'Billing') returning id into v_team;
+  insert into public.ticket_teams (org_id, code, name)
+  values (v_org, 'nobody', 'Nobody Yet') returning id into v_empty;
+
+  -- A team with nobody on it takes anybody. This is the assertion that
+  -- protects every existing company.
+  v_tkt := public.create_ticket(v_org, 'Nobody is on this team');
+  update public.tickets set team_id = v_empty where id = v_tkt;
+  perform public.assign_ticket(v_tkt, v_off);
+  perform pg_temp.check_eq('an empty team takes anybody',
+    (select assignee_id from public.tickets where id = v_tkt), v_off);
+
+  -- And a team with a list takes only the list. The lead goes in
+  -- second, so the roster's ordering is doing something: inserted first
+  -- it would come out first whether or not the order clause exists.
+  insert into public.ticket_team_members (org_id, team_id, user_id, is_lead)
+  values (v_org, v_team, v_lead_second, false);
+  insert into public.ticket_team_members (org_id, team_id, user_id, is_lead)
+  values (v_org, v_team, v_on, true);
+
+  v_tkt := public.create_ticket(v_org, 'Somebody is on this one');
+  update public.tickets set team_id = v_team where id = v_tkt;
+
+  perform public.assign_ticket(v_tkt, v_on);
+  perform pg_temp.check_eq('somebody on the team may be given it',
+    (select assignee_id from public.tickets where id = v_tkt), v_on);
+
+  begin
+    perform public.assign_ticket(v_tkt, v_off);
+    v_said := null;
+  exception when others then v_said := sqlerrm;
+  end;
+  perform pg_temp.check_true('and somebody who is not, may not',
+    v_said is not null);
+  perform pg_temp.check_true('with a sentence that says what to do about it',
+    v_said like '%Move the ticket%' or v_said like '%add them%');
+  perform pg_temp.check_eq('the ticket stays where it was',
+    (select assignee_id from public.tickets where id = v_tkt), v_on);
+
+  -- Taking it off somebody is not assigning it to anybody, so the team
+  -- has nothing to say about it. Without this, a ticket on a team
+  -- somebody has since left cannot be un-assigned either.
+  perform public.assign_ticket(v_tkt, null);
+  perform pg_temp.check_true('and it can always be handed back to nobody',
+    (select assignee_id from public.tickets where id = v_tkt) is null);
+
+  -- A ticket on no team at all has no team to be off.
+  v_tkt := public.create_ticket(v_org, 'On no team');
+  update public.tickets set team_id = null where id = v_tkt;
+  perform public.assign_ticket(v_tkt, v_off);
+  perform pg_temp.check_eq('a ticket on no team is unaffected',
+    (select assignee_id from public.tickets where id = v_tkt), v_off);
+
+  -- The roster, leads first, which is what an escalation needs. Two
+  -- people on it, so "first" is a claim about the order rather than
+  -- about the only row there is.
+  perform pg_temp.check_eq('the roster names who is on it',
+    (select count(*) from public.ticket_team_roster(v_team)), 2::bigint);
+  perform pg_temp.check_true('and says which of them leads it',
+    (select is_lead from public.ticket_team_roster(v_team) limit 1));
+  perform pg_temp.check_eq('naming the lead first, whoever joined first',
+    (select user_id from public.ticket_team_roster(v_team) limit 1), v_on);
+
+  -- One lead per team: two people who are both "the" lead is a question
+  -- nobody can answer.
+  begin
+    insert into public.ticket_team_members (org_id, team_id, user_id, is_lead)
+    values (v_org, v_team, v_off, true);
+    v_took := true;
+  exception when unique_violation then v_took := false;
+  end;
+  perform pg_temp.check_true('a team has one lead, not two', not v_took);
+
+  -- But any number of members.
+  insert into public.ticket_team_members (org_id, team_id, user_id, is_lead)
+  values (v_org, v_team, v_off, false);
+  perform pg_temp.check_eq('and as many members as it likes',
+    (select count(*) from public.ticket_team_roster(v_team)), 3::bigint);
+end $$;
+
 rollback;

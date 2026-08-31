@@ -6,6 +6,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'teams_screen.dart';
 
 /// The queue.
 ///
@@ -40,6 +41,23 @@ class _TicketsScreenState extends ConsumerState<TicketsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Service desk'),
+        actions: [
+          // Where a team is created and its membership filled in.
+          // `ticket_teams` could be filtered by and never created, so
+          // every team in existence came from a demo seed; and 0192's
+          // `ticket_team_members` was written by nothing at all, which
+          // made routing a label rather than a decision.
+          IconButton(
+            key: const ValueKey('ticket-teams'),
+            tooltip: 'Support teams',
+            icon: const Icon(Icons.groups_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const TicketTeamsScreen(),
+              ),
+            ),
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(56),
           child: FilterBar(
