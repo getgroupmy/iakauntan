@@ -709,9 +709,21 @@ Run this check before planning a block of work, not after.
   same way a function nobody calls is, and neither sweep looks for it:
   the table is read, the function is called, and the argument is missing.
 
-- **Not closed: `resync_bank_balance`.** Called by the opening-balance
-  importers and asserted in `supabase/tests/bank_balance_resync.sql`, so
-  it is exercised — but nothing in the app calls it. A company whose
-  cached `bank_accounts.current_balance` has drifted from the posted
-  ledger can see the wrong number and has no way to rebuild it.
+- **The bank balance, and rebuilding it** (`resync_bank_balance`). It was
+  called by the opening-balance importers and asserted in
+  `bank_balance_resync.sql`, so it ran on every CI run — which is why
+  neither sweep flagged it loudly and why it is worth writing down.
+  *Exercised* is not *reachable*. Nothing a person could do in the app
+  ran it.
+
+  What made that matter is the other half: `current_balance` is a
+  running total kept by twenty-three separate statements across thirteen
+  migrations, and `BankAccount.currentBalance` was parsed out of every
+  row and drawn nowhere. So a balance that had drifted from the ledger
+  could be neither seen nor repaired. A Book balance action on the
+  reconciliation screen — where somebody is already comparing a balance
+  against a statement — shows the figure and offers the rebuild, and
+  says whether the number moved. Saying so is the point: a repair that
+  silently corrects a figure teaches nobody that something posted
+  against the bank's GL account without going through the total.
 

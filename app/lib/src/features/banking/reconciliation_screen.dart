@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'book_balance.dart';
 import 'reconciliation_history_dialog.dart';
 import 'statement_import.dart';
 import 'transfer_dialog.dart';
@@ -131,6 +132,28 @@ class _ReconciliationScreenState extends ConsumerState<ReconciliationScreen> {
                       if (changed == true) await _refresh();
                     },
             ),
+          // What the account itself says it holds, and the way to
+          // rebuild it. `current_balance` is a running total kept by
+          // twenty-three statements across the migrations, and
+          // `resync_bank_balance` — asserted since 0175 and called by
+          // nothing — is what puts it back in step with the ledger.
+          IconButton(
+            key: const ValueKey('book-balance'),
+            tooltip: 'Book balance',
+            icon: const Icon(Icons.account_balance_outlined),
+            onPressed: _bankAccountId == null
+                ? null
+                : () async {
+                    final account = banks.firstWhere(
+                      (b) => b['id'] == _bankAccountId,
+                      orElse: () => const <String, dynamic>{},
+                    );
+                    if (account.isEmpty) return;
+                    if (await showBookBalance(context, account: account)) {
+                      await _refresh();
+                    }
+                  },
+          ),
           IconButton(
             tooltip: 'Refresh',
             icon: const Icon(Icons.refresh),

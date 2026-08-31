@@ -2911,6 +2911,20 @@ class Repo {
     return _rows(data);
   }
 
+  /// Rebuild an account's cached balance from the posted ledger.
+  ///
+  /// Returns the figure it wrote, so the caller can say whether it
+  /// moved. `0175` guards it with `app.can_post`; the screen hides the
+  /// action from anybody else, which is a convenience rather than the
+  /// control.
+  Future<double> resyncBankBalance(String bankAccountId) async {
+    final data = await client.rpc(
+      'resync_bank_balance',
+      params: {'p_bank_account_id': bankAccountId},
+    );
+    return Fmt.toDouble(data);
+  }
+
   Future<List<Map<String, dynamic>>> paymentModes() async {
     final data = await client
         .from('ref_payment_modes')
