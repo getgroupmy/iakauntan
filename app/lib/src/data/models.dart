@@ -2653,8 +2653,16 @@ class Applicant {
     this.expectedSalary,
     this.source,
     this.rating,
+    this.requisitionId,
     this.requisitionTitle,
     this.appliedAt,
+    this.nric,
+    this.currentEmployer,
+    this.noticePeriodDays,
+    this.referredBy,
+    this.referrerName,
+    this.hiredEmployeeId,
+    this.notes,
   });
 
   final String id;
@@ -2666,8 +2674,34 @@ class Applicant {
   final double? expectedSalary;
   final String? source;
   final int? rating;
+  final String? requisitionId;
   final String? requisitionTitle;
   final DateTime? appliedAt;
+  final String? nric;
+  final String? currentEmployer;
+
+  /// What they owe their current employer. A start date inside it is a
+  /// date they cannot make, which `hire_applicant` refuses unless
+  /// somebody says the notice has been waived.
+  final int? noticePeriodDays;
+
+  /// Who introduced them. A reference nothing wrote until `0381`, which
+  /// made an employee referral scheme unpayable from the data.
+  final String? referredBy;
+  final String? referrerName;
+
+  /// Set by `hire_applicant`, and the thing that stops the same person
+  /// being typed into the employee editor from the record beside it.
+  final String? hiredEmployeeId;
+  final String? notes;
+
+  bool get isHired => hiredEmployeeId != null;
+
+  /// The earliest day they could start, given the notice they owe.
+  DateTime? earliestStart(DateTime today) => noticePeriodDays == null ||
+          noticePeriodDays! <= 0
+      ? null
+      : DateTime(today.year, today.month, today.day + noticePeriodDays!);
 
   factory Applicant.fromJson(Map<String, dynamic> j) {
     final req = j['job_requisitions'];
@@ -2683,8 +2717,20 @@ class Applicant {
           : Fmt.toDouble(j['expected_salary']),
       source: j['source']?.toString(),
       rating: j['rating'] == null ? null : Fmt.toInt(j['rating']),
+      requisitionId: j['requisition_id'] as String?,
       requisitionTitle: req is Map ? req['title'] as String? : null,
       appliedAt: Fmt.parseDate(j['applied_at']),
+      nric: j['nric']?.toString(),
+      currentEmployer: j['current_employer']?.toString(),
+      noticePeriodDays: j['notice_period_days'] == null
+          ? null
+          : Fmt.toInt(j['notice_period_days']),
+      referredBy: j['referred_by'] as String?,
+      referrerName: j['referrer'] is Map
+          ? j['referrer']['full_name']?.toString()
+          : null,
+      hiredEmployeeId: j['hired_employee_id'] as String?,
+      notes: j['notes']?.toString(),
     );
   }
 }

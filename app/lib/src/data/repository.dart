@@ -4569,13 +4569,72 @@ extension RepoHr on Repo {
   Future<List<Applicant>> applicants({String? requisitionId}) async {
     var q = client
         .from('applicants')
-        .select('*, job_requisitions(title)')
+        .select('*, job_requisitions(title), '
+            // Who introduced them, by name. `referred_by` was a
+            // reference nothing wrote before `0381`.
+            'referrer:employees!applicants_referred_by_fkey(full_name)')
         .eq('org_id', orgId);
     if (requisitionId != null) q = q.eq('requisition_id', requisitionId);
     return Repo._rows(
       await q.order('applied_at', ascending: false),
     ).map(Applicant.fromJson).toList();
   }
+
+  Future<void> saveApplicant(
+    Map<String, dynamic> values, {
+    String? id,
+  }) async {
+    if (id != null) {
+      await client.from('applicants').update(values).eq('id', id);
+    } else {
+      await client.from('applicants').insert({...values, 'org_id': orgId});
+    }
+  }
+
+  /// Turns a candidate into an employee and links the two records.
+  ///
+  /// An RPC rather than an insert plus an update, because the whole
+  /// point is that they cannot come apart: `hired_employee_id` carried a
+  /// comment saying it was set when this happened, nothing set it, and
+  /// somebody retyped the name, the phone number and the NRIC from the
+  /// record in front of them. It also refuses a start date inside the
+  /// notice they owe, and counts the hire against the requisition's
+  /// headcount.
+  Future<String> hireApplicant(
+    String applicantId, {
+    required String employeeNo,
+    required DateTime hireDate,
+    required num basicSalary,
+    DateTime? dateOfBirth,
+    String? departmentId,
+    String? positionId,
+    String? managerId,
+    String? earlyStartNote,
+  }) async {
+    final id = await callRpc('hire_applicant', params: {
+      'p_applicant': applicantId,
+      'p_employee_no': employeeNo,
+      'p_hire_date': Fmt.iso(hireDate),
+      'p_basic_salary': basicSalary,
+      'p_date_of_birth':
+          dateOfBirth == null ? null : Fmt.iso(dateOfBirth),
+      'p_department': departmentId,
+      'p_position': positionId,
+      'p_manager': managerId,
+      'p_early_start_note': earlyStartNote,
+    });
+    return id.toString();
+  }
+
+  Future<List<Map<String, dynamic>>> referralHires({
+    DateTime? from,
+    DateTime? to,
+  }) async =>
+      Repo._rows(await callRpc('report_referral_hires', params: {
+        'p_org': orgId,
+        'p_from': from == null ? null : Fmt.iso(from),
+        'p_to': to == null ? null : Fmt.iso(to),
+      }));
 
   /// Moves an applicant along and keeps the move as history, so
   /// time-to-hire can be measured later.

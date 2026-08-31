@@ -7,10 +7,13 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'applicant_editor.dart';
 import 'appraisal_cycles_dialog.dart';
 import 'appraisal_goals_dialog.dart';
 import 'appraisal_part.dart';
 import 'appraisal_review.dart';
+import 'hire_dialog.dart';
+import 'referrals_dialog.dart';
 import 'interviews_dialog.dart';
 
 /// Recruitment and performance. Applicant data is HR-only — it is not
@@ -26,6 +29,13 @@ class TalentScreen extends ConsumerWidget {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Talent'),
+          actions: [
+            IconButton(
+              tooltip: 'Referrals',
+              icon: const Icon(Icons.groups_outlined),
+              onPressed: () => showReferralHires(context),
+            ),
+          ],
           bottom: const TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
@@ -106,20 +116,29 @@ class _CandidatesTab extends ConsumerWidget {
 
   /// The pipeline in order, so a candidate can be nudged to the next
   /// stage without a dropdown of every possible state.
+  // `hired` is deliberately not on this list. It is not the next label
+  // on the pipeline: `0381` refuses a status of hired with nobody on
+  // the payroll, because that is what used to happen — the label moved
+  // and somebody typed the person into the employee editor again.
   static const _stages = [
     'applied',
     'screening',
     'interview',
     'assessment',
     'offer',
-    'hired',
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final applicants = ref.watch(applicantsProvider);
 
-    return AsyncView(
+    return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => showApplicantEditor(context),
+        icon: const Icon(Icons.person_add_outlined),
+        label: const Text('Candidate'),
+      ),
+      body: AsyncView(
       value: applicants,
       onRetry: () => ref.invalidate(applicantsProvider),
       builder: (list) {
@@ -127,7 +146,8 @@ class _CandidatesTab extends ConsumerWidget {
           return const EmptyState(
             icon: Icons.person_search_outlined,
             title: 'No candidates yet',
-            message: 'Applicants appear here as they come in.',
+            message: 'Add one, and everything recorded here comes across '
+                'when they are hired.',
           );
         }
         return ListView.separated(
@@ -161,21 +181,38 @@ class _CandidatesTab extends ConsumerWidget {
               subtitle: Text(
                 [
                   if (a.requisitionTitle != null) a.requisitionTitle,
+                  if (a.currentEmployer != null) 'at ${a.currentEmployer}',
                   if (a.currentPosition != null) a.currentPosition,
                   if (a.expectedSalary != null)
                     'expects ${Fmt.money(a.expectedSalary!)}',
-                  if (a.source != null) 'via ${a.source}',
+                  if (a.noticePeriodDays != null && a.noticePeriodDays! > 0)
+                    '${a.noticePeriodDays}d notice',
+                  // Who introduced them, which is what a referral scheme
+                  // pays on and what nothing recorded before `0381`.
+                  if (a.referrerName != null) 'via ${a.referrerName}'
+                  else if (a.source != null) 'via ${a.source}',
                 ].whereType<String>().join(' · '),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 12),
               ),
+              onTap: () => showApplicantEditor(context, applicant: a),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 TextButton(
                   onPressed: () => showInterviews(context, a.id, a.fullName),
                   child: const Text('Interviews'),
                 ),
-                if (next != null) ...[
+                // Hiring is not the next label on the pipeline: it makes
+                // the employee record out of this one and links the two,
+                // so nobody retypes the name, the phone number and the
+                // NRIC from the record in front of them.
+                if (!a.isHired && a.status == 'offer') ...[
+                  const SizedBox(width: Space.xs),
+                  FilledButton.tonal(
+                    onPressed: () => _hire(context, ref, a),
+                    child: const Text('Hire'),
+                  ),
+                ] else if (next != null && !a.isHired) ...[
                   const SizedBox(width: Space.xs),
                   OutlinedButton(
                     onPressed: () => _advance(context, ref, a, next),
@@ -187,7 +224,13 @@ class _CandidatesTab extends ConsumerWidget {
           },
         );
       },
+      ),
     );
+  }
+
+  Future<void> _hire(
+      BuildContext context, WidgetRef ref, Applicant a) async {
+    await showHireDialog(context, a);
   }
 
   Future<void> _advance(

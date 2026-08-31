@@ -2086,3 +2086,52 @@ early return stops a write, and is unobservable only because
 `app.write_audit_log` already drops an update whose diff is empty.
 Arriving at a correct audit trail through a second guard downstream is
 not the same as not touching rows nobody asked to change.
+
+## The record that was typed in twice
+
+`applicants.hired_employee_id` carried, since `0036`, the comment
+describing exactly what nothing did:
+
+    -- Set when the applicant becomes an employee, so the two records
+    -- stay linked and the hire is traceable back to its requisition.
+
+`hired` was the last label on the pipeline. `moveApplicant` wrote a
+status and a history row; somebody then opened the employee editor and
+typed the name, the phone number, the NRIC and the salary in again, from
+the record sitting beside them.
+
+The retyping is the visible cost and the smallest one. What was actually
+lost is every question the recruiting data exists to answer: which
+requisition this person came from, what the offer was against what they
+expected, how long it took, and who introduced them.
+
+Four more columns in the same cluster, each of which now stops
+something:
+
+- **`notice_period_days`** is what the candidate owes somebody else. A
+  start date inside it is a date they cannot make, and finding that out
+  after the offer has gone is how a start slips a month. Refused, with
+  a required reason as the way through — notice does get bought out,
+  and a refusal with none is how somebody puts the wrong date in to get
+  past the screen.
+- **`headcount`** had been *displayed* since the screen was written —
+  "3 position(s)" — and nothing counted against it. A requisition for
+  one could be filled four times with the register still saying it was
+  open.
+- **`closed_date`** and the `filled` status are the other half: the
+  requisition closes on the day its places were taken rather than
+  whenever somebody remembers.
+- **`referred_by`** is a reference to an employee that nothing wrote,
+  which made a referral scheme unpayable from the data.
+
+`report_referral_hires` returns both counts, hires and candidates,
+because a list of hires alone cannot tell somebody who introduced six
+people and had none taken on from somebody who introduced nobody — and
+the first is the person a scheme exists to keep.
+
+**One column left deliberately unwritten.** `applicants.resume_path` is
+a text column holding a storage path, and attachments have had a home
+since `0046`: a bucket, a row, a lifecycle and a policy. A second place
+for a file to be missing from is not an improvement. The place to delete
+this paragraph is the day the applicant screen grows an attachments
+section, which is where a CV belongs.

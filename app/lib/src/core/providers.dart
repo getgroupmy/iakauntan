@@ -1361,6 +1361,13 @@ final applicantsProvider = FutureProvider.autoDispose<List<Applicant>>((ref) {
   return requireRepo(ref).applicants();
 });
 
+/// Who introduced the people the company hired. HR only; the database
+/// answers an employee with nothing.
+final referralHiresProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return requireRepo(ref).referralHires();
+});
+
 final appraisalsProvider = FutureProvider.autoDispose<List<Appraisal>>((ref) {
   return requireRepo(ref).appraisals();
 });
