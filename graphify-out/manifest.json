@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788131660.072643,
-    "ast_hash": "6f7476d52a99abcd0c6ed19ad4bfdbed",
+    "mtime": 1788136118.219618,
+    "ast_hash": "13d181609d2b5f277ba5416751e785a4",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -85,8 +85,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/widgets.dart": {
-    "mtime": 1788133479.4323766,
-    "ast_hash": "94852717d415cab03fe3c0b9df2b2fe7",
+    "mtime": 1788135774.9733846,
+    "ast_hash": "645b3c011f6d36c3393f0393363f8fe4",
     "semantic_hash": ""
   },
   "app/lib/src/data/attachments_repository.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788129894.6337726,
-    "ast_hash": "135091999c9daf6b74250d72a9ff90ec",
+    "mtime": 1788136118.2033854,
+    "ast_hash": "e2c91ab6ae0ffc306ef01c198ed8718a",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -260,8 +260,8 @@
     "semantic_hash": "e58e35578f6071bf209f21ce15e74f45"
   },
   "app/lib/src/features/onboarding/create_org_screen.dart": {
-    "mtime": 1788105843.3086832,
-    "ast_hash": "cd23f270debcaca39e9dc4e87200ac00",
+    "mtime": 1788136182.527515,
+    "ast_hash": "8e028f4c137846da04b3d4aabcd9a307",
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/reports_screen.dart": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788135642.6730673,
-    "ast_hash": "1f2a4535c8ceb2b98b85e5c97e4779db",
+    "mtime": 1788136632.9852064,
+    "ast_hash": "d183e7822374be07cce07f9d11e78062",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -2130,8 +2130,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/company_card.dart": {
-    "mtime": 1788105843.312683,
-    "ast_hash": "8f615a428567027c0f3bb26be79a1007",
+    "mtime": 1788136157.3244498,
+    "ast_hash": "7b5cc1017e56afce009a44dd6415b2fa",
     "semantic_hash": ""
   },
   "app/test/company_details_test.dart": {
@@ -5652,6 +5652,21 @@
   "app/test/register_channel_test.dart": {
     "mtime": 1788133039.1883755,
     "ast_hash": "c7aa37259657eb1c149fba0ba5583bba",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/settings/msic_picker.dart": {
+    "mtime": 1788136354.388973,
+    "ast_hash": "c6a6fb45308372a297abb679ac8be0d6",
+    "semantic_hash": ""
+  },
+  "app/test/msic_picker_test.dart": {
+    "mtime": 1788136348.426426,
+    "ast_hash": "62d1e5e63125d60557b48aab89be39a0",
+    "semantic_hash": ""
+  },
+  "app/test/no_scope_feedback_test.dart": {
+    "mtime": 1788135752.8926597,
+    "ast_hash": "78ca62f76c1d0445d86fbaa7208868a5",
     "semantic_hash": ""
   }
 }
