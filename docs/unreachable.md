@@ -1701,6 +1701,50 @@ multiplies them.
   row it scans, and the second call is a second transfer. The call is
   hoisted into a variable, which is where a volatile function belongs.
 
+- **A setting that named its own purpose and did nothing**
+  (`pos_settings.park_expiry_hours`). A column since `0206`, with a
+  comment reading "how long a parked sale survives before it is
+  somebody's problem", a check constraint holding it between 1 and 720,
+  and a default of 24. Nothing ever read it.
+
+  This one is worth recording because of what it collides with. `0206`'s
+  shift close counts parked sales and refuses; `0361` — written earlier
+  in this same pass — made `begin_pos_count` refuse for the same reason.
+  So a basket somebody opened three days ago and walked away from stops
+  a cashier counting their own drawer tonight, and the only way out is a
+  void, which needs the `pos_void` grant a cashier does not have. They
+  ring a manager, at closing time, about a bill nobody remembers. A gap
+  closed in one migration made a gap in another one bite harder, which
+  is the second time this document has had to say that.
+
+  The sweep clears only what nothing has happened to: nothing tendered,
+  nothing sent to the kitchen, older than the shop's own setting. Which
+  is exactly the case the column was written for — keystrokes. A
+  part-paid bill is somebody's money and a cooked line is a real cost
+  that `0246` deliberately made a manager's decision.
+
+  Two small truths in how it records itself. The reason is `other` with
+  a note saying what happened and how old the bill was, not
+  `customer_cancelled`: nobody cancelled anything, `pos_void_summary`
+  groups by reason, and one honest line beats a hundred false
+  cancellations. And `voided_by` is null, because no person did this —
+  putting a name on it would make the audit trail say somebody decided.
+
+  A mutant survived and was kept anyway. Removing the "no settings row"
+  guard changes nothing, because `make_interval(hours => null)` is null
+  and `created_at < null` matches no rows. It stays: arriving at the
+  right answer through three-valued logic is not the same as saying it,
+  and the next person to touch that query should not have to discover
+  that a null interval was load-bearing. Same judgement as `0361`'s
+  closed-shift branch, reached the same way.
+
+  And a caution for whoever next reproduces a function in a migration.
+  This one rebuilt `run_daily_jobs` from `0360` and silently dropped what
+  `0365` had added to it — `expire_carried_leave` stopped being
+  scheduled. `scheduled_work.sql` caught it on the first run, which is
+  what that file is for. The rule: copy from the *latest* migration that
+  defines the function, and let the reachability assertions check you.
+
 - **Two left where they are, and why.** `organizations.trial_ends_at`
   and the `trial_days` platform setting are the vestige of a business
   model this system does not have. Nothing enters the `trial` status —

@@ -178,4 +178,128 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- The bill nobody came back for (0375)
+--
+-- `pos_settings.park_expiry_hours` has been a column since `0206`, with
+-- a comment saying exactly what it is for, and nothing ever read it. A
+-- basket somebody opened and walked away from stayed parked — and both
+-- the shift close and `begin_pos_count` above refuse while one is open,
+-- so a forgotten bill stops a cashier counting their own drawer, and the
+-- way out needs a grant they do not have.
+--
+-- The sweep clears only what nothing has happened to. The two it must
+-- not touch are asserted beside it, because a sweep that voids a
+-- part-paid bill loses a payment that was taken.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org    uuid;
+  v_wh     uuid;
+  v_walkin uuid;
+  v_item   uuid;
+  v_outlet uuid;
+  v_reg    uuid;
+  v_shift  uuid;
+  v_cash   uuid;
+  v_stale  uuid;
+  v_fresh  uuid;
+  v_paid   uuid;
+  v_cooked uuid;
+  v_n      integer;
+begin
+  v_org := pg_temp.test_org('Kedai Lupa Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['pos','inventory']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'MAIN', 'Shop floor') returning id into v_wh;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'WALK-IN', 'Counter sales', 'customer') returning id into v_walkin;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'KOPI', 'Kopi', 'stock', false, 'C62', 5.00)
+  returning id into v_item;
+  insert into public.pos_outlets
+    (org_id, code, name, business_type, warehouse_id, walk_in_contact_id,
+     prices_include_tax)
+  values (v_org, 'SHOP', 'The shop', 'retail', v_wh, v_walkin, false)
+  returning id into v_outlet;
+  insert into public.pos_registers (org_id, outlet_id, code, name)
+  values (v_org, v_outlet, 'T1', 'Counter') returning id into v_reg;
+  -- Six hours, so the fixture does not have to pretend a day has passed.
+  insert into public.pos_settings (org_id, park_expiry_hours)
+  values (v_org, 6);
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
+  values (v_org, 'CASH', 'Cash', 'cash', '01', true, true)
+  returning id into v_cash;
+
+  v_shift := public.open_pos_shift(v_reg, 100.00);
+
+  -- Four baskets, all parked. Only the first is keystrokes.
+  v_stale := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_stale, v_item, 1, 5.00);
+  v_fresh := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_fresh, v_item, 1, 5.00);
+  v_paid := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_paid, v_item, 2, 5.00);
+  v_cooked := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_cooked, v_item, 1, 5.00);
+
+  -- Somebody's money: a part payment taken and the bill left open.
+  insert into public.pos_tenders
+    (org_id, sale_id, tender_type_id, kind, amount)
+  values (v_org, v_paid, v_cash, 'cash', 5.00);
+  -- Something that became food.
+  update public.pos_sale_lines set sent_to_kitchen_at = now() - interval '2 days'
+   where sale_id = v_cooked;
+
+  -- Age three of them past the six hours. The fresh one stays today.
+  update public.pos_sales set created_at = now() - interval '2 days'
+   where id in (v_stale, v_paid, v_cooked);
+
+  v_n := app.expire_parked_sales(v_org);
+  perform pg_temp.check_eq('one forgotten basket is cleared', v_n, 1);
+  perform pg_temp.check_eq('and it is the one nothing happened to',
+    (select status::text from public.pos_sales where id = v_stale), 'voided');
+
+  -- The note is the whole audit trail for a void nobody authorised, so
+  -- it has to say what happened rather than pick a reason off a list.
+  perform pg_temp.check_eq('recorded as other, not as a cancellation',
+    (select void_reason from public.pos_sales where id = v_stale), 'other');
+  perform pg_temp.check_true('with a note saying why and how old it was',
+    (select void_note like '%Cleared automatically%'
+        and void_note like '%48 hours%'
+       from public.pos_sales where id = v_stale));
+  -- Null on purpose: no person did this.
+  perform pg_temp.check_true('and nobody''s name on it',
+    (select voided_by is null from public.pos_sales where id = v_stale));
+
+  perform pg_temp.check_eq('a basket from today is left alone',
+    (select status::text from public.pos_sales where id = v_fresh), 'parked');
+  perform pg_temp.check_eq('a part-paid bill is somebody''s money',
+    (select status::text from public.pos_sales where id = v_paid), 'parked');
+  perform pg_temp.check_eq('and a bill the kitchen cooked from is a decision',
+    (select status::text from public.pos_sales where id = v_cooked), 'parked');
+
+  -- Running it again clears nothing: the stale one is already gone and
+  -- the other three are still not eligible.
+  perform pg_temp.check_eq('a second sweep finds nothing new',
+    app.expire_parked_sales(v_org), 0);
+
+  -- A shop with no settings row has no till to sweep, and must not fall
+  -- over on the way past. Asserted as the outcome rather than as the
+  -- guard: the mutation run showed the query gives the same answer with
+  -- the explicit check removed, because a null interval matches nothing.
+  -- The check stays for the reader, and this holds either way.
+  perform pg_temp.check_eq('and a company with no POS settings is skipped',
+    app.expire_parked_sales(pg_temp.test_org('Tiada Kaunter Sdn Bhd')), 0);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
