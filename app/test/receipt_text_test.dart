@@ -260,4 +260,128 @@ TOTAL      118.00
       expect(parseReceiptText(text).totalAmount, isNull);
     });
   });
+
+  // The three parsers the hand-assignment screen uses. They exist so
+  // that a field somebody assigns by hand means the same thing as one
+  // the reader found on its own — a second opinion about what
+  // `07/04/2026` says is how a receipt lands in the wrong month — and
+  // none of them was called by a test.
+  group('a date off one line', () {
+    test('is read day first, because this is Malaysia', () {
+      // 7 April, not 4 July. On a ledger with period control, the
+      // difference is a posting in the wrong month that foots perfectly.
+      expect(parseReceiptDate('07/04/2026'), DateTime(2026, 4, 7));
+      expect(parseReceiptDate('07-04-2026'), DateTime(2026, 4, 7));
+    });
+
+    test('and the unambiguous spellings agree with it', () {
+      expect(parseReceiptDate('2026-04-07'), DateTime(2026, 4, 7));
+      expect(parseReceiptDate('7 Apr 2026'), DateTime(2026, 4, 7));
+    });
+
+    test('a day past the twelfth settles the question either way', () {
+      // 31/12 and 13/01 can only be read one way round, so they pin the
+      // order down independently of the rule above.
+      expect(parseReceiptDate('31/12/2025'), DateTime(2025, 12, 31));
+      expect(parseReceiptDate('13/01/2026'), DateTime(2026, 1, 13));
+    });
+
+    test('and a line with no date in it is not a date', () {
+      expect(parseReceiptDate('no date here'), isNull);
+      expect(parseReceiptDate(''), isNull);
+    });
+
+    test('it says the same thing the reader said', () {
+      // The whole reason it is public. If these two ever disagree, a
+      // receipt reads one way on the scan and another when somebody
+      // corrects it.
+      const receipt = 'KEDAI RUNCIT AMAN\nTarikh: 07/04/2026\nTOTAL 12.00';
+      expect(parseReceiptText(receipt).documentDate,
+          parseReceiptDate('07/04/2026'));
+    });
+  });
+
+  group('a figure as printed or as typed', () {
+    test('comes back whatever is around it', () {
+      expect(parseAmountText('RM 1,234.56'), 1234.56);
+      expect(parseAmountText('1234.56'), 1234.56);
+      expect(parseAmountText('12'), 12);
+    });
+
+    test('a leading minus is kept', () {
+      expect(parseAmountText('-5.00'), -5);
+      expect(parseAmountText('RM-5.00'), -5);
+    });
+
+    test('and brackets come back positive, deliberately', () {
+      // Recorded because it would be easy to read the stripping as a
+      // bug. What this fills is a receipt's subtotal, tax and total, and
+      // a retail receipt prints `TOTAL 12.00`; brackets on one are noise
+      // around the figure or the reader mistaking a character. An
+      // accounting statement, where brackets mean a credit, is not what
+      // gets photographed.
+      expect(parseAmountText('(12.00)'), 12);
+    });
+
+    test('a minus anywhere but the front is noise too', () {
+      // There is no arithmetic in a printed figure.
+      expect(parseAmountText('5-3'), 53);
+    });
+
+    test('and what is not a figure is nothing, never nought', () {
+      // The distinction the empty box depends on: "not on the document"
+      // is not "the document says zero".
+      expect(parseAmountText(''), isNull);
+      expect(parseAmountText('   '), isNull);
+      expect(parseAmountText('abc'), isNull);
+      expect(parseAmountText('.'), isNull);
+      expect(parseAmountText('-'), isNull);
+      expect(parseAmountText('1.2.3'), isNull);
+    });
+  });
+
+  group('one printed line, split', () {
+    test('the money at the end is the amount, and the rest is the words', () {
+      final line = parseReceiptLine('Teh Tarik 3.50');
+      expect(line.description, 'Teh Tarik');
+      expect(line.amount, 3.50);
+    });
+
+    test('and where a line prices the unit as well, the last figure wins', () {
+      // `2 x 5.00 10.00` — the ten is what the line cost. Taking the
+      // first figure would book half of everything sold in twos.
+      final line = parseReceiptLine('Nasi Lemak 2 x 5.00 10.00');
+      expect(line.amount, 10.00);
+      expect(line.description, 'Nasi Lemak 2 x 5.00');
+    });
+
+    test('a line with no money on it is still a description', () {
+      final line = parseReceiptLine('Just a description');
+      expect(line.description, 'Just a description');
+      expect(line.amount, isNull);
+    });
+
+    test('and a line with nothing on it at all is nothing', () {
+      // `scan_all_data` drops an assigned line only when both halves
+      // are absent, so an empty description here would file a nameless
+      // line against the document rather than refusing it.
+      final line = parseReceiptLine('');
+      expect(line.description, isNull);
+      expect(line.amount, isNull);
+
+      final spaces = parseReceiptLine('   ');
+      expect(spaces.description, isNull);
+      expect(spaces.amount, isNull);
+    });
+
+    test('and a bare figure is an amount with nothing said about it', () {
+      // Not a description of "". `scan_all_data` drops a line only when
+      // both halves are absent, so an empty string here would file a
+      // nameless line rather than refusing it.
+      final line = parseReceiptLine('12.00');
+      expect(line.description, isNull);
+      expect(line.amount, 12.00);
+    });
+  });
+
 }

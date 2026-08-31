@@ -220,15 +220,31 @@ OcrExtraction parseReceiptText(String text) {
 /// because this is Malaysia.
 DateTime? parseReceiptDate(String line) => _dateIn(line);
 
-/// A figure as printed or as typed: `RM 1,234.56`, `1234.56`, `(12.00)`.
+/// A figure as printed or as typed: `RM 1,234.56`, `1234.56`, `12`.
 ///
-/// Null for anything that is not one, which is what keeps an empty box
-/// meaning "not on the document" rather than zero.
+/// Everything but digits, a point and a leading minus is stripped, so a
+/// figure in brackets comes back **positive** — `(12.00)` is 12.00, not
+/// −12.00. That is deliberate for what this reads: the fields it fills
+/// are a receipt's subtotal, tax and total, and a retail receipt prints
+/// `TOTAL 12.00`. Brackets on one are noise around the figure, or the
+/// reader's guess at a character that was not a bracket at all. An
+/// accounting statement, where brackets do mean a credit, is not what
+/// gets photographed here.
+///
+/// A minus anywhere but the front goes the same way: `5-3` is 53. There
+/// is no arithmetic in a printed figure.
+///
+/// Null for anything that is not a figure, which is what keeps an empty
+/// box meaning "not on the document" rather than zero.
 double? parseAmountText(String raw) {
   final cleaned = raw
       .replaceAll(RegExp(r'[^0-9.\-]'), '')
       .replaceAll(RegExp(r'(?!^)-'), '');
-  if (cleaned.isEmpty || cleaned == '-' || cleaned == '.') return null;
+  // No guard at all, and that is the finding rather than an oversight.
+  // This checked for an empty string, a bare `-` and a bare `.`, and
+  // `double.tryParse` returns null for all three — so every branch of
+  // it was one nothing could tell apart from its absence. Measured, not
+  // assumed: each was mutated away in turn and no assertion moved.
   return double.tryParse(cleaned);
 }
 
