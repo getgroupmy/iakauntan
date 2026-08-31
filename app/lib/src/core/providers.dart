@@ -1358,6 +1358,27 @@ final appraisalsProvider = FutureProvider.autoDispose<List<Appraisal>>((ref) {
   return requireRepo(ref).appraisals();
 });
 
+final appraisalCyclesProvider =
+    FutureProvider.autoDispose<List<AppraisalCycle>>((ref) {
+  return requireRepo(ref).appraisalCycles();
+});
+
+/// Whose half is whose, straight from `my_appraisal_parts`. The screen
+/// draws its buttons from this rather than working the rule out again —
+/// see `features/hr/appraisal_part.dart`.
+final myAppraisalPartsProvider =
+    FutureProvider.autoDispose<Map<String, String>>((ref) {
+  return requireRepo(ref).myAppraisalParts();
+});
+
+/// Who has not written their half, and by how long. HR only; an employee
+/// asking gets nothing, which is the database's answer and not a filter
+/// applied here.
+final appraisalsDueProvider =
+    FutureProvider.autoDispose<List<AppraisalDue>>((ref) {
+  return requireRepo(ref).appraisalsDue();
+});
+
 /// Whether the caller holds a live, admin-approved grant to read payslips.
 final myPayslipAccessProvider = FutureProvider.autoDispose<bool>((ref) {
   final repo = ref.watch(repoProvider);

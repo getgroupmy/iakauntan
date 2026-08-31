@@ -1946,3 +1946,91 @@ answer differs and the reasoning is the point:
 
 The question to ask of each is not "does this refuse what it should"
 but "what happens on the second write to a row that already fails it".
+
+## The one a row policy cannot express
+
+The seventh sweep looks for a column one side of the wire uses and the
+other cannot. The appraisal block — twelve columns, the largest declared
+and unbuilt thing left — turned out to be that and something worse
+underneath it, and the shape is worth writing down because there will be
+others.
+
+`0038` grants the person being appraised UPDATE on their own appraisal
+row:
+
+    -- Appraisals: mine, my reports', or all of them if HR.
+    create policy appraisals_update on public.appraisals
+      for update to authenticated
+      using (app.can_manage_hr(org_id)
+             or employee_id = app.my_employee_id(org_id)
+             or reviewer_id = app.my_employee_id(org_id))
+
+The comment reads like a rule about who may do what. It is a rule about
+which **rows** are visible to an UPDATE, and it has no opinion about
+columns — there is no column-level grant behind it. So the subject could
+write their own `manager_rating`, their own `manager_comments`, their own
+`final_rating`, set `promotion_recommended`, put a number in
+`recommended_bonus`, and mark the row `completed`.
+
+That is a **falsehood** in the sense `0371` names: not a feature missing,
+but a control that appears to have been applied. A document whose entire
+purpose is that two people said two things separately, either of whom
+could have written both. Every appraisal in the system was evidence of
+nothing and looked exactly like evidence.
+
+**The rule a policy cannot state is a rule about the change.** `0379`
+writes it as a trigger that asks which columns moved and whether the
+person moving them owns that half — the same question as `0367`'s, from
+the other direction. Three things fell out of writing it that way:
+
+- **Reopening is recognised, not flagged.** HR may take a submission
+  stamp off; HR may not write in the half. Both are UPDATEs to the same
+  columns, and what separates them is the *shape of the change* — a
+  stamp cleared and not a word touched. Deriving it from `old` and `new`
+  rather than from a `set_config` marker means a direct UPDATE that
+  looks like a reopen is one, and one that also rewrites the words is
+  refused as what it actually is. The mutation run found this: with the
+  "and not a word touched" clause removed, everything still passed,
+  because no fixture had tried to do both at once.
+- **Being the subject beats every other part.** An HR manager is HR on
+  everybody's appraisal except their own. Ordering it the other way
+  would mean the one person who could write their own manager rating is
+  the person who administers the process.
+- **A named reviewer is the reviewer.** The reporting line stands in
+  only where nobody is named. Letting it apply always makes a skip-level
+  manager a second reviewer, which is two manager reviews with one
+  overwriting the other. This too was a surviving mutant first: the
+  fixture never had a reviewer who was not also the manager.
+
+### And the screen does not work it out again
+
+The obvious way to draw the right buttons is to compute the same rule in
+Dart. Two implementations of one permission rule disagree eventually, and
+the copy that is wrong is the one a person actually reads. So `0379` adds
+`my_appraisal_parts`, which answers from `app.appraisal_part_of` — the
+same function the trigger judges changes by — and
+`features/hr/appraisal_part.dart` only parses the answer. What that file
+does compute is the *next step*, which is a fact about the state of the
+appraisal rather than about permission: given a part and how far the
+appraisal has got, there is exactly one thing it is waiting for.
+
+### A deadline that only sends emails is not a deadline
+
+`self_review_due` and `manager_review_due` were columns nothing had read,
+which made a cycle with deadlines and a cycle without indistinguishable.
+The first is now load-bearing rather than decorative: the manager's half
+is refused until the employee submits theirs, **or** until the day the
+employee's was due — a review nobody wrote cannot stop the one somebody
+did. The second is what `report_appraisals_due` measures.
+
+`rating_scale_max` is the third. A 7 stored perfectly in a cycle scored
+out of 5, and a 4 out of 5 and a 4 out of 10 are different judgements
+that looked identical in every list.
+
+### Where to look next
+
+Any `for update` policy whose `using` clause names more than one kind of
+person is a candidate for the same reading. The policy decides which rows
+that person may touch; if the columns on the row belong to *different*
+people, the policy has not said so and cannot. `appraisal_goals_all` had
+it too and is fixed in the same migration.

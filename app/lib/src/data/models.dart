@@ -2693,47 +2693,188 @@ class Appraisal {
   Appraisal({
     required this.id,
     required this.status,
+    required this.employeeId,
+    this.reviewerId,
+    this.cycleId,
     this.employeeName,
     this.reviewerName,
     this.cycleName,
+    this.ratingScaleMax = 5,
+    this.selfReviewDue,
+    this.managerReviewDue,
     this.selfRating,
+    this.selfComments,
+    this.selfSubmittedAt,
     this.managerRating,
+    this.managerComments,
+    this.managerSubmittedAt,
     this.finalRating,
+    this.calibrationNote,
+    this.completedAt,
     this.recommendedIncrement,
+    this.recommendedBonus,
+    this.promotionRecommended = false,
+    this.developmentPlan,
   });
 
   final String id;
   final String status;
+
+  /// Who is being appraised, and who writes the manager half. Both are
+  /// needed to work out which part the person reading this holds — see
+  /// `features/hr/appraisal_part.dart`, and `0379` for the rule the
+  /// database enforces.
+  final String employeeId;
+  final String? reviewerId;
+  final String? cycleId;
   final String? employeeName;
   final String? reviewerName;
   final String? cycleName;
+
+  /// The cycle's own scale. A 1-5 cycle and a 1-10 cycle coexist, and a
+  /// rating outside its own scale means nothing to whoever reads it
+  /// next year.
+  final int ratingScaleMax;
+  final DateTime? selfReviewDue;
+  final DateTime? managerReviewDue;
+
   final double? selfRating;
+  final String? selfComments;
+  final DateTime? selfSubmittedAt;
   final double? managerRating;
+  final String? managerComments;
+  final DateTime? managerSubmittedAt;
   final double? finalRating;
+  final String? calibrationNote;
+  final DateTime? completedAt;
+
   final double? recommendedIncrement;
+  final double? recommendedBonus;
+  final bool promotionRecommended;
+  final String? developmentPlan;
+
+  bool get selfSubmitted => selfSubmittedAt != null;
+  bool get managerSubmitted => managerSubmittedAt != null;
+  bool get isComplete => completedAt != null;
 
   factory Appraisal.fromJson(Map<String, dynamic> j) {
     final emp = j['employees'];
+    final rev = j['reviewer'];
     final cyc = j['appraisal_cycles'];
+    double? num_(String key) =>
+        j[key] == null ? null : Fmt.toDouble(j[key]);
+    DateTime? when(Map? m, String key) {
+      final raw = (m ?? j)[key];
+      return raw == null ? null : DateTime.tryParse(raw.toString());
+    }
+
     return Appraisal(
       id: j['id'] as String,
       status: j['status']?.toString() ?? 'draft',
+      employeeId: j['employee_id'] as String,
+      reviewerId: j['reviewer_id'] as String?,
+      cycleId: j['cycle_id'] as String?,
       employeeName: emp is Map ? emp['full_name'] as String? : null,
+      reviewerName: rev is Map ? rev['full_name'] as String? : null,
       cycleName: cyc is Map ? cyc['name'] as String? : null,
-      selfRating: j['self_rating'] == null
-          ? null
-          : Fmt.toDouble(j['self_rating']),
-      managerRating: j['manager_rating'] == null
-          ? null
-          : Fmt.toDouble(j['manager_rating']),
-      finalRating: j['final_rating'] == null
-          ? null
-          : Fmt.toDouble(j['final_rating']),
-      recommendedIncrement: j['recommended_increment_percent'] == null
-          ? null
-          : Fmt.toDouble(j['recommended_increment_percent']),
+      ratingScaleMax:
+          cyc is Map ? (cyc['rating_scale_max'] as num?)?.toInt() ?? 5 : 5,
+      selfReviewDue: cyc is Map ? when(cyc, 'self_review_due') : null,
+      managerReviewDue: cyc is Map ? when(cyc, 'manager_review_due') : null,
+      selfRating: num_('self_rating'),
+      selfComments: j['self_comments'] as String?,
+      selfSubmittedAt: when(null, 'self_submitted_at'),
+      managerRating: num_('manager_rating'),
+      managerComments: j['manager_comments'] as String?,
+      managerSubmittedAt: when(null, 'manager_submitted_at'),
+      finalRating: num_('final_rating'),
+      calibrationNote: j['calibration_note'] as String?,
+      completedAt: when(null, 'completed_at'),
+      recommendedIncrement: num_('recommended_increment_percent'),
+      recommendedBonus: num_('recommended_bonus'),
+      promotionRecommended: j['promotion_recommended'] == true,
+      developmentPlan: j['development_plan'] as String?,
     );
   }
+}
+
+/// A round of appraisals: the period reviewed, the scale it is scored
+/// out of, and the two days the halves are due.
+class AppraisalCycle {
+  AppraisalCycle({
+    required this.id,
+    required this.name,
+    required this.periodStart,
+    required this.periodEnd,
+    required this.status,
+    required this.ratingScaleMax,
+    this.selfReviewDue,
+    this.managerReviewDue,
+    this.opened = 0,
+  });
+
+  final String id;
+  final String name;
+  final DateTime periodStart;
+  final DateTime periodEnd;
+  final String status;
+  final int ratingScaleMax;
+  final DateTime? selfReviewDue;
+  final DateTime? managerReviewDue;
+
+  /// How many appraisals the cycle has open, so the button can say
+  /// whether opening it would do anything.
+  final int opened;
+
+  factory AppraisalCycle.fromJson(Map<String, dynamic> j) {
+    DateTime? when(String key) =>
+        j[key] == null ? null : DateTime.tryParse(j[key].toString());
+    final counted = j['appraisals'];
+    return AppraisalCycle(
+      id: j['id'] as String,
+      name: j['name']?.toString() ?? '',
+      periodStart: when('period_start') ?? DateTime.now(),
+      periodEnd: when('period_end') ?? DateTime.now(),
+      status: j['status']?.toString() ?? 'draft',
+      ratingScaleMax: (j['rating_scale_max'] as num?)?.toInt() ?? 5,
+      selfReviewDue: when('self_review_due'),
+      managerReviewDue: when('manager_review_due'),
+      opened: counted is List && counted.isNotEmpty
+          ? (counted.first['count'] as num?)?.toInt() ?? 0
+          : 0,
+    );
+  }
+}
+
+/// A row of `report_appraisals_due`: who is late, on which half.
+class AppraisalDue {
+  AppraisalDue({
+    required this.appraisalId,
+    required this.cycleName,
+    required this.employeeName,
+    required this.waitingOn,
+    required this.dueOn,
+    required this.daysLate,
+    this.reviewerName,
+  });
+
+  final String appraisalId;
+  final String cycleName;
+  final String employeeName;
+  final String? reviewerName;
+  final String waitingOn;
+  final DateTime dueOn;
+  final int daysLate;
+
+  factory AppraisalDue.fromJson(Map<String, dynamic> j) => AppraisalDue(
+        appraisalId: j['appraisal_id'] as String,
+        cycleName: j['cycle_name']?.toString() ?? '',
+        employeeName: j['employee_name']?.toString() ?? '',
+        reviewerName: j['reviewer_name'] as String?,
+        waitingOn: j['waiting_on']?.toString() ?? '',
+        dueOn: DateTime.parse(j['due_on'].toString()),
+        daysLate: (j['days_late'] as num?)?.toInt() ?? 0,
+      );
 }
 
 /// An auditor's request to read payslips, and the admin decision on it.

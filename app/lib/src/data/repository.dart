@@ -4594,11 +4594,120 @@ extension RepoHr on Repo {
         .from('appraisals')
         .select(
           '*, employees!appraisals_employee_id_fkey(full_name), '
-          'appraisal_cycles(name)',
+          'reviewer:employees!appraisals_reviewer_id_fkey(full_name), '
+          'appraisal_cycles(name, rating_scale_max, self_review_due, '
+          'manager_review_due)',
         )
         .eq('org_id', orgId)
         .order('created_at', ascending: false),
   ).map(Appraisal.fromJson).toList();
+}
+
+/// The performance cycle: opening one, the two halves, and settling it.
+///
+/// Every write here is an RPC rather than a table update. `0379` put a
+/// trigger on `appraisals` that judges *which columns moved and who
+/// moved them* — a row policy grants the row and has no opinion about
+/// columns, so before it the person being appraised could write their
+/// own manager rating and their own final rating. Going through the
+/// functions means the screen and the database agree about whose half
+/// is whose instead of the screen finding out by being refused.
+extension RepoAppraisalCycle on Repo {
+  Future<List<AppraisalCycle>> appraisalCycles() async => Repo._rows(
+        await client
+            .from('appraisal_cycles')
+            .select('*, appraisals(count)')
+            .eq('org_id', orgId)
+            .order('period_end', ascending: false),
+      ).map(AppraisalCycle.fromJson).toList();
+
+  Future<void> saveAppraisalCycle(
+    Map<String, dynamic> values, {
+    String? id,
+  }) async {
+    if (id != null) {
+      await client.from('appraisal_cycles').update(values).eq('id', id);
+    } else {
+      await client
+          .from('appraisal_cycles')
+          .insert({...values, 'org_id': orgId});
+    }
+  }
+
+  /// Opens one appraisal per person employed at the end of the period.
+  /// Returns how many it opened; running it again opens nobody twice.
+  Future<int> openAppraisalCycle(String cycleId) async {
+    final n = await callRpc('open_appraisal_cycle',
+        params: {'p_cycle': cycleId});
+    return (n as num?)?.toInt() ?? 0;
+  }
+
+  Future<void> submitSelfAppraisal(
+    String appraisalId, {
+    required num rating,
+    required String comments,
+  }) =>
+      callRpc('submit_self_appraisal', params: {
+        'p_appraisal': appraisalId,
+        'p_rating': rating,
+        'p_comments': comments,
+      });
+
+  Future<void> submitManagerAppraisal(
+    String appraisalId, {
+    required num rating,
+    required String comments,
+    num? increment,
+    num? bonus,
+    bool promotion = false,
+    String? developmentPlan,
+  }) =>
+      callRpc('submit_manager_appraisal', params: {
+        'p_appraisal': appraisalId,
+        'p_rating': rating,
+        'p_comments': comments,
+        'p_increment': increment,
+        'p_bonus': bonus,
+        'p_promotion': promotion,
+        'p_development_plan': developmentPlan,
+      });
+
+  Future<void> finaliseAppraisal(
+    String appraisalId, {
+    required num finalRating,
+    String? calibrationNote,
+  }) =>
+      callRpc('finalise_appraisal', params: {
+        'p_appraisal': appraisalId,
+        'p_final_rating': finalRating,
+        'p_calibration_note': calibrationNote,
+      });
+
+  /// Clears one half's submission stamp so its author can write it
+  /// again. What was written stays, so they edit their own words rather
+  /// than starting from a blank box.
+  Future<void> reopenAppraisal(String appraisalId, String side) =>
+      callRpc('reopen_appraisal',
+          params: {'p_appraisal': appraisalId, 'p_side': side});
+
+  /// Which part the caller holds on each appraisal they can see, as the
+  /// database works it out. Asked for rather than computed here so the
+  /// buttons and the trigger cannot come to disagree.
+  Future<Map<String, String>> myAppraisalParts() async {
+    final data = await callRpc('my_appraisal_parts', params: {'p_org': orgId});
+    return {
+      for (final r in Repo._rows(data))
+        r['appraisal_id'] as String: r['my_part']?.toString() ?? '',
+    };
+  }
+
+  Future<List<AppraisalDue>> appraisalsDue({DateTime? asAt}) async {
+    final data = await callRpc('report_appraisals_due', params: {
+      'p_org': orgId,
+      if (asAt != null) 'p_as_at': Fmt.iso(asAt),
+    });
+    return Repo._rows(data).map(AppraisalDue.fromJson).toList();
+  }
 }
 
 /// Auditor access to payslips: requested, approved by a company admin,

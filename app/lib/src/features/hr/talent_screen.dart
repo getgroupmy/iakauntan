@@ -7,7 +7,10 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'appraisal_cycles_dialog.dart';
 import 'appraisal_goals_dialog.dart';
+import 'appraisal_part.dart';
+import 'appraisal_review.dart';
 import 'interviews_dialog.dart';
 
 /// Recruitment and performance. Applicant data is HR-only — it is not
@@ -205,65 +208,176 @@ class _AppraisalsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final appraisals = ref.watch(appraisalsProvider);
+    // Whose half is whose, from `my_appraisal_parts`. Asked for rather
+    // than worked out here: the same function the trigger in `0379`
+    // judges changes by, so a button offered is a button that works.
+    final parts = ref.watch(myAppraisalPartsProvider);
+    final isHr = ref.watch(canManageHrProvider);
 
-    return AsyncView(
-      value: appraisals,
-      onRetry: () => ref.invalidate(appraisalsProvider),
-      builder: (list) => list.isEmpty
-          ? const EmptyState(
-              icon: Icons.assessment_outlined,
-              title: 'No appraisals yet',
-              message: 'Start a cycle to open self and manager reviews.',
+    return Scaffold(
+      floatingActionButton: isHr
+          ? FloatingActionButton.extended(
+              onPressed: () => showAppraisalCycles(context),
+              icon: const Icon(Icons.event_repeat_outlined),
+              label: const Text('Cycles'),
             )
-          : ListView.separated(
-              itemCount: list.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (_, i) {
-                final a = list[i];
-                return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: Space.lg, vertical: Space.sm),
-                  title: Row(children: [
-                    Flexible(
-                      child: Text(a.employeeName ?? '—',
-                          overflow: TextOverflow.ellipsis,
-                          style:
-                              const TextStyle(fontWeight: FontWeight.w600)),
+          : null,
+      body: AsyncView(
+        value: appraisals,
+        onRetry: () {
+          ref.invalidate(appraisalsProvider);
+          ref.invalidate(myAppraisalPartsProvider);
+        },
+        builder: (list) => list.isEmpty
+            ? EmptyState(
+                icon: Icons.assessment_outlined,
+                title: 'No appraisals yet',
+                message: isHr
+                    ? 'Open a cycle and everybody gets one to write.'
+                    : 'Nothing to write yet. HR opens a cycle and one '
+                        'appears here.',
+              )
+            : Column(
+                children: [
+                  if (isHr) const _OverdueBanner(),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: list.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) => _AppraisalTile(
+                        appraisal: list[i],
+                        part: partFromName(
+                            parts.valueOrNull?[list[i].id]),
+                      ),
                     ),
-                    const SizedBox(width: Space.sm),
-                    StatusChip(a.status, compact: true),
-                  ]),
-                  subtitle: Text(
-                    [
-                      if (a.cycleName != null) a.cycleName,
-                      if (a.selfRating != null) 'self ${a.selfRating}',
-                      if (a.managerRating != null)
-                        'manager ${a.managerRating}',
-                    ].whereType<String>().join(' · '),
-                    style: const TextStyle(fontSize: 12),
                   ),
-                  onTap: () => showAppraisalGoals(
-                      context, a.id, a.employeeName ?? 'Appraisal'),
-                  trailing: a.finalRating == null
-                      ? null
-                      : Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text('${a.finalRating}',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w700)),
-                            if (a.recommendedIncrement != null)
-                              Text('+${a.recommendedIncrement}% proposed',
-                                  style:
-                                      Theme.of(context).textTheme.bodySmall),
-                          ],
-                        ),
-                );
-              },
-            ),
+                ],
+              ),
+      ),
     );
+  }
+}
+
+/// Who has not written their half, and by how long.
+///
+/// `self_review_due` and `manager_review_due` have been columns since
+/// talent management landed and nothing read either, which made a cycle
+/// with deadlines and a cycle without indistinguishable. It is a banner
+/// rather than a screen because the answer is only interesting in the
+/// week the deadline passes.
+class _OverdueBanner extends ConsumerWidget {
+  const _OverdueBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final due = ref.watch(appraisalsDueProvider).valueOrNull ?? const [];
+    if (due.isEmpty) return const SizedBox.shrink();
+
+    final worst = due.first;
+    return Container(
+      width: double.infinity,
+      color: context.colors.warning.withValues(alpha: 0.12),
+      padding: const EdgeInsets.symmetric(
+          horizontal: Space.lg, vertical: Space.sm),
+      child: Text(
+        due.length == 1
+            ? '${worst.employeeName} is ${worst.daysLate} day'
+                '${worst.daysLate == 1 ? '' : 's'} late on their '
+                '${worst.waitingOn}.'
+            : '${due.length} reviews are late, the oldest by '
+                '${worst.daysLate} day${worst.daysLate == 1 ? '' : 's'} '
+                '(${worst.employeeName}, ${worst.waitingOn}).',
+        style: TextStyle(fontSize: 12, color: context.colors.warning),
+      ),
+    );
+  }
+}
+
+class _AppraisalTile extends ConsumerWidget {
+  const _AppraisalTile({required this.appraisal, required this.part});
+
+  final Appraisal appraisal;
+  final AppraisalPart part;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final a = appraisal;
+    final action = appraisalAction(
+      part: part,
+      selfSubmitted: a.selfSubmitted,
+      managerSubmitted: a.managerSubmitted,
+      completed: a.isComplete,
+      selfDue: a.selfReviewDue,
+      today: DateTime.now(),
+    );
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(
+          horizontal: Space.lg, vertical: Space.sm),
+      title: Row(children: [
+        Flexible(
+          child: Text(a.employeeName ?? '—',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+        ),
+        const SizedBox(width: Space.sm),
+        StatusChip(a.status, compact: true),
+      ]),
+      subtitle: Text(
+        [
+          if (a.cycleName != null) a.cycleName,
+          'self ${_score(a.selfRating, a.ratingScaleMax)}',
+          'manager ${_score(a.managerRating, a.ratingScaleMax)}',
+        ].whereType<String>().join(' · '),
+        style: const TextStyle(fontSize: 12),
+      ),
+      onTap: () => _open(context, ref),
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (action != AppraisalAction.waiting)
+          // The one thing this appraisal is waiting for from this
+          // person. Two buttons would be a screen that has not decided.
+          FilledButton.tonal(
+            onPressed: () => _open(context, ref),
+            child: Text(switch (action) {
+              AppraisalAction.writeSelf => 'Write mine',
+              AppraisalAction.writeManager => 'Review',
+              AppraisalAction.finalise => 'Settle',
+              AppraisalAction.waiting => '',
+            }),
+          )
+        else if (a.finalRating != null)
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(Fmt.qty(a.finalRating!),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+              if (a.recommendedIncrement != null)
+                Text('+${Fmt.qty(a.recommendedIncrement!)}% proposed',
+                    style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
+        IconButton(
+          tooltip: 'Goals',
+          icon: const Icon(Icons.flag_outlined, size: 18),
+          onPressed: () => showAppraisalGoals(
+              context, a.id, a.employeeName ?? 'Appraisal'),
+        ),
+      ]),
+    );
+  }
+
+  String _score(double? rating, int scale) =>
+      rating == null ? '—' : '${Fmt.qty(rating)}/$scale';
+
+  Future<void> _open(BuildContext context, WidgetRef ref) async {
+    final changed = await showAppraisalReview(context, appraisal, part);
+    if (changed == true) {
+      ref.invalidate(appraisalsProvider);
+      ref.invalidate(appraisalsDueProvider);
+    }
   }
 }
