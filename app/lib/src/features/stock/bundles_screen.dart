@@ -36,13 +36,22 @@ String marginLabel(Map<String, dynamic>? margin) {
       : '${Fmt.money(m)} margin · ${pct.toStringAsFixed(1)}%';
 }
 
-/// Red when a bundle is priced under its own parts.
-Color? marginColour(BuildContext context, Map<String, dynamic>? margin) {
+/// Bad news when a bundle is priced under its own parts, and worth
+/// looking at when it is priced at exactly what they cost.
+///
+/// Selling at cost is not a mistake and is not a healthy price either,
+/// so it is amber rather than red or nothing — and the boundary is
+/// exact, because a bundle a sen under cost and one a sen over are
+/// different statements about the same shelf.
+Tone? marginTone(Map<String, dynamic>? margin) {
   if (margin == null) return null;
   final m = num.tryParse('${margin['margin'] ?? 0}') ?? 0;
-  if (m < 0) return context.colors.danger;
-  return m == 0 ? context.colors.warning : null;
+  if (m < 0) return Tone.bad;
+  return m == 0 ? Tone.warn : null;
 }
+
+Color? marginColour(BuildContext context, Map<String, dynamic>? margin) =>
+    context.toneColour(marginTone(margin));
 
 /// How many can be sold out of what is on the shelf.
 String availabilityLabel(Map<String, dynamic>? a) {

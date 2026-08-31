@@ -856,3 +856,35 @@ between them is worth keeping:
   a roster ordering that no test could see, because the fixture had one
   member in it: "leads first" is only a claim when there are two.
 
+## A fourth sweep: a decision no test can call
+
+The three above ask what cannot be *reached*. This one asks what cannot
+be *asserted*, which turns out to be a different set.
+
+```python
+# Run from app/. Every top-level function declared in lib/src, against
+# every name any test mentions. Only lines with no leading whitespace,
+# so class members are left out — those are reached through their widget
+# and are a different question.
+```
+
+352 top-level functions, 68 named by no test. Most are `showX` dialog
+openers and platform stubs, which are entry points rather than
+decisions. Four were neither, and they had all been skipped for the same
+structural reason: they took a `BuildContext` and returned a `Color`, so
+reading the answer back needed a widget test, and none was written.
+
+The colour was never the point. `varianceTone`, `weekTone`, `marginTone`
+and `chequeTone` each state something about the business — this variance
+is unfavourable, this week the bank closes short, this bundle is priced
+under its own parts, this cheque should have been banked and was not —
+and red is how one of them is shown. Separating the claim from its
+presentation made all four assertable, and a wrong one is silent: a
+favourable variance in red reads as bad news about a good month.
+
+None of the four was wrong. That is the useful result and not a wasted
+pass — `varianceColour` reading `favourable` rather than the sign of the
+variance is exactly the thing `0274` wrote a column to make possible,
+and until now nothing would have noticed if a later edit had "simplified"
+it to `v > 0`. Something does now.
+

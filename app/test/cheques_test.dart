@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/features/documents/cheques_screen.dart';
 
 void main() {
@@ -83,4 +84,32 @@ void main() {
       expect(chequeActions('cancelled'), isEmpty);
     });
   });
+
+  group('what a cheque row claims', () {
+    test('bad news for one that bounced', () {
+      expect(chequeTone({'status': 'bounced', 'days_to_go': 30}), Tone.bad);
+    });
+
+    test('worth looking at for one that matured and is still sitting there',
+        () {
+      expect(chequeTone({'status': 'held', 'days_to_go': -1}), Tone.warn);
+      expect(chequeTone({'status': 'deposited', 'days_to_go': -8}), Tone.warn);
+    });
+
+    test('and nothing for one whose day has not come', () {
+      expect(chequeTone({'status': 'held', 'days_to_go': 0}), isNull);
+      expect(chequeTone({'status': 'held', 'days_to_go': 14}), isNull);
+    });
+
+    test('a cheque that is finished is never late', () {
+      // `days_to_go` goes on counting down after a cheque clears or is
+      // handed back, and means nothing once it has. Colouring on it
+      // would put a warning against a cheque nobody owes anything
+      // about.
+      expect(chequeTone({'status': 'cleared', 'days_to_go': -400}), isNull);
+      expect(chequeTone({'status': 'cancelled', 'days_to_go': -400}), isNull);
+      expect(chequeTone({'status': 'returned', 'days_to_go': -400}), isNull);
+    });
+  });
+
 }

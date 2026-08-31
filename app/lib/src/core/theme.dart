@@ -32,6 +32,31 @@ abstract final class Motion {
       MediaQuery.disableAnimationsOf(context) ? Duration.zero : d;
 }
 
+/// What a screen is claiming when it colours something.
+///
+/// Separate from the colour itself, and that separation is the point.
+/// "This variance is unfavourable", "this cheque should have been banked
+/// and was not", "this bundle is priced under its own parts", "this week
+/// the bank closes short" are statements about the business. Red is how
+/// one of them is shown.
+///
+/// Kept apart because the statements could not be asserted while they
+/// were entangled with the colour: reading a `Color` back needs a
+/// `BuildContext`, so every one of these decisions sat in a function no
+/// unit test could call, and four of them did. A wrong one is silent —
+/// a favourable variance in red reads as bad news about a good month —
+/// which is precisely the kind of thing this repository asserts.
+enum Tone {
+  /// Good news. Green.
+  good,
+
+  /// Worth looking at. Amber.
+  warn,
+
+  /// Bad news, and the thing on the page hardest to miss. Red.
+  bad,
+}
+
 /// Status colours, which are *not* the brand accent — a figure is green
 /// because it is money in, not because green is on brand. Held in a theme
 /// extension so each brightness gets a shade that actually passes contrast
@@ -112,6 +137,16 @@ extension AppColorsX on BuildContext {
       Theme.of(this).extension<AppColors>() ?? AppColors._light;
 
   ColorScheme get scheme => Theme.of(this).colorScheme;
+
+  /// The colour a [Tone] is shown in, or null for no tone at all —
+  /// which is a real answer and the commonest one: most rows on most
+  /// screens are making no claim.
+  Color? toneColour(Tone? tone) => switch (tone) {
+    Tone.good => colors.success,
+    Tone.warn => colors.warning,
+    Tone.bad => colors.danger,
+    null => null,
+  };
 }
 
 /// iAkauntan visual identity: a deep teal that reads as trustworthy on a

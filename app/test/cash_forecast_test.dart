@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/features/reports/cash_forecast_screen.dart';
 
 void main() {
@@ -146,4 +147,24 @@ void main() {
       expect(lagsProvenance, contains('180'));
     });
   });
+
+  group('what a forecast week claims', () {
+    test('bad news when the bank closes short', () {
+      expect(weekTone({'overdrawn': true}), Tone.bad);
+    });
+
+    test('and nothing when it does not', () {
+      expect(weekTone({'overdrawn': false}), isNull);
+      expect(weekTone(const {}), isNull);
+    });
+
+    test('it reads the server\'s answer rather than the figures', () {
+      // A closing balance that looks negative on the row but is not
+      // flagged is the server saying something this screen does not
+      // know — recomputing here would be a second opinion that can
+      // disagree with the first.
+      expect(weekTone({'overdrawn': false, 'closing': -9000}), isNull);
+    });
+  });
+
 }

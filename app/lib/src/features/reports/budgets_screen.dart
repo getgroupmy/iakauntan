@@ -37,15 +37,24 @@ String varianceLabel(Map<String, dynamic> row) {
       : '$money $direction · ${pct.abs().toStringAsFixed(1)}%';
 }
 
-/// Green for good news, red for bad, and nothing for a line that is on
-/// plan or for an account where the question does not apply.
-Color? varianceColour(BuildContext context, Map<String, dynamic> row) {
+/// Good news or bad, and nothing for a line that is on plan or for an
+/// account where the question does not apply.
+///
+/// On `favourable`, never on the sign. `0274` says why it puts that
+/// column on the row: spending less than planned and earning less than
+/// planned are both negative variances and only one of them is good
+/// news. A screen that coloured on the arithmetic would call a bad
+/// month a good one.
+Tone? varianceTone(Map<String, dynamic> row) {
   final v = num.tryParse('${row['variance'] ?? 0}') ?? 0;
   if (v == 0) return null;
   final good = row['favourable'];
   if (good is! bool) return null;
-  return good ? context.colors.success : context.colors.danger;
+  return good ? Tone.good : Tone.bad;
 }
+
+Color? varianceColour(BuildContext context, Map<String, dynamic> row) =>
+    context.toneColour(varianceTone(row));
 
 /// The periods a report covers, named the way somebody asks for them.
 String periodRangeLabel(int from, int to) {

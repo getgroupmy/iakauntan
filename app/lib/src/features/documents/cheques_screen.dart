@@ -39,14 +39,23 @@ String chequeSummary(Map<String, dynamic> row) => [
   Fmt.date(DateTime.tryParse('${row['cheque_date']}')),
 ].join(' · ');
 
-/// Red for a cheque that should have been banked and was not, and
-/// nothing for the rest.
-Color? chequeColour(BuildContext context, Map<String, dynamic> row) {
+/// Bad news for a cheque that bounced, and worth looking at for one
+/// that matured and is still sitting there.
+///
+/// Only `held` and `deposited` can be late. A cheque that has cleared
+/// is finished, and one that was cancelled or handed back is finished
+/// too — their `days_to_go` goes on counting down and means nothing, so
+/// colouring on it would put a warning against a cheque nobody owes
+/// anything about.
+Tone? chequeTone(Map<String, dynamic> row) {
   final status = '${row['status']}';
-  if (status == 'bounced') return context.colors.danger;
+  if (status == 'bounced') return Tone.bad;
   if (status != 'held' && status != 'deposited') return null;
-  return Fmt.toInt(row['days_to_go']) < 0 ? context.colors.warning : null;
+  return Fmt.toInt(row['days_to_go']) < 0 ? Tone.warn : null;
 }
+
+Color? chequeColour(BuildContext context, Map<String, dynamic> row) =>
+    context.toneColour(chequeTone(row));
 
 /// What can still be done to a cheque in this state.
 ///

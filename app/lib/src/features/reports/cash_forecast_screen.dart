@@ -38,10 +38,18 @@ String weekLabel(Map<String, dynamic> row) {
   return 'Week $n · ${Fmt.date(start)}';
 }
 
-/// Red when the week closes short. The one thing on the page that has
-/// to be impossible to miss.
+/// Bad news when the week closes short. The one thing on the page that
+/// has to be impossible to miss.
+///
+/// `overdrawn` is the server's answer and is read as one: a week is
+/// short because the closing balance went below zero, and recomputing
+/// that here from the figures on the row would be a second opinion that
+/// could disagree with the first.
+Tone? weekTone(Map<String, dynamic> row) =>
+    row['overdrawn'] == true ? Tone.bad : null;
+
 Color? weekColour(BuildContext context, Map<String, dynamic> row) =>
-    row['overdrawn'] == true ? context.colors.danger : null;
+    context.toneColour(weekTone(row));
 
 /// How late a customer actually pays, said the way somebody would
 /// defend or dispute it.

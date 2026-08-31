@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iakauntan/src/core/theme.dart';
 import 'package:iakauntan/src/features/reports/budgets_screen.dart';
 
 void main() {
@@ -62,4 +63,35 @@ void main() {
       expect(periodRangeLabel(4, 6), 'Periods 4 to 6');
     });
   });
+
+  // The claim, separated from the colour in the same commit that
+  // asserted it: reading a `Color` back needs a `BuildContext`, so this
+  // decision sat in a function no unit test could call.
+  group('what a variance line claims', () {
+    test('is favourable or not, and never the sign of the number', () {
+      // `0274` puts `favourable` on the row for exactly this reason:
+      // spending less than planned and earning less than planned are
+      // both negative variances, and only one of them is good news.
+      expect(varianceTone({'variance': -500, 'favourable': true}), Tone.good);
+      expect(varianceTone({'variance': -500, 'favourable': false}), Tone.bad);
+      expect(varianceTone({'variance': 500, 'favourable': false}), Tone.bad);
+      expect(varianceTone({'variance': 500, 'favourable': true}), Tone.good);
+    });
+
+    test('a line on plan claims nothing', () {
+      // Exactly on plan is not good news and not bad. Colouring it
+      // would make every untouched account shout.
+      expect(varianceTone({'variance': 0, 'favourable': true}), isNull);
+      expect(varianceTone({'variance': 0, 'favourable': false}), isNull);
+    });
+
+    test('and neither does an account where the question does not apply', () {
+      // A null `favourable` is the server declining to answer, not a
+      // false. Reading it as false would call every such line bad news.
+      expect(varianceTone({'variance': -500}), isNull);
+      expect(varianceTone({'variance': -500, 'favourable': null}), isNull);
+      expect(varianceTone(const {}), isNull);
+    });
+  });
+
 }
