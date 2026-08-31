@@ -1627,6 +1627,47 @@ class Repo {
         'p_as_at': asAt == null ? null : Fmt.iso(asAt),
       }));
 
+  /// What a customer would save by paying early, and by when.
+  ///
+  /// `payment_terms.discount_percent` and `discount_days` have been
+  /// columns since `0003` and nothing read either, so the eight seeded
+  /// terms were a settlement discount scheme that never existed.
+  Future<Map<String, dynamic>?> settlementDiscount(
+    String documentId, {
+    DateTime? asAt,
+  }) async {
+    final rows = _rows(await callRpc('settlement_discount_available',
+        params: {
+          'p_document': documentId,
+          'p_as_at': asAt == null ? null : Fmt.iso(asAt),
+        }));
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// Allocates a receipt against an invoice, taking a settlement
+  /// discount if one is on offer.
+  ///
+  /// An RPC and not an insert into `payment_allocations`, because the
+  /// discount has to reach the ledger in the same breath.
+  /// `app.apply_allocation` clears the invoice by cash *plus* discount
+  /// and `post_receipt` credits the receivable by the cash alone, so a
+  /// discount written straight into the table would settle the document
+  /// and leave the control account overstated by it, permanently.
+  Future<String> allocateWithDiscount({
+    required String receiptId,
+    required String invoiceId,
+    required num amount,
+    num? discount,
+  }) async {
+    final id = await callRpc('allocate_with_discount', params: {
+      'p_receipt': receiptId,
+      'p_invoice': invoiceId,
+      'p_amount': amount,
+      'p_discount': discount,
+    });
+    return id.toString();
+  }
+
   /// What a run would charge, per asset, before anything is posted.
   Future<List<DepreciationLine>> depreciationPreview(DateTime asAt) async {
     final data = await callRpc(

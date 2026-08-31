@@ -2325,3 +2325,75 @@ This is the third time in this document that trigger ordering has been
 the bug rather than the rule. The general form: **a BEFORE trigger
 cannot read a column another BEFORE trigger derives.** If the rule is
 about the final state of the row, it belongs in AFTER.
+
+## The discount that cleared an invoice and no ledger
+
+`payment_allocations.discount_amount` has been a column since `0005`.
+`payment_terms.discount_percent` and `discount_days` have been columns
+since `0003`, and `0012` seeds eight payment terms — NET7 through NET90
+— that are the shell of a settlement discount scheme nothing ever built.
+
+That is the absence. Underneath it is the worst falsehood this document
+has recorded, and it is worth stating precisely, because it is invisible
+in every screen.
+
+`app.apply_allocation` clears the invoice by the cash **and** the
+discount:
+
+    select coalesce(sum(amount + discount_amount), 0) into v_paid
+
+`app.post_receipt_internal` credits the receivable by the cash alone. So
+an allocation carrying a discount marks the invoice `completed` with a
+balance of nothing, takes it off the aged receivables — and leaves the
+**receivable control account in the general ledger** overstated by
+exactly the discount, permanently, with no document anywhere that
+mentions it. The subsidiary ledger says the customer owes nothing; the
+trial balance says they owe two hundred ringgit; and nobody can find the
+difference because it has no name.
+
+Nothing wrote the column, so the damage has not happened. That is luck,
+not design: the two halves have disagreed since `0005` and any screen
+that used the column as intended would have caused it.
+
+**The fix is where it cannot be got round.** An allocation may not carry
+a discount unless it names the journal that posted it —
+`discount_entry_id`, and a trigger. `allocate_with_discount` posts Dr
+Sales Returns and Discounts (4300), Cr Receivable, and writes the
+allocation naming that journal. The two records now clear together or
+not at all.
+
+### The tax is deliberately untouched
+
+Under the Sales Tax Act 2018 and the Service Tax Act 2018 the tax
+charged is the tax on the invoice; a discount taken afterwards changes
+the taxable value only if a credit note is issued, which is a separate
+document with its own e-Invoice consequences. Silently reducing the
+output tax at settlement would understate what the company has already
+told LHDN it charged. So the discount is posted against revenue at its
+gross amount and the tax account is not touched — and the test asserts
+that no tax line appears in the discount journal, because "we chose not
+to" and "we forgot" look identical a year later.
+
+### The picker with no consequence
+
+`payment_terms.days` and `term_type` were the same shape of nothing: a
+document's `due_date` was typed, so choosing NET30 changed neither when
+the invoice fell due nor when it appeared on the ageing.
+`app.due_date_from_terms` derives it — end-of-month terms actually
+falling at the month end, cash on delivery falling on the day whatever
+the days column says.
+
+Derived **only when absent**. A due date somebody typed is a date they
+negotiated, and overwriting it with the standard terms would be the
+software correcting a customer agreement it knows nothing about.
+
+### Two more masked-refusal fixtures
+
+Twice more the mutation run found a test accepting any refusal where
+something further in refused for its own reasons: the table's `amount >
+0` check standing in for the function's own guard, and `create_gl_entry`
+refusing an outsider before `can_post` was reached. Both now assert the
+message. The general rule, now three times over: **a refusal test has to
+name which guard spoke**, or it passes with that guard deleted — and in
+this case it would have passed after a discount journal had already been
+posted for an allocation that never landed.
