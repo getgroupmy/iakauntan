@@ -7,6 +7,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart'
 
 import '../../core/providers.dart';
 import '../../core/theme.dart';
+import '../../core/widgets.dart';
 import 'call_engine.dart';
 
 /// Being on a call.
@@ -23,6 +24,7 @@ class CallScreen extends ConsumerStatefulWidget {
   const CallScreen({
     super.key,
     required this.callId,
+    this.isMine = false,
     required this.title,
     required this.video,
     this.engine,
@@ -31,6 +33,13 @@ class CallScreen extends ConsumerStatefulWidget {
   final String callId;
   final String title;
   final bool video;
+
+  /// Whether this person started the call.
+  ///
+  /// `chat_end_call` refuses anybody else — "Only whoever started the
+  /// call may end it for everybody" — so the button is only offered to
+  /// the one person the server will accept it from.
+  final bool isMine;
 
   /// Left null in the app; supplied by tests.
   final CallEngine? engine;
@@ -90,6 +99,30 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
     unawaited(_leave());
+  }
+
+  /// Hangs up on everybody, rather than leaving them to it.
+  ///
+  /// `chat_end_call` was in `0140` from the day calls were built and
+  /// had no caller: join, decline and leave all reached the screen and
+  /// ending did not, so the person who started a meeting could only
+  /// walk out of it. It marks every participant left and the call
+  /// ended, which is why it is asked about first.
+  Future<void> _endForEverybody() async {
+    final go = await confirm(
+      context,
+      title: 'End the call for everybody?',
+      message: 'Everybody still on it is hung up on. Leaving instead '
+          'lets the rest carry on without you.',
+      confirmLabel: 'End it',
+      destructive: true,
+    );
+    if (!go || !mounted) return;
+    await ref
+        .read(repoProvider)
+        ?.chatEndCall(widget.callId)
+        .catchError((_) {});
+    if (mounted) await _leave();
   }
 
   Future<void> _leave() async {
@@ -191,6 +224,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                       ? () => _engine.setScreenShare(!_engine.sharingScreen)
                       : null,
                   onHangUp: _leave,
+                  onEndForEverybody: widget.isMine ? _endForEverybody : null,
                 ),
               ),
             ],
@@ -445,6 +479,7 @@ class _Controls extends StatelessWidget {
     required this.onFlip,
     required this.onShare,
     required this.onHangUp,
+    this.onEndForEverybody,
   });
 
   final bool micOn;
@@ -460,6 +495,13 @@ class _Controls extends StatelessWidget {
   /// would enable it, and nothing they can do will.
   final VoidCallback? onShare;
   final VoidCallback onHangUp;
+
+  /// Null for everybody but whoever started the call, because
+  /// `chat_end_call` refuses everybody but them. Absent rather than
+  /// greyed out, for the same reason as screen sharing above: a
+  /// disabled button invites people to work out what would enable it,
+  /// and nothing they can do will.
+  final VoidCallback? onEndForEverybody;
 
   @override
   Widget build(BuildContext context) {
@@ -514,6 +556,17 @@ class _Controls extends StatelessWidget {
             danger: true,
             onPressed: onHangUp,
           ),
+          if (onEndForEverybody != null) ...[
+            const SizedBox(width: Space.lg),
+            _Round(
+              key: const ValueKey('call-end-all'),
+              icon: Icons.cancel_outlined,
+              tooltip: 'End the call for everybody',
+              active: true,
+              danger: true,
+              onPressed: onEndForEverybody!,
+            ),
+          ],
         ],
       ),
     );

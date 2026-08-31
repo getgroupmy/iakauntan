@@ -468,9 +468,12 @@ Nine repository methods with no caller, one of them a false positive:
     replied, and it could never appear. Closed from the conversation
     list, which is what fetched the messages and so is what knows they
     arrived.
-  - **`chatEndCall`** is still open, and is a real one: join, decline
-    and leave are all called, and ending a call — hanging up on
-    everybody rather than leaving them to it — is not.
+  - **`chatEndCall` was real, and is closed.** Join, decline and leave
+    all reached the screen and ending did not, so whoever called a
+    meeting could only walk out of it. `chat_end_call` refuses everybody
+    but the person who started the call, so the button is only offered
+    to them — absent rather than greyed out, like the screen-share
+    button beside it.
   - **`chatFileBytes`** is probably dead weight. `chatFileUrl` returns a
     short-lived signed URL and is what the attachment viewer uses;
     downloading the bytes into the app would only be for writing a file

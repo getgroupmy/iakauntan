@@ -223,7 +223,9 @@ class CallButtons extends ConsumerWidget {
       successMessage: null,
     );
     if (!ok || callId == null || !context.mounted) return;
-    await _open(context, ref, callId!, video: video);
+    // Started here, so this is the one person `chat_end_call` will
+    // take an ending from.
+    await _open(context, ref, callId!, video: video, isMine: true);
   }
 
   Future<void> _open(
@@ -231,6 +233,7 @@ class CallButtons extends ConsumerWidget {
     WidgetRef ref,
     String callId, {
     required bool video,
+    bool isMine = false,
   }) async {
     final repo = ref.read(repoProvider);
     if (repo == null) return;
@@ -244,8 +247,12 @@ class CallButtons extends ConsumerWidget {
 
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            CallScreen(callId: callId, title: title ?? 'Call', video: video),
+        builder: (_) => CallScreen(
+          callId: callId,
+          title: title ?? 'Call',
+          video: video,
+          isMine: isMine,
+        ),
       ),
     );
     ref.invalidate(chatActiveCallProvider(conversationId));
