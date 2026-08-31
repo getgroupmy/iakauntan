@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788184018.9144802,
-    "ast_hash": "efc6ae63f46edd557cc6e0605cf1f938",
+    "mtime": 1788185046.46996,
+    "ast_hash": "a05a1514e00fd67c63d58d70b983f491",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788177650.6869116,
-    "ast_hash": "f4150e26d67cd67530dab02f9594ec59",
+    "mtime": 1788184998.765401,
+    "ast_hash": "d9a76c1d6765e0068921d9aec359be80",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -190,8 +190,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/employee_editor.dart": {
-    "mtime": 1788175860.6799898,
-    "ast_hash": "a6a56ea1ba7caf0378842c0158643aeb",
+    "mtime": 1788185109.0076907,
+    "ast_hash": "5adcf10c3da745941819a5c1bae4c1b4",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/hr_setup_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788184144.2919414,
-    "ast_hash": "98682b15a510a571c8c768025ab675bf",
+    "mtime": 1788184853.986707,
+    "ast_hash": "a04c641a837c6039f78f16b67210b12c",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788184607.1750398,
-    "ast_hash": "f9dc41d44820b8c85ef05fc958fe589b",
+    "mtime": 1788185653.310411,
+    "ast_hash": "be27c57e321eea9e47f1adf3c7bdaf31",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -3580,8 +3580,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/module_surface.sql": {
-    "mtime": 1787822946.0265896,
-    "ast_hash": "424d865355959c451c0c8f41d712fcdd",
+    "mtime": 1788184913.65846,
+    "ast_hash": "bfd20d769a7225ec882dd0c0942b3b45",
     "semantic_hash": ""
   },
   "supabase/tests/security_audit.sql": {
@@ -6002,6 +6002,31 @@
   "supabase/tests/hrdf_levy.sql": {
     "mtime": 1788184120.902486,
     "ast_hash": "309c46e7fb94192fb2218e32fcccccd2",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/departure.dart": {
+    "mtime": 1788184977.1644702,
+    "ast_hash": "5358f0cd851719427495883169df433a",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/departure_dialog.dart": {
+    "mtime": 1788185141.954775,
+    "ast_hash": "17a39600ae9771dbfb71ea648b57bc72",
+    "semantic_hash": ""
+  },
+  "app/test/departure_test.dart": {
+    "mtime": 1788184977.1661353,
+    "ast_hash": "d16258243667b35addc562b8e49c1696",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0371_the_leaver_who_was_still_being_paid.sql": {
+    "mtime": 1788185354.6564615,
+    "ast_hash": "a883c6f13daf285dfe598395a43e98c8",
+    "semantic_hash": ""
+  },
+  "supabase/tests/departures.sql": {
+    "mtime": 1788184866.2273574,
+    "ast_hash": "40784d82f32bc280d7d7ac07660d1f9e",
     "semantic_hash": ""
   }
 }
