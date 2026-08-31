@@ -3740,6 +3740,31 @@ extension RepoExtras on Repo {
     return row['id'] as String;
   }
 
+  /// Closes a file, and says what it left unbilled.
+  ///
+  /// Refuses while the client account still holds anything for the
+  /// matter — see `0372`. Unbilled time and disbursements come back in
+  /// the result rather than stopping it: they are the firm's own money.
+  Future<Map<String, dynamic>> closeMatter(
+    String matterId, {
+    DateTime? closedOn,
+    String? note,
+  }) async {
+    final data = await callRpc(
+      'close_matter',
+      params: {
+        'p_matter': matterId,
+        'p_closed_date': closedOn == null ? null : Fmt.iso(closedOn),
+        'p_note': note,
+      },
+    );
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  /// Puts a closed file back into service.
+  Future<void> reopenMatter(String matterId) =>
+      callRpc('reopen_matter', params: {'p_matter': matterId});
+
   Future<List<ClientTransaction>> clientTransactions(String matterId) async {
     final data = await client
         .from('client_account_transactions')

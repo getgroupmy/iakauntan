@@ -130,6 +130,7 @@ jobs:
                    supabase/tests/leave_type_rules.sql \
                    supabase/tests/hrdf_levy.sql \
                    supabase/tests/departures.sql \
+                   supabase/tests/matter_closing.sql \
                    supabase/tests/lot_report.sql \
                    supabase/tests/platform_console.sql \
                    supabase/tests/landing_page.sql \

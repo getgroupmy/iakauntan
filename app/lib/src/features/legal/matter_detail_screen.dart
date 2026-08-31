@@ -8,6 +8,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import 'matter_billing.dart';
+import 'matter_closing.dart';
 import 'matter_transfer.dart';
 
 /// A single matter: client money held, time recorded and disbursements.
@@ -51,6 +52,20 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen>
                 overflow: TextOverflow.ellipsis);
           },
         ),
+        actions: [
+          if (canPost)
+            AsyncView(
+              value: summaries,
+              loading: const SizedBox.shrink(),
+              builder: (list) {
+                final s = list
+                    .where((e) => e.matterId == widget.matterId)
+                    .firstOrNull;
+                if (s == null) return const SizedBox.shrink();
+                return _CloseAction(summary: s);
+              },
+            ),
+        ],
         bottom: TabBar(
           controller: _tabs,
           tabs: const [
@@ -86,6 +101,84 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen>
       ),
     );
   }
+}
+
+/// Closing the file, and putting it back.
+///
+/// Until `0372` there was no way to do either: `matters.status` had
+/// `closed` in the enum and the list screen had a Closed tab, and
+/// nothing in the system ever wrote the value. Every file a practice
+/// opened stayed on the live list for the life of the practice.
+class _CloseAction extends ConsumerWidget {
+  const _CloseAction({required this.summary});
+
+  final MatterSummary summary;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (canReopen(summary.status)) {
+      return TextButton.icon(
+        key: const ValueKey('reopen-matter'),
+        icon: const Icon(Icons.lock_open_outlined, size: 18),
+        label: const Text('Reopen'),
+        onPressed: () async {
+          final ok = await runWithFeedback(
+            context,
+            action: () => ref.read(repoProvider)!.reopenMatter(summary.matterId),
+            successMessage: 'Back on the live list',
+          );
+          if (ok) ref.invalidate(matterSummaryProvider);
+        },
+      );
+    }
+
+    final why = closeBlockedBecause(
+      status: summary.status,
+      clientFunds: summary.clientFunds,
+    );
+
+    return TextButton.icon(
+      key: const ValueKey('close-matter'),
+      icon: const Icon(Icons.lock_outline, size: 18),
+      label: const Text('Close'),
+      // Greyed rather than pressed and refused, with the reason on the
+      // tooltip: the balance is on the header two lines below, and being
+      // told "not allowed" while looking at the figure that explains it
+      // is worse than seeing why up front.
+      onPressed: why != null ? null : () => _close(context, ref),
+    ).withTooltip(why);
+  }
+
+  Future<void> _close(BuildContext context, WidgetRef ref) async {
+    final warning = unbilledWarning(
+      unbilledTime: summary.unbilledTime,
+      unbilledDisbursements: summary.unbilledDisbursements,
+    );
+    final yes = await confirm(
+      context,
+      title: 'Close ${summary.matterNo}?',
+      message: [
+        'The file comes off the live list. It can be reopened.',
+        if (warning != null) warning,
+      ].join('\n\n'),
+      confirmLabel: 'Close the file',
+    );
+    if (!yes || !context.mounted) return;
+
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.closeMatter(summary.matterId),
+      successMessage: 'Closed',
+    );
+    if (ok) ref.invalidate(matterSummaryProvider);
+  }
+}
+
+extension on Widget {
+  /// A tooltip only where there is something to say. A `Tooltip` with an
+  /// empty message still swallows the long press.
+  Widget withTooltip(String? message) =>
+      message == null ? this : Tooltip(message: message, child: this);
 }
 
 class _MatterHeader extends StatelessWidget {

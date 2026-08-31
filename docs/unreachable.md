@@ -1563,6 +1563,62 @@ multiplies them.
   `record_departure` derives it — the value now means something no other
   value means.
 
+- **A tab that could only ever be empty** (`matters.closed_date`).
+  `app.matter_status` has had `closed` since `0021` and the matters
+  screen has had a **Closed** segment for as long. Nothing in the system
+  ever wrote that value: `createMatter` inserts with the default `open`
+  and there is no update path at all. So the tab was empty, always, and
+  `closed_date` had never held a date.
+
+  In a law firm that is not cosmetic. Every file ever opened stays on the
+  matter list, in the client-funds report and in the work-in-progress
+  figures for the life of the practice, and the list a partner uses to
+  ask "what is still live" answers "all of it".
+
+  `0372`'s interesting part is not the closing, it is the line between a
+  refusal and a warning, and the line is drawn by **whose money it is**.
+
+  The client's stops it absolutely. The Legal Profession (Accounts)
+  Rules 1990 hold that money received for a client is held for a purpose
+  and paid out when the purpose is done; a matter closed with a balance
+  on it is money nobody is looking at any more — off the live list, and
+  the client is not chasing it either. That is the ordinary route to
+  unclaimed client money, so it is refused, with the balance in the
+  sentence and both ways out named: pay it, or move it with `0358`.
+
+  The firm's own is reported. Unbilled time and disbursements come back
+  in the result and the screen says so before confirming, because a
+  practice writing off work on a file that came to nothing is entitled
+  to, and refusing would turn an ordinary write-off into a dead end.
+  Outstanding invoices are not checked at all: a finished matter with an
+  unpaid bill is what a receivables ledger is for, and holding the file
+  open until the client pays would empty the word "closed" of meaning.
+
+  The mutation run found the fixture short again, for the fifth time in
+  this document. Counting voided client transactions in the balance
+  survived, because no fixture had one — and it matters, because
+  `report_matter_summary` and `0021`'s deferred trigger both read
+  `status <> 'void'`, so a closing that read different rows would make
+  the screen and the refusal disagree about the same file. The fixture
+  now carries both halves of that sentence: a voided receipt is not money
+  held, and a draft one still is.
+
+- **Two left where they are, and why.** `organizations.trial_ends_at`
+  and the `trial_days` platform setting are the vestige of a business
+  model this system does not have. Nothing enters the `trial` status —
+  the column defaults to `active` — and where `trial` appears it is
+  treated identically to `active`. The platform monetises through
+  prepaid credit and module entitlements, not a subscription with an
+  expiry, so writing a trial clock would mean inventing the commercial
+  policy that goes with it: what happens on the last day, who is
+  suspended, and on whose authority. That is not a gap to close from
+  inside the code. `payment_terms.discount_percent` and `discount_days`
+  are the settlement discount — "2/10 net 30" — and are a real feature
+  rather than a defect: taking one changes the taxable value and needs a
+  credit note under SST, so it is a piece of work with a statutory shape,
+  not a wire to reconnect. Both are listed here so the next sweep does
+  not rediscover them as findings.
+
 - **And one left deliberately unwritten.** `bank_transactions.value_date`
   is the day funds become good, which differs from the transaction date
   on a cheque deposit. `0369` records the balance beside it and not this,
