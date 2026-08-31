@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'charge_run_sheet.dart';
+import 'statutory_charge_payment.dart';
 import 'statutory_charge_sheet.dart';
 import 'strata_sheet.dart';
 import 'tenancy_sheet.dart';
@@ -579,6 +580,14 @@ class _StatutoryList extends ConsumerWidget {
             final paid = c['paid_on'] != null;
             final due = DateTime.parse(c['due_date'] as String);
             final overdue = !paid && due.isBefore(DateTime.now());
+            // What is behind the date, not only that there is one. A
+            // charge on a bill and a charge somebody typed a date into
+            // used to read identically here, which is how the second
+            // one passed for the first.
+            final behind = describeSettlement({
+              ...c,
+              'bill_no': (c['purchase_documents'] as Map?)?['doc_no'],
+            });
             return ListTile(
               leading: Icon(
                 c['kind'] == 'quit_rent'
@@ -596,7 +605,8 @@ class _StatutoryList extends ConsumerWidget {
                 '${c['period_year']}'
                 '${c['period_half'] == null ? '' : ' H${c['period_half']}'} · '
                 '${c['authority'] ?? '—'} · '
-                '${paid ? 'paid ${Fmt.date(DateTime.parse(c['paid_on'] as String))}' : 'due ${Fmt.date(due)}'}',
+                '${paid ? 'paid ${Fmt.date(DateTime.parse(c['paid_on'] as String))}' : 'due ${Fmt.date(due)}'} · '
+                '$behind',
                 style: TextStyle(
                   fontSize: 12,
                   color: overdue ? context.colors.danger : null,

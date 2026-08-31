@@ -2466,3 +2466,62 @@ be followed by a clean rebuild before the suite is believed again. The
 useful part: the deployed body is the truth, and `select prosrc from
 pg_proc` settles in one query whether the database is running the code
 you are reading.
+
+## The quit rent that was paid by typing a date
+
+`property_statutory_charges` has carried `bill_document_id` since
+`0162` — its own comment reads "the supplier bill it was paid through,
+if it went through the books" — and nothing has ever written it. `0387`
+found the reason that matters: the column beside it, `paid_on`, was
+offered by the sheet as a plain date picker.
+
+So a managing agent records the quit rent on a site under the National
+Land Code, or the half-yearly assessment the council levies under the
+Local Government Act 1976. It sits in `property_statutory_due` until
+somebody types a date into "paid on", and then it is gone from the
+report. No bill, no supplier, no payment, and the ledger has never heard
+of the charge at all. Not an absence — a falsehood, of the same shape as
+`0371`'s leaver, `0379`'s appraisal and `0385`'s discount: a control
+that appears to have been applied.
+
+Three moves fix it, and only the third is new.
+
+`bill_statutory_charge` makes the bill **out of** the charge, the way
+`0382` makes an asset out of a bill line: the charge's own amount, its
+own due date, and the site, period and land-office account number
+written into the line description, so the two records cannot later
+disagree about what was owed. It posts, and it links.
+
+`paid_on` stops being typed the moment a bill stands behind it. It is
+derived from the bill's settlement — the date of the last thing that
+cleared it, not the date somebody keyed the allocation, because which
+period a statutory charge falls into is decided by when it was paid.
+And it moves in both directions: a bill reopened takes the paid date
+back with it, and detaching the bill clears it, which is what makes
+`on delete set null` on the foreign key survivable at all.
+
+The third is the concession, and it is the interesting one. A charge
+with **no** bill may still be marked paid, because it honestly happens
+— the owner pays the assessment at the counter and posts in the receipt
+— but it must name the receipt. Refusing that case outright would have
+pushed people into fabricating a bill to get the charge off the due
+list, which is a worse falsehood than the one being removed. The rule is
+not "never" but "say what is behind it".
+
+### Two places that compute the same thing is one place too many
+
+The first draft had the `AFTER` trigger on `purchase_documents` set
+`paid_on` itself, and the `BEFORE` trigger on the charge derive it too.
+The mutation run could not kill breaking the first: whatever the AFTER
+trigger writes, the BEFORE trigger on the charge overwrites with the
+right answer on the way in. The mutant was equivalent because the code
+was redundant. The AFTER trigger now only touches the rows whose derived
+date has moved, and the derivation lives in exactly one place — at which
+point the same mutation kills.
+
+The survivor that was kept is the other one: narrowing the push to
+`bill_document_id = new.id`. Widening it to every charge still gives the
+right answer, because each row re-derives from its own bill; what it
+costs is a row lock on every statutory charge in reach each time any
+bill in the company is paid. Kept for the reason `0380` keeps its own —
+correct and slow is still a defect, even when no assertion can see it.

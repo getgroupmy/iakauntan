@@ -6160,10 +6160,44 @@ extension RepoProperty on Repo {
   ) async => Repo._rows(
     await client
         .from('property_statutory_charges')
-        .select('*')
+        // The bill's number, so the list can say what is behind each
+        // paid date rather than only that there is one. The constraint
+        // is named because `purchase_documents` is reachable from this
+        // table only one way today, and naming it keeps a second link
+        // from turning the select into a PGRST201 later.
+        .select('*, purchase_documents!property_statutory_charges_'
+            'bill_document_id_fkey(doc_no)')
         .eq('site_id', siteId)
         .eq('org_id', orgId)
         .order('due_date', ascending: false),
+  );
+
+  /// Raise the supplier bill for a quit rent or an assessment.
+  ///
+  /// The bill is made out of the charge — same amount, same due date,
+  /// the site and the period and the account number in the line — so
+  /// the two cannot afterwards disagree about what was owed. From here
+  /// the charge's paid date is the bill's, and nothing types it.
+  Future<String> billStatutoryCharge({
+    required String chargeId,
+    required String supplierId,
+    DateTime? docDate,
+    String? supplierDocNo,
+  }) async =>
+      (await callRpc('bill_statutory_charge', params: {
+        'p_charge': chargeId,
+        'p_supplier': supplierId,
+        if (docDate != null) 'p_doc_date': Fmt.iso(docDate),
+        if (supplierDocNo != null && supplierDocNo.trim().isNotEmpty)
+          'p_supplier_doc_no': supplierDocNo.trim(),
+      })) as String;
+
+  /// Every statutory charge and what is behind it.
+  Future<List<Map<String, dynamic>>> statutoryChargeReport({
+    int? year,
+  }) async => Repo._rows(
+    await callRpc('report_statutory_charges',
+        params: {'p_org_id': orgId, if (year != null) 'p_year': year}),
   );
 
   Future<void> savePropertyStatutoryCharge(

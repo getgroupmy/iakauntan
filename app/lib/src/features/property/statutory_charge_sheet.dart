@@ -5,8 +5,10 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/models.dart';
 import '../../data/repository.dart';
 import '../secretarial/person_editor.dart' show StatutoryDateField;
+import 'statutory_charge_payment.dart';
 
 /// The two charges that come with holding land in Malaysia.
 ///
@@ -52,6 +54,14 @@ Map<String, dynamic> statutoryChargeValues({
   String? accountNo,
   String? reference,
   String? notes,
+  /// Whether a supplier bill stands behind the charge.
+  ///
+  /// When one does, `paid_on` and the receipt it names are the
+  /// database's to derive — `0387` overwrites the first from the bill's
+  /// settlement and the second is not the record of anything. Sending
+  /// either back would be sending the database its own answer, and
+  /// blanking a value the screen never offered to edit.
+  bool billed = false,
 }) {
   String? trimmed(String? v) =>
       (v == null || v.trim().isEmpty) ? null : v.trim();
@@ -63,12 +73,12 @@ Map<String, dynamic> statutoryChargeValues({
     'period_half': hasHalves(kind) ? periodHalf : null,
     'amount': amount,
     'due_date': Fmt.iso(dueDate),
-    'paid_on': paidOn == null ? null : Fmt.iso(paidOn),
+    if (!billed) 'paid_on': paidOn == null ? null : Fmt.iso(paidOn),
     'authority': trimmed(authority),
     'account_no': trimmed(accountNo),
     // A payment reference for a bill nobody has paid is a reference to
     // nothing.
-    'reference': paidOn == null ? null : trimmed(reference),
+    if (!billed) 'reference': paidOn == null ? null : trimmed(reference),
     'notes': trimmed(notes),
   };
 }
@@ -110,6 +120,16 @@ class _StatutorySheetState extends ConsumerState<_StatutorySheet> {
   DateTime? _paid;
   bool _saving = false;
 
+  /// The bill this charge was raised on, if it was.
+  ///
+  /// While one stands, `paid_on` is the bill's and the guard in `0387`
+  /// overwrites whatever is typed. Offering a date picker for a value
+  /// the database is going to replace is how a screen teaches somebody
+  /// the wrong thing about their own books, so it is shown and not
+  /// asked for.
+  String? _billId;
+  String? _billNo;
+
   @override
   void initState() {
     super.initState();
@@ -131,6 +151,8 @@ class _StatutorySheetState extends ConsumerState<_StatutorySheet> {
         : DateTime.parse(c!['due_date'] as String);
     _paid =
         c?['paid_on'] == null ? null : DateTime.parse(c!['paid_on'] as String);
+    _billId = c?['bill_document_id'] as String?;
+    _billNo = (c?['purchase_documents'] as Map?)?['doc_no'] as String?;
   }
 
   @override
@@ -148,6 +170,35 @@ class _StatutorySheetState extends ConsumerState<_StatutorySheet> {
     super.dispose();
   }
 
+  /// Raise the supplier bill for the charge.
+  ///
+  /// Everything on it comes from the charge; the only thing this asks
+  /// is who to bill it to, because the land office and the local
+  /// council are contacts like any other and the books need to know
+  /// which one it was.
+  Future<void> _bill() async {
+    final supplier = await showDialog<String>(
+      context: context,
+      builder: (_) => const _AuthorityPicker(),
+    );
+    if (supplier == null || !mounted) return;
+
+    setState(() => _saving = true);
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.billStatutoryCharge(
+            chargeId: widget.charge!['id'] as String,
+            supplierId: supplier,
+          ),
+      successMessage: 'Billed',
+    );
+    if (mounted) setState(() => _saving = false);
+    if (ok && mounted) {
+      ref.invalidate(propertyStatutoryChargesProvider(widget.siteId));
+      Navigator.of(context).pop(true);
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final year = yearOf(_year.text);
@@ -163,6 +214,7 @@ class _StatutorySheetState extends ConsumerState<_StatutorySheet> {
       amount: amount,
       dueDate: _due!,
       paidOn: _paid,
+      billed: _billId != null,
       authority: _authority.text,
       accountNo: _accountNo.text,
       reference: _reference.text,
@@ -298,21 +350,49 @@ class _StatutorySheetState extends ConsumerState<_StatutorySheet> {
                   ),
                 ]),
                 const SizedBox(height: Space.md),
-                StatutoryDateField(
-                  label: 'Paid on',
-                  value: _paid,
-                  enabled: !_saving,
-                  onChanged: (d) => setState(() => _paid = d),
-                ),
-                if (_paid != null) ...[
-                  const SizedBox(height: Space.md),
-                  TextFormField(
-                    controller: _reference,
-                    enabled: !_saving,
-                    decoration: const InputDecoration(
-                      labelText: 'Payment reference',
+                if (_billId != null)
+                  // Shown, not asked for. The bill is the record of the
+                  // payment, and `0387` derives this from it.
+                  InputDecorator(
+                    key: const ValueKey('statutory-paid-by-bill'),
+                    decoration: InputDecoration(
+                      labelText: 'Paid on',
+                      helperText: _billNo == null
+                          ? 'From the bill this charge was raised on.'
+                          : 'From bill $_billNo. Settle the bill and '
+                              'this follows it.',
                     ),
+                    child: Text(_paid == null
+                        ? 'Billed, not yet paid'
+                        : Fmt.date(_paid!)),
+                  )
+                else ...[
+                  StatutoryDateField(
+                    label: 'Paid on',
+                    value: _paid,
+                    enabled: !_saving,
+                    onChanged: (d) => setState(() => _paid = d),
                   ),
+                  if (_paid != null) ...[
+                    const SizedBox(height: Space.md),
+                    TextFormField(
+                      key: const ValueKey('statutory-reference'),
+                      controller: _reference,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(
+                        labelText: 'Receipt number',
+                        helperText: 'What the authority gave you for it.',
+                      ),
+                      // The same refusal the database makes, said where
+                      // the person is typing rather than after a round
+                      // trip. The database's is the one that counts.
+                      validator: (v) => paidDateBlockedBecause(
+                        hasBill: false,
+                        paidOn: _paid,
+                        reference: v,
+                      ),
+                    ),
+                  ],
                 ],
                 const SizedBox(height: Space.md),
                 TextFormField(
@@ -328,6 +408,18 @@ class _StatutorySheetState extends ConsumerState<_StatutorySheet> {
         ),
       ),
       actions: [
+        if (widget.charge != null)
+          Tooltip(
+            message: canBill(widget.charge!)
+                ? 'Raise the supplier bill for it, so the charge is in '
+                    'the ledger and its paid date comes from the bill.'
+                : whyNotBillable(widget.charge!),
+            child: TextButton(
+              key: const ValueKey('statutory-bill'),
+              onPressed: _saving || !canBill(widget.charge!) ? null : _bill,
+              child: const Text('Bill it'),
+            ),
+          ),
         TextButton(
           onPressed: _saving ? null : () => Navigator.of(context).pop(false),
           child: const Text('Cancel'),
@@ -342,6 +434,73 @@ class _StatutorySheetState extends ConsumerState<_StatutorySheet> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+
+/// Who the charge is billed to.
+///
+/// A land office or a local council is a supplier contact like any
+/// other. Nothing else is asked, because everything else on the bill
+/// comes from the charge.
+class _AuthorityPicker extends ConsumerStatefulWidget {
+  const _AuthorityPicker();
+
+  @override
+  ConsumerState<_AuthorityPicker> createState() => _AuthorityPickerState();
+}
+
+class _AuthorityPickerState extends ConsumerState<_AuthorityPicker> {
+  String? _id;
+
+  @override
+  Widget build(BuildContext context) {
+    final suppliers = ref
+            .watch(contactsProvider((type: 'supplier', search: '')))
+            .valueOrNull ??
+        const <Contact>[];
+
+    return AlertDialog(
+      title: const Text('Bill it to'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DropdownButtonFormField<String>(
+              key: const ValueKey('statutory-authority'),
+              value: _id,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Authority'),
+              items: [
+                for (final c in suppliers)
+                  DropdownMenuItem(value: c.id, child: Text(c.name)),
+              ],
+              onChanged: (v) => setState(() => _id = v),
+            ),
+            const SizedBox(height: Space.md),
+            Text(
+              'The bill is made out of the charge: the same amount, the '
+              'same due date, and the site, period and account number '
+              'in the line. Nothing to retype.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const ValueKey('statutory-authority-ok'),
+          onPressed: _id == null ? null : () => Navigator.of(context).pop(_id),
+          child: const Text('Raise the bill'),
         ),
       ],
     );

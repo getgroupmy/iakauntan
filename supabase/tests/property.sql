@@ -403,9 +403,13 @@ begin
   -- Paid, so it must not appear however overdue it looks.
   insert into public.property_statutory_charges
     (org_id, site_id, kind, authority, account_no, period_year, period_half,
-     amount, due_date, paid_on)
+     amount, due_date, paid_on, reference)
   values (v_org, v_site, 'assessment', 'Majlis Bandaraya', 'AS-77',
-          2025, 2, 880.00, current_date - 200, current_date - 190);
+          2025, 2, 880.00, current_date - 200, current_date - 190,
+          -- The receipt, because `0387` refuses a paid date with
+          -- nothing behind it: paid at the counter is a real way to pay
+          -- an assessment, but it has to name what paid it.
+          'MBSA receipt 40218');
 
   select count(*) into v_due
     from public.property_statutory_due(v_org, 60);
