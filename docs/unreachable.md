@@ -1187,3 +1187,33 @@ The three under `attendance_status` were the real find.
   employee who asked for the day, was refused, and did not come in
   anyway: without it, a rejected request would have excused the absence
   it was refused for.
+
+- **The minutes while the drawer is counted** (`pos_shift_status.counting`,
+  closed in `0361`). `open_pos_shift` wrote `open`, `close_pos_shift`
+  wrote `closed`, in one step, and the state that exists for the minutes
+  in between was never reached.
+
+  Those minutes are the point. `close_pos_shift` works out
+  `expected_cash` at the moment it is called, so anything rung up
+  between the count and the close is in the expected figure and not in
+  the pile of notes on the counter. The variance is then wrong by
+  exactly that sale, and it is recorded against whoever counted.
+  `0206`'s own comment on selling with no shift open says it — "selling
+  into a drawer nobody has counted is how a variance becomes
+  unattributable" — and this is the same failure a few minutes later.
+
+  No new button. `_closeShift` calls `begin_pos_count` before asking for
+  the figure rather than after, so pressing Cash up stops the till, and
+  cancelling at the prompt puts it back. `resume_pos_shift` exists for
+  that second half: a stopped till nobody can restart is how a shift
+  gets closed early to take one customer.
+
+  And a third mutation-run finding, the same shape as `0358`'s.
+  `pos_shifts_closed_ck` already makes reopening a closed shift
+  impossible, so removing that guard from `resume_pos_shift` failed
+  nothing — the test only asked whether it was refused. What the guard
+  adds is the sentence: without it somebody gets `violates check
+  constraint "pos_shifts_closed_ck"` instead of "Open a new one to keep
+  selling". The assertion now checks the words, and the mutant dies on
+  the constraint's own error text, which makes the point better than
+  the comment does.

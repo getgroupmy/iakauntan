@@ -6535,6 +6535,24 @@ extension RepoPos on Repo {
   /// Returns what was expected, what was declared and the difference —
   /// all three, because a variance without the two numbers behind it is
   /// a figure nobody can check.
+  /// Stops the till while the drawer is counted.
+  ///
+  /// 0361. A sale rung up between the count and the close is in
+  /// `expected_cash` and not in the notes on the counter, so the
+  /// variance comes out wrong by exactly that sale — and is recorded
+  /// against whoever counted. Idempotent: two cashiers reaching for the
+  /// same button is an ordinary Saturday.
+  Future<void> beginPosCount(String shiftId) =>
+      callRpc('begin_pos_count', params: {'p_shift': shiftId});
+
+  /// Puts a counting till back into service.
+  ///
+  /// A count is not a commitment. Without a way back, somebody who
+  /// starts counting and finds a customer at the counter closes the
+  /// shift early to take the one sale.
+  Future<void> resumePosShift(String shiftId) =>
+      callRpc('resume_pos_shift', params: {'p_shift': shiftId});
+
   Future<Map<String, dynamic>?> closePosShift(
     String shiftId,
     num declared, {

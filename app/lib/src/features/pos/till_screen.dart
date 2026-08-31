@@ -107,14 +107,47 @@ class _TillScreenState extends ConsumerState<TillScreen> {
   /// expected one is shown, which is the whole point of a cash-up: a
   /// count taken after seeing the answer is not a count.
   Future<void> _closeShift(String shiftId) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+
+    // Stopped before the figure is asked for, not after. A cash-up is
+    // only meaningful if the count and the expected figure describe the
+    // same drawer, and a sale rung up while somebody counts makes them
+    // describe two different ones — with the difference recorded
+    // against the person who counted. 0361.
+    final stopped = await runWithFeedback(
+      context,
+      pendingMessage: 'Stopping the till…',
+      successMessage: null,
+      action: () => repo.beginPosCount(shiftId),
+    );
+    if (!stopped || !mounted) return;
+    final stoppedOn = _registerId;
+    if (stoppedOn != null) ref.invalidate(currentPosShiftProvider(stoppedOn));
+
     final declared = await _askAmount(
       context,
       title: 'Count the drawer',
       hint: 'What is actually in it',
     );
-    if (declared == null || !mounted) return;
-    final repo = ref.read(repoProvider);
-    if (repo == null) return;
+    if (declared == null) {
+      // Changed their mind at the prompt. Putting the till back is the
+      // whole reason `resume_pos_shift` exists: a stopped till nobody
+      // can restart is how a shift gets closed early to take one
+      // customer.
+      if (!mounted) return;
+      await runWithFeedback(
+        context,
+        successMessage: 'Back in service',
+        action: () => repo.resumePosShift(shiftId),
+      );
+      final back = _registerId;
+      if (mounted && back != null) {
+        ref.invalidate(currentPosShiftProvider(back));
+      }
+      return;
+    }
+    if (!mounted) return;
     Map<String, dynamic>? result;
     final ok = await runWithFeedback(
       context,
