@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788157295.0088916,
-    "ast_hash": "cde63563565af21936ad6afb04ca7ae1",
+    "mtime": 1788171018.0162315,
+    "ast_hash": "1d7c169090d68e5f26db94b47aeff67f",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788163250.9366329,
-    "ast_hash": "5a56dd01f2666128c4a69b265e02c8e9",
+    "mtime": 1788175115.9855318,
+    "ast_hash": "094de31a4fa9dd7ace91a91a36cad848",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -145,8 +145,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/doc_types.dart": {
-    "mtime": 1788166261.190847,
-    "ast_hash": "e74fa263a916083920a9b24f82929124",
+    "mtime": 1788171579.0509074,
+    "ast_hash": "aded114508d9ee838af64b4f6415c3c4",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_editor.dart": {
@@ -250,8 +250,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/legal/matter_detail_screen.dart": {
-    "mtime": 1788157295.0248916,
-    "ast_hash": "7d89d0538a811fed2b6d0602780343e9",
+    "mtime": 1788173823.976897,
+    "ast_hash": "a990e532088e96639290ca23236ea25f",
     "semantic_hash": ""
   },
   "app/lib/src/features/legal/matters_screen.dart": {
@@ -310,8 +310,8 @@
     "semantic_hash": "98cb2370b61e1252dca2af748bd8dfdd"
   },
   "app/lib/src/features/team/team_screen.dart": {
-    "mtime": 1788160571.1207962,
-    "ast_hash": "1bc9baf8bc2ea34790f896a0413e98b7",
+    "mtime": 1788170830.8500507,
+    "ast_hash": "aef29efbfd762ea81275c3a27029c422",
     "semantic_hash": ""
   },
   "app/test/format_test.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788170443.4503803,
-    "ast_hash": "6dab294407f4a4b283eae2f8eae1630d",
+    "mtime": 1788175162.8277526,
+    "ast_hash": "f4ea1c1edda5f8f2f449565d09af6495",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788170641.261685,
-    "ast_hash": "5dc0c6cbae15229d7a876bbdfd7274d0",
+    "mtime": 1788175477.5419724,
+    "ast_hash": "95e70aaec7a075284fc91044025a7fd0",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -3170,13 +3170,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/tender_sheet.dart": {
-    "mtime": 1787822945.4950595,
-    "ast_hash": "df0ef679f099d0370025cac323744c23",
+    "mtime": 1788172714.3862138,
+    "ast_hash": "5f34d923d95f8b89f9db3eaf4767580c",
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/till_screen.dart": {
-    "mtime": 1788157295.0248916,
-    "ast_hash": "66f8173783ed4f1317fe7df2e036850e",
+    "mtime": 1788175148.884008,
+    "ast_hash": "f0f1943302edf64ebf9179142133435b",
     "semantic_hash": ""
   },
   "app/test/diary_screen_test.dart": {
@@ -4285,8 +4285,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/payroll_periods.sql": {
-    "mtime": 1787822946.0265896,
-    "ast_hash": "4f5c6eeb2921687b1ad28e69f911e2b6",
+    "mtime": 1788174285.4230273,
+    "ast_hash": "66d3b9290253fbc99fe7ec2a118f4ee6",
     "semantic_hash": ""
   },
   "supabase/tests/payroll_run.sql": {
@@ -5775,8 +5775,8 @@
     "semantic_hash": ""
   },
   "app/test/doc_types_test.dart": {
-    "mtime": 1788166188.3494203,
-    "ast_hash": "99381b664ffee56b1989edf0ee588f65",
+    "mtime": 1788171541.9318547,
+    "ast_hash": "821f92ae9e020e13d7a868a0f73d73e8",
     "semantic_hash": ""
   },
   "app/test/ticket_teams_test.dart": {
@@ -5805,8 +5805,88 @@
     "semantic_hash": ""
   },
   "supabase/tests/scheduled_work.sql": {
-    "mtime": 1788170499.0257676,
-    "ast_hash": "834a14b45b59d5556fc7df3bee96b9d7",
+    "mtime": 1788174547.269593,
+    "ast_hash": "e44f069615df4191d3937ace2bb52f6e",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/legal/matter_transfer.dart": {
+    "mtime": 1788173497.765614,
+    "ast_hash": "8e794b1aa3898b6fa32f9721b489d2ef",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/pos/on_account.dart": {
+    "mtime": 1788172655.1898046,
+    "ast_hash": "e5d0ab04a17106063a9dda055ce7d645",
+    "semantic_hash": ""
+  },
+  "app/test/matter_transfer_test.dart": {
+    "mtime": 1788173497.7676091,
+    "ast_hash": "b40affb297f5e3d69d0d1115200fb65d",
+    "semantic_hash": ""
+  },
+  "app/test/member_roles_test.dart": {
+    "mtime": 1788170913.700241,
+    "ast_hash": "ae9a5c3da1c9933a3c207ff1d7853de3",
+    "semantic_hash": ""
+  },
+  "app/test/pos_on_account_test.dart": {
+    "mtime": 1788172655.1950321,
+    "ast_hash": "c29d259e6a232b8c4ea74e05a20228ad",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0357_a_sale_the_customer_has_not_paid_for.sql": {
+    "mtime": 1788172419.7265615,
+    "ast_hash": "5f31a6611f9567b3f76cdac2d6b9d676",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0358_the_clients_money_moved_to_their_other_matter.sql": {
+    "mtime": 1788173385.3304167,
+    "ast_hash": "2977351d9e2a1fd9f2fe2e8d4a10607c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0359_the_payroll_engine_is_monthly_and_says_so.sql": {
+    "mtime": 1788174183.6857965,
+    "ast_hash": "d311c7e2d55cca0eba4b66fa82285db1",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0360_the_day_nobody_clocked_in.sql": {
+    "mtime": 1788174547.2531314,
+    "ast_hash": "f315bd8dffdc47e05083ba20f7de517d",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0361_counting_the_drawer_stops_the_till.sql": {
+    "mtime": 1788175083.3770027,
+    "ast_hash": "e79669f4cc107b624ea0579bd3d9a848",
+    "semantic_hash": ""
+  },
+  "supabase/tests/attendance_close.sql": {
+    "mtime": 1788174698.1068406,
+    "ast_hash": "128420ec1724ce0f239853fb831b3b0c",
+    "semantic_hash": ""
+  },
+  "supabase/tests/document_types.sql": {
+    "mtime": 1788171667.4877396,
+    "ast_hash": "153c92d3ba7dfedfe8946aa2c5cea219",
+    "semantic_hash": ""
+  },
+  "supabase/tests/hr_manager_role.sql": {
+    "mtime": 1788171018.0177073,
+    "ast_hash": "d1e09f3a36951dda675e81a082e3ede4",
+    "semantic_hash": ""
+  },
+  "supabase/tests/matter_transfer.sql": {
+    "mtime": 1788173385.330641,
+    "ast_hash": "ed2ecabaa481a5609c1f00904ed4c5b9",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pos_counting.sql": {
+    "mtime": 1788175083.3634453,
+    "ast_hash": "f5ab0bd43b21e66f0fa11fbbc75cf15e",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pos_on_account.sql": {
+    "mtime": 1788172559.1438823,
+    "ast_hash": "3add9f9a62f320d8efb5f58aa5004f29",
     "semantic_hash": ""
   }
 }
