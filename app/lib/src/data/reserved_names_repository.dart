@@ -346,6 +346,32 @@ final inboxProvider =
   );
 });
 
+/// What came attached to one message.
+///
+/// `0328` built the table, the read policy and the grant, and the
+/// ingest path never wrote a row — so a supplier's PDF invoice reached
+/// the covering note and stopped. `0354` files them, and this reads
+/// them back.
+final inboundAttachmentsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, emailId) async {
+  return Repo.rows(
+    await ref
+        .watch(supabaseProvider)
+        .rpc('inbound_attachments', params: {'p_email_id': emailId}),
+  );
+});
+
+/// A link to one, good for an hour.
+///
+/// Signed rather than public, and short-lived, for the reason the chat
+/// bucket gives: the object is private and the policy that guards it
+/// asks whether you work there *now*.
+Future<String> inboundAttachmentUrl(
+  SupabaseClient client,
+  String storagePath,
+) =>
+    client.storage.from('mail').createSignedUrl(storagePath, 60 * 60);
+
 /// The words this company has written over its own door.
 ///
 /// `0349`. Null until it lands and null for a company that has written

@@ -4,9 +4,29 @@
  * Takes delivery of mail sent to a reserved address on the platform's
  * domain and files it against the company that reserved it.
  *
- * POST { to, from, from_name?, message_id, subject?, text?, html? }
- *   -> 200 { stored: true, id }    filed
- *   -> 200 { stored: false }       nobody's address, or the module is off
+ * POST { to, from, from_name?, message_id, subject?, text?, html?,
+ *         attachments?: [{ filename, content_type, content_base64 }] }
+ *   -> 200 { stored: true, id, attachments: n }  filed
+ *   -> 200 { stored: false }                     nobody's address, or
+ *                                                the module is off
+ *
+ * ## Attachments
+ *
+ * Added in `0354`. Before it the worker dropped every part it did not
+ * recognise as text, so a supplier's PDF invoice reached the covering
+ * note and stopped — with nothing saying so, which is worse than a
+ * failure because a failure would be noticed.
+ *
+ * Bytes go to the `mail` bucket under `<org_id>/<email_id>/`, and
+ * `record_inbound_attachment` writes the row. Both are service-role
+ * only: a client that could write either could invent a document that
+ * appears to have arrived from somebody.
+ *
+ * A file that fails to store does not fail the delivery. The message is
+ * already filed by then, and rejecting here would make the mail router
+ * send the whole thing again — which lands the message once (its
+ * Message-ID sees to that) and retries the same broken upload forever.
+ * The count in the reply is what actually stored.
  *
  * ## Where the mail comes from
  *
@@ -39,6 +59,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { fail, json, serveFunction } from "../_shared/cors.ts";
+import { attachmentPath, decodeBase64 } from "../_shared/mail_files.ts";
 
 interface Delivery {
   to?: string;
@@ -48,6 +69,13 @@ interface Delivery {
   subject?: string | null;
   text?: string | null;
   html?: string | null;
+  attachments?: Attachment[] | null;
+}
+
+interface Attachment {
+  filename?: string;
+  content_type?: string | null;
+  content_base64?: string;
 }
 
 /**
@@ -126,5 +154,55 @@ serveFunction("receive-email.failed", async (req: Request) => {
   // No row means the address belongs to nobody, or to a company that
   // has switched the module off. Neither is this function's problem and
   // neither is worth a retry.
-  return json({ stored: data !== null, id: data?.id ?? null });
+  if (data === null) return json({ stored: false });
+
+  const filed = await fileAttachments(db, data.org_id, data.id, body.attachments);
+  return json({ stored: true, id: data.id, attachments: filed });
 });
+
+/**
+ * Puts each attachment in the bucket and records it.
+ *
+ * Returns how many actually landed. Failures are counted out rather
+ * than thrown: see the note above about why a broken file must not fail
+ * the delivery.
+ */
+async function fileAttachments(
+  // deno-lint-ignore no-explicit-any
+  db: any,
+  orgId: string,
+  emailId: string,
+  attachments: Attachment[] | null | undefined,
+): Promise<number> {
+  if (!Array.isArray(attachments) || attachments.length === 0) return 0;
+
+  let filed = 0;
+  for (let i = 0; i < attachments.length; i++) {
+    const a = attachments[i];
+    const path = attachmentPath(orgId, emailId, i + 1, a.filename ?? "");
+    if (!a.content_base64 || !path) continue;
+
+    let bytes: Uint8Array;
+    try {
+      bytes = decodeBase64(a.content_base64);
+    } catch {
+      continue;
+    }
+
+    const up = await db.storage.from("mail").upload(path, bytes, {
+      contentType: a.content_type ?? "application/octet-stream",
+      upsert: true,
+    });
+    if (up.error) continue;
+
+    const { error } = await db.rpc("record_inbound_attachment", {
+      p_email_id: emailId,
+      p_filename: a.filename,
+      p_content_type: a.content_type ?? null,
+      p_size_bytes: bytes.length,
+      p_storage_path: path,
+    });
+    if (!error) filed++;
+  }
+  return filed;
+}

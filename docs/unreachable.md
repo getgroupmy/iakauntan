@@ -783,3 +783,54 @@ Run this check before planning a block of work, not after.
   something already done, so it went. Not every name a sweep returns is
   a gap; some are just code nobody needs.
 
+## A third sweep: a table nothing touches
+
+The two above find what the *app* cannot reach. Neither finds a table
+that nothing anywhere writes — the SQL check counts a table as reached
+when a function names it, and the Dart sweeps never see one at all.
+
+```python
+# Run from the repository root. Every base table, against the app and
+# the edge functions, and then against the bodies of the migrations
+# themselves. A name has to appear in a call shape — after from, join,
+# into, update, delete or references — because `create table`, `grant`
+# and `comment on` all name a table without touching it, and so does the
+# paragraph in a migration header explaining what it is for.
+```
+
+Three of 303 came back the first time it was run, and the difference
+between them is worth keeping:
+
+- **`inbound_email_attachments`** was a real loss, closed in `0354`. See
+  below.
+- **`ticket_team_members`** is a design nobody finished. A support team
+  can be created and routed to, and who is *on* it is recorded nowhere;
+  assignment offers every active member of the company instead. Left as
+  it is for now, and written down here rather than in a comment nobody
+  will find.
+- **`fs_disclosures`** is the narrative MBRS asks for alongside the
+  figures, and filling it needs a disclosure taxonomy this repository
+  does not have. Deliberately not invented: making up statutory codes
+  and presenting a filing as complete is a worse failure than an empty
+  table.
+
+- **The bill somebody e-mailed you** (`inbound_email_attachments`).
+  `0328` built the table, a read policy scoped to the company whose
+  mailbox the message arrived at, and the `select` grant — and the
+  ingest path never wrote a row. `cloudflare/email-router/worker.js`
+  kept the two MIME parts it recognised and dropped every other one, so
+  a supplier e-mailing a PDF invoice got the covering note filed and the
+  invoice discarded.
+
+  This is the worst shape a gap can have, and worth naming: **it looks
+  like the absence of a thing rather than the failure of one**. The
+  message is there, it reads as the whole of what was sent, and the only
+  clue is a sentence in the body about an attachment that is not
+  attached. A crash would have been kinder.
+
+  `0354` gives it a bucket, a writer the ingest path alone can reach,
+  and a reader for the app. The MIME parsing moved into a module of its
+  own so it could be asserted, because every way of getting it wrong is
+  quiet in the same direction: an empty attachment list is
+  indistinguishable from a message that had none.
+

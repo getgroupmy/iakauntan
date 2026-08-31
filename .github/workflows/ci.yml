@@ -462,6 +462,25 @@ jobs:
       - run: deno check supabase/functions/places/parse_test.ts
       - run: deno test supabase/functions/places/parse_test.ts
 
+      # Reading an e-mail well enough to file what was in it.
+      #
+      # `0354`'s reason for existing: the router dropped every MIME part
+      # it did not recognise as text, so a supplier's PDF invoice
+      # reached the covering note and stopped, with nothing anywhere
+      # saying so. Every way of getting this wrong is quiet in the same
+      # direction — an attachment list that comes back empty looks
+      # exactly like a message that had none — which is why the parsing
+      # is a module of its own and is asserted here.
+      - run: deno check cloudflare/email-router/mime_test.js
+      - run: deno test cloudflare/email-router/mime_test.js
+
+      # And turning what it found into something storage will take. A
+      # name that cannot be a key and base64 that arrived wrapped are
+      # both "the file is skipped", which reads from outside as "there
+      # was no file".
+      - run: deno check supabase/functions/_shared/mail_files_test.ts
+      - run: deno test supabase/functions/_shared/mail_files_test.ts
+
       # The workspace proxy, which is a Cloudflare worker rather than an
       # edge function but runs here because it shares the toolchain and
       # nothing else in this file would execute it.

@@ -5,7 +5,9 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../core/safe_link.dart';
 import '../../data/reserved_names_repository.dart';
+import 'attachments.dart';
 
 /// Mail that arrived at this company's addresses on the platform's
 /// domain.
@@ -157,6 +159,7 @@ class _Row extends ConsumerWidget {
                       ? '${row['body_text']}'
                       : 'This message had no plain-text part.',
                 ),
+                _Attachments(emailId: '${row['id']}'),
               ],
             ),
           ),
@@ -168,6 +171,72 @@ class _Row extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// What came attached, and a way to open it.
+///
+/// Drawn only when there is something: a message with no attachments
+/// shows no section at all rather than a line announcing an absence.
+///
+/// The link is signed and lasts an hour. The bucket is private and the
+/// policy on it asks whether you work at the company whose mailbox this
+/// arrived at — now, not when the message landed — so a permanent URL
+/// would be a permanent answer to a question that keeps changing.
+class _Attachments extends ConsumerWidget {
+  const _Attachments({required this.emailId});
+
+  final String emailId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rows = ref.watch(inboundAttachmentsProvider(emailId)).valueOrNull;
+    final heading = attachmentsHeading(rows?.length ?? 0);
+    if (rows == null || heading == null) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: Space.xl),
+        Text(
+          heading,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+        for (final a in rows)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            leading: const Icon(Icons.attach_file, size: 18),
+            title: Text('${a['filename']}', style: const TextStyle(fontSize: 13)),
+            subtitle: Text(
+              attachmentLine(a),
+              style: TextStyle(
+                fontSize: 11,
+                color: context.scheme.onSurfaceVariant,
+              ),
+            ),
+            onTap: () async {
+              try {
+                final url = await inboundAttachmentUrl(
+                  ref.read(supabaseProvider),
+                  '${a['storage_path']}',
+                );
+                if (!context.mounted) return;
+                final opened = await launchExternal(url);
+                if (!context.mounted || opened) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Could not open that file.')),
+                );
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('$e')),
+                );
+              }
+            },
+          ),
+      ],
     );
   }
 }

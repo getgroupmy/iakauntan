@@ -288,4 +288,114 @@ begin
       'execute'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- What came attached to it
+--
+-- `0328` built everything an attachment needs — the table, a read
+-- policy scoped to the company whose mailbox it arrived at, a grant —
+-- and nothing ever wrote a row. A supplier's PDF invoice reached the
+-- covering note and stopped. `0354` gives the ingest path somewhere to
+-- put it, and this asserts the two claims that matter: the file is
+-- filed under the company that owns the mailbox, and nobody but the
+-- ingest path can put one there.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.test_org('Attach Sdn Bhd', array['mailbox']);
+  v_other uuid := pg_temp.test_org('Elsewhere Sdn Bhd', array['mailbox']);
+  v_box   uuid;
+  v_mail  public.inbound_emails;
+  v_a     uuid;
+  v_again uuid;
+  v_said  text;
+begin
+  perform public.request_mailbox(v_org, 'bills');
+  select id into v_box from public.org_mailboxes where org_id = v_org;
+  perform public.decide_mailbox(v_box, true);
+
+  v_mail := public.receive_email(
+    'bills@iakauntan.com', 'supplier@example.test', 'A Supplier',
+    '<attach-1@example.test>', 'Invoice 4471', 'See attached.', null, null);
+  perform pg_temp.check_true('the covering note arrived', v_mail.id is not null);
+
+  v_a := public.record_inbound_attachment(
+    v_mail.id, 'invoice-4471.pdf', 'application/pdf', 88123,
+    v_org || '/' || v_mail.id || '/1-invoice-4471.pdf');
+  perform pg_temp.check_true('and so does what was attached to it',
+    v_a is not null);
+  perform pg_temp.check_eq('under the name the sender gave it',
+    (select filename from public.inbound_email_attachments where id = v_a),
+    'invoice-4471.pdf');
+  perform pg_temp.check_eq('with the size it arrived at',
+    (select size_bytes from public.inbound_email_attachments where id = v_a),
+    88123::bigint);
+
+  -- Delivered twice is what a retry looks like. `receive_email` answers
+  -- that for the message; this answers it for the file.
+  v_again := public.record_inbound_attachment(
+    v_mail.id, 'invoice-4471.pdf', 'application/pdf', 88123,
+    v_org || '/' || v_mail.id || '/1-invoice-4471.pdf');
+  perform pg_temp.check_eq('the same file twice lands once', v_again, v_a);
+  perform pg_temp.check_eq('and leaves one row',
+    (select count(*) from public.inbound_email_attachments
+      where email_id = v_mail.id), 1::bigint);
+
+  -- The path is what the storage policy reads the owning company out
+  -- of, so a path under somebody else's id would hand this company's
+  -- post to another company's staff.
+  begin
+    perform public.record_inbound_attachment(
+      v_mail.id, 'invoice-4471.pdf', 'application/pdf', 88123,
+      v_other || '/' || v_mail.id || '/1-invoice-4471.pdf');
+    v_said := null;
+  exception when others then v_said := sqlerrm;
+  end;
+  perform pg_temp.check_true('a path under another company is refused',
+    v_said is not null);
+
+  begin
+    perform public.record_inbound_attachment(
+      v_mail.id, '  ', 'application/pdf', 1, v_org || '/x/y.pdf');
+    v_said := null;
+  exception when others then v_said := sqlerrm;
+  end;
+  perform pg_temp.check_true('and so is one with no filename',
+    v_said is not null);
+
+  perform pg_temp.check_eq('neither of which wrote anything',
+    (select count(*) from public.inbound_email_attachments
+      where email_id = v_mail.id), 1::bigint);
+
+  -- Same rule as the message itself: the ingest path is the service
+  -- role and nothing else. A client that could write here could invent
+  -- a document that appears to have arrived from somebody.
+  perform pg_temp.check_true('recording one is the service role''s alone',
+    not has_function_privilege('authenticated',
+      'public.record_inbound_attachment(uuid, text, text, bigint, text)',
+      'execute'));
+  perform pg_temp.check_true('and not an anonymous caller''s',
+    not has_function_privilege('anon',
+      'public.record_inbound_attachment(uuid, text, text, bigint, text)',
+      'execute'));
+  perform pg_temp.check_true('while the service role may',
+    has_function_privilege('service_role',
+      'public.record_inbound_attachment(uuid, text, text, bigint, text)',
+      'execute'));
+
+  -- And the reader, which runs as the caller so the policy decides.
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.check_eq('the company reads what arrived for it',
+    (select count(*) from public.inbound_attachments(v_mail.id)), 1::bigint);
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('outsider@example.test'));
+  begin
+    set local role authenticated;
+    perform pg_temp.check_eq('and a stranger reads nothing',
+      (select count(*) from public.inbound_attachments(v_mail.id)), 0::bigint);
+  end;
+  reset role;
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

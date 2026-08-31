@@ -30,6 +30,8 @@
  * an address-existence oracle on a shared domain is how somebody finds
  * which companies are on the platform.
  */
+import { parse } from "./mime.js";
+
 export default {
   async email(message, env) {
     // The raw message, read once. `message.raw` is a stream and can
@@ -48,7 +50,7 @@ export default {
       message_id: headers.get("message-id") ??
         `<${message.from}-${headers.get("date") ?? ""}-${raw.length}@generated>`,
       subject: headers.get("subject"),
-      ...split(raw),
+      ...parse(raw),
     };
 
     const response = await fetch(env.FUNCTION_URL, {
@@ -68,32 +70,3 @@ export default {
     }
   },
 };
-
-/**
- * The text and HTML parts of a MIME message, well enough for a screen
- * to show them.
- *
- * Deliberately shallow: the whole message is what the platform keeps,
- * and this only has to be right often enough that the common case reads
- * properly. A message this misreads is still stored whole.
- */
-function split(raw) {
-  const boundary = raw.match(/boundary="?([^";\r\n]+)"?/i)?.[1];
-  if (!boundary) {
-    const body = raw.split(/\r?\n\r?\n/).slice(1).join("\n\n");
-    return /content-type:\s*text\/html/i.test(raw)
-      ? { text: null, html: body }
-      : { text: body, html: null };
-  }
-
-  let text = null;
-  let html = null;
-  for (const part of raw.split(`--${boundary}`)) {
-    const [head, ...rest] = part.split(/\r?\n\r?\n/);
-    if (!rest.length) continue;
-    const content = rest.join("\n\n").trim();
-    if (/content-type:\s*text\/plain/i.test(head)) text ??= content;
-    if (/content-type:\s*text\/html/i.test(head)) html ??= content;
-  }
-  return { text, html };
-}
