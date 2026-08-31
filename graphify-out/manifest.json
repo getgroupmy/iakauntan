@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788200444.9366772,
-    "ast_hash": "6bb9167d17c07b316fff2c9e5ce30baf",
+    "mtime": 1788201625.5977278,
+    "ast_hash": "3e16f75395b93a8bc9f715b5c40d435d",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788198598.4465322,
-    "ast_hash": "85d41fd92fe23c162d905274f6287f44",
+    "mtime": 1788201608.0018053,
+    "ast_hash": "ce7491d1197c150cae29885207c780a1",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788198746.5233555,
-    "ast_hash": "9fcae28ba9ad4836cebed1991e5619f9",
+    "mtime": 1788201625.5955267,
+    "ast_hash": "644ff643d2b9ebc0511a9e3fa169e50a",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -230,8 +230,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/talent_screen.dart": {
-    "mtime": 1788198914.0857978,
-    "ast_hash": "cf013e891fd6bb30ed2eb06daee26a8e",
+    "mtime": 1788201820.5021791,
+    "ast_hash": "790ffb69d4b1264a38ebb2e212dcf4d6",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/tax_year_section.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788199383.6821501,
-    "ast_hash": "e723e18bf185a31833a96a86931f4e56",
+    "mtime": 1788201078.4665751,
+    "ast_hash": "1f40677d6b56b57b84f036c3268c000d",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788200867.6834817,
-    "ast_hash": "e6d755204a583b9c4271ebab98207541",
+    "mtime": 1788202052.515552,
+    "ast_hash": "d12d8e562d64fabb7be608e9eadeb19c",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6182,6 +6182,41 @@
   "supabase/tests/alternates_and_verification.sql": {
     "mtime": 1788200349.5122526,
     "ast_hash": "5955773d6dd477278f3f4318b8c057f3",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/applicant_editor.dart": {
+    "mtime": 1788201772.37459,
+    "ast_hash": "0ec9374a568a9c8a70db80a9efb2b77a",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/hire_dialog.dart": {
+    "mtime": 1788201760.2002625,
+    "ast_hash": "d759340ac87e6ef46b851fe966cb2978",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/hiring.dart": {
+    "mtime": 1788201678.9474866,
+    "ast_hash": "438e04f1397ded1b9405404226ca018f",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/referrals_dialog.dart": {
+    "mtime": 1788201820.5058773,
+    "ast_hash": "cce5343b2f73ed594a713aea0d20cb71",
+    "semantic_hash": ""
+  },
+  "app/test/hiring_test.dart": {
+    "mtime": 1788201678.9475298,
+    "ast_hash": "317e36378468960d04222890695fcb0c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0381_the_candidate_who_was_typed_in_twice.sql": {
+    "mtime": 1788201516.433394,
+    "ast_hash": "ddc71fc5ab90cbafc03a37a63dddb5d5",
+    "semantic_hash": ""
+  },
+  "supabase/tests/hiring.sql": {
+    "mtime": 1788201460.7879007,
+    "ast_hash": "fb05377b13b2bfd85152f32ae3b28a79",
     "semantic_hash": ""
   }
 }
