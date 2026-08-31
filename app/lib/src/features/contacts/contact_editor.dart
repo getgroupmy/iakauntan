@@ -9,6 +9,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'control_account.dart';
 import '../../data/places_repository.dart';
 // `RepoGroupContacts` is an extension, and a Dart extension is only
 // in scope where its declaring library is imported.
@@ -33,6 +34,8 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
   String _contactType = 'customer';
   String? _priceLevelId;
   bool _creditHold = false;
+  String? _receivableAccountId;
+  String? _payableAccountId;
   String? _linkedOrgId;
   bool _statementBusy = false;
   String _entityType = 'sdn_bhd';
@@ -102,6 +105,8 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         _c('postcode').text = contact.postcode ?? '';
         _c('creditLimit').text = contact.creditLimit.toStringAsFixed(2);
         _creditHold = contact.creditHold;
+        _receivableAccountId = contact.receivableAccountId;
+        _payableAccountId = contact.payableAccountId;
         _contactType = contact.contactType;
         _priceLevelId = contact.priceLevelId;
         _entityType = contact.entityType;
@@ -214,6 +219,8 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         entityType: _entityType,
         creditLimit: double.tryParse(_c('creditLimit').text) ?? 0,
         creditHold: _creditHold,
+        receivableAccountId: _receivableAccountId,
+        payableAccountId: _payableAccountId,
         priceLevelId: _priceLevelId,
       );
 
@@ -585,6 +592,18 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                           ),
                         ),
                       const SizedBox(height: 14),
+                      // Read by 0013 in four places and settable
+                      // nowhere until now, so every company's
+                      // receivables sat in one account whether or not
+                      // its accounts needed them apart. A balance owed
+                      // by a related party is disclosed separately
+                      // under MPERS, and a control account of its own
+                      // is how that comes out of a ledger.
+                      if (_contactType != 'supplier')
+                        _controlAccountField(receivable: true),
+                      if (_contactType != 'customer')
+                        _controlAccountField(receivable: false),
+                      const SizedBox(height: 14),
                       // Only for customers: a price level is what we
                       // charge, not what a supplier charges us.
                       if (_contactType != 'supplier')
@@ -667,6 +686,41 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                 ),
               ),
             ),
+    );
+  }
+
+  /// Where this contact's balance sits, when it is not the usual one.
+  ///
+  /// The list is `controlAccountChoices`, which is the whole of the
+  /// decision and is asserted separately: only a control account of the
+  /// matching subtype, no group headings, nothing retired. Pointed at
+  /// the bank instead, a customer's balance would post into cash and
+  /// the aged listing — which reconciles against the control account —
+  /// would stop agreeing with the ledger without saying why.
+  Widget _controlAccountField({required bool receivable}) {
+    final choices = controlAccountChoices(
+      ref.watch(accountsProvider).valueOrNull ?? const <Account>[],
+      receivable: receivable,
+    );
+    final current = receivable ? _receivableAccountId : _payableAccountId;
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: DropdownButtonFormField<String?>(
+        value: choices.any((a) => a.id == current) ? current : null,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: receivable ? 'Receivable account' : 'Payable account',
+          helperText: 'Leave it alone unless this one is kept apart',
+        ),
+        items: [
+          const DropdownMenuItem(value: null, child: Text(kDefaultControlAccount)),
+          for (final a in choices)
+            DropdownMenuItem(value: a.id, child: Text('${a.code} — ${a.name}')),
+        ],
+        onChanged: (v) => setState(
+          () => receivable ? _receivableAccountId = v : _payableAccountId = v,
+        ),
+      ),
     );
   }
 }

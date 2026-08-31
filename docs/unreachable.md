@@ -1383,3 +1383,23 @@ multiplies them.
   excluded the null type anyway. The case it guards is a company that
   types **nought** — meaning "no expiry", not "lapses on the first of
   January". Added, and the mutant dies.
+
+- **A contact with a control account of its own** (`contacts`
+  `receivable_account_id` and `payable_account_id`). Columns since
+  `0003`, read by `0013` in four places — the invoice, the bill, the
+  receipt and the payment each fall back to `1210` and `2110` only when
+  the contact names nothing — and settable on no screen. The arithmetic
+  was written, correct, and had never once been exercised.
+
+  This is the first case of the seventh sweep in its purest form: the
+  gap is entirely on the app side, and closing it is two dropdowns and
+  a test. What made it worth doing rather than filing is that a balance
+  owed by a related party is disclosed separately under MPERS, and a
+  control account of its own is how that comes out of a ledger at all.
+
+  The list a dropdown offers is the whole of the decision, so it is a
+  function of its own and asserted separately: the matching subtype
+  only, no group headings, nothing retired. Pointed at the bank instead,
+  a customer's balance posts into cash and the aged listing — which
+  reconciles against the control account — stops agreeing with the
+  ledger without saying why.

@@ -181,6 +181,8 @@ class Contact {
     this.currency = 'MYR',
     this.creditLimit = 0,
     this.creditHold = false,
+    this.receivableAccountId,
+    this.payableAccountId,
     this.paymentTermId,
     this.priceLevelId,
     this.isActive = true,
@@ -232,6 +234,13 @@ class Contact {
   /// enforce, a hold refuses an invoice either way: it is a person's
   /// instruction rather than arithmetic. Credit notes still post.
   final bool creditHold;
+
+  /// Where this contact's balance sits, when it is not the company's
+  /// usual control account. 0013 reads both in four places — the
+  /// invoice, the bill, the receipt and the payment — and falls back to
+  /// 1210 and 2110 only when the contact names nothing.
+  final String? receivableAccountId;
+  final String? payableAccountId;
   final String? paymentTermId;
 
   /// Which price list this customer buys on. Null falls back to the
@@ -271,6 +280,8 @@ class Contact {
     currency: j['currency']?.toString() ?? 'MYR',
     creditLimit: Fmt.toDouble(j['credit_limit']),
     creditHold: j['credit_hold'] == true,
+    receivableAccountId: j['receivable_account_id'] as String?,
+    payableAccountId: j['payable_account_id'] as String?,
     paymentTermId: j['payment_term_id'] as String?,
     priceLevelId: j['price_level_id'] as String?,
     isActive: j['is_active'] != false,
@@ -304,6 +315,8 @@ class Contact {
     currency: currency,
     creditLimit: creditLimit,
     creditHold: creditHold,
+    receivableAccountId: receivableAccountId,
+    payableAccountId: payableAccountId,
     paymentTermId: paymentTermId,
     priceLevelId: priceLevelId,
     isActive: isActive,
@@ -332,6 +345,8 @@ class Contact {
     'currency': currency,
     'credit_limit': creditLimit,
     'credit_hold': creditHold,
+    'receivable_account_id': receivableAccountId,
+    'payable_account_id': payableAccountId,
     'price_level_id': priceLevelId,
     'is_active': isActive,
     'entity_type': entityType,
