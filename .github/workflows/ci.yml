@@ -133,6 +133,7 @@ jobs:
                    supabase/tests/matter_closing.sql \
                    supabase/tests/win_loss.sql \
                    supabase/tests/document_dates.sql \
+                   supabase/tests/bill_credit.sql \
                    supabase/tests/lot_report.sql \
                    supabase/tests/platform_console.sql \
                    supabase/tests/landing_page.sql \

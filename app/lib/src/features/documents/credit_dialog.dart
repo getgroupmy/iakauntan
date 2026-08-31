@@ -43,7 +43,13 @@ num creditTotal(
 bool hasCreditable(List<Map<String, dynamic>> rows) =>
     rows.any((r) => (num.tryParse('${r['remaining'] ?? 0}') ?? 0) > 0);
 
-/// Crediting an invoice: which lines, how many of each, and why.
+/// Crediting a document: which lines, how many of each, and why.
+///
+/// One dialog for both sides. The arithmetic is the same — what is left,
+/// at the document's own prices — and so are the words, because the
+/// question is the same question: how much of this is coming back. What
+/// differs is which function is called and which direction the money
+/// goes, and that is [purchase].
 ///
 /// Returns the new credit note's id, or null if nothing was created.
 Future<String?> showCreditDialog(
@@ -51,16 +57,29 @@ Future<String?> showCreditDialog(
   WidgetRef ref, {
   required String invoiceId,
   required String invoiceNo,
+  bool purchase = false,
 }) => showDialog<String>(
   context: context,
-  builder: (_) => _CreditDialog(invoiceId: invoiceId, invoiceNo: invoiceNo),
+  builder: (_) => _CreditDialog(
+    invoiceId: invoiceId,
+    invoiceNo: invoiceNo,
+    purchase: purchase,
+  ),
 );
 
 class _CreditDialog extends ConsumerStatefulWidget {
-  const _CreditDialog({required this.invoiceId, required this.invoiceNo});
+  const _CreditDialog({
+    required this.invoiceId,
+    required this.invoiceNo,
+    required this.purchase,
+  });
 
   final String invoiceId;
   final String invoiceNo;
+
+  /// A supplier's bill rather than a customer's invoice. `0376` is
+  /// `0269` one table over.
+  final bool purchase;
 
   @override
   ConsumerState<_CreditDialog> createState() => _CreditDialogState();
@@ -96,13 +115,20 @@ class _CreditDialogState extends ConsumerState<_CreditDialog> {
     final ok = await runWithFeedback(
       context,
       action: () async {
-        made = await ref
-            .read(repoProvider)!
-            .creditSalesInvoice(
-              widget.invoiceId,
-              lines: asked,
-              reason: _reason.text.trim().isEmpty ? null : _reason.text.trim(),
-            );
+        final repo = ref.read(repoProvider)!;
+        final why =
+            _reason.text.trim().isEmpty ? null : _reason.text.trim();
+        made = widget.purchase
+            ? await repo.creditPurchaseBill(
+                widget.invoiceId,
+                lines: asked,
+                reason: why,
+              )
+            : await repo.creditSalesInvoice(
+                widget.invoiceId,
+                lines: asked,
+                reason: why,
+              );
       },
       successMessage: null,
     );
@@ -112,7 +138,9 @@ class _CreditDialogState extends ConsumerState<_CreditDialog> {
   @override
   Widget build(BuildContext context) {
     final remaining = ref.watch(
-      invoiceCreditRemainingProvider(widget.invoiceId),
+      widget.purchase
+          ? billCreditRemainingProvider(widget.invoiceId)
+          : invoiceCreditRemainingProvider(widget.invoiceId),
     );
 
     return AlertDialog(

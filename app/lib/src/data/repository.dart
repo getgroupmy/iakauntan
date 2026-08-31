@@ -9269,6 +9269,42 @@ extension RepoCreditNotes on Repo {
   )).toString();
 }
 
+/// The same thing one table over, for a supplier's bill.
+///
+/// 0376. `purchase_documents.original_bill_id` has existed since 0006
+/// with the same intent and the same silence. Without the link a
+/// supplier credit cannot be capped at what was billed, cannot be paired
+/// with the bill on the aged listing, and cannot say whose input tax it
+/// adjusts.
+extension RepoBillCredits on Repo {
+  /// What is left uncredited on each line of a bill.
+  Future<List<Map<String, dynamic>>> billCreditRemaining(
+    String billId,
+  ) async => Repo.rows(
+    await callRpc('bill_credit_remaining', params: {'p_bill': billId}),
+  );
+
+  /// Raises and posts a credit note against a bill. [lines] is `{bill
+  /// line id: quantity}`; null credits everything still uncredited.
+  Future<String> creditPurchaseBill(
+    String billId, {
+    Map<String, num>? lines,
+    String? reason,
+  }) async => (await callRpc(
+    'credit_purchase_bill',
+    params: {
+      'p_bill': billId,
+      'p_lines': lines == null
+          ? null
+          : [
+              for (final e in lines.entries)
+                {'line': e.key, 'quantity': e.value},
+            ],
+      'p_reason': reason,
+    },
+  )).toString();
+}
+
 /// Landed cost: freight, duty and insurance onto what the goods cost.
 /// 0271.
 extension RepoLandedCost on Repo {

@@ -843,15 +843,18 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// about that one.
   Future<void> _credit() async {
     if (widget.documentId == null) return;
+    final purchase = widget.docType == 'bill';
     final made = await showCreditDialog(
       context,
       ref,
       invoiceId: widget.documentId!,
       invoiceNo: _docNo,
+      purchase: purchase,
     );
     if (made == null || !mounted) return;
     _toast('Credit note created', success: true);
-    context.go('${_kind.routePrefix}/credit_note/$made');
+    context.go('${_kind.routePrefix}/'
+        '${purchase ? 'purchase_credit_note' : 'credit_note'}/$made');
   }
 
   Future<void> _settle() async {
@@ -1096,16 +1099,19 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                 },
         ),
 
-      // Crediting a posted invoice. Offered here rather than as a new
-      // blank credit note, because a credit note that names its invoice
-      // can be capped at what was actually sold — and, for a counter
-      // sale, can tell the recipe which ingredients came back. A
-      // hand-written one can do neither. See 0269.
+      // Crediting a posted invoice, or a posted bill. Offered here
+      // rather than as a new blank credit note, because a credit note
+      // that names its document can be capped at what was actually sold
+      // or bought — and, for a counter sale, can tell the recipe which
+      // ingredients came back. A hand-written one can do neither. See
+      // 0269 for the sales side and 0376 for the purchase side.
       if (!_isNew &&
-          widget.docType == 'invoice' &&
+          const {'invoice', 'bill'}.contains(widget.docType) &&
           const {'posted', 'partial', 'completed'}.contains(_status))
         IconButton(
-          tooltip: 'Credit this invoice',
+          tooltip: widget.docType == 'bill'
+              ? 'Credit this bill'
+              : 'Credit this invoice',
           icon: const Icon(Icons.assignment_return_outlined, size: 20),
           onPressed: _saving || !canPost ? null : _credit,
         ),

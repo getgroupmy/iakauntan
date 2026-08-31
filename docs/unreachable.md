@@ -1745,6 +1745,49 @@ multiplies them.
   what that file is for. The rule: copy from the *latest* migration that
   defines the function, and let the reachability assertions check you.
 
+- **The same hole, one table over** (`purchase_documents.original_bill_id`).
+  A column since `0006`, declared beside `parent_id` with the same intent
+  as `sales_documents.original_invoice_id`, and never written. `0269`
+  found and closed that hole on the sales side and said why it is worse
+  than a missing feature: a credit note naming no document cannot be
+  capped at what it reverses and cannot be reported against it.
+
+  Every word of that is true here with the signs reversed, and it became
+  live rather than theoretical earlier in this same pass — `0160` gave
+  `purchase_credit_note` a row in the document table, so a supplier
+  credit can now be raised, and it lands as a hand-typed document naming
+  no bill.
+
+  The third consequence is the statutory one. `report_sst_summary`
+  counts a purchase credit note's tax as a reduction of input tax
+  claimed, and which bill's input tax is not a detail: a return of goods
+  bought under one tax code adjusts that claim and not another, and an
+  assessment asks bill by bill.
+
+  It deliberately does not move stock. `0269` had to return ingredients
+  because selling took them out; here the goods are going back to the
+  supplier and `0097`'s posting path already moves them, so a second
+  movement would take them out twice. The test asserts the store falls by
+  twenty once.
+
+  Four survivors across two mutation rounds, and each one taught
+  something different. A **draft** credit note against the bill must not
+  reduce what is creditable — a document that may never be posted would
+  otherwise block a real return, and that case exists precisely because
+  `0160` made the type raisable by hand. A **debit note** pointing at the
+  same bill is not a credit and must not count as one. The credit takes
+  the **bill's own exchange rate**, because re-resolving it would book an
+  FX gain on a return every time the ringgit moved.
+
+  And the fourth found dead code rather than a missing case. `0269`
+  deletes the half-built note before raising "nothing left to credit",
+  and that line does nothing: the raise unwinds the whole call and the
+  insert goes with it. There is no path out of that branch that does not
+  raise. `0376` leaves the delete out and says so, so the next reader
+  does not copy it back in thinking it was load bearing — and the
+  assertion is written as the outcome ("the refusal leaves no half-built
+  note"), which holds either way.
+
 - **Two left where they are, and why.** `organizations.trial_ends_at`
   and the `trial_days` platform setting are the vestige of a business
   model this system does not have. Nothing enters the `trial` status —

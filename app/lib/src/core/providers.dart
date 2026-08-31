@@ -2610,3 +2610,9 @@ final invoiceCreditRemainingProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>(
       (ref, invoiceId) => requireRepo(ref).invoiceCreditRemaining(invoiceId),
     );
+
+/// The same, for a supplier's bill. 0376.
+final billCreditRemainingProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>(
+      (ref, billId) => requireRepo(ref).billCreditRemaining(billId),
+    );
