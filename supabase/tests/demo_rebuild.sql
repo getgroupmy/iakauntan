@@ -657,6 +657,49 @@ begin
   perform pg_temp.sign_out();
 
   -- --------------------------------------------------------------
+  -- A pipeline somebody could look at
+  -- --------------------------------------------------------------
+  -- `crm` is on every tenant and there had never been a lead in the
+  -- product. What makes the seed worth having is not the row count but
+  -- the spread: a board where every card is in one column shows nothing
+  -- about a board.
+  perform pg_temp.check_true('Sinar has a pipeline with leads in it',
+    (select count(*) from public.leads where org_id = v_sinar) >= 5);
+  perform pg_temp.check_true(
+    'and the leads are in more than one state',
+    (select count(distinct status) from public.leads
+      where org_id = v_sinar) >= 3);
+  perform pg_temp.check_true(
+    'and the deals are open, won and lost rather than all one thing',
+    (select count(distinct status) from public.opportunities
+      where org_id = v_sinar) >= 3);
+
+  -- Through the functions, not into the tables. `convert_lead` is the
+  -- only thing that sets `converted_contact_id`, and it is what stops a
+  -- lead becoming two customers; a seed that wrote `status =
+  -- 'converted'` by hand would look identical on the board and leave
+  -- that column null.
+  perform pg_temp.check_eq(
+    'a converted lead became a contact, which only convert_lead does',
+    (select count(*) from public.leads
+      where org_id = v_sinar and status = 'converted'
+        and converted_contact_id is null), 0);
+  -- `close_lead` refuses without one: "a list of dead leads with no
+  -- reasons on it is a list nobody reads twice".
+  perform pg_temp.check_eq(
+    'and a lost lead says why',
+    (select count(*) from public.leads
+      where org_id = v_sinar and status = 'lost'
+        and coalesce(btrim(lost_reason), '') = ''), 0);
+  -- `0373`'s trigger dates the close when the stage moves, and `0422`
+  -- pinned it to the Malaysian day.
+  perform pg_temp.check_eq(
+    'and a closed deal is dated',
+    (select count(*) from public.opportunities
+      where org_id = v_sinar and status <> 'open'
+        and actual_close_date is null), 0);
+
+  -- --------------------------------------------------------------
   -- And there is something in it when you get there
   -- --------------------------------------------------------------
   -- The assertion above is satisfied by a flag. `mbrs` passed it for as
@@ -683,17 +726,52 @@ begin
     gaps text[] := '{}';
     -- Enabled, empty, and known. Each is a demo somebody has not
     -- written yet, not a defect in the module.
+    --
+    -- Tenant and module, not module alone. As a list of module codes
+    -- this could only record "crm is empty somewhere" and could never
+    -- shrink by one tenant, so seeding Sinar's pipeline would have left
+    -- it unchanged and the register would have stopped meaning
+    -- anything. A register that cannot record partial progress stops
+    -- being read.
     known text[] := array[
-      -- Nobody has demonstrated a pipeline in any tenant.
-      'crm',
-      -- Submitting to LHDN needs credentials, and `demo_credentials_locked`
-      -- withholds them on purpose. A submission row would be a lie.
-      'einvoice',
+      -- Submitting to LHDN needs credentials, and
+      -- `demo_credentials_locked` withholds them on purpose. A
+      -- submission row would be a lie about a connection that was never
+      -- made, so this one is not a gap to close -- it is the right
+      -- answer, and it is here so the scan does not report it every
+      -- time.
+      'Amanah Setiausaha Sdn Bhd -> einvoice',
+      'Harta Prima Management Sdn Bhd -> einvoice',
+      'Roti Warisan Enterprise -> einvoice',
+      'Seri Ayu Salon & Spa Sdn Bhd -> einvoice',
+      'Sinar Teknologi Sdn Bhd -> einvoice',
+      'Warung Sedap Enterprise -> einvoice',
+      -- A pipeline for the five tenants that are not Sinar. `0428`
+      -- argues that a warung and a salon do not run one, and that `crm`
+      -- being enabled on all six is a question about what
+      -- `demo_modules` hands out rather than five pipelines to write.
+      'Amanah Setiausaha Sdn Bhd -> crm',
+      'Harta Prima Management Sdn Bhd -> crm',
+      'Roti Warisan Enterprise -> crm',
+      'Seri Ayu Salon & Spa Sdn Bhd -> crm',
+      'Warung Sedap Enterprise -> crm',
       -- Sinar is the only tenant that buys anything.
-      'purchases',
-      -- Written for Sinar's scale; the other tenants approve nothing.
-      'approvals',
-      'branches', 'manufacturing', 'timesheets', 'legal', 'fixed_assets'];
+      'Amanah Setiausaha Sdn Bhd -> purchases',
+      'Harta Prima Management Sdn Bhd -> purchases',
+      'Roti Warisan Enterprise -> purchases',
+      'Seri Ayu Salon & Spa Sdn Bhd -> purchases',
+      'Warung Sedap Enterprise -> purchases',
+      -- Written for Sinar's scale; nobody approves anything yet.
+      'Amanah Setiausaha Sdn Bhd -> approvals',
+      'Harta Prima Management Sdn Bhd -> approvals',
+      'Sinar Teknologi Sdn Bhd -> approvals',
+      -- One each, and each its own small demo.
+      'Sinar Teknologi Sdn Bhd -> branches',
+      'Sinar Teknologi Sdn Bhd -> manufacturing',
+      'Sinar Teknologi Sdn Bhd -> timesheets',
+      'Amanah Setiausaha Sdn Bhd -> timesheets',
+      'Amanah Setiausaha Sdn Bhd -> legal',
+      'Harta Prima Management Sdn Bhd -> fixed_assets'];
   begin
     for r in
       with probe(module_code, tbl) as (values
@@ -715,7 +793,7 @@ begin
         join public.organizations o on o.id = om.org_id
         join probe pr on pr.module_code = om.module_code
        where o.is_demo and om.is_enabled
-         and not (om.module_code = any (known))
+         and not (o.name || ' -> ' || om.module_code = any (known))
        order by o.name, om.module_code
     loop
       execute format('select count(*) from public.%I where org_id = $1', r.t)
@@ -733,7 +811,21 @@ begin
       (select count(*) from public.org_modules om
          join public.organizations o on o.id = om.org_id
         where o.is_demo and om.is_enabled
-          and not (om.module_code = any (known))) > 10);
+          and not (o.name || ' -> ' || om.module_code = any (known))) > 10);
+
+    -- And the register is not carrying entries for pairs that no longer
+    -- exist. A line left behind after a tenant is renamed or a module
+    -- turned off reads as work outstanding when there is none, and the
+    -- register is only worth having if it is true.
+    perform pg_temp.check_eq(
+      'every line in the register is a module a demo tenant still has',
+      (select coalesce(string_agg(k, ', '), '')
+         from unnest(known) k
+        where not exists (
+          select 1 from public.org_modules om
+            join public.organizations o on o.id = om.org_id
+           where o.is_demo and om.is_enabled
+             and o.name || ' -> ' || om.module_code = k)), '');
 
     perform pg_temp.check_eq(
       'and a module a demo tenant has bought has something in it',
