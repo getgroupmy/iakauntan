@@ -312,4 +312,103 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- =====================================================================
+-- The same bill, typed rather than rung up
+-- =====================================================================
+-- `0418`'s header says a service charge on an ordinary sales document
+-- is "still not taxed", and that overstates it. The header *field* is
+-- only set by a till, but a company that types its invoices can put the
+-- charge on as a line pointed at 4250, and doing so is not a
+-- second-class version of the till's answer -- it is the same answer.
+--
+-- Asserted here rather than described in a document, because the claim
+-- is the reason no rate-on-the-document feature was built: if these
+-- ever stop agreeing, the advice is wrong and this file says so.
+do $$
+declare
+  v_org  uuid;
+  v_cust uuid;
+  v_room uuid;
+  v_svc  uuid;
+  v_st8  uuid;
+  v_doc  uuid;
+  v_gl   uuid;
+  d      record;
+begin
+  v_org := pg_temp.test_org('Pejabat Berkhidmat Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+
+  insert into public.tax_codes
+    (org_id, code, name, tax_type_code, rate, applies_to,
+     sales_tax_account_id, purchase_tax_account_id)
+  values (v_org, 'ST8', 'Service Tax 8%', '02', 8, 'both',
+          (select id from public.accounts where org_id = v_org and code = '2130'),
+          (select id from public.accounts where org_id = v_org and code = '1410'))
+  returning id into v_st8;
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Penyewa', 'customer') returning id into v_cust;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code,
+     unit_price, sales_tax_code_id)
+  values (v_org, 'ROOM', 'Meeting room', 'service', false, 'C62', 100.00, v_st8)
+  returning id into v_room;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code,
+     unit_price, sales_tax_code_id)
+  values (v_org, 'SVC', 'Service charge', 'service', false, 'C62', 10.00, v_st8)
+  returning id into v_svc;
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-LINE', current_date, current_date, v_cust,
+          'MYR', 1, 'draft')
+  returning id into v_doc;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, tax_code_id, tax_rate)
+  values (v_org, v_doc, 1, 'item', v_room, 'Meeting room', 1, 'C62',
+          100.00, v_st8, 8);
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, tax_code_id, tax_rate, account_id)
+  values (v_org, v_doc, 2, 'item', v_svc, 'Service charge 10%', 1, 'C62',
+          10.00, v_st8, 8,
+          (select id from public.accounts where org_id = v_org and code = '4250'));
+
+  perform app.post_sales_document_internal(v_doc);
+  select * into d from public.sales_documents where id = v_doc;
+  select gl_entry_id into v_gl from public.sales_documents where id = v_doc;
+
+  -- The same four figures the till produces at the top of this file.
+  perform pg_temp.check_eq('the typed bill comes to a hundred and eighteen eighty',
+    d.total_amount, 118.80);
+  perform pg_temp.check_eq('with eight eighty of tax on it',
+    d.tax_amount, 8.80);
+  perform pg_temp.check_eq('the charge is credited to 4250, as the till credits it',
+    (select coalesce(sum(l.credit - l.debit), 0)
+       from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_gl and a.code = '4250'), 10.00);
+  perform pg_temp.check_eq('the room to 4100',
+    (select coalesce(sum(l.credit - l.debit), 0)
+       from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_gl and a.code = '4100'), 100.00);
+  perform pg_temp.check_eq('and the whole of the tax to output tax',
+    (select coalesce(sum(l.credit - l.debit), 0)
+       from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_gl and a.code = '2130'), 8.80);
+
+  -- And Customs is told the same thing either way. `0418` fixed the
+  -- header route; the line route was always right, and this is what
+  -- says the two agree.
+  perform pg_temp.check_eq('and the SST-02 return declares it',
+    (select coalesce(sum(tax_amount), 0)
+       from public.report_sst_summary(v_org, current_date - 1, current_date + 1)
+      where direction = 'output'), 8.80);
+end $$;
+
 rollback;

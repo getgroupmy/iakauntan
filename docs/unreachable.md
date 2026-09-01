@@ -4902,14 +4902,39 @@ That is the whole point of both files, and it is the first time in this
 run that the mechanism caught the column rather than a person
 remembering to look.
 
-### Not changed here
+### Not changed here — and a correction to what `0418` says about it
 
-A service charge typed onto an ordinary sales document is still not
-taxed — `recalc_sales_totals` adds it to the total and stops. Only the
-till charges tax on it, because only the outlet says at what rate. That
-is a real gap and it is not `0418`'s: it needs a rate on the document
-and a screen to set it on, and nothing today can put a service charge on
-a document except a till.
+`0418`'s own header says a service charge typed onto an ordinary sales
+document "is still not taxed", and calls that a real gap needing a rate
+on the document and a screen to set it on. **That overstates it, and the
+migration text cannot be edited once applied, so the correction lives
+here.**
+
+The header *field* is only ever set by a till, and that much is true.
+But a company that types its invoices has never needed it: the charge
+goes on as a line, pointed at 4250, and that is not a second-class
+version of the till's answer — measured on the same worked example, it
+is the same answer.
+
+```
+             typed as a line      rung up on the till
+total             118.80                 118.80
+tax                 8.80                   8.80
+4250 revenue       10.00                  10.00
+4100 sales        100.00                 100.00
+2130 output tax     8.80                   8.80
+SST-02 declares     8.80                   8.80
+```
+
+So the difference is that one route asks for an amount and the other
+for a percentage. That is a convenience, not a correctness gap, and it
+does not justify restating `recalc_sales_totals` — the most load-bearing
+function in this schema — to add a second owner of the header total.
+
+The equivalence is now asserted at the foot of `pos_service_charge.sql`
+rather than described here, because the claim is the whole reason no
+feature was built. If the two routes ever stop agreeing, that file goes
+red and this advice is wrong.
 
 ### Mutants
 
