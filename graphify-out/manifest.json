@@ -3035,8 +3035,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_rebuild.sql": {
-    "mtime": 1788293481.631569,
-    "ast_hash": "0243fe652c069568ff7f64e2336c5bbc",
+    "mtime": 1788294322.5514867,
+    "ast_hash": "bca22a574be962a9d9efc5b48a6ead1a",
     "semantic_hash": ""
   },
   "supabase/tests/demo_teardown.sql": {
@@ -6772,6 +6772,11 @@
   "supabase/migrations/0429_the_hours_a_practice_bills.sql": {
     "mtime": 1788293510.7519464,
     "ast_hash": "7dbe8fb37ae701ecd436713dd60df83d",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0430_a_law_firm_because_the_module_was_written_for_one.sql": {
+    "mtime": 1788294337.5117366,
+    "ast_hash": "19aea768a0af7f8f889a5332c194c765",
     "semantic_hash": ""
   }
 }
