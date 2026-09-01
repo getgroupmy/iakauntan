@@ -79,6 +79,26 @@
 -- rather than a table that quietly fell out of a loop.
 --
 -- ---------------------------------------------------------------------
+-- Two of the twenty already had this, and that is not redundant
+--
+-- `0402` freezes `gl_entry_id` among its named columns on
+-- `sales_documents` and `purchase_documents`, so those two are covered
+-- twice. Checked rather than waved away, because "an equivalent mutant
+-- means redundant code" is a rule this project holds itself to: taking
+-- `gl_entry_id` out of `0402`'s list, with `0403` in place, still fails
+-- `posted_document_is_frozen.sql`.
+--
+-- The reason is that both rules fire and the first one wins. Postgres
+-- runs triggers in name order, `refuse_posted_change` before
+-- `refuse_reposting`, so on those two tables the caller gets `0402`'s
+-- answer -- which names the document and points at voiding or a credit
+-- note -- rather than this one's, which is written for twenty tables
+-- and cannot be that specific. The assertion reads the message, so it
+-- notices.
+--
+-- On the other eighteen this is the only rule there is.
+--
+-- ---------------------------------------------------------------------
 -- Where the tables come from
 --
 -- The catalogue, not a list. A list written today is a list that does

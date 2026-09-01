@@ -3731,3 +3731,14 @@ uuid. With the rule switched off it died on
 made the same mistake and left the same note. The fixture now posts a
 second expense so there is a real journal belonging to something else to
 point at.
+
+### The overlap with 0402, checked
+
+`0402` already froze `gl_entry_id` among its named columns on the two
+document tables, so those two are covered twice. Taking it out of
+`0402`'s list with `0403` in place still fails
+`posted_document_is_frozen.sql`: Postgres runs triggers in name order,
+`refuse_posted_change` before `refuse_reposting`, so on those two tables
+the caller gets `0402`'s document-specific answer and the assertion
+reads the message. Not an equivalent mutant, and not dead code. On the
+other eighteen tables `0403` is the only rule there is.
