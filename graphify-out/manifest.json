@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788252274.2985375,
-    "ast_hash": "2a8214ca120f1d0a263896129db80590",
+    "mtime": 1788255067.9027865,
+    "ast_hash": "06748d12554075fea55c986a0838857d",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788252292.2745385,
-    "ast_hash": "a5f09596f46485afa715b8c9de04b3b7",
+    "mtime": 1788255808.6840773,
+    "ast_hash": "553808b433d39c64d87bff22e00c896f",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -4290,8 +4290,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/payroll_run.sql": {
-    "mtime": 1788184144.3068995,
-    "ast_hash": "5e45f569d3a84f13aaa5fbd847390021",
+    "mtime": 1788256170.5875752,
+    "ast_hash": "113fc0c51d56dc35cb21aa34db8da6a8",
     "semantic_hash": ""
   },
   "supabase/tests/payslip_access.sql": {
@@ -6395,8 +6395,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/fs_statutory_order.sql": {
-    "mtime": 1788221821.4635055,
-    "ast_hash": "7da5ef4a0b8101fdd21bc7535f9dd7fc",
+    "mtime": 1788256805.5273852,
+    "ast_hash": "882fa11d4f3e2f56f7e9abd1c8f14b3d",
     "semantic_hash": ""
   },
   "supabase/tests/monthly_jobs.sql": {
@@ -6570,8 +6570,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/posted_document_is_frozen.sql": {
-    "mtime": 1788248247.71439,
-    "ast_hash": "90d1eb1678eb6e5f355ef75d078d05cf",
+    "mtime": 1788255180.2676337,
+    "ast_hash": "6bed27b861889f846129623b4817c946",
     "semantic_hash": ""
   },
   "supabase/tests/posted_link_is_immutable.sql": {
@@ -6600,8 +6600,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_service_charge.sql": {
-    "mtime": 1788248556.0397537,
-    "ast_hash": "3a7690c167e7dc5fb0dc8bf3f18eb289",
+    "mtime": 1788255793.4400423,
+    "ast_hash": "379beee1f100bec50faa3ef7eb127ccd",
     "semantic_hash": ""
   },
   "supabase/migrations/0412_a_tenants_own_gateway_credentials.sql": {
@@ -6667,6 +6667,36 @@
   "supabase/functions/_local_check/supabase_js_stub.ts": {
     "mtime": 1788253011.354581,
     "ast_hash": "b8407bde6c3700cb6b753ebb62e0d271",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0416_the_monthly_bill_that_billed_less_than_its_template.sql": {
+    "mtime": 1788254017.7666411,
+    "ast_hash": "37c4d931a7e387e02de313b4ed0564f0",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0417_the_invoice_that_charged_more_than_the_quotation.sql": {
+    "mtime": 1788254568.1947367,
+    "ast_hash": "7bf25067d3efd6c3c61ba895059da89f",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0418_the_eighty_sen_a_restaurant_never_declared.sql": {
+    "mtime": 1788254993.078794,
+    "ast_hash": "cb6a663f360b4cb561e5a0cb80dc69b8",
+    "semantic_hash": ""
+  },
+  "supabase/tests/recurring_template_carries_the_document.sql": {
+    "mtime": 1788255180.2678201,
+    "ast_hash": "e30b1c8763c47416e7a3847aeaa329aa",
+    "semantic_hash": ""
+  },
+  "supabase/tests/sst_return_declares_what_was_charged.sql": {
+    "mtime": 1788255042.594702,
+    "ast_hash": "560c505f8360d5df765455111c735746",
+    "semantic_hash": ""
+  },
+  "supabase/tests/transfer_carries_the_price_agreed.sql": {
+    "mtime": 1788254615.4508429,
+    "ast_hash": "59b6b4f270cca120dbbff64eca12ec5f",
     "semantic_hash": ""
   }
 }
