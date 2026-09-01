@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788205832.051043,
-    "ast_hash": "98b812ee1966c34e6dcc0724c9f559ae",
+    "mtime": 1788226141.2239196,
+    "ast_hash": "770d1e0221073bbe024e98f6f9060b05",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788219339.759325,
-    "ast_hash": "14369b9a132c2065531fb40d4825da8d",
+    "mtime": 1788226093.2792406,
+    "ast_hash": "740e4a8c3078d779d8357ba1cdacb51a",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -230,8 +230,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/talent_screen.dart": {
-    "mtime": 1788201820.5021791,
-    "ast_hash": "790ffb69d4b1264a38ebb2e212dcf4d6",
+    "mtime": 1788226121.7979805,
+    "ast_hash": "c1cb9f4c3bc4c7ebc34e3ffa37f99733",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/tax_year_section.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788223712.667128,
-    "ast_hash": "8b0ae2d7499667e9e82915b4c8badcdd",
+    "mtime": 1788224431.5555608,
+    "ast_hash": "43a78bf85e1275e63aff2f48ac5fce1a",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788224199.9688685,
-    "ast_hash": "9a9e06a5c0276ad97ed1dea393eeb0f5",
+    "mtime": 1788226518.3570063,
+    "ast_hash": "c552d1cb758a771a99bbd1433b118a29",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6215,8 +6215,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/hiring.sql": {
-    "mtime": 1788201460.7879007,
-    "ast_hash": "fb05377b13b2bfd85152f32ae3b28a79",
+    "mtime": 1788224595.4743562,
+    "ast_hash": "20e7fff50db685f4eaf7c552c2c01c17",
     "semantic_hash": ""
   },
   "app/lib/src/features/assets/capitalise_dialog.dart": {
@@ -6412,6 +6412,26 @@
   "supabase/tests/who_filed_it.sql": {
     "mtime": 1788223712.658537,
     "ast_hash": "85b3f429eeaee40d124263ae4d08918d",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/requisition_editor.dart": {
+    "mtime": 1788226080.9294891,
+    "ast_hash": "8b00731c5c9d60039ee37e9871ead860",
+    "semantic_hash": ""
+  },
+  "app/test/requisition_editor_test.dart": {
+    "mtime": 1788226177.8249862,
+    "ast_hash": "b01cfbd8a9d0ff53b828ad300f47f08b",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0394_the_vacancy_nobody_could_open.sql": {
+    "mtime": 1788226021.3168385,
+    "ast_hash": "1c03b018e4427cd436b246192fa87117",
+    "semantic_hash": ""
+  },
+  "supabase/tests/vacancies.sql": {
+    "mtime": 1788225105.6390572,
+    "ast_hash": "ab0fd9b9a4b271d8108fe0bedd40eb5c",
     "semantic_hash": ""
   }
 }
