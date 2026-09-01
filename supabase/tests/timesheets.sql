@@ -335,6 +335,95 @@ begin
         where org_id = v_org and doc_type = 'invoice') > 0);
   end;
 
+  -- ------------------------------------------------------------------
+  -- 5. When the fee note falls due
+  -- ------------------------------------------------------------------
+  -- `0439`. `app.bill_time_internal` set `due_date := coalesce(p_due,
+  -- p_to)` and never touched `payment_term_id`, so a fee note fell due
+  -- on the day it was raised whatever the client had agreed. Measured
+  -- on a client set to NET30: doc_date and due_date both the same day,
+  -- and `report_ar_aging` -- which buckets on `coalesce(due_date,
+  -- doc_date)` -- had them a month in arrears for a month they were
+  -- promised.
+  declare
+    v_terms uuid; v_soon uuid; v_late uuid; v_p3 uuid; v_note uuid;
+  begin
+    -- `pg_temp.test_org` builds a bare company; the standard terms come
+    -- from `create_organization`'s seed, which it does not run. Written
+    -- here so the section tests the billing, not the bootstrap.
+    insert into public.payment_terms (org_id, code, name, days, term_type)
+    values (v_org, 'NET30', '30 Days', 30, 'net')
+    on conflict (org_id, code) do update set days = 30
+    returning id into v_terms;
+    perform pg_temp.check_true('the standard terms are on file',
+      v_terms is not null);
+
+    update public.contacts set payment_term_id = v_terms where id = v_client;
+
+    insert into public.projects (org_id, code, name, contact_id)
+    values (v_org, 'P-DUE', 'A job for a client with terms', v_client)
+    returning id into v_p3;
+    insert into public.time_entries
+      (org_id, project_id, user_id, entry_date, description, minutes,
+       is_billable)
+    values (v_org, v_p3, v_owner, date '2026-03-10', 'Work', 60, true);
+
+    v_note := public.bill_project_time(
+      v_p3, date '2026-03-01', date '2026-03-31');
+
+    perform pg_temp.check_eq(
+      'a fee note falls due on the terms the client agreed',
+      (select due_date::text from public.sales_documents where id = v_note),
+      '2026-04-30');
+    perform pg_temp.check_eq(
+      'and it is not due the day it was raised',
+      (select doc_date::text from public.sales_documents where id = v_note),
+      '2026-03-31');
+
+    -- The document records WHICH terms, not only the date they produce.
+    -- `settlement_discount_of` reads `payment_term_id` off the
+    -- document, so a fee note with the right date and no term still
+    -- cannot say whether an early-payment discount applies.
+    perform pg_temp.check_eq(
+      'and records the terms it was raised on',
+      (select payment_term_id from public.sales_documents where id = v_note),
+      v_terms);
+
+    -- A date somebody negotiated still wins. The standard terms must
+    -- not overwrite an agreement the software knows nothing about --
+    -- which is the rule `app.document_due_date_guard` states and this
+    -- has to keep.
+    insert into public.time_entries
+      (org_id, project_id, user_id, entry_date, description, minutes,
+       is_billable)
+    values (v_org, v_p3, v_owner, date '2026-04-10', 'More work', 60, true);
+    v_late := public.bill_project_time(
+      v_p3, date '2026-04-01', date '2026-04-30', date '2026-05-15');
+    perform pg_temp.check_eq(
+      'and a date the biller typed beats the standard terms',
+      (select due_date::text from public.sales_documents where id = v_late),
+      '2026-05-15');
+
+    -- And a client with nothing on file falls back to where it was:
+    -- due on the day, rather than a null the ageing would have to
+    -- guess at.
+    insert into public.contacts (org_id, code, name, contact_type)
+    values (v_org, 'CL-NOTERMS', 'A client with no terms agreed', 'customer')
+    returning id into v_soon;
+    insert into public.projects (org_id, code, name, contact_id)
+    values (v_org, 'P-NOTERMS', 'A job for them', v_soon) returning id into v_p3;
+    insert into public.time_entries
+      (org_id, project_id, user_id, entry_date, description, minutes,
+       is_billable)
+    values (v_org, v_p3, v_owner, date '2026-05-10', 'Work', 60, true);
+    v_note := public.bill_project_time(
+      v_p3, date '2026-05-01', date '2026-05-31');
+    perform pg_temp.check_eq(
+      'and with no terms on file it falls due on the day, not on null',
+      (select due_date::text from public.sales_documents where id = v_note),
+      '2026-05-31');
+  end;
+
   raise notice 'timesheets: 3 billable hours billed at two rates, 75%% utilised';
 end $$;
 
