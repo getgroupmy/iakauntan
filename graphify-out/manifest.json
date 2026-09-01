@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788217491.6723323,
-    "ast_hash": "6edc2b9f6216c34b9a6f011a7024fba0",
+    "mtime": 1788221258.835659,
+    "ast_hash": "5f156f8728f95b1cac272a2287b97e79",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788219746.3006039,
-    "ast_hash": "7b3628255020eeda3753d0d7419230aa",
+    "mtime": 1788223095.416803,
+    "ast_hash": "e7047b355cb0fff485508e0869889b1d",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -2915,8 +2915,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/mbrs.sql": {
-    "mtime": 1788157295.1024518,
-    "ast_hash": "e546a6afd3ae1ae3db10f390c6260cc1",
+    "mtime": 1788220097.4162984,
+    "ast_hash": "d7caf34ede843cfabfe240bc7f39d9cc",
     "semantic_hash": ""
   },
   "docs/mbrs.md": {
@@ -6382,6 +6382,26 @@
   "supabase/tests/ticket_share.sql": {
     "mtime": 1788219005.6626108,
     "ast_hash": "0d917b54bc38e6e0d66ff2a3e96ac810",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0391_the_statutory_order_of_the_accounts.sql": {
+    "mtime": 1788222082.4923434,
+    "ast_hash": "8896b03e52bde2dbca655c87a628d7c9",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0392_the_consolidated_einvoice_that_never_ran.sql": {
+    "mtime": 1788222987.9507024,
+    "ast_hash": "52211ead4f94c4896dfa1c745996f519",
+    "semantic_hash": ""
+  },
+  "supabase/tests/fs_statutory_order.sql": {
+    "mtime": 1788221821.4635055,
+    "ast_hash": "7da5ef4a0b8101fdd21bc7535f9dd7fc",
+    "semantic_hash": ""
+  },
+  "supabase/tests/monthly_jobs.sql": {
+    "mtime": 1788222921.2188675,
+    "ast_hash": "ff798e8c6bed473d3ca2d5e4f0e3b247",
     "semantic_hash": ""
   }
 }
