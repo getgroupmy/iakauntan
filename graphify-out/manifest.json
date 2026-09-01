@@ -6270,8 +6270,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pipeline_quotes.sql": {
-    "mtime": 1788285600.507654,
-    "ast_hash": "19e0efff7dc274bd842781d9ab62a018",
+    "mtime": 1788301276.401347,
+    "ast_hash": "cfe67b3fae2f0dc052b7226f93dc3879",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/settlement_discount.dart": {
@@ -6812,6 +6812,11 @@
   "supabase/migrations/0437_the_service_tax_on_a_firms_own_hours.sql": {
     "mtime": 1788300307.397012,
     "ast_hash": "111087b691e1f8d6bb38c2455e76f730",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0438_the_quotation_that_forgot_the_tax.sql": {
+    "mtime": 1788301384.1553922,
+    "ast_hash": "806873c0ac290a16d677f28705d8c8a2",
     "semantic_hash": ""
   }
 }
