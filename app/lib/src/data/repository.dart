@@ -9319,6 +9319,29 @@ extension RepoPosControls on Repo {
           ?.toString() ??
       '';
 
+  /// The service charge this outlet adds, and the tax that rides it.
+  ///
+  /// A Malaysian bill reads "subject to 10% service charge and 8%
+  /// service tax", and the service tax is charged on the amount that
+  /// already includes the charge — so this is not a printing choice,
+  /// it changes what the customer pays. `0410` does the arithmetic and
+  /// `0411` is the setter.
+  ///
+  /// A null tax code means a charge with nothing on top, which is what
+  /// an outlet that is not registered for service tax has.
+  Future<void> savePosServiceCharge({
+    required String outletId,
+    required double percent,
+    String? taxCodeId,
+  }) => callRpc(
+    'set_pos_service_charge',
+    params: {
+      'p_outlet': outletId,
+      'p_percent': percent,
+      'p_tax_code': taxCodeId,
+    },
+  );
+
   /// What this outlet prints, defaults included.
   Future<Map<String, dynamic>> posReceiptSettings(String outletId) async {
     final rows = Repo.rows(

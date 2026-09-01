@@ -323,8 +323,9 @@ statutory statements, and so is bank transfer, and so is importing the
 master files — and so, now, is the whole opening position: the open
 invoices and bills, the trial balance that squares them off, and the
 stock behind the inventory figure. Together they are what makes moving
-onto this system mid-year possible at all. What is left: compound tax
-and taking payment.
+onto this system mid-year possible at all. What is left: taking payment.
+Compound tax closed at `0410`, in the shape a Malaysian bill actually
+has one.
 
 **Granular permissions closed** — `access_types` and
 `access_type_modules` in `0127`, who holds which one in `0129`, and the
@@ -336,8 +337,20 @@ The other two were "confirmed open by querying for them rather than by
 memory", and one of them has since stopped being true in the form it was
 written. Re-queried at `0404`:
 
-- **Compound tax is still absent.** `is_compound` appears nowhere in the
-  migrations, the client or the edge functions — grepped, not recalled.
+- ~~**Compound tax is still absent.**~~ Closed at `0410` and `0411`, in
+  the form it actually takes in this country. `is_compound` still
+  appears nowhere, and does not need to: a Malaysian bill compounds in
+  exactly one place — "subject to 10% service charge and 8% service
+  tax", where the service tax is charged on the amount that already
+  includes the charge. The schema had no service charge at all, on the
+  outlet, the sale or the document, so a restaurant could not produce a
+  correct bill and every part of the food and beverage module sat on a
+  total that was ten per cent plus the tax on it short. The outlet now
+  carries the percentage and the tax code that rides it, the charge
+  posts to `4250`, and the receipt prints it above the tax line with
+  the percentage on it. `pos_service_charge.sql` asserts the worked
+  example — 100.00 food, 10.00 charge, 8.80 tax, 118.80 total — and the
+  identity behind it rather than the number.
 - **"No payment gateway of any kind — no Billplz, no ToyyibPay, no
   Stripe" is now false as a statement about the codebase.** Ten
   acquirers are registered and two Billplz edge functions are deployed.

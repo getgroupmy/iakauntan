@@ -386,7 +386,12 @@ declare
     'currency', 'exchange_rate', 'subtotal', 'discount_amount',
     'discount_percent', 'tax_amount', 'shipping_amount',
     'rounding_amount', 'total_amount', 'base_total_amount',
-    'branch_id', 'matter_id', 'posted_at', 'posted_by', 'gl_entry_id'];
+    'branch_id', 'matter_id', 'posted_at', 'posted_by', 'gl_entry_id',
+    -- `0410`. The service charge is on the journal, credited to 4250,
+    -- so moving it after posting moves the ledger away from the
+    -- document. This list is the reason that column could not be added
+    -- quietly: the walk below refused until it was named.
+    'service_charge_amount'];
   -- Deliberately still writable on a posted document, and why:
   --   money that moves after posting ... paid_amount, applied_amount,
   --     balance_amount, status

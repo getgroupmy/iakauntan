@@ -4274,3 +4274,101 @@ the target null and the `coalesce(v_hrdf_ver, false)` below already says
 it. A branch no mutation can kill is a branch that is not doing
 anything, so it is gone and the reason is in the comment that replaced
 it.
+
+## 0410 and 0411 — ten per cent for the table, and eight on top of that
+
+Not a defect found by sweeping. A gap the register named and nobody had
+gone back to: "compound tax is still absent, `is_compound` appears
+nowhere in the migrations, the client or the edge functions". Both
+halves of that sentence were true, and the second half is why the first
+one stayed open — `is_compound` is the wrong thing to look for in
+Malaysia.
+
+There is exactly one place a Malaysian bill compounds, and every
+restaurant in the country prints it:
+
+    Subtotal              100.00
+    Service charge 10%     10.00
+    Service tax 8%          8.80
+    Total                 118.80
+
+The 8.80 is on 110.00, not on 100.00. And this schema had no service
+charge at all — not on `pos_outlets`, not on `pos_sales`, not on
+`sales_documents`, grepped across every migration rather than
+remembered. A restaurant using this point of sale could not produce a
+correct bill, and the whole food and beverage module — the floor plan,
+the modifiers, the split bills, the kitchen display, the counters — was
+built on a total that was ten per cent plus the tax on it short.
+
+### Where the compound comes from without taxing anything twice
+
+Tax here is per line and summed, so the lines already carry service tax
+on the food. Taxing the charge at the same rate gives
+
+    rate x food + rate x charge = rate x (food + charge)
+
+which is the figure the Act asks for, reached with no second tax pass.
+`pos_service_charge.sql` asserts that identity as arithmetic rather than
+as the number 8.80, so a rate change keeps the assertion honest.
+
+### The decisions, said out loud
+
+The percentage is on the **outlet**, not the organization: a takeaway
+counter and a dining room in the same company charge differently, and
+the test has one of each. The tax code is **named** rather than
+inherited from the food, because an outlet that is not registered for
+service tax adds a charge with nothing on top — null means exactly that,
+and there is an assertion whose whole job is stopping the null being
+read as "use whatever the food used". The charge posts to **4250**, new
+in `0410` beside `4200 Service Income`, not into `4100`: it is what the
+service staff are paid out of, and a restaurant that cannot see it apart
+from food sales cannot tell what it took at the table from what it took
+for the table. `0013` set that precedent by giving the courier charge
+`4900`.
+
+The receipt prints it **above the tax line, with the percentage on it**,
+and deliberately not behind `show_tax_summary`: a shop may choose not to
+print a tax breakdown, and it may not choose to add ten per cent to a
+bill without saying so.
+
+### What the existing guards did
+
+`0402`'s frozen deny-list refused the new column before any of this
+worked — `posted_document_is_frozen.sql` walks both document tables and
+demands every column be either frozen or explicitly named as writable,
+and `service_charge_amount` was neither. That is the guard working, and
+it is why the column could not be added quietly.
+
+`0411`'s own closing assertion caught the setter having been left
+**unreachable**: `0165`'s event trigger strips PUBLIC and anon from
+every new function, and nothing had granted it to `authenticated`. A
+function nobody can call is the exact shape this document is about, and
+it was caught inside the migration that created it rather than by a
+screen failing later.
+
+### Mutants
+
+Eight, and one of them changed the code rather than confirming it.
+
+  * the charge left untaxed — the compound lost — fails "eighty sen
+    rides the service charge";
+  * the charge missing from the sale total fails the 118.80;
+  * posting it to `4100` instead of `4250` fails the ledger assertion;
+  * a fixed ten per cent for every outlet fails "a takeaway carries no
+    service charge";
+  * the receipt block removed fails "the receipt names the service
+    charge";
+  * another company's tax code accepted fails the cross-tenant probe.
+
+The charge dropped from the invoice was killed by the ledger's own
+balance constraint before the assertion about it ran — a real kill, and
+a weaker one than it looks, so it is recorded as what it was rather than
+as the assertion earning its place.
+
+And the percentage bound **survived**, because the column carries a
+check constraint that refuses 150 as well; a test that asked only "was
+it refused" could not tell the two apart. What the function's guard adds
+is a sentence a person can act on, so the assertion now reads the
+message. Under the mutant it fails with the constraint's own text —
+`violates check constraint "pos_outlets_service_charge_percent_check"` —
+which is the failure explaining itself.

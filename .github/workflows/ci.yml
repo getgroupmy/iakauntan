@@ -181,6 +181,7 @@ jobs:
                    supabase/tests/pos_fnb.sql \
                    supabase/tests/pos_delivery.sql \
                    supabase/tests/pos_receipt.sql \
+                   supabase/tests/pos_service_charge.sql \
                    supabase/tests/pos_public_menu.sql \
                    supabase/tests/pos_reports.sql \
                    supabase/tests/pos_recipes.sql \
