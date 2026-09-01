@@ -78,12 +78,35 @@ other table, checked rather than remembered. Nothing on a tenant's
 `sales_documents` reaches it, and `open_shared_document` gives a
 customer a document to read and no way to pay it.
 
-So the user-facing gap is exactly as open as it was. What has changed is
-the size of the job: the acquirer list, the checkout/callback shape, the
-signature verification and the idempotency are all built and exercised
-once. What is missing is per-organization gateway credentials, a pay
-route on the shared invoice link, and a receipt posted to the ledger
-when the callback confirms — not a payments integration from nothing.
+So the user-facing gap was exactly as open as it was. What had changed
+was the size of the job: the acquirer list, the checkout/callback shape,
+the signature verification and the idempotency were all built and
+exercised once. What was missing was per-organization gateway
+credentials, a pay route on the shared invoice link, and a receipt
+posted to the ledger when the callback confirms.
+
+**Two of the three are now built.** `0412` gives an organization its own
+acquirer credentials, held the way `0107` holds the LHDN ones — RLS with
+no policies, every client grant revoked, a status function that never
+returns a secret. `0413` gives the shared invoice link a way to pay:
+`shared_payment_options` tells the person holding the link which
+acquirers the shop can actually settle through, `begin_shared_payment`
+opens a pending payment for **the balance on the document and never an
+amount the caller chose**, and `settle_shared_payment` posts a receipt
+through `app.post_receipt_internal` — so the money comes off the
+receivable and lands in the bank account the shop nominated, by the same
+door a receipt keyed in by hand uses. `shared_invoice_payment.sql` has
+58 assertions on it, including the retry, the short payment, and the
+invoice that was settled by bank transfer while the acquirer was still
+thinking.
+
+**The third is the acquirer call itself**, and it is what keeps this
+section open. `begin_shared_payment` and `settle_shared_payment` are the
+two ends an edge function holds; the HTTP between them is not written
+for a tenant's credentials, and there is no screen for a shop to enter
+them. Until both exist, nothing charges anybody — which is said here
+rather than left for a reader to discover, because two thirds of a
+payment flow reads exactly like a whole one from a migration list.
 
 ## 4. Missing reports, two of them statutory
 

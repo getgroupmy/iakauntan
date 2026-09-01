@@ -740,8 +740,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory.sql": {
-    "mtime": 1788219005.6624186,
-    "ast_hash": "8d09e84885b0c3674d52583750009197",
+    "mtime": 1788250907.9149952,
+    "ast_hash": "e4c00588a4bb518f035e427ea0034742",
     "semantic_hash": ""
   },
   ".claude/CLAUDE.md": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788249343.1099577,
-    "ast_hash": "b16b9f5a3896ed895f0ab36ce74997db",
+    "mtime": 1788250592.6285288,
+    "ast_hash": "756b56a7f8a1ff8056c891914d42f94c",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788249369.0063648,
-    "ast_hash": "57319ef4275e051f318c31fa3b165f54",
+    "mtime": 1788250927.4422405,
+    "ast_hash": "048a6ae14536ff2203632f56dc080701",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -1500,8 +1500,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-akaunting.md": {
-    "mtime": 1788248585.6282907,
-    "ast_hash": "5da3636d209553e79a7c1df3b1febd3d",
+    "mtime": 1788250607.179246,
+    "ast_hash": "aec518e4d262942cf84852c333adc58e",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/email_screen.dart": {
@@ -6612,6 +6612,16 @@
   "supabase/tests/tenant_gateway_credentials.sql": {
     "mtime": 1788249313.779307,
     "ast_hash": "f6fe20a3cdfd2291056f11e954cac0c8",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0413_the_customer_can_pay_the_invoice_they_were_sent.sql": {
+    "mtime": 1788250478.964385,
+    "ast_hash": "052a4cc3505580f99638919238695d15",
+    "semantic_hash": ""
+  },
+  "supabase/tests/shared_invoice_payment.sql": {
+    "mtime": 1788250568.3214154,
+    "ast_hash": "5478b16a9aebe36e292b3e264895f67a",
     "semantic_hash": ""
   }
 }

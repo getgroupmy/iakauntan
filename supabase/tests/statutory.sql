@@ -260,7 +260,7 @@ begin
       select 1 from pg_policies
        where tablename = 'payslip_access_requests' and cmd <> 'SELECT'));
 
-  -- Nine functions are deliberately open to an unauthenticated caller,
+  -- Ten functions are deliberately open to an unauthenticated caller,
   -- and each earned its place by someone who has no account needing to
   -- do exactly one thing: a director signing one resolution, a customer
   -- reading one invoice they were sent a link to, and — since 0262 — a
@@ -304,6 +304,29 @@ begin
            -- internal notes and line cost deliberately left out.
            -- `supabase/tests/document_share.sql` asserts both absences.
            'open_shared_document',
+           -- 0413, and the smallest thing that could be added beside
+           -- the one above: the customer reading an invoice on a link
+           -- has to be told how they may pay it, and they are not
+           -- signed in.
+           --
+           -- It takes the same token, applies the same checks (a valid,
+           -- unrevoked, unexpired link on a document that has not been
+           -- withdrawn), and answers with acquirer codes and names for
+           -- gateways this company has switched on and can actually
+           -- settle through. Nothing about a gateway crosses to an
+           -- unauthenticated caller except what is already printed on
+           -- the button they are about to press: no key, no collection
+           -- reference, no mode. It writes nothing.
+           --
+           -- Its siblings are deliberately *not* here.
+           -- `begin_shared_payment` and `settle_shared_payment` are
+           -- revoked from anon and authenticated alike, and
+           -- `app.shared_payment_intent` -- which hands back an
+           -- acquirer key -- from every client role. Only the service
+           -- role reaches those, which is to say the edge function.
+           -- `supabase/tests/shared_invoice_payment.sql` asserts all
+           -- three refusals under `set local role anon`.
+           'shared_payment_options',
            -- 0390, and the pair of them are the reader and the writer
            -- of one conversation. `ticket_comments.author_contact_id`
            -- has existed since `0192` with a check constraint demanding

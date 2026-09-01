@@ -4430,3 +4430,86 @@ header rather than leaving a reader to work it out.
 The next slice is the one that makes it reachable — a pay route on the
 shared invoice link and a receipt posted when the callback confirms —
 and the screen belongs with that, not before it.
+
+## 0413 — the customer can pay the invoice they were sent
+
+`0412`'s exception, closed one step: the database can now take a
+payment. What it still cannot do is call an acquirer, and that is said
+here as plainly as `0412` said its own.
+
+The shape is `platform_payments`', because that one has been settling
+iAkauntan's own subscription invoices and got it right: one row per
+`(gateway_code, provider_ref)` so a retry finds the payment it already
+settled; five named outcomes rather than a boolean that cannot tell a
+forged reference from a short payment; `unknown` returned quietly,
+because an answer that distinguishes a wrong guess from a right one is
+an oracle for guessing references; and a short payment **recorded and
+refused**, never rounded up into a settled invoice.
+
+What a tenant's payment has that the platform's does not is a ledger
+behind it. A confirmed payment posts a receipt through
+`app.post_receipt_internal`, allocated against the invoice, so the money
+comes off the receivable and lands in the nominated bank account by the
+same door a receipt keyed in by hand uses. The migration asserts that
+nothing in it writes `gl_entries` directly — `0399` closed that door and
+this did not reopen it.
+
+Three decisions worth having in writing:
+
+  * **The amount comes from the document.** `begin_shared_payment` takes
+    no amount, and the migration asserts its signature has none. A
+    checkout for a figure the caller chose is how an invoice gets
+    settled for a ringgit.
+  * **A gateway with nowhere to bank is not offered.** A button that
+    leads to a failure is worse than a button that is not there, and the
+    moment a customer has already paid is the wrong time to discover the
+    receipt cannot post.
+  * **Never more than is owed.** Two people paying the same link, or a
+    bank transfer that landed while the acquirer was still thinking,
+    must not leave the invoice in credit through this door. The test has
+    that case: the payment is recorded as paid and takes no receipt of
+    its own.
+
+### Two things the test caught that would have shipped
+
+**Recreating `open_shared_document` took the share link away from every
+customer holding one.** `0165`'s event trigger strips PUBLIC and `anon`
+from a function as it is created, so a `create or replace` of a function
+`anon` executes silently revokes it. The test noticed because its last
+section runs under `set local role anon` — the role a customer actually
+has — rather than as the owner. There is now a re-grant, placed after
+the recreation, and an assertion beside it.
+
+**The service charge was missing from the shared invoice.** `0410` added
+`service_charge_amount` and `0411` prints it on a receipt; the shared
+document still listed subtotal, tax, shipping and rounding, so a
+customer reading their own invoice found figures that did not add up to
+its total. `check_query_columns.py` cannot see this one — it is a column
+missing from a SQL function, not a name the client got wrong.
+
+### And a third the existing guards caught
+
+`statutory.sql` keeps an allowlist of the SECURITY DEFINER functions
+`anon` may execute, and says of itself that "adding a name here should
+feel like a decision". Granting `shared_payment_options` to `anon` made
+the whole suite red until the name was added with a written reason for
+it — which is the allowlist working exactly as its own comment
+describes. It is ten functions now, not nine, and the entry says what
+the stranger needs, what the function reaches, and that its two
+siblings are deliberately not beside it.
+
+### Mutants
+
+Eight, all killed. The short-payment branch, the retry guard, the cap at
+what is owed, the stripped signature, the unbanked gateway still being
+offered, the quiet `unknown`, and — on the migration's own assertions —
+the missing grant on the share link.
+
+The eighth is the one worth recording. **The cross-tenant probe survived
+its first mutant**, because it was written as "take whatever
+`where org_id <> v_org` finds, and skip if that is nothing" — and in a
+fixture with one company in it, that is nothing. It passed by not
+running. The other company and its bank account are created in the
+fixture now, and the same mutant dies. A probe that measures whether it
+had anything to probe is not a probe, which is the same fault `0395`
+shipped in a different shape.

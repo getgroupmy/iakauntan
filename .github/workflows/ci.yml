@@ -158,6 +158,7 @@ jobs:
                    supabase/tests/platform_pricing_and_payment.sql \
                    supabase/tests/gateway_payments.sql \
                    supabase/tests/tenant_gateway_credentials.sql \
+                   supabase/tests/shared_invoice_payment.sql \
                    supabase/tests/invitations.sql \
                    supabase/tests/clock_out.sql \
                    supabase/tests/bank_balance_resync.sql \
