@@ -441,3 +441,97 @@ accident and thirty "never came out" is a conversation, while these are
 few, each is a whole order, and the question is which one and whose.
 It reports the cooked count beside the line count, because food lost
 and an order that never existed are different facts.
+
+## What was found after 0248 (0399–0407)
+
+The document above stops at `0248`, and a reader reaching the end of it
+would take away two things that are no longer true. Both were narrated
+correctly when written; the schema moved.
+
+### The ledger holds `SELECT` and nothing else now (0399)
+
+`0239` "leaves a client role with `INSERT, SELECT` and nothing else",
+and that sentence stood for a hundred and sixty migrations. The insert
+grant was kept as `0239`'s "positive control" — the reasoning being that
+revoking everything would satisfy a no-excess-privilege check by leaving
+nothing at all.
+
+The belief underneath it was false. `app.create_gl_entry_internal`,
+`public.create_gl_entry` and `public.post_manual_journal` are all
+SECURITY DEFINER and owned by the role that owns `gl_entries`, so
+posting runs as the owner and never consults the grant. Measured rather
+than argued: with `insert` revoked and both policies dropped,
+`post_manual_journal` called as `authenticated` still posts both lines.
+
+What the grant did buy was a second door. Measured as an `accountant`
+with a period closed, under `set local role authenticated` — the role
+change matters, and the first measurement of this was made without it
+and proved nothing:
+
+- an entry dated inside a **closed period**, inserted straight into
+  `gl_entries` — accepted;
+- a single line of 1,000,000 debit and no credit, straight into
+  `gl_lines` — accepted;
+- so the header said debit 100 credit 100 while its own lines summed to
+  1,000,000;
+- and `post_manual_journal`, given the same closed period, refused it.
+
+The guard was never wrong. It was avoidable. `0399` revokes `insert`,
+`update` and `delete` from both client roles on both tables and drops
+the two insert policies: the ledger is written by SECURITY DEFINER
+functions and read by whoever may read it, and there is no third thing.
+
+### `anon` could write 251 tables (0401)
+
+`0240`'s table counts three privileges — TRUNCATE, REFERENCES, TRIGGER —
+and says "`SELECT`, `INSERT`, `UPDATE` and `DELETE` are untouched". True,
+and the omission mattered: on the hosted project `anon` held INSERT,
+UPDATE or DELETE on **251 relations** in `public`, because `0238`
+revoked update and delete from `authenticated` and never named `anon`,
+and a freshly started local stack does not have them. Every CI run was
+green and every local suite passed while the real project carried them.
+
+Excess privilege rather than an open door — RLS was enabled on 250 of
+the 251 and not one policy admits `anon` to write anything, checked
+against the project rather than assumed. But it put the whole of
+`anon`'s inability to write this database on every policy being right,
+forever, across 250 tables. `0401` takes all three from `anon` on every
+relation and narrows the default privileges so the next `create table`
+does not hand them back.
+
+### And the rest, briefly
+
+- **`0402`, `0403`** — a posted sales or purchase document was fully
+  editable: a line repriced from RM100 to RM1 with the header recomputed
+  to match, the document deleted with its journal left standing, and
+  `gl_entry_id` cleared so the same invoice posted a second time. Eleven
+  posting routines guard against a double posting by reading that one
+  column, so `0403` makes it immutable on all twenty tables that carry
+  it.
+- **`0400`** — the same for a posted payslip, which is what the EPF,
+  SOCSO and LHDN submissions and the bank file are built from.
+- **`0405`** — four storage policies cast a path segment to `uuid`
+  instead of using `app.uuid_or_null`. A policy predicate that raises
+  does not deny a row, it fails the statement, so one badly named object
+  made a whole bucket unreadable for every user of it.
+- **`0407`** — `0095` asserted that no SECURITY DEFINER function outside
+  a three-name allowlist is executable by **`anon`**. Nobody had asked it
+  of **`authenticated`**. Four functions in `app` wrote and were
+  executable by any signed-in user with no guard: rolling another
+  company's leave year, posting every tenant's recurring journals,
+  seeding a chart of accounts, and writing the module entitlements that
+  decide what a company has paid for. Excess privilege again — PostgREST
+  does not publish `app` — but the grant was explicit, not a default.
+
+### Two sweeps that found nothing, and are now tests
+
+- **Can a member of one company read another's rows?** Asked by reading
+  rows as `authenticated` with the JWT of somebody in one company and
+  not the other, across every table the other company actually has rows
+  in. No leak. `no_tenant_sees_another.sql`.
+- **Does every edge function holding the service role establish the
+  caller first?** Seven do, by four different routes. All correct.
+  `scripts/check_edge_authorization.py` keeps it that way.
+
+`docs/unreachable.md` carries the full reasoning for each, including the
+measurements that turned out to be wrong the first time.
