@@ -285,6 +285,7 @@ jobs:
                    supabase/tests/recurring_template_carries_the_document.sql \
                    supabase/tests/transfer_carries_the_price_agreed.sql \
                    supabase/tests/sst_return_declares_what_was_charged.sql \
+                   supabase/tests/stock_value_returns_to_zero.sql \
                    supabase/tests/ocr_credit.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \
