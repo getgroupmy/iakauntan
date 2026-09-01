@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788228297.029112,
-    "ast_hash": "d5a6e1b32c772c1bf7f735b740490e00",
+    "mtime": 1788228953.521151,
+    "ast_hash": "0defcb770bda7bea5510f496dd88d782",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -4345,8 +4345,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/einvoice_statutory.sql": {
-    "mtime": 1787822946.0225897,
-    "ast_hash": "e2b2db2e2f1f6f84f7fc1cf4437bf2cd",
+    "mtime": 1788228859.4739757,
+    "ast_hash": "23a1e03c61e5891a55c9a2a7983f1c6f",
     "semantic_hash": ""
   },
   "supabase/migrations/0288_a_quarter_is_three_months_of_rent.sql": {
@@ -6457,6 +6457,11 @@
   "scripts/check_idempotent_calls.py": {
     "mtime": 1788228186.0971055,
     "ast_hash": "4ee98973b24e58f70b36fdd220355bc7",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0396_a_version_this_build_cannot_sign.sql": {
+    "mtime": 1788228859.4741776,
+    "ast_hash": "103e1f05bef32b47f5fc5ff87ce7c3d2",
     "semantic_hash": ""
   }
 }

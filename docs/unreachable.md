@@ -3062,3 +3062,62 @@ plain `callRpc` — one path, per `0386`.
 Run against the repository as it stood before the fix, it reports all
 four as having protection that is not in force. That is the finding,
 stated by the thing that will now keep it stated.
+
+## A version this build cannot sign
+
+The same RPC-parameter sweep put `set_einvoice_credentials` next on the
+list: five certificate parameters — `p_cert_pem`,
+`p_cert_private_key_pem`, `p_cert_serial_number`, `p_cert_issuer_name`,
+`p_cert_expires_at` — that nothing has ever passed.
+
+The obvious conclusion was wrong and it is worth recording why. The
+XAdES signature those columns exist for is **not** an undiscovered gap:
+`0015`'s own comment on the columns says they are "PKCS#12 material for
+the XAdES signature required by version 1.1", and `README.md` says
+plainly that documents are submitted as version 1.0 unsigned, that 1.1
+needs a certificate from a Malaysian certificate authority, and that the
+signing step is not implemented. Checking before claiming a find is the
+whole of the difference between this and the previous two entries.
+
+The defect is next to it. Nothing enforces the scope the README
+describes. `prepare_einvoice` resolves the version as
+
+    coalesce(v_org.settings ->> 'einvoice_version', '1.0')
+
+and `ubl.ts` puts whatever comes out into `listVersionID`. Between those
+two points there is no validation at all. `organizations.settings` is
+free-form jsonb and `0010`'s update policy covers the whole row, so any
+admin may write it — `banana` would go to LHDN as the version of a tax
+document, and `1.1` would go as a claim that the document carries a
+signature it does not have. That is worse than a refusal: a refusal is a
+message somebody reads, and this is a filing with a false statement of
+what it is.
+
+And the column's default was `'1.1'` from `0007`, on a build that can
+only produce 1.0. The reason nobody noticed is that `prepare_einvoice`
+is the only insert path and it always names the column — but
+`einvoice_statutory.sql`'s own fixture never did, so every e-Invoice row
+the test suite has ever made was stamped as the signed version. The
+default did bite. It bit in the fixtures, where nobody looked.
+
+`0396` puts what the build can produce into one immutable predicate and
+has both a check constraint and a `before insert or update` trigger read
+it, so they cannot disagree. Whoever implements the signature changes
+that one function and nothing else.
+
+### An unkillable mutant that is not redundant code
+
+Dropping the check constraint leaves every assertion in the file
+passing: the trigger covers every path a test can take, so no behaviour
+distinguishes them. That looks like `0387`'s rule — an equivalent mutant
+means redundant code — and it is not the same case. In `0387` two
+triggers *derived* the same value and could drift apart, so consolidating
+them removed a real risk. Here both read one predicate and cannot drift.
+What the constraint adds is not enforcement but declaration: it is what
+a schema dump shows, and it makes removing the rule a deliberate act
+rather than a side effect of dropping a trigger.
+
+So the resolution is neither to delete it nor to pretend the mutant died:
+the existence of both is asserted directly, the way `statutory.sql` and
+`table_grants.sql` assert grants and policies. When behaviour cannot see
+a control, assert the control.

@@ -20,6 +20,14 @@
 -- looking at. It decides what the invoice screen says about LHDN, and
 -- it too was named by no test.
 --
+-- The fourth is the version stamped on the document. `prepare_einvoice`
+-- read it straight out of free-form organization settings, which any
+-- admin may write, and the column's default was `1.1` -- the signed
+-- version -- on a build with no signing step. The fixture below has
+-- never named the column, so every row this file made was stamped 1.1.
+-- Nobody looked. 0396 puts what the build can produce in one predicate
+-- and refuses the rest.
+--
 -- Nothing is written; the file rolls back.
 -- =====================================================================
 
@@ -294,6 +302,110 @@ begin
     perform pg_temp.check_eq('the bill shows ' || v_state,
       (select einvoice_status from public.purchase_documents where id = v_bill), v_state);
   end loop;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A version this build cannot sign
+--
+-- The version on a document is a claim about that document. Version 1.1
+-- is the one carrying an XAdES signature from a Malaysian certificate
+-- authority; 0015's own comment on the certificate columns says so and
+-- README says the signing step is not implemented. A document stamped
+-- 1.1 with no signature in it is not a rejected filing, it is a filed
+-- one with a false statement of what it is.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Versi Sdn Bhd');
+  v_contact uuid; v_doc uuid; v_ein uuid; v_msg text;
+begin
+  perform pg_temp.check_true('1.0 is what this build produces',
+    app.einvoice_version_supported('1.0'));
+  perform pg_temp.check_true('and 1.1 is not, while nothing signs',
+    not app.einvoice_version_supported('1.1'));
+
+  -- The default `0007` set the other way round. This fixture has never
+  -- named the column, which is how a test suite came to be full of
+  -- documents claiming the signed version.
+  v_ein := pg_temp.einvoice_row(v_org, null);
+  perform pg_temp.check_eq('a row that does not name a version gets 1.0',
+    (select einvoice_version from public.einvoice_documents where id = v_ein),
+    '1.0');
+
+  -- Written straight to the table, which is the path a future insert or
+  -- an incident fix would take.
+  begin
+    update public.einvoice_documents
+       set einvoice_version = '1.1' where id = v_ein;
+    raise exception 'FAIL: a document was stamped 1.1 with nothing to sign it';
+  exception when sqlstate '0A000' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('and the refusal names the signature',
+      v_msg like '%XAdES signature%');
+    raise notice 'ok   a version this build cannot sign is refused';
+  end;
+  perform pg_temp.check_eq('and the document is unchanged',
+    (select einvoice_version from public.einvoice_documents where id = v_ein),
+    '1.0');
+
+  -- Not only 1.1. The settings key is free-form text and anything in it
+  -- was going onto a tax document verbatim.
+  begin
+    update public.einvoice_documents
+       set einvoice_version = 'banana' where id = v_ein;
+    raise exception 'FAIL: an arbitrary string was accepted as a version';
+  exception when sqlstate '0A000' then
+    raise notice 'ok   and so is anything else somebody types';
+  end;
+
+  -- End to end: the settings key an admin can write, through
+  -- prepare_einvoice, which is where it actually gets on the document.
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  update public.organizations
+     set einvoice_enabled = true, tin = 'C1234567890',
+         settings = coalesce(settings, '{}'::jsonb)
+                    || jsonb_build_object('einvoice_version', '1.1')
+   where id = v_org;
+  insert into public.contacts (org_id, code, contact_type, name, tin)
+  values (v_org, 'C-1', 'customer', 'Pembeli Sdn Bhd', 'C1111111111')
+  returning id into v_contact;
+  v_doc := pg_temp.sales_doc(v_org, v_contact);
+  begin
+    perform public.prepare_einvoice(v_doc);
+    raise exception
+      'FAIL: an organization setting put 1.1 on a document with no signature';
+  exception when sqlstate '0A000' then
+    raise notice 'ok   nor can an organization setting reach it';
+  end;
+  perform pg_temp.check_eq('and no document was prepared',
+    (select count(*) from public.einvoice_documents
+      where source_id = v_doc), 0);
+
+  -- The constraint and the trigger read the same predicate, so no
+  -- behaviour can tell them apart: dropping the constraint leaves every
+  -- assertion above passing, which the mutation run confirmed. That is
+  -- why both are asserted structurally rather than inferred. The
+  -- trigger is the sentence somebody reads; the constraint is the
+  -- invariant a schema dump shows and a future migration has to remove
+  -- on purpose.
+  perform pg_temp.check_eq('the invariant is declared on the table',
+    (select count(*) from pg_constraint
+      where conrelid = 'public.einvoice_documents'::regclass
+        and conname = 'einvoice_documents_version_supported'), 1);
+  perform pg_temp.check_eq('and the trigger that explains it is there too',
+    (select count(*) from pg_trigger
+      where tgrelid = 'public.einvoice_documents'::regclass
+        and tgname = 'check_einvoice_version' and not tgisinternal), 1);
+
+  -- With the setting removed it prepares, at the version the build can
+  -- actually produce. Asserted so the guard is shown to refuse the one
+  -- case and not the whole feature.
+  update public.organizations set settings = settings - 'einvoice_version'
+   where id = v_org;
+  v_ein := public.prepare_einvoice(v_doc);
+  perform pg_temp.check_eq('the ordinary case still prepares, at 1.0',
+    (select einvoice_version from public.einvoice_documents where id = v_ein),
+    '1.0');
 end $$;
 
 rollback;
