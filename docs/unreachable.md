@@ -3918,3 +3918,56 @@ something else.
 The exemption list is the whole of the judgement in the file. Adding a
 name to it is saying "this one has no session to check", and that should
 be a sentence somebody has to write.
+
+## 0405 — one badly named file closed the whole bucket
+
+Every storage policy reads the organization out of the first segment of
+an object's path. Eleven do it with `app.uuid_or_null(...)`, which
+returns null for anything that is not a uuid. Four — the three chat
+policies from `0138` and the mail one from `0354` — do it with a hard
+cast, `(nullif(split_part(name,'/',1), ''))::uuid`. `nullif` handles an
+*empty* first segment and nothing else, and **a policy predicate that
+raises does not deny a row, it fails the statement**.
+
+Measured, as a member listing their own company's files: one attachment
+visible; then one row named `inbox/...` inserted the way a service-role
+writer would leave it; then the same query by the same member came back
+`22P02 invalid input syntax for type uuid: "inbox"`. Not a leak —
+nobody sees anything they should not. One badly named object makes the
+bucket unreadable for **every** user of it, because the policy is
+evaluated per row and one row that raises aborts the statement. Their
+own attachments, behind an error naming a path they have never heard of.
+
+### Reachable only with a second bug, which is why it is a blast radius
+
+Nothing writes such a path today: `mail_files.ts` builds
+`${orgId}/${emailId}/${index}-${name}` from an org id it looked up, and
+a client cannot insert a bad row through the front door because the
+*write* policy carries the same cast and raises before the row lands.
+
+The reason to close it anyway is who the writers are. They are edge
+functions holding the service role, outside RLS entirely — and the
+sweep recorded above found seven of them. One wrong path from any one,
+today or in a later change, takes out a whole bucket for every company
+on the platform rather than failing on its own row. That is a lot of
+consequence resting on a string being well-formed when the schema
+already has the function that makes it not matter, and uses it
+everywhere else.
+
+### Only ever narrows
+
+`app.uuid_or_null` returns null for a non-uuid, and all three helpers
+refuse a null — measured, not assumed: `is_chat_participant(null)`,
+`has_module(null, 'mailbox')` and `is_org_member(null)` are all false.
+So a badly named row becomes invisible instead of fatal, and every path
+that is a uuid evaluates exactly as before.
+
+Three mutants killed by `bucket_survives_a_bad_path.sql`: restoring the
+cast on the mail policy, restoring it on the chat policy, and — the one
+that matters — dropping the org scoping from the mail policy altogether,
+which makes the member see the foreign row and proves the fix narrowed
+rather than widened.
+
+Both the migration and the test ask the catalogue for any policy whose
+expression still contains `::uuid`, rather than naming the four, so a
+fifth written next year fails.
