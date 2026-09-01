@@ -3035,8 +3035,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_rebuild.sql": {
-    "mtime": 1787154103.3467262,
-    "ast_hash": "61b00159ddd294a8dc8cfc1c8330860e",
+    "mtime": 1788291775.9647796,
+    "ast_hash": "27f0e2ec3ceb148aca02c52f55613b19",
     "semantic_hash": ""
   },
   "supabase/tests/demo_teardown.sql": {
@@ -6752,6 +6752,11 @@
   "app/test/fs_entity_line_test.dart": {
     "mtime": 1788290772.3168397,
     "ast_hash": "4875612b401e16a732257aa648ebb4ef",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0426_a_practice_that_prepares_its_clients_accounts.sql": {
+    "mtime": 1788291851.291909,
+    "ast_hash": "55aea31a6dd2b37caf2590961060b941",
     "semantic_hash": ""
   }
 }
