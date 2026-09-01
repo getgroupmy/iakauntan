@@ -5239,3 +5239,59 @@ Twice more, the system caught a mutant harder than the assertion did:
 refused a role before reaching its self-approval check. Say so; an
 assertion credited with a kill it did not make is how a test file starts
 drifting from what it covers.
+
+## An eighth sweep, which found nothing, and why the predicate was wrong
+
+Two assertions in this suite were found this session to pass by not
+running — `demo_rebuild.sql`'s "no active module is left without a demo
+tenant" (satisfied by a flag) and `corp_particulars.sql`'s four s.28(4)
+assertions (true the whole time nothing called the function). Both were
+found by doubting a specific claim. The obvious next move is to look for
+the rest mechanically, so it was tried.
+
+### The predicate, and what it caught
+
+An assertion of the shape `check_eq('no X does Y', (select count(*) …),
+0)` is satisfied by an empty table. There are **269** of them, across 90
+of the 196 files.
+
+Narrowing to those whose scanned relation the file never inserts into
+left **250**. Excluding relations that are set-returning functions
+rather than tables — `from public.report_matters_over_agreed_fee(…)`
+reads exactly like `from public.some_table` to a regex — and those with
+a positive expectation elsewhere in the same file left **35**.
+
+All thirty-five were then read. None is vacuous in the harmful sense.
+
+### Why not
+
+Two reasons, and both are the suite being right rather than lucky.
+
+**This suite populates through functions on purpose.** A file that
+asserts about `pos_sales`, `receipts`, `revenue_schedule_periods` or
+`leave_requests` does not insert into them; it calls
+`complete_pos_sale`, `post_receipt`, `recognise_revenue`,
+`apply_for_leave`. That is the project's own discipline — write through
+the function that owns the rule — so "the file never inserts into the
+table it asserts over" is the *normal* case here, not a smell.
+`revenue_recognition.sql` reads `revenue_schedule_periods` in six
+assertions and inserts into it never.
+
+**"This table should be empty" is a legitimate claim, and a common
+one.** A haircut leaves no stock movement behind. A preview raises no
+charge run and no invoice. A deleted report is gone. The product ships
+with nobody else's logo on the landing page. In every one of those the
+emptiness *is* the assertion, and a control demanding rows would be
+asserting the opposite of what the file means.
+
+### What that leaves
+
+The failure mode is real — it has bitten twice — but it is not a shape a
+regex can see. What distinguishes a vacuous assertion from a correct
+negative one is whether the population the claim is *about* exists, and
+that is a fact about the fixture's intent, not its text. The two that
+were caught were caught by reading a sentence and disbelieving it.
+
+So this predicate is recorded as tried and unproductive, and the number
+is here so nobody re-derives it: 269, then 250, then 35, then none. The
+method that works on this class is still the slow one.
