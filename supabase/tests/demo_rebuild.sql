@@ -54,8 +54,8 @@ begin
   select count(*) into v_users from auth.users
    where raw_app_meta_data ->> 'demo' = 'true';
 
-  perform pg_temp.check_eq('six demo companies', v_orgs, 6);
-  perform pg_temp.check_eq('eight demo logins', v_users, 8);
+  perform pg_temp.check_eq('seven demo companies', v_orgs, 7);
+  perform pg_temp.check_eq('nine demo logins', v_users, 9);
 
   -- --------------------------------------------------------------
   -- The promise on the sign-in page
@@ -721,6 +721,113 @@ begin
         and actual_close_date is null), 0);
 
   -- --------------------------------------------------------------
+  -- A law firm, and the two rules client money is held under
+  -- --------------------------------------------------------------
+  -- `client_account.sql` opens by stating them, and until `0430` no
+  -- demo showed either. `legal` was switched on at Amanah, a company
+  -- secretarial practice, purely so the assertion above -- "no active
+  -- module is left without a demo tenant to show it in" -- was
+  -- satisfied by a tick.
+  declare v_guaman uuid; v_client_bank uuid;
+  begin
+    select id into v_guaman from public.organizations
+     where is_demo and name like 'Guaman%';
+    perform pg_temp.check_true('there is a law firm now', v_guaman is not null);
+    perform pg_temp.check_eq(
+      'and legal is no longer switched on at the secretarial practice',
+      (select count(*) from public.org_modules
+        where org_id = v_amanah and module_code = 'legal' and is_enabled), 0);
+
+    perform pg_temp.check_true('the firm has matters open',
+      (select count(*) from public.matters where org_id = v_guaman) >= 3);
+
+    -- Rule one: client money sits in a client account, never the
+    -- firm's own. A seed that made its own bank account and called it
+    -- one would put office money behind a label.
+    select id into v_client_bank from public.bank_accounts
+     where org_id = v_guaman and is_client_account;
+    perform pg_temp.check_true('and a client account to hold money in',
+      v_client_bank is not null);
+    perform pg_temp.check_eq(
+      'every client-money movement is against that account and no other',
+      (select count(*) from public.client_account_transactions
+        where org_id = v_guaman
+          and bank_account_id is distinct from v_client_bank), 0);
+
+    -- The ledger and the bank register agree. This does NOT catch an
+    -- amount signed the wrong way -- `post_client_transaction` moves
+    -- both from the same `v_amount`, so they agree whichever way it is
+    -- signed, and a first draft of this file claimed otherwise.
+    -- Measured: signing the payment positive leaves this green. What it
+    -- does catch is the two drifting apart, which `0282` fixed once
+    -- already.
+    perform pg_temp.check_eq(
+      'what the client account holds is what the ledger says it holds',
+      (select current_balance from public.bank_accounts
+        where id = v_client_bank),
+      (select coalesce(sum(l.debit - l.credit), 0) from public.gl_lines l
+         join public.gl_entries e on e.id = l.entry_id
+         join public.accounts a on a.id = l.account_id
+        where e.org_id = v_guaman and e.status = 'posted'
+          and a.code = '1150'));
+    -- Client money is a liability and never income: 1150 against 2300,
+    -- not against revenue. If it ever landed in revenue the firm would
+    -- be paying tax on money it does not own.
+    perform pg_temp.check_eq(
+      'and it is owed to the clients, not earned',
+      (select coalesce(sum(l.credit - l.debit), 0) from public.gl_lines l
+         join public.gl_entries e on e.id = l.entry_id
+         join public.accounts a on a.id = l.account_id
+        where e.org_id = v_guaman and e.status = 'posted'
+          and a.code = '2300'),
+      (select current_balance from public.bank_accounts
+        where id = v_client_bank));
+
+    -- Rule two: no client ledger in debit. Not asserted as a refusal --
+    -- `client_account.sql` does that -- but as the state the demo is
+    -- actually in, because a demo that quietly held a negative balance
+    -- for one client would look fine in total.
+    perform pg_temp.check_eq(
+      'and no client is out of pocket to pay for another',
+      (select count(*) from (
+         select t.matter_id, sum(t.amount) as bal
+           from public.client_account_transactions t
+          where t.org_id = v_guaman and t.status = 'posted'
+          group by t.matter_id) m where m.bal < 0), 0);
+
+    -- The money crossed from client to office the only lawful way.
+    perform pg_temp.check_true(
+      'the firm took its fee by transferring it, not by helping itself',
+      exists (select 1 from public.client_account_transactions
+               where org_id = v_guaman
+                 and transaction_type = 'transfer_to_office'
+                 and status = 'posted'));
+
+    -- And money out went out. `post_client_transaction` takes the
+    -- amount as the caller signs it, so a payment written as a positive
+    -- number debits the client bank a second time: the firm shows as
+    -- holding more after paying the vendor than it ever received, and
+    -- every balance check above still passes because the ledger and the
+    -- register move together. This is the assertion that separates the
+    -- two.
+    perform pg_temp.check_true(
+      'a matter that has paid money out holds less than it took in',
+      (select sum(t.amount) from public.client_account_transactions t
+        where t.org_id = v_guaman and t.status = 'posted'
+          and t.matter_id = (
+            select matter_id from public.client_account_transactions
+             where org_id = v_guaman and transaction_type = 'payment'
+             limit 1))
+      < (select sum(t.amount) from public.client_account_transactions t
+          where t.org_id = v_guaman and t.status = 'posted'
+            and t.transaction_type = 'receipt'
+            and t.matter_id = (
+              select matter_id from public.client_account_transactions
+               where org_id = v_guaman and transaction_type = 'payment'
+               limit 1)));
+  end;
+
+  -- --------------------------------------------------------------
   -- The hours the practice bills
   -- --------------------------------------------------------------
   -- Amanah's whole business is billing time and it had recorded none.
@@ -802,6 +909,7 @@ begin
       'Seri Ayu Salon & Spa Sdn Bhd -> einvoice',
       'Sinar Teknologi Sdn Bhd -> einvoice',
       'Warung Sedap Enterprise -> einvoice',
+      'Guaman Aziz & Rakan -> einvoice',
       -- A pipeline for the five tenants that are not Sinar. `0428`
       -- argues that a warung and a salon do not run one, and that `crm`
       -- being enabled on all six is a question about what
@@ -811,12 +919,14 @@ begin
       'Roti Warisan Enterprise -> crm',
       'Seri Ayu Salon & Spa Sdn Bhd -> crm',
       'Warung Sedap Enterprise -> crm',
+      'Guaman Aziz & Rakan -> crm',
       -- Sinar is the only tenant that buys anything.
       'Amanah Setiausaha Sdn Bhd -> purchases',
       'Harta Prima Management Sdn Bhd -> purchases',
       'Roti Warisan Enterprise -> purchases',
       'Seri Ayu Salon & Spa Sdn Bhd -> purchases',
       'Warung Sedap Enterprise -> purchases',
+      'Guaman Aziz & Rakan -> purchases',
       -- Written for Sinar's scale; nobody approves anything yet.
       'Amanah Setiausaha Sdn Bhd -> approvals',
       'Harta Prima Management Sdn Bhd -> approvals',
@@ -825,20 +935,6 @@ begin
       'Sinar Teknologi Sdn Bhd -> branches',
       'Sinar Teknologi Sdn Bhd -> manufacturing',
       'Sinar Teknologi Sdn Bhd -> timesheets',
-      -- `legal` is not a gap to seed. It describes itself as "Legal
-      -- Firm Accounting -- Matters, client account segregation and time
-      -- recording for law firms", and Amanah is a company secretarial
-      -- practice. Client account segregation is the Solicitors'
-      -- Accounts Rules, which apply to solicitors; seeding matters and
-      -- client money here would model Amanah as something it is not.
-      --
-      -- It is switched on because there is no law firm among the six
-      -- tenants, and the assertion above -- "no active module is left
-      -- without a demo tenant to show it in" -- is satisfied by a tick.
-      -- Which is this file's own finding one level up: the tick is on a
-      -- tenant of the wrong kind. The fix is a seventh tenant that is a
-      -- law firm, and that is its own piece of work.
-      'Amanah Setiausaha Sdn Bhd -> legal',
       'Harta Prima Management Sdn Bhd -> fixed_assets'];
   begin
     for r in
@@ -848,7 +944,8 @@ begin
         ('fixed_assets','fixed_assets'), ('forecasting','forecast_runs'),
         ('hr','employees'), ('inventory','warehouses'),
         ('legal','matters'), ('manufacturing','manufacturing_orders'),
-        ('mbrs','fs_filings'), ('memberships','pos_memberships'),
+        ('mbrs','fs_filings'),
+        ('memberships','pos_memberships'),
         ('payroll','payroll_runs'), ('pos','pos_outlets'),
         ('property_nonstrata','property_units'),
         ('property_strata','property_units'),
