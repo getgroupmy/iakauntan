@@ -66,10 +66,70 @@ start_cluster() {
     "$PGBIN/pg_ctl -D $PGDATA -l /var/tmp/pg.log -o '-k $PGSOCK -p $PGPORT' start" \
     >/dev/null
   for _ in $(seq 1 30); do
-    $PSQL -tAc 'select 1' >/dev/null 2>&1 && return
+    $PSQL -tAc 'select 1' >/dev/null 2>&1 && { check_cluster; return; }
     sleep 1
   done
   echo "postgres did not come up; see /var/tmp/pg.log" >&2; exit 1
+}
+
+# A cluster this script did not build.
+#
+# The block above writes `shared_preload_libraries` and
+# `cron.database_name` only when it runs `initdb`. A `$PGDATA` that
+# already exists is adopted as-is, on the assumption that a previous run
+# of this script made it -- and that assumption is wrong often enough to
+# be worth checking, because `/var/tmp` survives longer than the thing
+# that put it there.
+#
+# It cost a full rebuild to work out once. A five-day-old cluster with
+# `cron.database_name = 'iakauntan'` was adopted, started cleanly, and
+# then failed sixty migrations later with
+#
+#     0060: ERROR: can only create extension in database iakauntan
+#
+# which is pg_cron refusing on a setting nothing in the output had
+# mentioned. The migration is fine; the cluster was wrong, and the error
+# names neither.
+#
+# So the settings the migrations actually need are checked against the
+# running server, and the remedy is named. `current_setting(..., true)`
+# rather than `show`, because `show` on a GUC pg_cron never registered
+# is itself an error and would report the wrong thing.
+check_cluster() {
+  local libs cron_db here
+  libs="$($PSQL -tAc "select current_setting('shared_preload_libraries', true)")"
+  cron_db="$($PSQL -tAc "select current_setting('cron.database_name', true)")"
+  here="$($PSQL -tAc 'select current_database()')"
+
+  case "$libs" in
+    *pg_cron*) ;;
+    *) cluster_wrong "pg_cron is not preloaded (shared_preload_libraries = '${libs:-}')" ;;
+  esac
+
+  # pg_cron will only install into the one database it was pointed at,
+  # and the migrations run in whichever one this script connects to.
+  if [ -n "$cron_db" ] && [ "$cron_db" != "$here" ]; then
+    cluster_wrong \
+      "pg_cron is pointed at database '$cron_db' but the migrations run in '$here'"
+  fi
+}
+
+cluster_wrong() {
+  cat >&2 <<EOF
+The postgres cluster already at $PGDATA is not configured the way the
+migrations need, and this script only writes that configuration when it
+creates the cluster itself. So it was started and left alone.
+
+  $1
+
+It is a throwaway test cluster, so the fix is to let this script build a
+new one:
+
+  rm -rf $PGDATA
+
+or point somewhere else with IAK_PGDATA=/some/other/path.
+EOF
+  exit 1
 }
 
 # The schemas Supabase would have supplied. Dropped and rebuilt each
