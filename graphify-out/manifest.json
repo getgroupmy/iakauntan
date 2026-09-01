@@ -3035,8 +3035,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_rebuild.sql": {
-    "mtime": 1788292203.553837,
-    "ast_hash": "a72ec9c3a7ed9466fb3a494de56a0d3f",
+    "mtime": 1788292997.9146183,
+    "ast_hash": "9aae7534aa414195dd3ec61d9399f4eb",
     "semantic_hash": ""
   },
   "supabase/tests/demo_teardown.sql": {
@@ -6762,6 +6762,11 @@
   "supabase/migrations/0427_a_client_company_that_changed_its_name.sql": {
     "mtime": 1788292254.8118799,
     "ast_hash": "c74ebc74475d40d7a67faef37bc52dff",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0428_a_pipeline_with_something_in_it.sql": {
+    "mtime": 1788293021.4747663,
+    "ast_hash": "1a612620cd522eb56a7ae2deeb7a007e",
     "semantic_hash": ""
   }
 }
