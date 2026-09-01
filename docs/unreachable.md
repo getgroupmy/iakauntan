@@ -4829,3 +4829,100 @@ Five, all killed for their own reason.
 The second is the one worth having. It is the plausible implementation —
 copy the amounts across — and it is exactly what the line-level comment
 warns against, one level up.
+
+---
+
+## The eighty sen a restaurant charged and never declared
+
+The most serious of the run, because the wrong figure goes to Royal
+Malaysian Customs.
+
+`0410` gave a Malaysian bill its service charge and taxed it. The tax is
+charged, it is printed, and `post_sales_document` puts it into output
+tax at 2130 with everything else. `report_sst_summary` — which *is* the
+SST-02 return — sums `tax_amount` off the document **lines**, and the
+charge is not a line. It is a percentage of all of them, so its tax was
+on the header.
+
+### Measured
+
+The worked example from `pos_service_charge.sql`: RM100 of food, ten per
+cent for the table, eight per cent service tax on the hundred and ten.
+
+```
+the document says output tax   8.80
+the SST-02 return says         8.00
+under-declared to Customs      0.80
+```
+
+Eighty sen in every hundred ringgit — about a twelfth of a restaurant's
+whole service tax liability — left off a statutory return every taxable
+period, while the company's own ledger carries the right figure. The two
+disagreeing is the only reason anybody would ever have found it, and
+nothing was comparing them.
+
+### Why it could not simply be added up
+
+The return is filed **by tax type**: one row per code, taxable value and
+tax. A figure folded into `tax_amount` with no tax code attached cannot
+be put in a column of that return. `sales_documents` recorded the charge
+but not what it had been charged under — only
+`pos_outlets.service_charge_tax_code_id` knew, two joins away and only
+for a sale that came from a till.
+
+So `0418` puts `service_charge_tax` and `service_charge_tax_code_id` on
+the document, `complete_pos_sale` writes them, and the return reads the
+header. Both join the frozen list: a figure a return declares must not
+be editable after posting, or the return stops agreeing with the ledger.
+
+### The assertion is against the ledger, not against 8.80
+
+`sst_return_declares_what_was_charged.sql` asserts that the return's
+output tax equals **the credit to 2130 those postings raised**, and
+equals the sum of `tax_amount` on the documents in the period. A number
+in a test is a number somebody has to remember to change; the tie to the
+ledger is what an auditor would check and what was actually broken. It
+also asserts the taxable value (320.00 on three dinners, two of them
+eaten in) — because the tax identity alone is satisfied by declaring the
+right tax against the wrong value, which would say the rate is not eight
+per cent.
+
+### Two guards caught this before CI did
+
+Adding the columns turned `posted_document_is_frozen.sql` red — `0402`
+requires every column on a document that posts to the ledger to be
+classified as frozen or still-moving — and turned
+`recurring_template_carries_the_document.sql` red, the guard written
+**earlier the same session**, demanding the new columns be carried or
+declined in writing. They are declined: they are derived at the till
+from the outlet's rate, and a schedule replaying them would assert a tax
+nobody charged.
+
+That is the whole point of both files, and it is the first time in this
+run that the mechanism caught the column rather than a person
+remembering to look.
+
+### Not changed here
+
+A service charge typed onto an ordinary sales document is still not
+taxed — `recalc_sales_totals` adds it to the total and stops. Only the
+till charges tax on it, because only the outlet says at what rate. That
+is a real gap and it is not `0418`'s: it needs a rate on the document
+and a screen to set it on, and nothing today can put a service charge on
+a document except a till.
+
+### Mutants
+
+Five, all killed.
+
+| mutant | died as |
+|---|---|
+| the return sums lines only (the defect as found) | 24.00 against the ledger's 25.60 |
+| `complete_pos_sale` stops recording the tax code | 24.00 — the join drops the row |
+| `complete_pos_sale` stops recording the tax amount | 24.00 |
+| the charge declared with no taxable value | 300.00 against 320.00 |
+| the two columns off the frozen list | a posted document let its tax be edited |
+
+The first three fail the same assertion for three genuinely different
+reasons, which is the right behaviour for an identity against the
+ledger: it does not care how the number got wrong.

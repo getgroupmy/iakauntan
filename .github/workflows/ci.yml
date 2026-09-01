@@ -284,6 +284,7 @@ jobs:
                    supabase/tests/einvoice_totals_reconcile.sql \
                    supabase/tests/recurring_template_carries_the_document.sql \
                    supabase/tests/transfer_carries_the_price_agreed.sql \
+                   supabase/tests/sst_return_declares_what_was_charged.sql \
                    supabase/tests/ocr_credit.sql \
                    supabase/tests/contact_numbering.sql \
                    supabase/tests/live_updates.sql \

@@ -239,6 +239,12 @@ declare
     'paid_amount', 'balance_amount', 'applied_amount', 'status',
     'fulfilment_status', 'gl_entry_id', 'posted_at', 'posted_by',
     'einvoice_id', 'einvoice_status', 'is_consolidated',
+    -- 0418. Derived at the till from the outlet's rate, not chosen on
+    -- the document: `service_charge_amount` is carried because it is a
+    -- figure somebody set, and these two are what taxing it produced.
+    -- A schedule replaying them would be asserting a tax nobody
+    -- charged; whatever raises the invoice works them out again.
+    'service_charge_tax', 'service_charge_tax_code_id',
     -- Ours, not the customer's, and not part of what is billed.
     'internal_notes', 'attachments',
     -- Audit. The raise writes its own.

@@ -391,7 +391,13 @@ declare
     -- so moving it after posting moves the ledger away from the
     -- document. This list is the reason that column could not be added
     -- quietly: the walk below refused until it was named.
-    'service_charge_amount'];
+    'service_charge_amount',
+    -- 0418. The tax on that charge and the code it was charged under.
+    -- The journal was built from the first of them -- it is inside the
+    -- credit to output tax -- and the SST-02 return is built from both,
+    -- so a figure that moved after posting would put the return and the
+    -- ledger out of agreement with each other.
+    'service_charge_tax', 'service_charge_tax_code_id'];
   -- Deliberately still writable on a posted document, and why:
   --   money that moves after posting ... paid_amount, applied_amount,
   --     balance_amount, status
