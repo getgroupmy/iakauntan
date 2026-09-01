@@ -4745,3 +4745,87 @@ expressions than target columns", not on an assertion; it was rebuilt to
 drop the value line too, which then failed properly. And renaming a
 listed column died in an unrelated trigger before reaching the rot
 check, which is why that check was mutated directly instead.
+
+---
+
+## The invoice that charged more than the quotation it came from
+
+`public.transfer_document` turns a quotation into an order, an order
+into an invoice, a purchase order into a bill. It copies a whitelist of
+header columns, and the whitelist had never had a money column on it.
+
+### Measured
+
+A quotation for RM1000 of goods, RM50 delivery, and RM100 off the whole
+job because the customer asked:
+
+```
+quoted     sub 1000.00  discount 100.00  delivery 50.00  total 1030.00
+invoiced   sub 1000.00  discount   0.00  delivery  0.00  total 1080.00
+```
+
+The customer is billed **fifty ringgit more than the price they agreed
+to**. Both directions are wrong at once: the discount they negotiated is
+gone from the invoice, and the delivery the company was owed went with
+it, so the figure is not even wrong in the company's favour
+consistently. Quote → invoice is the most ordinary workflow in the
+product.
+
+### The rule was already written, one level down
+
+The line loop inside this same function has carried it since it was
+written:
+
+> A cash discount is proportional to what is being taken, not carried
+> whole onto a partial transfer.
+
+```sql
+case when r.quantity = 0 then 0
+     else round(r.discount_amount * v_want / r.quantity, 2) end
+```
+
+The header amounts were never given the same treatment. `0417` gives
+them it. The share is measured on **line value** rather than quantity —
+two lines at different prices are not two equal halves of a delivery
+charge — and taken against the *source's* total rather than against what
+is left of it, which is what makes two half-transfers add back to one
+whole. `branch_id` carries whole on both sides: half a bill can go on
+one invoice, half a branch cannot.
+
+### The second bug inside the first
+
+Writing the header amounts after the line loop put them on the row and
+not in the total. `app.recalc_sales_totals` is a trigger on the *lines*,
+so a header amount written after the last line is never folded in — the
+first attempt at this fix produced an invoice carrying `shipping 50.00`
+and a total that still said 1080.00.
+
+Fixed by touching a line so the one function that owns the arithmetic
+runs over the finished header, rather than either alternative: computing
+the share before the header insert would mean writing the `v_want`
+expression a second time where the two copies can drift apart silently,
+and setting `total_amount` by hand would put this function in the
+business of arithmetic that belongs elsewhere, on a draft somebody is
+still going to edit.
+
+### Not fixed
+
+Documents already transferred keep the figures they have. Rewriting a
+posted document's total from a migration is not something this schema
+does — `0238` and `0410`'s frozen list both say so.
+
+### Mutants
+
+Five, all killed for their own reason.
+
+| mutant | died as |
+|---|---|
+| the header amounts not carried (the defect as found) | 1080.00 against 1030.00 |
+| carried whole onto a partial transfer | 50.00 against 25.00 |
+| the recalculating touch removed | 1080.00 against 1030.00, with the amounts on the row |
+| `branch_id` dropped again | the branch assertion |
+| zero-subtotal source answers "none" instead of "all" | the free sample billed 0.00 delivery |
+
+The second is the one worth having. It is the plausible implementation —
+copy the amounts across — and it is exactly what the line-level comment
+warns against, one level up.
