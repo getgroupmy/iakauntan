@@ -158,6 +158,16 @@ function buildParty(
 /**
  * Tax categories map onto UN/ECE 5153 scheme "OTH", except exemptions
  * which MyInvois codes as "E" and require a reason.
+ *
+ * `exemptedAmount` is deliberately not emitted. Since `0431` an exempt
+ * line's `tax_exempted_amount` is written equal to its taxable amount --
+ * `tax_codes.is_exempt` is a boolean, so a partial exemption cannot be
+ * expressed -- and `TaxableAmount` already carries that number. The
+ * branch that used to substitute one for the other could only ever be a
+ * no-op or, if a future writer read LHDN's "Amount Exempted from Tax"
+ * as the tax forgone rather than the supply exempted, send 60.00 as the
+ * taxable amount of a RM1,000 exempt supply. It is taken as a
+ * parameter so the caller still names what it holds.
  */
 function buildTaxSubtotal(
   taxableAmount: number,
@@ -165,7 +175,7 @@ function buildTaxSubtotal(
   taxTypeCode: string,
   currency: string,
   exemptionReason: string | null,
-  exemptedAmount: number,
+  _exemptedAmount: number,
 ): Node {
   const category: Node = {
     ID: v(taxTypeCode),
@@ -183,10 +193,6 @@ function buildTaxSubtotal(
     TaxAmount: money(taxAmount, currency),
     TaxCategory: [category],
   };
-
-  if (taxTypeCode === "E" && exemptedAmount > 0) {
-    subtotal.TaxableAmount = money(exemptedAmount, currency);
-  }
 
   return subtotal;
 }

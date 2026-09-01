@@ -71,6 +71,8 @@ declare
   v_cust uuid;
   v_item uuid;
   v_st8  uuid;
+  v_exempt uuid;
+  v_doc  uuid;
   e      record;
 begin
   v_org := pg_temp.test_org('Restoran Sepuluh Belas Sdn Bhd');
@@ -171,6 +173,89 @@ begin
 
   perform pg_temp.check_true('on more than one of them',
     (select count(*) from public.einvoice_documents where org_id = v_org) >= 5);
+
+  -- ------------------------------------------------------------------
+  -- An exempt line says how much was exempted, and under what
+  -- ------------------------------------------------------------------
+  -- `einvoice_lines.tax_exempted_amount` has existed since `0007` and
+  -- no function wrote it, so it was 0 on every line ever prepared. The
+  -- UBL builder reads it and, before `0431`, substituted it for the
+  -- taxable amount of the exempt subtotal whenever it was non-zero --
+  -- so a future writer taking LHDN's "Amount Exempted from Tax" to
+  -- mean the tax forgone would have sent 8.00 as the taxable amount of
+  -- a RM100 exempt supply, silently. Measured against the real builder
+  -- before the fix: writing the taxable base changed the payload not at
+  -- all, writing the tax changed it.
+  insert into public.tax_codes
+    (org_id, code, name, tax_type_code, rate, is_exempt, exemption_reason,
+     sales_tax_account_id, purchase_tax_account_id)
+  values (v_org, 'EX', 'Exempt supply', 'E', 0, true,
+          'Exempt under the Service Tax (Persons Exempted) Order 2018',
+          (select id from public.accounts where org_id = v_org and code = '2130'),
+          (select id from public.accounts where org_id = v_org and code = '1410'))
+  returning id into v_exempt;
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-EX', app.today(), app.today(), v_cust,
+          'MYR', 1, 'draft')
+  returning id into v_doc;
+
+  -- One exempt line and one taxed line on the same document, so the
+  -- assertions below can tell "written for exempt lines" apart from
+  -- "written for every line".
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, uom_code, unit_price, tax_code_id, tax_rate)
+  values
+    (v_org, v_doc, 1, 'item', v_item, 'Exempt service', 1, 'C62',
+     100.00, v_exempt, 0),
+    (v_org, v_doc, 2, 'item', v_item, 'Taxed service', 1, 'C62',
+     50.00, v_st8, 8);
+
+  perform app.post_sales_document_internal(v_doc);
+  perform public.prepare_einvoice(v_doc);
+
+  perform pg_temp.check_eq(
+    'the exempt line says how much of the supply was exempted',
+    (select el.tax_exempted_amount from public.einvoice_lines el
+       join public.einvoice_documents ed on ed.id = el.einvoice_id
+      where ed.source_id = v_doc and el.line_no = 1), 100.00);
+
+  -- The number the UBL builder would otherwise send as the taxable
+  -- amount of the exempt subtotal. They have to be the same figure, or
+  -- the two ways of reading the column disagree about what LHDN is
+  -- told about a supply that paid no tax.
+  perform pg_temp.check_eq(
+    'and it is the taxable amount of that line, not the tax forgone',
+    (select el.tax_exempted_amount - el.total_excl_tax
+       from public.einvoice_lines el
+       join public.einvoice_documents ed on ed.id = el.einvoice_id
+      where ed.source_id = v_doc and el.line_no = 1), 0);
+
+  -- Writing the column unconditionally would satisfy both assertions
+  -- above and tell LHDN that a taxed supply was exempted.
+  perform pg_temp.check_eq(
+    'and a line that paid tax was exempted from nothing',
+    (select el.tax_exempted_amount from public.einvoice_lines el
+       join public.einvoice_documents ed on ed.id = el.einvoice_id
+      where ed.source_id = v_doc and el.line_no = 2), 0);
+
+  -- The amount and the ground are one claim in two columns. Either
+  -- without the other is an exemption LHDN cannot check.
+  perform pg_temp.check_eq(
+    'no line in this file claims an exemption without naming its ground',
+    (select count(*) from public.einvoice_lines el
+       join public.einvoice_documents ed on ed.id = el.einvoice_id
+      where ed.org_id = v_org
+        and (el.tax_exempted_amount <> 0) is distinct from
+            (el.tax_exemption_reason is not null)), 0);
+
+  perform pg_temp.check_true('and at least one of them claims one',
+    (select count(*) from public.einvoice_lines el
+       join public.einvoice_documents ed on ed.id = el.einvoice_id
+      where ed.org_id = v_org and el.tax_exempted_amount <> 0) >= 1);
 end $$;
 
 rollback;
