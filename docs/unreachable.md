@@ -3596,3 +3596,92 @@ consults a grant held by `anon`, which is exactly why taking those
 grants away reaches none of them. So the control is the surface itself:
 all nine still executable by `anon`, asserted in the migration and again
 in `table_grants.sql`.
+
+## 0402 — the invoice that could be posted twice
+
+`0238` made the ledger append-only, `0399` shut the door beside it and
+`0400` did the same for the payslip. The sales invoice is the biggest of
+the four and nobody had applied it there.
+
+Measured as an `accountant` under `set local role authenticated`, on one
+posted RM1,000 invoice: the line repriced to RM1.00 and the header
+recomputed to RM10.00 to match; the header rewritten directly to RM5.00
+under a different number; the lines deleted; the document itself deleted
+with its journal left standing; and — the one that costs money rather
+than merely confusing the books — `gl_entry_id` set back to null,
+`post_sales_document` called again, and a second journal raised. Two
+entries, RM2,000 of revenue and receivable, for one RM1,000 sale.
+
+`post_sales_document_internal`'s only defence against a second posting
+is `if v_doc.gl_entry_id is not null`, which is a fact stored in a column
+the client may write.
+
+### The rule already existed, in Dart
+
+`document_editor.dart` has always had `bool get _isPosted => _glEntryId
+!= null;` and `final editable = !_isPosted && …` — the same predicate,
+by the same reasoning, one layer up. Nothing in the client needed
+changing. It was right; it was only alone, and PostgREST publishes both
+tables to anyone holding a session.
+
+### Named columns, both ways round
+
+A blunt freeze would have broken the application on the day it applied.
+`apply_allocation` moves `paid_amount`, `balance_amount` and `status` on
+every payment; the MyInvois submission writes `einvoice_status` after
+posting; `void_sales_document` writes `status` and `internal_notes`; and
+`refresh_sales_progress` writes `fulfilment_status` on the header and
+the progress counters on the *lines* of a posted document. So the
+migration freezes a named list — the figures and identifiers the journal
+was built from — and lets the rest go on moving.
+
+A deny-list is only as good as its list, so
+`posted_document_is_frozen.sql` walks all four tables and requires every
+column to be in the frozen set or in an explicitly named writable set. A
+column added later is in neither and fails, which is the point.
+
+### contact_id, which came back off the list
+
+It was frozen in the first draft — `post_sales_document_internal` writes
+it onto the receivable line, so moving it leaves the document and the
+sub-ledger naming different people. Running the suite refused a real
+path for it, which is the argument for running the suite rather than
+trusting the reasoning: a counter sale posts against the outlet's
+walk-in contact, and `request_einvoice_for_sale` puts the customer's
+name on it afterwards when they ask for an e-Invoice. `0210` wrote that
+deliberately with LHDN's rules attached.
+
+So `contact_id` is writable and the disagreement is closed at the other
+end instead: `request_einvoice_for_sale` now moves the receivable line's
+`contact_id` with the document's, in the same transaction, as the owner.
+Nothing else about the journal moves — not the amount, the account, the
+date or the entry.
+
+### What only the line rule reaches
+
+Every write to a line runs `recalc_totals`, which rewrites the header —
+so a line change that moves money is refused by the *header* rule
+whether the line rule exists or not. Mutation testing said so: switching
+the line rule off entirely left "a posted invoice's line cannot be
+repriced" passing, which meant the assertion was measuring the wrong
+trigger. Three of the first eight mutants survived for this reason.
+
+The questions only the line rule can answer are the columns no total
+depends on — `description`, `item_id`, `account_id`, `warehouse_id`,
+`cost_amount`, `0309`'s `service_start`/`service_end`, and the
+`project_code` / `department_code` dimensions the journal line carries —
+and a line worth nothing, whose arrival or departure moves no total at
+all. The fixture keeps a nil-value line for exactly that.
+
+### Named as decisions, not defects
+
+* **`deleted_at` is still writable on a posted document.** Soft-deleting
+  a posted invoice hides it from every report while the ledger keeps its
+  journal. `void_sales_document` is the supported way to undo a posting
+  and it is what the client offers; whether a soft delete should be
+  refused as well is a decision, not an oversight.
+* **A data backfill will now hit this trigger.** `0270` ran
+  `update public.sales_document_lines set …` at migration time, as the
+  owner, and a trigger fires for the owner too. Nothing retroactive
+  breaks — `0270` ran long before `0402` — but the next migration that
+  wants to reshape a column on these tables will have to say so.

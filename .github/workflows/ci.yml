@@ -240,6 +240,7 @@ jobs:
                    supabase/tests/idempotency.sql \
                    supabase/tests/ledger_is_written_only_by_functions.sql \
                    supabase/tests/posted_payslip_is_frozen.sql \
+                   supabase/tests/posted_document_is_frozen.sql \
                    supabase/tests/revenue_recognition.sql \
                    supabase/tests/expense_claims.sql \
                    supabase/tests/expenses.sql \

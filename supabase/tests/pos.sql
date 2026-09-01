@@ -301,6 +301,29 @@ begin
   perform pg_temp.check_true('and it has an e-Invoice of its own',
     (select d.einvoice_id is not null from public.sales_documents d
       join public.pos_sales s on s.invoice_id = d.id where s.id = v_card_sale));
+  -- `0402`. The invoice posted against the outlet's walk-in contact and
+  -- the receivable line was filed under it. Renaming the buyer has to
+  -- take the sub-ledger with it, or an aged receivables report built
+  -- from `gl_lines` and one built from `sales_documents` name different
+  -- people for the same money. The document's own contact is asserted
+  -- as well, so a mutant that moved only the ledger would be caught too.
+  perform pg_temp.check_eq('the invoice now names the customer',
+    (select d.contact_id from public.sales_documents d
+      join public.pos_sales s on s.invoice_id = d.id where s.id = v_card_sale),
+    v_named);
+  perform pg_temp.check_eq(
+    'and the receivable in the ledger was refiled under them with it',
+    (select count(*) from public.gl_lines l
+       join public.sales_documents d on d.gl_entry_id = l.entry_id
+       join public.pos_sales s on s.invoice_id = d.id
+      where s.id = v_card_sale and l.contact_id is not null
+        and l.contact_id is distinct from v_named),
+    0);
+  perform pg_temp.check_true('on a line that is actually there',
+    (select count(*) from public.gl_lines l
+       join public.sales_documents d on d.gl_entry_id = l.entry_id
+       join public.pos_sales s on s.invoice_id = d.id
+      where s.id = v_card_sale and l.contact_id = v_named) > 0);
 
   -- A buyer with no TIN cannot be named on one: LHDN needs the number,
   -- and a blank there is the walk-in by another route.
