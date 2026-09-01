@@ -4513,3 +4513,73 @@ running. The other company and its bank account are created in the
 fixture now, and the same mutant dies. A probe that measures whether it
 had anything to probe is not a probe, which is the same fault `0395`
 shipped in a different shape.
+
+## 0414 and the two edge functions — the acquirer, and the shop's own key
+
+`0412` and `0413` both said in their own headers that nothing charged
+anybody. This is the part that does, and the part that makes the two
+before it reachable: `pay-invoice` creates the bill at the tenant's own
+acquirer, `pay-invoice-callback` verifies the confirmation, a Pay button
+appears on the shared invoice link, and a settings card lets a shop
+enter its credentials and nominate where the takings land.
+
+### The key a callback is verified against is the shop's
+
+`billplz-callback` verifies against `BILLPLZ_XSIGNATURE_KEY`, one Edge
+Function secret, because the platform has one Billplz account. A
+tenant's bills do not work that way: every organization has its own
+account and its own X Signature key, so the key depends on *which*
+confirmation this is — and the only thing identifying that before
+verification is the reference in an unverified body.
+
+`app.shared_payment_signature_key` looks it up, and the reasoning is
+written down because it looks worse than it is. **Finding a row decides
+nothing.** The reference selects which key to check against; the
+signature is still the credential and is still checked before a single
+field is believed. A caller who guesses a reference gets exactly as far
+as one who does not.
+
+What they must not learn is which of the two happened, so a reference
+nobody has heard of, a shop with no key configured, and a signature that
+did not verify are **answered identically** — 401, with which one it was
+in the log. Answering them differently makes the endpoint an oracle for
+guessing references, which is the same reason `settle_shared_payment`
+returns `unknown` quietly rather than raising.
+
+### Two functions with no session, and what stands in for one
+
+`scripts/check_edge_authorization.py` refuses any function that holds
+the service role without building a client from the caller's own
+Authorization header, unless it is in `NO_CALLER` with a written reason.
+Both new ones are, and the reasons are the point:
+
+  * `pay-invoice-callback` — an acquirer's servers hold no session with
+    us. A confirmation that could only arrive with a JWT would never
+    arrive.
+  * `pay-invoice` — the payer is a customer, not a user. They have no
+    account and never will; that is what `open_shared_document` is for.
+    The share token is the credential and it is checked in SQL by
+    `app.shared_payment_intent`, not in TypeScript.
+
+### What the screen will not do
+
+It never displays a key. `org_payment_gateway_status` answers
+`has_api_key` and `has_signature_key`, and the card shows "Key stored"
+— a screen that could redisplay a secret is a screen that could leak
+one, and there is no reason to read one back. An empty key box on save
+means "leave the stored one alone", which is what makes correcting a
+collection id safe rather than destructive.
+
+### And the honest limit
+
+**Nothing here has been run against an acquirer.** There is no Billplz
+sandbox in this environment, so what is verified is everything either
+side of the HTTP: the token check, the intent, the pending row, the
+signature verification (whose assertions live in
+`_shared/billplz_test.ts` and run in CI), the five settlement outcomes,
+the receipt and the ledger. The call itself is
+`createBillplzBill` — the same helper `billplz-checkout` has been using
+against real bills — with the tenant's key rather than the platform's.
+
+That is a real difference from "payments work", and it is written here
+rather than left to be assumed from a green CI run.

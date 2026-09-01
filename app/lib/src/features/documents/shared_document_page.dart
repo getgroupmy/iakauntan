@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
 import '../../core/theme.dart';
@@ -65,7 +66,7 @@ class _SharedDocumentPageState extends ConsumerState<SharedDocumentPage> {
                 final d = snap.data ?? const {'state': 'invalid'};
                 final state = d['state']?.toString() ?? 'invalid';
                 if (state != 'open') return _stateMessage(state);
-                return _Document(data: d);
+                return _Document(data: d, token: widget.token);
               },
             ),
           ),
@@ -102,9 +103,10 @@ class _SharedDocumentPageState extends ConsumerState<SharedDocumentPage> {
 }
 
 class _Document extends StatelessWidget {
-  const _Document({required this.data});
+  const _Document({required this.data, required this.token});
 
   final Map<String, dynamic> data;
+  final String token;
 
   @override
   Widget build(BuildContext context) {
@@ -112,6 +114,10 @@ class _Document extends StatelessWidget {
     final contact = Map<String, dynamic>.from(data['contact'] as Map? ?? {});
     final doc = Map<String, dynamic>.from(data['document'] as Map? ?? {});
     final lines = ((data['lines'] as List?) ?? const [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+
+    final payWith = ((data['pay_with'] as List?) ?? const [])
         .map((e) => Map<String, dynamic>.from(e as Map))
         .toList();
 
@@ -170,6 +176,11 @@ class _Document extends StatelessWidget {
                 due: due,
                 overdue: overdue,
               ),
+              // Only where the company has an acquirer set up and
+              // something to settle through it. `shared_payment_options`
+              // decides that in SQL and answers with an empty list
+              // otherwise, so there is no button that leads nowhere.
+              _PayWith(token: token, options: payWith),
             ],
             if ((doc['notes']?.toString() ?? '').isNotEmpty) ...[
               const SizedBox(height: Space.lg),
@@ -333,6 +344,7 @@ class _Totals extends StatelessWidget {
     final discount = Fmt.toDouble(doc['discount_amount']);
     final tax = Fmt.toDouble(doc['tax_amount']);
     final shipping = Fmt.toDouble(doc['shipping_amount']);
+    final serviceCharge = Fmt.toDouble(doc['service_charge_amount']);
     final rounding = Fmt.toDouble(doc['rounding_amount']);
     final paid = Fmt.toDouble(doc['paid_amount']);
 
@@ -344,6 +356,11 @@ class _Totals extends StatelessWidget {
           _Total('Subtotal', Fmt.toDouble(doc['subtotal']), currency),
           if (discount != 0) _Total('Discount', -discount, currency),
           if (shipping != 0) _Total('Delivery', shipping, currency),
+          // Above the tax, where a Malaysian bill puts it: the service
+          // tax underneath is charged on the amount that includes it,
+          // so a customer reading down the column can follow it.
+          if (serviceCharge != 0)
+            _Total('Service charge', serviceCharge, currency),
           if (tax != 0) _Total('Tax', tax, currency),
           if (rounding != 0) _Total('Rounding', rounding, currency),
           const Divider(),
@@ -475,6 +492,96 @@ class _Message extends StatelessWidget {
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall),
         ]),
+      ),
+    );
+  }
+}
+
+/// The Pay button, and what happens when it is pressed.
+///
+/// The payer has no account and never will, so everything here runs as
+/// `anon`: `pay-invoice` takes the share token, and the token is checked
+/// in SQL rather than in the browser. Nothing on this page knows the
+/// amount it is paying — `begin_shared_payment` reads that off the
+/// document — and nothing here knows the company's acquirer key.
+class _PayWith extends StatefulWidget {
+  const _PayWith({required this.token, required this.options});
+
+  final String token;
+  final List<Map<String, dynamic>> options;
+
+  @override
+  State<_PayWith> createState() => _PayWithState();
+}
+
+class _PayWithState extends State<_PayWith> {
+  String? _busy;
+  String? _error;
+
+  Future<void> _pay(String gateway) async {
+    setState(() {
+      _busy = gateway;
+      _error = null;
+    });
+    try {
+      final res = await Supabase.instance.client.functions.invoke(
+        'pay-invoice',
+        body: {'token': widget.token, 'gateway': gateway},
+      );
+      final data = Map<String, dynamic>.from(res.data as Map? ?? {});
+      final url = data['url']?.toString();
+      if (url == null || url.isEmpty) {
+        throw Exception(data['error']?.toString() ?? 'No checkout was given');
+      }
+      // The acquirer's own page. Same tab: a payer sent back by the
+      // acquirer should land on the invoice they started from, and a
+      // popup blocker is not a thing to fight on somebody else's device.
+      await launchUrl(Uri.parse(url), webOnlyWindowName: '_self');
+    } catch (e) {
+      // Whatever went wrong, the payer is told one sentence and the
+      // invoice is unchanged. Nothing here has taken any money.
+      if (mounted) {
+        setState(() => _error = 'The payment could not be started.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.options.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: Space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final o in widget.options)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Space.sm),
+              child: FilledButton.icon(
+                onPressed: _busy == null
+                    ? () => _pay(o['code']?.toString() ?? '')
+                    : null,
+                icon: _busy == o['code']
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.lock_outline, size: 18),
+                label: Text('Pay with ${o['name'] ?? o['code']}'),
+              ),
+            ),
+          if (_error != null)
+            Text(
+              _error!,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: context.scheme.error),
+            ),
+        ],
       ),
     );
   }

@@ -345,6 +345,13 @@ final outstandingProvider = FutureProvider.autoDispose
       ).outstandingFor(kind: args.kind, contactId: args.contactId);
     });
 
+/// Which acquirers this company has set up to collect from its own
+/// customers. Never the keys — see `Repo.orgPaymentGateways`.
+final orgPaymentGatewaysProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).orgPaymentGateways();
+    });
+
 final bankAccountsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).bankAccounts();
 });

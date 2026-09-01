@@ -24,6 +24,7 @@ import 'notifications_card.dart';
 import 'ways_to_pay.dart';
 import 'warehouses_card.dart';
 import 'credit_ledger_dialog.dart';
+import 'collect_payments_card.dart';
 import 'einvoice_credentials.dart';
 import 'tax_exemption.dart';
 
@@ -764,6 +765,8 @@ class _BillingSection extends StatelessWidget {
         const _PlatformInvoices(),
         const SizedBox(height: 12),
         const _WaysToPay(),
+        const SizedBox(height: Space.lg),
+        const CollectPaymentsCard(),
       ],
     );
   }

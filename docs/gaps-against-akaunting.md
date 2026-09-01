@@ -100,13 +100,23 @@ door a receipt keyed in by hand uses. `shared_invoice_payment.sql` has
 invoice that was settled by bank transfer while the acquirer was still
 thinking.
 
-**The third is the acquirer call itself**, and it is what keeps this
-section open. `begin_shared_payment` and `settle_shared_payment` are the
-two ends an edge function holds; the HTTP between them is not written
-for a tenant's credentials, and there is no screen for a shop to enter
-them. Until both exist, nothing charges anybody — which is said here
-rather than left for a reader to discover, because two thirds of a
-payment flow reads exactly like a whole one from a migration list.
+**The third is the acquirer call**, and `0414` with `pay-invoice` and
+`pay-invoice-callback` is it. A shop enters its Billplz credentials on
+the Settings screen and nominates the account its takings land in; a
+customer holding an invoice link gets a Pay button; the callback is
+verified against **that shop's** X Signature key — found from the
+reference in the unverified body, which selects a key and decides
+nothing — and `settle_shared_payment` posts the receipt.
+
+**What has not happened is a payment.** There is no acquirer sandbox in
+the environment this was built in, so what is asserted is everything
+either side of the HTTP: the token check, the pending row, the
+signature verification (whose own assertions run in CI), the five
+settlement outcomes, the receipt and the ledger. The call itself is
+`createBillplzBill`, the helper `billplz-checkout` has been using
+against real bills, with the tenant's key instead of the platform's.
+Section closed as far as code goes; a first live ringgit is still a
+thing somebody has to do.
 
 ## 4. Missing reports, two of them statutory
 
@@ -346,9 +356,10 @@ statutory statements, and so is bank transfer, and so is importing the
 master files — and so, now, is the whole opening position: the open
 invoices and bills, the trial balance that squares them off, and the
 stock behind the inventory figure. Together they are what makes moving
-onto this system mid-year possible at all. What is left: taking payment.
-Compound tax closed at `0410`, in the shape a Malaysian bill actually
-has one.
+onto this system mid-year possible at all. Nothing is left on this list that has not been built. Compound tax
+closed at `0410`, in the shape a Malaysian bill actually has one, and
+taking payment at `0412`–`0414` — with the caveat above, which is that
+no ringgit has yet gone through it.
 
 **Granular permissions closed** — `access_types` and
 `access_type_modules` in `0127`, who holds which one in `0129`, and the

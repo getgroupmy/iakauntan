@@ -57,6 +57,14 @@ NO_CALLER = {
     "billplz-callback":
         "inbound webhook from Billplz; the X-Signature header is verified "
         "against the gateway's signing key before anything is read",
+    "pay-invoice-callback":
+        "inbound webhook from a tenant's own acquirer; the signature is "
+        "verified against that tenant's key, found from the reference in "
+        "the unverified body, before anything is read",
+    "pay-invoice":
+        "the payer is a customer holding a share link and has no account "
+        "to hold a session; the token is the credential and is checked in "
+        "SQL by app.shared_payment_intent, not here",
     "receive-email":
         "inbound webhook from the mail router; authenticated by a shared "
         "secret in the request",

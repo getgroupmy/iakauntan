@@ -10482,3 +10482,74 @@ extension RepoBundles on Repo {
     },
   )).toString();
 }
+
+/// Collecting from a customer, through the company's own acquirer.
+///
+/// Distinct from the platform's gateways, which settle
+/// `platform_invoices` — iAkauntan billing its own subscribers. These
+/// are the company's own credentials, and nothing here ever reads a key
+/// back: `0412` holds them in a table with RLS and no policies, and the
+/// only way in is the three functions below.
+extension RepoTenantPayments on Repo {
+  /// Which acquirers this company has set up, and whether each is ready.
+  ///
+  /// Never the keys. `org_payment_gateway_status` answers with
+  /// `has_api_key` and `has_signature_key` and nothing that could carry
+  /// a secret — `0412` asserts that on the function's own signature and
+  /// `tenant_gateway_credentials.sql` asserts it on the row that comes
+  /// back.
+  Future<List<Map<String, dynamic>>> orgPaymentGateways() async => Repo.rows(
+    await callRpc('org_payment_gateway_status', params: {'p_org_id': orgId}),
+  );
+
+  /// Saves an acquirer's credentials.
+  ///
+  /// A null key leaves the stored one alone, which is what makes
+  /// correcting a collection id safe. Sending an empty string would be
+  /// the same as sending nothing — `0412` trims and treats blank as
+  /// absent — so the caller does not have to decide.
+  Future<void> saveOrgPaymentGateway({
+    required String gateway,
+    required String mode,
+    String? apiKey,
+    String? collectionRef,
+    String? signatureKey,
+    bool? isActive,
+  }) => callRpc(
+    'set_org_payment_gateway',
+    params: {
+      'p_org_id': orgId,
+      'p_gateway': gateway,
+      'p_mode': mode,
+      'p_api_key': apiKey,
+      'p_collection_ref': collectionRef,
+      'p_signature_key': signatureKey,
+      'p_is_active': isActive,
+    },
+  );
+
+  /// Where the takings land, and what the receipt calls them.
+  Future<void> saveOrgPaymentSettlement({
+    required String gateway,
+    required String mode,
+    String? bankAccountId,
+    String? paymentModeCode,
+  }) => callRpc(
+    'set_org_payment_settlement',
+    params: {
+      'p_org_id': orgId,
+      'p_gateway': gateway,
+      'p_mode': mode,
+      'p_bank_account': bankAccountId,
+      'p_payment_mode': paymentModeCode,
+    },
+  );
+
+  Future<void> clearOrgPaymentGateway({
+    required String gateway,
+    required String mode,
+  }) => callRpc(
+    'clear_org_payment_gateway',
+    params: {'p_org_id': orgId, 'p_gateway': gateway, 'p_mode': mode},
+  );
+}
