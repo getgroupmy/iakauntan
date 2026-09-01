@@ -68,6 +68,46 @@
 -- what was true when it ran, and this one records what is true now.
 --
 -- ---------------------------------------------------------------------
+-- What the hosted project actually held
+--
+-- The assertion at the foot of this migration refused the first time it
+-- ran against the hosted project, which is the whole reason it is there
+-- and not only in a test:
+--
+--     FAIL 0399: a client role holds DELETE, SELECT, UPDATE on the
+--     ledger, expected SELECT
+--
+-- Asked precisely, the hosted project held:
+--
+--     authenticated  gl_entries  INSERT, SELECT
+--     authenticated  gl_lines    INSERT, SELECT
+--     anon           gl_entries  DELETE, INSERT, SELECT, UPDATE
+--     anon           gl_lines    DELETE, INSERT, SELECT, UPDATE
+--
+-- `0238` revoked update and delete **from `authenticated`** and did not
+-- name `anon`; `0239` revoked truncate, references and trigger from
+-- both. So `anon`'s three write privileges were never taken away there.
+-- A freshly migrated local stack does not have them — Supabase's
+-- default privileges differ between a new project and a `supabase
+-- start` — so every CI run has been green and every local suite has
+-- passed while the real project carried them.
+--
+-- **This was excess privilege and not an open door, and the difference
+-- matters.** RLS is enabled on both tables on the hosted project, and
+-- the only policies on either are `insert` and `select`: there is no
+-- update policy and no delete policy, so those two are denied to every
+-- non-owner role whatever the grant says. The insert policy demands
+-- `app.can_post(org_id)`, which is false for a caller with no
+-- `auth.uid()`. Checked against the project rather than assumed.
+--
+-- What it did mean is that the ledger's protection rested on RLS alone
+-- where it was meant to rest on RLS *and* the absence of a grant, and
+-- that nothing in the repository could see the difference. Which is the
+-- argument for putting the assertion in the migration: the local stack
+-- is built from these files and therefore cannot disagree with them.
+-- Only something that runs against the real project can.
+--
+-- ---------------------------------------------------------------------
 -- What is not changed here, and why
 --
 -- An accountant can also flip a period from `closed` back to `open`,
@@ -87,8 +127,19 @@
 
 -- The ledger is written by SECURITY DEFINER functions and read by
 -- everybody who may read it. There is no third thing.
-revoke insert on public.gl_entries from authenticated, anon;
-revoke insert on public.gl_lines   from authenticated, anon;
+--
+-- `update` and `delete` are named here as well, and they are the half
+-- that only the hosted project needed. See "What the hosted project
+-- actually held" above: `0238` revoked those two from `authenticated`
+-- and did not name `anon`, so on the hosted project `anon` still held
+-- `DELETE, INSERT, SELECT, UPDATE` on both tables. A fresh local stack
+-- shows none of it, which is exactly why no test could have found it.
+--
+-- Revoking a privilege that is already absent is a no-op, so naming all
+-- four on both roles converges the two environments rather than
+-- describing either.
+revoke insert, update, delete on public.gl_entries from authenticated, anon;
+revoke insert, update, delete on public.gl_lines   from authenticated, anon;
 
 drop policy if exists gl_entries_insert on public.gl_entries;
 drop policy if exists gl_lines_insert   on public.gl_lines;
@@ -108,7 +159,10 @@ begin
 
   if v_left is distinct from 'SELECT' then
     raise exception
-      'FAIL 0399: a client role holds % on the ledger, expected SELECT',
+      'FAIL 0399: a client role holds % on the ledger, expected SELECT. '
+      'The revokes above name insert, update and delete on both tables '
+      'for both roles, so anything left is a privilege granted after '
+      'this migration ran.',
       coalesce(v_left, 'nothing');
   end if;
 

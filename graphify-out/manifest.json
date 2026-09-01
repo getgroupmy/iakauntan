@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788232873.717384,
-    "ast_hash": "4d5412925a9f6ef186fb265f6f78a986",
+    "mtime": 1788233192.761118,
+    "ast_hash": "8982366aac90fd1600e0f1874deb74bf",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6480,13 +6480,13 @@
     "semantic_hash": ""
   },
   "supabase/migrations/0399_the_ledger_had_a_door_beside_the_door.sql": {
-    "mtime": 1788231542.153305,
-    "ast_hash": "75e48b045f34d8f66c699293ec16d50f",
+    "mtime": 1788233077.3714843,
+    "ast_hash": "cbe35c8784218e705da3ae8ddaa97249",
     "semantic_hash": ""
   },
   "supabase/tests/ledger_is_written_only_by_functions.sql": {
-    "mtime": 1788231958.4685304,
-    "ast_hash": "8bb4dc5b8c3a6daf47031c9f668fec8a",
+    "mtime": 1788233095.2953255,
+    "ast_hash": "60b31a69d49287ab0e0cec4f906529ef",
     "semantic_hash": ""
   },
   "supabase/migrations/0400_no_hand_may_reach_a_posted_payslip.sql": {

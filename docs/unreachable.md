@@ -3367,6 +3367,47 @@ grant cost the whole of period control and bought nothing. A positive
 control has to exercise the thing, not check that a privilege exists —
 so the new test posts, and would fail if posting broke.
 
+### The assertion earned its place on the first run
+
+`0399` was written with a `do $$` block that re-checks the grants after
+setting them, on the reasoning that nothing stops a later `grant all`
+undoing a revoke. It refused the first time it met the hosted project:
+
+    FAIL 0399: a client role holds DELETE, SELECT, UPDATE on the ledger,
+    expected SELECT
+
+Asked precisely, the hosted project held `INSERT, SELECT` for
+`authenticated` on both tables — as intended — and `DELETE, INSERT,
+SELECT, UPDATE` for **`anon`** on both. `0238` revoked update and delete
+*from `authenticated`* and never named `anon`; `0239` revoked truncate,
+references and trigger from both. So `anon`'s write privileges were
+never taken away there, and a freshly migrated local stack does not have
+them, because Supabase's default privileges differ between a new hosted
+project and a `supabase start`.
+
+**Excess privilege, not an open door, and the distinction matters.** RLS
+is enabled on both tables on the hosted project and the only policies on
+either are insert and select — there is no update policy and no delete
+policy, so both are denied to every non-owner role whatever the grant
+says, and the insert policy demands `app.can_post(org_id)`, false for a
+caller with no `auth.uid()`. Checked against the project, not assumed.
+
+What it did mean is that the ledger's protection rested on RLS alone
+where it was meant to rest on RLS *and* the absence of a grant — and
+that nothing in this repository could see the difference. The local
+stack is built from these files, so it cannot disagree with them. Only
+something that runs against the real project can, and the only thing
+that does is a migration. That is the argument for asserting state
+inside a migration and not only in a test, and it is stronger than the
+one `0399` was written with.
+
+So `0399` now revokes insert, update and delete from both roles on both
+tables rather than only insert: revoking an absent privilege is a no-op,
+so naming all of them converges the two environments instead of
+describing either. The test names each role and privilege separately,
+because the aggregate message said "DELETE, SELECT, UPDATE" and it took
+a second query to learn all three belonged to `anon`.
+
 ### Left alone, deliberately
 
 An accountant can also flip a period from `closed` back to `open`:

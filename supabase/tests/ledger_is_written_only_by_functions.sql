@@ -211,6 +211,30 @@ begin
   end if;
   raise notice 'ok   the client roles hold SELECT on the ledger and nothing else';
 
+  -- Named one role and one privilege at a time, because the aggregate
+  -- above hides which of the four combinations is at fault. `0399`'s
+  -- assertion refused on the hosted project with "DELETE, SELECT,
+  -- UPDATE" and it took a second query to learn that all three belonged
+  -- to `anon` -- `0238` revoked update and delete from `authenticated`
+  -- and never named `anon`, and a local stack shows neither.
+  if has_table_privilege('anon', 'public.gl_entries', 'INSERT')
+     or has_table_privilege('anon', 'public.gl_entries', 'UPDATE')
+     or has_table_privilege('anon', 'public.gl_entries', 'DELETE')
+     or has_table_privilege('anon', 'public.gl_lines', 'INSERT')
+     or has_table_privilege('anon', 'public.gl_lines', 'UPDATE')
+     or has_table_privilege('anon', 'public.gl_lines', 'DELETE')
+  then
+    raise exception 'FAIL: anon can write the ledger';
+  end if;
+  if has_table_privilege('authenticated', 'public.gl_entries', 'UPDATE')
+     or has_table_privilege('authenticated', 'public.gl_entries', 'DELETE')
+     or has_table_privilege('authenticated', 'public.gl_lines', 'UPDATE')
+     or has_table_privilege('authenticated', 'public.gl_lines', 'DELETE')
+  then
+    raise exception 'FAIL: authenticated can change or remove a ledger row';
+  end if;
+  raise notice 'ok   and neither role may insert, update or delete either table';
+
   if exists (select 1 from pg_policy p join pg_class t on t.oid = p.polrelid
               where t.relname in ('gl_entries', 'gl_lines') and p.polcmd = 'a')
   then
