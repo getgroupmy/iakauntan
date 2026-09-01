@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788285599.903654,
-    "ast_hash": "bd3e4db3f8dad73b4a4b8fc7591e3736",
+    "mtime": 1788288879.2925265,
+    "ast_hash": "dd434e1ed6be9164aca9517734aeeaa8",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788285599.907654,
-    "ast_hash": "d83042e934678a738d29001ec82c7bc8",
+    "mtime": 1788288879.2914572,
+    "ast_hash": "6daa4d9ae8857f5e04619bc25e8590aa",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -2885,8 +2885,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/financials/filings_screen.dart": {
-    "mtime": 1786942622.8067098,
-    "ast_hash": "f9259d54c303f0657dd324aaadef0b20",
+    "mtime": 1788289111.7674544,
+    "ast_hash": "5c4761c18668fccdc10b8e80ff8e35c9",
     "semantic_hash": ""
   },
   "app/lib/src/features/financials/mtool_csv.dart": {
@@ -6732,6 +6732,11 @@
   "supabase/migrations/0423_the_demo_books_keep_malaysian_time_too.sql": {
     "mtime": 1788287983.5623353,
     "ast_hash": "473044379b615f6ca7e83585f2790088",
+    "semantic_hash": ""
+  },
+  "app/test/lodgement_countdown_test.dart": {
+    "mtime": 1788289040.2792714,
+    "ast_hash": "138c16e767029e728a0756dec67e4634",
     "semantic_hash": ""
   }
 }
