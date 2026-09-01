@@ -253,4 +253,61 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Every scheduled command actually runs
+--
+-- `0392` is why this block exists. `app.roll_einvoice_consolidation`
+-- compared a status against an enum literal that does not exist and
+-- raised `22P02` on every call — for as long as the function had been
+-- in the repository. Nothing noticed, because the only caller is
+-- `pg_cron` and nobody reads a cron log.
+--
+-- This file already asserts that each job **is** scheduled. That is a
+-- different question from whether the thing scheduled **works**, and
+-- `0392` is what the gap between the two costs: a statutory return
+-- LHDN expects every month, never once gathered.
+--
+-- So: take the commands out of `cron.job` and run them. Derived from
+-- the schedule rather than from a list kept by hand, because a hand-
+-- kept list is a list that drifts — and the job this would have caught
+-- was one nobody thought to add to a list.
+--
+-- It is a smoke test and says so: it asserts that each command
+-- completes, not that it did the right thing. What each one computes is
+-- asserted in its own file. What is caught here is the class of fault
+-- that makes a job fail on its first statement, which is the class that
+-- has actually happened.
+--
+-- One thing this cannot do is take a calendar branch. `run_daily_jobs`
+-- is called below with whatever today is, and `0392`'s fault lived
+-- behind `if extract(day from p_on) = 1`. `supabase/tests/monthly_jobs.sql`
+-- pins the dates for that reason, and its header says so.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  j       record;
+  v_n     integer := 0;
+  v_bad   text := '';
+begin
+  for j in select jobid, command from cron.job order by jobid
+  loop
+    begin
+      execute j.command;
+      v_n := v_n + 1;
+    exception when others then
+      v_bad := v_bad || format(E'\n  job %s: %s\n    %s',
+                               j.jobid, j.command, sqlerrm);
+    end;
+  end loop;
+
+  if v_bad <> '' then
+    raise exception 'FAIL a scheduled command does not run: %', v_bad;
+  end if;
+
+  -- A run that found no jobs is not a run that passed. The same hole
+  -- this suite's own runner had, one layer down.
+  perform pg_temp.check_true(
+    format('every scheduled command runs (%s of them)', v_n), v_n >= 4);
+end $$;
+
 rollback;

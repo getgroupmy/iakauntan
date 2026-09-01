@@ -2815,3 +2815,41 @@ together, whichever of them the current edit touched.
 Two fixtures elsewhere had to change, and both were the rule working:
 `mbrs.sql` circulated accounts nobody had approved, and this file's own
 first draft froze audited accounts with no auditor named.
+
+### The sweep 0392 argued for
+
+`0392` was found by the calendar, not by reading, so the first thing
+after it was to ask what else of that shape is in here. Two questions,
+both bounded:
+
+**Which functions branch on the calendar?** Nine use `extract(day…)` or
+`extract(month…)`, and eight of them are arithmetic — computing a
+financial year end, an age in months, the last day of a period. Only
+`run_daily_jobs` branched on *today*, and that is the one that was
+broken.
+
+**Which scheduled commands does no test ever run?** Four jobs are in
+`cron.job`; `app.queue_all_activity_reminders` was called by nothing in
+the suite. Run by hand it is clean and already isolated per organization
+— no defect — but a function whose only caller is `pg_cron` is a
+function whose first failure is discovered in production, a month later,
+by nobody.
+
+So the guard is derived from the schedule rather than from a list: the
+new block in `scheduled_work.sql` reads `cron.job` and executes every
+command in it, collecting failures rather than stopping at the first.
+A job added later is covered without anybody remembering to add it — and
+the job this would have caught was precisely one nobody thought to add
+to a list.
+
+It is a smoke test and says so in its own comment: it asserts each
+command *completes*, not that it did the right thing. What each computes
+is asserted in its own file. What is caught here is the class that fails
+on the first statement, which is the class that actually happened. It
+was verified by putting `0392`'s fault back — a bad enum literal inside
+a cron'd function, call chain intact — and watching the block fail.
+
+The one thing it cannot do is take a calendar branch: it runs each
+command as today, and `0392` hid behind `if extract(day from p_on) = 1`.
+That is what `monthly_jobs.sql` pins dates for, and why the two files
+say so to each other.
