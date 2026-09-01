@@ -6130,8 +6130,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/corp_particulars.sql": {
-    "mtime": 1788285600.499654,
-    "ast_hash": "3ba939cef9a2727d2b652a1c0d3ad7be",
+    "mtime": 1788290316.6081247,
+    "ast_hash": "3479798fcf31f10fa79384e5fef704fc",
     "semantic_hash": ""
   },
   "supabase/migrations/0378_saying_no_and_who_lodged_it.sql": {
@@ -6742,6 +6742,11 @@
   "supabase/migrations/0424_a_moment_cast_to_a_day.sql": {
     "mtime": 1788289538.4827955,
     "ast_hash": "d6be9c0594c632481f47348cba0b6680",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0425_the_former_name_on_the_documents_that_need_it.sql": {
+    "mtime": 1788290266.633934,
+    "ast_hash": "6def695182bdcf887984e08dbf68a58d",
     "semantic_hash": ""
   }
 }
