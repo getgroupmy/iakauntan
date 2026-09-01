@@ -2530,8 +2530,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/intercompany_billing.sql": {
-    "mtime": 1786953655.915685,
-    "ast_hash": "7b87e17947362e2de30538374ee5f0a4",
+    "mtime": 1788302580.226112,
+    "ast_hash": "6472099b7d1af2e4f27f8c63abc1500c",
     "semantic_hash": ""
   },
   "app/test/consolidation_spec_test.dart": {
@@ -2790,8 +2790,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/timesheets.sql": {
-    "mtime": 1788300307.3836877,
-    "ast_hash": "810aa03cad83ad3218c193f4440305bd",
+    "mtime": 1788302502.0278244,
+    "ast_hash": "b53ad93e2447f28d345c35162d7aec4f",
     "semantic_hash": ""
   },
   "docs/timesheets.md": {
@@ -6817,6 +6817,11 @@
   "supabase/migrations/0438_the_quotation_that_forgot_the_tax.sql": {
     "mtime": 1788301384.1553922,
     "ast_hash": "806873c0ac290a16d677f28705d8c8a2",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0439_the_terms_the_customer_agreed.sql": {
+    "mtime": 1788302764.2468925,
+    "ast_hash": "b03fc744e2b076902f25eb3cffb4ad9d",
     "semantic_hash": ""
   }
 }
