@@ -33,7 +33,15 @@ Checked, for a chain whose `.from()` names a table this schema has:
   * every top-level name in a `.select()` list;
   * the first argument of every filter and ordering — `.eq`, `.neq`,
     `.gt`, `.gte`, `.lt`, `.lte`, `.like`, `.ilike`, `.order` and the
-    rest.
+    rest;
+  * every top-level key of an `.insert()`, `.update()` or `.upsert()`
+    map. A key the table does not have comes back PGRST204, "column not
+    found in the schema cache", and the write does not happen;
+  * the `onConflict:` of an upsert, which must name the columns of a
+    unique constraint or unique index exactly. PostgREST passes it to
+    `ON CONFLICT` and Postgres answers 42P10 when no unique index
+    matches, so an upsert that has drifted from its constraint fails
+    every time rather than inserting a duplicate.
 
 Not checked:
 
@@ -43,13 +51,13 @@ Not checked:
   * a name containing `.`, `(`, `->` or `::`. Those are an embedded
     path, an aggregate, a JSON traversal or a cast, and none of them is
     a bare column of this table.
+  * a spread — `{...values, 'org_id': orgId}`. What `values` holds is
+    not visible here; the literal keys beside it still are, and are
+    checked.
   * `.rpc()`. A function's parameters are `check_idempotent_calls.py`'s
     ground, not this one's.
 
 A chain ends at the first `;`, which is what a Dart statement ends at.
-A `.from()` with no `.select()` and no filter in its statement — an
-`insert` or an `upsert` — contributes nothing and is skipped; the
-columns of a written map are a separate question this does not answer.
 """
 
 from __future__ import annotations
@@ -69,6 +77,20 @@ select c.relname || ':' || string_agg(a.attname, ',' order by a.attnum)
  group by c.relname;
 """
 
+# Every set of columns an ON CONFLICT could name: unique indexes, which
+# is what Postgres actually looks for, and which covers the primary key
+# and every unique constraint because each is backed by one.
+UNIQUE_SQL = """
+select c.relname || ':' || string_agg(a.attname, ',' order by a.attname)
+  from pg_index i
+  join pg_class c on c.oid = i.indrelid
+  join pg_namespace n on n.oid = c.relnamespace
+ cross join lateral unnest(i.indkey) with ordinality as k(att, ord)
+  join pg_attribute a on a.attrelid = c.oid and a.attnum = k.att
+ where n.nspname = 'public' and i.indisunique
+ group by i.indexrelid, c.relname;
+"""
+
 APP = pathlib.Path(__file__).resolve().parent.parent / "app" / "lib"
 
 FROM_RE = re.compile(r"\.from\(\s*'([a-z_0-9]+)'\s*\)")
@@ -85,6 +107,9 @@ FILTER_RE = re.compile(
     r"|ilikeAnyOf|contains|containedBy|overlaps|rangeGt|rangeGte|rangeLt"
     r"|rangeLte|rangeAdjacent|order|isFilter|inFilter)\(\s*'([^']*)'"
 )
+WRITE_RE = re.compile(r"\.(insert|update|upsert)\(\s*\{")
+KEY_RE = re.compile(r"'([a-z_0-9]+)'\s*:")
+ON_CONFLICT_RE = re.compile(r"onConflict\s*:\s*'([^']*)'")
 
 # A chain runs to the end of its Dart statement.
 CHAIN_LIMIT = 8000
@@ -109,6 +134,23 @@ def columns(database_url: str) -> dict[str, set[str]]:
             f"only {len(found)} relations in public — the catalogue query "
             "cannot have reached the schema this checks against"
         )
+    return found
+
+
+def unique_sets(database_url: str) -> dict[str, set[str]]:
+    out = subprocess.run(
+        ["psql", database_url, "-t", "-A", "-c", UNIQUE_SQL],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    found: dict[str, set[str]] = {}
+    for line in out.splitlines():
+        line = line.strip()
+        if not line or ":" not in line:
+            continue
+        table, names = line.split(":", 1)
+        found.setdefault(table, set()).add(names)
     return found
 
 
@@ -153,6 +195,45 @@ def top_level(select: str) -> list[str]:
     return [t.strip() for t in out if t.strip()]
 
 
+def written_keys(chain: str, at: int) -> list[str]:
+    """The top-level keys of the map literal starting at `at`.
+
+    Depth 1 only: a nested map or list belongs to a jsonb column and its
+    keys are not columns. A string literal only counts as a key when it
+    follows the opening brace or a comma — without that,
+    `'kind': voice ? 'voice' : 'file'` reads its own ternary branch as a
+    second key, which is how the first draft of this reported a `voice`
+    column on `chat_messages`.
+    """
+    depth, i = 0, at
+    while i < len(chain):
+        if chain[i] == "{":
+            depth += 1
+        elif chain[i] == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    body = chain[at: i + 1]
+
+    keys, depth, j = [], 0, 0
+    while j < len(body):
+        ch = body[j]
+        if ch in "{[(":
+            depth += 1
+        elif ch in "}])":
+            depth -= 1
+        elif ch == "'" and depth == 1:
+            before = body[:j].rstrip()
+            km = KEY_RE.match(body, j)
+            if km and (before.endswith("{") or before.endswith(",")):
+                keys.append(km.group(1))
+                j = km.end()
+                continue
+        j += 1
+    return keys
+
+
 def bare_column(token: str) -> str | None:
     """The column a select token names, or None if it names none."""
     if "(" in token or token == "*":
@@ -168,6 +249,7 @@ def main() -> int:
         sys.exit("usage: check_query_columns.py DATABASE_URL")
 
     known = columns(sys.argv[1])
+    unique = unique_sets(sys.argv[1])
     problems: list[str] = []
     checked = 0
 
@@ -214,7 +296,28 @@ def main() -> int:
                         f"{table} has no such column"
                     )
 
-    if checked < 200:
+            for wm in WRITE_RE.finditer(chain):
+                for key in written_keys(chain, wm.end() - 1):
+                    checked += 1
+                    if key not in known[table]:
+                        problems.append(
+                            f"{where}  .{wm.group(1)}() writes '{key}' — "
+                            f"{table} has no such column"
+                        )
+
+            for cm in ON_CONFLICT_RE.finditer(chain):
+                spec = ",".join(
+                    sorted(c.strip() for c in cm.group(1).split(",") if c.strip())
+                )
+                checked += 1
+                if spec not in unique.get(table, set()):
+                    problems.append(
+                        f"{where}  onConflict '{cm.group(1)}' — {table} has "
+                        "no unique index on exactly those columns, so the "
+                        "upsert fails 42P10"
+                    )
+
+    if checked < 600:
         # A rewrite of the client that this stopped matching would
         # otherwise pass by checking nothing at all.
         problems.append(
@@ -227,8 +330,9 @@ def main() -> int:
         for p in problems:
             print("  " + p)
         print(
-            "\nPostgREST answers 42703 and refuses the whole request, so "
-            "each of these takes out everything the screen needed."
+            "\nPostgREST refuses the whole request for each of these — "
+            "42703 on a read, PGRST204 on a write, 42P10 on an upsert — "
+            "so each one takes out everything the screen needed."
         )
         return 1
 

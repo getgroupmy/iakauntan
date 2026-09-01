@@ -4173,9 +4173,21 @@ RM3,460.40 on RM20,000 a month, with RM2,500 of lifestyle declared).
 
 `scripts/check_query_columns.py` reads every column the schema has, then
 every `.from('table')` chain in the app, and refuses any column name
-that table does not carry — in a `.select()` list or as the first
-argument of a filter or ordering. 682 references, and after this fix
-every one of them is real.
+that table does not carry: in a `.select()` list, as the first argument
+of a filter or ordering, as a key of an `.insert()`, `.update()` or
+`.upsert()` map, and as an upsert's `onConflict`, which has to name a
+unique index's columns exactly or Postgres answers 42P10. 986
+references, and after this fix every one of them is real.
+
+The three that are not the read path were a sweep of their own and found
+nothing — 297 written keys and every `onConflict` resolving to a real
+unique index. They are in the guard anyway, because the reason to have
+it is the next rename rather than this one. Both were checked by
+mutation rather than assumed: a bogus key and an `onConflict` short of
+one column are each reported. The first draft of the key reader also
+reported a `voice` column on `chat_messages`, reading its own ternary
+branch in `'kind': voice ? 'voice' : 'file'` as a second key; a key is
+now only a literal that follows the opening brace or a comma.
 
 It is `check_embeds.py` one level down and for the same reason that file
 gives: the name is inside a string literal, so the analyzer cannot see
