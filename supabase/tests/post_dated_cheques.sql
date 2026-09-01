@@ -376,6 +376,7 @@ declare
   v_in uuid; v_out uuid; r record; v_ok boolean;
   v_type uuid; v_type2 uuid; v_inv uuid;
   v_buyer uuid := pg_temp.another_user('buyer@cek.test');
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
 begin
   v_org := pg_temp.test_org('Daftar Cek Sdn Bhd');
   perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
@@ -396,18 +397,23 @@ begin
   returning id into v_bank;
 
   -- Dated relative to today on purpose: `days_to_go` is measured against
-  -- current_date, so a fixed date would make the assertion drift by a
-  -- day every day and fail on some future morning for no reason.
+  -- today, so a fixed date would make the assertion drift by a day every
+  -- day and fail on some future morning for no reason.
+  --
+  -- And today in Kuala Lumpur, not in whatever zone the session happens
+  -- to be in. `0419` pinned `pdc_list` to Malaysia; this fixture said
+  -- `current_date`, and between midnight and eight in the morning there
+  -- the two are a day apart, which is how this line came to be written.
   insert into public.post_dated_cheques
     (org_id, pdc_no, direction, contact_id, cheque_no, cheque_date,
      amount, received_on, bank_account_id, bank_name)
-  values (v_org, 'PDC-IN', 'incoming', v_cust, '900001', current_date + 10,
-          1500, current_date, v_bank, 'CIMB')
+  values (v_org, 'PDC-IN', 'incoming', v_cust, '900001', v_today + 10,
+          1500, v_today, v_bank, 'CIMB')
   returning id into v_in;
   insert into public.post_dated_cheques
     (org_id, pdc_no, direction, contact_id, cheque_no, cheque_date,
      amount, bank_account_id, bank_name)
-  values (v_org, 'PDC-OUT', 'outgoing', v_sup, '900002', current_date + 20,
+  values (v_org, 'PDC-OUT', 'outgoing', v_sup, '900002', v_today + 20,
           900, v_bank, 'Maybank')
   returning id into v_out;
 

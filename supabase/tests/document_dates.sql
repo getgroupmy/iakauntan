@@ -138,19 +138,23 @@ declare
   v_do    uuid;
   v_inv   uuid;
   r       record;
+  -- `report_late_orders` counts from today in Kuala Lumpur since `0419`,
+  -- so the promise it is counted against is dated from the same day. On
+  -- `current_date` the two are one apart for the eight hours the
+  -- session's zone is behind Malaysia, and `days_late` came out eleven.
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
 begin
-  v_quote := pg_temp.dd_quote(v_org, 'QT-1', current_date + 30,
-                              current_date - 10);
+  v_quote := pg_temp.dd_quote(v_org, 'QT-1', v_today + 30, v_today - 10);
 
   v_order := public.transfer_document(v_quote, 'sales_order');
   perform pg_temp.check_eq('the promised date reaches the order',
     (select delivery_date from public.sales_documents where id = v_order)::text,
-    (current_date - 10)::text);
+    (v_today - 10)::text);
 
   v_do := public.transfer_document(v_order, 'delivery_order');
   perform pg_temp.check_eq('and the delivery order raised from it',
     (select delivery_date from public.sales_documents where id = v_do)::text,
-    (current_date - 10)::text);
+    (v_today - 10)::text);
 
   -- An invoice's delivery date is a fact about a delivery that happened.
   -- Copying a promise into it would restate history.
@@ -204,7 +208,7 @@ begin
    where document_id = v_order;
   perform pg_temp.check_eq('nor is anything late before the day promised',
     (select count(*) from public.report_late_orders(
-       v_org, current_date - 20)), 0);
+       v_org, v_today - 20)), 0);
 
   perform pg_temp.sign_out();
 end $$;

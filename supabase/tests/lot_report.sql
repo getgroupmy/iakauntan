@@ -153,16 +153,19 @@ begin
   -- ==================================================================
   -- days_to_expiry, the only sum the function does
   -- ==================================================================
+  -- Counted from today in Kuala Lumpur. `0419` pinned the report there;
+  -- an expectation built on `current_date` disagreed with it for the
+  -- eight hours the session's zone is a day behind Malaysia.
   perform pg_temp.check_eq('days to expiry is counted from today',
     (select days_to_expiry from public.report_lot_balances(v_org, v_milk)
       where lot_ref = 'B-MAR'),
-    (date '2026-06-30' - current_date)::integer);
+    (date '2026-06-30' - (now() at time zone 'Asia/Kuala_Lumpur')::date)::integer);
   -- Null rather than a number. A lot that does not expire has no
   -- countdown, and zero would read as "expires today".
   --
   -- This one documents the behaviour rather than defending it: the
   -- function's `case when expiry_date is null then null` arm is
-  -- redundant, because `null::date - current_date` is already null.
+  -- redundant, because `null::date - app.today()` is already null.
   -- Removing the arm changes nothing, so no test can catch its removal
   -- -- which is worth knowing before somebody trusts this line to
   -- protect the countdown.

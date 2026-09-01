@@ -249,6 +249,8 @@ declare
   v_said text;
   v_out  uuid := pg_temp.another_user('outsider@vac.test');
   v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+  v_east integer;
+  v_west integer;
 begin
   insert into public.departments (org_id, code, name)
   values (v_org, 'OPS', 'Operations') returning id into v_dept;
@@ -279,6 +281,35 @@ begin
   -- The number that starts the conversation.
   perform pg_temp.check_eq('and how long it has been open',
     v_row.days_open, 45);
+
+  -- The assertion above is dated against the Malaysian day, and that is
+  -- what caught `0419`: for the eight hours between midnight in Kuala
+  -- Lumpur and midnight in London the report read the session's clock
+  -- and answered forty-four. It went red at 02:02 MYT.
+  --
+  -- Which means the assertion above can only catch it during those
+  -- eight hours -- green all morning, red all afternoon, the flake
+  -- `secretarial.sql` argues against at length. So the property is
+  -- pinned here as well. Kiritimati is UTC+14 and Etc/GMT+12 is UTC-12:
+  -- twenty-six hours apart, never on the same date, so a session-clock
+  -- implementation differs here at every instant and a pinned one never
+  -- does.
+  begin
+    set local time zone 'Pacific/Kiritimati';
+    select v.days_open into v_east
+      from public.report_open_vacancies(v_org) v
+     where v.requisition_id = v_r;
+    set local time zone 'Etc/GMT+12';
+    select v.days_open into v_west
+      from public.report_open_vacancies(v_org) v
+     where v.requisition_id = v_r;
+  end;
+  reset time zone;
+  perform pg_temp.check_true('the fixture reached the report',
+    v_east is not null);
+  perform pg_temp.check_eq(
+    'and how long it has been open does not depend on who is asking',
+    v_east, v_west);
   perform pg_temp.check_eq('two applied', v_row.applicants, 2);
   perform pg_temp.check_eq('nobody hired yet', v_row.hired, 0);
   perform pg_temp.check_eq('so three places remain', v_row.remaining, 3);

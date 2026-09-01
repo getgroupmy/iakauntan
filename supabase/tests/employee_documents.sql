@@ -237,7 +237,11 @@ declare
   v_said  text;
   v_first record;
   v_n     integer;
-  v_today date := current_date;
+  -- Today in Kuala Lumpur. `report_expiring_documents` counts from the
+  -- Malaysian day since `0419`; on `current_date` the pass that expired
+  -- three days ago was reported as four for the eight hours the two
+  -- zones disagree.
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
 begin
   v_expat := pg_temp.ed_employee(v_org, 'E1', 'Mr Tanaka', 'foreign_worker');
   v_local := pg_temp.ed_employee(v_org, 'E2', 'Cik Aminah', 'citizen');
