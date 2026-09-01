@@ -408,4 +408,102 @@ begin
     '1.0');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- What the business does, which every document said was `NA`
+--
+-- organizations.business_activity was written by nothing:
+-- create_organization takes the parameter and the onboarding form does
+-- not pass it, and updateCompanyDetails writes msic_code and omits this
+-- column beside it. ubl.ts emits `name: businessActivity || "NA"`, so
+-- every e-Invoice from every company told LHDN `NA` -- while
+-- ref_msic_codes has held the description of that very code since 0002.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Sawit Sdn Bhd');
+  v_contact uuid; v_doc uuid; v_ein uuid;
+begin
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  update public.organizations
+     set einvoice_enabled = true, tin = 'C1234567890',
+         msic_code = '01261', business_activity = null
+   where id = v_org;
+  insert into public.contacts (org_id, code, contact_type, name, tin)
+  values (v_org, 'C-1', 'customer', 'Pembeli Sdn Bhd', 'C1111111111')
+  returning id into v_contact;
+
+  perform pg_temp.check_eq('the description comes from the picked code',
+    app.business_activity_of(v_org), 'Growing of oil palm (estate)');
+
+  v_doc := pg_temp.sales_doc(v_org, v_contact);
+  v_ein := public.prepare_einvoice(v_doc);
+  perform pg_temp.check_eq('and it reaches the document',
+    (select supplier_business_activity from public.einvoice_documents
+      where id = v_ein), 'Growing of oil palm (estate)');
+
+  -- A company that has said what it does in its own words keeps them.
+  update public.organizations
+     set business_activity = 'Oil palm, smallholder' where id = v_org;
+  perform pg_temp.check_eq('an organization''s own wording wins',
+    app.business_activity_of(v_org), 'Oil palm, smallholder');
+  v_doc := pg_temp.sales_doc(v_org, v_contact);
+  v_ein := public.prepare_einvoice(v_doc);
+  perform pg_temp.check_eq('and that is what is filed',
+    (select supplier_business_activity from public.einvoice_documents
+      where id = v_ein), 'Oil palm, smallholder');
+
+  -- A caller that supplies one is believed, the same way 0393's
+  -- set_filed_by believes a caller that names somebody: an import knows
+  -- what the company did at the time better than today's reference list
+  -- does. Without this the trigger could overwrite it and nothing would
+  -- notice.
+  insert into public.einvoice_documents
+    (org_id, source_table, source_id, einvoice_type_code, internal_doc_no,
+     issue_date, supplier_name, supplier_tin, supplier_business_activity,
+     buyer_name, buyer_tin, status)
+  values (v_org, 'sales_documents', gen_random_uuid(), '01', 'INV-HIST',
+          current_date, 'Sawit Sdn Bhd', 'C1234567890',
+          'What it did in 2019', 'Pembeli Sdn Bhd', 'C1111111111',
+          'valid')
+  returning id into v_ein;
+  perform pg_temp.check_eq('an activity given on the row is kept',
+    (select supplier_business_activity from public.einvoice_documents
+      where id = v_ein), 'What it did in 2019');
+
+  -- But a blank on the row is not a given one. prepare_einvoice inserts
+  -- the organization's column straight through, so an organization
+  -- holding '' would put '' on the document -- and ubl.ts renders that
+  -- as `NA`, which is the whole defect coming back by a side door.
+  insert into public.einvoice_documents
+    (org_id, source_table, source_id, einvoice_type_code, internal_doc_no,
+     issue_date, supplier_name, supplier_tin, supplier_business_activity,
+     buyer_name, buyer_tin, status)
+  values (v_org, 'sales_documents', gen_random_uuid(), '01', 'INV-BLANK',
+          current_date, 'Sawit Sdn Bhd', 'C1234567890', '   ',
+          'Pembeli Sdn Bhd', 'C1111111111', 'valid')
+  returning id into v_ein;
+  perform pg_temp.check_eq('a blank on the row is filled in, not left',
+    (select supplier_business_activity from public.einvoice_documents
+      where id = v_ein), 'Oil palm, smallholder');
+
+  -- Blank is not a wording. The company card writes '' when somebody
+  -- tabs through a field, and '' on a document is `NA` with extra steps.
+  update public.organizations set business_activity = '   ' where id = v_org;
+  perform pg_temp.check_eq('a blank falls back to the code''s description',
+    app.business_activity_of(v_org), 'Growing of oil palm (estate)');
+
+  -- No code and no wording is genuinely nothing to say, and ubl.ts
+  -- emits no classification block at all without a code -- so null here
+  -- is right and must not become the literal 'NA'.
+  update public.organizations
+     set msic_code = null, business_activity = null where id = v_org;
+  perform pg_temp.check_true('nothing said stays nothing, not the word NA',
+    app.business_activity_of(v_org) is null);
+  v_doc := pg_temp.sales_doc(v_org, v_contact);
+  v_ein := public.prepare_einvoice(v_doc);
+  perform pg_temp.check_true('and the document carries no activity either',
+    (select supplier_business_activity from public.einvoice_documents
+      where id = v_ein) is null);
+end $$;
+
 rollback;

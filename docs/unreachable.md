@@ -3196,3 +3196,71 @@ tell the two apart, which is what a distinct message is *for*: the
 assertions now check which sentence came back, not only the sqlstate.
 Both mutants die. A branch that exists only to say something better is
 worth keeping precisely when something notices it has stopped saying it.
+
+## The business activity that was the letters NA
+
+`organizations.business_activity` is the sweep's fifteenth unpassed
+parameter and the last one worth a migration. `create_organization`
+takes `p_business_activity`, the onboarding form does not send it, and
+`updateCompanyDetails` writes `msic_code` while omitting this column
+beside it. Nothing has ever written it.
+
+`prepare_einvoice` snapshots it onto every document, and `ubl.ts` does
+this:
+
+    party.IndustryClassificationCode = v(msicCode, {
+      name: businessActivity || "NA",
+    });
+
+So every e-Invoice, from every organization, has told LHDN that what the
+business does is `NA`.
+
+### The answer was already in the database
+
+`ref_msic_codes` has held `(code, description)` since `0002`, and the
+MSIC code is picked from exactly that list. `IndustryClassificationCode`
+carries the code and its `name` is the description *of that code*. They
+are one fact.
+
+Which is why `0398` adds no text box. A free-text `business_activity`
+beside a picked `msic_code` is two places to say one thing, and the
+second is how the two come to disagree — `0393`'s argument for
+`app.set_filed_by()`. An organization that has its own wording keeps it;
+one that has not is not asked to retype what it chose from a list a
+moment earlier.
+
+It is filled in on insert rather than resolved at send time because an
+e-Invoice is a snapshot and `prepare_einvoice` is careful to make one:
+it copies the supplier's name, TIN, address and SST number so a document
+filed in March still says what the company was in March. Resolving the
+description at send time would rewrite filed history whenever the
+reference list was corrected.
+
+### Two mutants that found unbacked claims
+
+The header said "a caller that supplies one is believed". Making the
+trigger overwrite unconditionally survived, because no test supplied
+one — a claim in prose with nothing behind it, which is the exact fault
+`0390`'s first draft had and `0388` is named after. Asserted now.
+
+Then narrowing the guard from "blank or null" to "null" also survived,
+and that one is not cosmetic: `prepare_einvoice` inserts the
+organization's column straight through, so an organization holding `''`
+would put `''` on the document, and `ubl.ts` renders `''` as `NA`. The
+`btrim` is what stops the original defect returning by a side door, and
+now something says so.
+
+### And the ones deliberately left
+
+Of the fifteen, most are feature gaps rather than defects and it is
+worth naming them so the sweep is not re-run over them. `email_document`
+takes `p_share_days integer default 30` and nothing passes it, which
+means every share link lives thirty days — a sensible default nobody can
+override, not a link that never expires. `run_inventory_forecast`'s
+`p_as_of`, `log_document_download`'s `p_format`, `platform_save_module`'s
+`p_is_core` and `chat_typing_ping`'s `p_seconds` are the same shape:
+defaults that are right, and a parameter for choosing otherwise that no
+screen offers. `clock_in`/`clock_out`'s `p_device` and `p_terminal` and
+`create_ticket`'s `p_requester_user_id` are provenance fields with no
+arithmetic attached, in the same class as the emergency-contact columns
+`0395` gave a form field and no migration.
