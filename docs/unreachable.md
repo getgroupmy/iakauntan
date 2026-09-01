@@ -3809,3 +3809,57 @@ by the "must start at zero" rule. Three more probes were added — a step
 missing from the middle, two bands over the same wage, and a band after
 the one that runs to the top — so each branch is refused for its own
 reason.
+
+## A fourth sweep, which found nothing and is now a test
+
+**Can a member of one company read another company's rows?** Thirty-odd
+assertion files exercise RLS for the feature each of them is about.
+Nothing asked the question in general, and it is the worst failure this
+product could have and the least likely to be noticed, because a leak
+looks like data.
+
+Asked of `pg_policy` first, and that answered nothing useful. Nine
+policies on org-scoped tables never mention `org_id`, and all nine are
+correct: `false` on `approval_requests` and `approval_steps`, which are
+reached only through SECURITY DEFINER functions; `user_id = auth.uid()`
+on `chat_participants`, which is narrower; `app.is_chat_participant(...)`,
+which scopes through a helper; and `app.is_platform_admin()` on
+`org_mailboxes`, `org_modules` and `org_subdomains`, where seeing across
+companies is the point.
+
+So it was asked by reading rows instead, as `authenticated`, with the
+JWT of somebody who is a member of one company and not the other.
+`no_tenant_sees_another.sql` is in CI. No leak: nothing of the other
+company is visible in any of the 16 tables it actually has rows in —
+including `gl_entries`, `gl_lines`, `sales_documents`, `employees`,
+`org_members` and 232 rows of `audit_logs`.
+
+### The two things that stop it going vacuous
+
+"No rows of the other company are visible" is also true of an empty
+table, and a sweep over 250 empty tables would pass forever. `0395`
+shipped an assertion with that fault and it survived its own mutant. So
+the tables are counted twice — as the owner, to find which ones the
+other company has rows in, and then as the member — only that set is
+asserted, its size is reported, and a floor under it fails the file if
+the fixture stops populating. Removing the fixture's inserts drops it to
+6 and the floor fires.
+
+And the company doing the looking deliberately owns almost nothing, with
+a positive control that it can see its own chart of accounts. Every
+count would also be zero if the member could see nothing at all —
+commenting out the `set local role authenticated` makes the file fail on
+`current_user`, not pass silently.
+
+### The mutant that survived, and why that is the finding
+
+Making `audit_logs`' select policy `using (true)` fails the file at once
+— "audit_logs (232 of 232)". Making `contacts`' select policy
+`using (true)` does nothing, because `contacts` carries a second policy:
+`module_gate_select` is *restrictive* and scopes by
+`app.can_read_module(org_id, 'contacts')`, and restrictive policies AND.
+
+That is not a weakness of the sweep; it is the thing the sweep exists to
+see. A module-gated table is scoped twice. `audit_logs` is scoped once,
+and one is all it takes for a single wrong policy to hand a competitor
+the lot.
