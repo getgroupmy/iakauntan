@@ -3035,8 +3035,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_rebuild.sql": {
-    "mtime": 1788296010.4968123,
-    "ast_hash": "296af160a1153bb5635edf3d609a707a",
+    "mtime": 1788296633.7294421,
+    "ast_hash": "a936b3c06efe3fd483bfb4a5fb9a99a3",
     "semantic_hash": ""
   },
   "supabase/tests/demo_teardown.sql": {
@@ -6787,6 +6787,11 @@
   "supabase/migrations/0432_every_business_buys_something.sql": {
     "mtime": 1788296194.87848,
     "ast_hash": "5a266900a664a766a4b42064d9e8f57d",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0433_an_enquiry_every_business_gets.sql": {
+    "mtime": 1788296907.2621186,
+    "ast_hash": "acc23eca97a5b4651c7657623522bded",
     "semantic_hash": ""
   }
 }
