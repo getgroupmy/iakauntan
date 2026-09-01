@@ -151,6 +151,69 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- And the purge keeps records for the seven years the Act asks for
+-- ---------------------------------------------------------------------
+-- Section 245(5) of the Companies Act 2016 requires accounting records
+-- to be kept for seven years, and a record of who changed them is part
+-- of them. `docs/security.md` says so and says how it is done:
+--
+--     `app.purge_audit_history(7)` runs weekly under `pg_cron` as its
+--     own job rather than a line in `run_daily_jobs`, so a purge that
+--     fails cannot take the recurring invoices with it.
+--
+-- Both halves of that were already true and only one was asserted.
+-- `security_audit.sql` proves the function keeps six years and eleven
+-- months and drops eight, calling it with a literal 7; the block above
+-- proves the function is reachable from *some* scheduled job. Neither
+-- reads the number in the command the scheduler actually runs.
+--
+-- So `purge_audit_history(1)` in that string would pass every assertion
+-- in this repository while destroying a company's statutory records six
+-- years early, and the only sign would be an audit trail that started
+-- last year. `CLAUDE.md`: "anything touching EPF, SOCSO, EIS, PCB or an
+-- SSM deadline needs a test that would fail if the number moved."
+do $$
+declare
+  v_schedule text;
+  v_command  text;
+  v_years    integer;
+begin
+  select schedule, command into v_schedule, v_command
+    from cron.job where jobname = 'iakauntan-purge-audit';
+
+  perform pg_temp.check_true(
+    'the purge has a job of its own, so a purge that fails cannot take '
+    'the nightly run with it',
+    v_command is not null);
+
+  -- The number, out of the command the scheduler runs -- not out of a
+  -- literal written beside the assertion.
+  v_years := (regexp_match(v_command, 'purge_audit_history\s*\(\s*([0-9]+)\s*\)'))[1]::integer;
+  perform pg_temp.check_eq(
+    'and keeps seven years, which is what section 245(5) asks for: '
+    || coalesce(v_command, '(no job)'),
+    v_years, 7);
+
+  -- Weekly, and the reason is in the doc: its own cadence, not the
+  -- daily run's. Asserted as "not more often than daily" rather than
+  -- "exactly Sunday", because purging more often is harmless and the
+  -- thing that would matter is it being folded back into the daily job.
+  perform pg_temp.check_true(
+    'on its own schedule rather than inside the daily run: '
+    || coalesce(v_schedule, '(none)'),
+    v_schedule is not null and v_schedule <> (
+      select schedule from cron.job where jobname = 'iakauntan-daily'));
+
+  -- And it is genuinely a separate command, not `run_daily_jobs` with a
+  -- purge hidden inside it.
+  perform pg_temp.check_true(
+    'and the daily run does not purge anything itself',
+    not exists (select 1 from cron.job
+                 where jobname = 'iakauntan-daily'
+                   and command ~ 'purge_audit_history'));
+end $$;
+
+-- ---------------------------------------------------------------------
 -- The shape the scheduler calls it in: no argument, every tenant
 -- ---------------------------------------------------------------------
 --

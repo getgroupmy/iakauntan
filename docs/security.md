@@ -291,6 +291,18 @@ them. `app.purge_audit_history(7)` runs weekly under `pg_cron` as its
 own job rather than a line in `run_daily_jobs`, so a purge that fails
 cannot take the recurring invoices with it.
 
+Both halves of that are now asserted, and one of them was not.
+`security_audit.sql` has always proved the *function* keeps six years
+and eleven months and drops eight — but it calls it with a literal `7`,
+and `scheduled_work.sql` only proved the function was reachable from
+some scheduled job. Neither read the number in the command the scheduler
+actually runs, so `purge_audit_history(1)` in that string would have
+passed every assertion in this repository while destroying a company's
+statutory records six years early, with no sign but an audit trail that
+began last year. `scheduled_work.sql` now parses the number out of
+`cron.job.command` and asserts it is seven, that the purge has a job of
+its own, and that the daily run does not purge anything itself.
+
 Before 0235 neither log had any retention at all: `audit_logs` had been
 growing without bound since 0055.
 
