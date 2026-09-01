@@ -3971,3 +3971,57 @@ rather than widened.
 Both the migration and the test ask the catalogue for any policy whose
 expression still contains `::uuid`, rather than naming the four, so a
 fifth written next year fails.
+
+## 0406 — three document numbers nothing kept unique
+
+`app.next_document_number_internal` takes a row lock —
+`select ... for update` — and holds it for the rest of the transaction,
+so two callers asking at the same moment serialise and cannot be handed
+the same number. The function is right. This is not about the function.
+
+It is about what happens when something writes one of these columns
+without going through it, and `contact_numbering.sql` already says that
+is not hypothetical: *"the CSV importer writes whatever the file said …
+it is what a live organization did the first time a supplier was created
+from a scanned bill."* What saved `contacts` was
+`contacts_org_id_code_key`. The duplicate was refused loudly by a
+constraint, and `0116` was written to re-sync the counter. On a table
+with no such index the same importer, the same seed, the same scanned
+bill writes the duplicate and says nothing.
+
+Asked of the catalogue: of the numbers this application issues, twenty
+are covered by a unique index over `(org_id, …)` and three were not —
+`stock_movements.movement_no`, `rent_runs.run_no` and
+`strata_charge_runs.run_no`, all `text not null`, all generated.
+
+Counted on the hosted project before writing the migration, because a
+unique index that cannot be built is a deployment that breaks: 44 stock
+movements, 149 ledger entries, 24 receipts, 0 duplicates anywhere. So
+nothing was repaired. What changed is where the guarantee lives.
+
+### Most `_no` columns should not be unique, which is why this is a list
+
+The sweep's first output was mostly noise, and it is worth recording so
+nobody re-runs it:
+
+- **Somebody else's numbers** — `registration_no`, `passport_no`,
+  `licence_no`, `bank_account_no`, `supplier_doc_no`. Two suppliers may
+  both send an invoice numbered `INV-1`, and a unique index there would
+  refuse the second one.
+- **Line numbers** — unique within a parent, and constrained there.
+- **`pos_sales.order_no`** — the number called across the room, which
+  restarts daily per outlet exactly as `0220` intended: "short enough to
+  read across a room, which is the whole job it has". An index there
+  would be wrong, not missing. `app.next_kiosk_order_no` is a single
+  upsert taking the row lock, and `0220`'s comment explains why it is
+  one statement rather than a read then a write.
+
+So the rule is not "every `_no` is unique". It is a named list of the
+numbers this application *issues*, asserted in `contact_numbering.sql`
+rather than only in the migration, because a migration records what was
+true when it ran and an index dropped by `0450` should fail something.
+
+Three mutants killed: dropping the new `stock_movements` index, dropping
+the pre-existing `gl_entries` constraint, and — the one that keeps the
+list honest — adding a unique index to `pos_sales.order_no`, which fails
+the assertion that the numbers which must repeat still can.
