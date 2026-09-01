@@ -3317,3 +3317,80 @@ The lesson from the third is the one worth keeping. A guard sweep
 written as a list of known guard names measures the list, not the code.
 Asking instead whether a function consults *anything* about who is
 calling is the question that has an answer.
+
+## The ledger had a door beside the door
+
+`post_manual_journal` fixes the journal's source, checks the accounts,
+checks that debits equal credits and checks the period. Its own comment
+says why: "the client has no business asserting where a ledger entry
+came from … so nothing here is trusted."
+
+`gl_entries` and `gl_lines` were `INSERT`able by `authenticated`, under
+a policy that checked one thing — `app.can_post(org_id)`. No period. No
+balance. No accounts. PostgREST publishes every table the grants allow,
+so the second door was an HTTP request wide.
+
+Measured as an `accountant`, with a period closed: an entry dated inside
+the closed period went straight in; a line of 1,000,000 debit with no
+credit went in after it; `post_manual_journal`, given the same closed
+period, refused it. The front door was never wrong — it was avoidable.
+
+### The measurement that proved nothing
+
+The first run of that experiment was worthless and it is worth saying
+why. `pg_temp.sign_in_as` sets `request.jwt.claims` and does **not**
+change the session role, so a test that only signs in still runs as the
+table owner — exempt from RLS, needing no grants. Every insert
+"succeeded" for a reason that had nothing to do with the policies.
+
+The tell was that the back door stayed open after the grant was revoked.
+A fix that changes nothing means the thing being measured was not the
+thing that mattered. `access_types.sql` already had the right idiom —
+`set local role authenticated` — and the new test asserts
+`current_user = 'authenticated'` before anything else, so the file
+cannot quietly go back to proving nothing.
+
+### `0239` kept the grant on purpose, for a reason that was false
+
+`0239` revoked update, delete and truncate from the ledger and asserted
+what was left, calling the INSERT check "the positive control" — a good
+instinct, since revoking everything would satisfy a no-excess-privilege
+check by leaving nothing. But `app.create_gl_entry_internal`,
+`create_gl_entry` and `post_manual_journal` are all SECURITY DEFINER and
+all owned by the role that owns `gl_entries`, so posting runs as the
+owner and never consults the `authenticated` grant.
+
+Measured rather than argued: with INSERT revoked and both policies
+dropped, `post_manual_journal` called *as `authenticated`* still posts
+and still writes both lines, and the direct insert returns `42501`. The
+grant cost the whole of period control and bought nothing. A positive
+control has to exercise the thing, not check that a privilege exists —
+so the new test posts, and would fail if posting broke.
+
+### Left alone, deliberately
+
+An accountant can also flip a period from `closed` back to `open`:
+`fiscal_periods_update` is `using (app.can_post(org_id))` over the whole
+row. Reopening a period to book an adjustment before the accounts are
+finalised is ordinary practice, and *who* may do it is a decision for
+the company rather than one to make on its behalf inside a migration
+about something else. Recorded here so the decision is available rather
+than merely missing.
+
+The related worry does not arise: `gl_entries_fiscal_period_id_fkey` is
+`no action`, so a period with entries cannot be deleted from under them.
+Checked, not assumed.
+
+### And one thing found on the way, not yet fixed
+
+`gl_entries.total_debit` and `total_credit` are left at zero by both
+posting paths — `post_manual_journal` and `create_gl_entry` — while the
+lines carry the amounts. `0009` contains the `update … set total_debit =
+v_debit` that was meant to maintain them and `0238` quotes it, yet a
+freshly posted entry reads 0.00 against lines summing to 100.00.
+Nothing appears to read the columns except `ledger_append_only.sql`,
+which asserts 100 and passes, so there is a path where they are right
+and a path where they are not. That contradiction is the next thing to
+resolve; it is recorded rather than guessed at, and the new test
+deliberately asserts the lines balance instead, which is the invariant
+the open door actually broke.

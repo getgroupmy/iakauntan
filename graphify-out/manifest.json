@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788228251.552181,
-    "ast_hash": "2adcf935e9350ac69ebbc79f60fd4498",
+    "mtime": 1788231674.471828,
+    "ast_hash": "a06a997a2eb024bb5f4ff5d3d5662c40",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788230630.601251,
-    "ast_hash": "230f5f5af60a7e71e436a7e20e0344ed",
+    "mtime": 1788231807.365321,
+    "ast_hash": "05a826d25e137323a1b2fb7f8100bba3",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6477,6 +6477,16 @@
   "supabase/migrations/0398_the_business_activity_that_was_the_letters_NA.sql": {
     "mtime": 1788230449.1572402,
     "ast_hash": "fe1d0643ef3710cd993b062588a5ffe1",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0399_the_ledger_had_a_door_beside_the_door.sql": {
+    "mtime": 1788231542.153305,
+    "ast_hash": "75e48b045f34d8f66c699293ec16d50f",
+    "semantic_hash": ""
+  },
+  "supabase/tests/ledger_is_written_only_by_functions.sql": {
+    "mtime": 1788231714.1461616,
+    "ast_hash": "f9ce91034c04965987153b3d8ad598ad",
     "semantic_hash": ""
   }
 }
