@@ -462,4 +462,99 @@ begin
       'public.quote_opportunity(uuid, date, text)', 'execute'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The price the customer will actually be asked for
+-- ---------------------------------------------------------------------
+-- `0438`. `quote_opportunity` wrote its line with neither a tax code
+-- nor a rate, for every organization. Measured end to end on a
+-- service-tax-registered company: a deal worth RM84,000 quoted at
+-- RM84,000 with RM0.00 of tax, and `transfer_document` -- which copies
+-- the line's tax code and rate, correctly -- carried the zero into the
+-- invoice. The customer was billed 84,000, the price was 90,720, and
+-- the difference is the registrant's to pay whether or not they
+-- collected it.
+--
+-- Worse in reach than `0437`'s fee note: a quotation is the front of
+-- the whole pipeline, so every invoice raised from a quoted deal
+-- inherited it.
+do $$
+declare
+  v_reg  uuid := pg_temp.test_org('Sebut Harga Berdaftar Sdn Bhd');
+  v_none uuid := pg_temp.test_org('Sebut Harga Tak Berdaftar Sdn Bhd');
+  v_cust uuid; v_cust2 uuid;
+  v_deal uuid; v_deal2 uuid;
+  v_doc  uuid; v_doc2 uuid; v_inv uuid;
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+begin
+  insert into public.tax_codes
+    (org_id, code, name, tax_type_code, rate,
+     sales_tax_account_id, purchase_tax_account_id)
+  values (v_reg, 'ST8', 'Service Tax 8%', '02', 8,
+          (select id from public.accounts where org_id = v_reg and code = '2130'),
+          (select id from public.accounts where org_id = v_reg and code = '1410'));
+  perform public.set_sst_registration(
+    v_reg, true, v_today - 365, 'W10-1808-31000123', 'ST8');
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_reg, 'C-1', 'Pembeli Sdn Bhd', 'customer') returning id into v_cust;
+  v_deal := pg_temp.pq_deal(v_reg, 'OPP-T1', 'Rack rollout', v_cust, 84000);
+  v_doc  := public.quote_opportunity(v_deal);
+
+  perform pg_temp.check_eq(
+    'a registered company quotes the tax it will charge',
+    (select tax_amount from public.sales_documents where id = v_doc),
+    6720.00);
+  perform pg_temp.check_eq(
+    'and the quotation totals the deal plus that tax',
+    (select total_amount from public.sales_documents where id = v_doc),
+    90720.00);
+
+  -- The deal's own figure is unchanged. Reading it as tax-inclusive
+  -- would have quoted a smaller contract than the pipeline says the
+  -- deal is worth, which is the disagreement `quote_opportunity` exists
+  -- to prevent.
+  perform pg_temp.check_eq(
+    'and the deal is still worth what the pipeline says',
+    (select unit_price from public.sales_document_lines
+      where document_id = v_doc), 84000);
+
+  -- The line, not just the header. Totals are recalculated from
+  -- `sales_document_lines.tax_rate`, so a quotation naming ST8 without
+  -- its 8 would show a tax code and charge nothing.
+  perform pg_temp.check_eq(
+    'and the line carries both the code and its rate',
+    (select count(*) from public.sales_document_lines
+      where document_id = v_doc
+        and (tax_code_id is null or coalesce(tax_rate, 0) = 0)), 0);
+
+  -- The whole point: what the invoice raised from it comes to.
+  -- `transfer_document` copies the line faithfully, so before `0438`
+  -- this inherited a zero.
+  v_inv := public.transfer_document(v_doc, 'invoice');
+  perform pg_temp.check_eq(
+    'and the invoice it becomes charges the same tax',
+    (select tax_amount from public.sales_documents where id = v_inv),
+    6720.00);
+  perform pg_temp.check_eq(
+    'so the quotation and the invoice agree on the price',
+    (select total_amount from public.sales_documents where id = v_inv),
+    90720.00);
+
+  -- The control. An unregistered company must still quote nothing,
+  -- or the fix becomes tax nobody may collect.
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_none, 'C-1', 'Pembeli Lain Sdn Bhd', 'customer')
+  returning id into v_cust2;
+  v_deal2 := pg_temp.pq_deal(v_none, 'OPP-T2', 'Same job', v_cust2, 84000);
+  v_doc2  := public.quote_opportunity(v_deal2);
+
+  perform pg_temp.check_eq(
+    'and a company that is not registered quotes no tax at all',
+    (select tax_amount from public.sales_documents where id = v_doc2), 0);
+  perform pg_temp.check_eq(
+    'on a quotation it really raised',
+    (select total_amount from public.sales_documents where id = v_doc2),
+    84000.00);
+end $$;
+
 rollback;
