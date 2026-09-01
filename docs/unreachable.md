@@ -4651,3 +4651,97 @@ reason those three per-column assertions are there at all.
 
 A seventh was a duplicate of the fourth, written by mistake and counted
 here as one rather than two.
+
+---
+
+## The monthly bill that billed less than the document it was made from
+
+The same column, one place further on, and this one is worse because it
+recurs.
+
+`app.snapshot_document` freezes a document into the template
+`app.raise_recurring_document` replays every month. Its two halves do
+the same job in opposite directions, and the lines half says why:
+
+> Everything on the line except what belongs to the document it came
+> off. **Listing what to keep instead would quietly drop any column
+> added after today.**
+
+That comment is on the lines. The header lists what to keep — the thing
+the comment warns against — and it had already dropped three columns.
+
+### Measured
+
+A property manager sets up one monthly bill: RM300 maintenance, RM12
+delivery, a RM45 service charge, on the Kuala Lumpur branch.
+
+```
+template  ship 12.00  service charge 45.00  branch set   total 381.00
+raised    ship 12.00  service charge  0.00  branch null  total 336.00
+```
+
+RM45 short, every month, on every parcel, and the invoice lands outside
+its branch. A monthly service charge billed to every owner is not an
+edge case here — it is the entire business of a strata management
+company, and one of the seeded demo tenants is one.
+
+### The three, and when each was lost
+
+| column | added by | relative to `0097` |
+|---|---|---|
+| `service_charge_amount` | `0410` | 313 migrations after |
+| `branch_id` | `0131` | 34 after, and missing on the buying side too |
+| `matter_id` | `0021` | before — never carried rather than dropped |
+
+`matter_id` is the one that does not change the money. A firm's monthly
+retainer raised without its matter bills the right amount into the wrong
+ledger, so the arithmetic assertion would never have found it. It has an
+assertion of its own.
+
+### What is not fixed
+
+Schedules already stored keep the header they were snapshotted with.
+`recurring_documents` holds no reference to the document a template came
+from — `last_document_id` is the last invoice *raised*, which is itself
+missing the columns — so there is nothing to re-derive them from. Saving
+the template again picks them up. The replay coalesces a missing key
+rather than failing, so those schedules go on billing exactly what they
+billed yesterday. That is stated in `0416`'s header too, because a fix
+that silently does not reach existing rows is worse than one that says
+where it stops.
+
+### What stops the fourth column
+
+`recurring_template_carries_the_document.sql` requires **every** column
+of both document tables to be either in the snapshot or in a list
+written down in the test as not replayed, with the reason. A column
+added to either table and not decided about turns it red, naming the
+column and what to do. It checks the other direction as well, so the
+list cannot rot into names of columns that no longer exist while
+claiming to have decided about them.
+
+The whitelist is kept rather than inverted. A header carries forty-odd
+columns and most of them are identity, numbering, computed totals and
+lifecycle that must never be replayed; subtracting would be the more
+dangerous direction here, and a new *computed* column would then be
+wrongly carried. What was missing was never the blacklist. It was
+anything at all that noticed.
+
+### Mutants
+
+Seven. Four killed for their own reason: the service charge dropped from
+the snapshot (381.00 against 336.00, the production defect exactly),
+`branch_id` dropped from the sales replay (the branch assertion),
+`matter_id` dropped (the retainer assertion), and the exclusion list
+naming a column the table no longer has.
+
+Two more are the ones the file exists for — a new money column added to
+`sales_documents`, and another to `purchase_documents` — both caught by
+the enumeration, each naming the column it found.
+
+Two weaker kills, reported as what they were. Dropping `branch_id` from
+the replay's column list alone died on a Postgres "INSERT has more
+expressions than target columns", not on an assertion; it was rebuilt to
+drop the value line too, which then failed properly. And renaming a
+listed column died in an unrelated trigger before reaching the rot
+check, which is why that check was mutated directly instead.
