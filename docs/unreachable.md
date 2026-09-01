@@ -3863,3 +3863,58 @@ That is not a weakness of the sweep; it is the thing the sweep exists to
 see. A module-gated table is scoped twice. `audit_logs` is scoped once,
 and one is all it takes for a single wrong policy to hand a competitor
 the lot.
+
+## A fifth sweep, which found nothing and became a guard
+
+The fourth sweep asked whether one company can read another's rows
+*through* RLS. This one asks the other side: **an edge function holding
+`SUPABASE_SERVICE_ROLE_KEY` is outside RLS entirely.** Every policy in
+this schema, every `app.can_*` guard and the whole of
+`no_tenant_sees_another.sql` are downstream of a client the function
+builds for itself, and a function that builds only the service-role one
+and then trusts `body.org_id` writes wherever the body says.
+
+Seven of the ten functions hold the service role. All seven are correct,
+by four different routes — which is exactly why a checker written
+against one of them would have failed the other three:
+
+- **`_shared/context.ts`** — `myinvois`. Reads `body.org_id`, requires
+  it, and validates membership through the caller's own client.
+- **An inline caller-scoped client calling a guarded function** — `ocr`
+  builds a client from the anon key and the request's own
+  `Authorization` header and calls `ocr_begin` through it;
+  `ocr_begin` is SECURITY DEFINER and opens with
+  `if not app.can_write(p_org_id)`. A forged `org_id` is refused there,
+  before the service-role client is built.
+- **A caller-scoped read whose RLS decides the work set** —
+  `send-email` reads `email_outbox` through the caller's client, so
+  `app.is_org_member(org_id)` decides what may be sent;
+  `billplz-checkout` reads `platform_invoices` the same way, with its
+  own comment saying "a forged invoice id belonging to another company
+  returns nothing rather than its amount"; `send-push` resolves the
+  sender the same way.
+- **No user caller at all** — `billplz-callback` and `receive-email` are
+  inbound webhooks authenticated by a signature and a shared secret,
+  and `fetch-rates` is a scheduled job. Demanding an `Authorization`
+  header of any of them would be asking the wrong question.
+
+### Why this one earned a checker and the other four did not
+
+`docs/unreachable.md` already says why three sweeps produced no CI
+guard: their false positives were indistinguishable from correct code.
+This one is different. The invariant is mechanical — a file that reads
+`SUPABASE_SERVICE_ROLE_KEY` either also builds a client from the
+request's `Authorization` header, or is on a named list with a written
+reason — and it has no false positives today across all ten functions.
+
+`scripts/check_edge_authorization.py` is in CI, next to
+`check_embeds.py` and `check_idempotent_calls.py`. Three mutants killed:
+removing `send-email`'s anon-key client, adding a brand-new function
+that holds only the service key and inserts on `body.org_id`, and
+leaving a name in the exemption list that no longer matches a function —
+because an exemption nothing uses is one waiting to be inherited by
+something else.
+
+The exemption list is the whole of the judgement in the file. Adding a
+name to it is saying "this one has no session to check", and that should
+be a sentence somebody has to write.

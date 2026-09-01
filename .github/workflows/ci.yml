@@ -324,6 +324,21 @@ jobs:
           python3 scripts/check_idempotent_calls.py "$DB"
 
       # -----------------------------------------------------------------
+      # An edge function holding the service role is outside RLS
+      # entirely, so every policy in the schema and the whole of
+      # `no_tenant_sees_another.sql` are downstream of a client it
+      # builds for itself. One that builds only the service-role client
+      # and then trusts `body.org_id` writes wherever the body says, and
+      # nothing else in the repository can see it: `deno check`
+      # type-checks the file, the SQL assertions never reach it, and the
+      # Deno tests exercise the pure helpers rather than the handler.
+      #
+      # Needs no database, so it runs here rather than in its own job.
+      # -----------------------------------------------------------------
+      - name: Check the service role never writes without knowing the caller
+        run: python3 scripts/check_edge_authorization.py
+
+      # -----------------------------------------------------------------
       # And does the hosted project match the migrations that built it?
       #
       # Everything above proves the *files* are good: the stack was built
