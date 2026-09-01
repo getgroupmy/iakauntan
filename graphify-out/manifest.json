@@ -3035,8 +3035,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_rebuild.sql": {
-    "mtime": 1788294322.5514867,
-    "ast_hash": "bca22a574be962a9d9efc5b48a6ead1a",
+    "mtime": 1788296010.4968123,
+    "ast_hash": "296af160a1153bb5635edf3d609a707a",
     "semantic_hash": ""
   },
   "supabase/tests/demo_teardown.sql": {
@@ -6782,6 +6782,11 @@
   "supabase/migrations/0431_the_exemption_lhdn_was_told_nothing_about.sql": {
     "mtime": 1788295230.98155,
     "ast_hash": "965e3fd97cff06f85b79578c263a133c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0432_every_business_buys_something.sql": {
+    "mtime": 1788296194.87848,
+    "ast_hash": "5a266900a664a766a4b42064d9e8f57d",
     "semantic_hash": ""
   }
 }
