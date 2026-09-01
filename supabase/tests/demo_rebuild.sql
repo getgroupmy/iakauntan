@@ -573,6 +573,130 @@ begin
   perform pg_temp.check_eq(
     'no active module is left without a demo tenant to show it in',
     v_modules, 0);
+
+  -- --------------------------------------------------------------
+  -- A practice's accounts name the client, not the practice
+  -- --------------------------------------------------------------
+  -- `fs_filings.corp_entity_id` had no writer until `e12d645`, so it was
+  -- null on every filing and `report_fs_deadlines` fell back to
+  -- `coalesce(e.name, o.name)` -- the practice's own name -- on every
+  -- row, with no registration number beside it. A seed that left the
+  -- column null would reproduce exactly that and look like a working
+  -- demo.
+  perform pg_temp.check_eq(
+    'every set of accounts Amanah prepares names a client company',
+    (select count(*) from public.fs_filings f
+      where f.org_id = v_amanah and f.corp_entity_id is null), 0);
+  -- `report_fs_deadlines` answers only a member of the organization, so
+  -- the two assertions that go through it are made as one. Everything
+  -- else in this file reads tables directly and needs no sign-in.
+  perform pg_temp.sign_in_as(
+    (select m.user_id from public.org_members m
+      where m.org_id = v_amanah and m.role = 'owner' limit 1));
+  perform pg_temp.check_true(
+    'and the deadline list shows those names rather than the practice',
+    not exists (select 1 from public.report_fs_deadlines(v_amanah, 400) d
+                 where d.company = 'Amanah Setiausaha Sdn Bhd'));
+  -- Both states, because they are the two arrangements the module has
+  -- to show: a practice preparing accounts for companies it keeps the
+  -- registers of, and a company preparing its own.
+  perform pg_temp.check_eq(
+    'while a company keeping its own books names none',
+    (select count(*) from public.fs_filings f
+      where f.org_id = v_sinar and f.corp_entity_id is not null), 0);
+  -- The list is worth reading: one past its date and one still to come.
+  -- A demo where every row is the same colour teaches nothing.
+  perform pg_temp.check_true(
+    'and the list has both a late one and one still in hand',
+    (select count(*) filter (where d.is_late) from
+       public.report_fs_deadlines(v_amanah, 400) d) >= 1
+    and (select count(*) filter (where not d.is_late) from
+       public.report_fs_deadlines(v_amanah, 400) d) >= 1);
+  perform pg_temp.sign_out();
+
+  -- --------------------------------------------------------------
+  -- And there is something in it when you get there
+  -- --------------------------------------------------------------
+  -- The assertion above is satisfied by a flag. `mbrs` passed it for as
+  -- long as the module has existed: enabled on Sinar, and no demo
+  -- tenant had ever had a set of accounts, so somebody signing in and
+  -- opening Financial statements read "No accounts prepared yet". A
+  -- guard that reads as "every module can be seen" and means "every
+  -- module is ticked" is the shape worth being careful about.
+  --
+  -- So this asks the other half: for each module a demo tenant has
+  -- enabled, is there a row in the table that holds its work. The
+  -- register below is what is still empty, named rather than tolerated
+  -- silently, and a twelfth joining it turns this red.
+  --
+  -- The probe is a hand-written map because there is no mechanical one:
+  -- a module is a concept, and which table means "this tenant uses it"
+  -- is a judgement. `chat` is left out because its tables are scoped
+  -- through a conversation rather than by an `org_id` column, and
+  -- `attachments`, `mailbox` and `workspace_address` because `0324` and
+  -- `0329` enable them deliberately without rows and say why.
+  declare
+    r record;
+    n bigint;
+    gaps text[] := '{}';
+    -- Enabled, empty, and known. Each is a demo somebody has not
+    -- written yet, not a defect in the module.
+    known text[] := array[
+      -- Nobody has demonstrated a pipeline in any tenant.
+      'crm',
+      -- Submitting to LHDN needs credentials, and `demo_credentials_locked`
+      -- withholds them on purpose. A submission row would be a lie.
+      'einvoice',
+      -- Sinar is the only tenant that buys anything.
+      'purchases',
+      -- Written for Sinar's scale; the other tenants approve nothing.
+      'approvals',
+      'branches', 'manufacturing', 'timesheets', 'legal', 'fixed_assets'];
+  begin
+    for r in
+      with probe(module_code, tbl) as (values
+        ('approvals','approval_rules'), ('branches','branches'),
+        ('crm','leads'), ('einvoice','einvoice_submissions'),
+        ('fixed_assets','fixed_assets'), ('forecasting','forecast_runs'),
+        ('hr','employees'), ('inventory','warehouses'),
+        ('legal','matters'), ('manufacturing','manufacturing_orders'),
+        ('mbrs','fs_filings'), ('memberships','pos_memberships'),
+        ('payroll','payroll_runs'), ('pos','pos_outlets'),
+        ('property_nonstrata','property_units'),
+        ('property_strata','property_units'),
+        ('purchases','purchase_documents'),
+        ('secretarial','corp_entities'), ('ticketing','tickets'),
+        ('timesheets','time_entries'), ('loyalty','loyalty_programs')
+      )
+      select o.name as org, o.id as org_id, om.module_code as m, pr.tbl as t
+        from public.org_modules om
+        join public.organizations o on o.id = om.org_id
+        join probe pr on pr.module_code = om.module_code
+       where o.is_demo and om.is_enabled
+         and not (om.module_code = any (known))
+       order by o.name, om.module_code
+    loop
+      execute format('select count(*) from public.%I where org_id = $1', r.t)
+        into n using r.org_id;
+      if n = 0 then
+        gaps := gaps || (r.org || ' -> ' || r.m);
+      end if;
+    end loop;
+
+    -- The control. If the probe matched no rows at all -- a renamed
+    -- table, a mistyped module code -- the loop would run zero times
+    -- and the assertion below would pass on an empty hand.
+    perform pg_temp.check_true(
+      'the probe actually looked at some modules',
+      (select count(*) from public.org_modules om
+         join public.organizations o on o.id = om.org_id
+        where o.is_demo and om.is_enabled
+          and not (om.module_code = any (known))) > 10);
+
+    perform pg_temp.check_eq(
+      'and a module a demo tenant has bought has something in it',
+      coalesce(array_to_string(gaps, ', '), ''), '');
+  end;
 end $$;
 
 rollback;
