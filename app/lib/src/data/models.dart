@@ -2003,6 +2003,7 @@ class LeaveType {
     required this.name,
     this.isPaid = true,
     this.defaultDays = 0,
+    this.allowHalfDay = true,
   });
 
   final String id;
@@ -2011,12 +2012,20 @@ class LeaveType {
   final bool isPaid;
   final double defaultDays;
 
+  /// Whether this leave may be taken in half days. `0365` built the rule
+  /// and `0397` measured that nothing had ever set the flag it guards,
+  /// so the rule had never once been reached. Read here so the form can
+  /// stop offering what the database would refuse.
+  final bool allowHalfDay;
+
   factory LeaveType.fromJson(Map<String, dynamic> j) => LeaveType(
     id: j['id'] as String,
     code: j['code']?.toString() ?? '',
     name: j['name']?.toString() ?? '',
     isPaid: j['is_paid'] == true,
     defaultDays: Fmt.toDouble(j['default_days']),
+    // Absent means allowed, matching the column's own default.
+    allowHalfDay: j['allow_half_day'] != false,
   );
 }
 

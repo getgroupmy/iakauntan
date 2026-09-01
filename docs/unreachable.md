@@ -3121,3 +3121,78 @@ So the resolution is neither to delete it nor to pretend the mutant died:
 the existence of both is asserted directly, the way `statutory.sql` and
 `table_grants.sql` assert grants and policies. When behaviour cannot see
 a control, assert the control.
+
+## The leave request for minus twenty days
+
+The next item on the RPC-parameter sweep was `submit_leave_request`'s
+`p_is_half_day` and `p_half_day_period`, which `0027` modelled
+deliberately ("half days are common enough to model directly rather than
+as hours") and no caller has ever passed. Looking at why led somewhere
+larger.
+
+`submit_leave_request` takes the number of days from its caller and
+never relates it to the dates it was given. Measured on the harness, an
+employee with fourteen days of annual leave filing one request for
+themselves, needing nobody:
+
+    submit_leave_request(org, annual, tomorrow, tomorrow, -20)
+
+    before        entitled 14.00  taken   0.00  pending   0.00  available 14
+    after submit                                pending -20.00  available 34
+    after approve                 taken -20.00  pending   0.00  available 34
+
+Twenty days of annual leave, out of nothing. The hold is applied as
+`pending_days + p_total_days`, so a negative subtracts;
+`decide_leave_request` then moves it into `taken_days`, where it stays.
+Every step below is a correct addition of a number nobody checked, and
+the manager approving it sees an ordinary one-day request — the days are
+on the balance, not on the screen they clicked. Unused annual leave is
+commonly paid out on termination, so this is not only an HR figure.
+
+The other direction has no bound at all on unpaid leave, where the
+entitlement check is skipped deliberately and correctly: a one-day
+request may claim 300 days, and that figure is what
+`calculate_payroll_run` multiplies by `basic_salary /
+working_days_per_month` and takes off gross pay, the EPF wage, the SOCSO
+and EIS wages and taxable income.
+
+It does *not* run the other way, and it is worth saying so rather than
+overstating the find: the payslip line is written only `if
+v_unpaid_amt > 0`, so a negative figure writes no line and pays nobody
+extra. It is still stored in the payslip's own `unpaid_leave_days` and
+`unpaid_leave_amount` columns, which is a payslip disagreeing with its
+own lines.
+
+### The bound that can be checked, and the one that cannot
+
+The upper bound needs nothing but the dates: fourteen calendar days is
+at most fourteen days of leave. The lower bound needs the work calendar
+— ten days over Chinese New Year may honestly be three days of leave —
+and `work_shifts` and `public_holidays` both exist and neither is
+consulted. `0397` enforces the upper bound and states that the lower one
+is missing, rather than inventing a working week that would be wrong for
+every company that does not keep it.
+
+### Two rules that had never met
+
+`0365` added `enforce_half_day_rule`: a leave type may forbid half days
+and a request marked as one is refused if it does. The rule works — set
+the flag directly and it fires. Nothing had ever set the flag, so it
+guarded a door nobody could open. `0397` writes the arithmetic both ways
+round: a half day is 0.5 days on one date, *and* 0.5 days is a half day.
+Without the second, a caller reaches past `0365` by claiming half a day
+and leaving the flag off, which is exactly what every caller did.
+
+### A redundant branch, kept and made killable
+
+Two mutants survived the first run: removing the `total_days <= 0` check
+entirely, and narrowing it to `= 0`. Both survive because `total_days <
+0.5` already refuses a negative — with the wrong sentence, telling
+somebody who filed -20 that the shortest leave is half a day.
+
+`0387`'s rule says an equivalent mutant means redundant code, and
+deleting the branch was one honest option. The other is to make the test
+tell the two apart, which is what a distinct message is *for*: the
+assertions now check which sentence came back, not only the sqlstate.
+Both mutants die. A branch that exists only to say something better is
+worth keeping precisely when something notices it has stopped saying it.

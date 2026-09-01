@@ -163,6 +163,39 @@ class _LeaveTile extends ConsumerWidget {
   }
 }
 
+/// Whether a half day may be asked for at all.
+///
+/// Two conditions, both of which the database also holds — `0397` for
+/// the single date and the arithmetic, `0365` for the leave type. This
+/// is here so the form does not offer what would be refused; the
+/// refusal is still the control, and has to be, because this code runs
+/// on a device somebody else owns.
+///
+/// `0365` wrote its rule and nothing ever set the flag it reads, so it
+/// guarded a door nobody could open until `0397`. The switch is the
+/// door.
+bool canTakeHalfDay({
+  required LeaveType? type,
+  required DateTime start,
+  required DateTime end,
+}) {
+  if (type == null || !type.allowHalfDay) return false;
+  return start.year == end.year &&
+      start.month == end.month &&
+      start.day == end.day;
+}
+
+/// What a request is for, given the dates and whether it is a half day.
+///
+/// An upper bound, and the database enforces it as one: ten calendar
+/// days over a public holiday may honestly be fewer days of leave, and
+/// deciding which needs the work calendar that neither side consults.
+double leaveDaysFor({
+  required DateTime start,
+  required DateTime end,
+  required bool halfDay,
+}) => halfDay ? 0.5 : end.difference(start).inDays + 1;
+
 class _RequestLeaveDialog extends ConsumerStatefulWidget {
   const _RequestLeaveDialog();
 
@@ -177,7 +210,26 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
   String? _typeId;
   DateTime _start = DateTime.now();
   DateTime _end = DateTime.now();
+  bool _halfDay = false;
+  String _period = 'morning';
   bool _saving = false;
+
+  /// A half day is one date, so the switch is only offered when the two
+  /// dates are the same, and it turns itself off when they stop being.
+  /// The database says the same thing — `0397` — and this is so the
+  /// person is not offered something that will be refused.
+  bool get _oneDate => _start.year == _end.year &&
+      _start.month == _end.month &&
+      _start.day == _end.day;
+
+  LeaveType? _typeOf(List<LeaveType> types) =>
+      types.where((x) => x.id == _typeId).firstOrNull;
+
+  bool _allowsHalfDay(List<LeaveType> types) =>
+      _typeOf(types)?.allowHalfDay ?? true;
+
+  bool _canHalfDay(List<LeaveType> types) =>
+      canTakeHalfDay(type: _typeOf(types), start: _start, end: _end);
 
   @override
   void dispose() {
@@ -186,9 +238,16 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
     super.dispose();
   }
 
-  /// Calendar days between the two dates. Working-day and half-day
-  /// handling belongs with the leave policy, which lives in the database.
-  double get _days => _end.difference(_start).inDays + 1;
+  /// What the request is for.
+  ///
+  /// Calendar days between the two dates, or half a day when it is one.
+  /// This is an upper bound and the database enforces it as one — a
+  /// span of ten days over a public holiday may honestly be fewer days
+  /// of leave, and deciding which needs the work calendar, which
+  /// neither side consults. `0397`'s header sets out why that lower
+  /// bound is left unstated rather than invented.
+  double get _days =>
+      leaveDaysFor(start: _start, end: _end, halfDay: _halfDay);
 
   @override
   Widget build(BuildContext context) {
@@ -219,7 +278,10 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
                         child: Text(_labelFor(t, balances)),
                       ),
                   ],
-                  onChanged: (v) => setState(() => _typeId = v),
+                  onChanged: (v) => setState(() {
+                    _typeId = v;
+                    if (!_allowsHalfDay(list)) _halfDay = false;
+                  }),
                   validator: (v) => v == null ? 'Choose a leave type' : null,
                 ),
               ),
@@ -232,6 +294,7 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
                     onChanged: (d) => setState(() {
                       _start = d;
                       if (_end.isBefore(d)) _end = d;
+                      if (!_oneDate) _halfDay = false;
                     }),
                   ),
                 ),
@@ -240,10 +303,50 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
                   child: _DateField(
                     label: 'Last day',
                     value: _end,
-                    onChanged: (d) => setState(() => _end = d),
+                    onChanged: (d) => setState(() {
+                      _end = d;
+                      if (!_oneDate) _halfDay = false;
+                    }),
                   ),
                 ),
               ]),
+              const SizedBox(height: Space.sm),
+              // `0027` modelled half days, `0365` wrote the rule about
+              // which leave may be taken in them, and nothing had ever
+              // set the flag either was about.
+              types.maybeWhen(
+                data: (list) => Row(children: [
+                  Switch(
+                    value: _halfDay,
+                    onChanged: _canHalfDay(list)
+                        ? (v) => setState(() => _halfDay = v)
+                        : null,
+                  ),
+                  const SizedBox(width: Space.sm),
+                  Expanded(
+                    child: Text(
+                      !_oneDate
+                          ? 'Half day — for a single date'
+                          : !_allowsHalfDay(list)
+                              ? 'Half day — not for this kind of leave'
+                              : 'Half day',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  if (_halfDay && _canHalfDay(list))
+                    SegmentedButton<String>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(value: 'morning', label: Text('AM')),
+                        ButtonSegment(value: 'afternoon', label: Text('PM')),
+                      ],
+                      selected: {_period},
+                      onSelectionChanged: (v) =>
+                          setState(() => _period = v.first),
+                    ),
+                ]),
+                orElse: () => const SizedBox.shrink(),
+              ),
               const SizedBox(height: Space.sm),
               Text('${Fmt.days(_days)} day(s)',
                   style: Theme.of(context).textTheme.bodySmall),
@@ -308,6 +411,8 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
             reason: _reason.text.trim().isEmpty ? null : _reason.text.trim(),
             contactWhileAway:
                 _contact.text.trim().isEmpty ? null : _contact.text.trim(),
+            isHalfDay: _halfDay,
+            halfDayPeriod: _halfDay ? _period : null,
           ),
       successMessage: 'Submitted for approval',
     );

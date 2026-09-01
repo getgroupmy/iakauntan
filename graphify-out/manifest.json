@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788227430.6430674,
-    "ast_hash": "4344f684ff096d04e5c35ba1ea864d5c",
+    "mtime": 1788229415.7523909,
+    "ast_hash": "df0672fecb7ad59580ce6b2f74d013fe",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788228213.669607,
-    "ast_hash": "bba73f823bd43f0ac0a4f3cdf02f42f0",
+    "mtime": 1788229415.7540238,
+    "ast_hash": "cde6742b94467fe211d94b93077adc12",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -200,8 +200,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/leave_screen.dart": {
-    "mtime": 1788227590.6316485,
-    "ast_hash": "319509d3d3b1a2881e2f94040718913a",
+    "mtime": 1788229491.450485,
+    "ast_hash": "57d13c7759bd308dbe81c65d93864946",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/my_hr_screen.dart": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788228953.521151,
-    "ast_hash": "0defcb770bda7bea5510f496dd88d782",
+    "mtime": 1788229730.8251975,
+    "ast_hash": "0f9fe21a13f5164d48deef96d2b7b25d",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -4270,8 +4270,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/leave_requests.sql": {
-    "mtime": 1788227388.1471565,
-    "ast_hash": "a4e0aa4dc5a8ac0cfb330113c1226e7b",
+    "mtime": 1788229321.110066,
+    "ast_hash": "4af1952d40e3e4c50df969d6cb3fa62e",
     "semantic_hash": ""
   },
   "supabase/tests/lot_report.sql": {
@@ -6462,6 +6462,16 @@
   "supabase/migrations/0396_a_version_this_build_cannot_sign.sql": {
     "mtime": 1788228859.4741776,
     "ast_hash": "103e1f05bef32b47f5fc5ff87ce7c3d2",
+    "semantic_hash": ""
+  },
+  "app/test/leave_half_day_test.dart": {
+    "mtime": 1788229509.9891841,
+    "ast_hash": "dfd08aa1fde1e3bb8aea347dc0b93ebb",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0397_the_leave_request_for_minus_twenty_days.sql": {
+    "mtime": 1788229206.3331661,
+    "ast_hash": "cd9ad172d23a29ad7c3afd223c6e20d0",
     "semantic_hash": ""
   }
 }

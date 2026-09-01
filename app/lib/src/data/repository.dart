@@ -4663,6 +4663,8 @@ extension RepoHr on Repo {
     required double days,
     String? reason,
     String? contactWhileAway,
+    bool isHalfDay = false,
+    String? halfDayPeriod,
   }) => callRpc(
     'submit_leave_request',
     params: {
@@ -4672,6 +4674,12 @@ extension RepoHr on Repo {
       'p_end_date': Fmt.iso(end),
       'p_total_days': days,
       if (reason != null) 'p_reason': reason,
+      // `0027` modelled half days and `0365` wrote the rule about which
+      // leave may be taken in them. Nothing ever passed the flag, so
+      // `0365` guarded a door nobody could open until `0397`.
+      if (isHalfDay) 'p_is_half_day': true,
+      if (isHalfDay && halfDayPeriod != null)
+        'p_half_day_period': halfDayPeriod,
       if (contactWhileAway != null)
         'p_contact_while_away': contactWhileAway,
     },

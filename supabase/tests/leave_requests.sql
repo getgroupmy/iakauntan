@@ -51,6 +51,9 @@ declare
   v_away     uuid;
   v_past     uuid;
   v_far      uuid;
+  v_half     uuid;
+  v_whole    uuid;
+  v_bal      numeric;
   r          record;
   v_msg      text;
 begin
@@ -279,6 +282,162 @@ begin
        join public.leave_types lt on lt.id = lr.leave_type_id
       where lr.employee_id = v_e_staff and lr.status = 'approved'
         and not lt.is_paid), 30);
+
+  -- ==================================================================
+  -- How many days it is actually for
+  -- ==================================================================
+  -- submit_leave_request took the number of days from its caller and
+  -- never related it to the dates. Measured before 0397: an employee
+  -- with fourteen days of annual leave filed one request for themselves
+  -- for -20 days, their available balance became 34, and approving it
+  -- moved the twenty days into taken_days for good. Every step below it
+  -- is a correct addition of a number nobody checked.
+  perform pg_temp.sign_in_as(v_staff);
+  select coalesce(entitled_days, 0) + coalesce(carried_forward, 0)
+       + coalesce(adjustment_days, 0) - coalesce(taken_days, 0)
+       - coalesce(pending_days, 0)
+    into v_bal from public.leave_balances
+   where employee_id = v_e_staff and leave_type_id = v_annual;
+
+  begin
+    perform public.submit_leave_request(
+      v_org, v_annual, current_date + 10, current_date + 10, -20,
+      'Manufacture');
+    raise exception 'FAIL: leave for minus twenty days was filed';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    -- The message, not only the sqlstate. A negative is not somebody
+    -- confused about the minimum, and the branch that says so is only
+    -- worth having if something notices when it stops being reached:
+    -- `total_days < 0.5` refuses -20 too, with the wrong sentence.
+    perform pg_temp.check_true('and the refusal is about it not being leave',
+      v_msg like '%is for some leave%' and v_msg like '%-20%');
+    raise notice 'ok   a leave request is for some leave';
+  end;
+  perform pg_temp.check_eq('and the balance is untouched',
+    (select coalesce(entitled_days, 0) + coalesce(carried_forward, 0)
+          + coalesce(adjustment_days, 0) - coalesce(taken_days, 0)
+          - coalesce(pending_days, 0)
+       from public.leave_balances
+      where employee_id = v_e_staff and leave_type_id = v_annual), v_bal);
+
+  begin
+    perform public.submit_leave_request(
+      v_org, v_annual, current_date + 10, current_date + 10, 0, 'None');
+    raise exception 'FAIL: leave for no days was filed';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('and it is the same refusal as a negative',
+      v_msg like '%is for some leave%');
+    raise notice 'ok   and zero is the same mistake as a negative';
+  end;
+
+  begin
+    perform public.submit_leave_request(
+      v_org, v_annual, current_date + 10, current_date + 10, 0.25,
+      'A quarter');
+    raise exception 'FAIL: a quarter of a day was filed';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    -- And this one is a different sentence, so the two branches are
+    -- told apart rather than merely both present.
+    perform pg_temp.check_true('the shortest leave is named',
+      v_msg like '%shortest leave is half a day%');
+    raise notice 'ok   the shortest leave is half a day';
+  end;
+
+  -- The upper bound, which needs nothing but the dates.
+  begin
+    perform public.submit_leave_request(
+      v_org, v_unpaid, current_date + 10, current_date + 10, 300,
+      'One day, three hundred claimed');
+    raise exception 'FAIL: one day was filed as three hundred';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('and the refusal gives both figures',
+      v_msg like '%1 day(s)%' and v_msg like '%300%');
+    raise notice 'ok   nobody is away longer than the dates they gave';
+  end;
+
+  -- Exactly the span is the boundary and is allowed: unpaid, so no
+  -- entitlement stands in for the check being made.
+  perform pg_temp.check_true('a request for exactly its own span is fine',
+    public.submit_leave_request(
+      v_org, v_unpaid, current_date + 50, current_date + 52, 3,
+      'Three of three') is not null);
+
+  -- ------------------------------------------------------------------
+  -- The half day 0365 guarded and nothing could ask for
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.leave_types (org_id, code, name, is_paid, allow_half_day)
+  values (v_org, 'HALF', 'Half-day leave', false, true)
+  returning id into v_half;
+  insert into public.leave_types (org_id, code, name, is_paid, allow_half_day)
+  values (v_org, 'WHOLE', 'Whole days only', false, false)
+  returning id into v_whole;
+  perform pg_temp.sign_in_as(v_staff);
+
+  perform pg_temp.check_true('a half day may be asked for at last',
+    public.submit_leave_request(
+      v_org, v_half, current_date + 60, current_date + 60, 0.5,
+      'Afternoon off', true, 'afternoon') is not null);
+
+  begin
+    perform public.submit_leave_request(
+      v_org, v_half, current_date + 61, current_date + 61, 1,
+      'Marked half, asking for a whole', true, 'morning');
+    raise exception 'FAIL: a half day was filed as a whole one';
+  exception when sqlstate '23514' then
+    raise notice 'ok   a half day is half a day';
+  end;
+
+  begin
+    perform public.submit_leave_request(
+      v_org, v_half, current_date + 62, current_date + 63, 0.5,
+      'Half a day across two', true, 'morning');
+    raise exception 'FAIL: a half day spanned two dates';
+  exception when sqlstate '23514' then
+    raise notice 'ok   and it is on one date';
+  end;
+
+  -- Both ways round. Without this, 0365's rule is reached past by
+  -- claiming half a day and leaving the flag off -- which is exactly
+  -- what every caller did, since nothing ever set the flag.
+  begin
+    perform public.submit_leave_request(
+      v_org, v_whole, current_date + 64, current_date + 64, 0.5,
+      'Half, quietly');
+    raise exception
+      'FAIL: half a day was taken on a type that forbids half days';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('and it is the arithmetic that spoke first',
+      v_msg like '%Mark it as one%');
+    raise notice 'ok   half a day has to say that it is one';
+  end;
+
+  -- Which is what lets 0365's own rule finally be reached.
+  begin
+    perform public.submit_leave_request(
+      v_org, v_whole, current_date + 65, current_date + 65, 0.5,
+      'Half, openly', true, 'morning');
+    raise exception 'FAIL: 0365''s half-day rule did not fire';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('and then 0365 refuses it by name',
+      v_msg like '%taken in whole days%');
+    raise notice 'ok   a type that forbids half days still does';
+  end;
+
+  begin
+    perform public.submit_leave_request(
+      v_org, v_half, current_date + 66, current_date + 66, 1,
+      'Which half of a whole day?', false, 'morning');
+    raise exception 'FAIL: a period was set on a whole-day request';
+  exception when sqlstate '23514' then
+    raise notice 'ok   a morning or an afternoon is a half day';
+  end;
 
   -- ==================================================================
   -- Where to reach somebody who is away
