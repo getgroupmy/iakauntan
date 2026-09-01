@@ -323,7 +323,13 @@ jobs:
       # see it: the analyzer cannot read inside a string, the widget
       # tests have no database, and the SQL assertions do not know what
       # the client asks for.
-      - name: Check the client's column names are columns
+      #
+      # Both halves are read. The edge functions ask PostgREST the same
+      # questions in the same string literals, hold the service role
+      # while doing it, and are further from anybody noticing: a
+      # MyInvois submission that stops working fails on a schedule
+      # rather than in front of a user.
+      - name: Check the column names are columns
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_query_columns.py "$DB"

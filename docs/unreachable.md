@@ -4179,6 +4179,24 @@ of a filter or ordering, as a key of an `.insert()`, `.update()` or
 unique index's columns exactly or Postgres answers 42P10. 986
 references, and after this fix every one of them is real.
 
+It reads both halves of the application. The Flutter client is the one
+that broke; the edge functions ask PostgREST the same questions in the
+same string literals, hold the service role while doing it, and are
+further from anybody noticing — a MyInvois submission or an inbound
+email that stops working fails on a schedule rather than in front of a
+user. They differ only in which quote a string literal takes, so the
+readers are built per quote rather than written twice, and each source
+carries its own floor: the client is large enough to hide the edge
+functions falling out of the count entirely. 171 of the 1,157 references
+are theirs, and every one resolves.
+
+While that was written the edge functions' `.rpc()` calls were swept by
+hand as well — every name resolves in `public`, and every argument
+object is a subset of a real signature. Left as a measurement rather
+than built into a script whose charter is columns; a mutated parameter
+name was reported by the probe, so the finding is that there is nothing
+to find rather than that nothing was looked for.
+
 The three that are not the read path were a sweep of their own and found
 nothing — 297 written keys and every `onConflict` resolving to a real
 unique index. They are in the guard anyway, because the reason to have

@@ -23,8 +23,16 @@ catches this. It is inside a string literal, so the Dart analyzer cannot
 see it." A plain column name is inside the same string literal.
 
 So: read every column the database has, then read every
-`.from('table')` chain in the app and fail on any column name that table
-does not carry.
+`.from('table')` chain the application makes and fail on any column name
+that table does not carry.
+
+Both halves are read. The Flutter client is the one that broke; the edge
+functions ask PostgREST the same questions in the same string literals,
+hold the service role while doing it, and are further from anybody
+noticing — a MyInvois submission or an inbound email that stops working
+fails on a schedule, not in front of a user. They differ from the client
+only in which quote a string literal takes, so the readers below are
+built per quote rather than written twice.
 
 ## What is checked, and what is deliberately not
 
@@ -54,10 +62,17 @@ Not checked:
   * a spread — `{...values, 'org_id': orgId}`. What `values` holds is
     not visible here; the literal keys beside it still are, and are
     checked.
-  * `.rpc()`. A function's parameters are `check_idempotent_calls.py`'s
-    ground, not this one's.
+  * a TypeScript shorthand key — `{ org_id }` rather than
+    `{ org_id: value }`. A missed check, not a false one.
+  * `.rpc()`. A function's name and parameters are
+    `check_idempotent_calls.py`'s ground, not this one's. Swept once by
+    hand across the edge functions while this was written — every name
+    resolves in `public` and every argument object is a subset of a real
+    signature — and left there rather than built into a script whose
+    charter is columns.
 
-A chain ends at the first `;`, which is what a Dart statement ends at.
+A chain ends at the first `;`, which is what a statement ends at in
+both languages.
 """
 
 from __future__ import annotations
@@ -91,25 +106,50 @@ select c.relname || ':' || string_agg(a.attname, ',' order by a.attname)
  group by i.indexrelid, c.relname;
 """
 
-APP = pathlib.Path(__file__).resolve().parent.parent / "app" / "lib"
+ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-FROM_RE = re.compile(r"\.from\(\s*'([a-z_0-9]+)'\s*\)")
+# The two halves of the application that talk to PostgREST by name. They
+# differ only in which quote their string literals use, so the readers
+# below are built per quote rather than written twice.
+SOURCES = [
+    (ROOT / "app" / "lib", "'"),
+    (ROOT / "supabase" / "functions", '"'),
+]
+
+# What each source must yield before the run is believed. Well under
+# what is there today, so ordinary editing does not trip them.
+FLOORS = {"lib": 600, "functions": 60}
+
+FILTERS = (
+    "eq|neq|gt|gte|lt|lte|like|ilike|likeAllOf|likeAnyOf|ilikeAllOf"
+    "|ilikeAnyOf|contains|containedBy|overlaps|rangeGt|rangeGte|rangeLt"
+    "|rangeLte|rangeAdjacent|order|isFilter|inFilter|in|is|not"
+)
+
+
+class Dialect:
+    """The readers for one quote character."""
+
+    def __init__(self, q: str) -> None:
+        self.q = q
+        e = re.escape(q)
+        self.FROM = re.compile(rf"\.from\(\s*{e}([a-z_0-9]+){e}\s*\)")
+        self.STRING = re.compile(rf"{e}((?:[^{e}\\]|\\.)*){e}")
+        self.SELECT = re.compile(r"\.select\(")
+        self.FILTER = re.compile(rf"\.({FILTERS})\(\s*{e}([^{e}]*){e}")
+        self.WRITE = re.compile(r"\.(insert|update|upsert)\(\s*\{")
+        # A written key is quoted in Dart and bare in TypeScript.
+        self.KEY = re.compile(
+            rf"{e}([a-z_0-9]+){e}\s*:" if q == "'" else r"([a-z_0-9]+)\s*:")
+        self.ON_CONFLICT = re.compile(rf"onConflict\s*:\s*{e}([^{e}]*){e}")
+
+
 # `client.storage.from('logos')` names a bucket, not a relation, and the
 # `.uploadBinary()` and `.remove()` that follow are not PostgREST at all.
 # Written as a lookbehind first, which missed every one of them: the
 # chains are formatted `client.storage` then `.from(` on the next line,
 # so what precedes the dot is a newline and eight spaces.
 STORAGE_RE = re.compile(r"storage\s*$")
-STRING_RE = re.compile(r"'((?:[^'\\]|\\.)*)'")
-SELECT_RE = re.compile(r"\.select\(")
-FILTER_RE = re.compile(
-    r"\.(eq|neq|gt|gte|lt|lte|like|ilike|likeAllOf|likeAnyOf|ilikeAllOf"
-    r"|ilikeAnyOf|contains|containedBy|overlaps|rangeGt|rangeGte|rangeLt"
-    r"|rangeLte|rangeAdjacent|order|isFilter|inFilter)\(\s*'([^']*)'"
-)
-WRITE_RE = re.compile(r"\.(insert|update|upsert)\(\s*\{")
-KEY_RE = re.compile(r"'([a-z_0-9]+)'\s*:")
-ON_CONFLICT_RE = re.compile(r"onConflict\s*:\s*'([^']*)'")
 
 # A chain runs to the end of its Dart statement.
 CHAIN_LIMIT = 8000
@@ -154,7 +194,7 @@ def unique_sets(database_url: str) -> dict[str, set[str]]:
     return found
 
 
-def select_literal(chain: str, at: int) -> str | None:
+def select_literal(d: "Dialect", chain: str, at: int) -> str | None:
     """Join the string literals making up one .select() argument.
 
     Dart concatenates adjacent literals, and the long selects in this
@@ -163,8 +203,8 @@ def select_literal(chain: str, at: int) -> str | None:
     depth, i, parts = 1, at, []
     while i < len(chain) and depth > 0:
         ch = chain[i]
-        if ch == "'":
-            m = STRING_RE.match(chain, i)
+        if ch == d.q:
+            m = d.STRING.match(chain, i)
             if not m:
                 return None
             parts.append(m.group(1))
@@ -195,7 +235,7 @@ def top_level(select: str) -> list[str]:
     return [t.strip() for t in out if t.strip()]
 
 
-def written_keys(chain: str, at: int) -> list[str]:
+def written_keys(d: "Dialect", chain: str, at: int) -> list[str]:
     """The top-level keys of the map literal starting at `at`.
 
     Depth 1 only: a nested map or list belongs to a jsonb column and its
@@ -223,9 +263,9 @@ def written_keys(chain: str, at: int) -> list[str]:
             depth += 1
         elif ch in "}])":
             depth -= 1
-        elif ch == "'" and depth == 1:
+        elif depth == 1 and (ch == d.q or (d.q == '"' and (ch.isalpha() or ch == "_"))):
             before = body[:j].rstrip()
-            km = KEY_RE.match(body, j)
+            km = d.KEY.match(body, j)
             if km and (before.endswith("{") or before.endswith(",")):
                 keys.append(km.group(1))
                 j = km.end()
@@ -253,26 +293,30 @@ def main() -> int:
     problems: list[str] = []
     checked = 0
 
-    for path in sorted(APP.rglob("*.dart")):
+    for root, quote in SOURCES:
+      before = checked
+      d = Dialect(quote)
+      for path in sorted(list(root.rglob("*.dart")) + list(root.rglob("*.ts"))):
         text = path.read_text()
-        for m in FROM_RE.finditer(text):
+        for m in d.FROM.finditer(text):
             if STORAGE_RE.search(text[max(0, m.start() - 40): m.start()]):
                 continue
             table = m.group(1)
             line = text.count("\n", 0, m.start()) + 1
-            where = f"{path.relative_to(APP.parent.parent)}:{line}"
+            where = f"{path.relative_to(ROOT)}:{line}"
 
             if table not in known:
-                problems.append(f"{where}  from('{table}') — no such relation")
+                problems.append(
+                    f"{where}  from({d.q}{table}{d.q}) — no such relation")
                 continue
 
             rest = text[m.end(): m.end() + CHAIN_LIMIT]
             end = rest.find(";")
             chain = rest if end == -1 else rest[:end]
 
-            sm = SELECT_RE.search(chain)
+            sm = d.SELECT.search(chain)
             if sm:
-                literal = select_literal(chain, sm.end())
+                literal = select_literal(d, chain, sm.end())
                 if literal:
                     for token in top_level(literal):
                         name = bare_column(token)
@@ -281,48 +325,51 @@ def main() -> int:
                         checked += 1
                         if name not in known[table]:
                             problems.append(
-                                f"{where}  select '{name}' — "
+                                f"{where}  select {d.q}{name}{d.q} — "
                                 f"{table} has no such column"
                             )
 
-            for fm in FILTER_RE.finditer(chain):
+            for fm in d.FILTER.finditer(chain):
                 column = fm.group(2)
                 if not re.fullmatch(r"[a-z_0-9]+", column):
                     continue          # an embedded path, a cast, an expression
                 checked += 1
                 if column not in known[table]:
                     problems.append(
-                        f"{where}  .{fm.group(1)}('{column}') — "
+                        f"{where}  .{fm.group(1)}({d.q}{column}{d.q}) — "
                         f"{table} has no such column"
                     )
 
-            for wm in WRITE_RE.finditer(chain):
-                for key in written_keys(chain, wm.end() - 1):
+            for wm in d.WRITE.finditer(chain):
+                for key in written_keys(d, chain, wm.end() - 1):
                     checked += 1
                     if key not in known[table]:
                         problems.append(
-                            f"{where}  .{wm.group(1)}() writes '{key}' — "
+                            f"{where}  .{wm.group(1)}() writes {d.q}{key}{d.q} — "
                             f"{table} has no such column"
                         )
 
-            for cm in ON_CONFLICT_RE.finditer(chain):
+            for cm in d.ON_CONFLICT.finditer(chain):
                 spec = ",".join(
                     sorted(c.strip() for c in cm.group(1).split(",") if c.strip())
                 )
                 checked += 1
                 if spec not in unique.get(table, set()):
                     problems.append(
-                        f"{where}  onConflict '{cm.group(1)}' — {table} has "
+                        f"{where}  onConflict {d.q}{cm.group(1)}{d.q} — {table} has "
                         "no unique index on exactly those columns, so the "
                         "upsert fails 42P10"
                     )
 
-    if checked < 600:
-        # A rewrite of the client that this stopped matching would
-        # otherwise pass by checking nothing at all.
+      # Floored per source rather than in total. A rewrite that this
+      # stopped matching would otherwise pass by checking nothing at
+      # all, and the client is large enough to hide the edge functions
+      # falling out of the count entirely.
+      found = checked - before
+      if found < FLOORS[root.name]:
         problems.append(
-            f"only {checked} column references were found in the client — "
-            "this check has stopped reading it"
+            f"only {found} column references were found under "
+            f"{root.relative_to(ROOT)} — this check has stopped reading it"
         )
 
     if problems:
