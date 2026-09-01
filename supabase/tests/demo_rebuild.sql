@@ -1016,6 +1016,51 @@ begin
         and coalesce(l.lost_reason, '') = ''), 0);
 
   -- --------------------------------------------------------------
+  -- Nobody approves their own
+  -- --------------------------------------------------------------
+  -- `0434`. Amanah and Harta had `approvals` and one member each, so
+  -- `decide_approval`'s refusal -- you raised this, so you cannot
+  -- approve it -- made every chain unclearable. The module came off
+  -- both; Sinar, which has three people, got the chain.
+  declare v_tek uuid;
+  begin
+    select id into v_tek from public.organizations
+     where is_demo and name like 'Sinar%';
+
+    perform pg_temp.check_true('there is a rule to approve against',
+      (select count(*) from public.approval_rules
+        where org_id = v_tek and is_active) >= 1);
+
+    -- A chain that has been decided, and one that has not. Either alone
+    -- leaves half the screen demonstrating itself by being empty.
+    perform pg_temp.check_true('a request the owner has cleared',
+      (select count(*) from public.approval_requests
+        where org_id = v_tek and status = 'approved') >= 1);
+    perform pg_temp.check_true('and one still waiting on somebody',
+      (select count(*) from public.approval_requests
+        where org_id = v_tek and status = 'pending') >= 1);
+
+    -- The rule that makes the module worth having. A seed that wrote
+    -- the request row itself would satisfy everything above and prove
+    -- nothing, because `decide_approval` is the only thing that refuses
+    -- this.
+    perform pg_temp.check_eq(
+      'and nobody approved a document they raised themselves',
+      (select count(*) from public.approval_requests q
+         join public.approval_steps st on st.request_id = q.id
+        where q.org_id = v_tek and st.decided_by = q.requested_by), 0);
+
+    -- And the approved one actually posted, which the trigger would
+    -- have refused without the decision.
+    perform pg_temp.check_true(
+      'the approved bill is in the ledger',
+      exists (select 1 from public.approval_requests q
+                join public.purchase_documents d on d.id = q.entity_id
+               where q.org_id = v_tek and q.status = 'approved'
+                 and d.gl_entry_id is not null));
+  end;
+
+  -- --------------------------------------------------------------
   -- And there is something in it when you get there
   -- --------------------------------------------------------------
   -- The assertion above is satisfied by a flag. `mbrs` passed it for as
@@ -1063,10 +1108,6 @@ begin
       'Sinar Teknologi Sdn Bhd -> einvoice',
       'Warung Sedap Enterprise -> einvoice',
       'Guaman Aziz & Rakan -> einvoice',
-      -- Written for Sinar's scale; nobody approves anything yet.
-      'Amanah Setiausaha Sdn Bhd -> approvals',
-      'Harta Prima Management Sdn Bhd -> approvals',
-      'Sinar Teknologi Sdn Bhd -> approvals',
       -- One each, and each its own small demo.
       'Sinar Teknologi Sdn Bhd -> branches',
       'Sinar Teknologi Sdn Bhd -> manufacturing',
