@@ -4951,3 +4951,291 @@ Five, all killed.
 The first three fail the same assertion for three genuinely different
 reasons, which is the right behaviour for an identity against the
 ledger: it does not care how the number got wrong.
+
+## The Malaysian clock, in both layers
+
+`vacancies.sql` went red at 02:02 in Kuala Lumpur and green again by
+morning. Not a flaky test: `report_open_vacancies` read `current_date`,
+which on Supabase is today in UTC — eight hours behind Malaysia. Between
+midnight and eight every morning, the database and the country disagree
+about what day it is.
+
+### Measured
+
+Sixty-one functions read the session clock: eighteen `STABLE`, and
+forty-three `VOLATILE` ones that decide what day a sale happened on,
+what day money moved, what day work was done. Four more could not be
+found by reading text at all — they cast a `timestamptz` to `date`,
+which needs the column's type to see.
+
+`app.today()` is now the only answer, and `app.malaysian_day()` the only
+cast. The rule is asserted at apply time and in
+`supabase/tests/malaysian_clock.sql`, whose property test compares
+`Pacific/Kiritimati` (UTC+14) against `Etc/GMT+12`: never the same date
+at any instant, so a session-clock implementation always differs and a
+pinned one never does. No "green all morning, red all afternoon".
+
+### One assertion that had to be corrected
+
+The first draft claimed reverting `next_document_number_internal` would
+fail an invoice-numbering assertion. Measured: it survives, because two
+zones share a `YYYYMM` except near a month end. Both the migration and
+the test say so now.
+
+## A sweep from the database's side
+
+The seven sweeps in this file all start from what Dart declares. Running
+it the other way — 552 granted `SECURITY DEFINER` functions against
+every mention in `app/lib` and `supabase/functions` — found four nobody
+names. Two were real: `corp_display_name`, which puts the former name on
+a document for the twelve months s.28(4) requires, and `fs_set_entity`.
+Two were never findings. Recorded so the direction is not re-run.
+
+## The demo register, and what closing it found
+
+`demo_rebuild.sql` asserted that every module a demo tenant has bought
+has something in it. Eleven module-and-tenant pairs were enabled and
+empty, and the register was reshaped from module codes to tenant-module
+pairs so partial progress could be recorded at all.
+
+Closing it took ten migrations and is finished: the register is now
+seven `einvoice` lines, every one deliberate, because
+`demo_credentials_locked` withholds LHDN credentials on purpose and a
+submission row would be a lie about a connection nobody made.
+
+The seeding is not the interesting part. Three things it turned up are.
+
+**Where an entitlement comes from decides the answer.**
+`app.seed_org_modules` turns on `einvoice`, `purchases`, `inventory` and
+`crm` for *every* organization in this product — they are what the plan
+includes. Turning one off for a demo tenant would show a prospect
+something a real sign-up does not get, so those are demos to write.
+Modules handed out by `app.demo_modules` in the rebuild *are* a demo
+choice and can be turned off — but only after checking that some other
+demo tenant still has the module, because the same file asserts every
+active module is enabled somewhere. `approvals` came off Amanah and
+Harta on that reasoning; `manufacturing` could not come off Sinar for
+exactly that reason and was seeded instead.
+
+**A cached balance nobody had reason to doubt.**
+`app.demo_sync_bank_balance` summed every bank-mapped ledger account
+across a tenant and wrote that one number onto *every* `bank_accounts`
+row. Correct while no demo tenant had more than one account — true until
+a law firm was given an office account and a client account.
+
+```
+what the client account holds is what the ledger says it holds
+  expected 3200.00, got -400.00
+```
+
+A client account misstated by the seed: the screen a solicitor opens to
+answer rule 11's "how much am I holding for this client" would have
+shown the firm's own overdrawn office balance.
+
+**A posting guard that was right, and reshaped a demo.**
+The branch seed's first draft back-tagged a year of existing documents
+and was refused: `branch_id` is one of the figures a journal is built
+from, and the ledger is append-only. That refusal is also the truthful
+shape, so the seed keeps it — a company that opens a branch in March has
+a January that happened at head office.
+
+### A mutant that survived, which is a missing assertion
+
+Sinar's manufacturing seed: dropping the routing step from the bill of
+materials passed every assertion written for it. The bench and
+`work_centres.cost_per_hour` were dead configuration and the finished
+servers would have been carried at components alone. Two assertions were
+added and it dies now.
+
+## The service tax on a firm's own hours
+
+`app.bill_time_internal` raises the fee note behind `bill_project_time`
+and `bill_matter_time` — what a consultancy, a secretarial practice or a
+law firm sends for the hours it recorded. Every line it wrote said
+`tax_rate => 0`, with no tax code, for every organization, always.
+
+Group G of the First Schedule to the Service Tax Regulations 2018 makes
+legal, accounting, surveying, consultancy, management and information
+technology services taxable. A registered firm was billing them and
+declaring nothing.
+
+### Measured
+
+```
+RM3,330 of engineer time, service tax charged   0.00
+after the fix                                 266.40
+```
+
+Found only because a demo seed gave an SST-registered tenant a job to
+bill and a revenue identity went red — by RM3,330, for a different
+reason (the account, not the tax). Until then no registered tenant had
+ever billed time, so no assertion anywhere could have said so.
+
+The rate is not guessed. `set_sst_registration` already refuses to be
+called without knowing which tax a company registered for, and records
+it as the one `tax_codes` row with `is_default`. `app.default_sales_tax`
+reads that.
+
+### What the mutants corrected
+
+The header first claimed the date test stopped a pre-registration fee
+note carrying tax. It does not — a posting guard from `0145` already
+refuses such a document. What became reachable once fee notes carried a
+default code was a firm *unable to bill pre-registration work at all*,
+because the guard would refuse the invoice. Header and assertion both
+say that now.
+
+## The quotation that forgot the tax
+
+The same predicate over every function that inserts a document line:
+fourteen write a tax rate unconditionally, six write no tax code at all.
+One is provably wrong.
+
+`quote_opportunity` names neither a code nor a rate, and
+`transfer_document` — which copies the line's tax code and rate,
+correctly — carries the omission into the invoice.
+
+### Measured
+
+```
+deal worth        84,000.00
+quotation total   84,000.00   tax 0.00
+invoice total     84,000.00   tax 0.00
+the real price    90,720.00
+```
+
+Worse in reach than the fee note: a quotation is the front of the whole
+pipeline, so every invoice raised from a quoted deal inherited it.
+`0417` was the reverse failure on the same pair of documents — an
+invoice that charged *more* than the quotation — and this is the one
+that made them agree on the wrong number.
+
+### The five left alone, and why
+
+Named so this is a decision on the record rather than an omission.
+`bill_statutory_charge` writes quit rent and assessment at zero: those
+are charges levied by a land office and a local authority, not a supply
+of services by anybody. `settle_pos_stalls` nets a stall's takings
+against the operator's commission into one figure; whether that
+commission is a taxable supply, and how it would be presented, is a
+modelling decision and not a rate to slot in. `raise_rent_invoices` and
+`raise_strata_charges` are scope questions with thresholds and
+exclusions attached, and **nothing in this repository records which
+reading it follows** — a number there would be a statutory figure nobody
+chose. `raise_recurring_document` looked like a sixth and is not: it
+copies its template's lines wholesale.
+
+## The terms the customer agreed
+
+The same predicate over dates instead of rates.
+
+A fee note fell due the day it was raised: `coalesce(p_due, p_to)`, with
+`payment_term_id` never touched.
+
+```
+client on NET30
+  doc_date  2026-09-02
+  due_date  2026-09-02
+  term on the document  null
+```
+
+`report_ar_aging` buckets on `coalesce(due_date, doc_date)`, so a client
+entitled to thirty days was a month in arrears for a month they were
+promised, and the chaser would have gone out.
+
+An intercompany bill fell due on no date at all.
+`accept_intercompany_bill` copies the counterparty's invoice faithfully
+— doc_date, currency, exchange rate, subtotal, discount, tax, total,
+base total, their number and their date — and copied neither `due_date`
+nor `payment_term_id`. A null ages from `doc_date`, so the group showed
+itself thirty days more overdue than it was, on both sides of the same
+transaction.
+
+The machinery existed and neither function used it.
+`app.due_date_from_terms` has handled `net`, `eom`, `cod` and `prepaid`
+since payment terms went in, and a trigger fills a missing due date from
+the document's own term. What was missing is the step before: nothing
+put the **contact's** agreed terms onto the document, so the guard had a
+null to work from and did nothing, correctly, for a reason nobody could
+see.
+
+## The 0410 shape, five times, and then closed
+
+A header column that a copying function was never told about. It has now
+paid out five times, and the sweep for it is finished.
+
+| where | what was missed | what it cost |
+|---|---|---|
+| `0415` | the service charge, on the e-Invoice header | LHDN told 113.00 for a bill of 123.00 |
+| `0416` | the service charge, in the recurring snapshot | every monthly bill short by it |
+| `0439` | `due_date` on an intercompany bill | thirty days of false arrears, both sides |
+| `0440` | the charges on a credit note | a full return that never cleared |
+| `0441` | the tax on the charge, in the snapshot | the whole charge off the SST return |
+
+### 0440, measured
+
+```
+INVOICE  sub=10000.00 ship=500.00 svc=300.00 tax=800.00 total=11600.00
+CREDIT   sub=10000.00 ship=  0.00 svc=  0.00 tax=800.00 total=10800.00
+```
+
+Credited in full, every line, nothing left — and the customer still owed
+RM800 for delivering and serving goods they had returned. The receivable
+never clears, so the invoice sits on the ageing forever and the only way
+out is a manual journal somebody has to justify. `0417` had already
+settled how much of a header charge follows a partial transfer;
+`0440` uses that rule in that form so the two paths cannot drift.
+
+### 0441, and an exemption that was wrong
+
+```
+TEMPLATE svc=100.00 svc_tax=8.00 code_set=t
+RAISED   svc=100.00 svc_tax=0.00 code_set=f
+```
+
+`report_sst_summary` reaches the service charge through an **inner
+join** on `service_charge_tax_code_id`, so with no code there is no row
+and the whole RM100 leaves the return — the taxable value as well as the
+tax.
+
+This one was not an oversight. The test file already had those two
+columns on a deliberate do-not-carry list, reasoning that they are
+"derived at the till from the outlet's rate" and that "whatever raises
+the invoice works them out again". The first half is true. The second is
+false, and measuring is how that came out: nothing outside the POS path
+computes them. **When a test already exempts the thing you are about to
+fix, read the exemption's reasoning and measure it** — and replace the
+comment as well as the list, answering the worry it recorded rather than
+deleting it.
+
+### Where the sweep stops, with the negative results
+
+- **The purchase half of `app.snapshot_document` is clean.** Every
+  column it does not carry is per-instance: the supplier's own number
+  and date, the expected date, the approval, the e-Invoice state, the
+  attachments, the intercompany link.
+- **`transfer_document` is clean**, and has been since `0417` gave it
+  the branch, the payment term and the apportioned charges.
+- **No screen can put a service charge on a non-POS document.**
+  `service_charge_amount` is read in three places in `app/lib` and
+  written by exactly one function, `set_pos_service_charge`. So the
+  limit `0441` names — that nothing outside POS computes the tax on a
+  service charge — is not currently reachable from the product. It is
+  worth knowing before anybody adds the field to the invoice editor.
+- **Every remaining path that writes a line's tax code copies it from a
+  source document**, which is right: a credit note, a transfer, a
+  recurring raise and an accepted intercompany bill must all mirror what
+  was actually charged, not today's default.
+
+### A method note worth more than any of the findings
+
+Three separate times this run, a mutant was killed by the migration's
+own apply-time guard *before any test ran*, because the guard
+string-matches the text the mutant edits. That is the guard working. It
+is **not** a test kill and must not be counted as one — write a further
+mutant that keeps the guarded string and changes behaviour instead.
+Twice more, the system caught a mutant harder than the assertion did:
+`create_gl_entry` refused an unbalanced journal, and `decide_approval`
+refused a role before reaching its self-approval check. Say so; an
+assertion credited with a kill it did not make is how a test file starts
+drifting from what it covers.
