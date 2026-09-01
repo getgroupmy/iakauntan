@@ -285,4 +285,98 @@ begin
   raise notice 'ok   credit_note_return';
 end $$;
 
+-- =====================================================================
+-- The charges a return has to give back too
+-- =====================================================================
+-- `0440`. `credit_sales_invoice` copies the invoice's contact, currency,
+-- rate and every line with its item, price, tax code and warehouse, and
+-- did not copy `shipping_amount`, `service_charge_amount` or
+-- `discount_amount`. Those are header columns and the credit note was
+-- written before two of the three existed -- the `0410` shape, a fourth
+-- time.
+--
+-- Measured before the fix: an invoice for RM11,600 -- RM10,000 of goods,
+-- RM500 delivery, RM300 service charge, RM800 tax -- credited in full
+-- came back at RM10,800. The customer returned everything and still
+-- owed RM800 for delivering and serving it, the receivable never
+-- cleared, and the invoice sat on the ageing forever.
+do $$
+declare
+  v_org  uuid := pg_temp.test_org('Pulangan Penuh Sdn Bhd');
+  v_own  uuid := pg_temp.test_user();
+  v_cust uuid; v_st8 uuid; v_inv uuid; v_note uuid; v_part uuid;
+  v_line uuid;
+begin
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+
+  insert into public.tax_codes
+    (org_id, code, name, tax_type_code, rate,
+     sales_tax_account_id, purchase_tax_account_id)
+  values (v_org, 'ST8', 'Service Tax 8%', '02', 8,
+          (select id from public.accounts where org_id = v_org and code = '2130'),
+          (select id from public.accounts where org_id = v_org and code = '1410'))
+  returning id into v_st8;
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Pembeli Sdn Bhd', 'customer') returning id into v_cust;
+
+  -- Two lines of RM5,000, so a partial credit has a clean half to take.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status, shipping_amount, service_charge_amount)
+  values (v_org, 'invoice', 'INV-CHG', current_date, current_date + 30,
+          v_cust, 'MYR', 1, 'draft', 500, 300)
+  returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     uom_code, unit_price, tax_code_id, tax_rate)
+  values (v_org, v_inv, 1, 'item', 'First half', 1, 'C62', 5000, v_st8, 8)
+  returning id into v_line;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     uom_code, unit_price, tax_code_id, tax_rate)
+  values (v_org, v_inv, 2, 'item', 'Second half', 1, 'C62', 5000, v_st8, 8);
+
+  perform app.post_sales_document_internal(v_inv);
+  perform pg_temp.check_eq('the invoice is RM11,600 all in',
+    (select total_amount from public.sales_documents where id = v_inv), 11600);
+
+  -- Half of it, by naming one line. `0417`'s rule: the charge follows
+  -- the share of the source lines being taken.
+  v_part := public.credit_sales_invoice(
+    v_inv, jsonb_build_array(jsonb_build_object('line', v_line, 'quantity', 1)),
+    'Half returned');
+
+  perform pg_temp.check_eq('crediting half the goods gives half the delivery',
+    (select shipping_amount from public.sales_documents where id = v_part), 250);
+  perform pg_temp.check_eq('and half the service charge',
+    (select service_charge_amount from public.sales_documents where id = v_part), 150);
+
+  -- And the rest. Together the two credits must come to the invoice,
+  -- which is the identity that matters: a returned invoice clears.
+  v_note := public.credit_sales_invoice(v_inv, null, 'The rest returned');
+  perform pg_temp.check_eq('the other half gives back the other half',
+    (select shipping_amount from public.sales_documents where id = v_note), 250);
+
+  perform pg_temp.check_eq(
+    'and a fully returned invoice is fully credited -- the receivable clears',
+    (select coalesce(sum(total_amount), 0) from public.sales_documents
+      where org_id = v_org and doc_type = 'credit_note'),
+    (select total_amount from public.sales_documents where id = v_inv));
+
+  -- The header amount reaches the total, not just the row. `0417`
+  -- found this the hard way: `app.recalc_sales_totals` fires on the
+  -- LINES, so a charge written after the last line sits in the column
+  -- and never reaches `total_amount`.
+  perform pg_temp.check_eq(
+    'and the charge is inside the credit note''s own total',
+    (select round(total_amount
+                  - subtotal - tax_amount
+                  - shipping_amount - service_charge_amount
+                  + discount_amount, 2)
+       from public.sales_documents where id = v_part), 0);
+
+  raise notice 'ok   credit_note_return: the charges come back too';
+end $$;
+
 rollback;
