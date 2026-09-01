@@ -250,6 +250,7 @@ jobs:
                    supabase/tests/expenses.sql \
                    supabase/tests/hr_reference.sql \
                    supabase/tests/statutory_schedules.sql \
+                   supabase/tests/declared_reliefs.sql \
                    supabase/tests/contact_extras.sql \
                    supabase/tests/leads_and_onboarding.sql \
                    supabase/tests/document_share.sql \
@@ -311,6 +312,21 @@ jobs:
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_embeds.py "$DB"
+
+      # One level below the embeds, and the same string literal. The
+      # screen that declares an employee's TP1 reliefs filtered
+      # `statutory_schedules` on `schedule_type`, which this schema has
+      # never had — a schedule's body is `body`. PostgREST answered
+      # 42703 and refused the whole request, the provider turned that
+      # into an empty list without a word, and the Add button was greyed
+      # out for the life of the feature. Nothing in the repository could
+      # see it: the analyzer cannot read inside a string, the widget
+      # tests have no database, and the SQL assertions do not know what
+      # the client asks for.
+      - name: Check the client's column names are columns
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_query_columns.py "$DB"
 
       # The other place the two halves meet. `0307` protects four money
       # writes with overloads whose key parameter has no default, and

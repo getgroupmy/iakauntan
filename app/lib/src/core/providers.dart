@@ -1181,8 +1181,15 @@ final declaredReliefsProvider = FutureProvider.autoDispose
       return requireRepo(ref).declaredReliefs(employeeId, DateTime.now().year);
     });
 
-final reliefTypesProvider = FutureProvider<List<ReliefType>>((ref) {
-  return requireRepo(ref).reliefTypes(DateTime.now());
+/// Keyed on the tax year, because that is what the ceiling is keyed on:
+/// `0408` judges a declaration against the PCB schedule in force at the
+/// end of the year it is declared for, and a list fetched for a
+/// different year would offer reliefs the database then refuses.
+final reliefTypesProvider = FutureProvider.family<List<ReliefType>, int>((
+  ref,
+  taxYear,
+) {
+  return requireRepo(ref).reliefTypes(taxYear);
 });
 
 /// The caller's own employee record. Everything on the self-service

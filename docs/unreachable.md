@@ -4084,3 +4084,103 @@ being none.
 Four mutants killed: each of three functions granted back to
 `authenticated`, and a fourth writer with no behavioural probe granted
 back, which the catalogue rule catches on its own.
+
+## 0408 — the relief ceiling that was only a helper text
+
+Two defects in the same screen, found by asking a question nobody had
+asked the client before: does every column name it sends exist?
+
+### The screen that had never once worked
+
+`reliefTypes` filled the dropdown of reliefs an employee may declare on
+a TP1. It asked PostgREST for
+
+    statutory_schedules?schedule_type=eq.pcb
+
+and there is no `schedule_type` column — a schedule's body is `body`, an
+`app.statutory_body` enum. PostgREST answers 42703 and refuses the whole
+request. The provider read it as `valueOrNull ?? const []`, so the
+failure became an empty list without a word, and
+
+    onPressed: types.isEmpty ? null : () => _edit(...)
+
+left the Add button greyed out. Not a broken screen — a screen that
+looked finished and did nothing, for the whole life of the feature.
+
+The corroboration is in the data: `employee_tax_reliefs` holds not one
+row on the hosted project, in any organization. That is what a feature
+nobody could ever use looks like from the database.
+
+Tapping an existing relief was worse than disabled. The dialog builds
+its dropdown from the same empty list and hands `DropdownButtonFormField`
+a non-null value with no matching item, which Flutter asserts on. There
+was no data to reach it with, so it had never been reached.
+
+`reliefTypes` is `public.declarable_reliefs(p_tax_year)` now — an RPC
+rather than a query, because the client had also been picking the
+schedule itself with a second copy of the rule that left out
+`effective_to`, and the ceiling below is enforced against a schedule
+chosen by a third. One rule, in one place, so the list offered is the
+list allowed. The screen also says why the button is off when it is off:
+loading, nothing published for the year, or the list failed — three
+states that used to look identical from the outside.
+
+### And the ceiling nothing enforced
+
+`calc_pcb` subtracts every row of `employee_tax_reliefs` from projected
+income without looking at the code:
+
+    select coalesce(sum(etr.amount), 0) into v_manual
+      from public.employee_tax_reliefs etr
+     where etr.employee_id = p_employee_id and etr.tax_year = v_year;
+
+So the amount is the whole of the arithmetic. `tax_reliefs.max_amount`
+carries LHDN's ceiling — RM3,000 on life insurance, RM2,500 on
+lifestyle, RM8,000 on medical expenses for parents, RM7,000 on education
+fees — and was read in exactly one place: a helper line under the amount
+box reading "LHDN allows up to RM3,000.00". `employee_tax_reliefs`
+carried no check at all: not the ceiling, not a floor of zero, and not
+that `relief_code` names a relief that exists.
+
+PCB is money the employer withholds and remits. Under-withholding is the
+employer's exposure.
+
+`app.check_declared_relief()` now refuses four things, and the third is
+the one that is not about a typed figure at all:
+
+  * a negative amount, which would raise the tax rather than lower it;
+  * a code the year's PCB schedule does not have;
+  * a code the schedule marks `is_automatic` or something other than
+    `applies_to = 'manual'`. `calc_pcb` already works the individual
+    allowance, EPF, SOCSO and EIS, the spouse and the children out of
+    the record the company holds, and then adds this table on top. A row
+    saying `individual` claims RM9,000 that has already been given, and
+    neither half can see the other;
+  * an amount above `max_amount` where one is set.
+
+The schedule it judges by is the one in force on 31 December of the tax
+year — the same one `calc_pcb` reaches for on that year's last pay date.
+A year with no published PCB table stands aside, which is `0404`'s
+answer to the same question and is asserted so it stays a decision.
+
+`declared_reliefs.sql` is in CI: 22 assertions, seven mutants killed,
+each by its own assertion. Two of them are the point rather than the
+refusals — every code the screen offers is one the trigger accepts, and
+a relief declared inside its ceiling still moves the tax (RM3,512.50 to
+RM3,460.40 on RM20,000 a month, with RM2,500 of lifestyle declared).
+
+### The guard
+
+`scripts/check_query_columns.py` reads every column the schema has, then
+every `.from('table')` chain in the app, and refuses any column name
+that table does not carry — in a `.select()` list or as the first
+argument of a filter or ordering. 682 references, and after this fix
+every one of them is real.
+
+It is `check_embeds.py` one level down and for the same reason that file
+gives: the name is inside a string literal, so the analyzer cannot see
+it, the widget tests have no database, and the SQL assertions do not
+know what the client asks for. Written first with a lookbehind to keep
+`client.storage.from('logos')` out, which missed every one of them —
+those chains are formatted with `.from(` on the line after `storage`, so
+what precedes the dot is a newline and eight spaces.

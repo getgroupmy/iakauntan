@@ -4531,25 +4531,23 @@ extension RepoHr on Repo {
 
   /// The reliefs an employee may declare — everything the company cannot
   /// work out for itself from the record it already holds.
-  Future<List<ReliefType>> reliefTypes(DateTime on) async {
-    final schedule = await client
-        .from('statutory_schedules')
-        .select('id')
-        .eq('schedule_type', 'pcb')
-        .lte('effective_from', Fmt.iso(on))
-        .order('effective_from', ascending: false)
-        .limit(1)
-        .maybeSingle();
-    if (schedule == null) return const [];
-    return Repo._rows(
-      await client
-          .from('tax_reliefs')
-          .select('code, name, max_amount')
-          .eq('schedule_id', schedule['id'] as String)
-          .eq('applies_to', 'manual')
-          .order('sort_order'),
-    ).map(ReliefType.fromJson).toList();
-  }
+  ///
+  /// This used to pick the schedule here, filtering `statutory_schedules`
+  /// on a column called `schedule_type`. There is no such column — a
+  /// schedule's body is `body` — so PostgREST answered 42703 and the
+  /// whole request failed, every time, for the life of the feature. The
+  /// provider turned that into an empty list without a word and the Add
+  /// button stayed greyed out, so nobody could declare a relief and
+  /// nobody could see why.
+  ///
+  /// It is an RPC now, and not only to fix the column. `0408` enforces
+  /// LHDN's ceiling against the schedule in force at the end of the tax
+  /// year; a list assembled here off a different schedule would offer
+  /// reliefs the database then refused. One rule, in one place, so the
+  /// list offered is the list allowed.
+  Future<List<ReliefType>> reliefTypes(int taxYear) async => Repo._rows(
+    await callRpc('declarable_reliefs', params: {'p_tax_year': taxYear}),
+  ).map(ReliefType.fromJson).toList();
 
   Future<void> saveDeclaredRelief(String employeeId, DeclaredRelief relief) =>
       client.from('employee_tax_reliefs').upsert({
