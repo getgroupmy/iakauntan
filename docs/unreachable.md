@@ -3264,3 +3264,56 @@ screen offers. `clock_in`/`clock_out`'s `p_device` and `p_terminal` and
 `create_ticket`'s `p_requester_user_id` are provenance fields with no
 arithmetic attached, in the same class as the emergency-contact columns
 `0395` gave a form field and no migration.
+
+## Three sweeps that found nothing
+
+The four migrations above came out of one sweep, so the next three were
+run in the same spirit and are recorded here because they found no
+defect. A sweep with no result is worth writing down twice over: it
+stops the next person repeating it, and the false positives say why a
+checker for it would not be worth having.
+
+**Every map key the client reads against every name the database
+returns.** 1378 distinct `row['key']` subscripts in `app/lib`, checked
+against every column, every function parameter, every `returns table`
+column, every table name and every key built by a `jsonb_build_object`
+in a deployed function body. 31 survived, and all 31 are legitimate:
+edge-function JSON payloads (`ice_servers`, `extraction`, `suggestions`),
+PostgREST embed *aliases* whose name differs from the table
+(`approver:employees!fk`, `decider`, `requester`, `from_account`), and
+PostgREST aggregate embeds — `property_units(count)` returns a
+one-element list whose `count` is not a column anywhere.
+
+No CI guard came of it, deliberately. Those three legitimate sources are
+indistinguishable from a typo without attributing each key to the call
+that produced it, and a checker that cries wolf on correct code is worse
+than none — `check_embeds.py` and `check_idempotent_calls.py` earn their
+place by having no false positives at all.
+
+**What the client sends each edge function against what that function
+reads.** Ten functions on disk, seven invoked from the app; the three
+that are never invoked are inbound webhooks and a scheduled job, which
+is correct. One apparent finding: the client sends `org_id` to
+`myinvois` and `supabase/functions/myinvois/index.ts` reads only
+`body.action`. It is a false positive, and instructive — `_shared/
+context.ts` reads `body.org_id`, requires it, and validates membership
+through the *caller's own* client so that a forged one is refused. A
+checker that does not follow the shared helper reports correct code as
+broken.
+
+**Every SECURITY DEFINER function granted to `authenticated` that
+carries no visible guard.** Written first as a list of guard names, which
+was wrong: it accused `chat_add_participant` and the three appraisal
+functions, all of which guard through helpers not on the list
+(`app.is_chat_participant`, `app.chat_enabled`, `app.chat_can_join`,
+`app.appraisal_part`). Rewritten as "calls no `app.*` function and does
+not mention `auth.uid()`" it leaves four: `fs_balance_check`,
+`cash_runs_out_on` and `decide_expense_claim` are thin wrappers whose
+callees — `fs_prepare`, `report_cash_forecast`, `decide_claim_step` —
+each guard, which was checked rather than assumed; and `site_pages`
+returns the sign-in page's own text and is granted to `anon` on purpose.
+
+The lesson from the third is the one worth keeping. A guard sweep
+written as a list of known guard names measures the list, not the code.
+Asking instead whether a function consults *anything* about who is
+calling is the question that has an answer.
