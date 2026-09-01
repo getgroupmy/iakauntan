@@ -2790,8 +2790,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/timesheets.sql": {
-    "mtime": 1788285600.5116541,
-    "ast_hash": "3524bdfbf749e66b01710bb2170508d0",
+    "mtime": 1788300307.3836877,
+    "ast_hash": "810aa03cad83ad3218c193f4440305bd",
     "semantic_hash": ""
   },
   "docs/timesheets.md": {
@@ -3035,8 +3035,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_rebuild.sql": {
-    "mtime": 1788298585.8470616,
-    "ast_hash": "f2571de8bf06a62c7ed11ea1cc1c0078",
+    "mtime": 1788299750.4720485,
+    "ast_hash": "8c883282a2d169d3d34df3847e452a80",
     "semantic_hash": ""
   },
   "supabase/tests/demo_teardown.sql": {
@@ -6802,6 +6802,16 @@
   "supabase/migrations/0435_the_servers_sinar_builds.sql": {
     "mtime": 1788298683.14185,
     "ast_hash": "6dfb4d3f73bb0e85f187b4d5783c9dcd",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0436_the_last_three_empty_screens.sql": {
+    "mtime": 1788299870.9785519,
+    "ast_hash": "93763165345695a10cf34f882e8ce1c2",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0437_the_service_tax_on_a_firms_own_hours.sql": {
+    "mtime": 1788300307.397012,
+    "ast_hash": "111087b691e1f8d6bb38c2455e76f730",
     "semantic_hash": ""
   }
 }
