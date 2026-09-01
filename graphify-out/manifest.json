@@ -345,9 +345,9 @@
     "semantic_hash": "9912d7b89608731b0a0bfd21ebce7360"
   },
   "supabase/functions/_shared/ubl.ts": {
-    "mtime": 1786899936.0688097,
-    "ast_hash": "a747aa4224e1d12e9fea41b573ce867d",
-    "semantic_hash": "a747aa4224e1d12e9fea41b573ce867d"
+    "mtime": 1788294977.8043609,
+    "ast_hash": "3dd139f94bfc623360643809b175276f",
+    "semantic_hash": ""
   },
   "supabase/functions/myinvois/cancel.ts": {
     "mtime": 1786899936.0688097,
@@ -6650,8 +6650,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/einvoice_totals_reconcile.sql": {
-    "mtime": 1788285600.499654,
-    "ast_hash": "df3f2060e9cf04774a60e52918391970",
+    "mtime": 1788295036.046579,
+    "ast_hash": "45ada4cfd9cc8d80768a5c6e41a523b1",
     "semantic_hash": ""
   },
   "app/test/invoice_totals_add_up_test.dart": {
@@ -6777,6 +6777,11 @@
   "supabase/migrations/0430_a_law_firm_because_the_module_was_written_for_one.sql": {
     "mtime": 1788294337.5117366,
     "ast_hash": "19aea768a0af7f8f889a5332c194c765",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0431_the_exemption_lhdn_was_told_nothing_about.sql": {
+    "mtime": 1788295230.98155,
+    "ast_hash": "965e3fd97cff06f85b79578c263a133c",
     "semantic_hash": ""
   }
 }
