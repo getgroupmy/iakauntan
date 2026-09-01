@@ -4372,3 +4372,61 @@ is a sentence a person can act on, so the assertion now reads the
 message. Under the mutant it fails with the constraint's own text —
 `violates check constraint "pos_outlets_service_charge_percent_check"` —
 which is the failure explaining itself.
+
+## 0412 — a tenant's own gateway credentials, and a deliberate exception
+
+`payment_gateways` carries forty-odd Malaysian and regional acquirers,
+`billplz-checkout` and `billplz-callback` are deployed, and
+`gateway_payments.sql` asserts the money. All of it settles
+**`platform_invoices`** — iAkauntan billing its own subscribers. The
+table's primary key is `code` alone; there is no `org_id` on it and
+there was never meant to be.
+
+`docs/gaps-against-akaunting.md` names the three things a tenant
+collecting from its own customer still needs: per-organization
+credentials, a pay route on the shared invoice link, and a receipt
+posted when the callback confirms. `0412` is the first, and it is the
+one that has to be right before the other two are worth writing,
+because it is where a tenant's acquirer secret lives.
+
+It is `0107`'s shape, deliberately and down to the detail. RLS enabled
+with **no policies at all**, every privilege revoked from `anon` and
+`authenticated`, writes through a SECURITY DEFINER function guarded by
+`app.can_admin`, and a status function that answers "is one set"
+without ever handing the secret back. Two barriers, so a migration that
+disabled RLS, a restore that dropped it, or a toggle in a dashboard
+would not on its own make an acquirer key readable by anyone holding
+the publishable key that ships in the web bundle.
+
+`(org_id, gateway_code, mode)` is the key, because `0107` learned that
+an environment stored as a column on a row an organization only has one
+of makes "prove it in sandbox, then go live" a one-way door. And the
+null-secret merge happens **before** the insert rather than in the `on
+conflict` arm, because `api_key` is NOT NULL and Postgres validates the
+proposed row before it looks for a conflict — the obvious
+`coalesce(excluded.api_key, ...)` never runs. `0107`'s test caught that
+on its first run; this one asserts it directly.
+
+`tenant_gateway_credentials.sql` is in CI: 35 assertions, five mutants
+killed. Two of them die on the migration's own assertions rather than
+in the test — leaving the client grants in place, and the status
+function returning the key under the collection's innocent-looking
+name — which is the right place for a barrier to be asserted, beside
+where it is set. The test's own version of the second is behavioural
+and stronger than a column-name check: it takes the whole returned row
+as JSON and refuses to find the stored key anywhere in it.
+
+### The exception, and why it is one
+
+**Nothing charges anybody yet.** There is no checkout call and no
+callback for a tenant's invoice, so this table has no screen and is
+reachable only by the two functions above. That is a column nothing can
+set from the outside, which is the shape this whole document is about,
+and it is deliberate: a settings screen inviting a shop to paste its
+live Billplz key into a system that will never call Billplz would be a
+worse outcome than an empty table. The migration says so in its own
+header rather than leaving a reader to work it out.
+
+The next slice is the one that makes it reachable — a pay route on the
+shared invoice link and a receipt posted when the callback confirms —
+and the screen belongs with that, not before it.
