@@ -6705,13 +6705,33 @@
     "semantic_hash": ""
   },
   "supabase/tests/malaysian_clock.sql": {
-    "mtime": 1788286315.8250139,
-    "ast_hash": "5bf792e2d175ddb0c1359cad4e0068b2",
+    "mtime": 1788288559.4970958,
+    "ast_hash": "799e5201175ceb645d27330dcc914b1c",
     "semantic_hash": ""
   },
   "supabase/tests/stock_value_returns_to_zero.sql": {
     "mtime": 1788285600.5116541,
     "ast_hash": "e346fa180a502bfa5655bf21f99bd753",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0420_what_day_a_sale_happened_on.sql": {
+    "mtime": 1788288559.497511,
+    "ast_hash": "0896217db9eed459082f48097ab2b13b",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0421_what_day_the_money_moved.sql": {
+    "mtime": 1788287983.5517957,
+    "ast_hash": "b21b0d9f6298e319fbf759f26d203ae9",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0422_what_day_the_work_was_done.sql": {
+    "mtime": 1788288507.541348,
+    "ast_hash": "28237ea9b68059e43bc2c515cd93deab",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0423_the_demo_books_keep_malaysian_time_too.sql": {
+    "mtime": 1788287983.5623353,
+    "ast_hash": "473044379b615f6ca7e83585f2790088",
     "semantic_hash": ""
   }
 }
