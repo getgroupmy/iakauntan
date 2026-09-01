@@ -4025,3 +4025,62 @@ Three mutants killed: dropping the new `stock_movements` index, dropping
 the pre-existing `gl_entries` constraint, and — the one that keeps the
 list honest — adding a unique index to `pos_sales.order_no`, which fails
 the assertion that the numbers which must repeat still can.
+
+## 0407 — four functions a stranger could start
+
+`0095` found this exact shape, fixed two instances, and recorded what
+caught them: *"`supabase/tests/statutory.sql` asserts that no SECURITY
+DEFINER function outside a three-name allowlist is executable by `anon`.
+It caught both of these, which is the entire reason it exists."*
+
+That assertion names `anon`, and only `anon`. Nobody had asked the same
+question of `authenticated` — the role anybody gets by signing up.
+
+Measured under `set local role authenticated`, as a member of one
+company with `app.is_org_member(theirs)` false:
+
+    app.roll_leave_year(<the other company>, 2026)   -- accepted
+    app.run_recurring_journals(current_date)         -- accepted,
+        for every tenant on the platform, on a date the caller chose
+
+Asked of the catalogue rather than of those two: four SECURITY DEFINER
+functions in `app` write and were executable by a client role, and not
+one carried a guard — those two plus `seed_chart_of_accounts` and
+`seed_org_modules`. The last is the one to look at twice: `0127` and
+`0129` built module entitlements to decide what a company has paid for,
+and that function writes the table for whatever organization id it is
+handed.
+
+### Excess privilege, not an open door
+
+Said plainly, because `0399` had to correct itself on exactly this
+point. PostgREST publishes `public` and does not publish `app`, and no
+`public` wrapper names any of the four — checked against the catalogue.
+A caller speaking to the API cannot reach them.
+
+What is left is `0240`'s argument: "anything holding a connection string
+gets the privilege, not the API's opinion of it." And the grant was not
+a leftover default — the ACL read `authenticated=X/postgres`, which is
+somebody having written the grant.
+
+### The rule takes no view on guards, on purpose
+
+An earlier draft asked "does it carry a guard", which means matching the
+*names* of guards — and a sweep written as a list of guard names
+measures the list, not the code, which is the fault `0395` shipped. So
+the rule is mechanical: a function in `app` that writes and runs as its
+definer is not something a client role executes, guarded or not. The
+exemption list is empty and is the whole of the judgement.
+
+`app_writers_are_not_a_client_surface.sql` is in CI. It asserts the four
+refusals behaviourally, keeps two positive controls (a client role must
+still call the RLS predicates, or every policy in the schema stops
+working; and the scheduler and org creation must still reach all four,
+which they do because a definer function calling another runs as the
+definer), and asks the catalogue the general question with a floor under
+it — 92 definer writers exist, so "none is open" is not true by there
+being none.
+
+Four mutants killed: each of three functions granted back to
+`authenticated`, and a fourth writer with no behavioural probe granted
+back, which the catalogue rule catches on its own.
