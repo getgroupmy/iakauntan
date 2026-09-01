@@ -3742,3 +3742,70 @@ document tables, so those two are covered twice. Taking it out of
 the caller gets `0402`'s document-specific answer and the assertion
 reads the message. Not an equivalent mutant, and not dead code. On the
 other eighteen tables `0403` is the only rule there is.
+
+## 0404 — the wage that fell between two bands
+
+`app.calc_statutory` looks up the band a wage falls in and, finding
+none, returned zero **and the schedule's own `is_verified`**. So a
+statutory table checked against the gazette but missing a band produced
+a zero contribution reported as a verified figure — and
+`payslip_pdf.dart` prints its warning off exactly that flag, so the one
+payslip that most needed a warning was the one that got none.
+
+Nothing in the seeded data has a hole: every category ends in an
+open-ended band. What creates one is the thing this schema was built to
+have happen. `0026` seeded from published percentages and marked every
+schedule unverified, with `README.md` saying they must be transcribed
+from the authority's gazetted table before anything is filed — and the
+KWSP Third Schedule *is* a table, a finite list of bands with a top row.
+A person transcribing it is a person typing a `wage_to` on the last
+band.
+
+SOCSO and EIS are worse, because the ceiling is already modelled
+properly as `wage_ceiling`. A transcriber has two plausible ways to
+write the same rule and only one is right: `wage_to = 6000` looks
+identical to `wage_ceiling = 6000` on the page and means "nobody above
+RM6,000 contributes" rather than "contributions stop counting above
+RM6,000".
+
+`0404` adds `app.assert_statutory_bands`, called by
+`platform_publish_statutory_schedule` in the transaction that inserts
+the rates: every category must start at zero, run without gaps or
+overlaps, and end open. And `calc_statutory` still returns zero for a
+wage no band covers, but no longer calls it verified.
+
+### The suite refused the first draft, and it was right to
+
+The first draft made `calc_statutory` raise instead of returning zero.
+Running the suite found that `statutory_schedules.sql` asserts the
+zero-fallback deliberately — "it contributes nothing rather than
+guessing at the nearest band" — which is a decision somebody took and
+wrote down, and it holds: guessing at a statutory figure is worse than
+declining to produce one, and the schedule consulted is recorded either
+way. The problem was never the amount. It was the third value.
+
+What that fixture also showed is the harm sitting in the repository as
+an expectation: it published three bands of the PERKESO Third Schedule
+**with `is_verified = true`**, then asserted that a wage of RM4,000 —
+squarely in a gap — contributes nothing. Under `0404` that table can no
+longer be published at all, so the fixture now inserts its partial bands
+directly, which is honest about what it is, and asserts the refusal
+separately.
+
+### A warning that was firing on the wrong payslip
+
+The same function returned `false` for the verified flag whenever the
+wage was zero, lumping "there is no schedule" together with "this
+employee was on unpaid leave all month". The second is not an
+unverified payslip, and printing "the statutory figures on this payslip
+have not been verified" on a document that goes to a person is a false
+alarm. Split.
+
+### The gap branch that no assertion reached
+
+Mutation testing: allowing a gap between bands survived every assertion
+in `statutory_schedules.sql`, because the fixture's gap is caught first
+by the "must start at zero" rule. Three more probes were added — a step
+missing from the middle, two bands over the same wage, and a band after
+the one that runs to the top — so each branch is refused for its own
+reason.

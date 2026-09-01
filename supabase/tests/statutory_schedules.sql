@@ -208,25 +208,143 @@ end $$;
 do $$
 declare
   v_admin uuid := pg_temp.test_user();
-  v_ee numeric; v_er numeric;
+  v_ee numeric; v_er numeric; v_sched uuid; v_said text; v_ver boolean;
 begin
   insert into public.platform_admins (user_id) values (v_admin)
     on conflict do nothing;
   perform pg_temp.sign_in_as(v_admin);
-  perform public.platform_publish_statutory_schedule(
-    'socso', 'Third Schedule, three bands of it', 'table',
-    date '2032-01-01',
-    jsonb_build_array(
-      jsonb_build_object('category','act4','wage_from',2900.01,'wage_to',3000,
-                         'employee_amount',14.75,'employer_amount',51.65,
-                         'employee_rate',0.5,'employer_rate',1.75),
-      jsonb_build_object('category','act4','wage_from',4900.01,'wage_to',5000,
-                         'employee_amount',24.75,'employer_amount',86.65,
-                         'employee_rate',0.5,'employer_rate',1.75),
-      jsonb_build_object('category','act4','wage_from',5900.01,'wage_to',null,
-                         'employee_amount',29.75,'employer_amount',104.15,
-                         'employee_rate',0.5,'employer_rate',1.75)),
-    'Akta Keselamatan Sosial Pekerja 1969', null, null, 'nearest_5sen', true);
+
+  -- `0404`. This table is three steps of a long one, so it has holes in
+  -- it by construction -- which is the point of the section below, and
+  -- is also exactly what `platform_publish_statutory_schedule` now
+  -- refuses to publish. Asserted first, because a fixture that quietly
+  -- stopped going through the front door would hide that.
+  begin
+    perform public.platform_publish_statutory_schedule(
+      'socso', 'Third Schedule, three bands of it', 'table',
+      date '2032-01-01',
+      jsonb_build_array(
+        jsonb_build_object('category','act4','wage_from',2900.01,'wage_to',3000,
+                           'employee_amount',14.75,'employer_amount',51.65,
+                           'employee_rate',0.5,'employer_rate',1.75),
+        jsonb_build_object('category','act4','wage_from',4900.01,'wage_to',5000,
+                           'employee_amount',24.75,'employer_amount',86.65,
+                           'employee_rate',0.5,'employer_rate',1.75),
+        jsonb_build_object('category','act4','wage_from',5900.01,'wage_to',null,
+                           'employee_amount',29.75,'employer_amount',104.15,
+                           'employee_rate',0.5,'employer_rate',1.75)),
+      'Akta Keselamatan Sosial Pekerja 1969', null, null, 'nearest_5sen', true);
+    raise exception
+      'FAIL: a SOCSO table missing most of its bands was published';
+  exception when check_violation then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true('the refusal names the wage nothing covers',
+      v_said like '%starts at 2900.01%');
+    perform pg_temp.check_true('and says what is wrong with it',
+      v_said like '%nothing covers a wage below it%');
+    raise notice 'ok   a table with holes in it cannot be published';
+  end;
+
+  -- The other shape, and the more likely one: a complete table from
+  -- zero whose last band stops. That is how somebody transcribing a
+  -- ceiling writes it if they reach for `wage_to`, so the refusal has
+  -- to name the column that actually means "contributions stop
+  -- counting above this".
+  begin
+    perform public.platform_publish_statutory_schedule(
+      'eis', 'A ceiling written as a last band', 'table',
+      date '2033-01-01',
+      jsonb_build_array(
+        jsonb_build_object('category','default','wage_from',0,'wage_to',6000,
+                           'employee_rate',0.2,'employer_rate',0.2)),
+      'Akta Sistem Insurans Pekerjaan 2017', null, null, 'nearest_5sen', true);
+    raise exception
+      'FAIL: an EIS table that stops at its ceiling was published';
+  exception when check_violation then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true('the refusal names where the table stops',
+      v_said like '%stops at 6000%');
+    perform pg_temp.check_true('and which column expresses a ceiling',
+      v_said like '%wage_ceiling%');
+    raise notice 'ok   a ceiling written as a last band is refused';
+  end;
+
+  -- Three more shapes, each isolated. The first refusal above happens
+  -- to be caught by the "must start at zero" rule, so on its own it
+  -- says nothing about the rest -- mutation testing showed the gap
+  -- branch was never reached by any assertion in this file.
+  begin
+    perform public.platform_publish_statutory_schedule(
+      'eis', 'A step missing from the middle', 'table', date '2033-02-01',
+      jsonb_build_array(
+        jsonb_build_object('category','default','wage_from',0,'wage_to',3000,
+                           'employee_rate',0.2,'employer_rate',0.2),
+        jsonb_build_object('category','default','wage_from',4000,'wage_to',null,
+                           'employee_rate',0.2,'employer_rate',0.2)),
+      null, null, null, 'nearest_5sen', true);
+    raise exception 'FAIL: a table with a step missing was published';
+  exception when check_violation then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true('the refusal names both sides of the gap',
+      v_said like '%jumps from 3000.00 to 4000.00%');
+    raise notice 'ok   a step missing from the middle is refused';
+  end;
+
+  begin
+    perform public.platform_publish_statutory_schedule(
+      'eis', 'Two bands over the same wage', 'table', date '2033-03-01',
+      jsonb_build_array(
+        jsonb_build_object('category','default','wage_from',0,'wage_to',3000,
+                           'employee_rate',0.2,'employer_rate',0.2),
+        jsonb_build_object('category','default','wage_from',2500,'wage_to',null,
+                           'employee_rate',0.4,'employer_rate',0.4)),
+      null, null, null, 'nearest_5sen', true);
+    raise exception 'FAIL: two bands covering one wage were published';
+  exception when check_violation then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true('the refusal says the answer would depend on row order',
+      v_said like '%depend on the order%');
+    raise notice 'ok   two bands over the same wage are refused';
+  end;
+
+  begin
+    perform public.platform_publish_statutory_schedule(
+      'eis', 'Something after the open band', 'table', date '2033-04-01',
+      jsonb_build_array(
+        jsonb_build_object('category','default','wage_from',0,'wage_to',null,
+                           'employee_rate',0.2,'employer_rate',0.2),
+        jsonb_build_object('category','default','wage_from',5000,'wage_to',null,
+                           'employee_rate',0.4,'employer_rate',0.4)),
+      null, null, null, 'nearest_5sen', true);
+    raise exception 'FAIL: a band after the open one was published';
+  exception when check_violation then
+    get stacked diagnostics v_said = message_text;
+    perform pg_temp.check_true('the refusal says only the last may run to the top',
+      v_said like '%Only the last band%');
+    raise notice 'ok   nothing may follow the band that runs to the top';
+  end;
+
+  -- So the fixture is put in directly, as the owner, which is honest
+  -- about what it is: three bands of a table, kept incomplete on
+  -- purpose so the rest of this section has a gap to ask about.
+  insert into public.statutory_schedules
+    (body, name, method, effective_from, result_rounding, source,
+     is_verified, notes)
+  values ('socso', 'Third Schedule, three bands of it', 'table',
+          date '2032-01-01', 'nearest_5sen',
+          'Akta Keselamatan Sosial Pekerja 1969', true,
+          'Deliberately partial: a fixture, not a publication.')
+  returning id into v_sched;
+  insert into public.statutory_rates
+    (schedule_id, category, wage_from, wage_to,
+     employee_rate, employer_rate, employee_amount, employer_amount, sort_order)
+  values (v_sched, 'act4', 2900.01, 3000, 0.5, 1.75, 14.75, 51.65, 1),
+         (v_sched, 'act4', 4900.01, 5000, 0.5, 1.75, 24.75, 86.65, 2),
+         (v_sched, 'act4', 5900.01, null, 0.5, 1.75, 29.75, 104.15, 3);
+  update public.statutory_schedules
+     set effective_to = date '2031-12-31'
+   where body = 'socso' and effective_from < date '2032-01-01'
+     and (effective_to is null or effective_to >= date '2032-01-01');
 
   -- The point of the whole section. 4,905 is 1.75% = 85.84 by rate and
   -- 86.65 by the Act, because the Act charges the band, not the wage.
@@ -272,6 +390,28 @@ begin
   perform pg_temp.check_true('and the schedule consulted is still named',
     (select schedule_id is not null
        from app.calc_statutory('socso','act4', 4000, date '2032-06-01')));
+
+  -- `0404`. What it must not do is call that zero a verified figure.
+  -- This schedule is marked verified and the wage is in a hole, which
+  -- is the combination that used to print "the statutory figures on
+  -- this payslip have been verified" over a SOCSO deduction of nothing.
+  select is_verified into v_ver
+    from app.calc_statutory('socso','act4', 4000, date '2032-06-01');
+  perform pg_temp.check_true(
+    'and a wage no table covers is not a verified figure', not v_ver);
+  perform pg_temp.check_true('even though the schedule itself is verified',
+    (select s.is_verified from public.statutory_schedules s
+      where s.id = v_sched));
+  -- The other side of it: a wage the table does cover still reports the
+  -- schedule's own answer, so this did not simply turn the flag off.
+  select is_verified into v_ver
+    from app.calc_statutory('socso','act4', 4905, date '2032-06-01');
+  perform pg_temp.check_true('a wage it does cover is still verified', v_ver);
+  -- And an employee with no wage at all is not an unverified payslip.
+  select is_verified into v_ver
+    from app.calc_statutory('socso','act4', 0, date '2032-06-01');
+  perform pg_temp.check_true(
+    'nor is a month of unpaid leave on a verified table', v_ver);
 
   -- A category the table does not carry is not the same as a wage it
   -- does not cover, and both come back nil rather than borrowing the
