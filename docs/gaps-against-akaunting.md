@@ -240,7 +240,28 @@ settlement rather than a tax code: it debits the payable, credits
 `2145 Withholding Tax Payable` and writes a `payment_allocations` row,
 so the bill shows what the supplier will actually be paid and the aged
 listing still foots. `supabase/tests/withholding.sql` asserts every rate
-and the one-month deadline. Compound tax is still not there.
+and the one-month deadline.
+
+**Compound tax needs saying more carefully than "still not there",**
+which is what this line said until the code moved under it. There is
+still no general mechanism: no `is_compound` on `tax_codes`, nothing
+that lets a shop declare that one tax computes on a base including
+another. Grepped, not recalled — the only `is_compound` in the tree is
+inside `0410`'s own header, arguing this point.
+
+But the single form compounding actually takes in this country is
+built. A Malaysian restaurant bill charges service tax on the food
+*plus* the ten per cent service charge — 8% of 110.00, not of 100.00 —
+and `0410` gives the outlet, the sale and the document a service charge
+and taxes it that way. `pos_service_charge.sql` asserts the identity
+rather than the number, and the chain is followed the whole way out:
+`0415` to the e-Invoice, `0418` to the SST-02 return, and the invoice
+PDF the customer receives.
+
+So the accurate statement is that the general tax type is absent and
+the specific compound is present and asserted. A reader deciding
+whether a Malaysian restaurant can be billed correctly needs the second
+half, and the flat sentence hid it.
 
 ## 8b. Live currency
 
@@ -387,10 +408,19 @@ written. Re-queried at `0404`:
   identity behind it rather than the number.
 - **"No payment gateway of any kind — no Billplz, no ToyyibPay, no
   Stripe" is now false as a statement about the codebase.** Ten
-  acquirers are registered and two Billplz edge functions are deployed.
-  What that sentence was *for* is still true, and section 3 now says it
-  the right way round: the gateways settle **platform** invoices, and a
-  tenant's customer still cannot pay a sales invoice online.
+  acquirers are registered and four payment edge functions are deployed.
+  This bullet used to end by saying that what the sentence was *for* was
+  still true — the gateways settled **platform** invoices and a tenant's
+  customer still could not pay a sales invoice online. That half has
+  since gone stale in its turn: `0412` to `0414`, `pay-invoice` and
+  `pay-invoice-callback` built the tenant side, and section 3 has said
+  so for some time while this line went on saying the opposite. The
+  document contradicted itself, and the stale half was the one a reader
+  reached last.
+
+  What remains true, and section 3 states it precisely, is narrower than
+  what this line claimed: no ringgit has been through the flow, because
+  there is no acquirer sandbox in the environment it was built in.
 
 The lesson is the one this document already states about itself. A gap
 register is only worth reading if it is re-queried, because the thing it
