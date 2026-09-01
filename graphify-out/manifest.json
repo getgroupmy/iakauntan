@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788231674.471828,
-    "ast_hash": "a06a997a2eb024bb5f4ff5d3d5662c40",
+    "mtime": 1788232776.5750065,
+    "ast_hash": "0df0f84ba3cf8951b3e5a06239ed06ec",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788231807.365321,
-    "ast_hash": "05a826d25e137323a1b2fb7f8100bba3",
+    "mtime": 1788232873.717384,
+    "ast_hash": "4d5412925a9f6ef186fb265f6f78a986",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6485,8 +6485,18 @@
     "semantic_hash": ""
   },
   "supabase/tests/ledger_is_written_only_by_functions.sql": {
-    "mtime": 1788231714.1461616,
-    "ast_hash": "f9ce91034c04965987153b3d8ad598ad",
+    "mtime": 1788231958.4685304,
+    "ast_hash": "8bb4dc5b8c3a6daf47031c9f668fec8a",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0400_no_hand_may_reach_a_posted_payslip.sql": {
+    "mtime": 1788232702.997374,
+    "ast_hash": "b48f16a6ceab9d4b47453d668df52923",
+    "semantic_hash": ""
+  },
+  "supabase/tests/posted_payslip_is_frozen.sql": {
+    "mtime": 1788232751.0213768,
+    "ast_hash": "26ef42c43a287d9a9afdcaa9a680158c",
     "semantic_hash": ""
   }
 }

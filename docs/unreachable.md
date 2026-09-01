@@ -3412,3 +3412,86 @@ does, and "the value is zero" is indistinguishable from "nothing set the
 value" unless you force the constraints. The rule that follows: before
 reporting that a column is not maintained, run `set constraints all
 immediate` and look again.
+
+## No hand may reach a posted payslip
+
+`0399` came from asking what a client role can do directly to a table
+whose rules live in functions. Asked of every table, that question is
+too coarse to be useful: 202 tables carry a client write grant, 118 of
+them are never written by the app, and most of those are ordinary CRUD
+or features not built yet. Revoking 118 grants on a hunch is not a fix,
+it is a gamble.
+
+So the same question was asked where the stakes are highest and the
+shape is identical to the ledger's — payroll. `payslips`,
+`payslip_lines` and `payroll_ytd` are written by `calculate_payroll_run`
+and nothing else; every writer is SECURITY DEFINER; the client only
+reads them.
+
+But unlike the ledger, the write policy is *named and deliberate* —
+`payslips_write`, created by `0038` — so "the same shape" was not
+evidence of "the same defect". That needed measuring, and the thing
+worth measuring was the one `0238` had already identified for the
+ledger: whether a hand can reach a record that has been reported.
+
+As an `hr_manager` over PostgREST, on a run whose status is `posted`:
+
+    update payslip_lines set amount = 1     -- 550.00 -> 1.00, accepted
+    update payslips set epf_employee = 1,
+                        pcb = 0             -- accepted
+    delete from payslip_lines               -- accepted
+    audit rows written by all of that       -- 0
+
+`payslip_lines` carries no triggers at all — not `set_updated_at`, not
+`audit_changes`. The EPF, SOCSO, EIS and PCB figures of a posted run
+could be rewritten by hand and nothing recorded that they were, while
+those figures are what the EPF, SOCSO and LHDN submissions and `0035`'s
+bank file are built from, and while `post_payroll_run`'s journal is
+already in a ledger `0238` made append-only. The payslip could be made
+to disagree with an entry that cannot be corrected to match it.
+
+`CLAUDE.md` says anything touching EPF, SOCSO, EIS or PCB needs a test
+that would fail if the number moved. `payroll_run.sql` and
+`statutory.sql` assert those numbers thoroughly — at the moment the
+engine computes them. An assertion about a calculation says nothing
+about a figure a hand changed afterwards.
+
+### Frozen at posted, and not before
+
+Deliberately narrow: `draft`, `calculated` and `approved` stay fully
+editable, because correcting a payroll before posting is the ordinary
+business of running one, and `calculate_payroll_run` rebuilds the
+payslips from scratch on every recalculation anyway. `void` stays
+editable too — voiding is how a run is undone, and undoing should be
+visible rather than overwritten.
+
+It breaks nothing, and that was checked rather than assumed:
+`calculate_payroll_run` refuses outright unless the run is `draft` or
+`calculated`, and `post_payroll_run` writes only to `payroll_runs`.
+
+A trigger rather than a narrowed policy, for two reasons. `0038`'s
+policy is one line of a pattern applied across a dozen HR tables, with
+the comment above it explaining only the *select* side — it was the
+default that fell out of a sweep, not a decision about hand-editing
+statutory figures. And a `using` clause gives a bare `42501` with
+nothing to read, where the trigger names the run, its state, and what to
+do instead.
+
+Six mutants, all killed, and three of them are about the boundary rather
+than the rule: leaving `paid` editable, freezing `approved` as well, and
+freezing `void` as well are each caught by the loop that walks every one
+of the six statuses and asserts which side of the line it falls on. A
+rule that depends on a status wants a test that tries every status.
+
+### Still open, and named so it can be decided
+
+`payroll_ytd` is not frozen. It carries the year-to-date figures PCB is
+computed against, so editing it changes future months rather than a
+filed one, and "posted" does not apply to it cleanly — it is per
+employee and year, not per run. Freezing it needs a rule about what a
+year-to-date correction *is*, which is a decision rather than a defect.
+
+Neither table gained an audit trigger. Recording a pre-posting
+correction is worth doing and is a different change from refusing a
+post-posting one; bundling them would have made this migration about two
+things.
