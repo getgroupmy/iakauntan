@@ -4583,3 +4583,71 @@ against real bills — with the tenant's key rather than the platform's.
 
 That is a real difference from "payments work", and it is written here
 rather than left to be assumed from a green CI run.
+
+## 0415 — LHDN was told 113 for a bill of 123
+
+The first defect in this document that was introduced by this document.
+`0410` is four migrations old and it is mine.
+
+`prepare_einvoice` copies six figures onto the MyInvois header, and they
+are not independent:
+
+    excl_tax - discount + charges + tax + rounding = payable
+
+`app.recalc_sales_totals` maintains that identity on the document. The
+mapping has to preserve it, and `total_charges` was `shipping_amount`
+alone. `0410` added a second charge — the service charge a Malaysian
+bill carries — put it in the total and into the ledger, and did not put
+it in `total_charges`.
+
+Measured on a RM100 restaurant bill with RM5 delivery and a RM10 service
+charge at eight per cent:
+
+    doc:    sub 100.00  tax 8.00  ship 5.00  svc 10.00  total 123.00
+    e-inv:  excl 100.00  charges 5.00  tax 8.00  payable 123.00
+    told:   113.00        billed: 123.00
+
+Ten ringgit in a hundred, on every bill a restaurant sends. MyInvois
+validates the arithmetic on what it is given, so the near outcome is a
+rejected submission and the worse one is an accepted document that
+understates the charge.
+
+### Why nothing caught it
+
+Nothing had ever asserted the six reconcile. `total_charges`,
+`total_excl_tax` and `payable_amount` appeared in **no test in this
+repository** — grepped, not recalled. The mapping had been trusted since
+it was written, so the day a seventh column joined the total there was
+nothing to notice.
+
+`einvoice_totals_reconcile.sql` is that assertion, written as the
+identity rather than as six expected numbers, so the next charge added
+to a document fails it too. It also asserts each column separately,
+because the identity alone is satisfied by putting the service charge in
+the tax column — a document that balances while misreporting the tax.
+
+### What this cost, said properly
+
+One column not looked for in the four places a document's money is
+copied to. Two of the four were caught by tests written in the same
+session — the shared invoice link in `0413`, and this — and the other
+two (`recalc_sales_totals`, `post_sales_document_internal`) were part of
+`0410` itself. A change that adds a column to a money table is a change
+that has to be followed everywhere the row is *read*, and `0410`'s own
+header did not say so.
+
+### Mutants
+
+Seven, and the split matters. Three died on the migration's own source
+assertion before the test ran — which sounds good and is not, because it
+means the assertion was doing all the work. So three more were built to
+survive that check and exercise the test: the charge kept in the
+expression and multiplied out (fails the reconciliation with exactly the
+original `-10.00`), the discount dropped from the header (fails it at
+`+7.50`, a column the test was not written for and catches anyway), and
+the charge moved into the tax column so the identity still holds — which
+fails "the charges are the delivery and the service charge" and is the
+reason those three per-column assertions are there at all.
+
+A seventh was a duplicate of the fourth, written by mistake and counted
+here as one rather than two.

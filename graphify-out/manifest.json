@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788250592.6285288,
-    "ast_hash": "756b56a7f8a1ff8056c891914d42f94c",
+    "mtime": 1788252274.2985375,
+    "ast_hash": "2a8214ca120f1d0a263896129db80590",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788251579.4392169,
-    "ast_hash": "b228a754a0f1614dd72452e9a2356cf9",
+    "mtime": 1788252292.2745385,
+    "ast_hash": "a5f09596f46485afa715b8c9de04b3b7",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6642,6 +6642,16 @@
   "supabase/migrations/0414_the_key_a_callback_is_verified_against_is_the_shops.sql": {
     "mtime": 1788251222.894475,
     "ast_hash": "511112ffb20e52f5e5943acc2cfa6a82",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0415_lhdn_was_told_113_for_a_bill_of_123.sql": {
+    "mtime": 1788252171.8232782,
+    "ast_hash": "14bb133bb93e602fa78b6e25aff6e28b",
+    "semantic_hash": ""
+  },
+  "supabase/tests/einvoice_totals_reconcile.sql": {
+    "mtime": 1788252207.1145334,
+    "ast_hash": "df3f2060e9cf04774a60e52918391970",
     "semantic_hash": ""
   }
 }
