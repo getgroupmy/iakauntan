@@ -252,10 +252,18 @@ begin
     (select r.frequency from public.recurring_documents r
       join public.pos_membership_subscriptions s on s.recurring_document_id = r.id
      where s.id = v_sub) = 'monthly');
+  -- A month after the day it started, and it started on the Malaysian
+  -- day the sale completed -- `0424` pinned `started_on` there, because
+  -- `completed_at::date` gave the session's day and a membership bought
+  -- at half past midnight began the day before and lost a day at the
+  -- far end. Dated from `current_date` this expectation is a day out
+  -- for the eight hours the two zones disagree.
   perform pg_temp.check_true('starting after the period just paid for',
     (select r.next_run_date from public.recurring_documents r
       join public.pos_membership_subscriptions s on s.recurring_document_id = r.id
-     where s.id = v_sub) = (current_date + interval '1 month')::date);
+     where s.id = v_sub)
+    = ((now() at time zone 'Asia/Kuala_Lumpur')::date
+       + interval '1 month')::date);
   perform pg_temp.check_eq('so nothing is waiting for a billing schedule',
     (select count(*) from public.membership_billing_gaps(v_org)), 0);
 

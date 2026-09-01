@@ -91,6 +91,42 @@ begin
    where n.nspname = 'app' and p.proname = 'today';
   perform pg_temp.check_eq('and it is stable rather than immutable',
     v_vol::text, 's');
+
+  -- ------------------------------------------------------------------
+  -- And its sibling, which takes the moment rather than assuming it
+  -- ------------------------------------------------------------------
+  -- A fixed instant, so this is a value assertion and not a property
+  -- one: 2026-01-01T16:30Z is half past midnight on the 2nd in Kuala
+  -- Lumpur and still the 1st in London. The whole defect, in one row.
+  perform pg_temp.check_eq(
+    'half past midnight in Kuala Lumpur is the second, not the first',
+    app.malaysian_day(timestamptz '2026-01-01 16:30:00+00')::text,
+    '2026-01-02');
+
+  -- The plain cast is what four functions were doing, and it is only
+  -- right when the session happens to be in Malaysia. Asserted under a
+  -- zone that is not, so it says something.
+  begin
+    set local time zone 'Etc/UTC';
+    perform pg_temp.check_eq(
+      'which is not what casting it to a date gives you',
+      (timestamptz '2026-01-01 16:30:00+00')::date::text, '2026-01-01');
+    perform pg_temp.check_eq('while the helper is unmoved',
+      app.malaysian_day(timestamptz '2026-01-01 16:30:00+00')::text,
+      '2026-01-02');
+  end;
+  reset time zone;
+
+  -- IMMUTABLE here, unlike app.today(): the answer depends only on the
+  -- argument, so folding it at plan time is correct. Getting this the
+  -- wrong way round in either direction is a defect -- an immutable
+  -- today() caches yesterday, and a stable malaysian_day() gives up an
+  -- index on an expression for nothing.
+  select p.provolatile into v_vol
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'app' and p.proname = 'malaysian_day';
+  perform pg_temp.check_eq('and it is immutable, which today() is not',
+    v_vol::text, 'i');
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -352,6 +388,41 @@ begin
 
   perform pg_temp.check_eq(
     'no function asks the caller what day it is',
+    coalesce(array_to_string(v_left, ', '), ''), '');
+
+  -- ------------------------------------------------------------------
+  -- And none asks it what day a moment fell on
+  -- ------------------------------------------------------------------
+  -- `0424`'s half of the rule. Casting a `timestamptz` to `date` gives
+  -- the day in the session's zone as surely as `current_date` does, and
+  -- no regex over the text can see it -- it has to know which columns
+  -- carry a zone, which means reading `information_schema`.
+  select count(*) into v_seen
+    from information_schema.columns
+   where table_schema in ('public', 'app')
+     and data_type = 'timestamp with time zone';
+  perform pg_temp.check_true(
+    'there are timestamptz columns to scan for', v_seen > 50);
+
+  select array_agg(distinct f || ' (' || c || ')')
+    into v_left
+    from (
+      select n.nspname || '.' || p.proname as f,
+             regexp_replace(p.prosrc, '--[^\n]*', '', 'g') as src
+        from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname in ('public', 'app') and p.prokind in ('f', 'p')
+    ) fn
+    cross join (
+      select distinct column_name as c
+        from information_schema.columns
+       where table_schema in ('public', 'app')
+         and data_type = 'timestamp with time zone'
+    ) tz
+   where fn.src ~ ('\m' || tz.c || '\M\s*::\s*date');
+
+  perform pg_temp.check_eq(
+    'nor casts a moment to a day in the caller''s time zone',
     coalesce(array_to_string(v_left, ', '), ''), '');
 end $$;
 
