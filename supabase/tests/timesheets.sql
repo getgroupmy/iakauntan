@@ -226,6 +226,115 @@ begin
     raise notice 'ok   a project with no client cannot be invoiced';
   end;
 
+  -- ------------------------------------------------------------------
+  -- 4. The tax on the hours
+  -- ------------------------------------------------------------------
+  -- `0437`. `app.bill_time_internal` wrote `tax_rate => 0` and no tax
+  -- code on every line of every fee note, for every organization. So a
+  -- firm registered for service tax billed its hours and declared
+  -- nothing on them -- Group G of the First Schedule to the Service Tax
+  -- Regulations 2018 makes legal, accounting, consultancy, management
+  -- and IT services taxable, and the shortfall is the registrant's to
+  -- pay whether or not they collected it.
+  --
+  -- Nothing caught it because no registered tenant had ever billed
+  -- time: `0436` was the first, and the identity it broke in
+  -- `demo_rebuild.sql` was about the revenue account, not the tax.
+  declare
+    v_reg uuid; v_reg_client uuid; v_reg_proj uuid; v_reg_user uuid;
+    v_note uuid; v_early uuid;
+  begin
+    v_reg := pg_temp.test_org('Probe Consulting (Registered)');
+    v_reg_user := v_owner;
+    insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+    values (v_reg, 'timesheets', true, now())
+    on conflict (org_id, module_code) do update set is_enabled = true;
+    perform public.create_fiscal_year(v_reg, date '2026-01-01');
+
+    insert into public.tax_codes
+      (org_id, code, name, tax_type_code, rate,
+       sales_tax_account_id, purchase_tax_account_id)
+    values (v_reg, 'ST8', 'Service Tax 8%', '02', 8,
+            (select id from public.accounts where org_id = v_reg and code = '2130'),
+            (select id from public.accounts where org_id = v_reg and code = '1410'));
+
+    -- Registered from March. Everything before that is out of scope,
+    -- which is the second half of what this section is for.
+    perform public.set_sst_registration(
+      v_reg, true, date '2026-03-01', 'W10-1808-31000999', 'ST8');
+
+    insert into public.contacts (org_id, code, name, contact_type)
+    values (v_reg, 'CL1', 'A client of a registered firm', 'customer')
+    returning id into v_reg_client;
+    insert into public.projects (org_id, code, name, contact_id)
+    values (v_reg, 'P1', 'Systems review', v_reg_client)
+    returning id into v_reg_proj;
+    insert into public.billing_rates
+      (org_id, user_id, effective_from, hourly_rate)
+    values (v_reg, v_reg_user, date '2026-01-01', 500);
+
+    -- Work done in April, after registration.
+    insert into public.time_entries
+      (org_id, project_id, user_id, entry_date, description, minutes,
+       is_billable)
+    values (v_reg, v_reg_proj, v_reg_user, date '2026-04-06',
+            'Review and report', 120, true);
+    v_note := public.bill_project_time(
+      v_reg_proj, date '2026-04-01', date '2026-04-30');
+
+    perform pg_temp.check_eq(
+      'a registered firm charges service tax on the hours it bills',
+      (select tax_amount from public.sales_documents where id = v_note),
+      80.00);
+    perform pg_temp.check_eq(
+      'and the fee note totals the hours plus that tax',
+      (select total_amount from public.sales_documents where id = v_note),
+      1080.00);
+
+    -- The rate has to be on the line, not merely the code: totals are
+    -- recalculated from `sales_document_lines.tax_rate`, so a line
+    -- naming ST8 without its 8 produces a fee note with a tax code on
+    -- it and no tax in it.
+    perform pg_temp.check_eq(
+      'and the line carries both the code and its rate',
+      (select count(*) from public.sales_document_lines
+        where document_id = v_note
+          and (tax_code_id is null or coalesce(tax_rate, 0) = 0)), 0);
+
+    -- Work done in February, before the firm registered. Measured
+    -- rather than assumed: a posting guard already refuses a document
+    -- dated before registration that carries tax, so the failure this
+    -- half prevents is not a wrong number -- it is a fee note that
+    -- CANNOT BE RAISED AT ALL. Take the date test out of
+    -- `app.default_sales_tax` and `bill_project_time` raises "This
+    -- document is dated 2026-02-28, before SST registration took effect
+    -- on 2026-03-01", and the firm has no way to bill work it did
+    -- before it registered.
+    insert into public.time_entries
+      (org_id, project_id, user_id, entry_date, description, minutes,
+       is_billable)
+    values (v_reg, v_reg_proj, v_reg_user, date '2026-02-10',
+            'Scoping, before we registered', 60, true);
+    v_early := public.bill_project_time(
+      v_reg_proj, date '2026-02-01', date '2026-02-28');
+
+    perform pg_temp.check_eq(
+      'and work billed before the firm registered carries none',
+      (select tax_amount from public.sales_documents where id = v_early), 0);
+
+    -- The control. Probe Consulting above is not registered, and its
+    -- fee notes must still come out at nothing -- otherwise the fix
+    -- would be charging tax nobody may collect.
+    perform pg_temp.check_eq(
+      'and an unregistered firm charges nothing on its hours',
+      (select coalesce(sum(tax_amount), 0) from public.sales_documents
+        where org_id = v_org and doc_type = 'invoice'), 0);
+    perform pg_temp.check_true(
+      'on fee notes it actually raised',
+      (select count(*) from public.sales_documents
+        where org_id = v_org and doc_type = 'invoice') > 0);
+  end;
+
   raise notice 'timesheets: 3 billable hours billed at two rates, 75%% utilised';
 end $$;
 
