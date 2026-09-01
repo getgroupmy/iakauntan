@@ -6685,8 +6685,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/recurring_template_carries_the_document.sql": {
-    "mtime": 1788285600.507654,
-    "ast_hash": "e30b1c8763c47416e7a3847aeaa329aa",
+    "mtime": 1788305111.6357567,
+    "ast_hash": "6ca161a410c1b9caa701b22478747811",
     "semantic_hash": ""
   },
   "supabase/tests/sst_return_declares_what_was_charged.sql": {
@@ -6827,6 +6827,11 @@
   "supabase/migrations/0440_the_delivery_a_full_return_kept_charging.sql": {
     "mtime": 1788303864.8901756,
     "ast_hash": "a29dd1259134b27dd9c7602a6c207981",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0441_the_service_tax_a_retainer_dropped_every_month.sql": {
+    "mtime": 1788305219.8133984,
+    "ast_hash": "17ccf89da6a559d83ff42234a086b123",
     "semantic_hash": ""
   }
 }
