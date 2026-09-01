@@ -1061,6 +1061,86 @@ begin
   end;
 
   -- --------------------------------------------------------------
+  -- The servers Sinar builds
+  -- --------------------------------------------------------------
+  -- `0435`. `manufacturing` was enabled on Sinar with no bill of
+  -- materials, work centre or order in the product. It could not be
+  -- turned off the way `0434` turned off `approvals`: the assertion
+  -- above requires every active module to be enabled on some demo
+  -- tenant, and none of the other six manufactures either.
+  declare v_tek uuid; v_mo uuid;
+  begin
+    select id into v_tek from public.organizations
+     where is_demo and name like 'Sinar%';
+
+    select id into v_mo from public.manufacturing_orders
+     where org_id = v_tek and status = 'done' and gl_entry_id is not null
+     order by order_no limit 1;
+    perform pg_temp.check_true(
+      'a build that was actually run, not a draft on a screen',
+      v_mo is not null);
+
+    -- Components out and the finished item in. A seed that wrote the
+    -- order row and stopped would satisfy nothing here, because only
+    -- `post_manufacturing_order` writes these movement types -- they
+    -- were in the enum from `0006` with no caller until `0422`.
+    perform pg_temp.check_true('components were issued to it',
+      (select count(*) from public.stock_movements
+        where source_id = v_mo and movement_type = 'assembly_out') >= 4);
+    perform pg_temp.check_true('and the finished servers came back in',
+      (select coalesce(sum(quantity), 0) from public.stock_movements
+        where source_id = v_mo and movement_type = 'assembly_in') > 0);
+
+    -- The scrap allowance. `confirm_manufacturing_order` ADDS scrap
+    -- rather than deducting it: four modules a server, two servers, and
+    -- five per cent thrown away means issuing more than eight. A seed
+    -- that wrote `mo_components` itself would have issued exactly
+    -- eight, and every other assertion here would still pass.
+    perform pg_temp.check_true(
+      'and the scrap allowance was added, not deducted',
+      (select c.quantity_required from public.mo_components c
+         join public.items i on i.id = c.item_id
+        where c.mo_id = v_mo and i.code = 'CMP-MEM') > 8);
+
+    -- The bench, and what it charges. Without this the routing step and
+    -- `work_centres.cost_per_hour` are dead configuration: dropping the
+    -- operation from the BOM leaves every other assertion here passing
+    -- and the finished item carried at components alone. Measured --
+    -- the mutant that removed it survived until this was added.
+    -- Two assertions, because either alone is satisfied by the mutant
+    -- that removes the routing step: with no operation there is no
+    -- conversion cost, and nothing minus nothing is zero.
+    perform pg_temp.check_true('the bench time was absorbed at all',
+      (select conversion_cost from public.manufacturing_orders
+        where id = v_mo) > 0);
+
+    perform pg_temp.check_eq(
+      'and at the rate the work centre charges',
+      (select round(m.conversion_cost - coalesce(sum(
+                (case when o.actual_minutes > 0 then o.actual_minutes
+                      else o.planned_minutes end)
+                / 60.0 * w.cost_per_hour), 0), 2)
+         from public.manufacturing_orders m
+         left join public.mo_operations o on o.mo_id = m.id
+         left join public.work_centres w on w.id = o.work_centre_id
+        where m.id = v_mo
+        group by m.conversion_cost), 0);
+
+    -- What the order says it cost is what its components cost. The two
+    -- are written by the same function from different sides -- the
+    -- components from `stock_movements.total_cost`, the header by
+    -- accumulating them -- so a costing error shows up as a gap.
+    perform pg_temp.check_eq(
+      'and what the order cost is what its components cost',
+      (select round(m.component_cost
+                    - coalesce(sum(c.total_cost), 0), 2)
+         from public.manufacturing_orders m
+         left join public.mo_components c on c.mo_id = m.id
+        where m.id = v_mo
+        group by m.component_cost), 0);
+  end;
+
+  -- --------------------------------------------------------------
   -- And there is something in it when you get there
   -- --------------------------------------------------------------
   -- The assertion above is satisfied by a flag. `mbrs` passed it for as
@@ -1110,7 +1190,6 @@ begin
       'Guaman Aziz & Rakan -> einvoice',
       -- One each, and each its own small demo.
       'Sinar Teknologi Sdn Bhd -> branches',
-      'Sinar Teknologi Sdn Bhd -> manufacturing',
       'Sinar Teknologi Sdn Bhd -> timesheets',
       'Harta Prima Management Sdn Bhd -> fixed_assets'];
   begin
