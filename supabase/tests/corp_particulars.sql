@@ -33,6 +33,7 @@ declare
   v_f    uuid;
   v_said text;
   r      record;
+  v_e2   uuid;
 begin
   v_org := pg_temp.test_org('Setiausaha Nama Sdn Bhd', array['secretarial']);
 
@@ -103,6 +104,41 @@ begin
   -- then. Putting today's name on last year's paper is a different lie.
   perform pg_temp.check_eq('paper dated before the change says the old name',
     public.corp_display_name(v_e, date '2026-01-01'), 'Lama Sdn Bhd');
+
+  -- ------------------------------------------------------------------
+  -- And the documents actually carry it
+  -- ------------------------------------------------------------------
+  -- The four assertions above were true from the day `0377` landed and
+  -- nothing was calling the function they assert. `{{company_name}}` --
+  -- the first line of every template `0066` ships, above the
+  -- registration number -- was `e.name`, the bare new name, for the
+  -- twelve months in which s.28(4) requires both.
+  --
+  -- So this asserts the merge field rather than the function: not "does
+  -- corp_display_name still work" but "does the document reach it".
+  --
+  -- `2026-03-01` is inside the twelve months at the time this runs.
+  -- Should that stop being true -- somebody reads this in 2028 -- the
+  -- control below goes red first and says the fixture date is what needs
+  -- moving, not the code.
+  perform pg_temp.check_true(
+    'the rename is still inside the twelve months this asserts',
+    (now() at time zone 'Asia/Kuala_Lumpur')::date < date '2027-03-01');
+  perform pg_temp.check_eq(
+    'a generated document carries both names, as s.28(4) requires',
+    app.corp_merge_context(v_e) ->> 'company_name',
+    'Baru Sdn Bhd (formerly Lama Sdn Bhd)');
+
+  -- The control. Without it the assertion above could be satisfied by a
+  -- merge context that appends "(formerly ...)" to everything.
+  insert into public.corp_entities
+    (org_id, name, entity_type, incorporated_on, registered_office)
+  values (v_org, 'Tetap Sdn Bhd', 'sdn_bhd', date '2019-05-05',
+          'No 2, Jalan Tetap, 50000 Kuala Lumpur')
+  returning id into v_e2;
+  perform pg_temp.check_eq(
+    'and a company that never renamed carries its name alone',
+    app.corp_merge_context(v_e2) ->> 'company_name', 'Tetap Sdn Bhd');
 
   -- ------------------------------------------------------------------
   -- The other door
