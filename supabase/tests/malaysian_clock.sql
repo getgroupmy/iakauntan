@@ -154,19 +154,157 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
--- The rule: nothing that only reads still reads the session's clock
+-- The mamak at half past midnight
 --
--- This is what makes the nineteenth one loud. A new report that reaches
--- for `current_date` -- the obvious thing to reach for, and what every
--- one of the eighteen did -- turns this red before it reaches anybody's
+-- `0420`'s story, asserted. A till rings up a sale at 00:30 in Kuala
+-- Lumpur. On `current_date` the sale, the invoice raised from it, the
+-- ledger entry behind it and the month in the invoice number were all
+-- the previous day's -- every day, for the eight hours the session's
+-- zone is behind Malaysia.
+--
+-- Two sales are completed here, one under each of the two zones
+-- twenty-six hours apart. Everything dated must come out the same, and
+-- must be Malaysia's day.
+--
+-- The date assertions are the ones that do the work: they separate a
+-- pinned implementation from a session-clock one at every instant,
+-- because the two zones are never on the same date.
+--
+-- The number assertions are weaker and are kept as a statement of what
+-- the number should be rather than as a trap.
+-- `app.next_document_number_internal` resets the counter when the
+-- `YYYYMM` key changes, so under the defect the second sale would carry
+-- a different month and restart the series at one -- but only on the
+-- days when the two zones fall in different months, which is a day or so
+-- either side of a month end. For the rest of the month both zones agree
+-- about `YYYYMM` and these three assertions pass whether or not the
+-- defect is present. Measured, not assumed: reverting
+-- `app.next_document_number_internal` to `current_date` leaves them green
+-- and is caught by the rule at the end of this file instead.
+--
+-- Making them sharp would mean waiting for a month boundary, which is
+-- the flake `secretarial.sql` argues against at length. So the honest
+-- arrangement is this one: the dates catch it always, the number says
+-- what it should be, and the rule catches the function itself.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org    uuid := pg_temp.test_org('Mamak Tengah Malam Sdn Bhd');
+  v_wh     uuid; v_walkin uuid; v_item uuid; v_outlet uuid; v_reg uuid;
+  v_cash   uuid; v_shift uuid;
+  v_s1     uuid; v_s2 uuid;
+  v_d1     uuid; v_d2 uuid;
+  v_no1    text; v_no2 text;
+  v_dt1    date; v_dt2 date;
+  v_gl1    date; v_gl2 date;
+  v_today  date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+begin
+  -- The period the sale will post into. Dated from the Malaysian year,
+  -- because that is the day the posting will carry.
+  perform public.create_fiscal_year(v_org, date_trunc('year', v_today)::date);
+
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'MAIN', 'Shop floor') returning id into v_wh;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'WALK-IN', 'Counter sales', 'customer')
+  returning id into v_walkin;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code,
+     unit_price, cost_price)
+  values (v_org, 'NASI', 'Nasi lemak', 'stock', false, 'C62', 5.00, 2.00)
+  returning id into v_item;
+  insert into public.pos_outlets
+    (org_id, code, name, business_type, warehouse_id, walk_in_contact_id,
+     prices_include_tax)
+  values (v_org, 'SHOP', 'The shop', 'food_beverage', v_wh, v_walkin, false)
+  returning id into v_outlet;
+  insert into public.pos_registers (org_id, outlet_id, code, name)
+  values (v_org, v_outlet, 'T1', 'Counter') returning id into v_reg;
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer,
+     gives_change)
+  values (v_org, 'CASH', 'Cash', 'cash', '01', true, true)
+  returning id into v_cash;
+
+  -- Numbered by month rather than by year. `yearly` is the default and
+  -- the defect shows there too -- one day a year instead of one day a
+  -- month -- but a shop that numbers `INV-202609-0001` meets it twelve
+  -- times over, and it is the case worth pinning.
+  insert into public.number_sequences
+    (org_id, doc_type, prefix, reset_policy)
+  values (v_org, 'invoice', 'INV-', 'monthly');
+
+  v_shift := public.open_pos_shift(v_reg, 100.00);
+
+  -- Kiritimati is UTC+14 and Etc/GMT+12 is UTC-12: twenty-six hours
+  -- apart, never on the same date.
+  begin
+    set local time zone 'Pacific/Kiritimati';
+    v_s1 := public.open_pos_sale(v_reg);
+    perform public.add_pos_sale_line(v_s1, v_item, 1, 5.00);
+    perform public.complete_pos_sale(v_s1, jsonb_build_array(
+      jsonb_build_object('type', v_cash, 'amount', 5.00)));
+
+    set local time zone 'Etc/GMT+12';
+    v_s2 := public.open_pos_sale(v_reg);
+    perform public.add_pos_sale_line(v_s2, v_item, 1, 5.00);
+    perform public.complete_pos_sale(v_s2, jsonb_build_array(
+      jsonb_build_object('type', v_cash, 'amount', 5.00)));
+  end;
+  reset time zone;
+
+  select s.invoice_id into v_d1 from public.pos_sales s where s.id = v_s1;
+  select s.invoice_id into v_d2 from public.pos_sales s where s.id = v_s2;
+
+  -- The control. Without it every comparison below is between two nulls.
+  perform pg_temp.check_true('both sales raised an invoice',
+    v_d1 is not null and v_d2 is not null and v_d1 <> v_d2);
+
+  select d.doc_date, d.doc_no into v_dt1, v_no1
+    from public.sales_documents d where d.id = v_d1;
+  select d.doc_date, d.doc_no into v_dt2, v_no2
+    from public.sales_documents d where d.id = v_d2;
+
+  perform pg_temp.check_eq('the invoice is dated the same day either way',
+    v_dt1::text, v_dt2::text);
+  perform pg_temp.check_eq('and it is the day it is in Malaysia',
+    v_dt1::text, v_today::text);
+
+  select e.entry_date into v_gl1 from public.gl_entries e
+   where e.id = (select gl_entry_id from public.sales_documents where id = v_d1);
+  select e.entry_date into v_gl2 from public.gl_entries e
+   where e.id = (select gl_entry_id from public.sales_documents where id = v_d2);
+  perform pg_temp.check_true('the ledger entry exists to be dated',
+    v_gl1 is not null);
+  perform pg_temp.check_eq('the ledger agrees with the invoice',
+    v_gl1::text, v_dt1::text);
+  perform pg_temp.check_eq('whoever rang it up', v_gl2::text, v_gl1::text);
+
+  -- The number carries the month, and both sales are in one series.
+  -- See the note above: this separates the two implementations only
+  -- near a month end.
+  perform pg_temp.check_true(
+    'both invoice numbers carry the Malaysian month',
+    v_no1 like '%' || to_char(v_today, 'YYYYMM') || '%'
+    and v_no2 like '%' || to_char(v_today, 'YYYYMM') || '%');
+  perform pg_temp.check_true(
+    'and the series ran on rather than starting again',
+    v_no1 <> v_no2);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The rule: nothing asks the session what day it is
+--
+-- This is what makes the next one loud. A new function that reaches for
+-- `current_date` -- the obvious thing to reach for, and what all
+-- sixty-one of them did -- turns this red before it reaches anybody's
 -- screen.
 --
--- The scan is confined to STABLE and IMMUTABLE functions on purpose.
--- The VOLATILE ones read the clock to stamp a date on a row they are
--- writing, and `0419` says at length why that is a separate migration:
--- the date a posting carries runs into fiscal period control and into
--- document numbers already issued. When that migration lands, this
--- predicate is the one to widen.
+-- `0419` scanned only the STABLE half and said the writers were a
+-- separate migration: the date a posting carries runs into fiscal period
+-- control and into document numbers already issued. `0420` to `0423` did
+-- them and made both arguments explicitly, so the scan is now the whole
+-- population and the rule is one sentence with nothing after it.
 -- ---------------------------------------------------------------------
 do $$
 declare
@@ -200,7 +338,7 @@ begin
   -- to look at. There are hundreds.
   select count(*) into v_seen
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-   where n.nspname in ('public', 'app') and p.provolatile in ('s', 'i');
+   where n.nspname in ('public', 'app');
   perform pg_temp.check_true(
     'and there are functions to scan', v_seen > 100);
 
@@ -208,13 +346,12 @@ begin
     into v_left
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname in ('public', 'app')
-     and p.provolatile in ('s', 'i')
      -- `0306` left the word in a comment in `module_dashboard`,
      -- explaining why it no longer reads it. That is not a defect.
      and regexp_replace(p.prosrc, '--[^\n]*', '', 'g') ~* v_re;
 
   perform pg_temp.check_eq(
-    'no function that only reads asks the caller what day it is',
+    'no function asks the caller what day it is',
     coalesce(array_to_string(v_left, ', '), ''), '');
 end $$;
 
