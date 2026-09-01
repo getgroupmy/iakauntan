@@ -56,12 +56,34 @@ iAkauntan already built this mechanism — `corp_signing_links`, scoped
 tokens for people who are not staff — and never pointed it at an
 invoice.
 
-## 3. No payment collection
+## 3. No payment collection *by a tenant, from their customer*
 
 Akaunting has offline payment methods, gateway apps, a
 `Portal/PaymentReceived` notification and a confirm/finish flow on the
-signed invoice route. iAkauntan records payments only after they have
-happened somewhere else. For Malaysia this would be FPX or DuitNow.
+signed invoice route. A tenant of iAkauntan still records payments only
+after they have happened somewhere else. For Malaysia this would be FPX
+or DuitNow.
+
+**The distinction matters, and this section used to blur it.** iAkauntan
+*does* now have gateway machinery: `payment_gateways` carries ten
+Malaysian acquirers (Billplz, toyyibPay, Bayarcash, CHIP, senangPay,
+iPay88, Fiuu, eGHL, Revenue Monster, Curlec), there is an admin screen
+behind the platform console, and `billplz-checkout` and
+`billplz-callback` are deployed edge functions with assertions in
+`gateway_payments.sql`.
+
+All of it serves **`platform_invoices`** — iAkauntan billing its own
+subscribers. `billplz-checkout` says so in its own header and reads no
+other table, checked rather than remembered. Nothing on a tenant's
+`sales_documents` reaches it, and `open_shared_document` gives a
+customer a document to read and no way to pay it.
+
+So the user-facing gap is exactly as open as it was. What has changed is
+the size of the job: the acquirer list, the checkout/callback shape, the
+signature verification and the idempotency are all built and exercised
+once. What is missing is per-organization gateway credentials, a pay
+route on the shared invoice link, and a receipt posted to the ledger
+when the callback confirms — not a payments integration from nothing.
 
 ## 4. Missing reports, two of them statutory
 
@@ -310,6 +332,20 @@ editor on the Team screen. `app.module_access` answers per person as
 well as per company, so a member can be let into purchasing and kept out
 of sales. This line listed it as open until `6207faa`.
 
-The other two are confirmed open by querying for them rather than by
-memory: there is no `is_compound` anywhere in 286 migrations, and no
-payment gateway of any kind — no Billplz, no ToyyibPay, no Stripe.
+The other two were "confirmed open by querying for them rather than by
+memory", and one of them has since stopped being true in the form it was
+written. Re-queried at `0404`:
+
+- **Compound tax is still absent.** `is_compound` appears nowhere in the
+  migrations, the client or the edge functions — grepped, not recalled.
+- **"No payment gateway of any kind — no Billplz, no ToyyibPay, no
+  Stripe" is now false as a statement about the codebase.** Ten
+  acquirers are registered and two Billplz edge functions are deployed.
+  What that sentence was *for* is still true, and section 3 now says it
+  the right way round: the gateways settle **platform** invoices, and a
+  tenant's customer still cannot pay a sales invoice online.
+
+The lesson is the one this document already states about itself. A gap
+register is only worth reading if it is re-queried, because the thing it
+describes gets built underneath it and the sentence stays where it
+was.
