@@ -135,6 +135,11 @@ begin
   update public.fs_filings
      set auditor_name = 'Tan & Partners', auditor_firm_no = 'AF 1234',
          opinion = 'unmodified', audit_report_date = date '2026-04-15',
+         -- `0391` refuses a circulation with no approval behind it:
+         -- under s.258 what goes to the members is the *approved*
+         -- accounts, so the board meeting has to be on the record
+         -- first. The fixture now runs in the order the Act does.
+         directors_approval_date = date '2026-04-15',
          circulated_on = date '2026-04-20'
    where id = v_filing;
 

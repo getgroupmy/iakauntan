@@ -2722,3 +2722,96 @@ Nineteen mutants; seventeen killed on the first pass, two needed
 assertions that were missing (the resolution note the requester is shown,
 and the link table's own row policy), and one is the unkillable revoke
 above.
+
+## The consolidated e-Invoice that has never once been raised
+
+This one was not found by reading. It was found because the clock rolled
+past midnight into 1 September 2026 in the middle of a mutation run, and
+two tests that had passed all session started failing:
+
+    ERROR: invalid input value for enum doc_status: "paid"
+
+`app.roll_einvoice_consolidation` has compared
+`d.status in ('posted', 'partial', 'paid')` since `0058`, and
+`app.doc_status` has no `paid` — its settled state is `completed`. The
+function raises `22P02` before it reads a row, and has done since the
+day it was written.
+
+Fixing that let execution reach the next statement, which was also
+broken: the insert supplies `due_date`, and a later migration made that
+column `generated always as (period_end + 7) stored`. Postgres refuses a
+non-default value in a generated column. **Two fatal faults, in a
+function nothing has ever successfully run.**
+
+Under the LHDN e-Invoice guideline a business must issue a consolidated
+e-Invoice for the month's sales to buyers who did not ask for one, within
+seven calendar days of the month end. This function is the only thing in
+the system that gathers those sales. It has gathered none.
+
+### Why nothing caught it
+
+`run_daily_jobs` calls it only when `extract(day from p_on) = 1`, and
+every test in this repository called `run_daily_jobs` with the **real
+current date**. The branch was therefore tested on whichever day the
+suite happened to run, and across hundreds of runs that was never the
+first of a month.
+
+So the rule, now written into `supabase/tests/monthly_jobs.sql`'s own
+header: **a job with a calendar branch is tested on the date that takes
+the branch, pinned, not on today.** Every call in that file names its
+own date.
+
+### The defect that was worse than either typo
+
+The loop in `run_daily_jobs` wraps each per-organization step in an
+exception handler — and `0375` wrote the reason in the comment above the
+till sweep:
+
+> a shop whose till sweep fails must not stop the leave year and the
+> consolidation for everybody else
+
+The two steps that comment names were the two still unwrapped. The
+isolation had been given to the branches that run daily and withheld
+from the branches that run once a month, which is exactly the wrong way
+round: a fault in a daily branch is found the next morning, and a fault
+in a January branch is found in a year. One organization on the e-Invoice
+module aborted the whole run for every organization after it in the loop
+— and on 1 January that includes their leave year.
+
+### And what the mutation run added
+
+Dropping `completed` from the status list survived the first pass,
+because every fixture invoice was merely `posted`. That is the case the
+consolidation exists for: a walk-in customer pays cash at the counter and
+asks for no invoice, so the sale is settled the moment it is made.
+Without a settled-invoice fixture the assertion would have passed while
+excluding every counter sale and consolidating only the few nobody had
+paid.
+
+## The statutory order of the accounts
+
+`fs_filings` carries three dates that are one sequence in the Companies
+Act 2016 — approved (s.251), circulated (s.258), lodged (s.259) — and
+nothing enforced that each happened before the next. The first two are
+plain date pickers on the filing form and `fs_lodge` wrote the third
+without looking at either.
+
+`fs_deadlines` is what that costs. Its own comment says the s.259 clock
+"runs from the act, not from the entitlement". Give it a circulation date
+that precedes the approval it is supposed to be of, or a lodgement with
+no circulation at all, and it computes a deadline from something that did
+not happen and reports the filing compliant.
+
+`corp_entity_id` had never been written either, so a corporate
+secretarial practice preparing a client's accounts could not tie them to
+the entity whose deadlines `0063` already tracks — the deadline board and
+the accounts for the same company were two systems that had not been
+introduced.
+
+The guard judges the whole row rather than only the change, unlike most
+here, and deliberately: three dates that describe one sequence are wrong
+together, whichever of them the current edit touched.
+
+Two fixtures elsewhere had to change, and both were the rule working:
+`mbrs.sql` circulated accounts nobody had approved, and this file's own
+first draft froze audited accounts with no auditor named.

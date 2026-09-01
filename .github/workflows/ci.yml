@@ -145,6 +145,8 @@ jobs:
                    supabase/tests/employee_documents.sql \
                    supabase/tests/project_budget.sql \
                    supabase/tests/ticket_share.sql \
+                   supabase/tests/fs_statutory_order.sql \
+                   supabase/tests/monthly_jobs.sql \
                    supabase/tests/corp_particulars.sql \
                    supabase/tests/decline_and_lodge.sql \
                    supabase/tests/lot_report.sql \
