@@ -89,6 +89,10 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
         _blankIfZero(e.epfVoluntaryEmployerRate);
     _ctl('bank_name').text = e.bankName ?? '';
     _ctl('bank_account_no').text = e.bankAccountNo ?? '';
+    _ctl('emergency_contact_name').text = e.emergencyContactName ?? '';
+    _ctl('emergency_contact_phone').text = e.emergencyContactPhone ?? '';
+    _ctl('emergency_contact_relation').text =
+        e.emergencyContactRelation ?? '';
     _leftOn = e.lastWorkingDate;
     // Never a leaving value: those come from `record_departure`, and a
     // dropdown showing one is a dropdown offering to change it.
@@ -291,6 +295,19 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
                       ],
                     ),
                     _Section(
+                      title: 'If something happens',
+                      subtitle: 'Who to call. Asked for on the first day '
+                          'and needed on the worst one',
+                      children: [
+                        _row([
+                          _text('emergency_contact_name', 'Name'),
+                          _text('emergency_contact_relation',
+                              'Relationship'),
+                        ]),
+                        _text('emergency_contact_phone', 'Phone'),
+                      ],
+                    ),
+                    _Section(
                       title: 'Statutory',
                       subtitle: 'Payroll cannot file a return without these',
                       children: [
@@ -482,6 +499,13 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
           double.tryParse(_ctl('basic_salary').text.trim()) ?? 0,
       'bank_name': _nullIfBlank('bank_name'),
       'bank_account_no': _nullIfBlank('bank_account_no'),
+      // Columns since `0025` that nothing wrote. There is no rule to
+      // enforce on a next of kin's phone number, so this is a form
+      // field and not a migration.
+      'emergency_contact_name': _nullIfBlank('emergency_contact_name'),
+      'emergency_contact_phone': _nullIfBlank('emergency_contact_phone'),
+      'emergency_contact_relation':
+          _nullIfBlank('emergency_contact_relation'),
       'epf_no': _nullIfBlank('epf_no'),
       'socso_no': _nullIfBlank('socso_no'),
       'income_tax_no': _nullIfBlank('income_tax_no'),

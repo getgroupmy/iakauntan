@@ -4571,6 +4571,7 @@ extension RepoHr on Repo {
     required DateTime end,
     required double days,
     String? reason,
+    String? contactWhileAway,
   }) => callRpc(
     'submit_leave_request',
     params: {
@@ -4580,7 +4581,33 @@ extension RepoHr on Repo {
       'p_end_date': Fmt.iso(end),
       'p_total_days': days,
       if (reason != null) 'p_reason': reason,
+      if (contactWhileAway != null)
+        'p_contact_while_away': contactWhileAway,
     },
+  );
+
+  /// The one field on a live leave request the employee may still
+  /// change after submitting it. `0038`'s update policy freezes the
+  /// whole row once it leaves draft, which is right for the dates and
+  /// wrong for this: where somebody is changes while they are away.
+  Future<void> updateLeaveContact(String requestId, String? contact) =>
+      callRpc(
+        'update_leave_contact',
+        params: {'p_request_id': requestId, 'p_contact': contact},
+      );
+
+  /// Approved leave overlapping the window, with the contact. HR sees
+  /// the organization; anybody else sees their own reporting line and
+  /// their own leave, which is what the table's select policy allows.
+  Future<List<Map<String, dynamic>>> whoIsAway({
+    DateTime? from,
+    DateTime? to,
+  }) async => Repo._rows(
+    await callRpc('report_who_is_away', params: {
+      'p_org_id': orgId,
+      if (from != null) 'p_from': Fmt.iso(from),
+      if (to != null) 'p_to': Fmt.iso(to),
+    }),
   );
 
   Future<void> decideLeave(String id, bool approve, {String? note}) =>

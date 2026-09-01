@@ -1824,6 +1824,9 @@ class Employee {
     this.epfVoluntaryEmployerRate = 0,
     this.bankName,
     this.bankAccountNo,
+    this.emergencyContactName,
+    this.emergencyContactPhone,
+    this.emergencyContactRelation,
     this.maritalStatus = 'single',
     this.residencyStatus = 'citizen',
     this.dateOfBirth,
@@ -1873,6 +1876,13 @@ class Employee {
   final double epfVoluntaryEmployerRate;
   final String? bankName;
   final String? bankAccountNo;
+
+  /// Who to call. Columns since `0025` that nothing wrote and nothing
+  /// read, so the register an employer is expected to keep had a hole
+  /// in it exactly where it is needed.
+  final String? emergencyContactName;
+  final String? emergencyContactPhone;
+  final String? emergencyContactRelation;
   final String maritalStatus;
   final String residencyStatus;
   final DateTime? dateOfBirth;
@@ -1916,6 +1926,10 @@ class Employee {
           Fmt.toDouble(j['epf_voluntary_employer_rate']),
       bankName: j['bank_name']?.toString(),
       bankAccountNo: j['bank_account_no']?.toString(),
+      emergencyContactName: j['emergency_contact_name']?.toString(),
+      emergencyContactPhone: j['emergency_contact_phone']?.toString(),
+      emergencyContactRelation:
+          j['emergency_contact_relation']?.toString(),
       maritalStatus: j['marital_status']?.toString() ?? 'single',
       residencyStatus: j['residency_status']?.toString() ?? 'citizen',
       dateOfBirth: Fmt.parseDate(j['date_of_birth']),
@@ -2054,6 +2068,7 @@ class LeaveRequest {
     this.leaveTypeName,
     this.reason,
     this.decisionNote,
+    this.contactWhileAway,
   });
 
   final String id;
@@ -2066,6 +2081,13 @@ class LeaveRequest {
   final String? leaveTypeName;
   final String? reason;
   final String? decisionNote;
+
+  /// Where to reach this person while they are away. Unlike the dates,
+  /// this can change after the request is approved — the number given a
+  /// fortnight before departure is a hotel they have since left — so
+  /// `0395` gives it its own update path rather than widening the RLS
+  /// policy that rightly freezes everything else.
+  final String? contactWhileAway;
 
   factory LeaveRequest.fromJson(Map<String, dynamic> j) {
     final emp = j['employees'];
@@ -2081,6 +2103,7 @@ class LeaveRequest {
       leaveTypeName: lt is Map ? lt['name'] as String? : null,
       reason: j['reason']?.toString(),
       decisionNote: j['decision_note']?.toString(),
+      contactWhileAway: j['contact_while_away']?.toString(),
     );
   }
 }

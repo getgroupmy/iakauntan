@@ -1226,6 +1226,21 @@ final expiringDocumentsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, int>(
         (ref, days) => requireRepo(ref).expiringDocuments(withinDays: days));
 
+/// Everyone away over the coming days, and how to reach them.
+///
+/// `contact_while_away` was a column nothing wrote and nothing read
+/// until `0395`; this is the reader. The window runs from today, so
+/// the family key is how many days ahead to look and not a date pair —
+/// a report about who is away has no use for a window in the past.
+final whoIsAwayProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, int>((ref, days) {
+  final today = DateTime.now();
+  return requireRepo(ref).whoIsAway(
+    from: today,
+    to: today.add(Duration(days: days)),
+  );
+});
+
 final leaveTypesProvider = FutureProvider<List<LeaveType>>((ref) {
   return requireRepo(ref).leaveTypes();
 });

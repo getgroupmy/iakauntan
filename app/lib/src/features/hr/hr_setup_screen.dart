@@ -247,6 +247,7 @@ class SetupField {
     this.required = false,
     this.number = false,
     this.boolean = false,
+    this.multiline = false,
     this.helper,
   });
 
@@ -255,6 +256,11 @@ class SetupField {
   final bool required;
   final bool number;
   final bool boolean;
+
+  /// A paragraph rather than a line. `positions.job_description` is the
+  /// only one so far — what a role actually involves does not fit on
+  /// one line, and a single-line box says it should.
+  final bool multiline;
   final String? helper;
 }
 
@@ -427,6 +433,8 @@ class _SetupDialogState extends ConsumerState<_SetupDialog> {
                           )
                         : TextFormField(
                             controller: _c[f.key],
+                            minLines: f.multiline ? 3 : null,
+                            maxLines: f.multiline ? 6 : 1,
                             keyboardType: f.number
                                 ? const TextInputType.numberWithOptions(
                                     decimal: true)
@@ -547,6 +555,11 @@ class _StructureTab extends StatelessWidget {
                 SetupField('grade', 'Grade'),
                 SetupField('min_salary', 'Minimum salary', number: true),
                 SetupField('max_salary', 'Maximum salary', number: true),
+                // A column since `0025` that nothing wrote. What the
+                // role involves is what goes into the advertisement and
+                // what a new joiner is handed on their first day.
+                SetupField('job_description', 'What the role involves',
+                    multiline: true),
                 SetupField('is_active', 'Active', boolean: true),
               ],
               titleOf: (r) => r['title']?.toString() ?? '',

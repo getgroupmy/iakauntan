@@ -2926,3 +2926,63 @@ writing over them loses both.
 
 The fixture that had to change was `0381`'s own: its helper opened a
 requisition with nobody owning it. It now makes the manager it needs.
+
+## The number to call while they are away
+
+`leave_requests.contact_while_away` has been a column since `0027`,
+never written by anything and never read. That is a smaller find than
+the last few, and the interesting part is why it needed SQL when two
+columns beside it did not.
+
+Three columns came out of the same sweep. `employees.emergency_contact_*`
+and `positions.job_description` are written straight into their tables
+by the client under the ordinary RLS policies, so the whole of their
+fix is a form field — a phone number has no arithmetic, and writing a
+trigger to justify a migration would be inventing rules. Both got a
+form field and no migration, and that is the sweep working: knowing
+which gaps are *not* worth SQL is part of its value.
+
+This one is different, and not cosmetically. The only write path into
+`leave_requests` is `submit_leave_request`, a SECURITY DEFINER function
+whose parameter list is the whole interface. No form could reach the
+column however it was built. A gap in a SECURITY DEFINER signature is a
+schema fault wearing a UI fault's clothes, and the way to tell the two
+apart is to look at *how the row is written* before deciding what layer
+to fix it in.
+
+Once reached, the column turned out to be unusual in a second way. It
+is the one field on a leave request that cannot be right at the moment
+it is submitted: where somebody is changes, and the number given a
+fortnight before departure is a hotel they have since left. `0038`'s
+update policy freezes the row once it leaves draft — correct for the
+dates, since an employee who could edit those after approval could take
+three weeks against an approval for three days — and it freezes this
+one too, against the only person who knows the new number. So the fix
+is a function for that single field rather than a widened policy: a
+policy permissive enough to let the employee change the contact would
+let them change the dates.
+
+`submit_leave_request` was dropped and recreated rather than gaining a
+default, for the reason `0351`'s header sets out. The mutation run
+proved it rather than asserting it: leaving the nine-argument version
+in place alongside the ten-argument one makes the tests' own six-
+argument call fail with "function public.submit_leave_request(...) is
+not unique" — `42725`, at run time, and in no test that does not think
+to count the functions. `leave_requests.sql` now counts them.
+
+Two mutants were instructive. Dropping `and r.status = 'approved'` from
+the report survived at first, because the assertion that nobody is away
+was being made by a caller who could not see anything anyway — an
+assertion passing vacuously is worth more attention than one failing,
+because nothing announces it. The fix was not to the mutant but to the
+report: it had been scoped to HR and managers while its own header
+claimed to return what `0038`'s select policy allows, and that policy
+allows an employee their own request. Matching the code to the claim
+made the assertion mean something and killed the mutant.
+
+The other is the order of the guards in `update_leave_contact`. The
+permission check runs before the status checks, so a manager who may
+decide the request but is not the person on leave is refused for being
+the wrong person, and is not told in passing what state the request is
+in. That ordering is asserted, because reversing it answers a question
+the caller was not entitled to ask.

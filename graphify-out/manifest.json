@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788219339.7576344,
-    "ast_hash": "178d9b4e11c4bcfb98e88c2b6af0565a",
+    "mtime": 1788227540.5073848,
+    "ast_hash": "81ced1c0665e8c50bbb7a04e1945aa57",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788226141.2239196,
-    "ast_hash": "770d1e0221073bbe024e98f6f9060b05",
+    "mtime": 1788227430.6430674,
+    "ast_hash": "4344f684ff096d04e5c35ba1ea864d5c",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788226093.2792406,
-    "ast_hash": "740e4a8c3078d779d8357ba1cdacb51a",
+    "mtime": 1788227459.5877187,
+    "ast_hash": "a51810afbafe7d141061425a35c13439",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -190,18 +190,18 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/employee_editor.dart": {
-    "mtime": 1788185109.0076907,
-    "ast_hash": "5adcf10c3da745941819a5c1bae4c1b4",
+    "mtime": 1788226664.6435647,
+    "ast_hash": "88b6d9dea8c31b9343bc500cfc290f3f",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/hr_setup_screen.dart": {
-    "mtime": 1788184012.1172416,
-    "ast_hash": "bb557d724c376aeb5f99f16c16335da7",
+    "mtime": 1788226708.47067,
+    "ast_hash": "863396564484c3b5f4515c00d0163555",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/leave_screen.dart": {
-    "mtime": 1786785756.618488,
-    "ast_hash": "7a50cfdbc711d07054cc2379eecccd34",
+    "mtime": 1788227590.6316485,
+    "ast_hash": "319509d3d3b1a2881e2f94040718913a",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/my_hr_screen.dart": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788226518.3570063,
-    "ast_hash": "c552d1cb758a771a99bbd1433b118a29",
+    "mtime": 1788227674.089075,
+    "ast_hash": "5a2342b6fa046ca804271cd220da22a3",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -4270,8 +4270,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/leave_requests.sql": {
-    "mtime": 1787822946.0265896,
-    "ast_hash": "812cccdba76b7e3a1eace9d74527b9a0",
+    "mtime": 1788227388.1471565,
+    "ast_hash": "a4e0aa4dc5a8ac0cfb330113c1226e7b",
     "semantic_hash": ""
   },
   "supabase/tests/lot_report.sql": {
@@ -6432,6 +6432,21 @@
   "supabase/tests/vacancies.sql": {
     "mtime": 1788225105.6390572,
     "ast_hash": "ab0fd9b9a4b271d8108fe0bedd40eb5c",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/who_is_away.dart": {
+    "mtime": 1788227580.1785007,
+    "ast_hash": "deb7d226ba620eba0d8cb7e27e75242e",
+    "semantic_hash": ""
+  },
+  "app/test/who_is_away_test.dart": {
+    "mtime": 1788227637.821073,
+    "ast_hash": "1f54dafa1fd206fe335f129b5d5c564d",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0395_the_number_to_call_while_they_are_away.sql": {
+    "mtime": 1788227355.8629582,
+    "ast_hash": "5e85916b89c3cbee7d9336cf562fe67e",
     "semantic_hash": ""
   }
 }

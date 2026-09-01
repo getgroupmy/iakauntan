@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'who_is_away.dart';
 
 /// Leave requests and approvals in one place. What you see depends on
 /// who you are: your own requests, your team's if you manage anyone, the
@@ -29,6 +30,11 @@ class _LeaveScreenState extends ConsumerState<LeaveScreen> {
       appBar: AppBar(
         title: const Text('Leave'),
         actions: [
+          IconButton(
+            tooltip: 'Who is away',
+            onPressed: () => showWhoIsAway(context),
+            icon: const Icon(Icons.beach_access_outlined),
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: Space.md),
             child: FilledButton.icon(
@@ -93,7 +99,20 @@ class _LeaveTile extends ConsumerWidget {
         ? Fmt.date(request.startDate)
         : '${Fmt.date(request.startDate)} – ${Fmt.date(request.endDate)}';
 
+    final editable = canEditContact(request);
+
     return ListTile(
+      // Tapping a row is how the contact gets corrected. `0038`'s
+      // update policy freezes the whole row once it leaves draft, which
+      // is right for the dates and wrong for where somebody is, so
+      // `0395` gives that one field a path of its own.
+      onTap: editable
+          ? () async {
+              if (await showEditLeaveContact(context, request)) {
+                ref.invalidate(leaveRequestsProvider);
+              }
+            }
+          : null,
       contentPadding:
           const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
       title: Row(children: [
@@ -108,7 +127,8 @@ class _LeaveTile extends ConsumerWidget {
       subtitle: Text(
         '${request.leaveTypeName ?? 'Leave'} · $span · '
         '${Fmt.days(request.totalDays)} day(s)'
-        '${request.reason != null && request.reason!.isNotEmpty ? ' · ${request.reason}' : ''}',
+        '${request.reason != null && request.reason!.isNotEmpty ? ' · ${request.reason}' : ''}'
+        '${request.contactWhileAway != null ? ' · ${request.contactWhileAway}' : ''}',
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 12),
@@ -153,6 +173,7 @@ class _RequestLeaveDialog extends ConsumerStatefulWidget {
 class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
   final _formKey = GlobalKey<FormState>();
   final _reason = TextEditingController();
+  final _contact = TextEditingController();
   String? _typeId;
   DateTime _start = DateTime.now();
   DateTime _end = DateTime.now();
@@ -161,6 +182,7 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
   @override
   void dispose() {
     _reason.dispose();
+    _contact.dispose();
     super.dispose();
   }
 
@@ -231,6 +253,19 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
                 maxLines: 2,
                 decoration: const InputDecoration(labelText: 'Reason'),
               ),
+              const SizedBox(height: Space.md),
+              // A column since `0027` that nothing could write until
+              // `0395` gave the RPC a parameter for it. It can be
+              // changed later — where somebody is changes — so it is
+              // asked for here and not demanded.
+              TextFormField(
+                controller: _contact,
+                decoration: const InputDecoration(
+                  labelText: 'Where to reach you',
+                  helperText: 'A number or address that works while you '
+                      'are away. You can change this later.',
+                ),
+              ),
             ],
           ),
         ),
@@ -271,6 +306,8 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
             end: _end,
             days: _days,
             reason: _reason.text.trim().isEmpty ? null : _reason.text.trim(),
+            contactWhileAway:
+                _contact.text.trim().isEmpty ? null : _contact.text.trim(),
           ),
       successMessage: 'Submitted for approval',
     );
