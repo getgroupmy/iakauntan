@@ -952,6 +952,70 @@ begin
   end;
 
   -- --------------------------------------------------------------
+  -- An enquiry every business gets
+  -- --------------------------------------------------------------
+  -- `0433`. `crm` was enabled on all seven -- by `app.seed_org_modules`,
+  -- like `purchases` -- and only Sinar had a lead in it.
+  perform pg_temp.check_eq(
+    'every demo tenant has somebody to call back',
+    (select count(*) from public.organizations o
+      where o.is_demo
+        and not exists (select 1 from public.leads l where l.org_id = o.id)), 0);
+
+  -- A board where everything is already closed shows nothing about
+  -- stages, which is the whole of what the screen is.
+  perform pg_temp.check_eq(
+    'and a deal still open on the board',
+    (select count(*) from public.organizations o
+      where o.is_demo
+        and not exists (
+          select 1 from public.opportunities p
+           where p.org_id = o.id and p.status = 'open')), 0);
+
+  -- A board where every card sits in the first stage is a board that
+  -- shows nothing about stages. Nothing else here would notice: the
+  -- open deal would still be open and the won one still won.
+  perform pg_temp.check_eq(
+    'and the open one has moved past the first stage',
+    (select count(*) from public.organizations o
+      where o.is_demo
+        and not exists (
+          select 1 from public.opportunities p
+            join public.pipeline_stages st on st.id = p.stage_id
+           where p.org_id = o.id and p.status = 'open'
+             and st.sort_order > (
+               select min(s2.sort_order) from public.pipeline_stages s2
+                where s2.pipeline_id = st.pipeline_id))), 0);
+
+  perform pg_temp.check_eq(
+    'and one it won',
+    (select count(*) from public.organizations o
+      where o.is_demo
+        and not exists (
+          select 1 from public.opportunities p
+           where p.org_id = o.id and p.status = 'won')), 0);
+
+  -- The columns only `convert_lead` sets. Writing `status =
+  -- ''converted''` into the table by hand looks identical on the board
+  -- and leaves the contact unmade, which is how one enquiry becomes two
+  -- customers later.
+  perform pg_temp.check_eq(
+    'every converted lead went through convert_lead',
+    (select count(*) from public.leads l
+       join public.organizations o on o.id = l.org_id and o.is_demo
+      where l.status = 'converted'
+        and (l.converted_contact_id is null or l.converted_at is null)), 0);
+
+  -- `close_lead` refuses without a reason. A lead closed straight into
+  -- the table would not have been refused.
+  perform pg_temp.check_eq(
+    'and every dead one says why it died',
+    (select count(*) from public.leads l
+       join public.organizations o on o.id = l.org_id and o.is_demo
+      where l.status = 'lost'
+        and coalesce(l.lost_reason, '') = ''), 0);
+
+  -- --------------------------------------------------------------
   -- And there is something in it when you get there
   -- --------------------------------------------------------------
   -- The assertion above is satisfied by a flag. `mbrs` passed it for as
@@ -999,27 +1063,6 @@ begin
       'Sinar Teknologi Sdn Bhd -> einvoice',
       'Warung Sedap Enterprise -> einvoice',
       'Guaman Aziz & Rakan -> einvoice',
-      -- A pipeline for the six tenants that are not Sinar. `0428`
-      -- argued that a warung and a salon do not run one, and that `crm`
-      -- being enabled on all six is a question about what
-      -- `demo_modules` hands out rather than pipelines to write.
-      --
-      -- The second half of that is wrong, and `0432` corrects it.
-      -- `app.demo_modules` never mentions `crm` for any of these
-      -- tenants: `app.seed_org_modules`, from `0019`, turns on
-      -- `einvoice`, `purchases`, `inventory` and `crm` for EVERY
-      -- organization created in this product. They are what the plan
-      -- includes. Turning one off for a demo tenant would show
-      -- something a real sign-up does not see, which is the opposite of
-      -- what this register is for -- so these are six small demos to
-      -- write, not an entitlement to argue about. `purchases` came off
-      -- this list the same way, in `0432`.
-      'Amanah Setiausaha Sdn Bhd -> crm',
-      'Harta Prima Management Sdn Bhd -> crm',
-      'Roti Warisan Enterprise -> crm',
-      'Seri Ayu Salon & Spa Sdn Bhd -> crm',
-      'Warung Sedap Enterprise -> crm',
-      'Guaman Aziz & Rakan -> crm',
       -- Written for Sinar's scale; nobody approves anything yet.
       'Amanah Setiausaha Sdn Bhd -> approvals',
       'Harta Prima Management Sdn Bhd -> approvals',
