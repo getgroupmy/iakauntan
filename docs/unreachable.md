@@ -3685,3 +3685,49 @@ all. The fixture keeps a nil-value line for exactly that.
   owner, and a trigger fires for the owner too. Nothing retroactive
   breaks — `0270` ran long before `0402` — but the next migration that
   wants to reshape a column on these tables will have to say so.
+
+## 0403 — the column that says "this was already posted"
+
+`0402`'s sharpest find was not an amount. It was that clearing
+`gl_entry_id` let the same invoice be posted a second time, because
+`post_sales_document_internal`'s entire defence against a double posting
+is `if v_doc.gl_entry_id is not null` — a fact stored in a column the
+client may write.
+
+Asked of the catalogue rather than remembered: **eleven** posting
+routines guard the same way, and every table they read it from grants
+UPDATE to `authenticated`. Measured on `expenses`, chosen because it is
+not a document: an RM100 expense posted, the column cleared by hand,
+`post_expense` called again — two entries, RM200 charged to the profit
+and loss for RM100 of petrol. So it was never a fact about invoices.
+
+`0403` is one narrow rule on twenty tables: `gl_entry_id`, once set, may
+not be given a different value or taken away. Setting it for the first
+time is untouched, because that is what posting is — every posting
+routine writes `null -> <entry>` and nothing else, so none of them can
+trip it. Everything else on a posted row goes on moving; `0402` is what
+a full freeze looks like, and it took a named column list per table to
+write safely, which is why it covers two tables and this covers twenty.
+
+The triggers are built from the catalogue rather than a list, and
+`posted_link_is_immutable.sql` asks the catalogue the same question, so
+a table created next year with the column and no trigger fails.
+
+### bank_transactions, excluded on purpose
+
+There the column means "which journal this statement line was matched
+to", not "the journal I posted as". `unmatch_bank_transaction` clears it
+as an ordinary correction, and freezing it would break reconciliation —
+the column would have been frozen on the strength of its name rather
+than its meaning. The exclusion is asserted by actually unmatching a
+bank line, not by reading a list of trigger names, because a list of
+trigger names measures the list.
+
+### The probe that was killed by a foreign key
+
+The "pointed at a different journal" assertion first used an all-zeros
+uuid. With the rule switched off it died on
+`expenses_gl_entry_id_fkey` and passed while proving nothing. `0399`
+made the same mistake and left the same note. The fixture now posts a
+second expense so there is a real journal belonging to something else to
+point at.
