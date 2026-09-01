@@ -445,6 +445,16 @@ begin
   -- Not SST registered, so receivables are the fee and nothing else. The
   -- identity is the same one Sinar's checks; here it holds with no tax
   -- rather than with tax, which is the case a hardcoded 8% would break.
+  --
+  -- Against every revenue account rather than against `4100`. `0429`
+  -- gave Amanah billable time, and `bill_project_time` credits whatever
+  -- `app.time_income_account` returns -- `4840 Professional Fees` --
+  -- not sales. Naming one account made this read as "receivables equal
+  -- fee income" while asserting "receivables equal the sales account",
+  -- and the two stopped being the same thing the moment the practice
+  -- billed an hour. The wider form is what the sentence always meant
+  -- and is the stronger assertion: no tax anywhere, not no tax on
+  -- sales.
   perform pg_temp.check_true(
     'Amanah billed fees, and receivables equal them exactly — it is under '
     'the SST threshold, so there is no tax to add',
@@ -455,12 +465,23 @@ begin
     = (select coalesce(sum(l.credit - l.debit), 0) from public.gl_lines l
          join public.gl_entries e on e.id = l.entry_id
          join public.accounts a on a.id = l.account_id
-        where e.org_id = v_amanah and e.status = 'posted' and a.code = '4100')
+        where e.org_id = v_amanah and e.status = 'posted'
+          and a.code like '4%')
     and (select coalesce(sum(l.credit - l.debit), 0) from public.gl_lines l
            join public.gl_entries e on e.id = l.entry_id
            join public.accounts a on a.id = l.account_id
           where e.org_id = v_amanah and e.status = 'posted'
-            and a.code = '4100') > 0);
+            and a.code like '4%') > 0);
+  -- And the practice's revenue is now in two places, which is the point:
+  -- statutory fee work and chargeable time are different income, and a
+  -- profit and loss that showed one line would be hiding the split.
+  perform pg_temp.check_true(
+    'and it comes from both the fee work and the billed hours',
+    (select count(distinct a.code) from public.gl_lines l
+       join public.gl_entries e on e.id = l.entry_id
+       join public.accounts a on a.id = l.account_id
+      where e.org_id = v_amanah and e.status = 'posted'
+        and a.code like '4%' and l.credit > 0) >= 2);
 
   -- --------------------------------------------------------------
   -- Harta Prima: both halves of the property module
@@ -700,6 +721,41 @@ begin
         and actual_close_date is null), 0);
 
   -- --------------------------------------------------------------
+  -- The hours the practice bills
+  -- --------------------------------------------------------------
+  -- Amanah's whole business is billing time and it had recorded none.
+  -- What makes the seed worth having is the two distinctions the module
+  -- exists for: recorded against chargeable, and chargeable against
+  -- billed.
+  perform pg_temp.check_true('Amanah records time against engagements',
+    (select count(*) from public.time_entries where org_id = v_amanah) >= 6);
+  perform pg_temp.check_true(
+    'not all of it chargeable, which is most of what a timesheet is for',
+    (select count(*) from public.time_entries
+      where org_id = v_amanah and not is_billable) >= 1);
+  perform pg_temp.check_true(
+    'and not all of the chargeable time is billed yet',
+    (select count(*) from public.time_entries
+      where org_id = v_amanah and is_billable and not is_billed) >= 1);
+
+  -- Billed by the function that raises the invoice. `bill_project_time`
+  -- writes the invoice, marks the entries and puts its id on them;
+  -- setting `is_billed` by hand would set the same flag and leave no
+  -- invoice, and the screen would show hours billed against nothing.
+  perform pg_temp.check_eq(
+    'every billed hour points at the invoice it was billed on',
+    (select count(*) from public.time_entries
+      where org_id = v_amanah and is_billed and invoice_id is null), 0);
+  perform pg_temp.check_true(
+    'and that invoice is a real one in the ledger',
+    exists (select 1 from public.sales_documents d
+             where d.org_id = v_amanah
+               and d.id in (select invoice_id from public.time_entries
+                             where org_id = v_amanah
+                               and invoice_id is not null)
+               and d.gl_entry_id is not null));
+
+  -- --------------------------------------------------------------
   -- And there is something in it when you get there
   -- --------------------------------------------------------------
   -- The assertion above is satisfied by a flag. `mbrs` passed it for as
@@ -769,7 +825,19 @@ begin
       'Sinar Teknologi Sdn Bhd -> branches',
       'Sinar Teknologi Sdn Bhd -> manufacturing',
       'Sinar Teknologi Sdn Bhd -> timesheets',
-      'Amanah Setiausaha Sdn Bhd -> timesheets',
+      -- `legal` is not a gap to seed. It describes itself as "Legal
+      -- Firm Accounting -- Matters, client account segregation and time
+      -- recording for law firms", and Amanah is a company secretarial
+      -- practice. Client account segregation is the Solicitors'
+      -- Accounts Rules, which apply to solicitors; seeding matters and
+      -- client money here would model Amanah as something it is not.
+      --
+      -- It is switched on because there is no law firm among the six
+      -- tenants, and the assertion above -- "no active module is left
+      -- without a demo tenant to show it in" -- is satisfied by a tick.
+      -- Which is this file's own finding one level up: the tick is on a
+      -- tenant of the wrong kind. The fix is a seventh tenant that is a
+      -- law firm, and that is its own piece of work.
       'Amanah Setiausaha Sdn Bhd -> legal',
       'Harta Prima Management Sdn Bhd -> fixed_assets'];
   begin
