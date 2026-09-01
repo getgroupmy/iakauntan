@@ -110,7 +110,7 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788244451.4949872,
+    "mtime": 1788244992.3243206,
     "ast_hash": "45511be71c35e70ce906449d90992fc9",
     "semantic_hash": ""
   },
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788244682.470086,
-    "ast_hash": "7a7307e874cac5d732110aacc18aa2d0",
+    "mtime": 1788246087.8541696,
+    "ast_hash": "f8af33161f5e01266325467d47a91ebf",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6000,8 +6000,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/hrdf_levy.sql": {
-    "mtime": 1788184120.902486,
-    "ast_hash": "309c46e7fb94192fb2218e32fcccccd2",
+    "mtime": 1788246014.3922055,
+    "ast_hash": "bb34e7b59e3a6a3cbcfad606eba02844",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/departure.dart": {
@@ -6510,8 +6510,8 @@
     "semantic_hash": ""
   },
   "scripts/check_query_columns.py": {
-    "mtime": 1788244424.446071,
-    "ast_hash": "55e058e3738b0cfeefdfb29128d20b14",
+    "mtime": 1788245013.0358202,
+    "ast_hash": "197d764b8b70490f87186e501bf291f9",
     "semantic_hash": ""
   },
   "supabase/migrations/0402_the_invoice_that_could_be_posted_twice.sql": {
@@ -6582,6 +6582,11 @@
   "docs/performance.md": {
     "mtime": 1788243408.0593352,
     "ast_hash": "8d85a0b9a25ce46ff41d6b8b6be8a596",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0409_the_one_figure_on_the_payslip_that_skips_calc_statutory.sql": {
+    "mtime": 1788246046.5621672,
+    "ast_hash": "12b370897c31e7faf6303fff6d9d99e0",
     "semantic_hash": ""
   }
 }

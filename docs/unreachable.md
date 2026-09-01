@@ -4196,3 +4196,63 @@ know what the client asks for. Written first with a lookbehind to keep
 `client.storage.from('logos')` out, which missed every one of them —
 those chains are formatted with `.from(` on the line after `storage`, so
 what precedes the dot is a newline and eight spaces.
+
+## 0409 — the one figure on the payslip that skips calc_statutory
+
+`payslips.schedules_verified` is what the banner on the payslip screen
+and the line on the PDF are drawn from: whether every statutory table
+this payslip's figures came from has been checked against what the body
+published. `calculate_payroll_run` built it from four:
+
+    v_verified := coalesce(v_epf_ver, true) and coalesce(v_soc_ver, true)
+              and coalesce(v_eis_ver, true) and coalesce(v_pcb_ver, true);
+
+There are five. The HRD Corp levy takes its rate straight off
+`statutory_rates`, joining the schedule and not reading
+`s.is_verified` — the one statutory figure that does not come through
+`app.calc_statutory`, and so the one whose verification had no way in.
+
+**Latent rather than live, and worth saying so.** Every schedule on this
+project is `is_verified = false`, the levy's included, so every payslip
+touching any of the four is already unverified and the levy's silence
+changes nothing today. What it costs is the moment somebody does the
+right thing: the four are checked against the KWSP and PERKESO schedules
+and the LHDN tables, HRD Corp publishes separately and is the obvious
+one to be verified last, and in that window a payslip says its figures
+came from verified tables while the levy on it came from one nobody has
+checked.
+
+The second half is `0404`'s shape exactly. A company with
+`payroll_settings.hrdf_category` set and no HRDF schedule in force for
+the pay date gets `select ... into` finding nothing, `v_hrdf_rate` null,
+and a levy of **zero** — silently, on a company that has told the system
+it is liable. The zero stands: an absent schedule means there is no
+arithmetic to be wrong about, which is what `0404` settled and `0408`
+followed. What changes is that the payslip stops calling it verified.
+
+The levy's verification counts only where the levy was consulted — the
+employee is `hrdf_eligible` and the company has set a category — on the
+same terms as the other four, each of which leaves its own flag `true`
+when its calculation does not run.
+
+Six assertions appended to `hrdf_levy.sql`, which is already in CI. The
+fixture verifies the four deliberately, because with nothing verified
+the question cannot be asked at all. Four mutants killed:
+
+  * reading the rate without `is_verified` — the defect itself — fails
+    "so the payslip does not claim its figures came from verified
+    tables";
+  * dropping the eligibility gate fails "keeps the verification the four
+    bodies earned";
+  * never folding the flag in is refused by the migration's own
+    assertion, before any test runs;
+  * treating a missing table as verified fails "says so rather than
+    calling the zero verified".
+
+A fifth mutant found dead code in the fix rather than in the schema. The
+first draft wrote `if not found then v_hrdf_ver := false` after the
+lookup, and removing it changed nothing: `select into` already leaves
+the target null and the `coalesce(v_hrdf_ver, false)` below already says
+it. A branch no mutation can kill is a branch that is not doing
+anything, so it is gone and the reason is in the comment that replaced
+it.

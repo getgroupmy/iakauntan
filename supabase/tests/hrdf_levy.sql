@@ -221,4 +221,140 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- And whether the payslip may call itself verified
+-- ---------------------------------------------------------------------
+--
+-- `payslips.schedules_verified` is what the banner on the payslip screen
+-- and the line on the PDF are drawn from. Until `0409` it was built from
+-- four bodies and there are five: the levy reads `statutory_rates`
+-- directly rather than through `app.calc_statutory`, so its schedule's
+-- verification had no way in.
+--
+-- Nothing on this project is verified today, so the hole is masked --
+-- every payslip is already unverified because of the other four. The
+-- fixture below verifies them deliberately, which is what makes the
+-- question answerable at all.
+do $$
+declare
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_emp    uuid;
+  v_emp2   uuid;
+  r        record;
+begin
+  v_org := pg_temp.test_org('Levi Belum Disemak Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+
+  insert into public.payroll_settings (org_id, hrdf_category)
+  values (v_org, 'mandatory_10plus')
+  on conflict (org_id) do update set hrdf_category = excluded.hrdf_category;
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-06', date '2026-06-01', date '2026-06-30',
+          date '2026-06-30')
+  returning id into v_period;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'V1', 'Disemak sebahagian', date '2020-01-01', 4000,
+          date '1992-04-15', 'single', 'citizen')
+  returning id into v_emp;
+
+  insert into public.payroll_runs (org_id, period_id, run_no)
+  values (v_org, v_period, 'PAY-2026-06') returning id into v_run;
+
+  -- The four that always reached the flag, checked against what the
+  -- bodies published. The levy's table is left as it is.
+  update public.statutory_schedules set is_verified = true
+   where body in ('epf', 'socso', 'eis', 'pcb');
+
+  perform pg_temp.check_eq('four bodies are verified and the levy is not',
+    (select count(*) from public.statutory_schedules where is_verified), 4);
+
+  perform public.calculate_payroll_run(v_run);
+  select * into r from public.payslips
+   where run_id = v_run and employee_id = v_emp;
+
+  perform pg_temp.check_true('the levy was actually charged', r.hrdf > 0);
+  perform pg_temp.check_true(
+    'so the payslip does not claim its figures came from verified tables',
+    not r.schedules_verified);
+
+  -- The positive control, and the one that matters: a flag that is
+  -- always false is no more use than one that is always true.
+  update public.statutory_schedules set is_verified = true where body = 'hrdf';
+  perform public.calculate_payroll_run(v_run);
+  select * into r from public.payslips
+   where run_id = v_run and employee_id = v_emp;
+  perform pg_temp.check_true('and once the levy''s table is checked too, it does',
+    r.schedules_verified);
+
+  -- ------------------------------------------------------------------
+  -- A category set, and no table in force to answer it
+  -- ------------------------------------------------------------------
+  -- `0404`'s shape. The levy comes out zero because there is nothing to
+  -- compute it from, which is the right answer; calling that zero
+  -- verified is not.
+  update public.statutory_schedules set effective_to = date '2025-12-31'
+   where body = 'hrdf';
+  perform public.calculate_payroll_run(v_run);
+  select * into r from public.payslips
+   where run_id = v_run and employee_id = v_emp;
+
+  perform pg_temp.check_eq('with no HRDF table in force the levy is zero',
+    r.hrdf, 0);
+  perform pg_temp.check_true(
+    'and the payslip says so rather than calling the zero verified',
+    not r.schedules_verified);
+
+  -- ------------------------------------------------------------------
+  -- An employee the levy never applied to
+  -- ------------------------------------------------------------------
+  -- Still no HRDF table in force, and the company still says it is
+  -- liable -- but this employee is not counted for the levy, so the
+  -- levy's table was never read on their behalf and must not take their
+  -- payslip's verification with it. This is the other half of the same
+  -- gate, and without a case for it the eligibility test would be code
+  -- nothing runs.
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status, hrdf_eligible)
+  values (v_org, 'V2', 'Tidak dilevi', date '2020-01-01', 4000,
+          date '1992-04-15', 'single', 'citizen', false)
+  returning id into v_emp2;
+
+  perform public.calculate_payroll_run(v_run);
+  select * into r from public.payslips
+   where run_id = v_run and employee_id = v_emp2;
+
+  perform pg_temp.check_eq('an employee outside the levy is levied nothing',
+    r.hrdf, 0);
+  perform pg_temp.check_true(
+    'and keeps the verification the four bodies earned',
+    r.schedules_verified);
+
+  -- ------------------------------------------------------------------
+  -- And a company the levy never applied to
+  -- ------------------------------------------------------------------
+  -- The levy's verification counts where the levy was consulted, on the
+  -- same terms as the other four. A company with no category must not
+  -- be dragged unverified by a table it never reads.
+  update public.payroll_settings set hrdf_category = null where org_id = v_org;
+  perform public.calculate_payroll_run(v_run);
+  select * into r from public.payslips
+   where run_id = v_run and employee_id = v_emp;
+
+  perform pg_temp.check_eq('an unregistered company is levied nothing here too',
+    r.hrdf, 0);
+  perform pg_temp.check_true(
+    'and its payslip is verified on the strength of the four it does use',
+    r.schedules_verified);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
