@@ -105,8 +105,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788229415.7523909,
-    "ast_hash": "df0672fecb7ad59580ce6b2f74d013fe",
+    "mtime": 1788253334.3338947,
+    "ast_hash": "910a2894360b0dd50574c8a4b468e849",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
@@ -335,8 +335,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/_shared/cors.ts": {
-    "mtime": 1788246861.8797517,
-    "ast_hash": "5363a52885dec6c0cc3546afa1892f76",
+    "mtime": 1788253022.478117,
+    "ast_hash": "8e2e691b2457c940f8b677267e17fcdf",
     "semantic_hash": ""
   },
   "supabase/functions/_shared/myinvois.ts": {
@@ -800,8 +800,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1788159029.3344374,
-    "ast_hash": "9b7babb45526eacb9c82899afe58e571",
+    "mtime": 1788253050.562729,
+    "ast_hash": "f831838af68450e16ae962983fa4866d",
     "semantic_hash": ""
   },
   "README.md": {
@@ -1035,8 +1035,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/invoice_pdf.dart": {
-    "mtime": 1786785756.6144881,
-    "ast_hash": "c09ecaf0104b81a430c21bb41d225d9e",
+    "mtime": 1788253426.0827975,
+    "ast_hash": "a7d9fac4fc0f739473008bd9f769fe91",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/payslip_pdf.dart": {
@@ -6635,7 +6635,7 @@
     "semantic_hash": ""
   },
   "supabase/functions/pay-invoice/index.ts": {
-    "mtime": 1788251257.886477,
+    "mtime": 1788253033.6323023,
     "ast_hash": "cafa7dda00a874f7fcfdfbbf316b52ab",
     "semantic_hash": ""
   },
@@ -6652,6 +6652,21 @@
   "supabase/tests/einvoice_totals_reconcile.sql": {
     "mtime": 1788252207.1145334,
     "ast_hash": "df3f2060e9cf04774a60e52918391970",
+    "semantic_hash": ""
+  },
+  "app/test/invoice_totals_add_up_test.dart": {
+    "mtime": 1788253414.6969354,
+    "ast_hash": "0aba4949f2e3edfbf274aec7112384b7",
+    "semantic_hash": ""
+  },
+  "supabase/functions/_local_check/check_locally.sh": {
+    "mtime": 1788253005.098962,
+    "ast_hash": "73ac866ea7fc09daf737087ebb5eb3d8",
+    "semantic_hash": ""
+  },
+  "supabase/functions/_local_check/supabase_js_stub.ts": {
+    "mtime": 1788253011.354581,
+    "ast_hash": "b8407bde6c3700cb6b753ebb62e0d271",
     "semantic_hash": ""
   }
 }

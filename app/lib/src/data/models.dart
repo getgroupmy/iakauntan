@@ -920,6 +920,7 @@ class BusinessDocument {
     this.discountAmount = 0,
     this.taxAmount = 0,
     this.shippingAmount = 0,
+    this.serviceChargeAmount = 0,
     this.roundingAmount = 0,
     this.totalAmount = 0,
     this.paidAmount = 0,
@@ -967,6 +968,11 @@ class BusinessDocument {
   final double discountAmount;
   final double taxAmount;
   final double shippingAmount;
+
+  /// Ten per cent for the table. `0410` put it on `sales_documents` and
+  /// on the POS sale; it is a header amount like shipping, it is taxed,
+  /// and it posts to 4250 rather than to sales.
+  final double serviceChargeAmount;
   final double roundingAmount;
   final double totalAmount;
   final double paidAmount;
@@ -1022,6 +1028,7 @@ class BusinessDocument {
       discountAmount: Fmt.toDouble(j['discount_amount']),
       taxAmount: Fmt.toDouble(j['tax_amount']),
       shippingAmount: Fmt.toDouble(j['shipping_amount']),
+      serviceChargeAmount: Fmt.toDouble(j['service_charge_amount']),
       roundingAmount: Fmt.toDouble(j['rounding_amount']),
       totalAmount: Fmt.toDouble(j['total_amount']),
       paidAmount: Fmt.toDouble(j['paid_amount']),
