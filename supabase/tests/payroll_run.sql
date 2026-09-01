@@ -422,6 +422,66 @@ begin
   end;
 
   perform pg_temp.sign_out();
+
+  -- ------------------------------------------------------------------
+  -- The payslip foots against its own itemisation
+  -- ------------------------------------------------------------------
+  -- `payslip_pdf.dart` prints the *lines* as the itemisation and the
+  -- *scalars* beside them as the totals of those lines: gross pay under
+  -- the earnings, total deductions under the deductions, net pay under
+  -- both.
+  --
+  -- **These three cannot fail as the engine is written today, and that
+  -- is the point of asserting them.** `calculate_payroll_run` derives
+  -- all three from the lines --
+  --
+  --     v_base.gross     := sum(payslip_lines where kind = 'earning')
+  --     v_deduct         := sum(payslip_lines where kind = 'deduction')
+  --     net_pay          := v_base.gross - v_deduct
+  --
+  -- -- so what is pinned here is the *derivation*, not the arithmetic.
+  -- The failure this would catch is a future change that sets one of
+  -- the scalars from somewhere other than the lines, which is exactly
+  -- what `complete_pos_sale` does to a sales document's `tax_amount`
+  -- and how `0410`'s service charge came to be missing from four
+  -- separate places. On a payslip that would read as an employee's
+  -- earnings not adding up to their own gross.
+  --
+  -- Reported honestly: mutating the engine to break either identity is
+  -- caught by the named-figure assertions earlier in this file before
+  -- reaching these, so they killed nothing that was not already dying.
+  -- They are a pin on the derivation and are worth exactly that much.
+  --
+  -- Asked of every payslip in the run rather than of a named one, so a
+  -- future employee shape is covered by the same assertion.
+  for r in select * from public.payslips where run_id = v_run loop
+    perform pg_temp.check_eq(
+      'the earnings lines add up to the gross pay printed beside them',
+      (select coalesce(sum(amount), 0) from public.payslip_lines
+        where payslip_id = r.id and kind = 'earning'),
+      r.gross_pay);
+    perform pg_temp.check_eq(
+      'and the deduction lines to the total deductions',
+      (select coalesce(sum(amount), 0) from public.payslip_lines
+        where payslip_id = r.id and kind = 'deduction'),
+      r.total_deductions);
+    perform pg_temp.check_eq(
+      'and what is left is the net pay',
+      round(r.gross_pay - r.total_deductions, 2), r.net_pay);
+  end loop;
+
+  -- And there was more than one shape of payslip to ask it of, so the
+  -- loop above did not pass by running once over an easy case.
+  perform pg_temp.check_true('on three payslips, not one',
+    (select count(*) from public.payslips where run_id = v_run) = 3);
+  perform pg_temp.check_true('one of which has no deductions at all',
+    exists (select 1 from public.payslips
+             where run_id = v_run and total_deductions = 0));
+  perform pg_temp.check_true('and one of which has several',
+    exists (select 1 from public.payslips p
+             where p.run_id = v_run
+               and (select count(*) from public.payslip_lines l
+                     where l.payslip_id = p.id and l.kind = 'deduction') >= 3));
 end $$;
 
 rollback;
