@@ -863,6 +863,95 @@ begin
                and d.gl_entry_id is not null));
 
   -- --------------------------------------------------------------
+  -- Every business buys something
+  -- --------------------------------------------------------------
+  -- `0432`. Six tenants had `purchases` enabled -- because
+  -- `app.seed_org_modules` turns it on for every organization in this
+  -- product, not because the demo chose to -- and no purchase document
+  -- between them.
+  perform pg_temp.check_eq(
+    'every demo tenant has a posted bill',
+    (select count(*) from public.organizations o
+      where o.is_demo
+        and not exists (
+          select 1 from public.purchase_documents d
+           where d.org_id = o.id and d.doc_type = 'bill'
+             and d.gl_entry_id is not null)), 0);
+
+  -- Bills that are all settled leave the payables ageing and the
+  -- supplier statement demonstrating themselves by being blank.
+  perform pg_temp.check_eq(
+    'and one still owed, so the ageing has something in it',
+    (select count(*) from public.organizations o
+      where o.is_demo
+        and not exists (
+          select 1 from public.purchase_documents d
+           where d.org_id = o.id and d.doc_type = 'bill'
+             and d.gl_entry_id is not null
+             and d.paid_amount < d.total_amount)), 0);
+
+  -- And one actually paid. A seed that posted two bills and no payment
+  -- would satisfy both assertions above.
+  perform pg_temp.check_eq(
+    'and one settled through a posted supplier payment',
+    (select count(*) from public.organizations o
+      where o.is_demo
+        and not exists (
+          select 1 from public.purchase_documents d
+            join public.payment_allocations a on a.bill_id = d.id
+            join public.purchase_payments p on p.id = a.payment_id
+           where d.org_id = o.id and p.gl_entry_id is not null
+             and d.paid_amount >= d.total_amount)), 0);
+
+  -- Rule 7 of the Solicitors' Accounts Rules 1990. The firm's own
+  -- printer is not paid out of money held for a client, and the seed
+  -- has to be checked for it like anything else that moves money.
+  declare v_firm uuid;
+  begin
+    select id into v_firm from public.organizations
+     where is_demo and name like 'Guaman%';
+    perform pg_temp.check_eq(
+      'and the law firm paid its supplier out of the office account',
+      (select count(*) from public.purchase_payments p
+         join public.bank_accounts b on b.id = p.bank_account_id
+        where p.org_id = v_firm and b.is_client_account), 0);
+  end;
+
+  -- --------------------------------------------------------------
+  -- One balance per bank account, not one per tenant
+  -- --------------------------------------------------------------
+  -- `app.demo_sync_bank_balance` wrote one org-wide total onto every
+  -- `bank_accounts` row a tenant had. Right while no demo tenant had
+  -- two; `0430` gave the law firm an office account and a client
+  -- account, and `0432` was the first thing to call the function on it.
+  -- The assertion above -- what the client account holds -- caught it,
+  -- which is the assertion working, but it only looks at one tenant and
+  -- one account. This asks it of every bank account in the demo.
+  perform pg_temp.check_eq(
+    'every bank account holds what its own ledger account holds',
+    (select count(*) from public.bank_accounts b
+       join public.organizations o on o.id = b.org_id and o.is_demo
+      where b.current_balance <> coalesce((
+        select sum(l.debit - l.credit)
+          from public.gl_lines l
+          join public.gl_entries e on e.id = l.entry_id
+         where e.org_id = b.org_id and e.status = 'posted'
+           and l.account_id = b.account_id), 0)), 0);
+
+  -- The control: two accounts on one tenant holding different numbers.
+  -- Without it the assertion above passes on a demo where every tenant
+  -- has one account, which is the state that hid the defect.
+  declare v_firm uuid;
+  begin
+    select id into v_firm from public.organizations
+     where is_demo and name like 'Guaman%';
+    perform pg_temp.check_true(
+      'on a tenant that has two of them, holding different balances',
+      (select count(distinct current_balance) from public.bank_accounts
+        where org_id = v_firm) = 2);
+  end;
+
+  -- --------------------------------------------------------------
   -- And there is something in it when you get there
   -- --------------------------------------------------------------
   -- The assertion above is satisfied by a flag. `mbrs` passed it for as
@@ -910,23 +999,27 @@ begin
       'Sinar Teknologi Sdn Bhd -> einvoice',
       'Warung Sedap Enterprise -> einvoice',
       'Guaman Aziz & Rakan -> einvoice',
-      -- A pipeline for the five tenants that are not Sinar. `0428`
-      -- argues that a warung and a salon do not run one, and that `crm`
+      -- A pipeline for the six tenants that are not Sinar. `0428`
+      -- argued that a warung and a salon do not run one, and that `crm`
       -- being enabled on all six is a question about what
-      -- `demo_modules` hands out rather than five pipelines to write.
+      -- `demo_modules` hands out rather than pipelines to write.
+      --
+      -- The second half of that is wrong, and `0432` corrects it.
+      -- `app.demo_modules` never mentions `crm` for any of these
+      -- tenants: `app.seed_org_modules`, from `0019`, turns on
+      -- `einvoice`, `purchases`, `inventory` and `crm` for EVERY
+      -- organization created in this product. They are what the plan
+      -- includes. Turning one off for a demo tenant would show
+      -- something a real sign-up does not see, which is the opposite of
+      -- what this register is for -- so these are six small demos to
+      -- write, not an entitlement to argue about. `purchases` came off
+      -- this list the same way, in `0432`.
       'Amanah Setiausaha Sdn Bhd -> crm',
       'Harta Prima Management Sdn Bhd -> crm',
       'Roti Warisan Enterprise -> crm',
       'Seri Ayu Salon & Spa Sdn Bhd -> crm',
       'Warung Sedap Enterprise -> crm',
       'Guaman Aziz & Rakan -> crm',
-      -- Sinar is the only tenant that buys anything.
-      'Amanah Setiausaha Sdn Bhd -> purchases',
-      'Harta Prima Management Sdn Bhd -> purchases',
-      'Roti Warisan Enterprise -> purchases',
-      'Seri Ayu Salon & Spa Sdn Bhd -> purchases',
-      'Warung Sedap Enterprise -> purchases',
-      'Guaman Aziz & Rakan -> purchases',
       -- Written for Sinar's scale; nobody approves anything yet.
       'Amanah Setiausaha Sdn Bhd -> approvals',
       'Harta Prima Management Sdn Bhd -> approvals',
