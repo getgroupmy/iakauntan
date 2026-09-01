@@ -3345,8 +3345,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_service.sql": {
-    "mtime": 1787216489.072845,
-    "ast_hash": "c4d7f57860e4dd2181876bbea97f45a8",
+    "mtime": 1788289692.9186277,
+    "ast_hash": "d09c9041bd2a68325e84363b0e7416dc",
     "semantic_hash": ""
   },
   "docs/pos.md": {
@@ -6705,8 +6705,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/malaysian_clock.sql": {
-    "mtime": 1788288559.4970958,
-    "ast_hash": "799e5201175ceb645d27330dcc914b1c",
+    "mtime": 1788289566.0027888,
+    "ast_hash": "71a2ebe32c38d2ee4a6c70704e4a4596",
     "semantic_hash": ""
   },
   "supabase/tests/stock_value_returns_to_zero.sql": {
@@ -6737,6 +6737,11 @@
   "app/test/lodgement_countdown_test.dart": {
     "mtime": 1788289040.2792714,
     "ast_hash": "138c16e767029e728a0756dec67e4634",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0424_a_moment_cast_to_a_day.sql": {
+    "mtime": 1788289538.4827955,
+    "ast_hash": "d6be9c0594c632481f47348cba0b6680",
     "semantic_hash": ""
   }
 }
