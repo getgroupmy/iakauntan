@@ -3536,3 +3536,63 @@ Neither table gained an audit trigger. Recording a pre-posting
 correction is worth doing and is a different change from refusing a
 post-posting one; bundling them would have made this migration about two
 things.
+
+## The role that is nobody could write everything
+
+The `anon` grants `0399` tripped over on the ledger were not confined to
+the ledger. Asked of the whole hosted schema:
+
+    anon holds INSERT, UPDATE or DELETE on   251 relations in public
+    of which RLS is enabled on               250
+    the one without is v_stock_valuation, a view
+    policies anywhere naming anon or public for a write ....... 0
+
+Zero. Not one policy in the schema admits `anon` to write anything, so
+every one of those 251 grants is a privilege RLS refuses on every row of
+every table, every time.
+
+The relation without RLS was worth a second look, because "RLS disabled"
+is also what a real exposure looks like. `v_stock_valuation` is a view —
+views carry no RLS of their own — and it is `security_invoker = on`, so
+it runs with the caller's rights and the RLS underneath applies. No
+exposure. Checked against the project rather than assumed.
+
+### Why remove a privilege RLS already refuses
+
+`0240` removed TRUNCATE, REFERENCES and TRIGGER from both client roles
+while noting they were unreachable through PostgREST, on the argument
+that "anything holding a connection string gets the privilege, not the
+API's opinion of it".
+
+These three are the opposite case. PostgREST emits POST, PATCH and
+DELETE all day, so RLS is the only thing in front of them — which puts
+the whole of `anon`'s inability to write this database on every policy
+being right, forever, across 250 tables. That is a great deal to ask of
+one layer when the second costs nothing. `anon` is the role for a caller
+who has not signed in, and there is no table here such a caller should
+write.
+
+`0401` takes the three from `anon` on every relation in `public` and
+narrows the default privileges so the next table created does not hand
+them back. `authenticated` is untouched and asserted to be untouched:
+the application writes as `authenticated` constantly, and narrowing that
+is a table-by-table question — `0399` and `0400` are two of those
+answers — not a sweep.
+
+### The positive control that was wrong first
+
+The first draft asserted that `anon` could still `SELECT` the
+`site_pages` table, and it failed on a local stack. `anon` never reads
+that table: it calls `public.site_pages()`, a SECURITY DEFINER function
+of the same name that reads the table as its owner.
+
+That mistake is the argument for the migration restated. The anonymous
+surface of this application is **nine functions** —
+`site_pages`, `landing_page`, `open_shared_document`,
+`open_shared_ticket`, `reply_to_shared_ticket`, `public_pos_menu`,
+`place_public_pos_order`, `corp_sign_with_link`, `corp_decline_with_link`
+— every one of them `prosecdef`, each writing as its owner. None of them
+consults a grant held by `anon`, which is exactly why taking those
+grants away reaches none of them. So the control is the surface itself:
+all nine still executable by `anon`, asserted in the migration and again
+in `table_grants.sql`.

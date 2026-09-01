@@ -329,4 +329,64 @@ begin
   raise notice 'ok   no client role holds MAINTAIN, and new tables will not get it';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- And anon writes nothing at all
+--
+-- `0401`. On the hosted project `anon` held INSERT, UPDATE or DELETE on
+-- 251 relations while not one policy in the schema named `anon` or
+-- `public` for a write -- every grant refused by RLS on every row, and
+-- RLS the only thing refusing them, since PostgREST emits POST, PATCH
+-- and DELETE all day. The anonymous surface of this application is nine
+-- SECURITY DEFINER functions, which is why taking the table grants away
+-- reaches none of it.
+-- ---------------------------------------------------------------------
+do $$
+declare v_held int; v_offenders text; v_acl text; v_fns int;
+begin
+  select count(*), string_agg(distinct rel || ' (' || priv || ')', ', ')
+    into v_held, v_offenders
+    from (
+      select c.oid::regclass::text as rel, p.priv
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+       cross join unnest(array['INSERT','UPDATE','DELETE']) as p(priv)
+       where n.nspname = 'public' and c.relkind in ('r','p','v','m','f')
+         and has_table_privilege('anon', c.oid, p.priv)
+    ) held;
+  if v_held > 0 then
+    raise exception 'FAIL anon holds % write grants in public: %',
+      v_held, left(v_offenders, 300);
+  end if;
+
+  -- And the next table created must not hand them back.
+  select coalesce(string_agg(d.defaclacl::text, ' | '), '(no row, built-in default)')
+    into v_acl
+    from pg_default_acl d
+    join pg_namespace n on n.oid = d.defaclnamespace
+   where n.nspname = 'public' and d.defaclobjtype = 'r'
+     and pg_get_userbyid(d.defaclrole) = 'postgres';
+  if v_acl ~ 'anon=[a-zA-Z]*[awd]' then
+    raise exception 'FAIL new tables would still be writable by anon: %', v_acl;
+  end if;
+
+  -- The positive control: what an anonymous caller legitimately reaches
+  -- is nine functions, and a revoke that took those away would satisfy
+  -- everything above.
+  select count(*) into v_fns
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.proname in ('site_pages', 'landing_page', 'open_shared_document',
+                       'open_shared_ticket', 'reply_to_shared_ticket',
+                       'public_pos_menu', 'place_public_pos_order',
+                       'corp_sign_with_link', 'corp_decline_with_link')
+     and has_function_privilege('anon', p.oid, 'EXECUTE');
+  if v_fns < 9 then
+    raise exception
+      'FAIL anon reaches only % of the nine anonymous functions', v_fns;
+  end if;
+
+  raise notice 'ok   anon writes nothing in public, new tables will not '
+    'let it, and all nine anonymous functions are still reachable';
+end $$;
+
 rollback;
