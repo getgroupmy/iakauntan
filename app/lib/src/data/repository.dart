@@ -6815,6 +6815,26 @@ extension RepoFinancialStatements on Repo {
     return rows.isEmpty ? null : rows.first;
   }
 
+  /// Which company these accounts are for.
+  ///
+  /// `fs_filings.corp_entity_id` is the link between a set of accounts
+  /// and the `corp_entities` row it belongs to, and `0391` granted
+  /// `fs_set_entity` to `authenticated` and then never called it. Until
+  /// something did, the column was null on every filing, so
+  /// `report_fs_deadlines` fell back to `coalesce(e.name, o.name)` --
+  /// the organization's own name -- for all of them, and the
+  /// registration number it returns beside it was always null. A
+  /// practice with forty companies got forty rows all named after the
+  /// practice.
+  ///
+  /// Null unlinks. A company keeping its own books has no
+  /// `corp_entities` row at all and its accounts are still its
+  /// accounts, which is what that `coalesce` is for.
+  Future<void> fsSetEntity(String filingId, String? entityId) => callRpc(
+    'fs_set_entity',
+    params: {'p_filing_id': filingId, 'p_entity_id': entityId},
+  );
+
   /// Every filing still to be lodged, and how long is left on each.
   ///
   /// `fs_deadlines` answers for one filing, which is what the filing's
