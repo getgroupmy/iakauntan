@@ -4005,8 +4005,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/credit_note_return.sql": {
-    "mtime": 1787822946.0225897,
-    "ast_hash": "67a13b90578cbf0a55d78e86df29f9f0",
+    "mtime": 1788303719.0393963,
+    "ast_hash": "544b2a93cfa0010071e1634098cf20c7",
     "semantic_hash": ""
   },
   "app/lib/src/features/stock/landed_cost_screen.dart": {
@@ -6822,6 +6822,11 @@
   "supabase/migrations/0439_the_terms_the_customer_agreed.sql": {
     "mtime": 1788302764.2468925,
     "ast_hash": "b03fc744e2b076902f25eb3cffb4ad9d",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0440_the_delivery_a_full_return_kept_charging.sql": {
+    "mtime": 1788303864.8901756,
+    "ast_hash": "a29dd1259134b27dd9c7602a6c207981",
     "semantic_hash": ""
   }
 }
