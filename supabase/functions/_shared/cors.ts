@@ -106,10 +106,14 @@ export function serveFunction(
 /// threw it may be carrying a request body, a provider URL or somebody's
 /// invoice on it, and logs are read by people who have no business
 /// seeing a particular company's data.
+/// The context is whatever a JSON log line can hold: a boolean answers
+/// "was a key configured" more honestly than the string "yes", and
+/// narrowing this to strings only pushed that conversion onto every
+/// caller, where it was forgotten once already.
 export function logFailure(
   err: unknown,
   event: string,
-  context?: Record<string, string>,
+  context?: Record<string, string | number | boolean>,
 ): string {
   const ref = crypto.randomUUID();
   console.error(

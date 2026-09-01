@@ -36,6 +36,14 @@ minutes — use it to find a broken assertion before pushing, not to skip the
 push. It stubs Supabase's `auth` and `storage` schemas, and its own header says
 where the stubs stop being the real thing.
 
+The edge functions have the same arrangement.
+`supabase/functions/_local_check/check_locally.sh` type-checks all of them here,
+stubbing `jsr:@supabase/supabase-js` so the check does not need jsr.io — which
+is unreachable from some machines this gets worked on, and was the reason a
+type error in `pay-invoice-callback` was found by CI rather than before the
+push. Green there is not green in CI: every call made *on* the Supabase client
+is unchecked. Red there is red in CI.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
