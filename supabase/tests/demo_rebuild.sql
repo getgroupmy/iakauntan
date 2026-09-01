@@ -612,6 +612,48 @@ begin
        public.report_fs_deadlines(v_amanah, 400) d) >= 1
     and (select count(*) filter (where not d.is_late) from
        public.report_fs_deadlines(v_amanah, 400) d) >= 1);
+
+  -- --------------------------------------------------------------
+  -- A client that changed its name, and the letterhead s.28(4) wants
+  -- --------------------------------------------------------------
+  -- `0425` wired `corp_display_name` into the merge context and `0427`
+  -- gave the demo a company it applies to. The assertion is on the
+  -- merge field because that is what reaches the paper: the four
+  -- assertions in `corp_particulars.sql` were true for as long as
+  -- nothing called the function.
+  perform pg_temp.check_true(
+    'the renamed client carries both names on its documents',
+    (select app.corp_merge_context(e.id) ->> 'company_name'
+       from public.corp_entities e
+      where e.org_id = v_amanah and e.name like 'Kilang%')
+    like '%(formerly %)');
+  -- The control: a company that never changed its name is unaffected,
+  -- without which the assertion above is satisfied by appending
+  -- "(formerly ...)" to everything.
+  perform pg_temp.check_true(
+    'and a client that did not carries one',
+    (select app.corp_merge_context(e.id) ->> 'company_name'
+       from public.corp_entities e
+      where e.org_id = v_amanah and e.name like 'Bayu%')
+    not like '%formerly%');
+  -- The reason `0426` left this out, answered. A change of name is a
+  -- fourteen-day filing under s.28, and a demo that opens one and never
+  -- lodges it shows a client company in breach on every screen that
+  -- counts deadlines.
+  perform pg_temp.check_eq(
+    'and the s.28 filing it opened was lodged, not left standing open',
+    (select count(*) from public.corp_filings f
+       join public.corp_entities e on e.id = f.entity_id
+      where e.org_id = v_amanah and f.filing_type = 'change_of_name'
+        and f.status <> 'lodged'), 0);
+  -- Through the proper door: `change_company_name` writes both of these
+  -- and `0377`'s trigger refuses a rename that does not.
+  perform pg_temp.check_true(
+    'the rename kept the old name and the date to count twelve from',
+    (select e.former_names[1] is not null and e.name_changed_on is not null
+       from public.corp_entities e
+      where e.org_id = v_amanah and e.name like 'Kilang%'));
+
   perform pg_temp.sign_out();
 
   -- --------------------------------------------------------------
