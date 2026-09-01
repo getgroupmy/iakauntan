@@ -2884,3 +2884,45 @@ or an edge function has no `auth.uid()`, and a not-null constraint would
 refuse the write rather than record the truth, which is that nobody in
 particular filed it. A caller that names somebody is believed — an
 import knows who filed the original better than `auth.uid()` does.
+
+## The vacancy nobody could open
+
+`hiring_manager_id`, `requirements` and `target_start_date` on
+`job_requisitions` have never been written, and the reason is the one
+`0389` found on `projects`: nothing writes *any* column.
+`Repo.requisitions()` selects the table, the talent screen lists what it
+finds, and there is no insert and no update anywhere in the client. A
+vacancy had to be typed straight into the table.
+
+`0381` built the far end and could only assume this one — it hires an
+applicant against a requisition, counts places against `headcount`, and
+closes the requisition when the last place is taken. All of that worked
+on rows nobody could create.
+
+The rule with teeth is the hiring manager. It is who the applicants
+belong to: the person an interview is arranged with, the person who
+decides, and — once `0381` hires somebody — the manager the new employee
+reports to. A vacancy advertised with nobody owning it collects
+applications that sit in a queue no one is reading, which is the same
+failure as `0192`'s ticket queue with no team and `0383`'s matter with
+no fee earner. Drafts are exempt, because a draft is somebody working
+out whether the role is wanted at all.
+
+And the dates follow the status rather than sitting beside it.
+`opened_date` and `closed_date` are plain date columns a form could have
+set independently of the status next to them — the shape `0387` found on
+a paid date and `0391` on a set of accounts. Here they are written by
+`open_requisition` and `close_requisition` and never offered to be
+typed, which is why the editor sends neither them nor the status.
+
+Two mutants earned their fixtures. Guarding only `open` and not
+`on_hold` survived: a vacancy parked while somebody decides is still
+advertised and still collecting applications, and `on delete set null`
+on that foreign key means its manager can vanish from under it. And
+opening a requisition from a status that should not allow it survived
+until a cancelled one was tried — reopening a cancelled vacancy is
+raising a new one, because the old has a closing date and a reason and
+writing over them loses both.
+
+The fixture that had to change was `0381`'s own: its helper opened a
+requisition with nobody owning it. It now makes the manager it needs.

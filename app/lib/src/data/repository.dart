@@ -4829,6 +4829,52 @@ extension RepoHr on Repo {
         .order('created_at', ascending: false),
   ).map(JobRequisition.fromJson).toList();
 
+  /// Raise or amend a vacancy.
+  ///
+  /// `job_requisitions` had no writer at all until `0394` — the table
+  /// was reachable only from a database connection, while `0381` hired
+  /// against its rows and counted places against its headcount.
+  ///
+  /// `status`, `opened_date` and `closed_date` are not sent from here:
+  /// `open_requisition` and `close_requisition` own them, because a date
+  /// typed beside a status is a date that can disagree with it.
+  Future<void> saveRequisition(
+    Map<String, dynamic> values, {
+    String? id,
+  }) async {
+    if (id == null) {
+      await client
+          .from('job_requisitions')
+          .insert({...values, 'org_id': orgId});
+    } else {
+      await client
+          .from('job_requisitions')
+          .update({...values, 'updated_at': DateTime.now().toIso8601String()})
+          .eq('id', id)
+          .eq('org_id', orgId);
+    }
+  }
+
+  /// Open a vacancy. The date is the act's, not a form field's.
+  Future<void> openRequisition(String id, {DateTime? on}) => callRpc(
+        'open_requisition',
+        params: {
+          'p_requisition': id,
+          if (on != null) 'p_opened_on': Fmt.iso(on),
+        },
+      );
+
+  /// Put it on hold, or cancel it. Filling one is hiring somebody,
+  /// which `hire_applicant` does.
+  Future<void> closeRequisition(String id, {String status = 'cancelled'}) =>
+      callRpc('close_requisition',
+          params: {'p_requisition': id, 'p_status': status});
+
+  /// Every vacancy still running, with how long it has been open.
+  Future<List<Map<String, dynamic>>> openVacancies() async => Repo._rows(
+        await callRpc('report_open_vacancies', params: {'p_org_id': orgId}),
+      );
+
   Future<List<Applicant>> applicants({String? requisitionId}) async {
     var q = client
         .from('applicants')

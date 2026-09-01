@@ -2673,6 +2673,7 @@ class JobRequisition {
     this.salaryMin,
     this.salaryMax,
     this.applicantCount = 0,
+    this.raw = const {},
   });
 
   final String id;
@@ -2685,6 +2686,15 @@ class JobRequisition {
   final double? salaryMin;
   final double? salaryMax;
   final int applicantCount;
+
+  /// The row as it came back.
+  ///
+  /// The editor needs the columns this class does not model —
+  /// `hiring_manager_id`, `requirements`, `target_start_date`,
+  /// `opened_date` — and adding a field for each would grow the model
+  /// for one screen's benefit. Kept as the row so the editor reads what
+  /// it needs and the list goes on using the named fields.
+  final Map<String, dynamic> raw;
 
   factory JobRequisition.fromJson(Map<String, dynamic> j) {
     final dept = j['departments'];
@@ -2702,6 +2712,7 @@ class JobRequisition {
       applicantCount: apps is List && apps.isNotEmpty && apps.first is Map
           ? Fmt.toInt((apps.first as Map)['count'])
           : 0,
+      raw: j,
     );
   }
 }

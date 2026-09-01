@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import 'requisition_editor.dart';
 import 'applicant_editor.dart';
 import 'appraisal_cycles_dialog.dart';
 import 'appraisal_goals_dialog.dart';
@@ -67,10 +68,22 @@ class _RequisitionsTab extends ConsumerWidget {
       value: reqs,
       onRetry: () => ref.invalidate(requisitionsProvider),
       builder: (list) => list.isEmpty
-          ? const EmptyState(
+          ? EmptyState(
               icon: Icons.work_outline,
               title: 'No open roles',
               message: 'Raise a requisition when you need to hire.',
+              // Said this and offered no way to do it: nothing in the
+              // client wrote to `job_requisitions` at all.
+              action: FilledButton.icon(
+                key: const ValueKey('req-new-empty'),
+                onPressed: () async {
+                  if (await showRequisitionEditor(context)) {
+                    ref.invalidate(requisitionsProvider);
+                  }
+                },
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Raise a vacancy'),
+              ),
             )
           : ListView.separated(
               itemCount: list.length,
@@ -104,6 +117,12 @@ class _RequisitionsTab extends ConsumerWidget {
                       : Text(
                           '${Fmt.money(r.salaryMin!)} – ${Fmt.money(r.salaryMax ?? r.salaryMin!)}',
                           style: Theme.of(context).textTheme.bodySmall),
+                  onTap: () async {
+                    if (await showRequisitionEditor(context,
+                        requisition: r.raw)) {
+                      ref.invalidate(requisitionsProvider);
+                    }
+                  },
                 );
               },
             ),

@@ -28,16 +28,33 @@ create or replace function pg_temp.hi_req(
   p_org uuid, p_no text, p_headcount integer,
   p_type text default 'contract')
 returns uuid language plpgsql as $$
-declare v_id uuid;
+declare v_id uuid; v_mgr uuid;
 begin
+  -- Somebody has to own the vacancy. Made here rather than passed in
+  -- from every call site, and made only once per company.
+  select id into v_mgr from public.employees
+   where org_id = p_org and employee_no = 'E-MGR';
+  if v_mgr is null then
+    insert into public.employees
+      (org_id, employee_no, full_name, hire_date, basic_salary,
+       date_of_birth)
+    values (p_org, 'E-MGR', 'Pengurus Pengambilan', date '2019-01-01',
+            8000, date '1980-01-01')
+    returning id into v_mgr;
+  end if;
+
   -- Deliberately not the column default. A fixture that asks for the
   -- value the row would hold anyway asserts nothing about where it came
   -- from, and the mutation run said so.
   insert into public.job_requisitions
     (org_id, requisition_no, title, headcount, status, opened_date,
-     employment_type)
+     employment_type,
+     -- `0394` refuses an open vacancy with nobody owning it:
+     -- applications to a requisition no one owns go into a queue nobody
+     -- is reading. A fixture that opens one has to say whose it is.
+     hiring_manager_id)
   values (p_org, p_no, 'Bookkeeper', p_headcount, 'open',
-          current_date - 30, p_type::app.employment_type)
+          current_date - 30, p_type::app.employment_type, v_mgr)
   returning id into v_id;
   return v_id;
 end $$;

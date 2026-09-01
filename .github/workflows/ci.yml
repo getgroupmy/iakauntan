@@ -148,6 +148,7 @@ jobs:
                    supabase/tests/fs_statutory_order.sql \
                    supabase/tests/monthly_jobs.sql \
                    supabase/tests/who_filed_it.sql \
+                   supabase/tests/vacancies.sql \
                    supabase/tests/corp_particulars.sql \
                    supabase/tests/decline_and_lodge.sql \
                    supabase/tests/lot_report.sql \
