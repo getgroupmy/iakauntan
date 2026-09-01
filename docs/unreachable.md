@@ -2853,3 +2853,34 @@ The one thing it cannot do is take a calendar branch: it runs each
 command as today, and `0392` hid behind `if extract(day from p_on) = 1`.
 That is what `monthly_jobs.sql` pins dates for, and why the two files
 say so to each other.
+
+## Who filed it
+
+`attachments.uploaded_by` has been a column since `0008` and nothing has
+ever written it — `attachments_repository.dart` inserts the org, the
+entity, the file name, the storage path, the mime type and the size, and
+leaves that one out. The same defect `0388` fixed on
+`employee_documents`, one table over, and `attachments` is the general
+store every entity in the system hangs files off, so it is where the
+answer matters most and where it was missing.
+
+The interesting part is not the fix but what to do with the second copy.
+`0388` had written the rule as a trigger of its own three weeks of
+migrations earlier. Writing it again here would be two copies of a
+three-line rule, and two copies is how two copies come to disagree — so
+`0393` generalises it into `app.set_filed_by()` and re-points `0388`'s
+trigger at it. `app.employee_document_filed_by` is left defined rather
+than dropped: migrations are append-only, and somebody reading the
+history should find what `0388` says it created.
+
+The mutation that mattered was removing the re-pointed trigger rather
+than the new one. It killed against `employee_documents.sql` — which is
+the assertion worth having, because the risk in consolidating two rules
+into one is not that the new table misses out but that the old one
+silently loses behaviour it already had.
+
+Null on insert stays possible on purpose. A row written by a scheduler
+or an edge function has no `auth.uid()`, and a not-null constraint would
+refuse the write rather than record the truth, which is that nobody in
+particular filed it. A caller that names somebody is believed — an
+import knows who filed the original better than `auth.uid()` does.
