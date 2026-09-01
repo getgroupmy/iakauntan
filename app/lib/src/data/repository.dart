@@ -16,11 +16,72 @@ import 'models.dart';
 /// cleared" indistinguishable to everything downstream.
 String? _orNull(String? v) => (v == null || v.trim().isEmpty) ? null : v.trim();
 
+/// One idempotency key, held across the retries of a single attempt.
+///
+/// Public so the rule below can be asserted directly — it is the whole
+/// correctness argument, and it is three lines of state that would
+/// otherwise only be exercised against a live database.
+///
+/// `0307` built the whole mechanism — the key table, the fingerprint
+/// check, a daily sweep and a CI test — and its own header notes that
+/// the client sends no key. Nothing ever started sending one, so every
+/// protected write has been unprotected since: a double tap on Post, or
+/// a retry after a request that timed out on the way back, posts twice.
+///
+/// The rule is what makes a key correct rather than merely present:
+///
+/// * **Retained across a failure.** That is the case the mechanism
+///   exists for — the write may or may not have landed, and only the
+///   server knows which.
+/// * **Retired on success.** Otherwise two deliberately identical
+///   entries — the same petty cash amount twice in a day, which is an
+///   ordinary thing to do — would collapse into one.
+/// * **Re-minted when the payload changes.** A failure the user fixes
+///   by editing the form is a different request, and `0307` refuses a
+///   key reused for different arguments.
+///
+/// The comparison is on the parameter map's own `toString`, which is
+/// stable because these maps are built from literals in a fixed order.
+/// It does not need to be canonical: the server computes the
+/// authoritative fingerprint, so the worst a disagreement here can do
+/// is produce a refusal, never a wrong post.
+///
+/// Keys live in memory, so a page reload loses one. A reload is a fresh
+/// attempt from the person's point of view and this is the honest limit
+/// of a client-held key, not something worked around.
+class IdempotentAttempt {
+  String? _key;
+  String? _payload;
+
+  String keyFor(Map<String, dynamic> params) {
+    final payload = params.toString();
+    if (_key == null || payload != _payload) {
+      _payload = payload;
+      _key = _mint();
+    }
+    return _key!;
+  }
+
+  void succeeded() {
+    _key = null;
+    _payload = null;
+  }
+
+  static final Random _rng = Random.secure();
+
+  static String _mint() {
+    final bytes = List<int>.generate(16, (_) => _rng.nextInt(256));
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+}
+
 class Repo {
   Repo(this.client, this.orgId);
 
   final SupabaseClient client;
   final String orgId;
+
+  final Map<String, IdempotentAttempt> _attempts = {};
 
   /// Every RPC in this file goes through here, so that being refused is
   /// written down.
@@ -48,6 +109,34 @@ class Repo {
       }
       rethrow;
     }
+  }
+
+  /// A write that must not happen twice.
+  ///
+  /// `0307`'s protected calls are *overloads*, and its header explains
+  /// why the key deliberately has no default: PostgREST picks between
+  /// the two by matching parameter names, so a body without the key
+  /// matches only the original and a body with it matches only the
+  /// wrapper. The consequence for a caller is easy to get wrong and
+  /// fails silently — **the wrapper has no defaults on any of its
+  /// parameters**, so a call that omits one optional argument does not
+  /// error, it quietly resolves to the unprotected original. Callers
+  /// here therefore name every parameter, passing an explicit null
+  /// rather than leaving one out.
+  ///
+  /// The key is minted by [IdempotentAttempt], which is what makes it
+  /// survive a retry and not a success.
+  Future<dynamic> callRpcOnce(
+    String fn, {
+    required Map<String, dynamic> params,
+  }) async {
+    final attempt = _attempts.putIfAbsent(fn, IdempotentAttempt.new);
+    final result = await callRpc(fn, params: {
+      ...params,
+      'p_idempotency_key': attempt.keyFor(params),
+    });
+    attempt.succeeded();
+    return result;
   }
 
   /// Never allowed to change what the caller sees. The refusal is the
@@ -540,15 +629,17 @@ class Repo {
     String? reference,
     required List<Map<String, dynamic>> lines,
   }) async {
-    final data = await callRpc(
+    final data = await callRpcOnce(
       'post_manual_journal',
       params: {
         'p_org_id': orgId,
         'p_entry_date': Fmt.iso(date),
         'p_lines': lines,
         'p_description': description,
-        if (reference != null && reference.trim().isNotEmpty)
-          'p_reference': reference.trim(),
+        // Named even when blank. `0307`'s wrapper has no defaults, so
+        // omitting this resolves to the unprotected overload without
+        // saying so.
+        'p_reference': _orNull(reference),
       },
     );
     return data as String;
@@ -9964,7 +10055,7 @@ extension RepoContra on Repo {
     required List<Map<String, dynamic>> invoices,
     required List<Map<String, dynamic>> bills,
     String? notes,
-  }) async => (await callRpc(
+  }) async => (await callRpcOnce(
     'create_contra',
     params: {
       'p_org': orgId,
@@ -10029,7 +10120,7 @@ extension RepoDeposits on Repo {
     String? mode,
     String? reference,
     String? notes,
-  }) async => (await callRpc(
+  }) async => (await callRpcOnce(
     'create_deposit',
     params: {
       'p_org': orgId,
@@ -10198,7 +10289,7 @@ extension RepoPdc on Repo {
     String? bankName,
     DateTime? receivedOn,
     String? notes,
-  }) async => (await callRpc(
+  }) async => (await callRpcOnce(
     'record_pdc',
     params: {
       'p_org': orgId,

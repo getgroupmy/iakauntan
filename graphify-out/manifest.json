@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788227459.5877187,
-    "ast_hash": "a51810afbafe7d141061425a35c13439",
+    "mtime": 1788228213.669607,
+    "ast_hash": "bba73f823bd43f0ac0a4f3cdf02f42f0",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788224431.5555608,
-    "ast_hash": "43a78bf85e1275e63aff2f48ac5fce1a",
+    "mtime": 1788228251.552181,
+    "ast_hash": "2adcf935e9350ac69ebbc79f60fd4498",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788227674.089075,
-    "ast_hash": "5a2342b6fa046ca804271cd220da22a3",
+    "mtime": 1788228297.029112,
+    "ast_hash": "d5a6e1b32c772c1bf7f735b740490e00",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6447,6 +6447,16 @@
   "supabase/migrations/0395_the_number_to_call_while_they_are_away.sql": {
     "mtime": 1788227355.8629582,
     "ast_hash": "5e85916b89c3cbee7d9336cf562fe67e",
+    "semantic_hash": ""
+  },
+  "app/test/idempotent_attempt_test.dart": {
+    "mtime": 1788228231.7051082,
+    "ast_hash": "3d46d62a3d490b6da313d9a1f2917e63",
+    "semantic_hash": ""
+  },
+  "scripts/check_idempotent_calls.py": {
+    "mtime": 1788228186.0971055,
+    "ast_hash": "4ee98973b24e58f70b36fdd220355bc7",
     "semantic_hash": ""
   }
 }

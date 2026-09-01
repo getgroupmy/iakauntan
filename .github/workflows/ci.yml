@@ -305,6 +305,19 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_embeds.py "$DB"
 
+      # The other place the two halves meet. `0307` protects four money
+      # writes with overloads whose key parameter has no default, and
+      # the wrapper has no defaults on any parameter either — so a call
+      # that omits one merely-optional argument resolves to the
+      # *unprotected* original, silently, and returns a plausible id.
+      # Nothing on either side can see that alone, and the shipped
+      # client sent no key at all for the whole time between 0307 and
+      # the commit that added this step.
+      - name: Check the protected writes actually reach the protected overload
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_idempotent_calls.py "$DB"
+
       # -----------------------------------------------------------------
       # And does the hosted project match the migrations that built it?
       #

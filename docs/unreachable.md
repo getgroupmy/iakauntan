@@ -2986,3 +2986,79 @@ decide the request but is not the person on leave is refused for being
 the wrong person, and is not told in passing what state the request is
 in. That ordering is asserted, because reversing it answers a question
 the caller was not entitled to ask.
+
+## The idempotency key that was built and never sent
+
+The sweep that found `contact_while_away` generalises. A SECURITY
+DEFINER function's parameter list *is* its interface, so a parameter no
+caller ever supplies is the same defect as a column nothing writes. Ask
+the database for every client-callable function's parameter names, ask
+the client for every `'p_…'` string literal it contains, and subtract:
+fifteen functions have a parameter nothing anywhere passes.
+
+The worst of them is `p_idempotency_key`, on `post_manual_journal`,
+`create_contra`, `create_deposit` and `record_pdc`.
+
+`0307` built the whole mechanism — the key table with its per-org
+uniqueness, the fingerprint check, a 24-hour sweep on the daily
+scheduler, revoked grants, and `idempotency.sql` in CI. Its header is
+careful and correct about PostgREST overload resolution, and it contains
+this sentence: "breaking the existing client, which sends no key." The
+client was never changed. So the mechanism has been complete, tested and
+entirely inert since, and a double tap on Post — or a retry after a
+request that timed out on the way back — has posted twice the whole
+time.
+
+This is `0388`'s shape again, a stated intention with nothing behind it,
+and one step worse: `0388` had a comment and an index, and this has a
+comment, an index, a table, a test and a scheduled job.
+
+### The half that is easy to get wrong
+
+The wrapper has **no defaults on any parameter**, not just on the key.
+That follows from how it is written and nobody had said it out loud. A
+caller that names the key but omits one merely-optional argument does
+not get an error and does not get a warning: PostgREST resolves the body
+against the *original*, which does have defaults, does the work, and
+returns an id. The screen is right, the ledger is right, and the
+guarantee is gone. `postManualJournal` omitted `p_reference` whenever
+the box was blank, so it would have been unprotected on exactly the
+entries people type fastest.
+
+### Sending *a* key is not enough
+
+Three rules make a key correct, and each of them is a way to get it
+wrong:
+
+- **Retained across a failure.** A fresh key per attempt protects
+  nothing, which is the whole point of the mechanism.
+- **Retired on success.** Two identical petty cash entries on one day is
+  an ordinary thing to do, and a key held past its success collapses the
+  second into the first and hands back the first entry's id.
+- **Re-minted when the payload changes.** `0307` refuses a key reused
+  for different arguments with `22023`, so a failure the person fixes by
+  editing the form would come back as an error they cannot act on.
+
+The client compares payloads on the parameter map's own `toString`,
+which is stable because these maps are built from literals in a fixed
+order. It does not have to be canonical: the server computes the
+authoritative fingerprint, so the worst a disagreement can do is produce
+a refusal, never a wrong post. Keys live in memory, so a page reload
+loses one — a reload is a fresh attempt from the person's point of view,
+and that is the honest limit of a client-held key rather than something
+to work around.
+
+### The guard
+
+`scripts/check_idempotent_calls.py`, next to `check_embeds.py` in CI and
+for the same reason: this is the only place the two halves meet. The
+analyzer sees a map of string literals, the SQL tests know the wrapper
+works but not who calls it, and the widget tests do not talk to a
+database. It asks the database which functions have a key overload, then
+checks that every `callRpcOnce` names a real one, names *every* one of
+its parameters, and that no protected function is also reachable through
+plain `callRpc` — one path, per `0386`.
+
+Run against the repository as it stood before the fix, it reports all
+four as having protection that is not in force. That is the finding,
+stated by the thing that will now keep it stated.
