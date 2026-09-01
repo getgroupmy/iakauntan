@@ -310,6 +310,14 @@ begin
   -- the receipts. Stated with the receipts on the left rather than
   -- dropped, because it is the same identity and it is still the one a
   -- missing `tax_rate` silently breaks.
+  --
+  -- Every revenue account, not `4100` alone. `0436` gave Sinar a job to
+  -- bill and `bill_project_time` credits `4840 Professional Fees`, so
+  -- naming one account made the identity fail by exactly the RM3,330 of
+  -- engineer time. `0429` widened Amanah's copy of this for the same
+  -- reason; "revenue plus output SST" is what the sentence always
+  -- meant, and it is a stronger assertion for covering the next income
+  -- account somebody adds.
   perform pg_temp.check_eq(
     'receivables plus what was collected equal revenue plus output SST',
     (select coalesce(sum(l.debit - l.credit), 0) from public.gl_lines l
@@ -322,7 +330,7 @@ begin
        join public.gl_entries e on e.id = l.entry_id
        join public.accounts a on a.id = l.account_id
       where e.org_id = v_sinar and e.status = 'posted'
-        and a.code in ('4100', '2130')));
+        and (a.code like '4%' or a.code = '2130')));
 
   -- --------------------------------------------------------------
   -- Sinar's cash, staff and assets
@@ -1141,6 +1149,92 @@ begin
   end;
 
   -- --------------------------------------------------------------
+  -- The last three empty screens
+  -- --------------------------------------------------------------
+  -- `0436`. `branches` and `timesheets` on Sinar and `fixed_assets` on
+  -- Harta were the last three register lines that were gaps rather than
+  -- deliberate absences.
+  declare v_tek uuid; v_hrt uuid; v_north uuid; v_job uuid;
+  begin
+    select id into v_tek from public.organizations
+     where is_demo and name like 'Sinar%';
+    select id into v_hrt from public.organizations
+     where is_demo and name like 'Harta%';
+
+    -- A branch with nothing through it makes the branch report answer
+    -- "nothing happened there".
+    select id into v_north from public.branches
+     where org_id = v_tek and code = 'PG';
+    perform pg_temp.check_true('there is a second office',
+      v_north is not null);
+    perform pg_temp.check_true('with trade actually raised in it',
+      (select count(*) from public.sales_documents
+        where org_id = v_tek and branch_id = v_north
+          and gl_entry_id is not null) >= 3);
+
+    -- And head office is not the whole of the rest. The documents that
+    -- predate the branch stay unassigned, because `branch_id` is one of
+    -- the figures a journal is built from and the posting guard refuses
+    -- to move it afterwards -- measured, the first draft of the seed
+    -- was refused on INV-2026-00021.
+    perform pg_temp.check_true(
+      'and the year that predates the branch was left where it happened',
+      (select count(*) from public.sales_documents
+        where org_id = v_tek and branch_id is null) > 0);
+
+    -- A timesheet where everything bills is not a timesheet.
+    select id into v_job from public.projects
+     where org_id = v_tek and code = 'JOB-001';
+    perform pg_temp.check_true('there is a job with hours on it',
+      (select count(*) from public.time_entries
+        where org_id = v_tek and project_id = v_job) >= 5);
+    perform pg_temp.check_true('some of which bill nothing',
+      (select count(*) from public.time_entries
+        where org_id = v_tek and project_id = v_job
+          and not is_billable) >= 2);
+
+    -- Billed through `bill_project_time`, which is the only thing that
+    -- sets `invoice_id`. A seed writing `is_billed` by hand would leave
+    -- the same rows looking billed with no invoice behind them.
+    perform pg_temp.check_eq(
+      'and every billed hour points at an invoice that exists',
+      (select count(*) from public.time_entries t
+        where t.org_id = v_tek and t.project_id = v_job and t.is_billed
+          and not exists (select 1 from public.sales_documents d
+                           where d.id = t.invoice_id
+                             and d.gl_entry_id is not null)), 0);
+    perform pg_temp.check_eq(
+      'and nothing unbillable was billed',
+      (select count(*) from public.time_entries
+        where org_id = v_tek and project_id = v_job
+          and not is_billable and is_billed), 0);
+
+    -- Harta owns a van and a fit-out. Not the buildings it manages --
+    -- those belong to the JMB, and a managing agent carrying the common
+    -- property on its own balance sheet would be a demo of a serious
+    -- accounting error.
+    perform pg_temp.check_true('the managing agent owns something itself',
+      (select count(*) from public.fixed_assets
+        where org_id = v_hrt and deleted_at is null) >= 3);
+    perform pg_temp.check_true('and has been depreciating it',
+      (select coalesce(sum(accumulated_depreciation), 0)
+         from public.fixed_assets where org_id = v_hrt) > 0);
+
+    -- The register agrees with the ledger. Two running totals that can
+    -- part company without anything failing, which is why the same
+    -- identity is asserted for Sinar above.
+    perform pg_temp.check_eq(
+      'and the register agrees with the accounts',
+      (select coalesce(sum(cost), 0) from public.fixed_assets
+        where org_id = v_hrt and deleted_at is null),
+      (select coalesce(sum(l.debit - l.credit), 0) from public.gl_lines l
+         join public.gl_entries e on e.id = l.entry_id
+         join public.accounts a on a.id = l.account_id
+        where e.org_id = v_hrt and e.status = 'posted'
+          and a.code in ('1510', '1520')));
+  end;
+
+  -- --------------------------------------------------------------
   -- And there is something in it when you get there
   -- --------------------------------------------------------------
   -- The assertion above is satisfied by a flag. `mbrs` passed it for as
@@ -1187,11 +1281,9 @@ begin
       'Seri Ayu Salon & Spa Sdn Bhd -> einvoice',
       'Sinar Teknologi Sdn Bhd -> einvoice',
       'Warung Sedap Enterprise -> einvoice',
-      'Guaman Aziz & Rakan -> einvoice',
-      -- One each, and each its own small demo.
-      'Sinar Teknologi Sdn Bhd -> branches',
-      'Sinar Teknologi Sdn Bhd -> timesheets',
-      'Harta Prima Management Sdn Bhd -> fixed_assets'];
+      'Guaman Aziz & Rakan -> einvoice'];
+      -- Nothing else. Every line left is an `einvoice` line above, and
+      -- every one of those is deliberate.
   begin
     for r in
       with probe(module_code, tbl) as (values
