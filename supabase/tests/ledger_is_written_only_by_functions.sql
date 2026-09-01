@@ -140,11 +140,15 @@ begin
   perform pg_temp.check_true('an ordinary journal still posts', v_entry is not null);
   perform pg_temp.check_eq('with both of its lines',
     (select count(*) from public.gl_lines where entry_id = v_entry), 2);
-  -- The invariant the back door broke: the lines balance. (The entry
-  -- header's own `total_debit`/`total_credit` are a separate matter --
-  -- both posting paths leave them at zero, which is recorded in
-  -- `docs/unreachable.md` as its own question and is not what this file
-  -- is about.)
+  -- The invariant the back door broke: the lines balance.
+  --
+  -- The entry header's own totals are deliberately not asserted here.
+  -- `assert_balanced` is DEFERRABLE INITIALLY DEFERRED, so it maintains
+  -- them at COMMIT, and this file rolls back -- they read zero for that
+  -- reason and not because anything is wrong. `0238` documents the trap
+  -- and `ledger_append_only.sql` forces the constraints and asserts the
+  -- totals properly. Comparing the lines to each other is what this
+  -- file is about anyway: it is the invariant the open door broke.
   perform pg_temp.check_eq('and its lines balance',
     (select sum(debit) from public.gl_lines where entry_id = v_entry),
     (select sum(credit) from public.gl_lines where entry_id = v_entry));

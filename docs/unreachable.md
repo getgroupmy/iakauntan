@@ -3381,16 +3381,34 @@ The related worry does not arise: `gl_entries_fiscal_period_id_fkey` is
 `no action`, so a period with entries cannot be deleted from under them.
 Checked, not assumed.
 
-### And one thing found on the way, not yet fixed
+### And one thing found on the way that turned out to be nothing
 
-`gl_entries.total_debit` and `total_credit` are left at zero by both
-posting paths — `post_manual_journal` and `create_gl_entry` — while the
-lines carry the amounts. `0009` contains the `update … set total_debit =
-v_debit` that was meant to maintain them and `0238` quotes it, yet a
-freshly posted entry reads 0.00 against lines summing to 100.00.
-Nothing appears to read the columns except `ledger_append_only.sql`,
-which asserts 100 and passes, so there is a path where they are right
-and a path where they are not. That contradiction is the next thing to
-resolve; it is recorded rather than guessed at, and the new test
-deliberately asserts the lines balance instead, which is the invariant
-the open door actually broke.
+While writing the test above, a freshly posted entry read
+`total_debit = 0.00` against lines summing to 100.00, on both
+`post_manual_journal` and `create_gl_entry`. The commit that added `0399`
+recorded that as an open contradiction to resolve. **It is not a defect,
+and this paragraph corrects that.**
+
+`assert_balanced` on `gl_lines` is a DEFERRABLE INITIALLY DEFERRED
+constraint trigger, so it runs at COMMIT, and `app.assert_gl_balanced`
+is what maintains the entry's totals from its lines. Every probe here
+runs inside `begin … rollback`, so commit never arrives, the deferred
+trigger never fires, and the totals sit at zero.
+
+`0238` says this already, in as many words:
+
+> A rolled-back probe never reaches commit, so the deferred trigger
+> never fires and the totals sit at zero — which looks identical to the
+> bug. `SET CONSTRAINTS ALL IMMEDIATE` forces it.
+
+Forcing it: `total_debit = 100.00`, `total_credit = 100.00`. The totals
+are maintained correctly and `ledger_append_only.sql` asserts exactly
+that, which is why it passes and why there was never a second path.
+
+Worth leaving written down, because the trap caught someone who had read
+`0238` an hour earlier and quoted a different part of it in the same
+sitting. A rolled-back harness cannot see anything a deferred trigger
+does, and "the value is zero" is indistinguishable from "nothing set the
+value" unless you force the constraints. The rule that follows: before
+reporting that a column is not maintained, run `set constraints all
+immediate` and look again.
