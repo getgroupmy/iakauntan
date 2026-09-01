@@ -1881,6 +1881,21 @@ final fsDeadlinesProvider = FutureProvider.autoDispose
       return requireRepo(ref).fsDeadlines(filingId);
     });
 
+/// The same deadlines for the whole list, keyed by filing id.
+///
+/// Six months rather than the function's default sixty days: CA 2016
+/// s.258 gives six months from the year end to circulate and thirty days
+/// after that to lodge, so a window shorter than the statutory one would
+/// hide the filing on the day somebody most wants to start it.
+final fsDeadlinesDueProvider =
+    FutureProvider.autoDispose<Map<String, Map<String, dynamic>>>((ref) async {
+      final rows = await requireRepo(ref).fsDeadlinesDue(withinDays: 180);
+      return {
+        for (final r in rows)
+          if (r['filing_id'] != null) r['filing_id'].toString(): r,
+      };
+    });
+
 /// All three grounds, whether they apply or not. The screen shows the
 /// ones that do not alongside why, because "why am I not exempt" is the
 /// question an accountant actually asks.

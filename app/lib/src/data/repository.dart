@@ -6815,6 +6815,26 @@ extension RepoFinancialStatements on Repo {
     return rows.isEmpty ? null : rows.first;
   }
 
+  /// Every filing still to be lodged, and how long is left on each.
+  ///
+  /// `fs_deadlines` answers for one filing, which is what the filing's
+  /// own screen needs and no use at all to a practice with forty
+  /// companies: asking it once per row is forty round trips to learn
+  /// which one is late. This asks once, and names the company rather
+  /// than the filing id.
+  ///
+  /// Lodged filings are not in it, and neither is anything due further
+  /// out than `withinDays` — the question it answers is what is
+  /// approaching, not what exists.
+  Future<List<Map<String, dynamic>>> fsDeadlinesDue({
+    int withinDays = 180,
+  }) async => Repo._rows(
+    await callRpc(
+      'report_fs_deadlines',
+      params: {'p_org_id': orgId, 'p_within_days': withinDays},
+    ),
+  );
+
   Future<List<Map<String, dynamic>>> fsAuditExemption(String filingId) async =>
       Repo._rows(
         await callRpc(
