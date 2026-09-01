@@ -326,4 +326,75 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- =====================================================================
+-- Six months from a year end that is the end of a month
+-- =====================================================================
+-- `fs_deadlines` computes the s.258 circulation deadline as
+-- `fy_end + interval '6 months'`, and the rest of this file never looks
+-- at it: its dates are all `v_today - N`, which is almost never the end
+-- of a month. So the one piece of arithmetic in the function that can
+-- move silently had no assertion on it, and `CLAUDE.md` is explicit
+-- that an SSM deadline needs a test that would fail if the number
+-- moved.
+--
+-- Nothing is wrong. Postgres clamps a month-add that overshoots, and
+-- every answer below is either exact or one day early, which is the
+-- safe direction for a filing deadline. What is pinned is that
+-- behaviour, against a future rewrite as `+ 180 days` or a
+-- `date_trunc`, either of which would move real deadlines for real
+-- companies without failing anything.
+--
+-- The four year ends are the ones Malaysian companies actually use.
+do $$
+declare
+  v_org uuid;
+  v_f   uuid;
+  r     record;
+begin
+  v_org := pg_temp.test_org('Tarikh Akhir Bulan Sdn Bhd');
+
+  -- 31 December: the common case, and no clamping -- June has 30 days
+  -- and the 31st does not exist, so this lands on the 30th.
+  v_f := pg_temp.so_filing(v_org, date '2026-12-31');
+  select * into r from public.fs_deadlines(v_f);
+  perform pg_temp.check_eq('a 31 December year end circulates by 30 June',
+    r.circulate_by::text, '2027-06-30');
+
+  -- 31 August into February, which is short. Clamped to the 28th.
+  v_f := pg_temp.so_filing(v_org, date '2026-08-31');
+  select * into r from public.fs_deadlines(v_f);
+  perform pg_temp.check_eq('a 31 August year end clamps to 28 February',
+    r.circulate_by::text, '2027-02-28');
+
+  -- And the same year end in a leap year, which is the assertion that
+  -- would catch a hand-rolled month-add that hard-codes 28.
+  v_f := pg_temp.so_filing(v_org, date '2027-08-31');
+  select * into r from public.fs_deadlines(v_f);
+  perform pg_temp.check_eq('and to 29 February in a leap year',
+    r.circulate_by::text, '2028-02-29');
+
+  -- 30 June into December, which is long. No clamping happens, so the
+  -- answer is the 30th and not the month end -- correct, and the one
+  -- most likely to be "corrected" by somebody who assumes a month-end
+  -- year end must give a month-end deadline.
+  v_f := pg_temp.so_filing(v_org, date '2026-06-30');
+  select * into r from public.fs_deadlines(v_f);
+  perform pg_temp.check_eq(
+    'a 30 June year end circulates by 30 December, not the 31st',
+    r.circulate_by::text, '2026-12-30');
+
+  -- 31 March, the other common one.
+  v_f := pg_temp.so_filing(v_org, date '2026-03-31');
+  select * into r from public.fs_deadlines(v_f);
+  perform pg_temp.check_eq('and a 31 March year end by 30 September',
+    r.circulate_by::text, '2026-09-30');
+
+  -- Deliberately five stated dates and no "and in general" clause. The
+  -- mechanical version of this assertion would have to express the rule
+  -- as `fy_end + interval '6 months'`, which is the function's own
+  -- expression -- it would agree with any rewrite of it, including a
+  -- wrong one, and pass by restating the implementation. Dates worked
+  -- out by hand from the Act are the only thing that does not.
+end $$;
+
 rollback;
