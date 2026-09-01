@@ -239,12 +239,31 @@ declare
     'paid_amount', 'balance_amount', 'applied_amount', 'status',
     'fulfilment_status', 'gl_entry_id', 'posted_at', 'posted_by',
     'einvoice_id', 'einvoice_status', 'is_consolidated',
-    -- 0418. Derived at the till from the outlet's rate, not chosen on
-    -- the document: `service_charge_amount` is carried because it is a
-    -- figure somebody set, and these two are what taxing it produced.
-    -- A schedule replaying them would be asserting a tax nobody
-    -- charged; whatever raises the invoice works them out again.
-    'service_charge_tax', 'service_charge_tax_code_id',
+    -- 0418's two columns were exempted here, on the reasoning that they
+    -- are "derived at the till from the outlet's rate" and that
+    -- "whatever raises the invoice works them out again". `0441`
+    -- measured the second half and it is not true: nothing outside the
+    -- POS path computes them. `app.recalc_sales_totals` adds the charge
+    -- to the total and does not touch the tax on it, and only
+    -- `app.recalc_pos_sale`, `public.set_pos_service_charge` and
+    -- `public.complete_pos_sale` ever write it. A recurring raise is
+    -- not a till.
+    --
+    -- So they came off this list and are carried. Measured before:
+    -- template `svc=100.00 svc_tax=8.00 code_set=t`, raised
+    -- `svc=100.00 svc_tax=0.00 code_set=f` -- and because
+    -- `report_sst_summary` reaches the charge through an INNER JOIN on
+    -- `service_charge_tax_code_id`, the whole RM100 left the return,
+    -- not just the RM8.
+    --
+    -- The worry the exemption recorded is real and is not dismissed: a
+    -- schedule replaying a tax figure asserts a tax nobody worked out
+    -- this month. For a FIXED retainer -- which is what a snapshot is --
+    -- the figure is the same every month and replaying it is exactly
+    -- right. For a service charge that is a percentage of a bill that
+    -- varies, neither carrying nor dropping is right and the answer is
+    -- recomputation, which nothing outside POS can do. That is named in
+    -- `0441` as a limit rather than guessed at.
     -- Ours, not the customer's, and not part of what is billed.
     'internal_notes', 'attachments',
     -- Audit. The raise writes its own.
@@ -372,6 +391,92 @@ begin
       ?& array['service_charge_amount', 'branch_id', 'matter_id']);
   perform pg_temp.check_true('branch_id on the buying side too',
     (app.snapshot_document(v_bill, 'purchase') -> 'header') ? 'branch_id');
+
+  -- `0441`'s two, likewise by name, so removing one fails as itself.
+  perform pg_temp.check_true(
+    'and 0441''s two, so the service charge reaches the SST return',
+    (app.snapshot_document(v_doc, 'sales') -> 'header')
+      ?& array['service_charge_tax', 'service_charge_tax_code_id']);
+end $$;
+
+-- =====================================================================
+-- The tax on a retainer's service charge, all the way to the return
+-- =====================================================================
+-- `0441`. The snapshot froze the charge and not the tax on it, and the
+-- raise named the columns it inserts, so both halves had to change --
+-- measured: after the snapshot alone the raised document still came out
+-- `svc_tax=0.00 code_set=f`.
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Pejabat Servis Bulanan Sdn Bhd');
+  v_own uuid := pg_temp.test_user();
+  v_cust uuid; v_st8 uuid; v_inv uuid; v_rec uuid; v_new uuid;
+  v_today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+  v_charged numeric;
+begin
+  perform public.create_fiscal_year(v_org, date_trunc('year', v_today)::date);
+
+  insert into public.tax_codes
+    (org_id, code, name, tax_type_code, rate,
+     sales_tax_account_id, purchase_tax_account_id)
+  values (v_org, 'ST8', 'Service Tax 8%', '02', 8,
+          (select id from public.accounts where org_id = v_org and code = '2130'),
+          (select id from public.accounts where org_id = v_org and code = '1410'))
+  returning id into v_st8;
+  perform public.set_sst_registration(
+    v_org, true, date_trunc('year', v_today)::date, 'W10-1808-31000441', 'ST8');
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Penyewa Sdn Bhd', 'customer') returning id into v_cust;
+
+  -- A retainer of RM1,000 with a RM100 service charge taxed at RM8.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status, service_charge_amount, service_charge_tax,
+     service_charge_tax_code_id)
+  values (v_org, 'invoice', 'INV-RET', v_today, v_today + 30, v_cust,
+          'MYR', 1, 'draft', 100, 8, v_st8)
+  returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, description, quantity,
+     uom_code, unit_price, tax_code_id, tax_rate)
+  values (v_org, v_inv, 1, 'item', 'Monthly retainer', 1, 'C62',
+          1000, v_st8, 8);
+  perform app.post_sales_document_internal(v_inv);
+
+  v_rec := public.create_recurring_document(
+    v_inv, 'Monthly retainer', 'monthly', v_today);
+  v_new := app.raise_recurring_document(v_rec, v_today);
+
+  perform pg_temp.check_eq('the raise carries the charge',
+    (select service_charge_amount from public.sales_documents where id = v_new),
+    100);
+  perform pg_temp.check_eq('and the tax on it',
+    (select service_charge_tax from public.sales_documents where id = v_new), 8);
+  perform pg_temp.check_true('and the code it is taxed under',
+    (select service_charge_tax_code_id is not null
+       from public.sales_documents where id = v_new));
+
+  -- The consequence, not only the column. `report_sst_summary` reaches
+  -- the charge through an inner join on the code, so a raise without it
+  -- takes the whole RM100 out of the return -- the taxable value as
+  -- well as the tax.
+  --
+  -- Posted first: a raise produces a draft unless the schedule posts
+  -- automatically, and a draft is rightly not on a return. Measured
+  -- rather than assumed -- the first draft of this assertion checked
+  -- the return before posting and read nothing at all.
+  perform app.post_sales_document_internal(v_new);
+
+  select coalesce(sum(taxable_amount), 0) into v_charged
+    from public.report_sst_summary(v_org, v_today - 1, v_today + 1)
+   where direction = 'output';
+
+  -- RM1,000 of retainer and RM100 of service charge, twice: the
+  -- template and the invoice raised from it.
+  perform pg_temp.check_eq(
+    'and the raised invoice''s service charge reaches the SST return',
+    v_charged, 2200);
 end $$;
 
 rollback;
