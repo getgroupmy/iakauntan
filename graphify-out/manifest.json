@@ -3035,8 +3035,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_rebuild.sql": {
-    "mtime": 1788297267.5523477,
-    "ast_hash": "76663d087d19939b913d972a154e7761",
+    "mtime": 1788298585.8470616,
+    "ast_hash": "f2571de8bf06a62c7ed11ea1cc1c0078",
     "semantic_hash": ""
   },
   "supabase/tests/demo_teardown.sql": {
@@ -6797,6 +6797,11 @@
   "supabase/migrations/0434_nobody_approves_their_own.sql": {
     "mtime": 1788297427.9266803,
     "ast_hash": "652bbe6ce5b55b1e25a5ee01b794a5d6",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0435_the_servers_sinar_builds.sql": {
+    "mtime": 1788298683.14185,
+    "ast_hash": "6dfb4d3f73bb0e85f187b4d5783c9dcd",
     "semantic_hash": ""
   }
 }
