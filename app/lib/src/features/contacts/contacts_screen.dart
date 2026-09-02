@@ -9,6 +9,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../shared/scan_intake.dart';
 import 'contact_editor.dart';
+import 'convert_contact.dart';
 
 class ContactsScreen extends ConsumerStatefulWidget {
   const ContactsScreen({super.key, this.initialType});
@@ -200,7 +201,18 @@ class _ContactTile extends StatelessWidget {
                   size: 18, color: context.colors.warning),
             ),
           const SizedBox(width: 8),
-          StatusChip(contact.contactType, compact: true),
+          // The chip is the type, so the way to change the type is on
+          // the chip. Tapping it opens the sheet; tapping anywhere else
+          // on the row still opens the contact.
+          InkWell(
+            key: ValueKey('convert-${contact.id}'),
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => showConvertContact(context, contact.id),
+            child: Tooltip(
+              message: 'Change what this contact is',
+              child: StatusChip(contact.contactType, compact: true),
+            ),
+          ),
           const Icon(Icons.chevron_right, size: 18),
         ],
       ),

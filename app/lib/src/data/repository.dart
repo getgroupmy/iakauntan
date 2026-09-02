@@ -733,6 +733,32 @@ class Repo {
     return Contact.fromJson(data);
   }
 
+  /// What this contact could be turned into, and what stops the rest.
+  ///
+  /// Asked rather than worked out here: the same helper answers the
+  /// trigger that enforces it, so a menu built from this cannot offer
+  /// something the save will refuse.
+  Future<Map<String, dynamic>> contactConversions(String contactId) async {
+    final row = await callRpc(
+      'contact_conversions',
+      params: {'p_contact_id': contactId},
+    );
+    return Map<String, dynamic>.from(row as Map);
+  }
+
+  /// Say what a contact is now.
+  ///
+  /// A plain update, because that is what the contact editor does and a
+  /// second path would be a second set of rules. The refusal, when
+  /// there is one, comes from the trigger and is already written for
+  /// somebody to read.
+  Future<void> convertContact(String contactId, String toType) =>
+      client
+          .from('contacts')
+          .update({'contact_type': toType})
+          .eq('id', contactId)
+          .eq('org_id', orgId);
+
   // ------------------------------------------------------------------
   // Items
   // ------------------------------------------------------------------

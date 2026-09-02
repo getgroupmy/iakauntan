@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788342271.3546987,
-    "ast_hash": "5c0bdd3306d3360a4d4da390bde75890",
+    "mtime": 1788348429.756283,
+    "ast_hash": "34b39410c621bd8b3bc745cb8e7910aa",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788342218.966556,
-    "ast_hash": "e10f15a9331e6f15580f037efbae943e",
+    "mtime": 1788348429.7370086,
+    "ast_hash": "a4a18acbe3137554293badf5bc59ce9e",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -130,8 +130,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contacts_screen.dart": {
-    "mtime": 1788339558.0011156,
-    "ast_hash": "77891b4620a963aa757c1de11a1cebac",
+    "mtime": 1788348514.1223938,
+    "ast_hash": "ad3b6f26c0f1134b9a97a2f60aa0cd2d",
     "semantic_hash": ""
   },
   "app/lib/src/features/crm/pipeline_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788340965.9222033,
-    "ast_hash": "ae27ae9e692e7f4c37429c90963b3ab1",
+    "mtime": 1788348294.0936856,
+    "ast_hash": "71d0c32ade79bc73a3616e8faad0d26d",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7247,6 +7247,26 @@
   "supabase/migrations/0475_a_replay_is_still_somebody_asking.sql": {
     "mtime": 1788345487.354919,
     "ast_hash": "8d65680ed44075d2c531073651dfe82c",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/contacts/convert_contact.dart": {
+    "mtime": 1788348489.3073924,
+    "ast_hash": "47482771e47f89ece7ea7c3afa2ab39a",
+    "semantic_hash": ""
+  },
+  "app/test/convert_contact_test.dart": {
+    "mtime": 1788348545.4303372,
+    "ast_hash": "47a244da22d0db2526e06de96c9064e2",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0476_a_contact_can_change_what_it_is.sql": {
+    "mtime": 1788348411.8378623,
+    "ast_hash": "963a740b4eebf8457453f413c11fdbf8",
+    "semantic_hash": ""
+  },
+  "supabase/tests/contact_conversion.sql": {
+    "mtime": 1788348377.8631892,
+    "ast_hash": "2bbb7341df36c7439fb9e518d5ce1730",
     "semantic_hash": ""
   }
 }
