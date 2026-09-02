@@ -4498,6 +4498,21 @@ extension RepoExtras on Repo {
     params: {'p_org_id': orgId, 'p_module': module, 'p_hidden': hidden},
   );
 
+  /// Add one of the paid add-ons to this company, or take it off.
+  ///
+  /// Not the same as [setModuleHidden], which is a preference about a
+  /// module already held. This is the entitlement itself, and the
+  /// monthly price with it. 0488: an owner or admin does this without
+  /// asking anybody, which is the door 0486's refusal names.
+  Future<void> setOwnModule(String module, bool enabled) => callRpc(
+    'set_own_module',
+    params: {
+      'p_org_id': orgId,
+      'p_module_code': module,
+      'p_enabled': enabled,
+    },
+  );
+
   /// Figures for the modules this company actually uses, keyed by module
   /// code. A company with no such module gets an empty map and keeps the
   /// accounting dashboard.

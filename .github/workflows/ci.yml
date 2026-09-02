@@ -250,6 +250,7 @@ jobs:
                    supabase/tests/firm_invitations.sql \
                    supabase/tests/multi_company.sql \
                    supabase/tests/demo_shop_and_factory.sql \
+                   supabase/tests/module_self_service.sql \
                    supabase/tests/company_handover.sql \
                    supabase/tests/company_export.sql \
                    supabase/tests/sst_taxable_period.sql \

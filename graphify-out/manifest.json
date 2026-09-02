@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788367721.222534,
-    "ast_hash": "a7d4d58ff2ef9cb4cd2df5fe8b6e422f",
+    "mtime": 1788372359.4357376,
+    "ast_hash": "7e82643b9b9242c35c68b9c0f3486ce8",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1788358972.7219512,
-    "ast_hash": "e748f0b966b1ba39c31a57b1a46c2c54",
+    "mtime": 1788372543.3158891,
+    "ast_hash": "3883d13cb7ca7252df982ae03193beca",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788369793.3720443,
-    "ast_hash": "404f9c83adbac70a10266c29a098f6c6",
+    "mtime": 1788372579.6785963,
+    "ast_hash": "413fe2f64330694750ccdae104e7acf6",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7412,6 +7412,26 @@
   "supabase/tests/demo_shop_and_factory.sql": {
     "mtime": 1788369757.2620084,
     "ast_hash": "362a5ad47ae6df02407a210e7980a828",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/settings/module_offer.dart": {
+    "mtime": 1788372543.3027213,
+    "ast_hash": "b80ff198300c36d385eff15d82f3252f",
+    "semantic_hash": ""
+  },
+  "app/test/module_offer_test.dart": {
+    "mtime": 1788372560.398945,
+    "ast_hash": "a7773a326fd72e79460199fab500bbbd",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0488_a_company_turns_its_own_module_on.sql": {
+    "mtime": 1788372258.4360502,
+    "ast_hash": "4fd94ff60da2d8206a525c3c6eb83b1c",
+    "semantic_hash": ""
+  },
+  "supabase/tests/module_self_service.sql": {
+    "mtime": 1788372320.9090087,
+    "ast_hash": "46c9fa7643bad05deca83de3790d7827",
     "semantic_hash": ""
   }
 }

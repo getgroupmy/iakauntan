@@ -8,6 +8,7 @@ import '../../core/safe_link.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'module_offer.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/platform_catalog_repository.dart';
 import '../../data/repository.dart';
@@ -1095,6 +1096,45 @@ class _OwnKeyFields extends StatelessWidget {
 /// screens and the rest away and be left with what it uses. Nothing is
 /// revoked by doing so: tickets still post to the same ledger, the API
 /// still answers, and the switch comes back on from this same card.
+/// Adding a paid module is a bill, so it is confirmed before it is
+/// done — and the confirmation says the price rather than leaving
+/// somebody to find it on an invoice.
+Future<void> _addModule(
+  BuildContext context,
+  WidgetRef ref,
+  ModuleSurface m,
+) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(addModuleTitle(m)),
+      content: Text(addModulePrompt(m)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Add it'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+
+  await runWithFeedback(
+    context,
+    action: () => ref.read(repoProvider)!.setOwnModule(m.code, true),
+    doing: 'add ${m.name}',
+    successMessage: '${m.name} is on',
+  );
+  ref.invalidate(moduleSurfaceProvider);
+  ref.invalidate(enabledModulesProvider);
+  ref.invalidate(moduleDashboardProvider);
+  ref.invalidate(canAddCompanyProvider);
+}
+
 class _ModulesCard extends ConsumerWidget {
   const _ModulesCard({required this.canAdmin});
 
@@ -1167,7 +1207,10 @@ class _ModulesCard extends ConsumerWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Contact us to add one of these.',
+                        // 0488. This used to read "Contact us to add
+                        // one of these", with no address behind it and
+                        // no way to act.
+                        moduleOfferLine(canAdmin: canAdmin),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 12),
@@ -1176,17 +1219,25 @@ class _ModulesCard extends ConsumerWidget {
                         runSpacing: 8,
                         children: [
                           for (final m in rest)
-                            Chip(
+                            ActionChip(
+                              key: ValueKey('add-module-${m.code}'),
                               avatar: Icon(
-                                Icons.remove_circle_outline,
+                                canAdmin
+                                    ? Icons.add_circle_outline
+                                    : Icons.remove_circle_outline,
                                 size: 16,
-                                color: Theme.of(context).colorScheme.outline,
+                                color: canAdmin
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.outline,
                               ),
-                              label: Text(
-                                m.monthlyPrice > 0
-                                    ? '${m.name} · ${Fmt.money(m.monthlyPrice)}/mo'
-                                    : m.name,
-                              ),
+                              label: Text(moduleChipLabel(m)),
+                              // Absent rather than refusing: a clerk
+                              // may write invoices all day and still
+                              // not commit the company to a bill, and
+                              // the server says the same.
+                              onPressed: !canAdmin
+                                  ? null
+                                  : () => _addModule(context, ref, m),
                             ),
                         ],
                       ),
