@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788317494.59355,
-    "ast_hash": "549be56d149a6406d4e0d705c89db537",
+    "mtime": 1788318196.7935917,
+    "ast_hash": "f4224c147ea1fa24d6c008e95b973719",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -3035,8 +3035,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_rebuild.sql": {
-    "mtime": 1788317346.622074,
-    "ast_hash": "5a93e8f506f8b6186395ce69cd7619c4",
+    "mtime": 1788318089.8452008,
+    "ast_hash": "b85540f536f036256f419562e3865751",
     "semantic_hash": ""
   },
   "supabase/tests/demo_teardown.sql": {
@@ -6872,6 +6872,11 @@
   "supabase/migrations/0448_the_payroll_screens_with_nothing_on_them.sql": {
     "mtime": 1788317386.823171,
     "ast_hash": "79438c4604d1b26134f4564e3bb62a0c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0449_the_counter_that_had_never_taken_money.sql": {
+    "mtime": 1788318089.8337421,
+    "ast_hash": "c3fa6a1a2b8f11c6689307321451825c",
     "semantic_hash": ""
   }
 }
