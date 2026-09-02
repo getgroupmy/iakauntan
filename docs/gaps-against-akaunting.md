@@ -29,8 +29,6 @@ and most of them have since closed.
 The short answer, so nobody has to reach it by scrolling. Everything
 else on this page has been built, and the sections say where.
 
-- **A customer portal login.** A signed link per invoice exists; an
-  account where a customer sees all of theirs does not. Section 2.
 - **No ringgit has been through the payment flow.** It is built end to
   end and there is no acquirer sandbox in the environment it was built
   in, so it has never been exercised against a real gateway. Section 3.
@@ -38,9 +36,11 @@ else on this page has been built, and the sections say where.
   transaction**, **bulk actions** and an **in-app notification
   centre**. Section 10.
 
-That is the whole of it. This document has twice been left saying a
-thing was missing for months after it was built — sections 1, 2 and 9
-each said so until this revision — so the list above is the part to
+That is the whole of it. This document has repeatedly been left saying
+a thing was missing for months after it was built — sections 1, 2 and 9
+each did, and section 2 did it twice: it claimed the shareable link was
+missing when `0067` had built it, and then claimed the portal was
+missing while `0493` was building it. So the list above is the part to
 distrust first if it has not been re-queried lately.
 
 ## 1. Getting a document to the customer
@@ -67,22 +67,41 @@ invoices to its tenants — `0490` sends the bill, `0491` chases it and
 confirms the payment — which is the clearest sign it is real rather
 than demonstrated once.
 
-## 2. The shareable link, built; the portal, still not
+## 2. The shareable link, and the account behind it
 
-Two different things, and this section used to treat them as one.
+Two different things, and this section used to treat them as one — then
+as one built and one open. Both are built now.
 
-**The signed link is built.** `issue_share_token` and `share_url` point
-the mechanism at a sales document, so somebody with the link views the
-invoice and pays it with no account at all — which is what
-`routes/signed.php` does in Akaunting. The token is scoped to the one
-document and carries the address it was issued to.
+**The signed link**, since `0067`. `issue_share_token` and `share_url`
+point the mechanism at a sales document, so somebody with the link
+views the invoice and pays it with no account at all — which is what
+`routes/signed.php` does in Akaunting.
 
-**The portal is not.** `routes/portal.php` gives a customer a login of
-their own where they see every invoice and payment on their account.
-iAkauntan has no such login: a customer holding three invoices holds
-three links. This is the part of section 2 that is still open, and
-stating it that precisely is the point — the previous wording claimed
-both were missing, and half of that had been false since `0067`.
+**The account**, since `0493`. `routes/portal.php` gives a customer a
+*login*; this gives them a scoped token, which is the same answer to
+the same question without putting people who are not staff into
+`auth.users` — every RLS policy in this database assumes an
+`auth.uid()` belongs to a member of an organization, and a customer
+account would undermine all of them. `open_customer_portal` answers
+with every invoice still owed, what each owes, the total and which are
+overdue; `portal_document_token` hands off to `0067`'s page for the one
+they tap, so there is one renderer and one place the total can be
+wrong. The page is `/account/:token` and the company issues and revokes
+it from the contact.
+
+Where Akaunting is still ahead, and it is narrow: their portal is a
+durable identity — a customer who loses the email can reset a password
+and get back in. Ours is a link, and a customer who loses it has to ask
+for another. That is a deliberate trade and not an oversight, but it is
+a difference and this section should say so rather than claim parity.
+
+`0494` is worth reading beside this: `share_customer_portal` emailed
+the *document* route for its first two commits, so every portal link
+sent led to a page saying the link was invalid. Nothing caught it —
+both halves were written from the same assumption, the routes live in
+the Flutter app where the database cannot see them, and the test
+extracted the token with a pattern happy with either path. It was found
+by going to build the page it should have opened.
 
 ## 3. Taking payment from a tenant's customer
 
