@@ -1502,6 +1502,23 @@ begin
   perform pg_temp.check_true('and tax was charged over the counter',
     (select coalesce(sum(s.tax_amount), 0) > 0 from public.pos_sales s
       where s.org_id = v_sinar and s.status = 'completed'));
+
+  -- And the goods left the warehouse. This is asserted through the
+  -- invoice the sale raises, because that is how POS moves stock: the
+  -- delivery is against the `sales_documents` row, so a movement with
+  -- `source_table = 'pos_sales'` does not exist and never did. Looking
+  -- for one is what made this appear broken for an hour, and the
+  -- assertion is written this way so nobody repeats it.
+  perform pg_temp.check_true('and the goods left the warehouse',
+    exists (select 1
+              from public.pos_sales s
+              join public.stock_movements m
+                on m.source_table = 'sales_documents'
+               and m.source_id = s.invoice_id
+             where s.org_id = v_sinar
+               and s.status = 'completed'
+               and m.movement_type = 'sales_delivery'
+               and m.quantity < 0));
 end $$;
 
 rollback;
