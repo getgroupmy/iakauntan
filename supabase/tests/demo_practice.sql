@@ -54,14 +54,14 @@ begin
   -- ------------------------------------------------------------------
   -- The practice
   -- ------------------------------------------------------------------
-  v_who := pg_temp.another_user('geswant@geswant.test');
-  v_report := app.demo_practice_rebuild('geswant@geswant.test');
+  v_who := pg_temp.another_user('accountant@akauntan.test');
+  v_report := app.demo_practice_rebuild('accountant@akauntan.test');
   raise notice 'practice said: %', v_report;
 
-  select id into v_firm from public.firms where slug like 'geswant%';
+  select id into v_firm from public.firms where slug like 'accountant%';
   perform pg_temp.check_true('the firm exists', v_firm is not null);
   perform pg_temp.check_eq('and it is the practice by name',
-    (select name from public.firms where id = v_firm), 'Geswant & Co.');
+    (select name from public.firms where id = v_firm), 'Accountant & Co.');
 
   perform pg_temp.check_eq('and the real person is a partner in it',
     (select role::text from public.firm_members
@@ -90,7 +90,7 @@ begin
     (select count(*)::integer from public.org_members m
        join public.organizations o on o.id = m.org_id
       where m.user_id = v_who and m.via_firm_id is null
-        and o.name <> 'Geswant & Co.'), 0);
+        and o.name <> 'Accountant & Co.'), 0);
   -- Ownership of the practice's own books first, and the three
   -- borrowed rows second. Both move together when the practice is
   -- handed back to a demo login, and this order makes that mutant die
@@ -100,7 +100,7 @@ begin
     (select count(*)::integer from public.org_members m
        join public.organizations o on o.id = m.org_id
       where m.user_id = v_who and m.via_firm_id is null
-        and m.role = 'owner' and o.name = 'Geswant & Co.'), 1);
+        and m.role = 'owner' and o.name = 'Accountant & Co.'), 1);
   -- Counted separately so that a rebuild which lost one of the three
   -- and gained a direct row on a client -- the shape of mistake this
   -- pair watches for -- cannot pass by keeping the total at four.
@@ -160,7 +160,7 @@ declare
   v_other   uuid;
   v_stray   uuid;
 begin
-  select id into v_firm from public.firms where slug like 'geswant%';
+  select id into v_firm from public.firms where slug like 'accountant%';
 
   -- A demo tenant standing outside this firm, made here rather than
   -- assumed: counting what happens to be lying around is how an
@@ -187,14 +187,14 @@ begin
   perform pg_temp.check_eq('there is something outside the firm to protect',
     v_others, 1);
 
-  perform app.demo_practice_rebuild('geswant@geswant.test');
+  perform app.demo_practice_rebuild('accountant@akauntan.test');
 
   perform pg_temp.check_eq('a second run leaves four companies, not eight',
     (select count(*)::integer from public.organizations
       where firm_id = v_firm), 4);
   perform pg_temp.check_eq('and one firm, not two',
     (select count(*)::integer from public.firms
-      where slug like 'geswant%'), 1);
+      where slug like 'accountant%'), 1);
   perform pg_temp.check_eq('the other demo tenants are where they were',
     (select count(*)::integer from public.organizations
       where is_demo and firm_id is distinct from v_firm), v_others);
@@ -224,16 +224,16 @@ declare
   v_old  uuid;
   v_firm uuid;
 begin
-  v_who := pg_temp.another_user('older@geswant.test');
+  v_who := pg_temp.another_user('older@akauntan.test');
   perform pg_temp.sign_in_as(v_who);
 
   -- The firm exactly as 0463 would have left it.
   v_old := public.create_firm('Kabeer & Co', 'AF 002026',
-                              'older@geswant.test', '03-2181 4500');
+                              'older@akauntan.test', '03-2181 4500');
   perform pg_temp.check_eq('the old firm has the old slug',
     (select slug from public.firms where id = v_old), 'kabeer-co');
 
-  perform app.demo_practice_rebuild('older@geswant.test');
+  perform app.demo_practice_rebuild('older@akauntan.test');
 
   -- The count first, deliberately. Losing the old slug from the lookup
   -- and losing the rename are two different mistakes with two different
@@ -245,7 +245,7 @@ begin
        join public.firm_members m on m.firm_id = f.id
       where m.user_id = v_who), 1);
   perform pg_temp.check_eq('and the practice built under the old name is renamed',
-    (select name from public.firms where id = v_old), 'Geswant & Co.');
+    (select name from public.firms where id = v_old), 'Accountant & Co.');
   perform pg_temp.check_eq('with the whole portfolio on it',
     (select count(*)::integer from public.organizations
       where firm_id = v_old), 4);
@@ -262,7 +262,7 @@ begin
     'the practice''s books belong to the account it was built for',
     (select count(*)::integer from public.org_members m
        join public.organizations o on o.id = m.org_id
-      where o.firm_id = v_old and o.name = 'Geswant & Co.'
+      where o.firm_id = v_old and o.name = 'Accountant & Co.'
         and m.user_id = v_who and m.role = 'owner'), 1);
   perform pg_temp.check_true(
     'and no demo login is left holding them',
@@ -270,7 +270,7 @@ begin
                   from public.org_members m
                   join public.organizations o on o.id = m.org_id
                   join auth.users u on u.id = m.user_id
-                 where o.firm_id = v_old and o.name = 'Geswant & Co.'
+                 where o.firm_id = v_old and o.name = 'Accountant & Co.'
                    and coalesce(u.raw_app_meta_data ->> 'demo', '') = 'true'));
   -- Two different facts. A rebuild that gets the owner right and the
   -- address wrong sends the practice's own mail to a domain that does
@@ -278,8 +278,8 @@ begin
   perform pg_temp.check_eq(
     'and the practice is contactable at the firm''s own address',
     (select email from public.organizations
-      where firm_id = v_old and name = 'Geswant & Co.'),
-    'older@geswant.test');
+      where firm_id = v_old and name = 'Accountant & Co.'),
+    'older@akauntan.test');
 
   select id into v_firm from public.firms where id = v_old;
   -- The one this migration is mostly about. The owner is now a real,
@@ -288,7 +288,7 @@ begin
   -- exemption the first run works and the second says the books are
   -- somebody's own.
   perform pg_temp.check_true('so a second run finds it again',
-    app.demo_practice_rebuild('older@geswant.test') is not null);
+    app.demo_practice_rebuild('older@akauntan.test') is not null);
   perform pg_temp.check_eq('and the portfolio is still four, not eight',
     (select count(*)::integer from public.organizations
       where firm_id = v_old), 4);
@@ -304,7 +304,7 @@ begin
   -- "users_email_partial_key"` part-way through, after its firm had
   -- been created.
   perform pg_temp.check_true('two practices can stand side by side',
-    (select count(*) from public.firms where slug like 'geswant%'
+    (select count(*) from public.firms where slug like 'accountant%'
         or slug like 'kabeer-co%') >= 2);
   -- Asserted on the *client* logins, which are the ones that still
   -- exist. 0472 gave the practice's own books to the real account, so
@@ -349,7 +349,7 @@ begin
   -- The firm itself stays. It belongs to a real person, and a teardown
   -- of demo data is not the place to close somebody's practice.
   perform pg_temp.check_eq('but the practice itself is still there',
-    (select count(*)::integer from public.firms where slug like 'geswant%'),
+    (select count(*)::integer from public.firms where slug like 'accountant%'),
     1);
 end $$;
 
@@ -365,8 +365,8 @@ declare
   v_msg  text;
   v_took boolean;
 begin
-  v_who := pg_temp.another_user('geswant2@geswant.test');
-  perform app.demo_practice_rebuild('geswant2@geswant.test');
+  v_who := pg_temp.another_user('accountant2@akauntan.test');
+  perform app.demo_practice_rebuild('accountant2@akauntan.test');
   select f.id into v_firm from public.firms f
     join public.firm_members m on m.firm_id = f.id
    where m.user_id = v_who;
@@ -381,7 +381,7 @@ begin
   values (v_org, v_out, 'admin', 'active', now());
 
   begin
-    perform app.demo_practice_rebuild('geswant2@geswant.test');
+    perform app.demo_practice_rebuild('accountant2@akauntan.test');
     v_took := true;
   exception when sqlstate '42501' then
     get stacked diagnostics v_msg = message_text;

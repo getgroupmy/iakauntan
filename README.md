@@ -1267,10 +1267,10 @@ accounting or company secretarial firm holds *other people's* books, and
 already exists:
 
 ```
-select app.demo_practice_rebuild('geswant@geswant.com');
+select app.demo_practice_rebuild('accountant@iakauntan.com');
 ```
 
-It makes the firm **Geswant & Co.**, puts the real account in it as a
+It makes the firm **Accountant & Co.**, puts the real account in it as a
 partner, and builds four demo companies into its portfolio — the
 practice's own books (with the statutory registers of three client
 companies on them) and those same three companies as tenants of their

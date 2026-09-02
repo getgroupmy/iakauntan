@@ -172,8 +172,8 @@ final _payload = <String, Object?>{
       'quote':
           'SAMPLE COPY, NOT A REAL CUSTOMER. A third, to fill the widest '
           'row.',
-      'author': 'Geswant Singh',
-      'company': 'Geswasnt & Co',
+      'author': 'Nurul Hakim',
+      'company': 'Accountant & Co.',
     },
   ],
   'modules': const [

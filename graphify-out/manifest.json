@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1788335803.4332907,
-    "ast_hash": "14eedee5bcf1d61d38c29f0aef2b7452",
+    "mtime": 1788364738.4095578,
+    "ast_hash": "1a937ed5ae5f1e6403de41893a201133",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -4830,8 +4830,8 @@
     "semantic_hash": ""
   },
   "app/screenshots/landing_shot.dart": {
-    "mtime": 1787822945.5025897,
-    "ast_hash": "166169813ce05632246e434acf4e31cc",
+    "mtime": 1788364738.4098456,
+    "ast_hash": "509c0f366e4f2cc14c8119b47e8a2c96",
     "semantic_hash": ""
   },
   "app/test/landing_hero_test.dart": {
@@ -7080,8 +7080,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_practice.sql": {
-    "mtime": 1788340660.0584471,
-    "ast_hash": "cf82e87fd1edef1e6983311cf61f400b",
+    "mtime": 1788364762.576559,
+    "ast_hash": "122a20c818c4de5acfa5866085eb7fc5",
     "semantic_hash": ""
   },
   "supabase/tests/feedback.sql": {
@@ -7377,6 +7377,11 @@
   "supabase/tests/firm_invitations.sql": {
     "mtime": 1788363909.112309,
     "ast_hash": "583a8f4557e76a560c22f3b2ac93e506",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0484_the_practice_under_its_own_name.sql": {
+    "mtime": 1788364586.24947,
+    "ast_hash": "d02dcbb9b8b02dc71af418716b3fe0d3",
     "semantic_hash": ""
   }
 }
