@@ -249,12 +249,36 @@ final _destinations = <_Dest>[
     '/legal',
     module: 'legal',
   ),
+  // Four doors onto one screen, under the CONTACTS heading the module
+  // already gives them. All Contacts stays what it was — the same page,
+  // opening on the same tab — and the three below it open it on theirs.
   _Dest(
-    'Contacts',
+    'All Contacts',
     Icons.people_outline,
     Icons.people,
     '/contacts',
     primary: true,
+    module: 'contacts',
+  ),
+  _Dest(
+    'Customer',
+    Icons.person_outline,
+    Icons.person,
+    '/customers',
+    module: 'contacts',
+  ),
+  _Dest(
+    'Supplier',
+    Icons.local_shipping_outlined,
+    Icons.local_shipping,
+    '/suppliers',
+    module: 'contacts',
+  ),
+  _Dest(
+    'Prospect',
+    Icons.person_search_outlined,
+    Icons.person_search,
+    '/prospects',
     module: 'contacts',
   ),
   _Dest(

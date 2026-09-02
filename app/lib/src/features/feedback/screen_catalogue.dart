@@ -86,7 +86,10 @@ final List<ScreenModule> appScreenCatalogue = [
       AppScreen('Deposits taken', '/deposits'),
     ]),
     ScreenArea('Customers', [
-      AppScreen('Customers and suppliers', '/contacts'),
+      AppScreen('All contacts', '/contacts'),
+      AppScreen('Customers', '/customers'),
+      AppScreen('Suppliers', '/suppliers'),
+      AppScreen('Prospects', '/prospects'),
       AppScreen('Salespeople', '/salespeople'),
       AppScreen('Chasing what is owed', '/collections'),
     ]),

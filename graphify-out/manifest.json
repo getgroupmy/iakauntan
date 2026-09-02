@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1788331184.1975079,
-    "ast_hash": "ef3859af74e49ed49902604318b88237",
+    "mtime": 1788339675.5975058,
+    "ast_hash": "45385eca99d17ceda0b2ddbdaf9b948f",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788330907.7553666,
-    "ast_hash": "0745e1245618220be0a468a99b63552e",
+    "mtime": 1788339558.0030527,
+    "ast_hash": "d7f12ac7e364bebc1dcb8299fe53cc1b",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -125,13 +125,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
-    "mtime": 1788329101.3344696,
-    "ast_hash": "c40ad99ee4c0762e64a5d97fabc5c47e",
+    "mtime": 1788339591.0361774,
+    "ast_hash": "0eb1489626b0a600da71c13990ce950f",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contacts_screen.dart": {
-    "mtime": 1788329109.6247685,
-    "ast_hash": "a32b5658dfbb3b31efae33cd2181de7f",
+    "mtime": 1788339558.0011156,
+    "ast_hash": "77891b4620a963aa757c1de11a1cebac",
     "semantic_hash": ""
   },
   "app/lib/src/features/crm/pipeline_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1788326506.1163428,
-    "ast_hash": "4a779c74502399d0865273f028a4b71b",
+    "mtime": 1788339575.0932279,
+    "ast_hash": "49a2c71390f15469ddeabf8e6bfab605",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -5725,8 +5725,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/run_locally.sh": {
-    "mtime": 1788285600.507654,
-    "ast_hash": "4d600b2cba801d23ea4c05ed84e17634",
+    "mtime": 1788340025.6184735,
+    "ast_hash": "d2ec0a0fd37f229d0209278c3c2f8fb8",
     "semantic_hash": ""
   },
   "app/lib/src/features/mail/attachments.dart": {
@@ -7155,8 +7155,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/feedback/screen_catalogue.dart": {
-    "mtime": 1788336357.9468625,
-    "ast_hash": "e4c464738a32151edbf3f52f0b4f6dbb",
+    "mtime": 1788339575.0934613,
+    "ast_hash": "751f0080bd68441ad5a9c81b423fdb6f",
     "semantic_hash": ""
   },
   "app/test/feedback_where_test.dart": {
@@ -7185,13 +7185,18 @@
     "semantic_hash": ""
   },
   "supabase/migrations/0471_somebody_you_have_not_sold_to_yet.sql": {
-    "mtime": 1788339283.492842,
-    "ast_hash": "eb8e2aaf4822c96c86c7ceaacfcfc269",
+    "mtime": 1788339894.4911082,
+    "ast_hash": "f77695f600ed7967246cfc094a0eb81a",
     "semantic_hash": ""
   },
   "supabase/tests/contact_types.sql": {
-    "mtime": 1788339041.878417,
-    "ast_hash": "63d4b2596ef865d43f2958515bf221cb",
+    "mtime": 1788340206.7346249,
+    "ast_hash": "73095e5002b2b265e893534ef86d07ca",
+    "semantic_hash": ""
+  },
+  "app/test/contacts_split_test.dart": {
+    "mtime": 1788339675.5976963,
+    "ast_hash": "22336f28b9126744d7f2be58ab4a3b9d",
     "semantic_hash": ""
   }
 }

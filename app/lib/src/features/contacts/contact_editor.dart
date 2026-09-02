@@ -384,6 +384,8 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                                 value: 'supplier', child: Text('Supplier')),
                             DropdownMenuItem(
                                 value: 'both', child: Text('Customer & Supplier')),
+                            DropdownMenuItem(
+                                value: 'prospect', child: Text('Prospect')),
                           ],
                           onChanged: (v) =>
                               setState(() => _contactType = v ?? 'customer'),

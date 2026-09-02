@@ -563,6 +563,25 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/expenses',
             builder: (_, __) => const ExpensesScreen(),
           ),
+          // One screen, four doors. `/contacts/customer` is not available
+          // as an address: `/contacts/:id` is the editor, so it would be
+          // read as a contact whose id is the word "customer".
+          for (final kind in const [
+            (path: '/customers', type: 'customer'),
+            (path: '/suppliers', type: 'supplier'),
+            (path: '/prospects', type: 'prospect'),
+          ])
+            GoRoute(
+              path: kind.path,
+              // Keyed by the type. Without it Flutter reuses the State
+              // across these three routes — same widget, same position —
+              // and `initialType` is only read once, so walking from
+              // Customer to Supplier would leave the old tab selected.
+              builder: (_, __) => ContactsScreen(
+                key: ValueKey(kind.type),
+                initialType: kind.type,
+              ),
+            ),
           GoRoute(
             path: '/contacts',
             builder: (_, __) => const ContactsScreen(),

@@ -217,13 +217,22 @@ declare
   v_src text := pg_get_functiondef(
     to_regprocedure('public.import_contacts(uuid, jsonb, boolean)'));
 begin
-  -- Compared as text on purpose. `'prospect'::app.contact_type` is a
-  -- new enum literal, and Postgres refuses one in the transaction that
-  -- added it; casting the existing values the other way asks the same
-  -- question without that.
+  -- Read out of the catalogue, not out of the type. CI applies each
+  -- migration file in one transaction, and `enum_range` on a type whose
+  -- value was added in that same transaction is refused with 55P04,
+  -- `unsafe use of new value`; so is any cast to it. `pg_enum` is a
+  -- table of rows, and the row is there the moment `alter type` runs.
+  -- The local harness applies statements one at a time and so never
+  -- asked this question -- which is how the first shape of this block
+  -- passed here and failed in CI.
   if not exists (
-    select 1 from unnest(enum_range(null::app.contact_type)) t
-     where t::text = 'prospect') then
+    select 1
+      from pg_enum e
+      join pg_type t on t.oid = e.enumtypid
+      join pg_namespace n on n.oid = t.typnamespace
+     where n.nspname = 'app'
+       and t.typname = 'contact_type'
+       and e.enumlabel = 'prospect') then
     raise exception '0471: there is still nowhere to put a prospect';
   end if;
 

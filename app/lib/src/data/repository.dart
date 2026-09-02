@@ -653,7 +653,15 @@ class Repo {
         .isFilter('deleted_at', null);
 
     if (type != null && type != 'all') {
-      query = query.inFilter('contact_type', [type, 'both']);
+      // `both` is customer *and* supplier, so it belongs in those two
+      // listings and in no others. Folding it into every filter would
+      // put every customer-and-supplier contact under Prospects, which
+      // is where the list stops meaning anything.
+      final withBoth = type == 'customer' || type == 'supplier';
+      query = query.inFilter(
+        'contact_type',
+        withBoth ? [type, 'both'] : [type],
+      );
     }
     if (search != null && search.trim().isNotEmpty) {
       final q = search.trim();

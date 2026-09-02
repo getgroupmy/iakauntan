@@ -11,7 +11,13 @@ import '../shared/scan_intake.dart';
 import 'contact_editor.dart';
 
 class ContactsScreen extends ConsumerStatefulWidget {
-  const ContactsScreen({super.key});
+  const ContactsScreen({super.key, this.initialType});
+
+  /// Which tab to open on. The sidebar has an entry per kind of contact
+  /// as well as All Contacts, and they are all this screen — a separate
+  /// list widget per type would be three copies of the same search box
+  /// drifting apart.
+  final String? initialType;
 
   @override
   ConsumerState<ContactsScreen> createState() => _ContactsScreenState();
@@ -19,7 +25,7 @@ class ContactsScreen extends ConsumerStatefulWidget {
 
 class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   final _search = TextEditingController();
-  String _type = 'customer';
+  late String _type = widget.initialType ?? 'customer';
   String _query = '';
 
   @override
@@ -89,6 +95,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                   segments: const [
                     ButtonSegment(value: 'customer', label: Text('Customers')),
                     ButtonSegment(value: 'supplier', label: Text('Suppliers')),
+                    ButtonSegment(value: 'prospect', label: Text('Prospects')),
                     ButtonSegment(value: 'all', label: Text('All')),
                   ],
                   selected: {_type},

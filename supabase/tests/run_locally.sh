@@ -156,10 +156,23 @@ migration_stamp() {
   cat "$ROOT"/supabase/migrations/*.sql | md5sum | cut -d' ' -f1
 }
 
+# `--single-transaction` is the whole point of this loop, not a tidiness.
+#
+# CI applies migrations with `supabase db push`, which wraps each file in
+# one transaction. Without the flag psql commits every statement on its
+# own, and a file whose later statements depend on its earlier ones
+# being *committed* passes here and fails there. That is not
+# hypothetical: 0471 adds a value to `app.contact_type` and then asks
+# whether it is there, and `enum_range` on a type altered in the same
+# transaction is refused with 55P04 -- green locally, red in CI.
+#
+# A migration that genuinely cannot run inside a transaction (`create
+# index concurrently`, `vacuum`) would now fail here. It would fail in
+# CI too, so failing here is the correct answer.
 migrate() {
   local f err
   for f in "$ROOT"/supabase/migrations/*.sql; do
-    err=$($PSQL -q -v ON_ERROR_STOP=1 -f "$f" 2>&1 | grep 'ERROR:' | head -2 || true)
+    err=$($PSQL -q -v ON_ERROR_STOP=1 --single-transaction -f "$f" 2>&1 | grep 'ERROR:' | head -2 || true)
     if [ -n "$err" ]; then
       echo "MIGRATION FAILED  $(basename "$f")"; echo "$err"; exit 1
     fi

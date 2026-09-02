@@ -3,11 +3,16 @@
 --
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/contact_types.sql
 --
--- `prospect` joins the contact types. The value itself is a one-line
--- change; what this file is about is the thing that would have been
--- left behind — `import_contacts` validated against a list of five
--- names typed into the function, and printed a message naming three of
--- them.
+-- `app.contact_type` gained a sixth value in 0471: `prospect`, for the
+-- company you are talking to and have not sold to. Adding the value is
+-- the easy half. The half that goes wrong quietly is every list of
+-- those names typed somewhere else -- `import_contacts` validated
+-- against five of them and printed three, so a file of prospects would
+-- have been refused row by row with advice that was already wrong
+-- before the sixth value existed.
+--
+-- So what is asserted here is not "the enum has six values". It is that
+-- nothing else holds a copy of the list.
 --
 -- Nothing is written; the file rolls back.
 -- =====================================================================
@@ -17,84 +22,140 @@ begin;
 
 \i supabase/tests/_helpers.sql
 
+-- One import, run in validate mode, reduced to the one row's verdict.
+create or replace function pg_temp.ct_check(p_org uuid, p_type text)
+returns text language sql as $$
+  select r.status || ': ' || r.message
+    from public.import_contacts(
+      p_org,
+      jsonb_build_array(jsonb_build_object(
+        'code', 'X' || upper(p_type), 'name', 'Syarikat ' || p_type,
+        'contact_type', p_type)),
+      false) r;
+$$;
+
+-- ---------------------------------------------------------------------
+-- The value itself
+-- ---------------------------------------------------------------------
+do $$
+begin
+  perform pg_temp.check_true('prospect is a contact type',
+    exists (select 1
+              from pg_enum e
+              join pg_type t on t.oid = e.enumtypid
+              join pg_namespace n on n.oid = t.typnamespace
+             where n.nspname = 'app'
+               and t.typname = 'contact_type'
+               and e.enumlabel = 'prospect'));
+
+  -- The five that were there before are still there. An `alter type`
+  -- cannot drop a value, but a restated type in a later migration can,
+  -- and this is the assertion that would notice.
+  perform pg_temp.check_eq('and the ones before it are untouched',
+    (select string_agg(e.enumlabel, ',' order by e.enumsortorder)
+       from pg_enum e
+       join pg_type t on t.oid = e.enumtypid
+       join pg_namespace n on n.oid = t.typnamespace
+      where n.nspname = 'app' and t.typname = 'contact_type'),
+    'customer,supplier,both,employee,other,prospect');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A file of prospects
+-- ---------------------------------------------------------------------
 do $$
 declare
   v_org uuid;
-  v_id  uuid;
-  r     record;
-  v_ok  integer := 0;
-  v_bad integer := 0;
-  v_msg text;
+  v_out text;
 begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
-  v_org := pg_temp.test_org('Bakal Sdn Bhd');
+  v_org := pg_temp.test_org('Bakal Pelanggan Sdn Bhd');
 
-  perform pg_temp.check_true('there is somewhere to put a prospect',
-    exists (select 1 from unnest(enum_range(null::app.contact_type)) t
-             where t::text = 'prospect'));
-
-  -- One can be recorded, and stays one.
+  -- One can be recorded by hand, which is the enum cast and nothing
+  -- else -- asserted separately from the importer so that a failure
+  -- says which of the two broke.
   insert into public.contacts (org_id, code, name, contact_type)
-  values (v_org, 'P-001', 'Mungkin Sdn Bhd', 'prospect')
-  returning id into v_id;
-  perform pg_temp.check_eq('and one can be recorded',
-    (select contact_type::text from public.contacts where id = v_id),
-    'prospect');
+  values (v_org, 'P-001', 'Mungkin Sdn Bhd', 'prospect');
+  perform pg_temp.check_eq('a prospect can be recorded',
+    (select c.contact_type::text from public.contacts c
+      where c.org_id = v_org and c.code = 'P-001'), 'prospect');
 
-  -- It is not a customer. The app asks for `customer` and `both` when
-  -- it needs somebody to invoice, so this is what keeps a prospect off
-  -- an invoice — no refusal was needed, and none was added.
-  perform pg_temp.check_eq(
-    'a prospect is not among the contacts you would invoice',
-    (select count(*)::integer from public.contacts
-      where org_id = v_org and contact_type in ('customer', 'both')), 0);
+  -- The mutant that matters: the five names typed back into the check.
+  -- It dies here, on `error` where `ok` was expected.
+  perform pg_temp.check_eq('a file of prospects validates',
+    pg_temp.ct_check(v_org, 'prospect'), 'ok: ');
 
-  -- ------------------------------------------------------------------
-  -- The importer, which is where a bare enum change would have stopped
-  -- ------------------------------------------------------------------
-  for r in select * from public.import_contacts(
-      v_org,
-      jsonb_build_array(jsonb_build_object(
-        'code', 'P-002', 'name', 'Barangkali Enterprise',
-        'contact_type', 'prospect')),
-      false)
-  loop
-    if r.status = 'error' then
-      v_bad := v_bad + 1;
-      v_msg := r.message;
-    else
-      v_ok := v_ok + 1;
-    end if;
-  end loop;
+  -- Not at the expense of the five it already took.
+  perform pg_temp.check_eq('and so does a customer',
+    pg_temp.ct_check(v_org, 'customer'), 'ok: ');
+  perform pg_temp.check_eq('and a supplier',
+    pg_temp.ct_check(v_org, 'supplier'), 'ok: ');
+  perform pg_temp.check_eq('and both',
+    pg_temp.ct_check(v_org, 'both'), 'ok: ');
+  perform pg_temp.check_eq('and an employee',
+    pg_temp.ct_check(v_org, 'employee'), 'ok: ');
+  perform pg_temp.check_eq('and other',
+    pg_temp.ct_check(v_org, 'other'), 'ok: ');
 
-  perform pg_temp.check_eq('a file of prospects validates', v_ok, 1);
-  perform pg_temp.check_eq('with nothing refused', v_bad, 0);
+  -- Something that is not a contact type is still refused.
+  v_out := pg_temp.ct_check(v_org, 'client');
+  perform pg_temp.check_true('and something that is not one is refused',
+    v_out like 'error: "client" is not a contact type%');
 
-  -- And it really does import, not merely validate.
-  perform public.import_contacts(
+  -- The second mutant: the message typed back to naming three of them.
+  -- Worth its own assertion. A refusal that is correct and then tells
+  -- you the wrong way to fix it costs somebody the same afternoon as a
+  -- refusal that is wrong.
+  perform pg_temp.check_true('and the refusal lists all of them',
+    v_out like '%both%' and v_out like '%customer%'
+    and v_out like '%employee%' and v_out like '%other%'
+    and v_out like '%prospect%' and v_out like '%supplier%');
+
+  -- It commits, too -- validating a type the insert would then reject
+  -- on the cast is a way of passing this file and failing in the app.
+  perform * from public.import_contacts(
     v_org,
     jsonb_build_array(jsonb_build_object(
-      'code', 'P-003', 'name', 'Entah Sdn Bhd', 'contact_type', 'prospect')),
+      'code', 'P1', 'name', 'Bakal Pelanggan', 'contact_type', 'prospect')),
     true);
-  perform pg_temp.check_eq('and lands as a prospect',
-    (select contact_type::text from public.contacts
-      where org_id = v_org and code = 'P-003'), 'prospect');
+  perform pg_temp.check_eq('and a prospect is a prospect once imported',
+    (select c.contact_type::text from public.contacts c
+      where c.org_id = v_org and c.code = 'P1'), 'prospect');
 
-  -- A type that is not one at all is still refused, and the message
-  -- names every type there is rather than three of them.
-  for r in select * from public.import_contacts(
-      v_org,
-      jsonb_build_array(jsonb_build_object(
-        'code', 'X-001', 'name', 'Salah', 'contact_type', 'unicorn')),
-      false)
-  loop
-    v_msg := r.message;
-  end loop;
-  perform pg_temp.check_true('a type that is not one is refused',
-    v_msg like '%is not a contact type%');
-  perform pg_temp.check_true('and the refusal lists all of them',
-    v_msg like '%prospect%' and v_msg like '%employee%'
-    and v_msg like '%customer%' and v_msg like '%supplier%');
+  -- And it is not one of the customers. This is the whole reason the
+  -- value exists: a pipeline recorded as customers overstates the
+  -- customer list, and every report built on that list with it.
+  perform pg_temp.check_eq('and it is not counted as a customer',
+    (select count(*) from public.contacts c
+      where c.org_id = v_org and c.code = 'P1'
+        and c.contact_type in ('customer', 'both')), 0::bigint);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- What did not change
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid;
+  v_lead uuid;
+  v_res  jsonb;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Tukar Petunjuk Sdn Bhd');
+
+  insert into public.leads (org_id, lead_no, company_name, status)
+  values (v_org, 'LD-001', 'Sudah Beli Sdn Bhd', 'qualified')
+  returning id into v_lead;
+
+  v_res := public.convert_lead(v_lead, false);
+
+  -- Deliberate, and asserted so that a later reading of "a lead is a
+  -- prospect" does not quietly move it. A lead worth converting is one
+  -- that has bought; a prospect is where a contact starts before there
+  -- is a lead at all.
+  perform pg_temp.check_eq('converting a lead still makes a customer',
+    (select c.contact_type::text from public.contacts c
+      where c.id = (v_res ->> 'contact_id')::uuid), 'customer');
 end $$;
 
 rollback;
