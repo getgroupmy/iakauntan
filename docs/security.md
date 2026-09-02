@@ -282,6 +282,37 @@ these books, keeps what they hold in their own right.
 Suspension is treated as leaving. Somebody stood down pending a
 question is exactly who should not be reading the books meanwhile.
 
+### The export, and what it deliberately does not carry
+
+**0454** is the answer to "can we leave?" — `company_export_manifest`
+and `company_export_page`, driven from `pg_class` rather than a list
+somebody typed, so a table added next year is exported without anybody
+remembering. It is the largest read this schema offers, so it is the
+one worth stating the rules of:
+
+- **Owners and administrators only.** A bookkeeper may post every
+  journal in the company and may not take a copy of it away.
+- **Every call writes a `record_export` event.** A copy leaving with no
+  record would be the single gap in a trail that notes the reading of
+  one payslip.
+- **Three kinds of thing are held back**: credentials the company lent
+  us to act on its behalf (`einvoice_credentials`,
+  `org_ocr_credentials`); the platform's own side of the relationship
+  (`org_modules`, `org_credits`), which means nothing in another
+  system; and machinery (`idempotency_keys`). Views are excluded
+  structurally — shipping a derived answer beside its inputs invites
+  somebody to reconcile the two.
+- **Every row goes through `app.audit_redact`** on the way out, the
+  same rule the audit trail uses. That matters most for tables that are
+  *not* excluded: `org_members` belongs in the export and carries a
+  working `invite_token` in it.
+- **The table name is matched against the allowed list**, never quoted
+  and hoped for, because it reaches dynamic SQL.
+
+Seven mutants, seven kills. The one to remember: dropping the `org_id`
+filter from a page returned **420 rows where 84 were expected** — five
+companies' charts of accounts in one file.
+
 ## The ledger is not append-only
 
 `gl_entries` and `gl_lines` carry `for update` and `for delete` policies

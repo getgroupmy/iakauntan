@@ -24,6 +24,7 @@ import 'notifications_card.dart';
 import 'ways_to_pay.dart';
 import 'warehouses_card.dart';
 import 'credit_ledger_dialog.dart';
+import 'export_card.dart';
 import 'collect_payments_card.dart';
 import 'einvoice_credentials.dart';
 import 'tax_exemption.dart';
@@ -114,6 +115,12 @@ class SettingsScreen extends ConsumerWidget {
                       const WarehousesCard(),
                       const SizedBox(height: 16),
                     ],
+                    // Last among the company cards, because it is the
+                    // one nobody needs until the day they do — and
+                    // because a platform that keeps the door open says
+                    // so plainly rather than burying it.
+                    ExportCard(canAdmin: isAdmin),
+                    const SizedBox(height: 16),
                     const _ChartOfAccountsCard(),
                     const SizedBox(height: 16),
                     _TaxCodesCard(),

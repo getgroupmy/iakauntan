@@ -130,3 +130,57 @@ class FirmsRepo {
         },
       );
 }
+
+/// Taking the whole company out of this system.
+///
+/// Two calls and a walk: the manifest says what there is, and each page
+/// hands back a slice of one table with the cursor for the next. Kept
+/// on [FirmsRepo] because it is the same question the rest of this file
+/// answers — whose company is this, and can it leave.
+extension CompanyExport on FirmsRepo {
+  /// Every table holding this company's data, largest first, with a
+  /// row count. Tables with nothing in them are left out: 258 tables
+  /// carry `org_id` and a small company uses a few dozen.
+  Future<List<Map<String, dynamic>>> exportManifest(String orgId) async =>
+      Repo.rows(
+        await client.rpc(
+          'company_export_manifest',
+          params: {'p_org_id': orgId},
+        ),
+      );
+
+  /// One page. [after] is the `next` from the page before, or null to
+  /// start; the returned `next` is null when there is nothing after.
+  Future<Map<String, dynamic>> exportPage(
+    String orgId,
+    String table, {
+    String? after,
+    int limit = 1000,
+  }) async {
+    final data = await client.rpc(
+      'company_export_page',
+      params: {
+        'p_org_id': orgId,
+        'p_table': table,
+        'p_after': after,
+        'p_limit': limit,
+      },
+    );
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  /// Walks every page of one table. Bounded so a cursor that stops
+  /// advancing — which would mean a bug on the server, not a large
+  /// company — cannot spin here forever.
+  Future<List<dynamic>> exportTable(String orgId, String table) async {
+    final out = <dynamic>[];
+    String? after;
+    for (var hop = 0; hop < 10000; hop++) {
+      final page = await exportPage(orgId, table, after: after);
+      out.addAll(page['rows'] as List? ?? const []);
+      after = page['next'] as String?;
+      if (after == null) return out;
+    }
+    return out;
+  }
+}
