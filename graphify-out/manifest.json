@@ -195,8 +195,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/hr_setup_screen.dart": {
-    "mtime": 1788285599.923654,
-    "ast_hash": "863396564484c3b5f4515c00d0163555",
+    "mtime": 1788315353.7174227,
+    "ast_hash": "52dd3a3838bdeed54297597b8d4aa56b",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/leave_screen.dart": {
@@ -1345,13 +1345,13 @@
     "semantic_hash": ""
   },
   "scripts/reachability.py": {
-    "mtime": 1786524640.0931358,
-    "ast_hash": "8777da0c21a7c8ea6fcbbb247560b1fe",
+    "mtime": 1788314376.8879511,
+    "ast_hash": "7dfad849fafa6cec4dd6f3932ccd95f4",
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788313970.9213405,
-    "ast_hash": "d4f2e618a6aeaab2c685e4bb1532a8b0",
+    "mtime": 1788315591.7734368,
+    "ast_hash": "d572103c9629c011a49a4f0aa88b2b38",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -3595,8 +3595,8 @@
     "semantic_hash": ""
   },
   "docs/security.md": {
-    "mtime": 1788312040.9572258,
-    "ast_hash": "c03d0f57eaef77067876a0696bb8acfd",
+    "mtime": 1788314026.1688385,
+    "ast_hash": "6d9bd4bec67bb19bc24a8b76196b6189",
     "semantic_hash": ""
   },
   "app/lib/src/features/loyalty/loyalty_screen.dart": {
@@ -4290,8 +4290,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/payroll_run.sql": {
-    "mtime": 1788285600.507654,
-    "ast_hash": "113fc0c51d56dc35cb21aa34db8da6a8",
+    "mtime": 1788315211.8747652,
+    "ast_hash": "1ad555bb2976f315c04d95f31305a2b1",
     "semantic_hash": ""
   },
   "supabase/tests/payslip_access.sql": {
@@ -6857,6 +6857,11 @@
   "supabase/migrations/0445_who_put_the_expensive_things_on_half_price.sql": {
     "mtime": 1788313862.2110536,
     "ast_hash": "834ca1e1c379857931da12c4453af863",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0446_the_bonus_that_was_taxed_every_month.sql": {
+    "mtime": 1788315250.6064904,
+    "ast_hash": "7f38998f1f6a09dc8da35bb65b0d98eb",
     "semantic_hash": ""
   }
 }
