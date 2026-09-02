@@ -390,6 +390,14 @@ final contactRecordsProvider = FutureProvider.autoDispose
       return requireRepo(ref).contactRecords(contactId);
     });
 
+/// The records on file twice, for the screen that offers to link
+/// them. autoDispose so it is asked afresh: a group linked a moment
+/// ago is not a group any more.
+final contactDuplicatesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).contactDuplicates();
+    });
+
 /// What the assistant is able to read for this company.
 ///
 /// Read from the server rather than listed in the app: a screen that

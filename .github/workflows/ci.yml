@@ -269,6 +269,7 @@ jobs:
                    supabase/tests/contact_import_codes.sql \
                    supabase/tests/document_numbering.sql \
                    supabase/tests/contact_lookalikes.sql \
+                   supabase/tests/contact_duplicates.sql \
                    supabase/tests/bucket_survives_a_bad_path.sql \
                    supabase/tests/app_writers_are_not_a_client_surface.sql \
                    supabase/tests/revenue_recognition.sql \

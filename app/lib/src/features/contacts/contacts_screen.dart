@@ -55,6 +55,10 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
               icon: const Icon(Icons.document_scanner_outlined),
               onPressed: () => _scanContact(context, ref, _type),
             ),
+          // What was typed twice before the editor started warning.
+          // The badge is the count, so a company with nothing on file
+          // twice is not invited to go and look.
+          if (canWrite) const _DuplicatesAction(),
           if (canWrite)
             Padding(
               padding: const EdgeInsets.only(right: 12),
@@ -251,4 +255,30 @@ Future<void> _scanContact(
       builder: (_) => ContactEditor(contactType: type, scanned: staged!.read),
     ),
   );
+}
+
+
+/// The way to the records on file twice, with the number of groups on
+/// it -- and nothing at all when there are none.
+///
+/// Its own widget so that the count is watched here rather than in the
+/// screen: a list rebuilt on every keystroke of the search box must
+/// not re-ask the server what is duplicated.
+class _DuplicatesAction extends ConsumerWidget {
+  const _DuplicatesAction();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count =
+        ref.watch(contactDuplicatesProvider).valueOrNull?.length ?? 0;
+    if (count == 0) return const SizedBox.shrink();
+    return IconButton(
+      tooltip: '$count set${count == 1 ? '' : 's'} of records on file twice',
+      icon: Badge.count(
+        count: count,
+        child: const Icon(Icons.merge_type),
+      ),
+      onPressed: () => context.go('/duplicate-contacts'),
+    );
+  }
 }

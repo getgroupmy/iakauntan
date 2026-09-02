@@ -839,6 +839,38 @@ class Repo {
     return _rows(rows);
   }
 
+  /// The records already on file twice: groups of live contacts that
+  /// carry the same registration number, ID or TIN and are not yet one
+  /// company.
+  ///
+  /// What was typed before the editor started warning is not linked by
+  /// anything, and no correct behaviour from now on finds it. Reported
+  /// rather than linked on sight, because a registration number typed
+  /// into the wrong row would otherwise put two companies' invoices on
+  /// one statement.
+  Future<List<Map<String, dynamic>>> contactDuplicates() async {
+    final rows = await callRpc(
+      'contact_duplicates',
+      params: {'p_org_id': orgId},
+    );
+    return _rows(rows);
+  }
+
+  /// Makes the given records one company, bringing along every record
+  /// already linked to any of them. Returns the party's code.
+  Future<String> linkContactRecords(List<String> ids) async {
+    final row = await callRpc(
+      'link_contact_records',
+      params: {'p_org_id': orgId, 'p_ids': ids},
+    );
+    return '${(row as Map)['code']}';
+  }
+
+  /// Takes one record back out of its company, for a link made on a
+  /// number that turned out to be a typing mistake.
+  Future<void> unlinkContactRecord(String contactId) =>
+      callRpc('unlink_contact_record', params: {'p_contact_id': contactId});
+
   // ------------------------------------------------------------------
   // Items
   // ------------------------------------------------------------------

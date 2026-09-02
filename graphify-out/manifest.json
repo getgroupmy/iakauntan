@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788358727.0052679,
-    "ast_hash": "5aeb7235100ee8fc2efbdaad78ddab9e",
+    "mtime": 1788361718.4902658,
+    "ast_hash": "80d404e44c88e156d37ca5dbb8f85e71",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1788342312.566541,
-    "ast_hash": "ca9153286d6f71b0cd286146edd8b009",
+    "mtime": 1788361782.3677464,
+    "ast_hash": "8c35118475d3e95a7f54c59dea992e4d",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788360664.7885525,
-    "ast_hash": "4e3217999c3730d925242370c3d4a6c8",
+    "mtime": 1788361710.1927056,
+    "ast_hash": "be8b49336dbc9f9e563d53bfaad9042c",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -130,8 +130,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contacts_screen.dart": {
-    "mtime": 1788353227.0753868,
-    "ast_hash": "1376df5a7fc3af36c657b4d12a5c7854",
+    "mtime": 1788361782.368086,
+    "ast_hash": "067739fa9b91c94b24265620cef00f7e",
     "semantic_hash": ""
   },
   "app/lib/src/features/crm/pipeline_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788360400.3924227,
-    "ast_hash": "1cbb79ebf5d9ded0509bd2c347c450bf",
+    "mtime": 1788361696.5941854,
+    "ast_hash": "00935c3d670e3f4411301e43ff23a02e",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7347,6 +7347,26 @@
   "supabase/tests/contact_lookalikes.sql": {
     "mtime": 1788360635.4696484,
     "ast_hash": "7cb85dae885ea2742404523c024f256a",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/contacts/duplicate_contacts_screen.dart": {
+    "mtime": 1788361818.086112,
+    "ast_hash": "8c9a66842017e0a6f330fdd21e168945",
+    "semantic_hash": ""
+  },
+  "app/test/duplicate_contacts_test.dart": {
+    "mtime": 1788361968.4341376,
+    "ast_hash": "0669df31b6ce1a80a3cb5174d6b6ea92",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0482_the_duplicates_already_on_file.sql": {
+    "mtime": 1788361596.9159997,
+    "ast_hash": "11828353d1aff4aea03ed680e1e36e0f",
+    "semantic_hash": ""
+  },
+  "supabase/tests/contact_duplicates.sql": {
+    "mtime": 1788361669.9895217,
+    "ast_hash": "5dbb752907b205924910f198b6c43688",
     "semantic_hash": ""
   }
 }

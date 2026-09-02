@@ -13,6 +13,7 @@ import '../features/landing/site_page_screen.dart';
 import '../features/chat/chat_screen.dart';
 import '../features/contacts/contact_editor.dart';
 import '../features/contacts/contacts_screen.dart';
+import '../features/contacts/duplicate_contacts_screen.dart';
 import '../features/crm/leads_screen.dart';
 import '../features/crm/pipeline_screen.dart';
 import '../features/admin/platform_console_screen.dart';
@@ -583,6 +584,12 @@ final routerProvider = Provider<GoRouter>((ref) {
                 initialType: kind.type,
               ),
             ),
+          // Not `/contacts/duplicates`, for the reason above: that
+          // address is read as a contact whose id is the word.
+          GoRoute(
+            path: '/duplicate-contacts',
+            builder: (_, __) => const DuplicateContactsScreen(),
+          ),
           GoRoute(
             path: '/contacts',
             builder: (_, __) => const ContactsScreen(),
