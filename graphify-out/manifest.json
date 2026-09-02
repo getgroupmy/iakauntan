@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788313430.0173082,
-    "ast_hash": "ccab6c29e8fc321d6c0bf8f6b20ac687",
+    "mtime": 1788313970.9213405,
+    "ast_hash": "d4f2e618a6aeaab2c685e4bb1532a8b0",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -4305,8 +4305,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_promotion_admin.sql": {
-    "mtime": 1787822946.0305898,
-    "ast_hash": "d139f51f79e5ad8f7eadfaa5bf2cda7a",
+    "mtime": 1788313803.760281,
+    "ast_hash": "dd8db691226d29a881c19f62964ccdac",
     "semantic_hash": ""
   },
   "supabase/tests/sst_summary.sql": {
@@ -6852,6 +6852,11 @@
   "supabase/migrations/0444_the_platforms_own_trail_had_no_reader.sql": {
     "mtime": 1788312897.8945832,
     "ast_hash": "79b741eeba31e93d7a06153f93d6504a",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0445_who_put_the_expensive_things_on_half_price.sql": {
+    "mtime": 1788313862.2110536,
+    "ast_hash": "834ca1e1c379857931da12c4453af863",
     "semantic_hash": ""
   }
 }
