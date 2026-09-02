@@ -5723,3 +5723,69 @@ measurement is here. What was actually wrong — that nothing tested more
 than one position in the cycle — is fixed. What needs a person's
 decision is visible to the next person who looks at leave, instead of
 being a subtraction nobody had read closely.
+
+## A quarter is not a Postgres interval
+
+0446's question — which figures depend on where in a cycle you stand,
+and do the assertions ever stand anywhere else — asked of the date
+arithmetic. It found two faults in nine lines, one of them a feature
+that had never worked at all.
+
+`app.advance_schedule` built an interval by pasting a number to a word:
+
+```sql
+(p_interval || ' ' || case p_frequency
+   when 'daily' then 'days' ... when 'quarterly' then 'quarters'
+   ... end)::interval
+```
+
+### `quarterly` raises 22007 every time
+
+Postgres has no `quarters` unit. The recurring journal editor offers
+**Quarter** in its dropdown and `recurring_documents_screen.dart`
+renders `quarterly` in its summary line, so this was reachable from two
+screens. Measured through the real scheduler:
+
+```
+quarterly journal ran, 0 raised
+last_error: invalid input syntax for type interval: "1 quarters"
+next_run_date is still: 2026-01-31
+```
+
+**The retry is what made it silent.** `run_recurring_journals` catches
+the failure, records `last_error` and deliberately leaves
+`next_run_date` alone so the run is retried — correct for a transient
+fault, and exactly wrong for one that can never stop happening. A
+quarterly schedule failed every night, posted nothing, and said so only
+in a column nobody reads. A permanent error dressed as a transient one
+is quieter than a crash.
+
+### And monthly walked off the end of the month
+
+Adding a month to 31 January gives 28 February, which is right. Adding
+a month to *that* gives 28 March:
+
+```
+2026-01-31 -> 2026-02-28 -> 2026-03-28 -> 2026-04-28 -> ...
+```
+
+A tenancy invoiced on the last day of every month becomes the 28th of
+every month, permanently, the first time it crosses February. The 30th
+does the same through a leap February. **It takes two steps to see**,
+which is why nothing saw it: the function advances from the previous
+occurrence, so once a short month has clamped the date the intent is
+gone, and a test that advances once is looking at the step that behaves.
+
+0447 gives the function the schedule's `start_date` as an anchor and
+puts the result back on that day of the month, clamped to the month's
+length — and replaces the pasted string with `make_interval`, so a unit
+that does not exist stops being expressible.
+
+### The general form
+
+Both faults share a property with 0446 and it is worth stating on its
+own: **a function that is called repeatedly on its own output cannot be
+tested with one call.** The first step of the drift is correct. A
+quarterly schedule's first failure looks like a warning. Where the
+output of one call is the input of the next, the assertion has to run
+the loop.

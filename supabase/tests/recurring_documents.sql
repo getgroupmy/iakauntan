@@ -527,4 +527,121 @@ begin
     has_table_privilege('authenticated', 'public.recurring_documents', 'select'));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A quarter is not a Postgres interval (0447)
+--
+-- `app.advance_schedule` built its interval by pasting a number to a
+-- word, and one of the words was wrong: Postgres has no `quarters`
+-- unit, so `'1 quarters'::interval` raises 22007. The recurring journal
+-- editor offers **Quarter** in its dropdown, so this was reachable and
+-- had never worked. Measured through the real scheduler before the fix:
+--
+--     quarterly journal ran, 0 raised
+--     last_error: invalid input syntax for type interval: "1 quarters"
+--     next_run_date is still: 2026-01-31
+--
+-- The runner catches the failure and leaves `next_run_date` alone so it
+-- retries, which is right for a transient fault and wrong for one that
+-- cannot stop happening: it failed every night and said so only in a
+-- column.
+--
+-- The second fault needed two steps to see, which is why nothing had.
+-- Adding a month to 31 January gives 28 February, correctly; adding a
+-- month to *that* gives 28 March. A tenancy invoiced on the last day of
+-- every month became the 28th of every month for good, the first time
+-- it crossed February.
+-- ---------------------------------------------------------------------
+do $$
+begin
+  perform pg_temp.check_eq('a quarter is three months',
+    app.advance_schedule(date '2026-01-31', 'quarterly', 1,
+                         date '2026-01-31')::text, '2026-04-30');
+
+  perform pg_temp.check_eq('and two quarters are six',
+    app.advance_schedule(date '2026-01-15', 'quarterly', 2,
+                         date '2026-01-15')::text, '2026-07-15');
+
+  -- The drift, in the two steps it takes to appear.
+  perform pg_temp.check_eq('the end of January is the end of February',
+    app.advance_schedule(date '2026-01-31', 'monthly', 1,
+                         date '2026-01-31')::text, '2026-02-28');
+
+  perform pg_temp.check_eq('and comes back to the thirty-first in March',
+    app.advance_schedule(date '2026-02-28', 'monthly', 1,
+                         date '2026-01-31')::text, '2026-03-31');
+
+  -- February is as long as February is: an anchor of the 31st must be
+  -- clamped rather than handed to a date that does not exist.
+  perform pg_temp.check_eq('February is as long as February is',
+    app.advance_schedule(date '2026-01-31', 'monthly', 1,
+                         date '2026-01-31')::text, '2026-02-28');
+
+  perform pg_temp.check_eq('and twenty-nine of it in a leap year',
+    app.advance_schedule(date '2024-01-31', 'monthly', 1,
+                         date '2024-01-31')::text, '2024-02-29');
+
+  -- A day in the middle of the month is not touched by any of this.
+  perform pg_temp.check_eq('the fifteenth stays the fifteenth',
+    app.advance_schedule(date '2026-01-15', 'monthly', 1,
+                         date '2026-01-15')::text, '2026-02-15');
+
+  -- Nor is anything counted in days or weeks: a fortnightly schedule is
+  -- every fourteen days, and snapping it to a day of the month would
+  -- turn it into something else entirely.
+  perform pg_temp.check_eq('a fortnightly schedule is left alone',
+    app.advance_schedule(date '2026-01-31', 'weekly', 2,
+                         date '2026-01-31')::text, '2026-02-14');
+
+  perform pg_temp.check_eq('and so is a daily one',
+    app.advance_schedule(date '2026-01-31', 'daily', 3,
+                         date '2026-01-31')::text, '2026-02-03');
+
+  perform pg_temp.check_eq('a year is a year',
+    app.advance_schedule(date '2026-02-28', 'yearly', 1,
+                         date '2026-02-28')::text, '2027-02-28');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And through the scheduler, which is where it mattered
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Suku Tahun Sdn Bhd');
+  v_j   uuid;
+  v_n   integer;
+begin
+  insert into public.recurring_journals
+    (org_id, name, frequency, interval_count, start_date, next_run_date,
+     is_active, auto_post, template)
+  values (v_org, 'Quarterly accrual', 'quarterly', 1, date '2026-01-31',
+          date '2026-01-31', true, false, '{"lines": []}'::jsonb)
+  returning id into v_j;
+
+  v_n := app.run_recurring_journals(date '2026-02-01');
+  perform pg_temp.check_eq('the quarterly journal runs at all', v_n, 1);
+
+  perform pg_temp.check_true('and records no error',
+    (select last_error is null from public.recurring_journals
+      where id = v_j));
+
+  perform pg_temp.check_eq('and is next due three months on',
+    (select next_run_date::text from public.recurring_journals
+      where id = v_j), '2026-04-30');
+
+  -- The monthly case, twice, because one step cannot show the drift.
+  update public.recurring_journals
+     set frequency = 'monthly', next_run_date = date '2026-01-31'
+   where id = v_j;
+
+  perform app.run_recurring_journals(date '2026-02-01');
+  perform pg_temp.check_eq('a monthly one reaches the end of February',
+    (select next_run_date::text from public.recurring_journals
+      where id = v_j), '2026-02-28');
+
+  perform app.run_recurring_journals(date '2026-03-01');
+  perform pg_temp.check_eq('and the end of March, rather than the 28th',
+    (select next_run_date::text from public.recurring_journals
+      where id = v_j), '2026-03-31');
+end $$;
+
 rollback;
