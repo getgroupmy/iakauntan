@@ -286,6 +286,70 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- What happened to the practice
+--
+-- A firm has no tenant, so until 0452 every row the audit trigger on
+-- `firms` produced was discarded by the guard that keeps a deleted
+-- company's children out of the platform's trail. The count below is
+-- read against a control in the same block, because a zero from a
+-- query nobody has seen return anything proves nothing.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_firm  uuid;
+  v_org   uuid;
+  v_staff uuid;
+  v_n     integer;
+  v_read  boolean;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_firm := public.create_firm('Kira Enam');
+  v_org  := pg_temp.test_org('Pelanggan Keenam Sdn Bhd');
+
+  perform pg_temp.check_true('the control: a company change is recorded',
+    exists (select 1 from public.audit_logs
+             where table_name = 'organizations' and record_id = v_org));
+
+  perform pg_temp.check_true('starting a practice is recorded',
+    exists (select 1 from public.audit_logs
+             where table_name = 'firms' and record_id = v_firm
+               and action = 'insert'));
+
+  -- The row that grants forty companies' ledgers in one insert.
+  v_staff := pg_temp.another_user('audited-0452@iakauntan.test');
+  insert into public.firm_members (firm_id, user_id, role, status, joined_at)
+  values (v_firm, v_staff, 'staff', 'active', now());
+
+  perform pg_temp.check_true('and so is somebody joining it',
+    exists (select 1 from public.audit_logs
+             where table_name = 'firm_members' and record_id = v_firm
+               and action = 'insert'));
+
+  -- Filed under the practice rather than the membership row, because
+  -- "what has happened to my firm" is the question being asked.
+  perform pg_temp.check_true('with the person it was in the record',
+    exists (select 1 from public.audit_logs
+             where table_name = 'firm_members' and record_id = v_firm
+               and (new_data ->> 'user_id')::uuid = v_staff));
+
+  -- Three: the firm itself, the partner `create_firm` enrolled, and the
+  -- member of staff added above.
+  select count(*) into v_n from public.firm_audit_trail(v_firm);
+  perform pg_temp.check_eq('and a partner can read the lot', v_n, 3);
+
+  -- Not everybody at the practice. A member of staff reading the record
+  -- of their own appointment being reviewed is the reason this is
+  -- guarded rather than open to any firm member.
+  perform pg_temp.sign_in_as(v_staff);
+  begin
+    perform * from public.firm_audit_trail(v_firm);
+    v_read := true;
+  exception when sqlstate '42501' then v_read := false;
+  end;
+  perform pg_temp.check_true('but a member of staff cannot', not v_read);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- The decision underneath all of it
 --
 -- If `app.is_org_member` ever learns about firms, every policy in the

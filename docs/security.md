@@ -22,7 +22,7 @@ it saw more than it did is worse than one that says where it stops.
 |---|---|---|
 | Sign-in | trigger on `auth.sessions` insert | **No.** GoTrue writes the row; the trigger is on the table. |
 | Session ended | trigger on `auth.sessions` delete | **No.** Covers signing out, expiry and revocation alike, which is why it is not called "signed out". An account *being deleted* is the exception — see below. |
-| Data change | `audit_changes` on 49 tables | **No.** A trigger, and the API cannot turn it off. |
+| Data change | `audit_changes` on 52 tables | **No.** A trigger, and the API cannot turn it off. |
 | Export | `record_export`, called by `exportTextFile`/`exportBytesFile` | Only by not using the app. Every download path goes through those two. |
 | Sensitive read | `app.note_read`, inside `security_log` and `audit_trail` | **No.** Reading either log records the read. |
 | Refusal | `report_denied`, called by `Repo.callRpc` on a 42501 | **Yes** — see below. |
@@ -200,6 +200,51 @@ and the trigger added after. That is the rule to carry forward: before
 auditing a table, look at how it is written, not only at what it holds.
 
 Which takes the count to 49.
+
+### A trigger that files nothing
+
+**0450** added a practice — `firms`, `firm_members`, and the companies a
+firm keeps the books for — and put an `audit_changes` trigger on
+`firms`, on the reasonable belief that a table worth having is a table
+worth auditing. The trigger fired and wrote nothing.
+
+`app.write_audit_log` derives a tenant from `org_id`, and since 0443
+drops any row it cannot place: a row with no tenant is almost always a
+child cascading away behind a deleted company, and filing it under the
+platform puts one tenant's data where other tenants' staff can reach it.
+`firms` has no `org_id` and never will — **a practice is not owned by
+any of the companies whose books it keeps** — so every firm row met the
+guard and was discarded. Measured, with a control in the same
+transaction because a zero from a query nobody has seen return anything
+proves nothing:
+
+| table | rows written |
+|---|---|
+| `organizations` (control) | 1 |
+| `company_transfers` | 1 |
+| `firms` | **0** |
+| `firm_members` | **0** |
+
+A trigger that files nothing is worse than no trigger, because it reads
+as coverage: the count above said 51 on the strength of the trigger
+existing.
+
+`firm_members` had no trigger at all, and it is the one that matters
+more. Adding somebody to a practice with forty clients grants them forty
+companies' ledgers in a single insert.
+
+**0452** widens the null-tenant allowance from the two statutory tables
+to four, the firm tables being above every company rather than below
+them, files a staff change under the *practice* the way 0445 files a
+scope row under its promotion, and adds the trigger `firm_members` never
+had. It also adds the reader — `firm_audit_trail`, guarded by
+`app.can_manage_firm`, because widening a policy is not the same as
+adding a reader and a member of staff should not read the record of
+their own appointment being questioned.
+
+Which takes the count to 52, and leaves a second rule beside 0445's:
+a trigger is not coverage until a row has been seen in the table it
+writes to.
 
 ## The ledger is not append-only
 

@@ -124,7 +124,20 @@ begin
   -- Every audited column in the live schema, checked against the rule
   -- rather than against a list somebody typed. Asserted as a count so
   -- the day a new sensitive column is added it is this that says so.
-  perform pg_temp.check_eq('exactly five audited columns are redacted today',
+  --
+  -- It has said so once: 0452 put the audit trigger on `firm_members`,
+  -- which carries an `invite_token` of its own, and this assertion read
+  -- 6 where it expected 5. The rule caught the new column without being
+  -- told about it, which is what it is for -- but the number is a
+  -- witness, so it is moved deliberately rather than relaxed.
+  --
+  --   corp_signing_links.token_hash
+  --   einvoice_credentials.cert_private_key_pem
+  --   einvoice_credentials.client_secret
+  --   firm_members.invite_token          (0452)
+  --   org_members.invite_token
+  --   organizations.einvoice_secret_ref
+  perform pg_temp.check_eq('exactly six audited columns are redacted today',
     (with audited as (
        select distinct tgrelid as rel from pg_trigger
         where not tgisinternal and tgfoid = 'app.write_audit_log'::regproc)
@@ -133,7 +146,7 @@ begin
        join pg_attribute att on att.attrelid = a.rel
         and att.attnum > 0 and not att.attisdropped
       where (app.audit_redact(jsonb_build_object(att.attname, 'X'))
-               ->> att.attname) = '***'), 5);
+               ->> att.attname) = '***'), 6);
 end $$;
 
 -- ---------------------------------------------------------------------
