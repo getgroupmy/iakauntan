@@ -392,6 +392,180 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- The bill that arrives
+-- ---------------------------------------------------------------------
+-- 0489 raised an invoice and told nobody, which is why the whole of it
+-- could run every month to no effect. 0490 puts one message in the
+-- outbox as the invoice is written.
+do $$
+declare
+  v_org   uuid;
+  v_owner uuid;
+  v_inv   uuid;
+  v_mail  public.email_outbox;
+  v_n     integer;
+  v_price numeric;
+begin
+  v_owner := pg_temp.another_user('tuan-0490@iakauntan.test');
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.organizations
+    (name, slug, entity_type, base_currency, created_by)
+  values ('Syarikat Surat Sdn Bhd', 'surat-' || gen_random_uuid(),
+          'sdn_bhd', 'MYR', v_owner)
+  returning id into v_org;
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_owner, 'owner', 'active', now())
+  on conflict do nothing;
+  perform pg_temp.held(v_org, 'multi_company',
+                       timestamptz '2025-11-04 09:00+08');
+  select monthly_price into v_price
+    from public.platform_modules where code = 'multi_company';
+
+  v_inv := app.bill_org_modules(v_org, pg_temp.jan());
+  perform pg_temp.check_true('the invoice is raised', v_inv is not null);
+
+  select * into v_mail from public.email_outbox
+   where org_id = v_org and template_code = 'platform_invoice';
+  perform pg_temp.check_true('the company is told its bill exists',
+    v_mail.id is not null);
+
+  -- No address on the company, so it went to whoever made it.
+  perform pg_temp.check_eq('with no address on the company, it goes to the owner',
+    v_mail.to_email, 'tuan-0490@iakauntan.test');
+  perform pg_temp.check_true('and the mail says what is owed',
+    v_mail.body like '%' || to_char(v_price, 'FM999G999G990D00') || '%');
+  perform pg_temp.check_true('and which month it is for',
+    v_mail.subject like '%January 2026%');
+  perform pg_temp.check_true('and which invoice',
+    v_mail.subject like '%' ||
+      (select invoice_no from public.platform_invoices where id = v_inv) || '%');
+
+  -- Once. The scheduler runs on the first, and a month re-run by hand
+  -- must not send a second copy of a bill somebody already has.
+  perform app.bill_org_modules(v_org, pg_temp.jan());
+  select count(*) into v_n from public.email_outbox
+   where org_id = v_org and template_code = 'platform_invoice';
+  perform pg_temp.check_eq('running the month again does not send a second copy',
+    v_n, 1);
+  perform pg_temp.check_true('and queueing it again finds the first',
+    app.queue_platform_invoice_email(v_inv) is null);
+
+  -- The company's own address wins when it has one.
+  update public.organizations set email = 'akaun@surat.test' where id = v_org;
+  delete from public.platform_invoices where org_id = v_org;
+  delete from public.email_outbox where org_id = v_org;
+  perform app.bill_org_modules(v_org, pg_temp.jan());
+  select * into v_mail from public.email_outbox
+   where org_id = v_org and template_code = 'platform_invoice';
+  perform pg_temp.check_eq('the company''s own address is used when it has one',
+    v_mail.to_email, 'akaun@surat.test');
+
+  -- The tenant's own outbound settings are not consulted: this is the
+  -- platform writing to the company, not the company writing to its
+  -- customers, and a tenant that never switched its own mail on still
+  -- owes for its modules. Nothing was inserted into `email_settings`
+  -- above and the mail was queued regardless, which is the assertion.
+  perform pg_temp.check_true('a company with no mail settings is still told',
+    not exists (select 1 from public.email_settings where org_id = v_org));
+end $$;
+
+-- With no address anywhere the invoice still stands. Its own block: the
+-- fixture has to be a company nobody owns, which is not a company the
+-- blocks above could go on using.
+do $$
+declare
+  v_org uuid;
+  v_inv uuid;
+  v_n   integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  insert into public.organizations
+    (name, slug, entity_type, base_currency)
+  values ('Syarikat Tanpa Alamat Sdn Bhd', 'tanpa-' || gen_random_uuid(),
+          'sdn_bhd', 'MYR')
+  returning id into v_org;
+  -- A trigger enrols whoever is signed in as the owner, so the company
+  -- is emptied of members deliberately: the case being tested is the
+  -- one where the last owner has gone and nothing on the company says
+  -- where to write.
+  delete from public.org_members where org_id = v_org;
+  perform pg_temp.held(v_org, 'multi_company',
+                       timestamptz '2025-11-04 09:00+08');
+
+  v_inv := app.bill_org_modules(v_org, pg_temp.jan());
+  perform pg_temp.check_true('the invoice stands even when the mail cannot go',
+    v_inv is not null);
+  select count(*) into v_n from public.email_outbox where org_id = v_org;
+  perform pg_temp.check_eq('with no address anywhere, nothing is queued',
+    v_n, 0);
+end $$;
+
+-- The wording of the platform's own bill is not the tenant's to edit.
+-- `app.email_template` layers a company's overrides on top of the
+-- defaults, which is right for the mail it sends its customers and
+-- wrong for the mail it is sent about what it owes.
+do $$
+declare
+  v_org  uuid;
+  v_mail public.email_outbox;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Syarikat Ubah Surat Sdn Bhd', array['crm']);
+  update public.organizations set email = 'akaun@ubah.test' where id = v_org;
+  perform pg_temp.held(v_org, 'multi_company',
+                       timestamptz '2025-11-04 09:00+08');
+
+  insert into public.email_templates (org_id, code, subject, body, is_active)
+  values (v_org, 'platform_invoice', 'Nothing is owed',
+          'Please disregard.', true);
+
+  perform app.bill_org_modules(v_org, pg_temp.jan());
+  select * into v_mail from public.email_outbox
+   where org_id = v_org and template_code = 'platform_invoice';
+  perform pg_temp.check_true(
+    'the wording of the platform''s own bill is not the tenant''s to edit',
+    v_mail.subject <> 'Nothing is owed' and v_mail.body <> 'Please disregard.');
+  perform pg_temp.check_true('it still says what is owed',
+    v_mail.subject like '%January 2026%');
+end $$;
+
+-- The invoice is the record and the mail is the courtesy. An outbox
+-- that refuses must not roll the bill back -- and inside
+-- `bill_the_month` it would take every company after this one with it.
+--
+-- Asserted by breaking the queue outright. The replacement dies with
+-- the transaction like everything else here, so this block is last
+-- among the ones that bill anything.
+do $$
+declare
+  v_org uuid;
+  v_inv uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Syarikat Pos Rosak Sdn Bhd', array['crm']);
+  update public.organizations set email = 'akaun@rosak.test' where id = v_org;
+  perform pg_temp.held(v_org, 'multi_company',
+                       timestamptz '2025-11-04 09:00+08');
+
+  create or replace function app.queue_platform_invoice_email(p_invoice_id uuid)
+  returns uuid language plpgsql as $f$
+  begin
+    raise exception 'the outbox is down';
+  end $f$;
+
+  v_inv := app.bill_org_modules(v_org, pg_temp.jan());
+  perform pg_temp.check_true(
+    'the invoice stands even when the mail cannot be queued',
+    v_inv is not null);
+  perform pg_temp.check_eq('and it is the right amount',
+    (select subtotal from public.platform_invoices where id = v_inv),
+    (select monthly_price from public.platform_modules
+      where code = 'multi_company'));
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Who may run it
 -- ---------------------------------------------------------------------
 do $$

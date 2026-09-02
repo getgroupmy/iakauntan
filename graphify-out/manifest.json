@@ -795,7 +795,7 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788374427.4480326,
+    "mtime": 1788378021.693526,
     "ast_hash": "444f88ebfef86abb307ead3db9aa2a6c",
     "semantic_hash": ""
   },
@@ -7455,8 +7455,13 @@
     "semantic_hash": ""
   },
   "supabase/tests/module_subscription.sql": {
-    "mtime": 1788374919.2936182,
-    "ast_hash": "b929d52131fca4b5ac06fe125b16b438",
+    "mtime": 1788377552.964235,
+    "ast_hash": "a5af314189d527bccb7e0ae15bbe9d51",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0490_the_bill_that_arrives.sql": {
+    "mtime": 1788377615.6005275,
+    "ast_hash": "8ede2a8fbb0ac57a7a9e074e8d28e5f5",
     "semantic_hash": ""
   }
 }
