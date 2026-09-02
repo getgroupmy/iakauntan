@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788286348.8443635,
-    "ast_hash": "464caae786e764797056cefb7a7ca3cd",
+    "mtime": 1788310787.828511,
+    "ast_hash": "18286974cdc3168e86d1d0d79009b879",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788307069.3529303,
-    "ast_hash": "d9e3029aad3bd9cf8b416ab18ff248d1",
+    "mtime": 1788312098.2532291,
+    "ast_hash": "0c12d4db1e4fc90c1c26935f38a5bb3f",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -1415,8 +1415,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/hr_reference.sql": {
-    "mtime": 1786526632.7120104,
-    "ast_hash": "3645696f085f824d8e465468a71a73e4",
+    "mtime": 1788311744.1490185,
+    "ast_hash": "aa6e517989294e73655e389bf0b82735",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_extras.dart": {
@@ -2635,8 +2635,8 @@
     "semantic_hash": ""
   },
   "docs/migrations.md": {
-    "mtime": 1786951845.8135185,
-    "ast_hash": "487eab9270d628f05d0af75f0b0421f1",
+    "mtime": 1788310857.1891553,
+    "ast_hash": "f7049adcd03ea1b9778d9caf54684c33",
     "semantic_hash": ""
   },
   "app/lib/src/features/assets/asset_schedule_dialog.dart": {
@@ -3595,8 +3595,8 @@
     "semantic_hash": ""
   },
   "docs/security.md": {
-    "mtime": 1788285599.947654,
-    "ast_hash": "66d20986b956f7b2d0a4a28e7e692d96",
+    "mtime": 1788312040.9572258,
+    "ast_hash": "c03d0f57eaef77067876a0696bb8acfd",
     "semantic_hash": ""
   },
   "app/lib/src/features/loyalty/loyalty_screen.dart": {
@@ -6837,6 +6837,11 @@
   "supabase/migrations/0442_who_changed_the_rate_everybody_is_paid_by.sql": {
     "mtime": 1788309599.4958265,
     "ast_hash": "4f67e25a8e58c2cd0a01d77a753a124c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0443_how_many_days_leave_a_person_gets.sql": {
+    "mtime": 1788312020.9903271,
+    "ast_hash": "9a5facb73e6451242d2501364f3979f3",
     "semantic_hash": ""
   }
 }
