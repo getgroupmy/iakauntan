@@ -20,6 +20,7 @@ import 'chat_card.dart';
 import 'company_card.dart';
 import 'company_group_card.dart';
 import 'sst_card.dart';
+import 'sst_returns_card.dart';
 import 'notifications_card.dart';
 import 'ways_to_pay.dart';
 import 'warehouses_card.dart';
@@ -66,6 +67,11 @@ class SettingsScreen extends ConsumerWidget {
                     // fact about this company, and it decides what every
                     // invoice line is taxed at.
                     const SstCard(),
+                    // And under the registration, the rhythm it puts
+                    // the company on. Draws nothing at all — not even a
+                    // gap — for a company that is not registered, which
+                    // is why it carries its own spacing.
+                    const SstReturnsCard(),
                     const SizedBox(height: 16),
                     // Beside the company they describe: a branch is part
                     // of this company, a group is the companies beside it.

@@ -348,6 +348,57 @@ class Repo {
     return _rows(data);
   }
 
+  // ------------------------------------------------------------------
+  // SST taxable periods
+  //
+  // `sstSummary` above takes any two dates somebody types, which is
+  // right for a report and wrong for a return: SST-02 is bi-monthly on
+  // a cycle set by the registration date, and the return is due on the
+  // last day of the month after the period. 0455 computes both.
+  // ------------------------------------------------------------------
+
+  /// Every taxable period since registration, with what was charged in
+  /// it and whether the return went in.
+  Future<List<Map<String, dynamic>>> sstTaxablePeriods({
+    DateTime? from,
+    DateTime? to,
+  }) async => _rows(
+    await callRpc(
+      'sst_taxable_periods',
+      params: {
+        'p_org_id': orgId,
+        'p_from': from == null ? null : Fmt.iso(from),
+        'p_to': to == null ? null : Fmt.iso(to),
+      },
+    ),
+  );
+
+  /// The periods whose return has not gone in, soonest first.
+  Future<List<Map<String, dynamic>>> sstDue({int withinDays = 60}) async =>
+      _rows(
+        await callRpc(
+          'report_sst_due',
+          params: {'p_org_id': orgId, 'p_within_days': withinDays},
+        ),
+      );
+
+  /// Records that the return for a finished period was filed. The
+  /// database refuses a date that is not the end of one, and refuses a
+  /// period that has not ended.
+  Future<void> fileSstReturn({
+    required DateTime periodEnd,
+    required double amount,
+    String? reference,
+  }) => callRpc(
+    'file_sst_return',
+    params: {
+      'p_org_id': orgId,
+      'p_period_end': Fmt.iso(periodEnd),
+      'p_amount': amount,
+      'p_reference': reference,
+    },
+  );
+
   /// The aged listing of one side of the subledger, as at a date.
   ///
   /// Not the same question as "what is still open today": with an as-at

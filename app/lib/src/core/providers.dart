@@ -913,6 +913,25 @@ final firmTrailProvider = FutureProvider.autoDispose
       return ref.watch(firmsRepoProvider).trail(firmId);
     });
 
+// ---------------------------------------------------------------------
+// SST taxable periods
+// ---------------------------------------------------------------------
+
+/// Every taxable period since registration. Empty for a company that is
+/// not SST-registered, which is most of them.
+final sstTaxablePeriodsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).sstTaxablePeriods();
+    });
+
+/// The returns that have not gone in. Watched by the card, so a
+/// deadline appears without anybody going looking for it.
+final sstDueProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((
+  ref,
+) {
+  return requireRepo(ref).sstDue(withinDays: 120);
+});
+
 /// The practice keeping *this* company's books, if any, with the role
 /// its people hold here. Null for the great majority of companies.
 ///
