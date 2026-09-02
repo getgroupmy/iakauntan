@@ -576,4 +576,121 @@ end $$;
 
 reset role;
 
+-- ---------------------------------------------------------------------
+-- The platform's own trail had no reader (0444)
+--
+-- 0442 widened the policy and stopped. Measured on the installed
+-- schema: `audit_trail(p_org_id, ...)` filters `l.org_id = p_org_id`,
+-- so no argument reaches a row whose `org_id` is null, and it is the
+-- only function in the schema that returns audit rows. The statutory
+-- publish 0442 started recording was readable by policy and reachable
+-- by nothing.
+--
+-- These assertions run through the route rather than the table, which
+-- is the difference between the two migrations.
+-- ---------------------------------------------------------------------
+create temporary table t_444
+  (admin_user uuid, owner_user uuid, org uuid);
+grant select on t_444 to authenticated;
+insert into t_444 values (null, null, null);
+
+do $$
+declare v_admin uuid; v_org uuid; v_owner uuid;
+begin
+  insert into auth.users (
+    id, email, created_at, updated_at, confirmation_token, recovery_token,
+    email_change_token_new, email_change_token_current,
+    phone_change_token, reauthentication_token, email_change, phone_change)
+  values (gen_random_uuid(), 'reader-0444@iakauntan.test', now(), now(),
+          '', '', '', '', '', '', '', '')
+  returning id into v_admin;
+
+  v_org := pg_temp.test_org('Syarikat Ketiga Sdn Bhd');
+  select user_id into v_owner from public.org_members
+   where org_id = v_org and status = 'active' limit 1;
+
+  -- A row of this company's own, so "not one row of any company's own"
+  -- is a claim about something that exists.
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-444', 'Pelanggan Ketiga', 'customer');
+
+  insert into public.platform_admins (user_id) values (v_admin)
+  on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+
+  perform public.platform_publish_statutory_schedule(
+    'eis', 'EIS probe for 0444', 'table', date '2027-01-01',
+    jsonb_build_array(jsonb_build_object(
+      'category', 'default', 'wage_from', 0,
+      'employee_amount', 0.20, 'employer_amount', 0.20)),
+    'A probe, not a gazette', 'written by a test');
+
+  update t_444 set admin_user = v_admin, owner_user = v_owner, org = v_org;
+end $$;
+
+-- The platform administrator, through the route.
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select admin_user from t_444),
+                    'role', 'authenticated')::text, true);
+set local role authenticated;
+
+do $$
+declare c record; v_n integer; v_reads integer;
+begin
+  select * into c from t_444;
+
+  select count(*) into v_n from public.platform_audit_trail();
+  perform pg_temp.check_true(
+    'the platform trail can be read by the platform', v_n > 0);
+
+  select count(*) into v_n from public.platform_audit_trail()
+   where table_name not in ('statutory_schedules', 'statutory_rates');
+  perform pg_temp.check_eq(
+    'and not one row of any company''s own', v_n, 0);
+
+  -- Narrowing by table is what a reader actually does with it.
+  select count(*) into v_n
+    from public.platform_audit_trail('statutory_rates');
+  perform pg_temp.check_true('one table at a time', v_n > 0);
+
+  -- Reading it is an event, and the platform log is where it lands --
+  -- which is the reason that function exists at all.
+  select count(*) into v_reads from public.platform_security_log()
+   where kind = 'sensitive_read' and target = 'platform_audit_trail';
+  perform pg_temp.check_true(
+    'reading the platform trail is itself recorded', v_reads > 0);
+
+  raise notice 'ok   the platform can read its own trail';
+end $$;
+
+reset role;
+
+-- The company's owner, through the same route.
+select set_config('request.jwt.claims',
+  json_build_object('sub', (select owner_user from t_444),
+                    'role', 'authenticated')::text, true);
+set local role authenticated;
+
+do $$
+declare v_n integer;
+begin
+  begin
+    select count(*) into v_n from public.platform_audit_trail();
+    raise exception
+      'FAIL an org owner read the platform trail and got % rows', v_n;
+  exception when sqlstate '42501' then
+    raise notice 'ok   an org owner cannot read the platform''s trail';
+  end;
+
+  begin
+    select count(*) into v_n from public.platform_security_log();
+    raise exception
+      'FAIL an org owner read the platform security log';
+  exception when sqlstate '42501' then
+    raise notice 'ok   nor the platform''s security log';
+  end;
+end $$;
+
+reset role;
+
 rollback;

@@ -13,6 +13,7 @@ import 'landing_cms.dart';
 import 'modules_admin.dart';
 import 'ocr_catalog_admin.dart';
 import 'payment_gateways_admin.dart';
+import 'platform_trail_admin.dart';
 import 'reservations_admin.dart';
 import 'site_pages_admin.dart';
 import 'statutory_rates_admin.dart';
@@ -99,6 +100,15 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/rates',
     primary: false,
     page: StatutoryRatesAdminTab(),
+  ),
+  (
+    group: 'Service',
+    label: 'The platform\u2019s trail',
+    icon: Icons.fact_check_outlined,
+    selectedIcon: Icons.fact_check,
+    path: '/admin/trail',
+    primary: false,
+    page: PlatformTrailAdminTab(),
   ),
   (
     group: 'Website & brand',
@@ -241,11 +251,13 @@ class PlatformConsoleScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(children: [
-          const Icon(Icons.shield_outlined, size: 20),
-          const SizedBox(width: 10),
-          Expanded(child: Text(section.label)),
-        ]),
+        title: Row(
+          children: [
+            const Icon(Icons.shield_outlined, size: 20),
+            const SizedBox(width: 10),
+            Expanded(child: Text(section.label)),
+          ],
+        ),
       ),
       body: AsyncView(
         value: isAdmin,
@@ -315,7 +327,8 @@ class _OverviewTab extends ConsumerWidget {
                     StatTile(
                       label: 'Users',
                       value: '${Fmt.toInt(s['users'])}',
-                      caption: '${Fmt.toInt(s['signups_30d'])} joined in 30 days',
+                      caption:
+                          '${Fmt.toInt(s['signups_30d'])} joined in 30 days',
                       icon: Icons.people_outline,
                       accent: context.colors.info,
                     ),
@@ -347,15 +360,20 @@ class _OverviewTab extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SectionHeader('e-Invoice adoption'),
-                        Row(children: [
-                          const Expanded(
-                              child: Text('Organizations with e-Invoice on')),
-                          Text(
-                            '${Fmt.toInt(s['einvoice_enabled_orgs'])}'
-                            ' of ${Fmt.toInt(s['organizations'])}',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ]),
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text('Organizations with e-Invoice on'),
+                            ),
+                            Text(
+                              '${Fmt.toInt(s['einvoice_enabled_orgs'])}'
+                              ' of ${Fmt.toInt(s['organizations'])}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -393,8 +411,7 @@ class _OrganizationsTab extends ConsumerWidget {
         return ListView.separated(
           itemCount: list.length,
           separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, i) =>
-              _OrgTile(org: list[i], modules: modules),
+          itemBuilder: (context, i) => _OrgTile(org: list[i], modules: modules),
         );
       },
     );
@@ -413,16 +430,20 @@ class _OrgTile extends ConsumerWidget {
 
     return ExpansionTile(
       tilePadding: const EdgeInsets.symmetric(horizontal: Space.lg),
-      title: Row(children: [
-        Flexible(
-          child: Text(org.name,
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              org.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-        ),
-        const SizedBox(width: 10),
-        StatusChip(org.status, compact: true),
-      ]),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(width: 10),
+          StatusChip(org.status, compact: true),
+        ],
+      ),
       subtitle: Text(
         [
           if ((org.registrationNo ?? '').isNotEmpty) org.registrationNo,
@@ -442,7 +463,8 @@ class _OrgTile extends ConsumerWidget {
             children: [
               const SectionHeader(
                 'Add-on modules',
-                subtitle: 'Switching one off blocks new records but keeps history',
+                subtitle:
+                    'Switching one off blocks new records but keeps history',
               ),
               Wrap(
                 spacing: 8,
@@ -481,7 +503,11 @@ class _OrgTile extends ConsumerWidget {
   }
 
   Future<void> _toggleModule(
-      BuildContext context, WidgetRef ref, ModuleInfo m, bool on) async {
+    BuildContext context,
+    WidgetRef ref,
+    ModuleInfo m,
+    bool on,
+  ) async {
     await runWithFeedback(
       context,
       action: () =>
@@ -495,12 +521,16 @@ class _OrgTile extends ConsumerWidget {
   }
 
   Future<void> _setStatus(
-      BuildContext context, WidgetRef ref, String status) async {
+    BuildContext context,
+    WidgetRef ref,
+    String status,
+  ) async {
     if (status == 'suspended') {
       final ok = await confirm(
         context,
         title: 'Suspend ${org.name}?',
-        message: 'Members keep their sign-in but the account is flagged '
+        message:
+            'Members keep their sign-in but the account is flagged '
             'suspended. Use this for non-payment or abuse.',
         confirmLabel: 'Suspend',
         destructive: true,
@@ -569,8 +599,7 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
 
   /// Settings that are a single on/off get a switch; the rest are edited
   /// as raw JSON, which keeps the console honest about what is stored.
-  bool get _isToggle =>
-      _value.length <= 2 && _value.containsKey('enabled');
+  bool get _isToggle => _value.length <= 2 && _value.containsKey('enabled');
 
   @override
   void initState() {
@@ -616,11 +645,15 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(Fmt.label(key),
-                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Text(
+                        Fmt.label(key),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       if (description != null)
-                        Text(description,
-                            style: Theme.of(context).textTheme.bodySmall),
+                        Text(
+                          description,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
                     ],
                   ),
                 ),
@@ -649,7 +682,9 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
                   ),
                   const SizedBox(width: 12),
                   FilledButton(
-                    onPressed: _dirty ? () => _save(_parse(_controller.text)) : null,
+                    onPressed: _dirty
+                        ? () => _save(_parse(_controller.text))
+                        : null,
                     child: const Text('Save'),
                   ),
                 ],

@@ -5438,3 +5438,53 @@ re-derived:
   and a separate one: the child tables are the same parent-lookup shape
   0443 solves, so it can be answered whenever the discount trail is
   worth having. It is recorded here as noticed, not as done.
+
+## The reader 0442 did not add
+
+0442 wrote this in its own header, and then did not finish acting on
+it:
+
+> An audit row nobody can read is the same shape as an assertion that
+> passes by not running: it exists, and it discharges nothing.
+
+It widened `audit_logs_select` so a platform administrator may read the
+rows whose `org_id` is null. That is a permission. Measured afterwards,
+on the installed schema:
+
+- `public.audit_trail(p_org_id, ...)` is the **only** function in the
+  schema that returns audit rows. It raises 42501 unless
+  `app.can_admin(p_org_id)` and then filters `l.org_id = p_org_id`, so
+  no argument anybody can pass reaches a row whose `org_id` is null;
+- the app's only caller passes the current organization;
+- so the statutory publish 0442 started recording was readable by
+  policy and reachable by nothing. A platform administrator with a
+  connection string could see it. The same person, in the product,
+  could not.
+
+This is worth naming as a shape, because it is not the same as the
+gaps this document usually records. The usual one is a function with no
+caller. This is a *permission* with no route — the check passed, the
+policy test passed, and the feature was still absent. **Widening a
+policy is not the same as adding a reader**, and a test that asserts
+through the table cannot tell them apart. 0444's assertions go through
+the route for exactly that reason.
+
+### The second one, one level up
+
+`app.note_read` writes a `sensitive_read` event with whatever `org_id`
+it is handed, and `security_log` filters the same way `audit_trail`
+does. So a platform trail that recorded its own reading against a null
+org would have written a row nothing could show — repeating the mistake
+inside the fix for it. 0444 therefore adds two functions, not one:
+`platform_audit_trail` and `platform_security_log`, the same pair a
+tenant has.
+
+### And the surviving mutant, recorded rather than papered over
+
+Removing the `least(...)` cap on the row limit survived every
+assertion. It is not fixed. Observing a 500-row cap needs 501 platform
+audit rows in the fixture, which is a great deal of scaffolding for a
+resource guard, and the cheap alternative — string-matching `least` in
+the apply-time check — would assert the source text rather than the
+behaviour, which this project has been bitten by before. Written down
+so the next person knows it was tried, not missed.
