@@ -7180,8 +7180,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/ai_assistant.sql": {
-    "mtime": 1788338628.4183514,
-    "ast_hash": "14b81eaeb5300bc53496911f114f6b95",
+    "mtime": 1788344810.9975262,
+    "ast_hash": "6c39b2856ddeb6f69d3f70df83ed6379",
     "semantic_hash": ""
   },
   "supabase/migrations/0471_somebody_you_have_not_sold_to_yet.sql": {
@@ -7237,6 +7237,11 @@
   "supabase/functions/ask/index.ts": {
     "mtime": 1788342175.836229,
     "ast_hash": "2c0ab054908113dc91dfae03e4ee758d",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0474_nobody_else_may_speak_in_the_assistants_voice.sql": {
+    "mtime": 1788344786.3210938,
+    "ast_hash": "1d48bd44116033af28f630457e2bbbcb",
     "semantic_hash": ""
   }
 }

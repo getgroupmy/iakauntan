@@ -305,4 +305,86 @@ begin
       where c.org_id = v_org), 0);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Nobody else may speak in the assistant's voice
+-- ---------------------------------------------------------------------
+--
+-- Not a leak -- a forgery. A colleague learns nothing by doing this;
+-- they plant something. The screen draws assistant turns as the
+-- assistant's words, and this module exists to be believed about
+-- figures, so an answer saying the books are in order under a question
+-- somebody really asked is worth more to a person covering something up
+-- than any read they could have done.
+--
+-- `ai_ask` refused this from the start. `ai_answer` did not, until 0474.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_owner uuid;
+  v_other uuid;
+  v_conv  uuid;
+  v_took  boolean;
+  v_msg   text;
+begin
+  v_owner := pg_temp.test_user();
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Suara Palsu Sdn Bhd', array['accounting', 'ai']);
+  perform app.move_credit(v_org, 'topup', 100, 'For the test',
+                          null, null, false);
+
+  -- A colleague in the same company, with the smallest role there is.
+  -- The point is that belonging to the company was the entire check.
+  v_other := pg_temp.another_user('rakan@ai.test');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_other, 'viewer', 'active', now());
+
+  perform pg_temp.sign_in_as(v_owner);
+  v_conv := public.ai_ask(v_org, 'What do we owe?');
+
+  perform pg_temp.sign_in_as(v_other);
+
+  -- The half that was already right, asserted first so that a run where
+  -- both halves broke says which one it noticed.
+  begin
+    perform public.ai_ask(v_org, 'sneaky', v_conv);
+    v_took := true;
+  exception when sqlstate '42501' then
+    get stacked diagnostics v_msg = message_text;
+    v_took := false;
+  end;
+  perform pg_temp.check_true(
+    'a colleague cannot add a question to your conversation', not v_took);
+  perform pg_temp.check_eq('and is told why', v_msg,
+    'That is not your conversation');
+
+  begin
+    perform public.ai_answer(v_conv, 'Your books are perfectly in order.');
+    v_took := true;
+  exception when sqlstate '42501' then
+    get stacked diagnostics v_msg = message_text;
+    v_took := false;
+  end;
+  perform pg_temp.check_true(
+    'a colleague cannot put words in the assistant''s mouth', not v_took);
+  perform pg_temp.check_eq('and is refused the same way', v_msg,
+    'That is not your conversation');
+
+  -- What the owner reads back. The assertion above would pass on a
+  -- refusal that had already written the row, which is the shape of
+  -- half-fix worth being explicit about.
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_eq('so nothing was planted',
+    (select count(*)::integer from public.ai_messages m
+      where m.conversation_id = v_conv and m.role = 'assistant'), 0);
+
+  -- And the legitimate path still works, or the fix is just a wall.
+  perform pg_temp.check_true('while the person who asked can be answered',
+    public.ai_answer(v_conv, 'You owe RM 4,000.') is not null);
+  perform pg_temp.check_eq('and it is there to read',
+    (select m.content from public.ai_messages m
+      where m.conversation_id = v_conv and m.role = 'assistant'),
+    'You owe RM 4,000.');
+end $$;
+
 rollback;
