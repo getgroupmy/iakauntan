@@ -40,17 +40,19 @@ class HrSetupScreen extends ConsumerWidget {
             ],
           ),
         ),
-        body: const TabBarView(children: [
-          _PayrollSettingsTab(),
-          _StructureTab(),
-          _ComponentsTab(),
-          _LeaveTypesTab(),
-          _ClaimTypesTab(),
-          _ShiftsTab(),
-          HolidaysTab(),
-          StatutoryRatesTab(),
-          _OnboardingTemplatesTab(),
-        ]),
+        body: const TabBarView(
+          children: [
+            _PayrollSettingsTab(),
+            _StructureTab(),
+            _ComponentsTab(),
+            _LeaveTypesTab(),
+            _ClaimTypesTab(),
+            _ShiftsTab(),
+            HolidaysTab(),
+            StatutoryRatesTab(),
+            _OnboardingTemplatesTab(),
+          ],
+        ),
       ),
     );
   }
@@ -95,10 +97,12 @@ class _PayrollSettingsTabState extends ConsumerState<_PayrollSettingsTab> {
       builder: (row) {
         if (!_loaded && row != null) {
           _loaded = true;
-          _ctl('employer_epf_no').text = row['employer_epf_no']?.toString() ?? '';
+          _ctl('employer_epf_no').text =
+              row['employer_epf_no']?.toString() ?? '';
           _ctl('employer_socso_no').text =
               row['employer_socso_no']?.toString() ?? '';
-          _ctl('employer_tax_no').text = row['employer_tax_no']?.toString() ?? '';
+          _ctl('employer_tax_no').text =
+              row['employer_tax_no']?.toString() ?? '';
           _ctl('hrdf_registration_no').text =
               row['hrdf_registration_no']?.toString() ?? '';
           _hrdf = row['hrdf_category']?.toString();
@@ -117,14 +121,18 @@ class _PayrollSettingsTabState extends ConsumerState<_PayrollSettingsTab> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const SectionHeader('Employer registrations',
-                            subtitle:
-                                'These appear on the statutory submissions'),
+                        const SectionHeader(
+                          'Employer registrations',
+                          subtitle: 'These appear on the statutory submissions',
+                        ),
                         _field('employer_epf_no', 'EPF (KWSP) employer number'),
                         const SizedBox(height: Space.md),
                         _field('employer_socso_no', 'SOCSO employer code'),
                         const SizedBox(height: Space.md),
-                        _field('employer_tax_no', 'LHDN employer file (E number)'),
+                        _field(
+                          'employer_tax_no',
+                          'LHDN employer file (E number)',
+                        ),
                       ],
                     ),
                   ),
@@ -136,24 +144,30 @@ class _PayrollSettingsTabState extends ConsumerState<_PayrollSettingsTab> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const SectionHeader('HRD Corp levy',
-                            subtitle:
-                                'Leave this off if the company is not liable'),
+                        const SectionHeader(
+                          'HRD Corp levy',
+                          subtitle:
+                              'Leave this off if the company is not liable',
+                        ),
                         DropdownButtonFormField<String?>(
                           value: _hrdf,
                           isExpanded: true,
-                          decoration:
-                              const InputDecoration(labelText: 'Liability'),
+                          decoration: const InputDecoration(
+                            labelText: 'Liability',
+                          ),
                           items: const [
                             DropdownMenuItem(
-                                value: null, child: Text('Not liable')),
+                              value: null,
+                              child: Text('Not liable'),
+                            ),
                             DropdownMenuItem(
-                                value: 'mandatory_10plus',
-                                child: Text('1% — ten or more employees')),
+                              value: 'mandatory_10plus',
+                              child: Text('1% — ten or more employees'),
+                            ),
                             DropdownMenuItem(
-                                value: 'optional_5to9',
-                                child: Text(
-                                    '0.5% — five to nine, opted in')),
+                              value: 'optional_5to9',
+                              child: Text('0.5% — five to nine, opted in'),
+                            ),
                           ],
                           onChanged: (v) => setState(() => _hrdf = v),
                         ),
@@ -170,17 +184,21 @@ class _PayrollSettingsTabState extends ConsumerState<_PayrollSettingsTab> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const SectionHeader('Payday',
-                            subtitle:
-                                'Which day of the month salaries are paid'),
+                        const SectionHeader(
+                          'Payday',
+                          subtitle: 'Which day of the month salaries are paid',
+                        ),
                         DropdownButtonFormField<int>(
                           value: _payDay,
                           isExpanded: true,
-                          decoration:
-                              const InputDecoration(labelText: 'Day of month'),
+                          decoration: const InputDecoration(
+                            labelText: 'Day of month',
+                          ),
                           items: [
                             const DropdownMenuItem(
-                                value: 0, child: Text('Last day of the month')),
+                              value: 0,
+                              child: Text('Last day of the month'),
+                            ),
                             for (var d = 1; d <= 28; d++)
                               DropdownMenuItem(value: d, child: Text('$d')),
                           ],
@@ -209,9 +227,9 @@ class _PayrollSettingsTabState extends ConsumerState<_PayrollSettingsTab> {
   }
 
   Widget _field(String key, String label) => TextFormField(
-        controller: _ctl(key),
-        decoration: InputDecoration(labelText: label),
-      );
+    controller: _ctl(key),
+    decoration: InputDecoration(labelText: label),
+  );
 
   Future<void> _save() async {
     setState(() => _saving = true);
@@ -317,19 +335,29 @@ class _SetupList extends ConsumerWidget {
                 children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(
-                        Space.lg, Space.lg, Space.lg, Space.sm),
+                      Space.lg,
+                      Space.lg,
+                      Space.lg,
+                      Space.sm,
+                    ),
                     child: SectionHeader(title, subtitle: subtitle),
                   ),
                   for (var i = 0; i < list.length; i++) ...[
                     if (i > 0) const Divider(height: 1),
                     ListTile(
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: Space.lg, vertical: Space.xs),
+                        horizontal: Space.lg,
+                        vertical: Space.xs,
+                      ),
                       onTap: () => _edit(context, ref, list[i]),
-                      title: Text(titleOf(list[i]),
-                          style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text(subtitleOf(list[i]),
-                          style: const TextStyle(fontSize: 12)),
+                      title: Text(
+                        titleOf(list[i]),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        subtitleOf(list[i]),
+                        style: const TextStyle(fontSize: 12),
+                      ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -346,15 +374,14 @@ class _SetupList extends ConsumerWidget {
   }
 
   Future<void> _edit(
-      BuildContext context, WidgetRef ref, Map<String, dynamic>? row) async {
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic>? row,
+  ) async {
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => _SetupDialog(
-        table: table,
-        title: title,
-        fields: fields,
-        row: row,
-      ),
+      builder: (_) =>
+          _SetupDialog(table: table, title: title, fields: fields, row: row),
     );
     if (saved == true) {
       ref.invalidate(setupRowsProvider((table: table, orderBy: orderBy)));
@@ -428,8 +455,7 @@ class _SetupDialogState extends ConsumerState<_SetupDialog> {
                             value: _flags[f.key] ?? true,
                             onChanged: (v) => setState(() => _flags[f.key] = v),
                             title: Text(f.label),
-                            subtitle:
-                                f.helper == null ? null : Text(f.helper!),
+                            subtitle: f.helper == null ? null : Text(f.helper!),
                           )
                         : TextFormField(
                             controller: _c[f.key],
@@ -437,11 +463,11 @@ class _SetupDialogState extends ConsumerState<_SetupDialog> {
                             maxLines: f.multiline ? 6 : 1,
                             keyboardType: f.number
                                 ? const TextInputType.numberWithOptions(
-                                    decimal: true)
+                                    decimal: true,
+                                  )
                                 : null,
                             decoration: InputDecoration(
-                              labelText:
-                                  f.required ? '${f.label} *' : f.label,
+                              labelText: f.required ? '${f.label} *' : f.label,
                               helperText: f.helper,
                             ),
                             validator: (v) {
@@ -474,7 +500,8 @@ class _SetupDialogState extends ConsumerState<_SetupDialog> {
               ? const SizedBox(
                   height: 18,
                   width: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2))
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : const Text('Save'),
         ),
       ],
@@ -499,11 +526,9 @@ class _SetupDialogState extends ConsumerState<_SetupDialog> {
 
     final ok = await runWithFeedback(
       context,
-      action: () => ref.read(repoProvider)!.saveSetupRow(
-            widget.table,
-            values,
-            id: widget.row?['id'] as String?,
-          ),
+      action: () => ref
+          .read(repoProvider)!
+          .saveSetupRow(widget.table, values, id: widget.row?['id'] as String?),
       successMessage: 'Saved',
     );
 
@@ -522,58 +547,70 @@ class _StructureTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
-      child: Column(children: [
-        const TabBar(tabs: [Tab(text: 'Departments'), Tab(text: 'Positions')]),
-        Expanded(
-          child: TabBarView(children: [
-            _SetupList(
-              table: 'departments',
-              title: 'Departments',
-              subtitle: 'Used to group people and to analyse payroll cost',
-              emptyMessage: 'Add the departments people belong to.',
-              fields: const [
-                SetupField('code', 'Code', required: true),
-                SetupField('name', 'Name', required: true),
-                SetupField('cost_centre', 'Cost centre'),
-                SetupField('is_active', 'Active', boolean: true),
+      child: Column(
+        children: [
+          const TabBar(
+            tabs: [
+              Tab(text: 'Departments'),
+              Tab(text: 'Positions'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _SetupList(
+                  table: 'departments',
+                  title: 'Departments',
+                  subtitle: 'Used to group people and to analyse payroll cost',
+                  emptyMessage: 'Add the departments people belong to.',
+                  fields: const [
+                    SetupField('code', 'Code', required: true),
+                    SetupField('name', 'Name', required: true),
+                    SetupField('cost_centre', 'Cost centre'),
+                    SetupField('is_active', 'Active', boolean: true),
+                  ],
+                  titleOf: (r) => r['name']?.toString() ?? '',
+                  subtitleOf: (r) => [
+                    r['code'],
+                    if (r['cost_centre'] != null) r['cost_centre'],
+                  ].whereType<Object>().join(' · '),
+                ),
+                _SetupList(
+                  table: 'positions',
+                  title: 'Positions',
+                  subtitle: 'Job titles and their salary bands',
+                  orderBy: 'title',
+                  emptyMessage: 'Add the roles people are hired into.',
+                  fields: const [
+                    SetupField('code', 'Code', required: true),
+                    SetupField('title', 'Title', required: true),
+                    SetupField('grade', 'Grade'),
+                    SetupField('min_salary', 'Minimum salary', number: true),
+                    SetupField('max_salary', 'Maximum salary', number: true),
+                    // A column since `0025` that nothing wrote. What the
+                    // role involves is what goes into the advertisement and
+                    // what a new joiner is handed on their first day.
+                    SetupField(
+                      'job_description',
+                      'What the role involves',
+                      multiline: true,
+                    ),
+                    SetupField('is_active', 'Active', boolean: true),
+                  ],
+                  titleOf: (r) => r['title']?.toString() ?? '',
+                  subtitleOf: (r) => [
+                    r['code'],
+                    if (r['grade'] != null) 'grade ${r['grade']}',
+                    if (r['min_salary'] != null)
+                      '${Fmt.money(Fmt.toDouble(r['min_salary']))} – '
+                          '${Fmt.money(Fmt.toDouble(r['max_salary']))}',
+                  ].whereType<Object>().join(' · '),
+                ),
               ],
-              titleOf: (r) => r['name']?.toString() ?? '',
-              subtitleOf: (r) => [
-                r['code'],
-                if (r['cost_centre'] != null) r['cost_centre'],
-              ].whereType<Object>().join(' · '),
             ),
-            _SetupList(
-              table: 'positions',
-              title: 'Positions',
-              subtitle: 'Job titles and their salary bands',
-              orderBy: 'title',
-              emptyMessage: 'Add the roles people are hired into.',
-              fields: const [
-                SetupField('code', 'Code', required: true),
-                SetupField('title', 'Title', required: true),
-                SetupField('grade', 'Grade'),
-                SetupField('min_salary', 'Minimum salary', number: true),
-                SetupField('max_salary', 'Maximum salary', number: true),
-                // A column since `0025` that nothing wrote. What the
-                // role involves is what goes into the advertisement and
-                // what a new joiner is handed on their first day.
-                SetupField('job_description', 'What the role involves',
-                    multiline: true),
-                SetupField('is_active', 'Active', boolean: true),
-              ],
-              titleOf: (r) => r['title']?.toString() ?? '',
-              subtitleOf: (r) => [
-                r['code'],
-                if (r['grade'] != null) 'grade ${r['grade']}',
-                if (r['min_salary'] != null)
-                  '${Fmt.money(Fmt.toDouble(r['min_salary']))} – '
-                      '${Fmt.money(Fmt.toDouble(r['max_salary']))}',
-              ].whereType<Object>().join(' · '),
-            ),
-          ]),
-        ),
-      ]),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -586,16 +623,21 @@ class _ComponentsTab extends StatelessWidget {
     return _SetupList(
       table: 'salary_components',
       title: 'Allowances and deductions',
-      subtitle: 'The liability flags are the point: overtime is charged to '
+      subtitle:
+          'The liability flags are the point: overtime is charged to '
           'SOCSO but not to EPF, a bonus to EPF but not to the HRD Corp '
-          'levy, a travelling allowance to none of them',
+          'levy, a travelling allowance to none of them — and a bonus is '
+          'paid once, which is what stops PCB taxing it twelve times',
       emptyMessage: 'Add the recurring allowances and deductions you pay.',
       fields: const [
         SetupField('code', 'Code', required: true),
         SetupField('name', 'Name', required: true),
         SetupField('default_amount', 'Default amount', number: true),
-        SetupField('percent_of_basic', 'Or a percentage of basic',
-            number: true),
+        SetupField(
+          'percent_of_basic',
+          'Or a percentage of basic',
+          number: true,
+        ),
         SetupField('is_taxable', 'Taxable', boolean: true),
         SetupField('is_epf_liable', 'Charged to EPF', boolean: true),
         SetupField('is_socso_liable', 'Charged to SOCSO', boolean: true),
@@ -604,8 +646,18 @@ class _ComponentsTab extends StatelessWidget {
         // often differs from the rest: the PSMB Act counts basic salary
         // and fixed allowances, so a bonus is EPF wage and is not levy
         // wage.
-        SetupField('is_hrdf_liable', 'Charged to HRD Corp levy',
-            boolean: true),
+        SetupField('is_hrdf_liable', 'Charged to HRD Corp levy', boolean: true),
+        // A bonus, a commission, arrears, a director's fee: pay that
+        // arrives once rather than every month. PCB annualises the
+        // month's pay to project the year, which is right for a salary
+        // and wrong for a bonus — before 0446 a 12,000 bonus in
+        // February was taxed as though it came eleven more times, and
+        // the February payslip took most of the year's tax in one go.
+        SetupField(
+          'is_additional_remuneration',
+          'Paid once, not monthly',
+          boolean: true,
+        ),
         SetupField('is_active', 'Active', boolean: true),
       ],
       titleOf: (r) => r['name']?.toString() ?? '',
@@ -619,6 +671,7 @@ class _ComponentsTab extends StatelessWidget {
         // is worth the space when a component has been taken out of the
         // levy — which is the deliberate act somebody may need to check.
         if (r['is_hrdf_liable'] == false) 'no levy',
+        if (r['is_additional_remuneration'] == true) 'paid once',
         if (r['is_taxable'] != true) 'not taxable',
       ].whereType<Object>().join(' · '),
     );
@@ -643,11 +696,18 @@ class _LeaveTypesTab extends StatelessWidget {
         SetupField('code', 'Code', required: true),
         SetupField('name', 'Name', required: true),
         SetupField('default_days', 'Days a year', number: true),
-        SetupField('max_carry_forward', 'Days that may carry forward',
-            number: true),
+        SetupField(
+          'max_carry_forward',
+          'Days that may carry forward',
+          number: true,
+        ),
         SetupField('notice_days', 'Notice required, in days', number: true),
-        SetupField('is_paid', 'Paid', boolean: true,
-            helper: 'Turn this off and the days are deducted from salary'),
+        SetupField(
+          'is_paid',
+          'Paid',
+          boolean: true,
+          helper: 'Turn this off and the days are deducted from salary',
+        ),
         SetupField('requires_attachment', 'Needs a document', boolean: true),
         SetupField('is_active', 'Active', boolean: true),
       ],
@@ -713,8 +773,7 @@ class _ShiftsTab extends StatelessWidget {
         SetupField('start_time', 'Starts', required: true, helper: '09:00'),
         SetupField('end_time', 'Ends', required: true, helper: '18:00'),
         SetupField('break_minutes', 'Break, in minutes', number: true),
-        SetupField('grace_minutes', 'Grace before counting late',
-            number: true),
+        SetupField('grace_minutes', 'Grace before counting late', number: true),
         SetupField('crosses_midnight', 'Ends the next day', boolean: true),
         SetupField('is_active', 'Active', boolean: true),
       ],
@@ -736,9 +795,11 @@ class _OnboardingTemplatesTab extends StatelessWidget {
     return _SetupList(
       table: 'onboarding_templates',
       title: 'Onboarding templates',
-      subtitle: 'The tasks a joiner and whoever is setting them up have to '
+      subtitle:
+          'The tasks a joiner and whoever is setting them up have to '
           'get through, with the day each one is due',
-      emptyMessage: 'Add a template, then its items, then start a checklist '
+      emptyMessage:
+          'Add a template, then its items, then start a checklist '
           'against whoever is joining.',
       fields: const [
         SetupField('name', 'Name', required: true),

@@ -5598,3 +5598,73 @@ happen" — which makes a screen calling the server's version directly a
 plausible next step rather than a mistake. Revoking a grant that harms
 nothing, to close a hole nobody can reach, is the kind of change that
 looks like work and is not.
+
+## The bonus that was taxed as though it came every month
+
+A statutory arithmetic finding rather than a reachability one, and the
+worst-shaped kind: correct over a year, wrong every month inside it.
+
+`app.calc_pcb` implements the MTD computerised calculation, and for
+normal remuneration it implements it correctly — project the month's
+taxable pay over the months remaining, subtract the reliefs, tax the
+result, take off what has been deducted, divide by the months left:
+
+```sql
+v_n         := 12 - month + 1;
+v_projected := ytd + opening + p_taxable_this_month * v_n;
+```
+
+The `* v_n` says "this month is what every remaining month looks like".
+True of a salary. False of a bonus. Under the Income Tax (Deduction from
+Remuneration) Rules a bonus, commission, arrears, director's fee or
+gratuity is **additional remuneration**: it enters the year's income
+once, and the deduction on it is the difference between the year's tax
+with it and without.
+
+Nothing in the schema could say which earnings were which, so
+`calculate_payroll_run` summed every taxable line into one figure and
+handed it over to be annualised.
+
+### Measured
+
+One employee, RM5,000 a month, resident, single, paid 25 February 2026:
+
+| Month's taxable pay | PCB deducted |
+|---|---|
+| 5,000 | 90.95 |
+| 5,000 + a 12,000 bonus | **2,528.85** |
+| 5,000 + the same bonus, after 0446 | 994.45 |
+
+### Why nothing caught it
+
+**The year comes out right.** The formula subtracts `v_ytd_pcb`, so
+March onwards deducts less and the twelve months sum to about the
+correct figure. A test that runs one payroll and checks the annual
+identity sees nothing wrong. What is wrong is every month in between,
+and two cases where "in between" is where the employee lives: somebody
+who leaves before December never gets the correction, and a bonus in a
+final month is the same error at full size.
+
+**And the suite paid in the wrong month.** `payroll_run.sql` pays in a
+single period, and a December bonus is unaffected because `v_n` is 1.
+The bug is invisible in December and largest in January.
+
+That is the general form worth keeping: *an error that self-corrects
+over a cycle is not caught by an assertion about the cycle.* Ask what
+the intermediate states are, and whether anybody lives in one.
+
+### What the fix cost, and the mutant that mattered
+
+`salary_components` and `payslip_lines` each gained
+`is_additional_remuneration`; the copier that builds a payslip line
+from a component had to be taught the new column, which is the 0410
+shape for the sixth time and is asserted rather than assumed.
+
+The fourth mutant is the one worth recording. Defaulting the new column
+to `true` rather than `false` **survived**: nothing asserted what an
+ordinary component does when nobody mentions the flag, which is the
+migration's most consequential silent claim — every allowance in every
+company would have stopped being annualised the day it applied. The
+assertion added for it is one line. A new column with a default is a
+claim about every existing row, and it deserves an assertion of its
+own.

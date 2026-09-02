@@ -484,4 +484,172 @@ begin
                      where l.payslip_id = p.id and l.kind = 'deduction') >= 3));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The bonus that was taxed as though it came every month (0446)
+--
+-- `calc_pcb` projects the month's taxable pay over the months left in
+-- the year, which is right for a salary and wrong for a bonus. Measured
+-- before 0446, on RM5,000 a month paid on 25 February 2026: an ordinary
+-- month deducted 90.95, and the same month with a 12,000 bonus rolled
+-- into it deducted **2,528.85** -- close to the whole year's tax, taken
+-- in one month, because eleven months were still to come and the bonus
+-- was multiplied by eleven.
+--
+-- The year still came out right, which is what hid it: later months
+-- subtract what has already been deducted. What is wrong is every month
+-- in between, and the employee who leaves before December never gets
+-- the correction.
+--
+-- February matters here. A December bonus is unaffected -- the factor
+-- is 1 -- which is why a suite that pays in a single month never saw
+-- this.
+--
+-- The three figures are asserted rather than described, against the
+-- 2026 PCB schedule this repository seeds. If a published schedule
+-- moves them, this file is where that should be noticed.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org    uuid := pg_temp.test_org('Bonus Bulan Dua Sdn Bhd');
+  v_emp    uuid;
+  v_plain  numeric;
+  v_split  numeric;
+  v_rolled numeric;
+begin
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     working_days_per_month, working_hours_per_day,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'B1', 'Paid a bonus in February', date '2020-01-01',
+          5000, 26, 8, date '1990-01-01', 'single', 'citizen')
+  returning id into v_emp;
+
+  select c.pcb into v_plain
+    from app.calc_pcb(v_emp, 5000, 550, 30, 0, date '2026-02-25') c;
+  perform pg_temp.check_eq(
+    'five thousand in February deducts 90.95', v_plain, 90.95);
+
+  -- Seventeen thousand of *ordinary* pay: annualising it is correct,
+  -- and this is the figure the bonus month used to produce.
+  select c.pcb into v_rolled
+    from app.calc_pcb(v_emp, 17000, 550, 30, 0, date '2026-02-25') c;
+  perform pg_temp.check_eq(
+    'seventeen thousand of salary deducts 2528.85', v_rolled, 2528.85);
+
+  -- The same money, said to be a bonus.
+  select c.pcb into v_split
+    from app.calc_pcb(v_emp, 5000, 550, 30, 0, date '2026-02-25',
+                      12000, 0) c;
+  perform pg_temp.check_eq(
+    'the same money as a bonus deducts 994.45', v_split, 994.45);
+
+  -- The two claims that make it the right 994.45 rather than a smaller
+  -- arbitrary one: the bonus is charged at all, and it is charged once
+  -- rather than eleven times.
+  perform pg_temp.check_true('a bonus is charged something',
+    v_split > v_plain);
+  perform pg_temp.check_true(
+    'and not as though it came every month',
+    v_split < v_plain + (v_rolled - v_plain) / 2);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And the flag has to reach the payslip line
+--
+-- The split is only as good as the run's knowledge of which earnings
+-- are which, and that travels from `salary_components` onto
+-- `payslip_lines` through the insert that copies a component's flags. A
+-- new column the copier was never told about is the failure this
+-- project has met five times, so it is asserted rather than assumed.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org    uuid := pg_temp.test_org('Bonus Melalui Larian Sdn Bhd');
+  v_emp    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_comp   uuid;
+  v_plain_comp uuid;
+  v_slip   uuid;
+begin
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-02', date '2026-02-01', date '2026-02-28',
+          date '2026-02-25')
+  returning id into v_period;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     working_days_per_month, working_hours_per_day,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'B2', 'Gets the February bonus', date '2020-01-01',
+          5000, 26, 8, date '1990-01-01', 'single', 'citizen')
+  returning id into v_emp;
+
+  insert into public.salary_components
+    (org_id, code, name, kind, default_amount,
+     is_taxable, is_epf_liable, is_socso_liable, is_eis_liable,
+     is_hrdf_liable, is_additional_remuneration)
+  values (v_org, 'BONUS', 'Annual bonus', 'earning', 12000,
+          true, true, false, false, false, true)
+  returning id into v_comp;
+
+  insert into public.employee_salary_components
+    (org_id, employee_id, component_id, effective_from)
+  values (v_org, v_emp, v_comp, date '2020-01-01');
+
+  -- An ordinary allowance, created the way every component in this
+  -- schema was created before 0446: without mentioning the flag at
+  -- all. It must not become additional remuneration by default, or
+  -- every existing allowance silently stops being annualised and
+  -- every company's PCB moves the day this migration applies.
+  insert into public.salary_components
+    (org_id, code, name, kind, default_amount,
+     is_taxable, is_epf_liable, is_socso_liable, is_eis_liable,
+     is_hrdf_liable)
+  values (v_org, 'TRAVEL', 'Travel allowance', 'earning', 200,
+          true, false, false, false, false)
+  returning id into v_plain_comp;
+
+  insert into public.employee_salary_components
+    (org_id, employee_id, component_id, effective_from)
+  values (v_org, v_emp, v_plain_comp, date '2020-01-01');
+
+  insert into public.payroll_runs (org_id, period_id, run_no)
+  values (v_org, v_period, 'PAY-2026-02')
+  returning id into v_run;
+
+  perform public.calculate_payroll_run(v_run);
+
+  select p.id into v_slip from public.payslips p
+   where p.run_id = v_run and p.employee_id = v_emp;
+
+  perform pg_temp.check_true('the flag reaches the payslip line',
+    (select l.is_additional_remuneration from public.payslip_lines l
+      where l.payslip_id = v_slip and l.code = 'BONUS'));
+
+  perform pg_temp.check_true('and the salary line is not marked',
+    (select not l.is_additional_remuneration from public.payslip_lines l
+      where l.payslip_id = v_slip and l.code = 'BASIC'));
+
+  perform pg_temp.check_true(
+    'nor is an allowance that never mentioned the flag',
+    (select not l.is_additional_remuneration from public.payslip_lines l
+      where l.payslip_id = v_slip and l.code = 'TRAVEL'));
+
+  -- The whole point, through the run rather than the function: 17,200
+  -- of pay in February -- 5,000 salary, 200 allowance and a 12,000
+  -- bonus -- and the deduction is the one the split produces, not the
+  -- annualised figure the same money used to attract.
+  --
+  -- Neither 994.45 nor 2,528.85, and both differences are the fixture
+  -- rather than the method. The allowance is 200 a month of ordinary
+  -- pay, so it *is* annualised, which is correct and raises the normal
+  -- half. The bonus is EPF-liable, so the month's employee EPF is
+  -- computed on the larger wage and the share belonging to the bonus
+  -- enters the year's relief once alongside the bonus itself.
+  perform pg_temp.check_eq('the run deducts the split figure',
+    (select p.pcb from public.payslips p where p.id = v_slip), 1115.30);
+end $$;
+
 rollback;
