@@ -7080,8 +7080,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_practice.sql": {
-    "mtime": 1788336965.0200164,
-    "ast_hash": "d37f3cb78676164e0e3952a620c9271a",
+    "mtime": 1788340660.0584471,
+    "ast_hash": "cf82e87fd1edef1e6983311cf61f400b",
     "semantic_hash": ""
   },
   "supabase/tests/feedback.sql": {
@@ -7197,6 +7197,11 @@
   "app/test/contacts_split_test.dart": {
     "mtime": 1788339675.5976963,
     "ast_hash": "22336f28b9126744d7f2be58ab4a3b9d",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0472_the_practices_books_belong_to_the_practice.sql": {
+    "mtime": 1788340681.880165,
+    "ast_hash": "3c47c61199e2f9b71fa1068d1a4acaff",
     "semantic_hash": ""
   }
 }

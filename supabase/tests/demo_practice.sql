@@ -76,16 +76,37 @@ begin
       where firm_id = v_firm and is_demo), 4);
 
   -- The point of the arrangement: the person who runs the practice owns
-  -- none of the books. Everything they can reach, they reach through
-  -- the firm, which is what a practice is and what makes the whole
-  -- portfolio removable.
+  -- none of the *clients'* books. Everything they can reach there, they
+  -- reach through the firm, which is what a practice is and what makes
+  -- the portfolio removable.
+  --
+  -- Narrowed by 0472, which gave the practice its own company outright.
+  -- That is not the same claim and never was: a firm's own books are
+  -- its own, not an engagement it holds, and the thing this assertion
+  -- protects -- that ending an appointment takes nobody's books --
+  -- is about the three clients.
   perform pg_temp.check_eq(
-    'the real account owns none of the books',
+    'the real account owns none of the clients'' books',
+    (select count(*)::integer from public.org_members m
+       join public.organizations o on o.id = m.org_id
+      where m.user_id = v_who and m.via_firm_id is null
+        and o.name <> 'Geswant & Co.'), 0);
+  -- Ownership of the practice's own books first, and the three
+  -- borrowed rows second. Both move together when the practice is
+  -- handed back to a demo login, and this order makes that mutant die
+  -- saying which fact it broke rather than "expected 3, got 4".
+  perform pg_temp.check_eq(
+    'and owns its own books, which no demo login holds',
+    (select count(*)::integer from public.org_members m
+       join public.organizations o on o.id = m.org_id
+      where m.user_id = v_who and m.via_firm_id is null
+        and m.role = 'owner' and o.name = 'Geswant & Co.'), 1);
+  -- Counted separately so that a rebuild which lost one of the three
+  -- and gained a direct row on a client -- the shape of mistake this
+  -- pair watches for -- cannot pass by keeping the total at four.
+  perform pg_temp.check_eq('and reaches the three clients through the firm',
     (select count(*)::integer from public.org_members
-      where user_id = v_who and via_firm_id is null), 0);
-  perform pg_temp.check_eq('and reaches all four through the firm',
-    (select count(*)::integer from public.org_members
-      where user_id = v_who and via_firm_id = v_firm), 4);
+      where user_id = v_who and via_firm_id = v_firm), 3);
 
   -- ------------------------------------------------------------------
   -- What is on the screens
@@ -234,9 +255,43 @@ begin
   perform pg_temp.check_eq('and the slug it is found by is untouched',
     (select slug from public.firms where id = v_old), 'kabeer-co');
 
+  -- Whose books the practice's own company is. Before 0472 this was
+  -- `practice-kabeer-co@geswant.demo`, a login with a published
+  -- password that the owner of the firm could not sign in as.
+  perform pg_temp.check_eq(
+    'the practice''s books belong to the account it was built for',
+    (select count(*)::integer from public.org_members m
+       join public.organizations o on o.id = m.org_id
+      where o.firm_id = v_old and o.name = 'Geswant & Co.'
+        and m.user_id = v_who and m.role = 'owner'), 1);
+  perform pg_temp.check_true(
+    'and no demo login is left holding them',
+    not exists (select 1
+                  from public.org_members m
+                  join public.organizations o on o.id = m.org_id
+                  join auth.users u on u.id = m.user_id
+                 where o.firm_id = v_old and o.name = 'Geswant & Co.'
+                   and coalesce(u.raw_app_meta_data ->> 'demo', '') = 'true'));
+  -- Two different facts. A rebuild that gets the owner right and the
+  -- address wrong sends the practice's own mail to a domain that does
+  -- not exist.
+  perform pg_temp.check_eq(
+    'and the practice is contactable at the firm''s own address',
+    (select email from public.organizations
+      where firm_id = v_old and name = 'Geswant & Co.'),
+    'older@geswant.test');
+
   select id into v_firm from public.firms where id = v_old;
+  -- The one this migration is mostly about. The owner is now a real,
+  -- non-demo, directly-joined member of a company marked demo, which is
+  -- precisely what the teardown guard refuses -- so without the
+  -- exemption the first run works and the second says the books are
+  -- somebody's own.
   perform pg_temp.check_true('so a second run finds it again',
     app.demo_practice_rebuild('older@geswant.test') is not null);
+  perform pg_temp.check_eq('and the portfolio is still four, not eight',
+    (select count(*)::integer from public.organizations
+      where firm_id = v_old), 4);
   perform pg_temp.check_eq('and still does not make another',
     (select count(*)::integer from public.firms f
        join public.firm_members m on m.firm_id = f.id
@@ -251,12 +306,24 @@ begin
   perform pg_temp.check_true('two practices can stand side by side',
     (select count(*) from public.firms where slug like 'geswant%'
         or slug like 'kabeer-co%') >= 2);
+  -- Asserted on the *client* logins, which are the ones that still
+  -- exist. 0472 gave the practice's own books to the real account, so
+  -- there is no `practice-...@geswant.demo` left to count -- and an
+  -- assertion that counts nothing twice and finds the two counts equal
+  -- passes for the rest of time without ever reading anything.
+  perform pg_temp.check_true('there are client logins to compare',
+    (select count(*) from auth.users
+      where email like 'client%@geswant.demo') >= 6);
   perform pg_temp.check_eq(
-    'each with demo logins of its own, named after its firm',
+    'each practice with client logins of its own, named after its firm',
     (select count(distinct split_part(email, '@', 1))::integer
-       from auth.users where email like 'practice-%@geswant.demo'),
+       from auth.users where email like 'client%@geswant.demo'),
     (select count(*)::integer from auth.users
-      where email like 'practice-%@geswant.demo'));
+      where email like 'client%@geswant.demo'));
+  perform pg_temp.check_eq(
+    'and no login stands in for a practice any more',
+    (select count(*)::integer from auth.users
+      where email like 'practice%@geswant.demo'), 0);
 end $$;
 
 -- ---------------------------------------------------------------------
