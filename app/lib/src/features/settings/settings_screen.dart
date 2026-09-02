@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import 'module_offer.dart';
+import 'subscription_card.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/platform_catalog_repository.dart';
 import '../../data/repository.dart';
@@ -103,6 +104,12 @@ class SettingsScreen extends ConsumerWidget {
                     _ScanningCard(canEdit: isAdmin),
                     const SizedBox(height: 16),
                     _ModulesCard(canAdmin: isAdmin),
+                    const SizedBox(height: 16),
+                    // 0489. What the modules above actually cost, and
+                    // the invoices raised for them. Directly under the
+                    // card that adds them, because the price agreed to
+                    // there is the figure shown here.
+                    SubscriptionCard(canAdmin: isAdmin),
                     const SizedBox(height: 16),
                     _FiscalYearsCard(canAdmin: isAdmin),
                     const SizedBox(height: 16),
@@ -1133,6 +1140,53 @@ Future<void> _addModule(
   ref.invalidate(enabledModulesProvider);
   ref.invalidate(moduleDashboardProvider);
   ref.invalidate(canAddCompanyProvider);
+  // 0489. The running total is the running total: a figure that still
+  // says "nothing this month" beside a module somebody just added is
+  // worse than no figure at all.
+  ref.invalidate(moduleChargesProvider);
+}
+
+/// Take a paid add-on off again.
+///
+/// The counterpart to [_addModule], and the thing 0488's copy promised
+/// and did not have: "you can take it off here too" was true of the
+/// visibility switch, which changes nothing about the bill, and false
+/// of the entitlement, which is what carries the price.
+Future<void> _removeModule(
+  BuildContext context,
+  WidgetRef ref,
+  ModuleSurface m,
+) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(removeModuleTitle(m)),
+      content: Text(removeModulePrompt(m)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Keep it'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Remove it'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+
+  await runWithFeedback(
+    context,
+    action: () => ref.read(repoProvider)!.setOwnModule(m.code, false),
+    doing: 'remove ${m.name}',
+    successMessage: '${m.name} is off',
+  );
+  ref.invalidate(moduleSurfaceProvider);
+  ref.invalidate(enabledModulesProvider);
+  ref.invalidate(moduleDashboardProvider);
+  ref.invalidate(canAddCompanyProvider);
+  ref.invalidate(moduleChargesProvider);
 }
 
 class _ModulesCard extends ConsumerWidget {
@@ -1178,6 +1232,23 @@ class _ModulesCard extends ConsumerWidget {
                                 m.description!,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
+                              ),
+                        // 0489. The switch beside this hides the
+                        // screens; this takes the entitlement, and the
+                        // monthly charge, off. Only for what is
+                        // actually an add-on: the core modules are the
+                        // product and cannot be removed from it.
+                        secondary: (!canAdmin || m.isCore)
+                            ? null
+                            : IconButton(
+                                key: ValueKey('remove-module-${m.code}'),
+                                tooltip: 'Remove from this company',
+                                icon: const Icon(
+                                  Icons.remove_circle_outline,
+                                  size: 20,
+                                ),
+                                onPressed: () =>
+                                    _removeModule(context, ref, m),
                               ),
                         onChanged: !canAdmin
                             ? null

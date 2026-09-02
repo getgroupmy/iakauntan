@@ -401,6 +401,28 @@ final canAddCompanyProvider = FutureProvider.autoDispose<bool>((ref) async {
   return repo.canAddCompany();
 });
 
+/// What this company's paid add-ons have cost it so far this month.
+///
+/// autoDispose, and invalidated whenever a module is switched on or
+/// off: the figure is the running total, and a stale one shown beside
+/// a module somebody just added is worse than no figure at all. The
+/// server refuses anybody but an owner or admin, so the card that
+/// draws this is drawn only for them.
+final moduleChargesProvider =
+    FutureProvider.autoDispose<SubscriptionMonth>((ref) async {
+      final repo = ref.watch(repoProvider);
+      if (repo == null) return const SubscriptionMonth(month: null, lines: [], subtotal: 0);
+      return SubscriptionMonth.fromMap(await repo.moduleCharges());
+    });
+
+/// The subscription invoices already raised against this company.
+final myPlatformInvoicesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+      final repo = ref.watch(repoProvider);
+      if (repo == null) return const [];
+      return repo.myPlatformInvoices();
+    });
+
 /// The records on file twice, for the screen that offers to link
 /// them. autoDispose so it is asked afresh: a group linked a moment
 /// ago is not a group any more.

@@ -1557,6 +1557,59 @@ class ModuleSurface {
   );
 }
 
+/// One add-on's share of the month, as the server pro-rated it.
+class ModuleCharge {
+  const ModuleCharge({
+    required this.code,
+    required this.name,
+    required this.days,
+    required this.daysInMonth,
+    required this.amount,
+  });
+
+  factory ModuleCharge.fromMap(Map<String, dynamic> m) => ModuleCharge(
+    code: m['module_code'] as String? ?? '',
+    name: m['name'] as String? ?? '',
+    days: (m['days'] as num?)?.toInt() ?? 0,
+    daysInMonth: (m['days_in_month'] as num?)?.toInt() ?? 0,
+    amount: (m['amount'] as num?)?.toDouble() ?? 0,
+  );
+
+  final String code;
+  final String name;
+  final int days;
+  final int daysInMonth;
+  final double amount;
+
+  /// True for a module that was not on for the whole month — the only
+  /// case where the days are worth showing. "31/31 days" beside a full
+  /// month's price is noise.
+  bool get isPartial => daysInMonth > 0 && days < daysInMonth;
+}
+
+/// The month in progress: what is on, and what it has cost so far.
+class SubscriptionMonth {
+  const SubscriptionMonth({
+    required this.month,
+    required this.lines,
+    required this.subtotal,
+  });
+
+  factory SubscriptionMonth.fromMap(Map<String, dynamic> m) =>
+      SubscriptionMonth(
+        month: DateTime.tryParse(m['month'] as String? ?? ''),
+        lines: [
+          for (final l in (m['lines'] as List? ?? const []))
+            ModuleCharge.fromMap(Map<String, dynamic>.from(l as Map)),
+        ],
+        subtotal: (m['subtotal'] as num?)?.toDouble() ?? 0,
+      );
+
+  final DateTime? month;
+  final List<ModuleCharge> lines;
+  final double subtotal;
+}
+
 class PlatformOrg {
   PlatformOrg({
     required this.id,

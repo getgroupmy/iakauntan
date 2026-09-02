@@ -42,3 +42,21 @@ String addModulePrompt(ModuleSurface m) => m.monthlyPrice > 0
           'is added to this company from today. You can take it off '
           'again here whenever you like.'
     : 'It is on straight away, and you can take it off again here.';
+
+/// The confirmation for taking a paid add-on off again.
+///
+/// 0488's own copy says "you can take it off here too" and there was no
+/// way to do it -- the switch on a held module hides its screens and
+/// leaves the entitlement, and the bill, exactly where they were. What
+/// this has to be clear about is the two things a person is actually
+/// afraid of: that the charge stops, and that their records do not go
+/// with it.
+String removeModuleTitle(ModuleSurface m) => 'Remove ${m.name}?';
+
+String removeModulePrompt(ModuleSurface m) => m.monthlyPrice > 0
+    ? 'The screens go, and ${Fmt.money(m.monthlyPrice)} a month stops '
+          'being charged from today— this month is billed for the days '
+          'it was on. Nothing already recorded is deleted, and you can '
+          'add it again here.'
+    : 'The screens go. Nothing already recorded is deleted, and you can '
+          'add it again here.';

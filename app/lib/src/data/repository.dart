@@ -4513,6 +4513,34 @@ extension RepoExtras on Repo {
     },
   );
 
+  /// What the add-ons this company holds have cost it so far this
+  /// month, line by line and pro-rated by the days each was on.
+  ///
+  /// The invoice for a month is written on the first of the next one,
+  /// so between those two dates this is the only answer to "what am I
+  /// paying?". The server refuses anybody but an owner or admin: the
+  /// price list is public, what this company pays is not.
+  Future<Map<String, dynamic>> moduleCharges() async {
+    final data = await callRpc('module_charges', params: {'p_org_id': orgId});
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  /// The subscription invoices already raised against this company,
+  /// newest first.
+  ///
+  /// Read straight off the table rather than through an RPC: its own
+  /// policy already limits it to an administrator of the company it
+  /// names, so a function would only restate the rule in a second
+  /// place.
+  Future<List<Map<String, dynamic>>> myPlatformInvoices() async => Repo._rows(
+    await client
+        .from('platform_invoices')
+        .select()
+        .eq('org_id', orgId)
+        .order('issue_date', ascending: false)
+        .limit(24),
+  );
+
   /// Figures for the modules this company actually uses, keyed by module
   /// code. A company with no such module gets an empty map and keeps the
   /// accounting dashboard.
