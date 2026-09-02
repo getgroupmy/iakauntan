@@ -5842,3 +5842,48 @@ recomputing it later.* The arithmetic is asserted where the inputs are
 controlled — `payroll_run.sql` — and what belongs in the demo is that
 the flag is carried onto the payslip and that the bonus month costs
 more than an ordinary one.
+
+## The counter that had never taken money, and one thing left unresolved
+
+0448 suggested a sweep the demo register could not do: not "which module
+has no tenant" but **"which tenant has a module switched on and its
+tables empty"**. Run over every demo tenant, attributing each org-scoped
+table to the narrowest module whose tenants are a superset of the
+tenants that populate it, exactly one gap was left after 0448:
+
+| module | table | tenant with none |
+|---|---|---|
+| pos | pos_sales, pos_sale_lines, pos_shifts, pos_tenders, pos_tender_types | Sinar Teknologi |
+
+`app.demo_pos_sinar` built the outlet, two registers and the walk-in
+customer, then said so itself: *"No sale has been rung through it yet."*
+A seed that reports where it stopped is better than one that does not;
+it is still a counter that has never taken money.
+
+0449 rings one through: RM9,180.00 on a card, RM680.00 of tax, one
+tender, a shift opened and cashed up, and a half payment refused before
+the full one was taken.
+
+### The thing that is not resolved, recorded rather than tidied away
+
+Two measurements disagree and the reason has not been found.
+
+- In a controlled fixture — a tracked item, no recipe, ten on hand, two
+  sold over a till — stock goes to **eight**, with two movements. Retail
+  depletion works.
+- In the demo, after the rebuild, Sinar's stock movement sources are
+  `manufacturing_orders`, `purchase_documents` and `sales_documents`.
+  There is **no `pos_sales` row among them**, though the sale completed,
+  the item is `stock` with `track_inventory`, its stock is in MAIN, and
+  the outlet sells from MAIN.
+
+Several explanations were tried and none survived: the item has no
+recipe in either case, the trigger fires on any sale reaching
+`completed`, and `pos_recipe_components` returning nothing for a
+recipe-less item does not explain the fixture depleting.
+
+So the migration claims only what was measured — money taken, tax
+charged, drawer cashed up — and this is written down as the next thing
+to look at. **A header that claims the tidier of two conflicting
+measurements is worse than one that admits the conflict**, because the
+next person inherits a false premise instead of an open question.

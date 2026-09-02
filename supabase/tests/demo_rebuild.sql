@@ -1456,4 +1456,52 @@ begin
   end if;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The counter that had never taken money (0449)
+--
+-- `demo_pos_sinar` built the outlet, two registers and the walk-in
+-- customer and then said so itself: "No sale has been rung through it
+-- yet." It was the last gap left by the sweep 0448 came from -- every
+-- demo tenant, every org-scoped table, attributed to the narrowest
+-- module whose tenants are a superset of the tenants that populate it.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_sinar uuid;
+  v_n     integer;
+begin
+  select id into v_sinar from public.organizations
+   where name = 'Sinar Teknologi Sdn Bhd';
+
+  select count(*) into v_n from public.pos_sales
+   where org_id = v_sinar and status = 'completed';
+  perform pg_temp.check_eq('the counter took money', v_n, 1);
+
+  select count(*) into v_n
+    from public.pos_tenders t
+    join public.pos_sales s on s.id = t.sale_id
+   where s.org_id = v_sinar;
+  perform pg_temp.check_eq('and it was tendered for', v_n, 1);
+
+  -- The sale is refused unless it is paid for in full, which the seed
+  -- exercises by offering half first. If that ever starts being
+  -- accepted there would be two tenders here, not one.
+  perform pg_temp.check_eq('a sale that is not paid for is refused',
+    (select count(*)::integer from public.pos_tenders t
+       join public.pos_sales s on s.id = t.sale_id
+      where s.org_id = v_sinar), 1);
+
+  select count(*) into v_n
+    from public.pos_shifts s
+    join public.pos_registers r on r.id = s.register_id
+   where r.org_id = v_sinar and s.status = 'closed';
+  perform pg_temp.check_eq('the till was cashed up', v_n, 1);
+
+  -- Sinar is SST-registered, which is what makes this counter worth
+  -- ringing: the other POS tenants do not charge it.
+  perform pg_temp.check_true('and tax was charged over the counter',
+    (select coalesce(sum(s.tax_amount), 0) > 0 from public.pos_sales s
+      where s.org_id = v_sinar and s.status = 'completed'));
+end $$;
+
 rollback;
