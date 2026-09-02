@@ -16,6 +16,7 @@ import '../team/invitations.dart';
 import 'addresses_card.dart';
 import 'claim_approval_card.dart';
 import 'branches_card.dart';
+import 'chart_of_accounts_card.dart';
 import 'chat_card.dart';
 import 'company_card.dart';
 import 'company_group_card.dart';
@@ -127,7 +128,7 @@ class SettingsScreen extends ConsumerWidget {
                     // so plainly rather than burying it.
                     ExportCard(canAdmin: isAdmin),
                     const SizedBox(height: 16),
-                    const _ChartOfAccountsCard(),
+                    const ChartOfAccountsCard(),
                     const SizedBox(height: 16),
                     _TaxCodesCard(),
                     const SizedBox(height: 16),
@@ -1851,58 +1852,6 @@ class _YearTile extends ConsumerWidget {
           : '${period.name} reopened',
     );
     ref.invalidate(fiscalYearsProvider);
-  }
-}
-
-class _ChartOfAccountsCard extends ConsumerWidget {
-  const _ChartOfAccountsCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final accounts = ref.watch(accountsProvider);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(Space.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SectionHeader(
-              'Chart of accounts',
-              subtitle: 'Malaysian SME template, MPERS aligned',
-            ),
-            AsyncView(
-              value: accounts,
-              onRetry: () => ref.invalidate(accountsProvider),
-              loading: const LinearProgressIndicator(),
-              builder: (list) {
-                final byType = <String, int>{};
-                for (final a in list.where((a) => !a.isGroup)) {
-                  byType[a.accountType] = (byType[a.accountType] ?? 0) + 1;
-                }
-                return Column(
-                  children: [
-                    for (final e in byType.entries)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          children: [
-                            Expanded(child: Text(Fmt.label(e.key))),
-                            Text(
-                              '${e.value} accounts',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 

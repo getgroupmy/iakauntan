@@ -337,6 +337,50 @@ class Repo {
     return _rows(data);
   }
 
+  // ------------------------------------------------------------------
+  // The chart of accounts
+  //
+  // The policies have allowed this since the schema was laid down. What
+  // 0459 adds is the refusals: a number the ledger posts to by name
+  // cannot be renumbered, an account with postings cannot change what
+  // kind of account it is, and one with history is deactivated rather
+  // than deleted.
+  // ------------------------------------------------------------------
+
+  Future<String> upsertAccount({
+    required String code,
+    required String name,
+    required String type,
+    required String subtype,
+    String? id,
+    String? parentId,
+    bool isGroup = false,
+    String? description,
+  }) async {
+    final data = await callRpc(
+      'upsert_account',
+      params: {
+        'p_code': code,
+        'p_name': name,
+        'p_type': type,
+        'p_subtype': subtype,
+        'p_id': id,
+        'p_parent_id': parentId,
+        'p_is_group': isGroup,
+        'p_description': description,
+        'p_org_id': id == null ? orgId : null,
+      },
+    );
+    return data as String;
+  }
+
+  /// Returns `deleted` or `deactivated`, so the screen can say which
+  /// happened rather than guessing.
+  Future<String> retireAccount(String id) async {
+    final data = await callRpc('retire_account', params: {'p_id': id});
+    return data as String;
+  }
+
   /// The ledger by account: balance brought forward, every posted line,
   /// balance carried down. What the trial balance is made of.
   ///
