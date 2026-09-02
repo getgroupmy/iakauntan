@@ -246,6 +246,8 @@ jobs:
                    supabase/tests/posted_document_is_frozen.sql \
                    supabase/tests/posted_link_is_immutable.sql \
                    supabase/tests/no_tenant_sees_another.sql \
+                   supabase/tests/firm_portfolio.sql \
+                   supabase/tests/company_handover.sql \
                    supabase/tests/bucket_survives_a_bad_path.sql \
                    supabase/tests/app_writers_are_not_a_client_surface.sql \
                    supabase/tests/revenue_recognition.sql \
