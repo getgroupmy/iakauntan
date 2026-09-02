@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788285599.947654,
-    "ast_hash": "553808b433d39c64d87bff22e00c896f",
+    "mtime": 1788307069.3529303,
+    "ast_hash": "d9e3029aad3bd9cf8b416ab18ff248d1",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -2710,8 +2710,8 @@
     "semantic_hash": ""
   },
   "docs/pre-deployment.md": {
-    "mtime": 1787061825.3346684,
-    "ast_hash": "f35d9e6d6c85563699fa1737406d5dbc",
+    "mtime": 1788308119.6048021,
+    "ast_hash": "cf8e1bda126c32895b59f62cd5ff3a7e",
     "semantic_hash": ""
   },
   "app/lib/src/core/safe_link.dart": {
@@ -4365,8 +4365,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/audit_redaction.sql": {
-    "mtime": 1787822946.0185897,
-    "ast_hash": "2a81c898d0e7d1ae023154d6a08de19c",
+    "mtime": 1788309544.1841843,
+    "ast_hash": "0af8196995219edef8cd8b7e313a015c",
     "semantic_hash": ""
   },
   "supabase/tests/profile_visibility.sql": {
@@ -6832,6 +6832,11 @@
   "supabase/migrations/0441_the_service_tax_a_retainer_dropped_every_month.sql": {
     "mtime": 1788305219.8133984,
     "ast_hash": "17ccf89da6a559d83ff42234a086b123",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0442_who_changed_the_rate_everybody_is_paid_by.sql": {
+    "mtime": 1788309599.4958265,
+    "ast_hash": "4f67e25a8e58c2cd0a01d77a753a124c",
     "semantic_hash": ""
   }
 }
