@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1788332369.5142589,
-    "ast_hash": "8c18c100834b8db455333c455c851dde",
+    "mtime": 1788335803.4332907,
+    "ast_hash": "14eedee5bcf1d61d38c29f0aef2b7452",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -7080,8 +7080,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_practice.sql": {
-    "mtime": 1788332213.9205658,
-    "ast_hash": "add77b0fbd3aabd46f53dc00674b327e",
+    "mtime": 1788335781.592912,
+    "ast_hash": "a9df8db8851d570bdc568cb37c15b06a",
     "semantic_hash": ""
   },
   "supabase/tests/feedback.sql": {
@@ -7147,6 +7147,11 @@
   "supabase/tests/cash_is_not_credit.sql": {
     "mtime": 1788335394.366211,
     "ast_hash": "a9c2fc6ca9e0fd954492db387bb0cd2c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0468_the_practice_has_a_name_of_its_own.sql": {
+    "mtime": 1788335803.4166882,
+    "ast_hash": "7361b61f34b368fe8bae957db9c1e6cb",
     "semantic_hash": ""
   }
 }

@@ -1267,10 +1267,10 @@ accounting or company secretarial firm holds *other people's* books, and
 already exists:
 
 ```
-select app.demo_practice_rebuild('kabeer@kabeer.my');
+select app.demo_practice_rebuild('geswant@geswant.com');
 ```
 
-It makes the firm **Kabeer & Co**, puts the real account in it as a
+It makes the firm **Geswant & Co.**, puts the real account in it as a
 partner, and builds four demo companies into its portfolio — the
 practice's own books (with the statutory registers of three client
 companies on them) and those same three companies as tenants of their
@@ -1290,9 +1290,12 @@ Three things to know before running it:
   removes every company marked demo, and these are marked demo so that
   they can be removed at all.
 - **It only tears down its own.** A second run replaces the four
-  companies attached to that firm and the `@kabeer.demo` logins it made,
+  companies attached to that firm and the `@geswant.demo` logins it made,
   and touches nothing else — including a company the practice keeps that
   is *not* flagged demo, which it refuses to delete and says so.
+
+A practice built under the earlier name is renamed rather than joined by
+a second firm; see `0468`.
 
 See `0463`, and `supabase/tests/demo_practice.sql` for what is asserted.
 

@@ -54,12 +54,14 @@ begin
   -- ------------------------------------------------------------------
   -- The practice
   -- ------------------------------------------------------------------
-  v_who := pg_temp.another_user('kabeer@kabeer.test');
-  v_report := app.demo_practice_rebuild('kabeer@kabeer.test');
+  v_who := pg_temp.another_user('geswant@geswant.test');
+  v_report := app.demo_practice_rebuild('geswant@geswant.test');
   raise notice 'practice said: %', v_report;
 
-  select id into v_firm from public.firms where slug like 'kabeer-co%';
+  select id into v_firm from public.firms where slug like 'geswant%';
   perform pg_temp.check_true('the firm exists', v_firm is not null);
+  perform pg_temp.check_eq('and it is the practice by name',
+    (select name from public.firms where id = v_firm), 'Geswant & Co.');
 
   perform pg_temp.check_eq('and the real person is a partner in it',
     (select role::text from public.firm_members
@@ -137,7 +139,7 @@ declare
   v_other   uuid;
   v_stray   uuid;
 begin
-  select id into v_firm from public.firms where slug like 'kabeer-co%';
+  select id into v_firm from public.firms where slug like 'geswant%';
 
   -- A demo tenant standing outside this firm, made here rather than
   -- assumed: counting what happens to be lying around is how an
@@ -160,29 +162,85 @@ begin
    where is_demo and firm_id is distinct from v_firm;
   select count(*)::integer into v_logins from auth.users
    where raw_app_meta_data ->> 'demo' = 'true'
-     and email not like '%@kabeer.demo';
+     and email not like '%@geswant.demo';
   perform pg_temp.check_eq('there is something outside the firm to protect',
     v_others, 1);
 
-  perform app.demo_practice_rebuild('kabeer@kabeer.test');
+  perform app.demo_practice_rebuild('geswant@geswant.test');
 
   perform pg_temp.check_eq('a second run leaves four companies, not eight',
     (select count(*)::integer from public.organizations
       where firm_id = v_firm), 4);
   perform pg_temp.check_eq('and one firm, not two',
     (select count(*)::integer from public.firms
-      where slug like 'kabeer-co%'), 1);
+      where slug like 'geswant%'), 1);
   perform pg_temp.check_eq('the other demo tenants are where they were',
     (select count(*)::integer from public.organizations
       where is_demo and firm_id is distinct from v_firm), v_others);
   perform pg_temp.check_eq('and so are their logins',
     (select count(*)::integer from auth.users
       where raw_app_meta_data ->> 'demo' = 'true'
-        and email not like '%@kabeer.demo'), v_logins);
+        and email not like '%@geswant.demo'), v_logins);
   perform pg_temp.check_true(
     'including a demo login that belongs to nothing, which is not this '
     'function''s to sweep',
     exists (select 1 from auth.users where id = v_stray));
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- A practice that was already built under the old name
+-- ---------------------------------------------------------------------
+--
+-- 0463 named this Kabeer & Co, and `create_firm` derived the slug
+-- `kabeer-co` from it. Anywhere the practice has already been built,
+-- 0468 has to rename that firm rather than stand a second one beside
+-- it — two firms, one portfolio moving between them depending on which
+-- somebody opens.
+do $$
+declare
+  v_who  uuid;
+  v_old  uuid;
+  v_firm uuid;
+begin
+  v_who := pg_temp.another_user('older@geswant.test');
+  perform pg_temp.sign_in_as(v_who);
+
+  -- The firm exactly as 0463 would have left it.
+  v_old := public.create_firm('Kabeer & Co', 'AF 002026',
+                              'older@geswant.test', '03-2181 4500');
+  perform pg_temp.check_eq('the old firm has the old slug',
+    (select slug from public.firms where id = v_old), 'kabeer-co');
+
+  perform app.demo_practice_rebuild('older@geswant.test');
+
+  -- The count first, deliberately. Losing the old slug from the lookup
+  -- and losing the rename are two different mistakes with two different
+  -- consequences — a second firm, and a firm still called the old
+  -- thing — and asserting the name first would have both mutants dying
+  -- on the same line, which tells you less than it looks like it does.
+  perform pg_temp.check_eq('there is still one firm, not two',
+    (select count(*)::integer from public.firms f
+       join public.firm_members m on m.firm_id = f.id
+      where m.user_id = v_who), 1);
+  perform pg_temp.check_eq('and the practice built under the old name is renamed',
+    (select name from public.firms where id = v_old), 'Geswant & Co.');
+  perform pg_temp.check_eq('with the whole portfolio on it',
+    (select count(*)::integer from public.organizations
+      where firm_id = v_old), 4);
+
+  -- The slug is left alone on purpose: nothing shows it, and changing
+  -- it would strand the lookup that has to find this firm next time.
+  perform pg_temp.check_eq('and the slug it is found by is untouched',
+    (select slug from public.firms where id = v_old), 'kabeer-co');
+
+  select id into v_firm from public.firms where id = v_old;
+  perform pg_temp.check_true('so a second run finds it again',
+    app.demo_practice_rebuild('older@geswant.test') is not null);
+  perform pg_temp.check_eq('and still does not make another',
+    (select count(*)::integer from public.firms f
+       join public.firm_members m on m.firm_id = f.id
+      where m.user_id = v_who), 1);
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -208,7 +266,7 @@ begin
   -- The firm itself stays. It belongs to a real person, and a teardown
   -- of demo data is not the place to close somebody's practice.
   perform pg_temp.check_eq('but the practice itself is still there',
-    (select count(*)::integer from public.firms where slug like 'kabeer-co%'),
+    (select count(*)::integer from public.firms where slug like 'geswant%'),
     1);
 end $$;
 
@@ -224,8 +282,8 @@ declare
   v_msg  text;
   v_took boolean;
 begin
-  v_who := pg_temp.another_user('kabeer2@kabeer.test');
-  perform app.demo_practice_rebuild('kabeer2@kabeer.test');
+  v_who := pg_temp.another_user('geswant2@geswant.test');
+  perform app.demo_practice_rebuild('geswant2@geswant.test');
   select f.id into v_firm from public.firms f
     join public.firm_members m on m.firm_id = f.id
    where m.user_id = v_who;
@@ -240,7 +298,7 @@ begin
   values (v_org, v_out, 'admin', 'active', now());
 
   begin
-    perform app.demo_practice_rebuild('kabeer2@kabeer.test');
+    perform app.demo_practice_rebuild('geswant2@geswant.test');
     v_took := true;
   exception when sqlstate '42501' then
     get stacked diagnostics v_msg = message_text;
