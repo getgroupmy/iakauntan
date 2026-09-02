@@ -58,8 +58,9 @@ begin
   -- its three client companies. 0485 builds them in the same call,
   -- because the teardown at the top of this function takes every
   -- `is_demo` company and used to leave those four deleted.
-  perform pg_temp.check_eq('eleven demo companies', v_orgs, 11);
-  perform pg_temp.check_eq('fourteen demo logins', v_users, 14);
+  -- Eleven, plus the shop and the factory 0487 added.
+  perform pg_temp.check_eq('thirteen demo companies', v_orgs, 13);
+  perform pg_temp.check_eq('sixteen demo logins', v_users, 16);
 
   -- The office holds two people. `invite_firm_member` was broken from
   -- 0450 to 0483, so until then it could only ever hold one.
@@ -1303,7 +1304,10 @@ begin
       'Accountant & Co. -> einvoice',
       'Bayu Digital Sdn Bhd -> einvoice',
       'Kilang Lestari Sdn Bhd -> einvoice',
-      'Pinang Holdings Berhad -> einvoice'];
+      'Pinang Holdings Berhad -> einvoice',
+      -- 0487's two, for the same reason as every line above.
+      'Kedai Serbaneka Mutiara Sdn Bhd -> einvoice',
+      'Kilang Perabot Meranti Sdn Bhd -> einvoice'];
       -- Nothing else. Every line left is an `einvoice` line above, and
       -- every one of those is deliberate.
   begin

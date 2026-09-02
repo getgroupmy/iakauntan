@@ -103,6 +103,18 @@ const demoAccounts = <DemoAccount>[
     icon: Icons.domain_outlined,
   ),
   DemoAccount(
+    email: 'accountant@iakauntan.com',
+    role: 'Accounting firm',
+    sees: 'One practice holding four companies, switched between',
+    icon: Icons.account_balance_outlined,
+  ),
+  DemoAccount(
+    email: 'legal@iakauntan.com',
+    role: 'Law firm',
+    sees: 'Matters, client account money kept apart, and billed hours',
+    icon: Icons.gavel_outlined,
+  ),
+  DemoAccount(
     email: 'property@iakauntan.com',
     role: 'Property manager',
     sees: 'A strata scheme and a commercial block, with their charges',
@@ -119,6 +131,18 @@ const demoAccounts = <DemoAccount>[
     role: 'Salon owner',
     sees: 'A day of appointments, two chairs, and a monthly package',
     icon: Icons.content_cut_outlined,
+  ),
+  DemoAccount(
+    email: 'kedai@iakauntan.com',
+    role: 'Shopkeeper',
+    sees: 'A minimarket: scanned barcodes, a shift, and a shelf running out',
+    icon: Icons.storefront_outlined,
+  ),
+  DemoAccount(
+    email: 'kilang@iakauntan.com',
+    role: 'Factory owner',
+    sees: 'A furniture floor — materials, a routing, and work in progress',
+    icon: Icons.precision_manufacturing_outlined,
   ),
   DemoAccount(
     email: 'stall@iakauntan.com',

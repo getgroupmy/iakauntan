@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788367237.1685417,
-    "ast_hash": "6d20475f090ec6b7bc078d8bcacf7e37",
+    "mtime": 1788369793.3720443,
+    "ast_hash": "404f9c83adbac70a10266c29a098f6c6",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1125,13 +1125,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/demo_accounts.dart": {
-    "mtime": 1787822945.4905899,
-    "ast_hash": "874567048124d68590ca3ddc4352e162",
+    "mtime": 1788369930.0707812,
+    "ast_hash": "63a7590fe4a30f1f823acc801c456320",
     "semantic_hash": ""
   },
   "app/test/demo_accounts_test.dart": {
-    "mtime": 1787127360.4447086,
-    "ast_hash": "052ea03bf57b8aca69368da27db8750f",
+    "mtime": 1788369930.071078,
+    "ast_hash": "8963f69be1339b2b5097aec166418935",
     "semantic_hash": ""
   },
   "supabase/migrations/0076_lock_demo_credentials.sql": {
@@ -3035,8 +3035,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_rebuild.sql": {
-    "mtime": 1788365910.4327736,
-    "ast_hash": "35fe13dc6eb3c67c8ebc154c6684e3b3",
+    "mtime": 1788369700.2672613,
+    "ast_hash": "ec9017d6fb642fc9b035106e49224af4",
     "semantic_hash": ""
   },
   "supabase/tests/demo_teardown.sql": {
@@ -7402,6 +7402,16 @@
   "supabase/tests/multi_company.sql": {
     "mtime": 1788367164.3402894,
     "ast_hash": "eea05267ac343ffe3ce857e660a3ceff",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0487_a_shop_counter_and_a_factory_floor.sql": {
+    "mtime": 1788369793.3667216,
+    "ast_hash": "e08e90d473286b1cafd0b56c9790ff9d",
+    "semantic_hash": ""
+  },
+  "supabase/tests/demo_shop_and_factory.sql": {
+    "mtime": 1788369757.2620084,
+    "ast_hash": "362a5ad47ae6df02407a210e7980a828",
     "semantic_hash": ""
   }
 }
