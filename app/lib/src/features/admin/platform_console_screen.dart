@@ -13,6 +13,7 @@ import 'landing_cms.dart';
 import 'modules_admin.dart';
 import 'ocr_catalog_admin.dart';
 import 'payment_gateways_admin.dart';
+import 'feedback_admin.dart';
 import 'platform_trail_admin.dart';
 import 'reservations_admin.dart';
 import 'site_pages_admin.dart';
@@ -100,6 +101,15 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/rates',
     primary: false,
     page: StatutoryRatesAdminTab(),
+  ),
+  (
+    group: 'Service',
+    label: 'What people told us',
+    icon: Icons.bug_report_outlined,
+    selectedIcon: Icons.bug_report,
+    path: '/admin/feedback',
+    primary: false,
+    page: FeedbackAdminTab(),
   ),
   (
     group: 'Service',

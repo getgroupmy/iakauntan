@@ -914,6 +914,24 @@ final firmTrailProvider = FutureProvider.autoDispose
     });
 
 // ---------------------------------------------------------------------
+// Telling us it is broken
+// ---------------------------------------------------------------------
+
+/// What this person has reported, plus what was reported from inside
+/// their company if they administer it.
+final myFeedbackProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).myFeedback();
+    });
+
+/// Every company's reports. Platform staff only; the server refuses
+/// anybody else outright rather than handing back an empty list.
+final platformFeedbackProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>((ref, status) {
+      return ref.watch(platformRepoProvider).feedback(status: status);
+    });
+
+// ---------------------------------------------------------------------
 // Statutory remittances
 // ---------------------------------------------------------------------
 

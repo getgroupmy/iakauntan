@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/feedback/feedback_screen.dart';
 import '../features/firms/practice_screen.dart';
 import '../features/auth/reset_password_screen.dart';
 import '../features/auth/sign_in_screen.dart';
@@ -585,6 +586,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
           GoRoute(path: '/team', builder: (_, __) => const TeamScreen()),
+          GoRoute(
+            path: '/feedback',
+            builder: (_, __) => const FeedbackScreen(),
+          ),
           GoRoute(
             path: '/practice',
             builder: (_, __) => const PracticeScreen(),

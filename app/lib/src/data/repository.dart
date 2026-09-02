@@ -338,6 +338,40 @@ class Repo {
   }
 
   // ------------------------------------------------------------------
+  // Telling us it is broken
+  //
+  // Not org-scoped in the entitlement sense: reporting a fault is not
+  // a feature a company buys, so `report_feedback` takes the company
+  // only to say where the person was standing. See 0460.
+  // ------------------------------------------------------------------
+
+  Future<String> reportFeedback({
+    required String title,
+    String kind = 'bug',
+    String? body,
+    String? screen,
+    String? appVersion,
+    int? severity,
+  }) async {
+    final data = await callRpc(
+      'report_feedback',
+      params: {
+        'p_title': title,
+        'p_kind': kind,
+        'p_body': body,
+        'p_screen': screen,
+        'p_app_version': appVersion,
+        'p_severity': severity,
+        'p_org_id': orgId,
+      },
+    );
+    return data as String;
+  }
+
+  Future<List<Map<String, dynamic>>> myFeedback() async =>
+      _rows(await callRpc('my_feedback', params: {'p_org_id': orgId}));
+
+  // ------------------------------------------------------------------
   // The chart of accounts
   //
   // The policies have allowed this since the schema was laid down. What
@@ -3899,6 +3933,21 @@ class PlatformRepo {
     final data = await client.from('platform_settings').select().order('key');
     return Repo._rows(data);
   }
+
+  /// Every company's reports, faults first and worst first. See 0460.
+  Future<List<Map<String, dynamic>>> feedback({String? status}) async =>
+      Repo._rows(
+        await client.rpc(
+          'platform_feedback',
+          params: {'p_status': status, 'p_limit': 300},
+        ),
+      );
+
+  Future<void> setFeedbackStatus(String id, String status, {String? note}) =>
+      client.rpc(
+        'set_feedback_status',
+        params: {'p_id': id, 'p_status': status, 'p_note': note},
+      );
 
   Future<void> updateSetting(String key, Map<String, dynamic> value) => client
       .rpc('platform_update_setting', params: {'p_key': key, 'p_value': value});

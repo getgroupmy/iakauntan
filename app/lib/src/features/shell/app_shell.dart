@@ -763,6 +763,15 @@ final _destinations = <_Dest>[
     module: 'mailbox',
   ),
   _Dest('Settings', Icons.settings_outlined, Icons.settings, '/settings'),
+  // No module, and last: reporting a fault is not a feature a company
+  // buys, and a company that has stopped paying for one is exactly the
+  // company most likely to want to say why.
+  _Dest(
+    'Report a problem',
+    Icons.bug_report_outlined,
+    Icons.bug_report,
+    '/feedback',
+  ),
   // The platform console, one destination per section. Everything a
   // platform operator does lives in this menu rather than in a second
   // one drawn inside the console — there is one side menu in this app

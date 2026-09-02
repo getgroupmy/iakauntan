@@ -254,6 +254,7 @@ jobs:
                    supabase/tests/statutory_remittances.sql \
                    supabase/tests/general_ledger.sql \
                    supabase/tests/chart_of_accounts.sql \
+                   supabase/tests/feedback.sql \
                    supabase/tests/bucket_survives_a_bad_path.sql \
                    supabase/tests/app_writers_are_not_a_client_surface.sql \
                    supabase/tests/revenue_recognition.sql \
