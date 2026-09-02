@@ -267,6 +267,76 @@ ReportSpec trialBalanceSpec(List<Map<String, dynamic>> rows) {
   );
 }
 
+/// The general ledger: one table per account, balance brought forward at
+/// the top and carried down every line.
+///
+/// Grouped rather than flat because a ledger is read one account at a
+/// time — a single table of every line in code order is the journals
+/// screen sorted differently, and the balance column would be
+/// meaningless across the joins between accounts.
+///
+/// The rows arrive in the order the running balance was computed in, so
+/// this does not sort them. Re-sorting here would print balances that
+/// do not follow from the lines above them.
+ReportSpec generalLedgerSpec(
+  List<Map<String, dynamic>> rows,
+  DateTimeRange range,
+) {
+  final byAccount = <String, List<Map<String, dynamic>>>{};
+  for (final r in rows) {
+    byAccount.putIfAbsent('${r['code']} ${r['name']}', () => []).add(r);
+  }
+
+  return ReportSpec(
+    title: 'General Ledger',
+    subtitle: '${Fmt.date(range.start)} to ${Fmt.date(range.end)}',
+    landscape: true,
+    blocks: [
+      for (final entry in byAccount.entries)
+        ReportGrid(
+          title: entry.key,
+          headers: const [
+            'Date',
+            'Entry',
+            'Description',
+            'Contact',
+            'Debit',
+            'Credit',
+            'Balance',
+          ],
+          rows: [
+            for (final r in entry.value)
+              [
+                TextCell(
+                  r['is_opening'] == true
+                      ? ''
+                      : Fmt.date(DateTime.tryParse('${r['entry_date']}')),
+                ),
+                TextCell(r['entry_no']?.toString() ?? ''),
+                TextCell(r['description']?.toString() ?? ''),
+                TextCell(r['contact_name']?.toString() ?? ''),
+                MoneyCell(Fmt.toDouble(r['debit'])),
+                MoneyCell(Fmt.toDouble(r['credit'])),
+                MoneyCell(Fmt.toDouble(r['balance']), signed: true),
+              ],
+          ],
+          // The closing balance is the last row's running balance, not a
+          // sum of the column: summing a running balance would produce a
+          // number that means nothing.
+          total: [
+            const TextCell(''),
+            const TextCell(''),
+            const TextCell('Carried down'),
+            const TextCell(''),
+            const TextCell(''),
+            const TextCell(''),
+            MoneyCell(Fmt.toDouble(entry.value.last['balance']), signed: true),
+          ],
+        ),
+    ],
+  );
+}
+
 /// The statement of cash flows, indirect method.
 ///
 /// The reconciliation at the foot is the point of the whole thing: the

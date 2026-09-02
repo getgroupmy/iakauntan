@@ -337,6 +337,28 @@ class Repo {
     return _rows(data);
   }
 
+  /// The ledger by account: balance brought forward, every posted line,
+  /// balance carried down. What the trial balance is made of.
+  ///
+  /// [accountId] narrows it to one account, which is what the question
+  /// almost always is — a year of a busy company is tens of thousands
+  /// of lines.
+  Future<List<Map<String, dynamic>>> generalLedger({
+    DateTime? from,
+    required DateTime to,
+    String? accountId,
+  }) async => _rows(
+    await callRpc(
+      'report_general_ledger',
+      params: {
+        'p_org_id': orgId,
+        'p_from': from == null ? null : Fmt.iso(from),
+        'p_to': Fmt.iso(to),
+        'p_account_id': accountId,
+      },
+    ),
+  );
+
   Future<List<Map<String, dynamic>>> sstSummary({
     required DateTime from,
     required DateTime to,

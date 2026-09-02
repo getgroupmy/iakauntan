@@ -40,10 +40,16 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
   /// unreachable.
   String? _department;
 
+  /// The account the general ledger is narrowed to, or null for every
+  /// account that moved. Only the ledger takes it, and only the ledger
+  /// shows the chooser: a year of a busy company is tens of thousands
+  /// of lines, and the question is almost always about one account.
+  String? _account;
+
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 9, vsync: this);
+    _tabs = TabController(length: 10, vsync: this);
     // The download button belongs to whichever report is on screen, so
     // it has to rebuild when the tab changes.
     _tabs.addListener(() => setState(() {}));
@@ -84,6 +90,34 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
             DropdownMenuItem(value: code, child: Text(code)),
         ],
         onChanged: onChanged,
+      ),
+    );
+  }
+
+  /// Which account the ledger is showing.
+  ///
+  /// Every account in the chart, not only the ones that have moved:
+  /// "why is there nothing in 6300" is a question somebody asks, and a
+  /// chooser that hides empty accounts cannot answer it.
+  Widget _accountFilter() {
+    final accounts = ref.watch(accountsProvider).valueOrNull ?? const [];
+    if (accounts.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: DropdownButton<String?>(
+        value: _account,
+        hint: const Text('All accounts'),
+        underline: const SizedBox.shrink(),
+        items: [
+          const DropdownMenuItem(value: null, child: Text('All accounts')),
+          for (final a in accounts.where((a) => !a.isGroup))
+            DropdownMenuItem(
+              value: a.id,
+              child: Text('${a.code} ${a.name}'),
+            ),
+        ],
+        onChanged: (v) => setState(() => _account = v),
       ),
     );
   }
@@ -263,6 +297,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               onChanged: (v) => setState(() => _department = v),
             ),
           ],
+          if (_tabs.index == 3) _accountFilter(),
           Padding(
             padding: const EdgeInsets.only(right: 12, left: 4),
             child: OutlinedButton.icon(
@@ -290,6 +325,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
             Tab(text: 'Profit & Loss'),
             Tab(text: 'Balance Sheet'),
             Tab(text: 'Trial Balance'),
+            Tab(text: 'General Ledger'),
             Tab(text: 'Aged Receivables'),
             Tab(text: 'Aged Payables'),
             Tab(text: 'Cash Flows'),
@@ -332,6 +368,24 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
               icon: Icons.table_chart_outlined,
               title: 'No ledger activity',
               message: 'The trial balance fills in as you post documents.',
+            ),
+          ),
+          // Straight after the trial balance, because it is what the
+          // trial balance is made of and that is the order somebody
+          // reads them in: the total first, then the lines behind it.
+          _Report(
+            provider: _generalLedgerProvider((
+              range: _range,
+              account: _account,
+            )),
+            spec: (rows) => generalLedgerSpec(rows, _range),
+            wide: true,
+            empty: const EmptyState(
+              icon: Icons.menu_book_outlined,
+              title: 'No ledger activity',
+              message:
+                  'Post a document or a journal and every account it '
+                  'touched appears here, with the balance carried down.',
             ),
           ),
           _Report(
@@ -703,6 +757,23 @@ final _dimensionsProvider =
 final _balanceSheetProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, DateTime>((ref, asAt) {
       return requireRepo(ref).balanceSheet(asAt: asAt);
+    });
+
+/// The ledger, for the chosen range and optionally one account.
+///
+/// A record rather than two families because both have to change
+/// together: asking for last year's dates against this year's chosen
+/// account would be two requests and one confusing answer.
+final _generalLedgerProvider = FutureProvider.autoDispose
+    .family<
+      List<Map<String, dynamic>>,
+      ({DateTimeRange range, String? account})
+    >((ref, args) {
+      return requireRepo(ref).generalLedger(
+        from: args.range.start,
+        to: args.range.end,
+        accountId: args.account,
+      );
     });
 
 final _sstProvider = FutureProvider.autoDispose

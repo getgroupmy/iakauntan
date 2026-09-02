@@ -252,6 +252,7 @@ jobs:
                    supabase/tests/sst_taxable_period.sql \
                    supabase/tests/service_tax_on_payment.sql \
                    supabase/tests/statutory_remittances.sql \
+                   supabase/tests/general_ledger.sql \
                    supabase/tests/bucket_survives_a_bad_path.sql \
                    supabase/tests/app_writers_are_not_a_client_surface.sql \
                    supabase/tests/revenue_recognition.sql \
