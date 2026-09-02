@@ -83,6 +83,7 @@ class _EntryTile extends StatelessWidget {
     'org_members': 'Team member',
     'org_modules': 'Module',
     'organizations': 'Company',
+    'number_sequences': 'Document numbering',
   };
 
   Color _colour(BuildContext context) => switch (entry.action) {

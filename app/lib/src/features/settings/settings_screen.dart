@@ -17,6 +17,7 @@ import 'addresses_card.dart';
 import 'claim_approval_card.dart';
 import 'branches_card.dart';
 import 'chart_of_accounts_card.dart';
+import 'document_numbering_card.dart';
 import 'chat_card.dart';
 import 'company_card.dart';
 import 'company_group_card.dart';
@@ -103,6 +104,8 @@ class SettingsScreen extends ConsumerWidget {
                     _ModulesCard(canAdmin: isAdmin),
                     const SizedBox(height: 16),
                     _FiscalYearsCard(canAdmin: isAdmin),
+                    const SizedBox(height: 16),
+                    const DocumentNumberingCard(),
                     const SizedBox(height: 16),
                     _CreditControlCard(org: organization, canAdmin: isAdmin),
                     const SizedBox(height: 16),

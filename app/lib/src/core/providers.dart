@@ -468,6 +468,14 @@ final warehousesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).warehouses();
 });
 
+/// What the next invoice, bill, journal and so on will be called: every
+/// series of the modules the company has, as it is set. Read from the
+/// server, which composes the sample the way the draw does.
+final documentNumberingProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).documentNumbering();
+    });
+
 final stockOnHandProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String?>((ref, warehouseId) {
       return requireRepo(ref).stockOnHand(warehouseId: warehouseId);

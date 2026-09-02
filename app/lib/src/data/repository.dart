@@ -2396,6 +2396,47 @@ class Repo {
     return data as String;
   }
 
+  /// Every series of the modules the company has, as it is set --
+  /// prefix, suffix, padding, reset policy, next number, last issued --
+  /// with a `sample` of what the next draw will return. Composed by the
+  /// server the way the draw composes it, and draws nothing: a settings
+  /// screen opened twice numbers nothing twice.
+  Future<List<Map<String, dynamic>>> documentNumbering() async {
+    final data = await callRpc(
+      'document_numbering',
+      params: {'p_org_id': orgId},
+    );
+    return _rows(data);
+  }
+
+  /// Set a series. Admin only. Returns the sample of the next number.
+  ///
+  /// The server refuses a next number below the last one issued while
+  /// the prefix, suffix and reset policy stay the same -- those numbers
+  /// are on documents already -- and says which number that was.
+  Future<String> setDocumentNumbering({
+    required String docType,
+    required String prefix,
+    required String suffix,
+    required int padding,
+    required String resetPolicy,
+    required int nextValue,
+  }) async {
+    final sample = await callRpc(
+      'set_document_numbering',
+      params: {
+        'p_org_id': orgId,
+        'p_doc_type': docType,
+        'p_prefix': prefix,
+        'p_suffix': suffix,
+        'p_padding': padding,
+        'p_reset_policy': resetPolicy,
+        'p_next_value': nextValue,
+      },
+    );
+    return sample as String;
+  }
+
   /// Creates or replaces a document and its lines. Lines are deleted and
   /// re-inserted so the header totals are recomputed by the database
   /// triggers rather than trusted from the client.

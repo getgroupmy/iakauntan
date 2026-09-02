@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788353194.2031345,
-    "ast_hash": "0f374d4be7fdf97681bdd6243f4d7878",
+    "mtime": 1788358727.0052679,
+    "ast_hash": "5aeb7235100ee8fc2efbdaad78ddab9e",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788355947.6998358,
-    "ast_hash": "baafa17c3570223f206dc509e1b5dfbf",
+    "mtime": 1788358727.0043035,
+    "ast_hash": "d8e424dba2f98e1099102c9677cc3211",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1788325733.6776545,
-    "ast_hash": "dd6dc072acdbd28e6852e8453eb21195",
+    "mtime": 1788358972.7219512,
+    "ast_hash": "e748f0b966b1ba39c31a57b1a46c2c54",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -305,9 +305,9 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
-    "mtime": 1786785756.626488,
-    "ast_hash": "98cb2370b61e1252dca2af748bd8dfdd",
-    "semantic_hash": "98cb2370b61e1252dca2af748bd8dfdd"
+    "mtime": 1788358972.722258,
+    "ast_hash": "f6b408b0fa4ec5ea15c22aed4ddadaae",
+    "semantic_hash": ""
   },
   "app/lib/src/features/team/team_screen.dart": {
     "mtime": 1788320721.2137742,
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788356767.060373,
-    "ast_hash": "f7ed6ccb73fac7fb2ed37221b8eac2db",
+    "mtime": 1788358671.5727804,
+    "ast_hash": "aaa0fedfdbf4c8a64230b489c49ee54e",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7307,6 +7307,26 @@
   "supabase/tests/contact_import_codes.sql": {
     "mtime": 1788356757.140106,
     "ast_hash": "3cc4e82d02a09b367ab362d44d7d3e4e",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/settings/document_numbering_card.dart": {
+    "mtime": 1788359005.2040174,
+    "ast_hash": "fd93baa16a5a5453db5efe7880f6fff4",
+    "semantic_hash": ""
+  },
+  "app/test/document_numbering_test.dart": {
+    "mtime": 1788359052.0908601,
+    "ast_hash": "3da7e9d9e04f50f1fd20780e004daad3",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0480_what_the_next_invoice_is_called.sql": {
+    "mtime": 1788359211.1716676,
+    "ast_hash": "9c22def2edd7749f2b2a1d3e16ade85a",
+    "semantic_hash": ""
+  },
+  "supabase/tests/document_numbering.sql": {
+    "mtime": 1788359223.9694042,
+    "ast_hash": "82848f7c351818ea1fc20b8fadcc8285",
     "semantic_hash": ""
   }
 }
