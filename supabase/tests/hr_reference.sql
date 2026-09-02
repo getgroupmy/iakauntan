@@ -111,6 +111,63 @@ begin
       (select lt from public.leave_types lt where lt.id = v_type),
       date '2010-03-01', 2026), 16);
 
+  -- ------------------------------------------------------------------
+  -- Which day of the year somebody was hired on
+  --
+  -- Every assertion above hires on 1 March. That is one position in the
+  -- year, and a function whose answer depends on where in the year you
+  -- stand cannot be tested from one position -- which is the lesson
+  -- 0446 paid for in the payroll engine, where a bonus was annualised
+  -- and every fixture paid in a single month.
+  --
+  -- `app.leave_entitlement` measures service as `p_year - year(hire)`.
+  -- That counts **New Year's Eves crossed**, not months served, so the
+  -- day of the year matters and these two employees are treated alike
+  -- while their service differs by almost a year:
+  --
+  --   * hired 1 January 2024 -- 24 months of service on 1 January 2026;
+  --   * hired 31 December 2024 -- 12 months and a day on the same date.
+  --
+  -- Both are given 12 days for 2026. Under s.60E(1) the twelve-day band
+  -- is for somebody "employed for a period of two years or more", and
+  -- the second employee is not, at the start of that leave year. They
+  -- are by the end of it, which is the reading under which the present
+  -- answer is right.
+  --
+  -- **This file does not decide which reading is correct**, because the
+  -- Act measures entitlement against twelve months of continuous
+  -- service rather than a calendar year, and choosing between the
+  -- start-of-year and end-of-year conventions is a decision about
+  -- somebody's leave, not an arithmetic slip to be quietly corrected.
+  -- What it does is pin the convention in force so it cannot drift
+  -- without a person seeing it, and name the question in the place
+  -- somebody looking at leave will find it. docs/unreachable.md carries
+  -- the measurement.
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq(
+    'hired on the last day of a year counts that year as served',
+    app.leave_entitlement(
+      (select lt from public.leave_types lt where lt.id = v_type),
+      date '2024-12-31', 2026), 12);
+
+  perform pg_temp.check_eq(
+    'and the first day of the same year gives the same answer',
+    app.leave_entitlement(
+      (select lt from public.leave_types lt where lt.id = v_type),
+      date '2024-01-01', 2026), 12);
+
+  -- The boundary the difference actually reaches: one of these has
+  -- served five years and a day at the start of 2030 and the other four
+  -- years and a day, and both are given sixteen.
+  perform pg_temp.check_eq('five New Years crossed reads as five years',
+    app.leave_entitlement(
+      (select lt from public.leave_types lt where lt.id = v_type),
+      date '2025-12-31', 2030), 16);
+  perform pg_temp.check_eq('however early in that year the hire was',
+    app.leave_entitlement(
+      (select lt from public.leave_types lt where lt.id = v_type),
+      date '2025-01-01', 2030), 16);
+
   -- Applying the other preset replaces the bands rather than adding to
   -- them: a table with one row from the Act and two from somewhere else
   -- is worse than either.

@@ -5668,3 +5668,58 @@ company would have stopped being annualised the day it applied. The
 assertion added for it is one line. A new column with a default is a
 claim about every existing row, and it deserves an assertion of its
 own.
+
+## The same blind spot, one module over: which day of the year
+
+0446 was invisible because every payroll fixture paid in a single
+month. The obvious next question is where else a figure depends on
+*where in a cycle you stand* while the assertions only ever stand in one
+place. Three candidates were measured and two came back clean.
+
+**Revenue recognition and depreciation are not this shape.**
+`revenue_recognition.sql` asserts intermediate periods explicitly — "the
+first month earns only its twelve days", "three months have reached
+revenue", "nothing later was touched". `depreciation_schedule.sql` does
+the same — "six months of van were charged", "the first charge is three
+months, the second is the three to disposal", "each opens where the last
+one closed". `fx_revaluation.sql` measures April from the booked rate
+rather than only the closing position. All three spread an amount across
+periods; all three check the periods.
+
+**`app.leave_entitlement` is.** Every band assertion in
+`hr_reference.sql` hired on 1 March. The function measures service as
+`p_year - extract(year from hire_date)`, which counts New Year's Eves
+crossed rather than months served, so the day of the year decides the
+answer and one position cannot see it. Measured:
+
+| Hired | Leave year | Service at 1 January of it | Days given |
+|---|---|---|---|
+| 2024-01-01 | 2026 | 24 months | 12 |
+| 2024-12-31 | 2026 | 12 months and a day | 12 |
+| 2025-01-01 | 2030 | 5 years | 16 |
+| 2025-12-31 | 2030 | 4 years and a day | 16 |
+
+### Why this is recorded rather than fixed
+
+Because it is not clearly a mistake, and saying so is the point.
+
+s.60E(1) sets the twelve-day band for an employee "employed for a period
+of two years or more". The 31 December 2024 hire is not, on 1 January
+2026 — and is, by 31 December 2026. The present answer is right under
+the end-of-year reading and wrong under the start-of-year one, and the
+Act itself measures entitlement against *twelve months of continuous
+service* rather than against a calendar year at all, which is a third
+frame the schema cannot express because the function only receives a
+year.
+
+Changing it would reduce somebody's leave. That is a decision about a
+statutory entitlement, and this project has declined to invent rules of
+that class before — the rounding method that would apply to every sales
+document, rent and strata. Declining consistently is the rule.
+
+So the convention in force is now pinned by four assertions that vary
+the day within the year, with the question named beside them, and the
+measurement is here. What was actually wrong — that nothing tested more
+than one position in the cycle — is fixed. What needs a person's
+decision is visible to the next person who looks at leave, instead of
+being a subtraction nobody had read closely.
