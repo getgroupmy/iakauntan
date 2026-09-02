@@ -299,4 +299,55 @@ begin
     v_src ~ 'select id, ''attachments'' from public.organizations');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A company's own paperwork, filed against its own invoice
+--
+-- Attachments were offered on purchase documents only, on the reasoning
+-- that a bill is evidence somebody else produced where an invoice is
+-- evidence this company produced and already holds. True of an invoice
+-- raised here; false of the case people actually have — a company
+-- moving onto this system types last year's invoices in, and the PDF it
+-- issued at the time is the only record of what it looked like.
+--
+-- The permission was always there. These assert it, so a later
+-- narrowing of `can_attach_to` cannot quietly take the screen's
+-- capability away again.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid;
+  v_doc  uuid;
+  v_cust uuid;
+  v_emp  uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Kertas Jualan Sdn Bhd');
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C1', 'Pelanggan', 'customer') returning id into v_cust;
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-OLD-1', app.today(), v_cust, 'MYR', 1,
+          'posted')
+  returning id into v_doc;
+
+  perform pg_temp.check_true(
+    'a sales invoice can carry the paper it was issued on',
+    app.can_attach_to(v_org, 'sales_documents', v_doc));
+  perform pg_temp.check_true('and whoever keeps the books can read it',
+    app.can_read_attachment(v_org, 'sales_documents', v_doc));
+
+  -- The same rule as everything else on a sales document: somebody with
+  -- no write permission does not get to file paper against the
+  -- company's own invoices.
+  v_emp := pg_temp.another_user('emp-invoice@iakauntan.test');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_emp, 'employee', 'active', now());
+  perform pg_temp.sign_in_as(v_emp);
+  perform pg_temp.check_true('but an employee does not',
+    not app.can_attach_to(v_org, 'sales_documents', v_doc));
+end $$;
+
 rollback;

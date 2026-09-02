@@ -281,7 +281,16 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// printed figure is a posted amount that does not match the return.
   void _applyScan(OcrExtraction read) {
     setState(() {
-      if (read.documentNo != null) _supplierDocNo.text = read.documentNo!;
+      // The number goes in `supplier_doc_no`, which is the supplier's
+      // own number and exists on a purchase document only. A sales
+      // document's number is this company's own sequence, generated
+      // here and never typed — and the paper being scanned into one is
+      // this company's own paper, so there is no other number on it to
+      // keep. What the scan is worth on an invoice is the date and the
+      // lines.
+      if (read.documentNo != null && !_kind.isSales) {
+        _supplierDocNo.text = read.documentNo!;
+      }
       if (read.documentDate != null) _docDate = read.documentDate!;
 
       // Only into an empty document. Somebody who has already keyed the
@@ -1368,26 +1377,43 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         onNotesChanged: _markDirty,
                       ),
 
-                      // The supplier's own paperwork, filed against the
-                      // document it justifies. Purchases only: a bill is
-                      // evidence somebody else produced and an auditor
-                      // will ask for, where an invoice is evidence this
-                      // company produced and already holds.
+                      // The paper behind the document.
+                      //
+                      // This used to be purchases only, on the reasoning
+                      // that a bill is evidence somebody else produced
+                      // where an invoice is evidence this company
+                      // produced and already holds. True of an invoice
+                      // raised here, and false of the case people
+                      // actually have: a company moving onto this system
+                      // types last year's invoices in, and the PDF it
+                      // issued at the time is the only record of what it
+                      // actually looked like. A signed delivery order and
+                      // the customer's own purchase order want filing
+                      // against the invoice too.
                       //
                       // Only once saved, because an attachment hangs off
                       // a record id and a new document has none yet.
-                      if (!_isNew && !_kind.isSales) ...[
+                      if (!_isNew) ...[
                         const SizedBox(height: 16),
                         AttachmentsCard(
-                          table: 'purchase_documents',
+                          table: _kind.isSales
+                              ? 'sales_documents'
+                              : 'purchase_documents',
+                          title: _kind.isSales
+                              ? 'Paperwork'
+                              : 'Supplier paperwork',
                           recordId: widget.documentId!,
-                          title: 'Supplier paperwork',
-                          subtitle:
-                              'The bill, delivery order or quotation '
-                              'this was raised from.',
-                          // Reading it fills the number, the date and the
-                          // lines — which is the whole reason the paper
-                          // is here rather than in a filing cabinet.
+                          subtitle: _kind.isSales
+                              ? 'The invoice as it was issued, a signed '
+                                    'delivery order, the customer\'s own '
+                                    'purchase order.'
+                              : 'The bill, delivery order or quotation '
+                                    'this was raised from.',
+                          // Reading it fills the date and the lines —
+                          // which is the whole reason the paper is here
+                          // rather than in a filing cabinet, and it is
+                          // the typing on an old invoice being entered
+                          // after the fact.
                           onExtracted: _applyScan,
                         ),
                       ],
