@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788333846.886684,
-    "ast_hash": "91c6fc3c22f284dc0a7e44a55d67ddbc",
+    "mtime": 1788334672.6467729,
+    "ast_hash": "20779bd1902446ff30b97c973f406ea1",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7127,6 +7127,16 @@
   "supabase/tests/allocation_party.sql": {
     "mtime": 1788334012.0894668,
     "ast_hash": "e44d5a27b495e1b102a8ef0b1eddc82b",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0466_an_opening_balance_is_not_a_new_sale.sql": {
+    "mtime": 1788334717.2948782,
+    "ast_hash": "573e317ebd9f6eea5e1241c7aa52bb21",
+    "semantic_hash": ""
+  },
+  "supabase/tests/opening_balance_credit.sql": {
+    "mtime": 1788334672.6359499,
+    "ast_hash": "869ff260e26f2a2ade51902bbfa7467c",
     "semantic_hash": ""
   }
 }
