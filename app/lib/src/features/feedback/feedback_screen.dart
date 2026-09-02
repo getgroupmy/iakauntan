@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../shared/attachments_card.dart';
+import 'screen_catalogue.dart';
 
 /// Somewhere to say it is broken.
 ///
@@ -51,8 +52,8 @@ class FeedbackScreen extends ConsumerWidget {
               title: 'Nothing reported yet',
               message:
                   'Something wrong, something missing, or something that '
-                  'could be better — all three are worth sending. Say '
-                  'which screen it happened on and we can usually see it '
+                  'could be better — all three are worth sending. Pick '
+                  'the screen it happened on and we can usually see it '
                   'ourselves.',
             );
           }
@@ -174,17 +175,28 @@ class _ReportDialog extends ConsumerStatefulWidget {
 class _ReportDialogState extends ConsumerState<_ReportDialog> {
   final _title = TextEditingController();
   final _body = TextEditingController();
-  final _screen = TextEditingController();
   String _kind = 'bug';
   int _severity = 3;
+
+  // Module, then the part of it, then the screen. Null at each level
+  // means "not chosen yet", and the two below reset when the one above
+  // changes — a sub-module left over from the previous module is how a
+  // picker sends back an answer nobody meant.
+  ScreenModule? _module;
+  ScreenArea? _area;
+  AppScreen? _screen;
 
   @override
   void dispose() {
     _title.dispose();
     _body.dispose();
-    _screen.dispose();
     super.dispose();
   }
+
+  /// What goes in the report: something a person can read and an address
+  /// we can open. Null until a screen is chosen, and null is allowed —
+  /// see `kSomewhereElse`.
+  String? get _where => _screen?.toString();
 
   @override
   Widget build(BuildContext context) {
@@ -236,18 +248,66 @@ class _ReportDialogState extends ConsumerState<_ReportDialog> {
                   labelText: 'What happened, and what you expected',
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _screen,
-                decoration: const InputDecoration(
-                  labelText: 'Which screen',
-                  hintText: '/hr/payroll',
-                  helperText:
-                      'The address in the bar, if you have it. It is the '
-                      'difference between a report we can act on and one '
-                      'we cannot.',
-                  helperMaxLines: 3,
+              const SizedBox(height: 16),
+              Text(
+                'Where it happened',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<ScreenModule?>(
+                key: const ValueKey('feedback-module'),
+                value: _module,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Module'),
+                items: [
+                  for (final m in appScreenCatalogue)
+                    DropdownMenuItem(value: m, child: Text(m.label)),
+                  const DropdownMenuItem(value: null, child: Text(kSomewhereElse)),
+                ],
+                onChanged: (m) => setState(() {
+                  _module = m;
+                  _area = null;
+                  _screen = null;
+                }),
+              ),
+              if (_module != null) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<ScreenArea>(
+                  key: const ValueKey('feedback-area'),
+                  value: _area,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Part of it'),
+                  items: [
+                    for (final a in _module!.areas)
+                      DropdownMenuItem(value: a, child: Text(a.label)),
+                  ],
+                  onChanged: (a) => setState(() {
+                    _area = a;
+                    _screen = null;
+                  }),
                 ),
+              ],
+              if (_area != null) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<AppScreen>(
+                  key: const ValueKey('feedback-screen'),
+                  value: _screen,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Screen'),
+                  items: [
+                    for (final sc in _area!.screens)
+                      DropdownMenuItem(value: sc, child: Text(sc.label)),
+                  ],
+                  onChanged: (sc) => setState(() => _screen = sc),
+                ),
+              ],
+              const SizedBox(height: 6),
+              Text(
+                _where ?? 'Naming the screen is the difference between a '
+                    'report we can act on and one we have to write back '
+                    'about. Leave it on Somewhere else if none of these '
+                    'is it.',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
               // Only on a fault. A severity on a suggestion sorts it in
               // among the things that are actually broken.
@@ -299,9 +359,7 @@ class _ReportDialogState extends ConsumerState<_ReportDialog> {
                 title: _title.text.trim(),
                 kind: _kind,
                 body: _body.text.trim().isEmpty ? null : _body.text.trim(),
-                screen: _screen.text.trim().isEmpty
-                    ? null
-                    : _screen.text.trim(),
+                screen: _where,
                 severity: _kind == 'bug' ? _severity : null,
               ),
             );
