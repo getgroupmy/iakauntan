@@ -7,6 +7,8 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../shared/scan_intake.dart';
+import 'contact_editor.dart';
 
 class ContactsScreen extends ConsumerStatefulWidget {
   const ContactsScreen({super.key});
@@ -36,6 +38,16 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
       appBar: AppBar(
         title: const Text('Contacts'),
         actions: [
+          // From the paper, which is how a customer or supplier
+          // actually arrives: a letterhead on an invoice, a name card
+          // at a meeting. Typing a company's registration number off a
+          // card is the part people get wrong.
+          if (canWrite)
+            IconButton(
+              tooltip: 'Scan a letterhead or name card',
+              icon: const Icon(Icons.document_scanner_outlined),
+              onPressed: () => _scanContact(context, ref, _type),
+            ),
           if (canWrite)
             Padding(
               padding: const EdgeInsets.only(right: 12),
@@ -187,4 +199,36 @@ class _ContactTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A customer or supplier read off the paper they arrived on.
+///
+/// The same reader the bills go through. It was written for a purchase
+/// document and a letterhead is most of one — a name, a registration
+/// number, a tax number, an address, a telephone — so nothing new is
+/// needed to read a name card or the top of an invoice.
+///
+/// What comes back opens the ordinary editor with those fields filled,
+/// rather than saving anything: a contact is checked before it is
+/// created, because a duplicate customer is a mistake that surfaces
+/// months later in an aged listing.
+Future<void> _scanContact(
+  BuildContext context,
+  WidgetRef ref,
+  String type,
+) async {
+  final staged = await showScanIntake(
+    context,
+    ref,
+    // Parked against `contacts` until the contact it belongs to exists.
+    table: 'contacts',
+    title: 'Scan a letterhead or name card',
+  );
+  if (staged?.read == null || !context.mounted) return;
+
+  await Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => ContactEditor(contactType: type, scanned: staged!.read),
+    ),
+  );
 }

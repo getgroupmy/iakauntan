@@ -9,6 +9,8 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../../data/ocr_repository.dart';
+import 'scanned_address.dart';
 import 'control_account.dart';
 import '../../data/places_repository.dart';
 // `RepoGroupContacts` is an extension, and a Dart extension is only
@@ -18,10 +20,22 @@ import 'statement_pdf.dart';
 import 'contact_extras.dart';
 
 class ContactEditor extends ConsumerStatefulWidget {
-  const ContactEditor({super.key, this.contactId, this.contactType = 'customer'});
+  const ContactEditor({
+    super.key,
+    this.contactId,
+    this.contactType = 'customer',
+    this.scanned,
+  });
 
   final String? contactId;
   final String contactType;
+
+  /// A letterhead, invoice or name card that has just been read.
+  ///
+  /// Fills what the paper carries — the name, the numbers, the address
+  /// as printed — and leaves the rest. What it deliberately does not
+  /// fill is the city: see `splitScannedAddress`.
+  final OcrExtraction? scanned;
 
   @override
   ConsumerState<ContactEditor> createState() => _ContactEditorState();
@@ -80,6 +94,18 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         _c('code').text = await repo.nextDocumentNumber('contact');
       } catch (_) {
         // Non-fatal: the user can type their own code.
+      }
+      final read = widget.scanned;
+      if (read != null) {
+        _c('name').text = read.supplierName ?? '';
+        _c('tin').text = read.supplierTaxId ?? '';
+        _c('registrationNo').text = read.supplierRegistrationNo ?? '';
+        _c('email').text = read.supplierEmail ?? '';
+        _c('phone').text = read.supplierPhone ?? '';
+        final address = splitScannedAddress(read.supplierAddress);
+        _c('address1').text = address.line1;
+        _c('address2').text = address.line2;
+        if (address.postcode != null) _c('postcode').text = address.postcode!;
       }
       if (mounted) setState(() => _loading = false);
       return;
