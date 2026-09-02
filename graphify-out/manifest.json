@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788334672.6467729,
-    "ast_hash": "20779bd1902446ff30b97c973f406ea1",
+    "mtime": 1788335209.114075,
+    "ast_hash": "f5b7777e965322229ade3327ed426059",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7137,6 +7137,16 @@
   "supabase/tests/opening_balance_credit.sql": {
     "mtime": 1788334672.6359499,
     "ast_hash": "869ff260e26f2a2ade51902bbfa7467c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0467_cash_is_not_credit.sql": {
+    "mtime": 1788335415.845685,
+    "ast_hash": "79432da76cdfafa374f5050f1b37a2d8",
+    "semantic_hash": ""
+  },
+  "supabase/tests/cash_is_not_credit.sql": {
+    "mtime": 1788335394.366211,
+    "ast_hash": "a9c2fc6ca9e0fd954492db387bb0cd2c",
     "semantic_hash": ""
   }
 }
