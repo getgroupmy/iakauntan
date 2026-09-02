@@ -747,4 +747,109 @@ begin
     (v_far_east -> 0 ->> 'due')::text, v_today::text);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Which annual returns are outstanding
+--
+-- The *date* is section 68's and does not move: thirty days from the
+-- anniversary of incorporation. Which anniversaries are still owed is
+-- a different question, and until 0461 the answer was "the one from
+-- last year", whatever had actually been lodged — so a company three
+-- years behind was shown one filing and told nothing about the other
+-- two.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid;
+  v_e   uuid;
+  v_inc date := (app.today() - interval '5 years')::date;
+  v_n   integer;
+begin
+  v_org := pg_temp.sec_org();
+  insert into public.corp_entities (org_id, name, entity_type, incorporated_on,
+    financial_year_end_day, financial_year_end_month)
+  values (v_org, 'Ketinggalan Sdn Bhd', 'sdn_bhd', v_inc, 31, 12)
+  returning id into v_e;
+
+  -- Nothing lodged in five years. Five anniversaries have passed and
+  -- every one of them is owed.
+  select count(*)::integer into v_n
+    from public.corp_upcoming_filings(v_org, 400) f
+   where f.entity_id = v_e and f.filing_type = 'annual_return';
+  perform pg_temp.check_true(
+    'a company years behind is shown every return it owes', v_n >= 5);
+
+  -- Including ones long past their thirty days. An annual return two
+  -- years overdue is not less overdue for being old.
+  perform pg_temp.check_true('however far back they go',
+    exists (select 1 from public.corp_upcoming_filings(v_org, 400) f
+             where f.entity_id = v_e and f.filing_type = 'annual_return'
+               and f.due_date < app.today() - 700));
+
+  -- And each is still thirty days from its own anniversary, which is
+  -- the part the Act fixes and this does not touch.
+  perform pg_temp.check_eq('each one thirty days from its anniversary',
+    (select count(*)::integer from public.corp_upcoming_filings(v_org, 400) f
+      where f.entity_id = v_e and f.filing_type = 'annual_return'
+        and f.due_date <> f.trigger_date + 30), 0);
+
+  -- Lodge the second anniversary's return. Everything up to and
+  -- including it drops off; the rest stay.
+  insert into public.corp_filings
+    (org_id, entity_id, filing_type, trigger_date, due_date, period_label,
+     status, lodged_on)
+  select v_org, v_e, 'annual_return', f.trigger_date, f.due_date,
+         f.period_label, 'lodged', f.due_date
+    from public.corp_upcoming_filings(v_org, 400) f
+   where f.entity_id = v_e and f.filing_type = 'annual_return'
+   order by f.trigger_date
+   limit 1;
+
+  perform pg_temp.check_true('lodging one takes it off the list',
+    not exists (
+      select 1 from public.corp_upcoming_filings(v_org, 400) f
+       where f.entity_id = v_e and f.filing_type = 'annual_return'
+         and f.trigger_date = (v_inc + interval '1 year')::date));
+
+  -- The next one owed is the anniversary after the one lodged, which
+  -- is how a secretary counts.
+  perform pg_temp.check_eq('and the next one follows the one lodged',
+    (select min(f.trigger_date)::text
+       from public.corp_upcoming_filings(v_org, 400) f
+      where f.entity_id = v_e and f.filing_type = 'annual_return'),
+    ((v_inc + interval '2 years')::date)::text);
+
+  -- A year skipped in the middle is the case that separates "every
+  -- anniversary not yet lodged" from "the one after the last lodged".
+  -- Lodge the third and the second must still be owed.
+  insert into public.corp_filings
+    (org_id, entity_id, filing_type, trigger_date, due_date, period_label,
+     status, lodged_on)
+  values (v_org, v_e, 'annual_return',
+          (v_inc + interval '3 years')::date,
+          ((v_inc + interval '3 years')::date + 30),
+          to_char(v_inc + interval '3 years', 'YYYY'), 'lodged',
+          (v_inc + interval '3 years')::date);
+
+  perform pg_temp.check_true('a year skipped in the middle is still owed',
+    exists (select 1 from public.corp_upcoming_filings(v_org, 400) f
+             where f.entity_id = v_e and f.filing_type = 'annual_return'
+               and f.trigger_date = (v_inc + interval '2 years')::date));
+  perform pg_temp.check_true('while the one lodged out of order is not',
+    not exists (select 1 from public.corp_upcoming_filings(v_org, 400) f
+                 where f.entity_id = v_e and f.filing_type = 'annual_return'
+                   and f.trigger_date = (v_inc + interval '3 years')::date));
+
+  -- The other filing kinds are generated for this year and last only,
+  -- so an old financial statement cannot appear however long the
+  -- window is. Asserted because the window clause reads as though it
+  -- were what keeps them out, and it is not.
+  perform pg_temp.check_eq(
+    'a financial statement is only ever asked for this year or last',
+    (select count(*)::integer from public.corp_upcoming_filings(v_org, 400) f
+      where f.entity_id = v_e
+        and f.filing_type = 'financial_statements'
+        and extract(year from f.trigger_date)
+            < extract(year from app.today()) - 1), 0);
+end $$;
+
 rollback;
