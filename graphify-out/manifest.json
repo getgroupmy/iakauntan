@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788384551.3480573,
-    "ast_hash": "5eb2d7e7846c9d1fb59578202a8f09f0",
+    "mtime": 1788387933.2110503,
+    "ast_hash": "e2795e688bd109ac35a68b4810448800",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1520,8 +1520,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/outbound_email.sql": {
-    "mtime": 1787822946.0265896,
-    "ast_hash": "51655fc760745097d17b1534e7759e71",
+    "mtime": 1788388889.550337,
+    "ast_hash": "c05e1eebe4eec5d882a120bb05400a18",
     "semantic_hash": ""
   },
   "docs/email-setup.md": {
@@ -1740,8 +1740,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/email_dialog.dart": {
-    "mtime": 1786785756.6144881,
-    "ast_hash": "df157e698917ded8bafcd937b0909926",
+    "mtime": 1788388278.4952624,
+    "ast_hash": "d56a099934ed0dce8f1c9d8188d5d5f8",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/receipt_pdf.dart": {
@@ -7507,6 +7507,26 @@
   "app/test/customer_portal_summary_test.dart": {
     "mtime": 1788386251.5535588,
     "ast_hash": "8dc033f61e54e2896a4b216b613fb032",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/activity_entry.dart": {
+    "mtime": 1788388257.4362595,
+    "ast_hash": "7820ac64aac44ce02d83ba19f12767e9",
+    "semantic_hash": ""
+  },
+  "app/test/activity_entry_test.dart": {
+    "mtime": 1788388311.0957885,
+    "ast_hash": "5ea564b87f41194a08b1f965de2d7211",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0495_what_happened_to_this_invoice.sql": {
+    "mtime": 1788388205.352076,
+    "ast_hash": "0318bb50c885a46b3f55552eaaecef7e",
+    "semantic_hash": ""
+  },
+  "supabase/tests/document_history.sql": {
+    "mtime": 1788388180.7283568,
+    "ast_hash": "225bdd1acdeb51a9bb6ea42a7b689381",
     "semantic_hash": ""
   }
 }

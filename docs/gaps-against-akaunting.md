@@ -32,9 +32,8 @@ else on this page has been built, and the sections say where.
 - **No ringgit has been through the payment flow.** It is built end to
   end and there is no acquirer sandbox in the environment it was built
   in, so it has never been exercised against a real gateway. Section 3.
-- **Per-document history**, **configurable dashboards**, **split
-  transaction**, **bulk actions** and an **in-app notification
-  centre**. Section 10.
+- **Configurable dashboards**, **split transaction**, **bulk actions**
+  and an **in-app notification centre**. Section 10.
 
 That is the whole of it. This document has repeatedly been left saying
 a thing was missing for months after it was built — sections 1, 2 and 9
@@ -412,11 +411,17 @@ this section went on saying the opposite.
 ## 10. Smaller
 
 - **Split transaction** — one payment divided across several accounts.
-- **Per-document history.** `Document/DocumentHistory.php` gives an
+- ~~**Per-document history.** `Document/DocumentHistory.php` gives an
   invoice its own timeline. iAkauntan has `audit_logs`, a global trail
   that answers a different question — "who changed what" rather than
-  "what happened to this invoice". Still open, and the distinction is
-  the reason it is worth listing.
+  "what happened to this invoice".~~ Closed at `0495`. It was narrower
+  than this said: `document_activity` had shown one document's emails,
+  share links and downloads since `0082`, so what was missing was not a
+  timeline but three sources on it. `0495` unions in the document's own
+  changes from `audit_logs` — read on the `(table_name, record_id)`
+  index `0038` built for exactly that and which nothing had ever used —
+  the money allocated against it, and what LHDN said. Nothing new is
+  recorded; all of it was already being written and none of it read.
 - **Configurable dashboards and widgets.** `Common/Dashboard.php`,
   `Common/Widget.php`, and eight widgets a user arranges themselves.
   iAkauntan's dashboard is fixed.

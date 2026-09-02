@@ -10,6 +10,7 @@ import '../../core/widgets.dart';
 // Not unused: emailDocument and friends live in an `extension on Repo`,
 // and an extension is only in scope where its library is imported.
 import '../../data/repository.dart';
+import 'activity_entry.dart';
 
 /// Emailing a document, and the record of everything that ever left the
 /// building for it.
@@ -345,8 +346,7 @@ class _ActivityDialog extends ConsumerWidget {
             builder: (list) => list.isEmpty
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: Space.md),
-                    child: Text(
-                        'Nothing has been sent, shared or downloaded yet.'),
+                    child: Text('Nothing has happened to this yet.'),
                   )
                 : Column(
                     mainAxisSize: MainAxisSize.min,
@@ -374,34 +374,24 @@ class _ActivityTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final kind = entry['kind'] as String? ?? '';
-    final status = entry['status'] as String? ?? '';
+    final line = ActivityLine.from(entry);
     final at = DateTime.tryParse(entry['at'] as String? ?? '');
 
-    final (IconData icon, Color colour) = switch (kind) {
-      'email' => (
-          Icons.mail_outline,
-          switch (status) {
-            'sent' => context.colors.success,
-            'failed' => context.colors.danger,
-            'cancelled' => Theme.of(context).disabledColor,
-            _ => context.colors.warning,
-          }
-        ),
-      'share link' => (
-          Icons.link,
-          switch (status) {
-            'opened' => context.colors.success,
-            'revoked' || 'expired' => Theme.of(context).disabledColor,
-            _ => context.colors.info,
-          }
-        ),
-      _ => (Icons.picture_as_pdf_outlined, context.colors.info),
+    final colour = switch (line.tone) {
+      ActivityTone.good => context.colors.success,
+      ActivityTone.bad => context.colors.danger,
+      ActivityTone.waiting => context.colors.warning,
+      ActivityTone.neutral => context.colors.info,
+      ActivityTone.muted => Theme.of(context).disabledColor,
     };
-
-    final recipient = entry['recipient'] as String?;
-    final detail = entry['detail'] as String?;
-    final note = entry['note'] as String?;
+    final icon = switch (line.icon) {
+      'mail' => Icons.mail_outline,
+      'link' => Icons.link,
+      'history' => Icons.history,
+      'payment' => Icons.payments_outlined,
+      'einvoice' => Icons.receipt_long_outlined,
+      _ => Icons.picture_as_pdf_outlined,
+    };
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Space.xs),
@@ -418,14 +408,8 @@ class _ActivityTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
-                  Text(
-                    switch (kind) {
-                      'email' => 'Emailed',
-                      'share link' => 'Link shared',
-                      _ => 'PDF downloaded',
-                    },
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
+                  Text(line.label,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(width: Space.sm),
                   // Not StatusChip: its palette is keyed to document
                   // statuses, and half of these words ('opened',
@@ -433,30 +417,34 @@ class _ActivityTile extends StatelessWidget {
                   // grey — which is the one thing this list must not do,
                   // since opened and revoked are the two facts somebody
                   // is scanning for.
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: colour.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(4),
+                  if (line.badge.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: colour.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(line.badge,
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: colour)),
                     ),
-                    child: Text(status,
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: colour)),
-                  ),
-                  if (detail != null) ...[
+                  if (line.detail != null) ...[
                     const SizedBox(width: Space.sm),
-                    Text(detail,
-                        style: Theme.of(context).textTheme.bodySmall),
+                    Flexible(
+                      child: Text(line.detail!,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ),
                   ],
                 ]),
-                if (recipient != null)
-                  Text(recipient,
+                if (line.recipient != null)
+                  Text(line.recipient!,
                       style: Theme.of(context).textTheme.bodySmall),
-                if (note != null)
-                  Text(note,
+                if (line.note != null)
+                  Text(line.note!,
                       style: Theme.of(context)
                           .textTheme
                           .bodySmall
