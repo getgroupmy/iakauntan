@@ -5534,3 +5534,67 @@ job that rewrites a table nightly — each turns a trail into noise, and
 noise is what makes a trail stop being read. The question to ask is not
 "is this table important" but "does a write to it correspond to a
 change somebody made".
+
+## The tool that found this document's subject, re-run and re-fixed
+
+`scripts/reachability.py` exists because schema lands ahead of
+behaviour here: of the eleven capabilities built before it was written,
+nine were already in the database with nothing able to call them. It
+was re-run this session, and the answer is worth recording twice over.
+
+### The headline: nothing is unreachable
+
+**Zero RPCs.** Every function in `public` that `authenticated` may
+execute is called by something. The gap this script was written to find
+is, for now, closed.
+
+The 98 tables it lists are the known false positive its own footer
+names: this codebase writes through functions, so a table reached only
+by `complete_pos_sale` or `post_receipt` looks unreferenced to a search
+of the client. That triage has not changed.
+
+### The tool was lying in two directions, and both are fixed
+
+**A hand-kept list of what the database already knows goes stale in one
+migration.** The script filtered extension functions with a prefix
+list — `citext`, `gtrgm`, `gin_`, and so on — written when those were
+the only extensions installed. `btree_gist` was installed later and
+nobody revised it, so 37 of its internals (`gbt_*`, `gbtreekey*`,
+`*_dist`) were reported as gaps every run. A third of the output was
+the noise the filter existed to remove, and the report had been that
+way long enough that its length was the reason nobody read it. The
+inventory query now asks `pg_depend`, which is exact and cannot drift:
+1,133 rows became 869.
+
+**A function called from SQL is not unreachable.** The script reads
+`app/lib` and `supabase/functions` and nothing else, so six functions
+that other routines call looked dead:
+
+| Function | Reached by |
+|---|---|
+| `shared_payment_options` | `open_shared_document` |
+| `pos_line_modifier_gaps` | `send_order_to_kitchen` |
+| `pos_item_portions` | `pos_menu`, `pos_item_availability`, `app.add_pos_sale_line_internal` |
+| `decide_claim_step` | `decide_expense_claim`, `claims_awaiting_my_approval` |
+| `corp_display_name`, `corp_issued_capital` | the corp-sec reports |
+
+They are now listed apart, as reachable, with a note that each holds an
+execute grant it may not need.
+
+### Why that note is a note and not a migration
+
+Inside a SECURITY DEFINER function the caller is the owner, so a
+function only SQL calls does not need its grant to `authenticated` at
+all: revoking six of them would narrow the PostgREST surface by six
+functions nothing calls. It was measured, and then not done, for
+reasons that are specific rather than cautious.
+
+`shared_payment_options` is granted to `anon` deliberately by 0413, for
+the customer holding a share link. `pos_line_modifier_gaps` and
+`pos_item_portions` are the server-side halves of rules the client
+repeats on purpose — `modifier_sheet.dart` says why, and says it is
+"not to replace the server's check but so the refusal never has to
+happen" — which makes a screen calling the server's version directly a
+plausible next step rather than a mistake. Revoking a grant that harms
+nothing, to close a hole nobody can reach, is the kind of change that
+looks like work and is not.
