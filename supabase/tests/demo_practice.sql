@@ -1,0 +1,255 @@
+-- =====================================================================
+-- iAkauntan :: the demo practice
+--
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/demo_practice.sql
+--
+-- `app.demo_practice_rebuild()` is the first thing in this project to
+-- use the firm layer for real. What has to hold:
+--
+--   * it refuses an address nobody has signed up with, because the
+--     argument is an e-mail and an e-mail is not proof of anything;
+--   * the real person owns none of the books. They hold a firm
+--     membership, and reach four companies through it;
+--   * running it twice leaves four companies, not eight;
+--   * a second run does not touch the other demo tenants, or their
+--     logins;
+--   * `demo_teardown` can still run afterwards -- which is the whole
+--     reason one line of it changed.
+--
+-- Nothing is written; the file rolls back.
+-- =====================================================================
+\set ON_ERROR_STOP on
+
+begin;
+
+\i supabase/tests/_helpers.sql
+
+do $$
+declare
+  v_who    uuid;
+  v_report text;
+  v_firm   uuid;
+  v_n      integer;
+  v_msg    text;
+  v_took   boolean;
+begin
+  -- ------------------------------------------------------------------
+  -- An address nobody owns
+  -- ------------------------------------------------------------------
+  begin
+    perform app.demo_practice_rebuild('nobody@nowhere.invalid');
+    v_took := true;
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    v_took := false;
+  end;
+  perform pg_temp.check_true(
+    'a practice cannot be built on an address nobody has signed up with',
+    not v_took);
+  perform pg_temp.check_true('and it says so, and says nothing was made',
+    v_msg like '%no account for%' and v_msg like '%Nothing has been created%');
+  perform pg_temp.check_eq('because nothing was',
+    (select count(*)::integer from public.firms), 0);
+
+  -- ------------------------------------------------------------------
+  -- The practice
+  -- ------------------------------------------------------------------
+  v_who := pg_temp.another_user('kabeer@kabeer.test');
+  v_report := app.demo_practice_rebuild('kabeer@kabeer.test');
+  raise notice 'practice said: %', v_report;
+
+  select id into v_firm from public.firms where slug like 'kabeer-co%';
+  perform pg_temp.check_true('the firm exists', v_firm is not null);
+
+  perform pg_temp.check_eq('and the real person is a partner in it',
+    (select role::text from public.firm_members
+      where firm_id = v_firm and user_id = v_who), 'partner');
+
+  perform pg_temp.check_eq('four companies in the portfolio',
+    (select count(*)::integer from public.organizations
+      where firm_id = v_firm), 4);
+
+  perform pg_temp.check_eq('every one of them flagged demo',
+    (select count(*)::integer from public.organizations
+      where firm_id = v_firm and is_demo), 4);
+
+  -- The point of the arrangement: the person who runs the practice owns
+  -- none of the books. Everything they can reach, they reach through
+  -- the firm, which is what a practice is and what makes the whole
+  -- portfolio removable.
+  perform pg_temp.check_eq(
+    'the real account owns none of the books',
+    (select count(*)::integer from public.org_members
+      where user_id = v_who and via_firm_id is null), 0);
+  perform pg_temp.check_eq('and reaches all four through the firm',
+    (select count(*)::integer from public.org_members
+      where user_id = v_who and via_firm_id = v_firm), 4);
+
+  -- ------------------------------------------------------------------
+  -- What is on the screens
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq('the practice keeps a statutory register',
+    (select count(*)::integer from public.corp_entities e
+       join public.organizations o on o.id = e.org_id
+      where o.firm_id = v_firm), 3);
+
+  perform pg_temp.check_true('the client books have posted invoices',
+    (select count(*) from public.sales_documents d
+       join public.organizations o on o.id = d.org_id
+      where o.firm_id = v_firm and d.status <> 'draft') > 20);
+
+  -- Every company in the portfolio has something still owed -- the
+  -- three clients and the practice's own retainers -- so "who owes
+  -- what" has an answer and one payment across companies has four sets
+  -- of books to settle in.
+  perform pg_temp.check_eq(
+    'and every company in the portfolio has something outstanding',
+    (select count(distinct d.org_id)::integer from public.sales_documents d
+       join public.organizations o on o.id = d.org_id
+      where o.firm_id = v_firm and coalesce(d.balance_amount, 0) > 0), 4);
+
+  perform pg_temp.check_true('with receipts against the older ones',
+    (select count(*) from public.receipts r
+       join public.organizations o on o.id = r.org_id
+      where o.firm_id = v_firm and r.status = 'posted') > 0);
+
+  -- The ledger balances in every one of them. A demo tenant that cannot
+  -- produce a trial balance is the half-built tenant this project has
+  -- found before.
+  perform pg_temp.check_eq('and the ledger balances in all four',
+    (select count(*)::integer from public.organizations o
+      where o.firm_id = v_firm
+        and (select round(sum(l.debit - l.credit), 2)
+               from public.gl_lines l
+               join public.gl_entries e on e.id = l.entry_id
+              where l.org_id = o.id and e.status = 'posted') <> 0), 0);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Twice
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_firm    uuid;
+  v_before  integer;
+  v_others  integer;
+  v_logins  integer;
+  v_other   uuid;
+  v_stray   uuid;
+begin
+  select id into v_firm from public.firms where slug like 'kabeer-co%';
+
+  -- A demo tenant standing outside this firm, made here rather than
+  -- assumed: counting what happens to be lying around is how an
+  -- assertion about "the others" comes to be about nothing at all. The
+  -- mutant that tore down every is_demo company survived this file
+  -- until this company existed.
+  v_other := app.demo_user('other@iakauntan.test', 'Somebody Else');
+  perform app.demo_company(
+    v_other, 'Syarikat Lain Sdn Bhd', 'sdn_bhd'::app.entity_type,
+    '202001001111', 'C20201111222', '47190', 'Retail sale in stores',
+    '10', 'Klang', '41100', 'No 1, Jalan Lain', '03-3000 0000',
+    'lain@example.test', 12::smallint);
+
+  -- And a demo login with nothing left to belong to. The global
+  -- teardown sweeps these; a rebuild of one practice has no business
+  -- knowing they exist.
+  v_stray := app.demo_user('stray@iakauntan.test', 'Nobody At All');
+
+  select count(*)::integer into v_others from public.organizations
+   where is_demo and firm_id is distinct from v_firm;
+  select count(*)::integer into v_logins from auth.users
+   where raw_app_meta_data ->> 'demo' = 'true'
+     and email not like '%@kabeer.demo';
+  perform pg_temp.check_eq('there is something outside the firm to protect',
+    v_others, 1);
+
+  perform app.demo_practice_rebuild('kabeer@kabeer.test');
+
+  perform pg_temp.check_eq('a second run leaves four companies, not eight',
+    (select count(*)::integer from public.organizations
+      where firm_id = v_firm), 4);
+  perform pg_temp.check_eq('and one firm, not two',
+    (select count(*)::integer from public.firms
+      where slug like 'kabeer-co%'), 1);
+  perform pg_temp.check_eq('the other demo tenants are where they were',
+    (select count(*)::integer from public.organizations
+      where is_demo and firm_id is distinct from v_firm), v_others);
+  perform pg_temp.check_eq('and so are their logins',
+    (select count(*)::integer from auth.users
+      where raw_app_meta_data ->> 'demo' = 'true'
+        and email not like '%@kabeer.demo'), v_logins);
+  perform pg_temp.check_true(
+    'including a demo login that belongs to nothing, which is not this '
+    'function''s to sweep',
+    exists (select 1 from auth.users where id = v_stray));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And the global teardown still runs
+-- ---------------------------------------------------------------------
+--
+-- This is the assertion the one changed line of `demo_teardown` is for.
+-- Before it, a firm holding a single demo company made every rebuild of
+-- the whole demo refuse: the borrowed `org_members` row points at a
+-- real person, and the guard read that as somebody's own books.
+do $$
+declare v_report text;
+begin
+  v_report := app.demo_teardown();
+  raise notice 'teardown said: %', v_report;
+
+  perform pg_temp.check_eq('the practice''s companies go with the rest',
+    (select count(*)::integer from public.organizations where is_demo), 0);
+  perform pg_temp.check_eq('and the firm is left with nothing in it',
+    (select count(*)::integer from public.organizations
+      where firm_id is not null), 0);
+
+  -- The firm itself stays. It belongs to a real person, and a teardown
+  -- of demo data is not the place to close somebody's practice.
+  perform pg_temp.check_eq('but the practice itself is still there',
+    (select count(*)::integer from public.firms where slug like 'kabeer-co%'),
+    1);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A company somebody joined in their own right still stops it
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_who  uuid;
+  v_firm uuid;
+  v_org  uuid;
+  v_out  uuid;
+  v_msg  text;
+  v_took boolean;
+begin
+  v_who := pg_temp.another_user('kabeer2@kabeer.test');
+  perform app.demo_practice_rebuild('kabeer2@kabeer.test');
+  select f.id into v_firm from public.firms f
+    join public.firm_members m on m.firm_id = f.id
+   where m.user_id = v_who;
+  select o.id into v_org from public.organizations o
+   where o.firm_id = v_firm order by o.name limit 1;
+
+  -- Somebody real, invited to this company by the company — not lent to
+  -- it by the practice. The flag is wrong, not the membership, and the
+  -- rebuild has to stop rather than delete their books.
+  v_out := pg_temp.another_user('theirs@example.test');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_out, 'admin', 'active', now());
+
+  begin
+    perform app.demo_practice_rebuild('kabeer2@kabeer.test');
+    v_took := true;
+  exception when sqlstate '42501' then
+    get stacked diagnostics v_msg = message_text;
+    v_took := false;
+  end;
+  perform pg_temp.check_true(
+    'a company with a member of its own is not torn down', not v_took);
+  perform pg_temp.check_true('and the refusal names it',
+    v_msg like '%theirs@example.test%');
+end $$;
+
+rollback;

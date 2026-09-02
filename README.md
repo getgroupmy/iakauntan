@@ -1257,6 +1257,45 @@ All eight logins share the password `Demo!Akaun2026`:
 | `salon@iakauntan.com` | Salon owner — two chairs, a day of bookings, a monthly package |
 | `stall@iakauntan.com` | Stall owner — one phone, and sales that landed offline |
 
+### A practice on a real account
+
+The demo companies above stand on their own. A practice does not: an
+accounting or company secretarial firm holds *other people's* books, and
+`0450`'s firm layer sat unused because no seed had ever built one.
+
+`app.demo_practice_rebuild('someone@example.com')` does, on a login that
+already exists:
+
+```
+select app.demo_practice_rebuild('kabeer@kabeer.my');
+```
+
+It makes the firm **Kabeer & Co**, puts the real account in it as a
+partner, and builds four demo companies into its portfolio — the
+practice's own books (with the statutory registers of three client
+companies on them) and those same three companies as tenants of their
+own, each with a year of invoices, the older ones settled and the last
+two months still owed.
+
+The real account owns none of it. It holds a `firm_members` row and
+reaches all four companies through `firm_id`, which is what a practice
+actually is, and what lets the whole portfolio be removed again.
+
+Three things to know before running it:
+
+- **The address must already have signed up.** It refuses one that has
+  not, and creates nothing. A practice whose only partner is an
+  unaccepted invitation is a practice nobody can open.
+- **Run it after `app.demo_rebuild()`, not before.** The global rebuild
+  removes every company marked demo, and these are marked demo so that
+  they can be removed at all.
+- **It only tears down its own.** A second run replaces the four
+  companies attached to that firm and the `@kabeer.demo` logins it made,
+  and touches nothing else — including a company the practice keeps that
+  is *not* flagged demo, which it refuses to delete and says so.
+
+See `0463`, and `supabase/tests/demo_practice.sql` for what is asserted.
+
 **None of that needs typing.** The sign-in page lists those eight accounts
 under *or look around a demo*, each described by what it will show rather
 than by the name of its role, and a tap signs straight in.
