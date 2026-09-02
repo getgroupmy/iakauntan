@@ -5864,26 +5864,43 @@ it is still a counter that has never taken money.
 tender, a shift opened and cashed up, and a half payment refused before
 the full one was taken.
 
-### The thing that is not resolved, recorded rather than tidied away
+### The thing that looked unresolved, and the answer
 
-Two measurements disagree and the reason has not been found.
+0449's header records a conflict as open, and **it was resolved shortly
+afterwards. That header is superseded by this section**; a reader who
+reaches it first should stop there.
 
-- In a controlled fixture — a tracked item, no recipe, ten on hand, two
-  sold over a till — stock goes to **eight**, with two movements. Retail
-  depletion works.
-- In the demo, after the rebuild, Sinar's stock movement sources are
-  `manufacturing_orders`, `purchase_documents` and `sales_documents`.
-  There is **no `pos_sales` row among them**, though the sale completed,
-  the item is `stock` with `track_inventory`, its stock is in MAIN, and
-  the outlet sells from MAIN.
+The two measurements were:
 
-Several explanations were tried and none survived: the item has no
-recipe in either case, the trigger fires on any sale reaching
-`completed`, and `pos_recipe_components` returning nothing for a
-recipe-less item does not explain the fixture depleting.
+- a controlled fixture — tracked item, no recipe, ten on hand, two sold
+  over a till — going to **eight**;
+- the demo showing **no `pos_sales` row** among Sinar's stock movement
+  sources after the counter sale.
 
-So the migration claims only what was measured — money taken, tax
-charged, drawer cashed up — and this is written down as the next thing
-to look at. **A header that claims the tidier of two conflicting
-measurements is worse than one that admits the conflict**, because the
-next person inherits a false premise instead of an open question.
+Both were correct. The mistake was the second question. Printing the
+fixture's movements rather than counting them gave it away in one line:
+
+```
+OB-1          opening_balance qty=10  src=(null)
+SM-2026-00001 sales_delivery  qty=-2  src=sales_documents
+```
+
+**A POS sale does not move stock in its own name.** It raises a sales
+document, and the delivery against *that* is what takes the goods out,
+so `source_table` is `sales_documents` and never `pos_sales`. A query
+filtering on `pos_sales` returns nought however well the till is
+working. Confirmed on the demo: the counter sale raised
+`INV-2026-00024`, and that invoice carries
+`SM-2026-00051 sales_delivery qty=-1.0000` — one component out of MAIN,
+which is exactly what the first draft of 0449's header claimed before it
+was softened.
+
+So there is no defect, and the softening was unnecessary. It was still
+right at the time: the header could not claim what had not been shown.
+What this cost was an hour; what the alternative costs is a document
+that says something untrue for as long as nobody checks.
+
+The lesson is narrower than "measure things", and worth keeping: **a
+count of zero proves nothing until you have seen the same query return
+something.** Printing one row of what the query *does* match would have
+ended it immediately.
