@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788324123.0557425,
-    "ast_hash": "7ff9fd2bc3ef04cc51abfaf39d292ac7",
+    "mtime": 1788330914.0943823,
+    "ast_hash": "55d95ee1a2cb34498314e99f4c4227f1",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1788324161.838497,
-    "ast_hash": "918b182032b66ea061b4518c22ac091b",
+    "mtime": 1788331184.1975079,
+    "ast_hash": "ef3859af74e49ed49902604318b88237",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,13 +110,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788324123.0548413,
-    "ast_hash": "8684e00f553fe8b521c5dc5473b457e8",
+    "mtime": 1788330907.7553666,
+    "ast_hash": "0745e1245618220be0a468a99b63552e",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
-    "mtime": 1788321052.1857615,
-    "ast_hash": "743201cd21f6f07863cc835528425851",
+    "mtime": 1788326506.1046813,
+    "ast_hash": "baa70c5e646f79bb1c0dc37aac6c90f5",
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
@@ -125,14 +125,14 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
-    "mtime": 1788285599.911654,
-    "ast_hash": "0ad19806bff56a3ff85ea8f6b3a657ba",
+    "mtime": 1788329101.3344696,
+    "ast_hash": "c40ad99ee4c0762e64a5d97fabc5c47e",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contacts_screen.dart": {
-    "mtime": 1786785756.6144881,
-    "ast_hash": "10171f35b93a487b87bbedf1c2359f9d",
-    "semantic_hash": "10171f35b93a487b87bbedf1c2359f9d"
+    "mtime": 1788329109.6247685,
+    "ast_hash": "a32b5658dfbb3b31efae33cd2181de7f",
+    "semantic_hash": ""
   },
   "app/lib/src/features/crm/pipeline_screen.dart": {
     "mtime": 1788285599.911654,
@@ -150,8 +150,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1788285599.911654,
-    "ast_hash": "cb5066f8d71e23cc542d0e74d9132833",
+    "mtime": 1788328637.2546685,
+    "ast_hash": "c46f995c5d799c434d7138c5bdb2e199",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -165,8 +165,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/line_editor.dart": {
-    "mtime": 1787822945.4905899,
-    "ast_hash": "3406ed49d63fb790d4878db8c610e6f3",
+    "mtime": 1788327900.1504307,
+    "ast_hash": "054f683a7295c325303c01175d3dc146",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/settlement_dialog.dart": {
@@ -180,8 +180,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/expenses/expenses_screen.dart": {
-    "mtime": 1786785756.618488,
-    "ast_hash": "bfd8172be9c21d1ae4b82de1428d7aa9",
+    "mtime": 1788328280.6544287,
+    "ast_hash": "e59b10b17d99ee509b5357d2233810ed",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/claims_screen.dart": {
@@ -260,13 +260,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/onboarding/create_org_screen.dart": {
-    "mtime": 1788285599.927654,
-    "ast_hash": "8e028f4c137846da04b3d4aabcd9a307",
+    "mtime": 1788331198.307624,
+    "ast_hash": "33c5de79d03c068a9d3f2eb7abaf4230",
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/reports_screen.dart": {
-    "mtime": 1787822945.4985898,
-    "ast_hash": "1a764b821c762d6f8eb78b578565e4b7",
+    "mtime": 1788325020.2002165,
+    "ast_hash": "921f56adcc561dc882079fdaaf8ac711",
     "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/entity_editor.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1788322801.7982905,
-    "ast_hash": "a9c4dcd4239c158739ca725d14613a20",
+    "mtime": 1788325733.6776545,
+    "ast_hash": "dd6dc072acdbd28e6852e8453eb21195",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1788320741.6798143,
-    "ast_hash": "f0b43afc63baa6d1982e52968fc8a828",
+    "mtime": 1788326506.1163428,
+    "ast_hash": "4a779c74502399d0865273f028a4b71b",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -735,8 +735,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/secretarial.sql": {
-    "mtime": 1787822946.0305898,
-    "ast_hash": "f92137a29b1e5f613d0576d8c48220ed",
+    "mtime": 1788327411.224643,
+    "ast_hash": "0ff01a127aaeec13a9c62b2fc21ea715",
     "semantic_hash": ""
   },
   "supabase/tests/statutory.sql": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788323997.41527,
-    "ast_hash": "37e8f16446c4e0177ad936a8e5f9b4fb",
+    "mtime": 1788332119.8864431,
+    "ast_hash": "562d1a3655c6767f90ef8804b76b69d7",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1787822945.4825897,
-    "ast_hash": "ac193b9584fe80d0ccbce42d10d984db",
+    "mtime": 1788332369.5142589,
+    "ast_hash": "8c18c100834b8db455333c455c851dde",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -1010,8 +1010,8 @@
     "semantic_hash": ""
   },
   "app/test/shell_rail_scroll_test.dart": {
-    "mtime": 1787200407.1480262,
-    "ast_hash": "fa71f984bd82c40737268e970975c371",
+    "mtime": 1788326926.0532568,
+    "ast_hash": "144b9b48b50da6913588fdb55f8e5011",
     "semantic_hash": ""
   },
   "app/lib/src/features/secretarial/document_pdf.dart": {
@@ -1075,8 +1075,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/report_spec.dart": {
-    "mtime": 1787822945.4985898,
-    "ast_hash": "bcd7d4e8c7682013582fd849f6d23227",
+    "mtime": 1788324989.3651905,
+    "ast_hash": "30d05bf6c894c05bef380ce2055a2623",
     "semantic_hash": ""
   },
   "app/test/report_pdf_test.dart": {
@@ -1730,8 +1730,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/ocr_repository.dart": {
-    "mtime": 1787822945.4865897,
-    "ast_hash": "758ba4bf91dc01860cb85a5f32ab2537",
+    "mtime": 1788327795.6564193,
+    "ast_hash": "e9cba3762c211c4d7e198a767c27afd2",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/credit_admin.dart": {
@@ -1745,13 +1745,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/receipt_pdf.dart": {
-    "mtime": 1786785756.6144881,
-    "ast_hash": "3926fc886dceef54f633d2b8a65003bf",
+    "mtime": 1788328211.5973587,
+    "ast_hash": "de8c10ecc7779ea43ddc4074d711d0c1",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/receipts_screen.dart": {
-    "mtime": 1787201675.6614,
-    "ast_hash": "a42252c84aada41f324bde5c8d82053f",
+    "mtime": 1788331207.103407,
+    "ast_hash": "a7dd1095f9a33a82cc3638ac8e4982e9",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/receipt_capture.dart": {
@@ -1790,8 +1790,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/ocr/index.ts": {
-    "mtime": 1786899980.5848124,
-    "ast_hash": "1e200319441ff2d80149c2f182d54ab0",
+    "mtime": 1788327701.3013039,
+    "ast_hash": "0a9b87f88ca857b114d70bfbe670b428",
     "semantic_hash": ""
   },
   "supabase/migrations/0108_email_send_now.sql": {
@@ -4810,8 +4810,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/attachments_module.sql": {
-    "mtime": 1787822946.0185897,
-    "ast_hash": "1445a3143853b2bf6c250e5129cab893",
+    "mtime": 1788328667.7561216,
+    "ast_hash": "cac1a0c243e6962514f27642667f2d3e",
     "semantic_hash": ""
   },
   "supabase/migrations/0324_the_demo_can_show_an_attachment.sql": {
@@ -6982,6 +6982,121 @@
   "supabase/tests/statutory_remittances.sql": {
     "mtime": 1788323978.8335302,
     "ast_hash": "23c1d0e3150ec09daf105a7c8795efb2",
+    "semantic_hash": ""
+  },
+  "app/lib/src/core/amount_words.dart": {
+    "mtime": 1788328274.0422008,
+    "ast_hash": "a44e376d7188067adc9c48e6c4c396dd",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/admin/feedback_admin.dart": {
+    "mtime": 1788326506.0946853,
+    "ast_hash": "11209fd2fb87ceac11197229a7744ef1",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/contacts/scanned_address.dart": {
+    "mtime": 1788329181.6169724,
+    "ast_hash": "d0ee6be5af0aeefe5fae077483244abf",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/group_payment_screen.dart": {
+    "mtime": 1788331695.9024014,
+    "ast_hash": "15f313ba4268777c056c987b955cfb22",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/expenses/expense_voucher_pdf.dart": {
+    "mtime": 1788328249.0051928,
+    "ast_hash": "b3318c7bd4739a13dc12077d77e57388",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/feedback/feedback_screen.dart": {
+    "mtime": 1788326475.2300837,
+    "ast_hash": "55ebf7a261d61f888a13fb43c1274ba5",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/settings/chart_of_accounts_card.dart": {
+    "mtime": 1788325724.9448187,
+    "ast_hash": "296d96ac676a48e21b9641d04a6d17ff",
+    "semantic_hash": ""
+  },
+  "app/test/amount_words_test.dart": {
+    "mtime": 1788328316.9301932,
+    "ast_hash": "610975491b74bf8c1eaf271990935710",
+    "semantic_hash": ""
+  },
+  "app/test/group_payment_screen_test.dart": {
+    "mtime": 1788331695.902676,
+    "ast_hash": "85bd981207cf0776b6a6e1f810660ea8",
+    "semantic_hash": ""
+  },
+  "app/test/line_description_multiline_test.dart": {
+    "mtime": 1788327865.6568003,
+    "ast_hash": "8f83a6ee8a98389e974d4a1e476cf407",
+    "semantic_hash": ""
+  },
+  "app/test/ocr_continuation_test.dart": {
+    "mtime": 1788327750.2728958,
+    "ast_hash": "5be262ddd1ffcd4b189aec1f0cd01eb5",
+    "semantic_hash": ""
+  },
+  "app/test/scanned_address_test.dart": {
+    "mtime": 1788329163.9562683,
+    "ast_hash": "19a27e16412814b4b4d821943688c66a",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0458_the_ledger_itself.sql": {
+    "mtime": 1788324952.5893593,
+    "ast_hash": "1aff2491e8eb922a9b0efd947d4e015c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0459_the_chart_is_the_companys.sql": {
+    "mtime": 1788325679.0460365,
+    "ast_hash": "a98e0884c6720df326e9d1a92911218a",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0460_somewhere_to_say_it_is_broken.sql": {
+    "mtime": 1788326370.4193845,
+    "ast_hash": "b6188e9f39ae83a5a7ab13bf2f669e75",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0461_the_next_return_follows_the_last.sql": {
+    "mtime": 1788327446.9411116,
+    "ast_hash": "717c8b42510f292f6c11715fae7d70a7",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0462_one_payment_across_several_companies.sql": {
+    "mtime": 1788330991.3278248,
+    "ast_hash": "30f1dd38ae1b251ce27af873cdb28472",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0463_a_practice_of_ones_own.sql": {
+    "mtime": 1788332249.5365126,
+    "ast_hash": "34471cf573a02c4c9ce770a5828a8bc7",
+    "semantic_hash": ""
+  },
+  "supabase/tests/chart_of_accounts.sql": {
+    "mtime": 1788325652.151833,
+    "ast_hash": "ab36b23cc95125c87115e4947fc16e3a",
+    "semantic_hash": ""
+  },
+  "supabase/tests/demo_practice.sql": {
+    "mtime": 1788332213.9205658,
+    "ast_hash": "add77b0fbd3aabd46f53dc00674b327e",
+    "semantic_hash": ""
+  },
+  "supabase/tests/feedback.sql": {
+    "mtime": 1788326343.0405362,
+    "ast_hash": "43a8ccaad9ac94644dbe58511546cad2",
+    "semantic_hash": ""
+  },
+  "supabase/tests/general_ledger.sql": {
+    "mtime": 1788324923.7159536,
+    "ast_hash": "6536242d01025dbc9a53069390d221d3",
+    "semantic_hash": ""
+  },
+  "supabase/tests/group_payment.sql": {
+    "mtime": 1788331003.8888044,
+    "ast_hash": "4d95fbd77e6c55ba50849e44ca66b2ed",
     "semantic_hash": ""
   }
 }
