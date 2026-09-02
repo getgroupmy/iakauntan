@@ -99,11 +99,19 @@ void main() {
   testWidgets('a service desk company is not shown the ledger', (tester) async {
     await onADesktop(tester, shell(const {'ticketing', 'contacts'}));
 
-    // What it pays for, and the two screens every company keeps.
+    // What it pays for, and the screens every company keeps.
     expect(find.text('Service desk'), findsOneWidget);
-    expect(find.text('Contacts'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Team'), findsOneWidget);
+
+    // Contacts is four entries now, not one: the split into Customer,
+    // Supplier and Prospect put three doors beside All Contacts, and
+    // this assertion used to look for a nav item called exactly
+    // "Contacts" — which is nobody's label any more.
+    expect(find.text('All Contacts'), findsOneWidget);
+    expect(find.text('Customer'), findsOneWidget);
+    expect(find.text('Supplier'), findsOneWidget);
+    expect(find.text('Prospect'), findsOneWidget);
 
     // What it does not. These carried no module tag at all before 0234
     // and were shown to every company on the platform.

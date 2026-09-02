@@ -16,6 +16,7 @@ import '../../data/ocr_repository.dart';
 import '../../data/repository.dart';
 import '../shared/attachments_card.dart';
 import '../shared/scan_intake.dart';
+import 'credit_banner_state.dart';
 import 'doc_types.dart';
 import 'document_dates.dart';
 import 'email_dialog.dart';
@@ -1507,17 +1508,15 @@ class _CreditBanner extends ConsumerWidget {
     final status = ref.watch(customerCreditProvider(contactId)).valueOrNull;
     if (status == null) return const SizedBox.shrink();
 
-    final control = status['control']?.toString() ?? 'warn';
-    final limit = Fmt.toDouble(status['credit_limit']);
-    if (control == 'off' || limit <= 0) return const SizedBox.shrink();
+    final state = creditBannerFor(status);
+    if (!state.shows) return const SizedBox.shrink();
 
-    final over = status['over_limit'] == true;
-    final available = Fmt.toDouble(status['available']);
-    // Quiet until it is close, because a warning shown every time is a
-    // warning nobody sees when it matters.
-    if (!over && available > limit * 0.1) return const SizedBox.shrink();
-
-    final colour = over ? context.colors.danger : context.colors.warning;
+    final over = state.kind == CreditBannerKind.over;
+    final hold = state.kind == CreditBannerKind.hold;
+    final available = state.available;
+    final colour = (over || hold)
+        ? context.colors.danger
+        : context.colors.warning;
     const blockedNote = '. Posting past it is blocked.';
 
     return Padding(
@@ -1528,7 +1527,11 @@ class _CreditBanner extends ConsumerWidget {
           child: Row(
             children: [
               Icon(
-                over ? Icons.credit_card_off : Icons.credit_card,
+                hold
+                    ? Icons.block
+                    : over
+                    ? Icons.credit_card_off
+                    : Icons.credit_card,
                 size: 20,
                 color: colour,
               ),
@@ -1538,7 +1541,11 @@ class _CreditBanner extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      over
+                      hold
+                          ? (state.contactName == null
+                                ? 'On credit hold'
+                                : '${state.contactName} is on credit hold')
+                          : over
                           ? 'Over their credit limit by '
                                 '${Fmt.money(-available)}'
                           : '${Fmt.money(available)} of credit left',
@@ -1548,9 +1555,15 @@ class _CreditBanner extends ConsumerWidget {
                       ),
                     ),
                     Text(
-                      'Owes ${Fmt.money(Fmt.toDouble(status['outstanding']))} '
-                      'against a limit of ${Fmt.money(limit)}'
-                      '${control == 'block' ? blockedNote : ''}',
+                      hold
+                          // The same two answers the refusal gives,
+                          // said before the invoice is typed rather
+                          // than after it is finished.
+                          ? 'This cannot be posted. Take the hold off in '
+                                'the contact, or raise it as a cash sale.'
+                          : 'Owes ${Fmt.money(state.outstanding)} '
+                                'against a limit of ${Fmt.money(state.limit)}'
+                                '${state.blocked ? blockedNote : ''}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],

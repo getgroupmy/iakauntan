@@ -150,8 +150,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1788328637.2546685,
-    "ast_hash": "c46f995c5d799c434d7138c5bdb2e199",
+    "mtime": 1788341105.1014662,
+    "ast_hash": "b5ddb48d8a0b61c188822478180710a4",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788339041.892028,
-    "ast_hash": "37997bd1ca612d408391219ab0e1c0c2",
+    "mtime": 1788340965.9222033,
+    "ast_hash": "ae27ae9e692e7f4c37429c90963b3ab1",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -3450,8 +3450,8 @@
     "semantic_hash": ""
   },
   "app/test/module_surface_test.dart": {
-    "mtime": 1787822945.5065897,
-    "ast_hash": "b8f065c873480a6db1bad5f954e424cd",
+    "mtime": 1788341686.3871171,
+    "ast_hash": "e9179dc5b52fc86569e9d52f0359c40a",
     "semantic_hash": ""
   },
   "app/test/offline_store_test.dart": {
@@ -7202,6 +7202,26 @@
   "supabase/migrations/0472_the_practices_books_belong_to_the_practice.sql": {
     "mtime": 1788340681.880165,
     "ast_hash": "3c47c61199e2f9b71fa1068d1a4acaff",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/credit_banner_state.dart": {
+    "mtime": 1788341082.6642802,
+    "ast_hash": "ec7ad108b92f7bf3c1714e462f2de796",
+    "semantic_hash": ""
+  },
+  "app/test/credit_banner_test.dart": {
+    "mtime": 1788341134.4121647,
+    "ast_hash": "02e3fed716a29049fe97b26a97d78b46",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0473_say_they_are_on_hold_before_the_invoice_is_typed.sql": {
+    "mtime": 1788340937.7556303,
+    "ast_hash": "b09a81d4f13ca0076a7ed6ee173048e4",
+    "semantic_hash": ""
+  },
+  "supabase/tests/credit_hold_is_visible.sql": {
+    "mtime": 1788341022.9207308,
+    "ast_hash": "66823f306d326eee272542b932737664",
     "semantic_hash": ""
   }
 }
