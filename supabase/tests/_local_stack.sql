@@ -90,6 +90,21 @@ create table if not exists auth.users (
   is_anonymous boolean default false
 );
 
+-- GoTrue's own unique index on the address, by the name the real one
+-- has so a violation here reads the same as a violation there.
+--
+-- It was missing, and that is not a detail: a seed that handed two
+-- practices the same demo login passed every local run and failed in
+-- CI with `duplicate key value violates unique constraint
+-- "users_email_partial_key"`. This harness's whole bargain is that red
+-- here means red there and green here means *probably* green there;
+-- the second half only holds for the constraints it actually carries.
+--
+-- Partial on `is_sso_user`, as GoTrue has it: an SSO user's address
+-- belongs to the identity provider and may repeat.
+create unique index if not exists users_email_partial_key
+  on auth.users (email) where is_sso_user = false;
+
 create table if not exists auth.identities (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users (id) on delete cascade,

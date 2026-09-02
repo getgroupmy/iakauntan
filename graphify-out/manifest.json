@@ -5720,8 +5720,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/_local_stack.sql": {
-    "mtime": 1788285600.499654,
-    "ast_hash": "01064f09422904a4388818b380a6ceb7",
+    "mtime": 1788336894.6918616,
+    "ast_hash": "b847665cdcc9d4558e865c7b55ef0737",
     "semantic_hash": ""
   },
   "supabase/tests/run_locally.sh": {
@@ -7080,8 +7080,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_practice.sql": {
-    "mtime": 1788335781.592912,
-    "ast_hash": "a9df8db8851d570bdc568cb37c15b06a",
+    "mtime": 1788336965.0200164,
+    "ast_hash": "d37f3cb78676164e0e3952a620c9271a",
     "semantic_hash": ""
   },
   "supabase/tests/feedback.sql": {
@@ -7167,6 +7167,11 @@
   "app/test/screen_catalogue_test.dart": {
     "mtime": 1788336387.216085,
     "ast_hash": "0480584c59ffa030a0f8ac936ec584dc",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0469_one_deployment_more_than_one_practice.sql": {
+    "mtime": 1788337116.7941804,
+    "ast_hash": "abb9813135483f4ada6f1a8f88c72ad8",
     "semantic_hash": ""
   }
 }

@@ -241,6 +241,22 @@ begin
     (select count(*)::integer from public.firms f
        join public.firm_members m on m.firm_id = f.id
       where m.user_id = v_who), 1);
+
+  -- Two practices on one deployment, which is the whole point of the
+  -- firm layer and which the seed could not do until 0469: the demo
+  -- logins were fixed addresses, so the second account got
+  -- `duplicate key value violates unique constraint
+  -- "users_email_partial_key"` part-way through, after its firm had
+  -- been created.
+  perform pg_temp.check_true('two practices can stand side by side',
+    (select count(*) from public.firms where slug like 'geswant%'
+        or slug like 'kabeer-co%') >= 2);
+  perform pg_temp.check_eq(
+    'each with demo logins of its own, named after its firm',
+    (select count(distinct split_part(email, '@', 1))::integer
+       from auth.users where email like 'practice-%@geswant.demo'),
+    (select count(*)::integer from auth.users
+      where email like 'practice-%@geswant.demo'));
 end $$;
 
 -- ---------------------------------------------------------------------
