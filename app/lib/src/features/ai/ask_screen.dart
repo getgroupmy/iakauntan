@@ -86,6 +86,53 @@ class _AskScreenState extends ConsumerState<AskScreen> {
     _toBottom();
   }
 
+  /// Reopen something asked before.
+  ///
+  /// The stored turns are replayed as they were said. Tool results are
+  /// not among them — `ai_messages` keeps which reports an answer used,
+  /// not what they said that day, deliberately: a balance shown again a
+  /// week later, looking current, is worse than one not shown at all.
+  Future<void> _open(String id) async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    setState(() {
+      _asking = true;
+      _error = null;
+    });
+    try {
+      final convo = await repo.aiConversation(id);
+      if (!mounted) return;
+      final said = (convo['messages'] as List? ?? [])
+          .map((m) => Map<String, dynamic>.from(m as Map))
+          .toList();
+      setState(() {
+        _conversationId = id;
+        _turns
+          ..clear()
+          ..addAll([
+            for (final m in said)
+              if (m['role'] == 'user')
+                _Turn.question('${m['content']}')
+              else if (m['role'] == 'assistant')
+                _Turn.answer(
+                  '${m['content']}',
+                  (m['tool_calls'] as List? ?? [])
+                      .map((c) => '${(c as Map)['tool']}')
+                      .toList(),
+                ),
+          ]);
+        _asking = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+        _asking = false;
+      });
+    }
+    _toBottom();
+  }
+
   void _toBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
@@ -103,6 +150,18 @@ class _AskScreenState extends ConsumerState<AskScreen> {
       appBar: AppBar(
         title: const Text('Ask about your books'),
         actions: [
+          IconButton(
+            key: const ValueKey('ask-earlier'),
+            tooltip: 'Asked before',
+            onPressed: _asking
+                ? null
+                : () => showModalBottomSheet<void>(
+                    context: context,
+                    showDragHandle: true,
+                    builder: (_) => _Earlier(onOpen: _open),
+                  ),
+            icon: const Icon(Icons.history),
+          ),
           if (_turns.isNotEmpty)
             IconButton(
               key: const ValueKey('ask-new'),
@@ -240,6 +299,57 @@ class _Opening extends ConsumerWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// What this person has asked before, in this company.
+///
+/// Their own, and an administrator's view of everybody's — which is
+/// `ai_conversations_for`'s rule, not this sheet's, so there is nothing
+/// here that could disagree with it.
+class _Earlier extends ConsumerWidget {
+  const _Earlier({required this.onOpen});
+
+  final void Function(String id) onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final convos = ref.watch(aiConversationsProvider);
+    return SizedBox(
+      height: 420,
+      child: AsyncView(
+        value: convos,
+        onRetry: () => ref.invalidate(aiConversationsProvider),
+        builder: (rows) => rows.isEmpty
+            ? const EmptyState(
+                icon: Icons.history,
+                title: 'Nothing asked yet',
+                message: 'Questions you ask are kept here, so you can pick '
+                    'one up where you left it.',
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: Space.sm),
+                itemCount: rows.length,
+                itemBuilder: (_, i) {
+                  final r = rows[i];
+                  return ListTile(
+                    key: ValueKey('ask-earlier-${r['id']}'),
+                    leading: const Icon(Icons.chat_bubble_outline, size: 20),
+                    title: Text('${r['title']}'),
+                    subtitle: Text(
+                      Fmt.dateTime(
+                        DateTime.tryParse('${r['updated_at']}'),
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      onOpen('${r['id']}');
+                    },
+                  );
+                },
+              ),
       ),
     );
   }

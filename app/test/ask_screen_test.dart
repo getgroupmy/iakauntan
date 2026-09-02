@@ -17,10 +17,12 @@ import 'package:iakauntan/src/features/ai/ask_screen.dart';
 void main() {
   Widget harness({
     List<Map<String, dynamic>> tools = const [],
+    List<Map<String, dynamic>> earlier = const [],
   }) => ProviderScope(
     overrides: [
       repoProvider.overrideWithValue(null),
       aiToolsProvider.overrideWith((_) async => tools),
+      aiConversationsProvider.overrideWith((_) async => earlier),
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
@@ -74,6 +76,41 @@ void main() {
     // Start again only appears once there is something to start again
     // from — an empty conversation has nothing to clear.
     expect(find.byKey(const ValueKey('ask-new')), findsNothing);
+  });
+
+  testWidgets('what was asked before is reachable', (tester) async {
+    // `ai_conversations_for` and `ai_conversation` existed with no
+    // caller — the same fault as the module itself, one layer in, and
+    // one I introduced adding the repository methods without a door.
+    await tester.pumpWidget(
+      harness(
+        earlier: const [
+          {
+            'id': 'c1',
+            'title': 'Who owes us the most?',
+            'updated_at': '2026-09-01T10:00:00Z',
+          },
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('ask-earlier')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Who owes us the most?'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ask-earlier-c1')), findsOneWidget);
+  });
+
+  testWidgets('and says so when there is nothing to reopen', (tester) async {
+    await tester.pumpWidget(harness());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('ask-earlier')));
+    await tester.pumpAndSettle();
+
+    // Not a blank sheet, which reads as a load that failed.
+    expect(find.text('Nothing asked yet'), findsOneWidget);
   });
 
   testWidgets('an empty question is not sent', (tester) async {
