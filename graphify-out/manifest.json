@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788361696.5941854,
-    "ast_hash": "00935c3d670e3f4411301e43ff23a02e",
+    "mtime": 1788363961.7165842,
+    "ast_hash": "4e20f8c708f8c480641da8be24a3a11b",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7367,6 +7367,16 @@
   "supabase/tests/contact_duplicates.sql": {
     "mtime": 1788361669.9895217,
     "ast_hash": "5dbb752907b205924910f198b6c43688",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0483_the_invitation_nobody_could_send.sql": {
+    "mtime": 1788363854.4083056,
+    "ast_hash": "6bdd0e309e9e9135a8cbc7b2f5945b79",
+    "semantic_hash": ""
+  },
+  "supabase/tests/firm_invitations.sql": {
+    "mtime": 1788363909.112309,
+    "ast_hash": "583a8f4557e76a560c22f3b2ac93e506",
     "semantic_hash": ""
   }
 }
