@@ -932,6 +932,14 @@ final sstDueProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((
   return requireRepo(ref).sstDue(withinDays: 120);
 });
 
+/// What makes up one period's figure, split by tax type and the basis
+/// each part is due on. Keyed by the period end as an ISO date, because
+/// that is what identifies a taxable period.
+final sstReturnLinesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, periodEnd) {
+      return requireRepo(ref).sstReturnLines(DateTime.parse(periodEnd));
+    });
+
 /// The practice keeping *this* company's books, if any, with the role
 /// its people hold here. Null for the great majority of companies.
 ///

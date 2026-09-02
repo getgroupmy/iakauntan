@@ -175,6 +175,13 @@ class _FileDialogState extends ConsumerState<_FileDialog> {
               'much, and under what reference.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            const SizedBox(height: 12),
+            // The figure split the way the Act splits it, because the
+            // person copying it onto the form needs to know which half
+            // is which — and because a service-tax line that looks
+            // small for the invoices issued in the period is right,
+            // not missing.
+            _Breakdown(periodEnd: '${widget.row['period_end']}'),
             const SizedBox(height: 16),
             TextField(
               controller: _amount,
@@ -232,4 +239,65 @@ class _FileDialogState extends ConsumerState<_FileDialog> {
       ],
     );
   }
+}
+
+/// What the period's figure is made of.
+///
+/// Three bases can appear, and they mean different things: sales tax is
+/// due when the goods go, service tax when the money comes, and service
+/// tax on an invoice that reached twelve months without being paid for
+/// falls due anyway. A company that reads only the total will file the
+/// right number; a company that reads this will understand why it is
+/// not the total of the invoices it issued.
+class _Breakdown extends ConsumerWidget {
+  const _Breakdown({required this.periodEnd});
+
+  final String periodEnd;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lines = ref.watch(sstReturnLinesProvider(periodEnd));
+
+    return lines.when(
+      loading: () => const LinearProgressIndicator(),
+      error: (e, _) => Text('$e', style: Theme.of(context).textTheme.bodySmall),
+      data: (rows) {
+        if (rows.isEmpty) {
+          return Text(
+            'Nothing fell due in this period.',
+            style: Theme.of(context).textTheme.bodySmall,
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final r in rows)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${r['tax_type_name']} · ${_basis('${r['basis']}')}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    Text(
+                      Fmt.money((r['tax_amount'] as num?)?.toDouble() ?? 0),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  static String _basis(String code) => switch (code) {
+    'payment' => 'on payments received',
+    'twelve months' => 'unpaid twelve months on',
+    _ => 'on the invoice',
+  };
 }

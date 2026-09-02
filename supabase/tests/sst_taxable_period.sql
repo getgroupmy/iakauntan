@@ -154,6 +154,13 @@ end $$;
 
 -- ---------------------------------------------------------------------
 -- Which period an invoice's tax lands in
+--
+-- Sales tax here, deliberately. Sales tax is due when the goods are
+-- sold, so the document date decides it and these assertions are about
+-- the period boundary. **Service tax is due when the money arrives**
+-- and is asserted in `service_tax_on_payment.sql` -- 0456 -- because a
+-- service-tax invoice with nothing paid against it belongs in no
+-- period at all.
 -- ---------------------------------------------------------------------
 do $$
 declare
@@ -167,8 +174,13 @@ declare
 begin
   perform pg_temp.sign_in_as(pg_temp.test_user());
   v_org := pg_temp.sst_org('SST Invois Sdn Bhd', date '2026-04-15');
-  select id into v_tax from public.tax_codes
-   where org_id = v_org and code = 'ST8';
+  insert into public.tax_codes
+    (org_id, code, name, tax_type_code, rate,
+     sales_tax_account_id, purchase_tax_account_id)
+  values (v_org, 'SL10', 'Sales Tax 10%', '01', 10,
+          (select id from public.accounts where org_id = v_org and code = '2130'),
+          (select id from public.accounts where org_id = v_org and code = '1410'))
+  returning id into v_tax;
 
   insert into public.contacts (org_id, code, name, contact_type)
   values (v_org, 'C1', 'Pelanggan', 'customer')
@@ -191,7 +203,7 @@ begin
   insert into public.sales_document_lines
     (org_id, document_id, line_no, description, quantity, unit_price,
      tax_code_id, tax_rate)
-  values (v_org, v_doc, 1, 'Khidmat Julai', 1, 1000, v_tax, 8);
+  values (v_org, v_doc, 1, 'Barang Julai', 1, 1000, v_tax, 8);
 
   insert into public.sales_documents
     (org_id, doc_type, doc_no, doc_date, contact_id, currency,
@@ -202,7 +214,7 @@ begin
   insert into public.sales_document_lines
     (org_id, document_id, line_no, description, quantity, unit_price,
      tax_code_id, tax_rate)
-  values (v_org, v_doc, 1, 'Khidmat Ogos', 1, 5000, v_tax, 8);
+  values (v_org, v_doc, 1, 'Barang Ogos', 1, 5000, v_tax, 8);
 
   select * into r from public.sst_taxable_periods(v_org)
    where period_end = date '2026-07-31';
@@ -226,7 +238,7 @@ begin
   insert into public.purchase_document_lines
     (org_id, document_id, line_no, description, quantity, unit_price,
      tax_code_id, tax_rate)
-  values (v_org, v_doc, 1, 'Khidmat dibeli', 1, 2000, v_tax, 8);
+  values (v_org, v_doc, 1, 'Barang dibeli', 1, 2000, v_tax, 8);
 
   select * into r from public.sst_taxable_periods(v_org)
    where period_end = date '2026-09-30';

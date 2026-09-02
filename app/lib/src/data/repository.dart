@@ -382,6 +382,18 @@ class Repo {
         ),
       );
 
+  /// What makes up the figure for one period, split by tax type and by
+  /// the basis it is due on: sales tax when the goods went, service tax
+  /// when the money came, and service tax that reached twelve months
+  /// without being paid for. See 0456.
+  Future<List<Map<String, dynamic>>> sstReturnLines(DateTime periodEnd) async =>
+      _rows(
+        await callRpc(
+          'sst_return_lines',
+          params: {'p_org_id': orgId, 'p_period_end': Fmt.iso(periodEnd)},
+        ),
+      );
+
   /// Records that the return for a finished period was filed. The
   /// database refuses a date that is not the end of one, and refuses a
   /// period that has not ended.
