@@ -251,9 +251,19 @@ serveFunction("ask", async (req) => {
         // gross margin down" is three reports and an argument about
         // what changed between them.
         thinking: { type: "adaptive" },
-        // On the last round the tools are taken away rather than merely
-        // discouraged, so the model has to answer with what it holds.
-        ...(last ? {} : { tools }),
+        // On the last round the model is told to answer with what it
+        // holds rather than reach for another report.
+        //
+        // `tool_choice: none` rather than dropping `tools`, which is
+        // what this did first and was wrong: by the last round the
+        // conversation already carries `tool_use` and `tool_result`
+        // blocks, and a request containing those with no `tools`
+        // defined is rejected. So the one round that exists to salvage
+        // an answer would have been the one that failed outright —
+        // and only on the long questions, which is exactly when it
+        // matters.
+        tools,
+        ...(last ? { tool_choice: { type: "none" } } : {}),
         messages,
       }),
     });

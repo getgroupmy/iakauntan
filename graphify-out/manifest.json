@@ -7235,8 +7235,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/ask/index.ts": {
-    "mtime": 1788342175.836229,
-    "ast_hash": "2c0ab054908113dc91dfae03e4ee758d",
+    "mtime": 1788346082.4087713,
+    "ast_hash": "a8d2bab4d8d3bb5545a5d3330c8f5384",
     "semantic_hash": ""
   },
   "supabase/migrations/0474_nobody_else_may_speak_in_the_assistants_voice.sql": {
