@@ -519,6 +519,81 @@ class Repo {
   // following month. See 0457.
   // ------------------------------------------------------------------
 
+  // -------------------------------------------------------------------
+  // One payment across several companies (0462)
+  // -------------------------------------------------------------------
+  //
+  // These three are deliberately not scoped to `orgId`. Everything else
+  // on this class asks about the company that is open; a group payment
+  // is the one operation whose whole point is the companies that are
+  // not. The server decides what the caller may see and settle —
+  // `open_documents_across_companies` filters by `app.can_post`, and
+  // `payment_batch_lines` by membership — so widening the question here
+  // does not widen the answer.
+
+  /// Everything still owed across every company this person may post
+  /// in. [kind] is `invoice` or `bill`.
+  Future<List<Map<String, dynamic>>> openAcrossCompanies({
+    String kind = 'invoice',
+    String? search,
+  }) async => _rows(await callRpc(
+    'open_documents_across_companies',
+    params: {'p_kind': kind, 'p_search': search},
+  ));
+
+  /// Settle documents in several companies with one payment. Each entry
+  /// names one document, never a company: the company is read off the
+  /// document, so a line cannot say one and settle another.
+  ///
+  /// Returns the batch id. One call is one transaction — either every
+  /// company's receipt is posted or none is.
+  Future<String> recordGroupPayment({
+    required DateTime paidOn,
+    String? reference,
+    String? note,
+    required List<
+      ({
+        String documentId,
+        bool isSales,
+        double amount,
+        double discount,
+        String? bankAccountId,
+        String? paymentModeCode,
+      })
+    >
+    lines,
+  }) async {
+    final payload = [
+      for (final l in lines)
+        {
+          if (l.isSales) 'invoice_id': l.documentId else 'bill_id': l.documentId,
+          'amount': l.amount,
+          if (l.discount > 0) 'discount': l.discount,
+          if (l.bankAccountId != null) 'bank_account_id': l.bankAccountId,
+          if (l.paymentModeCode != null)
+            'payment_mode_code': l.paymentModeCode,
+        },
+    ];
+    final id = await callRpc(
+      'record_group_payment',
+      params: {
+        'p_paid_on': Fmt.iso(paidOn),
+        'p_reference': reference,
+        'p_lines': payload,
+        'p_note': note,
+      },
+    );
+    return id as String;
+  }
+
+  /// The companies' own lines on one batch — only the ones the reader
+  /// belongs to.
+  Future<List<Map<String, dynamic>>> paymentBatchLines(String batchId) async =>
+      _rows(await callRpc(
+        'payment_batch_lines',
+        params: {'p_batch': batchId},
+      ));
+
   Future<List<Map<String, dynamic>>> statutoryRemittances() async =>
       _rows(await callRpc(
         'report_statutory_remittances',

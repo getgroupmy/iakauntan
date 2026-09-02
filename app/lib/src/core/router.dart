@@ -73,6 +73,7 @@ import '../features/ticketing/ticket_screen.dart';
 import '../features/ticketing/tickets_screen.dart';
 import '../features/property/site_screen.dart';
 import '../features/manufacturing/order_screen.dart';
+import '../features/documents/group_payment_screen.dart';
 import '../features/onboarding/create_org_screen.dart';
 import '../features/ledger/journals_screen.dart';
 import '../features/documents/recurring_documents_screen.dart';
@@ -497,6 +498,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       // this address does not open.
       GoRoute(path: '/no-access', builder: (_, __) => const NoAccessScreen()),
       GoRoute(path: '/onboarding', builder: (_, __) => const CreateOrgScreen()),
+      // The same form, at an address the redirect does not send anybody
+      // away from. `/onboarding` is first-run only — a person who
+      // already has a company is bounced from it to the dashboard — so
+      // until now there was no way at all to open a second set of books
+      // from inside the app.
+      GoRoute(
+        path: '/companies/new',
+        builder: (_, __) => const CreateOrgScreen(returnTo: '/dashboard'),
+      ),
       // Reachable two ways on purpose: the router forces it after a
       // recovery event, and the reset e-mail links straight here. If the
       // event is missed the link still lands somewhere useful.
@@ -693,6 +703,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/receipts',
             builder: (_, __) => const ReceiptsScreen(),
+            routes: [
+              GoRoute(
+                path: 'group',
+                parentNavigatorKey: _rootKey,
+                builder: (_, __) => const GroupPaymentScreen(),
+              ),
+            ],
           ),
           GoRoute(path: '/assets', builder: (_, __) => const AssetsScreen()),
           GoRoute(path: '/lots', builder: (_, __) => const LotsScreen()),

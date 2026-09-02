@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/address_field.dart';
 import '../../core/providers.dart';
@@ -11,7 +12,16 @@ import '../settings/msic_picker.dart';
 /// First-run setup. One call to create_organization() stands up the whole
 /// tenant: chart of accounts, SST codes, fiscal calendar and pipeline.
 class CreateOrgScreen extends ConsumerStatefulWidget {
-  const CreateOrgScreen({super.key});
+  const CreateOrgScreen({super.key, this.returnTo});
+
+  /// Where to go once the company exists.
+  ///
+  /// Null is first-run: the router is watching `hasOrg` and lets the
+  /// person out of `/onboarding` by itself the moment there is a
+  /// company. Reached from `/companies/new` by somebody who already has
+  /// one, no redirect fires — they would be left looking at the form
+  /// they have just submitted — so that address says where to go.
+  final String? returnTo;
 
   @override
   ConsumerState<CreateOrgScreen> createState() => _CreateOrgScreenState();
@@ -130,6 +140,8 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
       if (orgId is String) {
         ref.read(currentOrgIdProvider.notifier).select(orgId);
       }
+      final to = widget.returnTo;
+      if (to != null && mounted) context.go(to);
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {

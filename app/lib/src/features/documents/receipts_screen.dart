@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/export_log.dart';
 import '../../core/format.dart';
@@ -59,6 +60,17 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
               onSelectionChanged: (s) => setState(() => _isSales = s.first),
             ),
             const Spacer(),
+            // The other shape a payment comes in: one transfer covering
+            // documents in more than one company. Not a nav entry —
+            // it is asked in the same breath as "did they pay?", and
+            // this is where that is asked.
+            if (canPost)
+              TextButton.icon(
+                onPressed: () => context.push('/receipts/group'),
+                icon: const Icon(Icons.account_tree_outlined, size: 18),
+                label: const Text('Across companies'),
+              ),
+            const SizedBox(width: Space.sm),
             if (canPost)
               FilledButton.icon(
                 // Awaited, and the list re-read afterwards. Fired and

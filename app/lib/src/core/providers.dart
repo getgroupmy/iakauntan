@@ -932,6 +932,18 @@ final platformFeedbackProvider = FutureProvider.autoDispose
     });
 
 // ---------------------------------------------------------------------
+// One payment across several companies
+// ---------------------------------------------------------------------
+
+/// What is open across every company the signed-in person may post in.
+/// Not scoped to the company that happens to be selected — that is the
+/// point of the screen it feeds.
+final openAcrossCompaniesProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, kind) {
+      return requireRepo(ref).openAcrossCompanies(kind: kind);
+    });
+
+// ---------------------------------------------------------------------
 // Statutory remittances
 // ---------------------------------------------------------------------
 
