@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788332629.8755548,
-    "ast_hash": "e844c842de3e7092092d86e7dcbac166",
+    "mtime": 1788333846.886684,
+    "ast_hash": "91c6fc3c22f284dc0a7e44a55d67ddbc",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1750,8 +1750,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/receipts_screen.dart": {
-    "mtime": 1788331207.103407,
-    "ast_hash": "a7dd1095f9a33a82cc3638ac8e4982e9",
+    "mtime": 1788334105.4196472,
+    "ast_hash": "f8812607c405f4a279fc4c167a6db25c",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/receipt_capture.dart": {
@@ -7107,6 +7107,26 @@
   "supabase/tests/over_allocation.sql": {
     "mtime": 1788332786.809746,
     "ast_hash": "cf1ae3834782f11631f6f4b3dc40ffc8",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/apply_on_account.dart": {
+    "mtime": 1788334116.6927903,
+    "ast_hash": "b73c971d3713bb601b89b47dff50c078",
+    "semantic_hash": ""
+  },
+  "app/test/apply_on_account_test.dart": {
+    "mtime": 1788334143.2681415,
+    "ast_hash": "ba2986b60616bc982184e856b6dfa124",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0465_whose_money_it_is.sql": {
+    "mtime": 1788334000.2139213,
+    "ast_hash": "690e005abe27a5bbd7de5915f746d17e",
+    "semantic_hash": ""
+  },
+  "supabase/tests/allocation_party.sql": {
+    "mtime": 1788334012.0894668,
+    "ast_hash": "e44d5a27b495e1b102a8ef0b1eddc82b",
     "semantic_hash": ""
   }
 }

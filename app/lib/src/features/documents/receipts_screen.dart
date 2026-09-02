@@ -15,6 +15,7 @@ import '../../data/models.dart';
 // an extension is only in scope where its library is imported.
 import '../../data/repository.dart';
 import 'email_dialog.dart' show sendNowOutcome;
+import 'apply_on_account.dart';
 import 'receipt_pdf.dart';
 import 'settlement_dialog.dart';
 
@@ -202,6 +203,31 @@ class _SettlementDetail extends ConsumerWidget {
           onPressed: () => Navigator.pop(context),
           child: const Text('Close'),
         ),
+        // Money still on account, and somewhere to put it. The line
+        // below the allocations has promised this since the screen was
+        // written; until 0465 nothing could do it.
+        if (ref.watch(canPostProvider) &&
+            _num(data.valueOrNull?['unapplied_amount']) > 0)
+          OutlinedButton.icon(
+            key: const ValueKey('set-against'),
+            onPressed: () async {
+              final s = data.value!;
+              final applied = await showApplyOnAccount(
+                context,
+                settlementId: id,
+                isSales: isSales,
+                contactId: '${s['contact_id']}',
+                available: _num(s['unapplied_amount']),
+                currency: '${s['currency'] ?? 'MYR'}',
+              );
+              if (applied) {
+                ref.invalidate(settlementProvider(key));
+                ref.invalidate(settlementsProvider(isSales));
+              }
+            },
+            icon: const Icon(Icons.playlist_add_check, size: 18),
+            label: const Text('Set against'),
+          ),
         OutlinedButton.icon(
           onPressed: data.valueOrNull == null
               ? null
