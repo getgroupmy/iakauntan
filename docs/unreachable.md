@@ -5488,3 +5488,49 @@ resource guard, and the cheap alternative — string-matching `least` in
 the apply-time check — would assert the source text rather than the
 behaviour, which this project has been bitten by before. Written down
 so the next person knows it was tried, not missed.
+
+## The trail that would have reported saving as changing
+
+0445 closes the audit sweep, and it is the one where adding the trigger
+was the smaller half of the work.
+
+A discount *applied* at the till has always been attributable —
+`pos_sale_promotions.applied_by`, and 0153's report names the person.
+The *definition* was not: `pos_promotions` and its three scope tables
+had no trigger, no `created_by` and no `updated_by`, so the sale that
+gave away half the stock was attributable and the decision to give it
+away was not.
+
+The scope tables are where the money is — a promotion is harmless until
+something is in its scope — and `upsert_pos_promotion` rewrote all three
+wholesale on every call:
+
+```sql
+delete from public.pos_promotion_items where promotion_id = v_id;
+insert into public.pos_promotion_items (promotion_id, item_id)
+select v_id, i from unnest(p_items) i on conflict do nothing;
+```
+
+Correct, and invisible while nothing watched. Put a trigger on it and
+correcting a promotion's *name* writes a delete and an insert for every
+item in its scope: forty rows saying nothing, with the one row that
+matters buried among them. **A trail that reports a change nobody made
+fails in the same way as one that misses a change somebody did**, and
+the second failure is the one people notice.
+
+So the delete was narrowed to the rows actually leaving. The insert
+needed nothing — `on conflict do nothing` inserts no row for one already
+there, and a trigger does not fire for a row that was not inserted — so
+the path is differential in both directions. Saving a promotion whose
+scope did not change now writes nothing to those tables where it
+previously wrote 2n rows.
+
+### The general form
+
+Auditing a table is not free of the write path's habits. Before putting
+a trigger on something, look at how it is written, not only at what it
+holds: a delete-and-reinsert, an `updated_at` bumped unconditionally, a
+job that rewrites a table nightly — each turns a trail into noise, and
+noise is what makes a trail stop being read. The question to ask is not
+"is this table important" but "does a write to it correspond to a
+change somebody made".

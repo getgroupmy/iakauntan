@@ -518,4 +518,118 @@ begin
     (select s.total_amount from public.pos_sales s where s.id = v_sale), 5.40);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Who put the expensive things on half price (0445)
+--
+-- A discount applied at the till has been attributable since the start
+-- -- `pos_sale_promotions.applied_by`, and 0153's report. The decision
+-- to offer it was not: `pos_promotions` and its three scope tables had
+-- no audit trigger, no `created_by` and no `updated_by`.
+--
+-- The scope tables are where the money is, and they were rewritten
+-- wholesale on every save, so a trigger on them would have reported a
+-- delete and an insert per item every time somebody corrected a
+-- promotion's name. 0445 narrows the delete to the rows actually
+-- leaving, which is what the third assertion here is about: it is the
+-- one that fails if the write path goes back to rewriting the lot.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_promo uuid;
+  v_teh   uuid;
+  v_roti  uuid;
+  v_n     integer;
+begin
+  v_org := pg_temp.test_org('Kedai Diskaun Sdn Bhd');
+
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'TEH', 'Teh tarik', 'service', false, 'C62', 3.00)
+  returning id into v_teh;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price)
+  values (v_org, 'ROTI', 'Roti canai', 'service', false, 'C62', 2.00)
+  returning id into v_roti;
+
+  v_promo := public.upsert_pos_promotion(
+    v_org, 'Half price on the drinks', 'percent_off',
+    p_percent => 50, p_items => array[v_teh]);
+
+  select count(*) into v_n from public.audit_logs
+   where org_id = v_org and table_name = 'pos_promotions';
+  perform pg_temp.check_eq('who made the promotion is recorded', v_n, 1);
+
+  select count(*) into v_n from public.audit_logs
+   where org_id = v_org and table_name = 'pos_promotion_items';
+  perform pg_temp.check_eq('and what it was pointed at', v_n, 1);
+
+  -- These tables are keyed on the pair and have no `id`, so `record_id`
+  -- has to be filled from the promotion or the row says which company
+  -- and which table and not which promotion.
+  select count(*) into v_n from public.audit_logs
+   where org_id = v_org and table_name = 'pos_promotion_items'
+     and record_id = v_promo;
+  perform pg_temp.check_eq(
+    'and which promotion it belongs to', v_n, 1);
+
+  -- The change worth catching: the expensive thing joins the list.
+  perform public.upsert_pos_promotion(
+    v_org, 'Half price on the drinks', 'percent_off',
+    p_percent => 50, p_items => array[v_teh, v_roti], p_id => v_promo);
+
+  select count(*) into v_n from public.audit_logs
+   where org_id = v_org and table_name = 'pos_promotion_items'
+     and action = 'insert';
+  perform pg_temp.check_eq('the item that was added is recorded', v_n, 2);
+
+  select count(*) into v_n from public.audit_logs
+   where org_id = v_org and table_name = 'pos_promotion_items'
+     and action = 'delete';
+  perform pg_temp.check_eq(
+    'and nothing was recorded as leaving', v_n, 0);
+
+  -- Saving it again, unchanged. Before 0445 this deleted and reinserted
+  -- both rows; the trail would have shown four events and no change.
+  perform public.upsert_pos_promotion(
+    v_org, 'Half price on the drinks', 'percent_off',
+    p_percent => 50, p_items => array[v_teh, v_roti], p_id => v_promo);
+
+  select count(*) into v_n from public.audit_logs
+   where org_id = v_org and table_name = 'pos_promotion_items';
+  perform pg_temp.check_eq(
+    'saving it again unchanged records nothing', v_n, 2);
+
+  -- And one actually leaving is one delete, not a rewrite.
+  perform public.upsert_pos_promotion(
+    v_org, 'Half price on the drinks', 'percent_off',
+    p_percent => 50, p_items => array[v_teh], p_id => v_promo);
+
+  select count(*) into v_n from public.audit_logs
+   where org_id = v_org and table_name = 'pos_promotion_items'
+     and action = 'delete';
+  perform pg_temp.check_eq('taking one off records one delete', v_n, 1);
+
+  perform pg_temp.check_eq('and the scope is what was asked for',
+    (select count(*)::integer from public.pos_promotion_items
+      where promotion_id = v_promo), 1);
+
+  -- Retiring it is a change to the promotion, not a deletion of it.
+  perform public.retire_pos_promotion(v_promo);
+  select count(*) into v_n from public.audit_logs
+   where org_id = v_org and table_name = 'pos_promotions'
+     and action = 'update'
+     and new_data ->> 'is_active' = 'false';
+  perform pg_temp.check_eq('retiring it is recorded as a change', v_n, 1);
+
+  -- The scope rows have no org_id of their own; 0443's guard means a
+  -- row that cannot name its tenant is not written at all, so this
+  -- being right is what keeps them out of the platform's trail.
+  select count(*) into v_n from public.audit_logs
+   where org_id is null
+     and table_name not in ('statutory_schedules', 'statutory_rates');
+  perform pg_temp.check_eq(
+    'and no scope row is filed under the platform', v_n, 0);
+end $$;
+
 rollback;
