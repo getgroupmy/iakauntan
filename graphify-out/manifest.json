@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788320712.7193887,
-    "ast_hash": "9d830e30ac0542b6775d49a04100c1fe",
+    "mtime": 1788323461.365624,
+    "ast_hash": "d88da50c03179a145c8153d7e83f50ce",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788313045.827937,
-    "ast_hash": "d0bc3ed31e6b56bc68e9548bbc91e927",
+    "mtime": 1788323461.3647313,
+    "ast_hash": "f08a5f0b8089593a93243fb374a12a51",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1788321648.0574942,
-    "ast_hash": "5ac951024ba0ea7be70d7591f0268003",
+    "mtime": 1788322801.7982905,
+    "ast_hash": "a9c4dcd4239c158739ca725d14613a20",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788321485.5230694,
-    "ast_hash": "6a2bd241cf8d1c6ae091d455ade26f6e",
+    "mtime": 1788323335.8946397,
+    "ast_hash": "755c245608abdfef6eaa6bae337a0bab",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -6942,6 +6942,31 @@
   "supabase/tests/firm_portfolio.sql": {
     "mtime": 1788320431.9630523,
     "ast_hash": "c24158f403a6079371250e75dc911649",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/settings/sst_returns_card.dart": {
+    "mtime": 1788323461.378349,
+    "ast_hash": "756f8a19d13e37251a1c8e2455460cd7",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0455_two_months_and_the_month_after.sql": {
+    "mtime": 1788322578.9350915,
+    "ast_hash": "cdb6bb78727ac7fe1c11a7af768e846f",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0456_service_tax_is_due_when_the_money_arrives.sql": {
+    "mtime": 1788323350.2003179,
+    "ast_hash": "ff7f0e9a1e53270ea77f78d6a6f1a568",
+    "semantic_hash": ""
+  },
+  "supabase/tests/service_tax_on_payment.sql": {
+    "mtime": 1788323313.940114,
+    "ast_hash": "2fe3f8ff73123e2cc9161dd980cfbb3a",
+    "semantic_hash": ""
+  },
+  "supabase/tests/sst_taxable_period.sql": {
+    "mtime": 1788323258.6381848,
+    "ast_hash": "1d6424074cf92ff78a1d353ae2197737",
     "semantic_hash": ""
   }
 }
