@@ -32,8 +32,7 @@ else on this page has been built, and the sections say where.
 - **No ringgit has been through the payment flow.** It is built end to
   end and there is no acquirer sandbox in the environment it was built
   in, so it has never been exercised against a real gateway. Section 3.
-- **Configurable dashboards**, **bulk actions** and an **in-app
-  notification centre**. Section 10.
+- **Configurable dashboards** and **bulk actions**. Section 10.
 
 That is the whole of it. This document has repeatedly been left saying
 a thing was missing for months after it was built — sections 1, 2 and 9
@@ -434,7 +433,15 @@ this section went on saying the opposite.
   `Common/Widget.php`, and eight widgets a user arranges themselves.
   iAkauntan's dashboard is fixed.
 - **Bulk actions** across a list.
-- **In-app notification centre** (`Common/Notification.php`).
+- ~~**In-app notification centre** (`Common/Notification.php`).~~
+  Closed at `0497`. Four things were recorded and told to nobody: an
+  e-Invoice LHDN refused, a ticket past the SLA the customer was
+  promised, a claim waiting on a named approver, and the CA 2016 s.259
+  lodgement date coming up. `app.raise_notifications` gathers them once
+  a night from `run_daily_jobs`; a notice addressed to nobody is the
+  company's and one carrying a `user_id` is that person's alone. The
+  lodgement rule moved into `app.fs_lodge_by` so the nightly pass and
+  `fs_deadlines` cannot drift apart.
 
 ## Order
 

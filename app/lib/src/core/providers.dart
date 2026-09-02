@@ -1857,6 +1857,20 @@ final documentActivityProvider = FutureProvider.autoDispose
       return requireRepo(ref).documentActivity(documentId);
     });
 
+/// What is waiting for the person signed in, in this company.
+final myNotificationsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, bool>((ref, includeRead) {
+      return requireRepo(ref).myNotifications(includeRead: includeRead);
+    });
+
+/// Just the number, for the bell. Separate from the list because the
+/// bell is on every screen and the list is only on the one that is
+/// open.
+final unreadNotificationsProvider =
+    FutureProvider.autoDispose<int>((ref) {
+      return requireRepo(ref).unreadNotifications();
+    });
+
 /// What one expense was divided into. Empty for the ordinary expense,
 /// which is on one account and has no lines at all.
 final expenseSplitProvider = FutureProvider.autoDispose

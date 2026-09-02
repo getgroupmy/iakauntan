@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788389727.4412282,
-    "ast_hash": "2f8479bdb6a2b74c92794cdf94b207a8",
+    "mtime": 1788391330.1321325,
+    "ast_hash": "f13c17d22ee8580f7fb150660d85ca08",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788389589.1429427,
-    "ast_hash": "859654de6ab1003757a44dea2fce0f20",
+    "mtime": 1788391330.1311197,
+    "ast_hash": "c14f6aa39c44726e1b71a22b988b53aa",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1788367757.926449,
-    "ast_hash": "680ea76eb59ac270ca583a9535e80d72",
+    "mtime": 1788391774.0925457,
+    "ast_hash": "61766f0ed9706816939eca0eccf6b595",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788389542.3104217,
-    "ast_hash": "d56b3b5703ee38bfca85f47c6601beb8",
+    "mtime": 1788391307.4507005,
+    "ast_hash": "2cc796548a3c6fb53588ebec2d4ccaf7",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1500,8 +1500,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-akaunting.md": {
-    "mtime": 1788390127.447749,
-    "ast_hash": "c98466c285ab8598ec4099851aaeb7fa",
+    "mtime": 1788392277.047874,
+    "ast_hash": "24380562cf1daa19692eadcc97d3dfb8",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/email_screen.dart": {
@@ -7547,6 +7547,21 @@
   "supabase/tests/expense_split.sql": {
     "mtime": 1788389464.0757976,
     "ast_hash": "ab9a5f62f871bf137736b1ee603f75b5",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/shell/notification_bell.dart": {
+    "mtime": 1788391774.092018,
+    "ast_hash": "c4d3d32d16584e396152118542921ed8",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0497_tell_somebody.sql": {
+    "mtime": 1788391307.433574,
+    "ast_hash": "e5c9ddfc0afd5e4d6e9c0a422a84ee53",
+    "semantic_hash": ""
+  },
+  "supabase/tests/notifications.sql": {
+    "mtime": 1788391270.5875962,
+    "ast_hash": "15b7d61486843a2bad6147554f71d117",
     "semantic_hash": ""
   }
 }

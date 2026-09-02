@@ -3799,6 +3799,34 @@ class Repo {
     return row['id'].toString();
   }
 
+  // ------------------------------------------------------------------
+  // What is waiting for somebody
+  // ------------------------------------------------------------------
+
+  /// The caller's notifications for this company. Unread only unless
+  /// asked otherwise; the row level policy decides whose they are.
+  Future<List<Map<String, dynamic>>> myNotifications(
+          {bool includeRead = false}) async =>
+      Repo._rows(await callRpc('my_notifications',
+          params: {'p_org': orgId, 'p_include_read': includeRead}));
+
+  Future<int> unreadNotifications() async {
+    final n = await callRpc('unread_notifications', params: {'p_org': orgId});
+    return (n as num?)?.toInt() ?? 0;
+  }
+
+  Future<void> markNotificationRead(String id) =>
+      callRpc('mark_notification_read', params: {'p_id': id});
+
+  Future<void> dismissNotification(String id) =>
+      callRpc('dismiss_notification', params: {'p_id': id});
+
+  Future<int> markAllNotificationsRead() async {
+    final n =
+        await callRpc('mark_all_notifications_read', params: {'p_org': orgId});
+    return (n as num?)?.toInt() ?? 0;
+  }
+
   /// Replace an expense's split. An empty list takes the split off and
   /// leaves the expense on its own account, which is where it started.
   Future<int> setExpenseSplit(

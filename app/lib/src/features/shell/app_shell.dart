@@ -14,6 +14,7 @@ import '../landing/landing_content.dart';
 import '../chat/call_incoming.dart';
 import '../chat/chat_live.dart';
 import '../admin/platform_console_screen.dart';
+import 'notification_bell.dart';
 
 /// Navigation destination shared by the rail (wide) and bottom bar (narrow).
 /// One heading and the destinations beneath it.
@@ -970,6 +971,8 @@ class AppShell extends ConsumerWidget {
               children: [
                 const _RailHeader(extended: false),
                 const Spacer(),
+                // No bell here: this layout is what somebody sees when
+                // there is no company to have notifications for.
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _AccountButton(),
@@ -1073,7 +1076,13 @@ class AppShell extends ConsumerWidget {
                                         padding: const EdgeInsets.only(
                                           bottom: 12,
                                         ),
-                                        child: _AccountButton(),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const NotificationBell(),
+                                            _AccountButton(),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -1319,6 +1328,7 @@ class _GroupedRail extends StatelessWidget {
               ),
           ],
           const Spacer(),
+          const NotificationBell(),
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: _AccountButton(),
