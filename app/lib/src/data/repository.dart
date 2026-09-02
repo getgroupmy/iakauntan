@@ -3763,6 +3763,7 @@ class Repo {
     String? taxCodeId,
     double taxAmount = 0,
     String? reference,
+    List<Map<String, dynamic>>? split,
   }) async {
     final row = await client
         .from('expenses')
@@ -3784,9 +3785,34 @@ class Repo {
         .select()
         .single();
 
+    // Before posting, and only before: `set_expense_split` refuses an
+    // expense that is already in the ledger, because what a posted
+    // expense was for is a journal and not an edit. It also writes the
+    // header's amount, tax and account from the lines, so the figures
+    // sent above are a first draft the split then corrects.
+    if (split != null && split.isNotEmpty) {
+      await callRpc('set_expense_split',
+          params: {'p_expense_id': row['id'], 'p_lines': split});
+    }
+
     await callRpc('post_expense', params: {'p_id': row['id']});
     return row['id'].toString();
   }
+
+  /// Replace an expense's split. An empty list takes the split off and
+  /// leaves the expense on its own account, which is where it started.
+  Future<int> setExpenseSplit(
+      String expenseId, List<Map<String, dynamic>> lines) async {
+    final n = await callRpc('set_expense_split',
+        params: {'p_expense_id': expenseId, 'p_lines': lines});
+    return (n as num?)?.toInt() ?? 0;
+  }
+
+  /// What one expense was divided into, with each account named.
+  Future<List<Map<String, dynamic>>> expenseSplit(String expenseId) async =>
+      Repo._rows(
+        await callRpc('expense_split', params: {'p_expense_id': expenseId}),
+      );
 
   // ------------------------------------------------------------------
   // e-Invoice

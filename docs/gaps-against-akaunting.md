@@ -32,8 +32,8 @@ else on this page has been built, and the sections say where.
 - **No ringgit has been through the payment flow.** It is built end to
   end and there is no acquirer sandbox in the environment it was built
   in, so it has never been exercised against a real gateway. Section 3.
-- **Configurable dashboards**, **split transaction**, **bulk actions**
-  and an **in-app notification centre**. Section 10.
+- **Configurable dashboards**, **bulk actions** and an **in-app
+  notification centre**. Section 10.
 
 That is the whole of it. This document has repeatedly been left saying
 a thing was missing for months after it was built — sections 1, 2 and 9
@@ -410,7 +410,15 @@ this section went on saying the opposite.
 
 ## 10. Smaller
 
-- **Split transaction** — one payment divided across several accounts.
+- ~~**Split transaction** — one payment divided across several
+  accounts.~~ Closed at `0496`. `expense_lines` divides one charge
+  across as many accounts as it needs; the split is the expense, so
+  `set_expense_split` writes the header's amount, tax and account from
+  the lines rather than validating one against the other. In a foreign
+  currency every line but the largest is converted on its own and the
+  largest takes the residual, because the credit leg answers to a bank
+  statement and the tax leg to a tax return, and neither may absorb a
+  cent. An expense with no lines posts exactly as it always did.
 - ~~**Per-document history.** `Document/DocumentHistory.php` gives an
   invoice its own timeline. iAkauntan has `audit_logs`, a global trail
   that answers a different question — "who changed what" rather than

@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788386146.0274558,
-    "ast_hash": "1f3fd6bf2ff179a0e6710611d73fcae8",
+    "mtime": 1788389727.4412282,
+    "ast_hash": "2f8479bdb6a2b74c92794cdf94b207a8",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788386146.0265834,
-    "ast_hash": "fae43a17fe7dc5561da1d0cefb094f68",
+    "mtime": 1788389589.1429427,
+    "ast_hash": "859654de6ab1003757a44dea2fce0f20",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -180,8 +180,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/expenses/expenses_screen.dart": {
-    "mtime": 1788328280.6544287,
-    "ast_hash": "e59b10b17d99ee509b5357d2233810ed",
+    "mtime": 1788389735.590012,
+    "ast_hash": "1c0cb33a744cbe76885c1b3a107d42fe",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/claims_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788387933.2110503,
-    "ast_hash": "e2795e688bd109ac35a68b4810448800",
+    "mtime": 1788389542.3104217,
+    "ast_hash": "d56b3b5703ee38bfca85f47c6601beb8",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1500,8 +1500,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-akaunting.md": {
-    "mtime": 1788386998.3637078,
-    "ast_hash": "78452e40d001fb97371ad7fad303c20e",
+    "mtime": 1788390127.447749,
+    "ast_hash": "c98466c285ab8598ec4099851aaeb7fa",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/email_screen.dart": {
@@ -7527,6 +7527,26 @@
   "supabase/tests/document_history.sql": {
     "mtime": 1788388180.7283568,
     "ast_hash": "225bdd1acdeb51a9bb6ea42a7b689381",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/expenses/expense_split.dart": {
+    "mtime": 1788389578.5032628,
+    "ast_hash": "b188850240b4a385f61dfd2c09a991c0",
+    "semantic_hash": ""
+  },
+  "app/test/expense_split_test.dart": {
+    "mtime": 1788389705.2437108,
+    "ast_hash": "b339a80d6efc1af6817a6d76934cd5a4",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0496_one_charge_two_accounts.sql": {
+    "mtime": 1788389536.9962149,
+    "ast_hash": "1374fcffcd45d88774185e25693f90d0",
+    "semantic_hash": ""
+  },
+  "supabase/tests/expense_split.sql": {
+    "mtime": 1788389464.0757976,
+    "ast_hash": "ab9a5f62f871bf137736b1ee603f75b5",
     "semantic_hash": ""
   }
 }

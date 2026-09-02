@@ -1857,6 +1857,13 @@ final documentActivityProvider = FutureProvider.autoDispose
       return requireRepo(ref).documentActivity(documentId);
     });
 
+/// What one expense was divided into. Empty for the ordinary expense,
+/// which is on one account and has no lines at all.
+final expenseSplitProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, expenseId) {
+      return requireRepo(ref).expenseSplit(expenseId);
+    });
+
 final appraisalGoalsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, appraisalId) {
       return requireRepo(ref).appraisalGoals(appraisalId);
