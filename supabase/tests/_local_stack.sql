@@ -47,6 +47,20 @@ create schema if not exists graphql_public;
 grant usage on schema auth, storage to postgres, anon, authenticated, service_role;
 grant usage on schema public to anon, authenticated, service_role;
 
+-- NOTE. Supabase's own default privileges are NOT reproduced here, and
+-- that is a known hole rather than an oversight. On the hosted project
+-- `alter default privileges ... grant all on tables to anon` is in
+-- force, so a new table in `public` carries an `anon` grant from the
+-- moment it exists unless its migration revokes it -- which is why
+-- 0496 passed every local run and was refused by its own self-check
+-- against the hosted project instead. Adding those defaults here makes
+-- four existing assertions fail, because they claim tables are shut to
+-- anon that are not shut on the hosted project. Closing that gap is
+-- worth doing and is not a one-line change to this file; until then,
+-- a new table needs `revoke all on public.<table> from anon,
+-- authenticated, public;` written by hand and the self-check in its own
+-- migration is what catches a missing one.
+
 -- ---------------------------------------------------------------------
 -- auth
 --

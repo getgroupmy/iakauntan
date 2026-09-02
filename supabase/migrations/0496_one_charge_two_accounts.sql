@@ -128,6 +128,14 @@ create policy module_gate_delete on public.expense_lines
   as restrictive for delete to authenticated
   using (app.can_write_module(org_id, 'purchases'));
 
+
+-- Supabase's own default privileges hand `anon` every new table in
+-- `public`. 0165's event trigger strips that from functions and not
+-- from tables, so a new table is readable by a stranger from the moment
+-- it exists unless this line is here. Taken away before anything is
+-- granted -- and see 0413, which does the same for
+-- `sales_gateway_payments`.
+revoke all on public.expense_lines from anon, authenticated, public;
 grant select, insert, update, delete on public.expense_lines
   to authenticated;
 

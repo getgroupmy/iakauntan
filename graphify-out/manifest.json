@@ -5720,8 +5720,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/_local_stack.sql": {
-    "mtime": 1788336894.6918616,
-    "ast_hash": "b847665cdcc9d4558e865c7b55ef0737",
+    "mtime": 1788392713.1682014,
+    "ast_hash": "59e8663c780bab4f7bbe4d8df249ddd4",
     "semantic_hash": ""
   },
   "supabase/tests/run_locally.sh": {
@@ -7540,8 +7540,8 @@
     "semantic_hash": ""
   },
   "supabase/migrations/0496_one_charge_two_accounts.sql": {
-    "mtime": 1788389536.9962149,
-    "ast_hash": "1374fcffcd45d88774185e25693f90d0",
+    "mtime": 1788392479.2046309,
+    "ast_hash": "cdffde5df42aaa4095c60a1d06eec2e8",
     "semantic_hash": ""
   },
   "supabase/tests/expense_split.sql": {
@@ -7555,8 +7555,8 @@
     "semantic_hash": ""
   },
   "supabase/migrations/0497_tell_somebody.sql": {
-    "mtime": 1788391307.433574,
-    "ast_hash": "e5c9ddfc0afd5e4d6e9c0a422a84ee53",
+    "mtime": 1788392479.20502,
+    "ast_hash": "46edc4d96ebaaabb7bdcf2b5d0578dae",
     "semantic_hash": ""
   },
   "supabase/tests/notifications.sql": {

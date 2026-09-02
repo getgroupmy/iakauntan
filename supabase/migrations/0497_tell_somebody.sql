@@ -131,6 +131,14 @@ create policy notifications_select on public.notifications
   using (app.is_org_member(org_id)
          and (user_id is null or user_id = auth.uid()));
 
+
+-- Supabase's own default privileges hand `anon` every new table in
+-- `public`. 0165's event trigger strips that from functions and not
+-- from tables, so a new table is readable by a stranger from the moment
+-- it exists unless this line is here. Taken away before anything is
+-- granted -- and see 0413, which does the same for
+-- `sales_gateway_payments`.
+revoke all on public.notifications from anon, authenticated, public;
 grant select on public.notifications to authenticated;
 
 -- ---------------------------------------------------------------------
