@@ -117,6 +117,7 @@ class _Dest {
     this.altModule,
     this.platformOnly = false,
     this.adminOnly = false,
+    this.firmOnly = false,
   });
 
   final String label;
@@ -159,6 +160,15 @@ class _Dest {
   /// colleague works from, and `security_log` refuses them anyway -- so
   /// showing it would be a door that opens onto an error message.
   final bool adminOnly;
+
+  /// Shown only to somebody who belongs to an accounting practice.
+  ///
+  /// Not a module: a practice is not something a company buys, and it is
+  /// not attached to the company in the rail at all — the same person
+  /// sees it whichever of their clients they are looking at. Almost
+  /// nobody has one, so an always-visible "Practice" would be a door
+  /// onto an explanation for every company that keeps its own books.
+  final bool firmOnly;
 }
 
 /// One place inside the product that an address can be pointed at.
@@ -728,6 +738,13 @@ final _destinations = <_Dest>[
   ),
   _Dest('Team', Icons.manage_accounts_outlined, Icons.manage_accounts, '/team'),
   _Dest(
+    'Practice',
+    Icons.apartment_outlined,
+    Icons.apartment,
+    '/practice',
+    firmOnly: true,
+  ),
+  _Dest(
     'Security',
     Icons.shield_outlined,
     Icons.shield,
@@ -805,10 +822,16 @@ class AppShell extends ConsumerWidget {
 
     final isAdmin = ref.watch(canAdminProvider);
 
+    // Read once for the rail rather than by the screen, so the door
+    // appears the moment somebody is taken on at a practice.
+    final atAPractice =
+        (ref.watch(myFirmsProvider).value ?? const []).isNotEmpty;
+
     return _destinations.where((d) {
       if (d.platformOnly) return isPlatformAdmin;
       if (!hasOrg) return false;
       if (d.adminOnly && !isAdmin) return false;
+      if (d.firmOnly && !atAPractice) return false;
       if (d.module == null) return true;
       if (moduleEnabled(ref, d.module!)) return true;
       return d.altModule != null && moduleEnabled(ref, d.altModule!);

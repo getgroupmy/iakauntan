@@ -11,6 +11,8 @@ import '../../data/repository.dart';
 import 'access_types_card.dart';
 import 'invitations.dart';
 import 'audit_trail_card.dart';
+import 'bookkeepers_card.dart';
+import 'handover_card.dart';
 
 /// Who is in the company and what they may do. Inviting someone creates
 /// a pending membership; when they register with that e-mail the database
@@ -66,7 +68,10 @@ class TeamScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
+                const BookkeepersCard(),
                 if (canAdmin) ...[
+                  const HandoverCard(),
+                  const SizedBox(height: 24),
                   const AccessTypesCard(),
                   const SizedBox(height: 24),
                   const _PayslipAccessCard(),

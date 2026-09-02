@@ -246,6 +246,42 @@ Which takes the count to 52, and leaves a second rule beside 0445's:
 a trigger is not coverage until a row has been seen in the table it
 writes to.
 
+### Access that outlived the job
+
+The same layer had a second gap, and this one was reachable by anybody
+who ever worked at a practice. 0450 grants a firm's staff access to its
+clients by writing ordinary `org_members` rows carrying `via_firm_id`.
+`app.sync_firm_access` only ever *inserts*. Nothing took the access
+back. Measured on a company whose books one practice keeps and one
+member of staff works on:
+
+| after | rows in `org_members` |
+|---|---|
+| while employed | 1 |
+| removed from the practice | **1** |
+| suspended at the practice | **1** |
+
+Somebody who leaves an accounting firm kept every client's ledger,
+payroll and bank detail — and kept it silently, because their
+membership of the client company is a perfectly ordinary row that
+nothing marks as borrowed except the `via_firm_id` nobody was reading
+on the way out. For a practice with forty clients, one resignation was
+forty companies.
+
+**0453 closed it with a trigger, not a function.** A
+`remove_firm_member(...)` doing both halves would not have been enough:
+0450 grants `delete` on `public.firm_members` to `authenticated` and
+gates it with a policy, so a partner can remove somebody with one
+PostgREST call and never touch the function. A rule that only holds
+when you go through the front door is not a rule. `app.revoke_firm_access`
+fires on delete and on any change to `user_id`, `firm_id` or `status`,
+and removes only the rows borrowed from *that* firm — a person the
+client invited itself, or who is at a second practice that also keeps
+these books, keeps what they hold in their own right.
+
+Suspension is treated as leaving. Somebody stood down pending a
+question is exactly who should not be reading the books meanwhile.
+
 ## The ledger is not append-only
 
 `gl_entries` and `gl_lines` carry `for update` and `for delete` policies

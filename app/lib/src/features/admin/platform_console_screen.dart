@@ -495,6 +495,26 @@ class _OrgTile extends ConsumerWidget {
                     ),
                 ],
               ),
+              const SizedBox(height: 16),
+              // The only route past `org_members`' own rules, which
+              // deliberately let nobody but an owner give up ownership.
+              // That is right until the owner stops answering, at which
+              // point the company cannot be handed to anyone and this is
+              // the way out. It writes down who did it and why.
+              const SectionHeader(
+                'Ownership',
+                subtitle:
+                    'For an owner who cannot be reached. Recorded '
+                    'permanently, with the reason given.',
+              ),
+              OutlinedButton.icon(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => _ForceHandoverDialog(org: org),
+                ),
+                icon: const Icon(Icons.gavel_outlined, size: 18),
+                label: const Text('Force a handover'),
+              ),
             ],
           ),
         ),
@@ -714,5 +734,117 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
       }
     }
     return out;
+  }
+}
+
+/// Taking a company off an owner who has gone.
+///
+/// `org_members`' own policies make an owner row undeletable and
+/// undemotable by anybody but its owner, which is right: it means a
+/// company can never be orphaned and a colleague cannot stage a coup.
+/// It also means that when the owner has left the firm, left the
+/// country or simply stopped answering, nobody can do anything at all.
+///
+/// This is the way out, and the reason is not optional — an escape
+/// hatch with no record is indistinguishable from a back door. The
+/// database refuses a blank one; this asks for it plainly rather than
+/// letting somebody find that out from a constraint name.
+class _ForceHandoverDialog extends ConsumerStatefulWidget {
+  const _ForceHandoverDialog({required this.org});
+
+  final PlatformOrg org;
+
+  @override
+  ConsumerState<_ForceHandoverDialog> createState() =>
+      _ForceHandoverDialogState();
+}
+
+class _ForceHandoverDialogState extends ConsumerState<_ForceHandoverDialog> {
+  final _email = TextEditingController();
+  final _reason = TextEditingController();
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Force a handover of ${widget.org.name}'),
+      content: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'The person named below becomes the owner. Whoever holds '
+              'it now becomes an administrator rather than being removed, '
+              'so nothing is lost if this turns out to have been a '
+              'mistake. Any practice keeping the books loses its access.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _email,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'The new owner\'s e-mail',
+                helperText: 'They must already have an account.',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _reason,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Why',
+                helperText:
+                    'Kept permanently and shown to the company. Say who '
+                    'asked, and what was tried first.',
+                helperMaxLines: 3,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            final email = _email.text.trim();
+            final reason = _reason.text.trim();
+            if (email.isEmpty || reason.isEmpty) return;
+            final ok = await confirm(
+              context,
+              title: 'Force the handover?',
+              message:
+                  'This overrides the company\'s own rules about who may '
+                  'give it away. It is recorded against your name.',
+              confirmLabel: 'Force it',
+              destructive: true,
+            );
+            if (!ok || !context.mounted) return;
+            final repo = ref.read(firmsRepoProvider);
+            final done = await runWithFeedback(
+              context,
+              doing: 'force a company handover',
+              successMessage: 'Handed over',
+              action: () => repo.forceTransfer(widget.org.id, email, reason),
+            );
+            ref.invalidate(platformOrgsProvider);
+            if (done && context.mounted) Navigator.pop(context);
+          },
+          child: const Text('Force it'),
+        ),
+      ],
+    );
   }
 }

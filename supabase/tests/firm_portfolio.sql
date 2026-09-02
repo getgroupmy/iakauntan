@@ -286,6 +286,103 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- Leaving the practice
+--
+-- 0450's grant was one-way: `app.sync_firm_access` only inserts, and
+-- nothing took the access back, so somebody who left an accounting firm
+-- kept every client's ledger. 0453 makes the access follow the
+-- membership from a trigger on the table, because the `delete` grant on
+-- `firm_members` means a partner can remove somebody without ever
+-- calling a function.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_firm  uuid;
+  v_org   uuid;
+  v_own   uuid;
+  v_staff uuid;
+  v_mine  uuid;
+  v_n     integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_firm := public.create_firm('Kira Lima');
+  v_org  := pg_temp.test_org('Pelanggan Kelima Sdn Bhd');
+  v_mine := pg_temp.test_org('Perniagaan Sendiri Sdn Bhd');
+
+  v_staff := pg_temp.another_user('leaver-0453@iakauntan.test');
+  insert into public.firm_members (firm_id, user_id, role, status, joined_at)
+  values (v_firm, v_staff, 'staff', 'active', now());
+
+  -- Somebody the client invited itself, who happens also to work at the
+  -- practice. Their own row is not the firm's to take away.
+  v_own := pg_temp.another_user('both-0453@iakauntan.test');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_own, 'accountant', 'active', now());
+  insert into public.firm_members (firm_id, user_id, role, status, joined_at)
+  values (v_firm, v_own, 'staff', 'active', now());
+
+  perform public.attach_company_to_firm(v_org, v_firm, 'accountant');
+
+  select count(*) into v_n from public.org_members
+   where org_id = v_org and user_id = v_staff;
+  perform pg_temp.check_eq('while employed, the client is theirs to work on',
+    v_n, 1);
+
+  -- The leaver's own company, nothing to do with the practice. Leaving
+  -- one job does not take away the books you keep for yourself, and a
+  -- revocation that is not scoped to the firm would.
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_mine, v_staff, 'owner', 'active', now());
+
+  -- Removed the way a partner would actually do it: straight off the
+  -- table, with no function in the way.
+  delete from public.firm_members
+   where firm_id = v_firm and user_id = v_staff;
+
+  select count(*) into v_n from public.org_members
+   where org_id = v_org and user_id = v_staff;
+  perform pg_temp.check_eq(
+    'and leaving the practice takes the client with it', v_n, 0);
+
+  perform pg_temp.check_true('but not the row the client granted itself',
+    exists (select 1 from public.org_members
+             where org_id = v_org and user_id = v_own
+               and via_firm_id is null));
+
+  perform pg_temp.check_true('nor anything the leaver held in their own right',
+    exists (select 1 from public.org_members
+             where org_id = v_mine and user_id = v_staff));
+
+  -- Suspension is not resignation, and it should not be treated as
+  -- weaker: somebody stood down pending a question is exactly who
+  -- should not be reading the books meanwhile.
+  insert into public.firm_members (firm_id, user_id, role, status, joined_at)
+  values (v_firm, v_staff, 'staff', 'active', now());
+  perform app.sync_firm_access(v_firm);
+  select count(*) into v_n from public.org_members
+   where org_id = v_org and user_id = v_staff;
+  perform pg_temp.check_eq('coming back restores it', v_n, 1);
+
+  update public.firm_members set status = 'suspended'
+   where firm_id = v_firm and user_id = v_staff;
+  select count(*) into v_n from public.org_members
+   where org_id = v_org and user_id = v_staff;
+  perform pg_temp.check_eq('and being suspended ends it too', v_n, 0);
+
+  -- The office as a list, which `profiles_select` cannot draw on its
+  -- own: two people at one practice do not share an organization until
+  -- they happen to share a client.
+  perform pg_temp.check_true('a practice can see who works at it',
+    (select count(*) from public.firm_team(v_firm)) >= 2);
+
+  -- And nobody else can. A staff list is who works where, which is not
+  -- public information about anybody.
+  perform pg_temp.sign_in_as(pg_temp.another_user('nobody-0453@iakauntan.test'));
+  perform pg_temp.check_eq('and nobody outside it can',
+    (select count(*)::integer from public.firm_team(v_firm)), 0);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- What happened to the practice
 --
 -- A firm has no tenant, so until 0452 every row the audit trigger on

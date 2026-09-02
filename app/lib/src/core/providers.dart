@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/corp_models.dart';
 import '../data/corp_repository.dart';
+import '../data/firms_repository.dart';
 import '../data/models.dart';
 import '../data/ocr_repository.dart';
 import '../data/repository.dart';
@@ -872,6 +873,73 @@ bool moduleWritable(WidgetRef ref, String code) => moduleWriteAllowed(
 final teamProvider = FutureProvider.autoDispose<List<TeamMember>>((ref) {
   return requireRepo(ref).team();
 });
+
+// ---------------------------------------------------------------------
+// The practice
+//
+// Above the organization rather than inside it, so none of these is
+// scoped by `currentOrgIdProvider` and none goes through `Repo`. Almost
+// everybody gets an empty list from `myFirmsProvider` and never sees any
+// of this: a company that keeps its own books is not a practice.
+// ---------------------------------------------------------------------
+final firmsRepoProvider = Provider<FirmsRepo>(
+  (ref) => FirmsRepo(ref.watch(supabaseProvider)),
+);
+
+final myFirmsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
+  if (!ref.watch(supabaseReadyProvider)) return Future.value(const []);
+  if (ref.watch(currentUserProvider) == null) return Future.value(const []);
+  return ref.watch(firmsRepoProvider).myFirms();
+});
+
+/// Which practice the firm screen is showing. Null until the list has
+/// arrived, and set to the only one when there is only one.
+final currentFirmIdProvider = StateProvider<String?>((ref) => null);
+
+final firmPortfolioProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, firmId) {
+      return ref.watch(firmsRepoProvider).portfolio(firmId);
+    });
+
+final firmTeamProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, firmId) {
+      return ref.watch(firmsRepoProvider).members(firmId);
+    });
+
+/// Partners and managers only; a member of staff gets a permission
+/// error rather than an empty list, which is why the screen guards it.
+final firmTrailProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, firmId) {
+      return ref.watch(firmsRepoProvider).trail(firmId);
+    });
+
+/// The practice keeping *this* company's books, if any, with the role
+/// its people hold here. Null for the great majority of companies.
+///
+/// `firms_select` lets a client's own members read the firm row their
+/// company names, which is what makes the embed legal.
+final ourPracticeProvider = FutureProvider.autoDispose<Map<String, dynamic>?>((
+  ref,
+) async {
+  final orgId = ref.watch(currentOrgIdProvider);
+  if (orgId == null) return null;
+  final row = await ref
+      .watch(supabaseProvider)
+      .from('organizations')
+      .select('firm_id, firm_member_role, firms(name, email, phone)')
+      .eq('id', orgId)
+      .maybeSingle();
+  if (row == null || row['firm_id'] == null) return null;
+  return Map<String, dynamic>.from(row);
+});
+
+/// Who has held this company before. Owners and admins only.
+final companyTransferHistoryProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      final orgId = ref.watch(currentOrgIdProvider);
+      if (orgId == null) return Future.value(const []);
+      return ref.watch(firmsRepoProvider).transferHistory(orgId);
+    });
 
 /// The places this company trades from. Empty for a company that has
 /// never opened a second one, which is most of them.
