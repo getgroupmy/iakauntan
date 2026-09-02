@@ -914,6 +914,25 @@ final firmTrailProvider = FutureProvider.autoDispose
     });
 
 // ---------------------------------------------------------------------
+// Statutory remittances
+// ---------------------------------------------------------------------
+
+/// Every posted payroll month, split by the body owed. Empty for a
+/// company that has never posted one.
+final statutoryRemittancesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).statutoryRemittances();
+    });
+
+/// The ones still to send, soonest first. Watched by the payroll screen
+/// so an overdue contribution announces itself rather than waiting to
+/// be looked for.
+final statutoryDueProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).statutoryDue(withinDays: 45);
+    });
+
+// ---------------------------------------------------------------------
 // SST taxable periods
 // ---------------------------------------------------------------------
 

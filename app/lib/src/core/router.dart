@@ -96,6 +96,7 @@ import '../features/hr/onboarding_screen.dart';
 import '../features/hr/leave_screen.dart';
 import '../features/hr/my_hr_screen.dart';
 import '../features/hr/payroll_screen.dart';
+import '../features/hr/statutory_remittances_screen.dart';
 import '../features/hr/payslip_screen.dart';
 import '../features/hr/people_screen.dart';
 import '../features/hr/talent_screen.dart';
@@ -614,6 +615,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/hr/claims', builder: (_, __) => const ClaimsScreen()),
           GoRoute(path: '/hr/talent', builder: (_, __) => const TalentScreen()),
           GoRoute(path: '/hr/setup', builder: (_, __) => const HrSetupScreen()),
+          GoRoute(
+            path: '/hr/remittances',
+            builder: (_, __) => const StatutoryRemittancesScreen(),
+          ),
           GoRoute(
             path: '/hr/payroll',
             builder: (_, __) => const PayrollScreen(),

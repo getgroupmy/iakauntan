@@ -40,6 +40,12 @@ class PayrollScreen extends ConsumerWidget {
               padding: EdgeInsets.symmetric(horizontal: Space.md),
               child: Center(child: _GrantedBadge()),
             ),
+          // The other half of a posted payroll: what it left the
+          // company owing KWSP, PERKESO and LHDN, due on the fifteenth
+          // of the following month. The badge is the point — a
+          // contribution nobody was reminded of is the one that goes
+          // late.
+          if (canRun) const _RemittancesAction(),
           if (canRun)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Space.md),
@@ -1017,6 +1023,33 @@ class _DateField extends StatelessWidget {
           suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
         ),
         child: Text(Fmt.date(value)),
+      ),
+    );
+  }
+}
+
+
+/// The way to what a posted payroll still owes, with a mark on it when
+/// something is overdue.
+class _RemittancesAction extends ConsumerWidget {
+  const _RemittancesAction();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final due = ref.watch(statutoryDueProvider).valueOrNull ?? const [];
+    final overdue = due.where((d) => d['is_overdue'] == true).length;
+
+    return IconButton(
+      tooltip: overdue > 0
+          ? '$overdue statutory contribution'
+                '${overdue == 1 ? '' : 's'} overdue'
+          : 'Statutory remittances',
+      onPressed: () => context.go('/hr/remittances'),
+      icon: Badge(
+        isLabelVisible: due.isNotEmpty,
+        backgroundColor: overdue > 0 ? context.colors.danger : null,
+        label: Text('${due.length}'),
+        child: const Icon(Icons.account_balance_outlined),
       ),
     );
   }

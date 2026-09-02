@@ -411,6 +411,44 @@ class Repo {
     },
   );
 
+  // ------------------------------------------------------------------
+  // What a posted payroll leaves owing
+  //
+  // The bank file pays the staff. These are the four bodies that took a
+  // slice of the same payroll and are owed it by the fifteenth of the
+  // following month. See 0457.
+  // ------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> statutoryRemittances() async =>
+      _rows(await callRpc(
+        'report_statutory_remittances',
+        params: {'p_org_id': orgId, 'p_from': null, 'p_to': null},
+      ));
+
+  Future<List<Map<String, dynamic>>> statutoryDue({int withinDays = 30}) async =>
+      _rows(await callRpc(
+        'report_statutory_due',
+        params: {'p_org_id': orgId, 'p_within_days': withinDays},
+      ));
+
+  Future<void> recordStatutoryRemittance({
+    required String periodId,
+    required String code,
+    required double amount,
+    DateTime? paidOn,
+    String? reference,
+  }) => callRpc(
+    'record_statutory_remittance',
+    params: {
+      'p_org_id': orgId,
+      'p_period_id': periodId,
+      'p_code': code,
+      'p_amount': amount,
+      'p_paid_on': paidOn == null ? null : Fmt.iso(paidOn),
+      'p_reference': reference,
+    },
+  );
+
   /// The aged listing of one side of the subledger, as at a date.
   ///
   /// Not the same question as "what is still open today": with an as-at
