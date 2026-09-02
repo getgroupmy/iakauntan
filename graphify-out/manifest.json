@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788323461.365624,
-    "ast_hash": "d88da50c03179a145c8153d7e83f50ce",
+    "mtime": 1788324123.0557425,
+    "ast_hash": "7ff9fd2bc3ef04cc51abfaf39d292ac7",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1788320721.2199895,
-    "ast_hash": "c5e075fe541436e9160a3280120fd7f0",
+    "mtime": 1788324161.838497,
+    "ast_hash": "918b182032b66ea061b4518c22ac091b",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788323461.3647313,
-    "ast_hash": "f08a5f0b8089593a93243fb374a12a51",
+    "mtime": 1788324123.0548413,
+    "ast_hash": "8684e00f553fe8b521c5dc5473b457e8",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -215,8 +215,8 @@
     "semantic_hash": "9414977cd524690608cccdde591230b9"
   },
   "app/lib/src/features/hr/payroll_screen.dart": {
-    "mtime": 1787201712.9490058,
-    "ast_hash": "d8871b4641fbe0544b367316186bec48",
+    "mtime": 1788324175.1986673,
+    "ast_hash": "69f75e402ccaf0f28823ff8de619eae7",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/payslip_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788323335.8946397,
-    "ast_hash": "755c245608abdfef6eaa6bae337a0bab",
+    "mtime": 1788323997.41527,
+    "ast_hash": "37e8f16446c4e0177ad936a8e5f9b4fb",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -6967,6 +6967,21 @@
   "supabase/tests/sst_taxable_period.sql": {
     "mtime": 1788323258.6381848,
     "ast_hash": "1d6424074cf92ff78a1d353ae2197737",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/hr/statutory_remittances_screen.dart": {
+    "mtime": 1788324161.8275611,
+    "ast_hash": "79ca0e114abb1ec0504a430e19ebf736",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0457_the_fifteenth_of_the_month_after.sql": {
+    "mtime": 1788324015.2814758,
+    "ast_hash": "7598b438d7794b0b5aa14a2bea987deb",
+    "semantic_hash": ""
+  },
+  "supabase/tests/statutory_remittances.sql": {
+    "mtime": 1788323978.8335302,
+    "ast_hash": "23c1d0e3150ec09daf105a7c8795efb2",
     "semantic_hash": ""
   }
 }
