@@ -22,7 +22,7 @@ it saw more than it did is worse than one that says where it stops.
 |---|---|---|
 | Sign-in | trigger on `auth.sessions` insert | **No.** GoTrue writes the row; the trigger is on the table. |
 | Session ended | trigger on `auth.sessions` delete | **No.** Covers signing out, expiry and revocation alike, which is why it is not called "signed out". An account *being deleted* is the exception — see below. |
-| Data change | `audit_changes` on 45 tables | **No.** A trigger, and the API cannot turn it off. |
+| Data change | `audit_changes` on 49 tables | **No.** A trigger, and the API cannot turn it off. |
 | Export | `record_export`, called by `exportTextFile`/`exportBytesFile` | Only by not using the app. Every download path goes through those two. |
 | Sensitive read | `app.note_read`, inside `security_log` and `audit_trail` | **No.** Reading either log records the read. |
 | Refusal | `report_denied`, called by `Repo.callRpc` on a 42501 | **Yes** — see below. |
@@ -182,6 +182,24 @@ So the rule is now explicit and enforced in `write_audit_log`: a null
 tenant writes nothing — which loses no event, because those rows only
 arise on a cascade and the parent's own deletion is audited against the
 right company.
+
+### Where the sweep stopped, and the rule it left behind
+
+**0445** closed it, on the four promotion tables — `pos_promotions` and
+the three that hold its scope. A discount applied at the till was
+already attributable; the decision to offer it was not.
+
+The trigger was the smaller half. Those three scope tables were
+rewritten wholesale on every save, so auditing them as they stood would
+have made correcting a promotion's *name* write a delete and an insert
+for every item in its scope. A trail that reports a change nobody made
+fails the same way as one that misses a change somebody did, and it is
+the first failure that stops people reading it. So the write path was
+made differential first — only the rows that actually joined or left —
+and the trigger added after. That is the rule to carry forward: before
+auditing a table, look at how it is written, not only at what it holds.
+
+Which takes the count to 49.
 
 ## The ledger is not append-only
 
