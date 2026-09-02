@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788338203.7516983,
-    "ast_hash": "d0b1a20e1e2d7cc04a0f633de5f112b1",
+    "mtime": 1788339041.892028,
+    "ast_hash": "37997bd1ca612d408391219ab0e1c0c2",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7182,6 +7182,16 @@
   "supabase/tests/ai_assistant.sql": {
     "mtime": 1788338628.4183514,
     "ast_hash": "14b81eaeb5300bc53496911f114f6b95",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0471_somebody_you_have_not_sold_to_yet.sql": {
+    "mtime": 1788339283.492842,
+    "ast_hash": "eb8e2aaf4822c96c86c7ceaacfcfc269",
+    "semantic_hash": ""
+  },
+  "supabase/tests/contact_types.sql": {
+    "mtime": 1788339041.878417,
+    "ast_hash": "63d4b2596ef865d43f2958515bf221cb",
     "semantic_hash": ""
   }
 }

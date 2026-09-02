@@ -262,6 +262,7 @@ jobs:
                    supabase/tests/opening_balance_credit.sql \
                    supabase/tests/cash_is_not_credit.sql \
                    supabase/tests/ai_assistant.sql \
+                   supabase/tests/contact_types.sql \
                    supabase/tests/bucket_survives_a_bad_path.sql \
                    supabase/tests/app_writers_are_not_a_client_surface.sql \
                    supabase/tests/revenue_recognition.sql \
