@@ -746,7 +746,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [flutter, database, edge, sfu]
-    if: github.event_name != 'pull_request'
+    # The default branch only, for the same reason the functions job
+    # gives and with more force: there is one Supabase project, so a
+    # branch's migrations applied to it are applied to production. A
+    # function deploy is overwritten by the next one; an applied
+    # migration has changed the ledger's schema and left its row in
+    # `schema_migrations`, and undoing it means writing another
+    # migration. `docs/migrations.md` has described this job as running
+    # on the default branch since it was written — the condition did
+    # not, and any branch pushed here would have reached the live
+    # database.
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref_name == github.event.repository.default_branch
     concurrency:
       group: migrate-${{ github.ref }}
       cancel-in-progress: false
@@ -1307,7 +1319,22 @@ jobs:
     needs: [flutter, database, migrate]
     # A pull request is somebody else's commit by definition; it gets the
     # checks and not the deploy credentials.
-    if: github.event_name != 'pull_request'
+    #
+    # `always()` is here because `migrate` is now skipped off the default
+    # branch, and a skipped dependency would otherwise skip this job too
+    # — taking preview deploys with it. So the three results are spelled
+    # out instead: the build has to have passed, and `migrate` has to
+    # have not failed. Skipped is fine and is the normal case for a
+    # preview, which by definition runs against a schema that does not
+    # have that branch's migrations. On the default branch the ordering
+    # is unchanged: this job still waits for `migrate` to succeed.
+    if: >-
+      always() &&
+      github.event_name != 'pull_request' &&
+      needs.flutter.result == 'success' &&
+      needs.database.result == 'success' &&
+      needs.migrate.result != 'failure' &&
+      needs.migrate.result != 'cancelled'
     # On the job rather than the workflow. A newer commit should supersede
     # an in-flight deploy of an older one — but not cancel the older
     # commit's tests, which are the record of whether that commit was

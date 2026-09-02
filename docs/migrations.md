@@ -67,6 +67,24 @@ and **before** the edge functions and the web bundle deploy — a function
 or a screen expecting a column the database does not have yet is the
 failure that ordering prevents.
 
+**That sentence was true of the intent and not of the condition, until
+it was measured.** The job's `if` read `github.event_name !=
+'pull_request'` — every branch, not the default one. The functions and
+worker jobs both carry the second half of the test and this one did not,
+so a push of any branch would have applied that branch's migrations to
+the one live project. It never did, because the only branch pushed here
+*is* the default branch: the guard was missing rather than the accident
+having happened. The condition now matches the sentence.
+
+The asymmetry with the Vercel deploy is deliberate and worth stating. A
+preview deploy off the default branch is fine — it gets its own URL — so
+`deploy` still runs there, and it now tolerates `migrate` being skipped
+rather than being skipped along with it. What a preview cannot have is
+that branch's schema: there is one database, and the preview reads the
+production one. A branch whose screens need a new column will show that
+as a missing column in the preview, which is the honest outcome and not
+a reason to loosen the gate.
+
 It has two gates, and they are separate on purpose.
 
 | To get | Set |

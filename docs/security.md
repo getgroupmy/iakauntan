@@ -22,7 +22,7 @@ it saw more than it did is worse than one that says where it stops.
 |---|---|---|
 | Sign-in | trigger on `auth.sessions` insert | **No.** GoTrue writes the row; the trigger is on the table. |
 | Session ended | trigger on `auth.sessions` delete | **No.** Covers signing out, expiry and revocation alike, which is why it is not called "signed out". An account *being deleted* is the exception — see below. |
-| Data change | `audit_changes` on 41 tables | **No.** A trigger, and the API cannot turn it off. |
+| Data change | `audit_changes` on 43 tables | **No.** A trigger, and the API cannot turn it off. |
 | Export | `record_export`, called by `exportTextFile`/`exportBytesFile` | Only by not using the app. Every download path goes through those two. |
 | Sensitive read | `app.note_read`, inside `security_log` and `audit_trail` | **No.** Reading either log records the read. |
 | Refusal | `report_denied`, called by `Repo.callRpc` on a 42501 | **Yes** — see below. |
@@ -124,6 +124,32 @@ redaction lived inside `audit_diff`, which only runs on UPDATE, so
 *changing* a secret hid it and *creating* one stored it in full. The
 test now puts a known string in through all three routes and searches
 the whole trail for it.
+
+## The rate everybody is paid by
+
+The count in that row was 41 for a long time and was never wrong. The
+question it does not answer is whether anything that *should* be audited
+sits outside the 41, and once asked, one thing did — the widest-reaching
+row in the product.
+
+`statutory_schedules` and `statutory_rates` hold the EPF, SOCSO, EIS and
+PCB schedules that `calculate_payroll_run` reads for every employee of
+every tenant. Publishing one changed what every company in the country
+pays, and measured before **0442** it wrote nothing to `audit_logs`,
+nothing to `security_events`, and there is no `published_by` column —
+while `payroll_settings` and `salary_components`, which move one
+company's payroll, were both audited. 0442 puts `audit_changes` on both,
+which is what takes the count to 43.
+
+Those two tables are platform-wide: their rows have no `org_id`. That
+exposed a second thing. `audit_logs_select` read
+`app.can_admin(org_id)`, and `can_admin(null)` is not true, so the rows
+0442 started writing were readable by nobody at all — an audit trail
+that exists and cannot be produced is not one. The policy now also
+admits a platform administrator to the rows whose `org_id` is null, and
+`audit_redaction.sql` asserts both halves: that a platform administrator
+sees the statutory trail, and that they see **not one row** of any
+company's own.
 
 ## The ledger is not append-only
 
