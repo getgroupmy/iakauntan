@@ -4605,8 +4605,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/idempotency.sql": {
-    "mtime": 1787822946.0225897,
-    "ast_hash": "7fe7ffc085afe81f8544194575be5ac1",
+    "mtime": 1788345508.2812898,
+    "ast_hash": "b8f1ab6c6328149bc4cbee67d3124725",
     "semantic_hash": ""
   },
   "docs/gaps-against-rillet.md": {
@@ -7242,6 +7242,11 @@
   "supabase/migrations/0474_nobody_else_may_speak_in_the_assistants_voice.sql": {
     "mtime": 1788344786.3210938,
     "ast_hash": "1d48bd44116033af28f630457e2bbbcb",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0475_a_replay_is_still_somebody_asking.sql": {
+    "mtime": 1788345487.354919,
+    "ast_hash": "8d65680ed44075d2c531073651dfe82c",
     "semantic_hash": ""
   }
 }

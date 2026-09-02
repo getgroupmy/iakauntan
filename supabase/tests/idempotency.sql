@@ -249,4 +249,108 @@ begin
     (select key from public.idempotency_keys where org_id = v_org), 'k-new');
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A replay is still somebody asking
+-- ---------------------------------------------------------------------
+--
+-- The wrappers are thin; the guard is inside the real function. So on
+-- the first call a stranger is refused correctly, and on a replay the
+-- real function is never called at all -- which is how somebody who was
+-- not in the company got the stored result of a write, and how a key
+-- they had merely guessed was confirmed to exist. See 0475.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org      uuid;
+  v_a        uuid;
+  v_b        uuid;
+  v_stranger uuid;
+  v_msg      text;
+  v_took     boolean;
+  v_lines    jsonb;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Kunci Ulang Sdn Bhd');
+  perform public.create_fiscal_year(
+    v_org, date_trunc('year', current_date)::date);
+
+  select id into v_a from public.accounts
+   where org_id = v_org and account_type = 'expense'
+     and not is_group and is_active order by code limit 1;
+  select id into v_b from public.accounts
+   where org_id = v_org and account_type = 'liability'
+     and not is_group and is_active order by code limit 1;
+  -- Nothing below proves anything without these.
+  perform pg_temp.check_true('the fixture found two postable accounts',
+    v_a is not null and v_b is not null);
+
+  v_lines := jsonb_build_array(
+    jsonb_build_object('account_id', v_a, 'debit', 100, 'credit', 0),
+    jsonb_build_object('account_id', v_b, 'debit', 0, 'credit', 100));
+
+  -- A member does the protected write, so there is a key to replay.
+  perform public.post_manual_journal(
+    v_org, current_date, v_lines, 'A journal', null, 'REPLAY-1');
+  perform pg_temp.check_eq('the member''s journal is there',
+    (select count(*)::integer from public.gl_entries
+      where org_id = v_org and description = 'A journal'), 1);
+
+  -- Somebody who is not in this company at all.
+  v_stranger := pg_temp.another_user('orang.luar@idem.test');
+  perform pg_temp.sign_in_as(v_stranger);
+
+  begin
+    perform public.post_manual_journal(
+      v_org, current_date, v_lines, 'A journal', null, 'REPLAY-1');
+    v_took := true;
+  exception when sqlstate '42501' then
+    get stacked diagnostics v_msg = message_text;
+    v_took := false;
+  end;
+  perform pg_temp.check_true(
+    'a stranger cannot replay somebody else''s key', not v_took);
+
+  -- Same key, arguments that do not match. Before 0475 this answered
+  -- `already used for a different request`, which tells somebody who
+  -- guessed a key that it is real. The refusal has to be the membership
+  -- one, and it has to arrive first.
+  begin
+    perform public.post_manual_journal(
+      v_org, current_date,
+      jsonb_build_array(
+        jsonb_build_object('account_id', v_a, 'debit', 999, 'credit', 0),
+        jsonb_build_object('account_id', v_b, 'debit', 0, 'credit', 999)),
+      'Something else', null, 'REPLAY-1');
+    v_took := true;
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    v_took := false;
+  end;
+  perform pg_temp.check_true('and learns nothing from a key they guessed',
+    not v_took and v_msg not like '%already used%');
+
+  -- The guard that was already right, kept: a fresh key still reaches
+  -- the real function and is refused there.
+  begin
+    perform public.post_manual_journal(
+      v_org, current_date, v_lines, 'Fresh', null, 'REPLAY-NEW');
+    v_took := true;
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    v_took := false;
+  end;
+  perform pg_temp.check_true('and a fresh key is refused as it always was',
+    not v_took);
+
+  -- And a member is not caught by any of it.
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.check_true('while the member replays their own key',
+    public.post_manual_journal(
+      v_org, current_date, v_lines, 'A journal', null, 'REPLAY-1')
+    is not null);
+  perform pg_temp.check_eq('without writing it twice',
+    (select count(*)::integer from public.gl_entries
+      where org_id = v_org and description = 'A journal'), 1);
+end $$;
+
 rollback;
