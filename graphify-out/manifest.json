@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788288879.2925265,
-    "ast_hash": "dd434e1ed6be9164aca9517734aeeaa8",
+    "mtime": 1788313016.1212838,
+    "ast_hash": "332bf654e31d30e5aa2c1c2f421b5091",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,13 +110,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788290698.51195,
-    "ast_hash": "92e5ba8c83848672985cd52f25562557",
+    "mtime": 1788313045.827937,
+    "ast_hash": "d0bc3ed31e6b56bc68e9548bbc91e927",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
-    "mtime": 1788285599.907654,
-    "ast_hash": "ce184c4b924391f6f3d8d8e8d30ddd7e",
+    "mtime": 1788313015.7492838,
+    "ast_hash": "458a0dbc32412caf39b7c2108cf50692",
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788312098.2532291,
-    "ast_hash": "0c12d4db1e4fc90c1c26935f38a5bb3f",
+    "mtime": 1788313430.0173082,
+    "ast_hash": "ccab6c29e8fc321d6c0bf8f6b20ac687",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -4365,8 +4365,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/audit_redaction.sql": {
-    "mtime": 1788309544.1841843,
-    "ast_hash": "0af8196995219edef8cd8b7e313a015c",
+    "mtime": 1788312738.06672,
+    "ast_hash": "6591040fc7778a8edbc870adab9f1d77",
     "semantic_hash": ""
   },
   "supabase/tests/profile_visibility.sql": {
@@ -6842,6 +6842,16 @@
   "supabase/migrations/0443_how_many_days_leave_a_person_gets.sql": {
     "mtime": 1788312020.9903271,
     "ast_hash": "9a5facb73e6451242d2501364f3979f3",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/admin/platform_trail_admin.dart": {
+    "mtime": 1788313073.5212872,
+    "ast_hash": "90f4d9c1b9c2db35e46533aa588d9722",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0444_the_platforms_own_trail_had_no_reader.sql": {
+    "mtime": 1788312897.8945832,
+    "ast_hash": "79b741eeba31e93d7a06153f93d6504a",
     "semantic_hash": ""
   }
 }
