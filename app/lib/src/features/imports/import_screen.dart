@@ -170,6 +170,38 @@ bool importNeedsPosting(ImportKind kind) =>
 int importBlockingErrors(List<Map<String, dynamic>> verdict) =>
     verdict.where((r) => r['status'] == 'error').length;
 
+/// The rows the verdict lists, in the order it lists them.
+///
+/// Errors first, because with a hundred rows and two mistakes the two
+/// are what somebody came for. Then warnings, which do not stop the
+/// file but are the reason the control accounts are in it at all: a
+/// row saying the old system's receivables and the invoices actually
+/// brought across disagree is the single most useful line on the
+/// screen, and hiding it because it is not fatal would waste it.
+///
+/// Then the rows that are fine and still have something to say. A
+/// contact row that left the code blank is told at preview what shape
+/// the code it gets will take, and after the import, which code it
+/// got. Without these the preview of such a file reads 'all of them
+/// fine' and the drawn codes are on nobody's screen. A fine row with
+/// nothing to say is not listed: a hundred rows of 'ok' would bury the
+/// two that matter.
+List<Map<String, dynamic>> importRowsToList(
+  List<Map<String, dynamic>> verdict,
+) {
+  final bad = verdict.where((r) => r['status'] == 'error').toList();
+  final warned = verdict.where((r) => r['status'] == 'warning').toList();
+  final noted = verdict
+      .where(
+        (r) =>
+            r['status'] != 'error' &&
+            r['status'] != 'warning' &&
+            (r['message']?.toString() ?? '').isNotEmpty,
+      )
+      .toList();
+  return [...bad, ...warned, ...noted];
+}
+
 class _ImportScreenState extends ConsumerState<ImportScreen> {
   final _text = TextEditingController();
 
@@ -201,7 +233,13 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   };
 
   List<String> get _required => switch (_kind) {
-    ImportKind.contacts || ImportKind.items => const ['code', 'name'],
+    // A contact file may leave the code blank: the database draws one
+    // from the row's series -- customer, supplier or prospect -- when
+    // the file is imported, and says so at preview. An item file may
+    // not, because the item code is what every later document line
+    // names the item by.
+    ImportKind.contacts => const ['name'],
+    ImportKind.items => const ['code', 'name'],
     ImportKind.openInvoices || ImportKind.openBills => const [
       'doc_no',
       'contact_code',
@@ -434,7 +472,8 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                             ImportKind.contacts =>
                               'code,name,contact_type,email\n'
                                   'C-001,Alpha Trading Sdn Bhd,customer,'
-                                  'ap@alpha.com',
+                                  'ap@alpha.com\n'
+                                  ',Beta Supplies Sdn Bhd,supplier,',
                             ImportKind.items =>
                               'code,name,unit_price,uom_code\n'
                                   'ITEM-1,Widget,12.50,C62',
@@ -782,8 +821,8 @@ String _label(Map<String, dynamic> row) {
   return v.isEmpty ? '' : ' · $v';
 }
 
-/// The per-row answer. Errors first, because with a hundred rows and two
-/// mistakes the two are what somebody came for.
+/// The per-row answer. What is listed, and in what order, is
+/// [importRowsToList]'s to say.
 class _Verdict extends StatelessWidget {
   const _Verdict({required this.rows, required this.errors});
 
@@ -793,13 +832,6 @@ class _Verdict extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imported = rows.where((r) => r['status'] == 'imported').length;
-    final bad = rows.where((r) => r['status'] == 'error').toList();
-    // Not errors — they do not stop the file — but the reason the
-    // control accounts are in it at all. A row saying the old system's
-    // receivables and the invoices actually brought across disagree is
-    // the single most useful line on this screen, and hiding it because
-    // it is not fatal would waste it.
-    final warned = rows.where((r) => r['status'] == 'warning').toList();
 
     return Card(
       child: Padding(
@@ -819,18 +851,25 @@ class _Verdict extends StatelessWidget {
                   ? 'Nothing has been written yet. Import writes them.'
                   : 'Nothing will be written until these are fixed.',
             ),
-            for (final r in [...bad, ...warned])
+            for (final r in importRowsToList(rows))
               ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(
-                  r['status'] == 'error'
-                      ? Icons.error_outline
-                      : Icons.info_outline,
+                  switch (r['status']) {
+                    'error' => Icons.error_outline,
+                    'warning' => Icons.info_outline,
+                    // A fine row with a note: a code drawn, or about
+                    // to be. Not a danger colour, because there is
+                    // nothing to fix.
+                    _ => Icons.tag,
+                  },
                   size: 18,
-                  color: r['status'] == 'error'
-                      ? context.colors.danger
-                      : context.colors.warning,
+                  color: switch (r['status']) {
+                    'error' => context.colors.danger,
+                    'warning' => context.colors.warning,
+                    _ => context.colors.info,
+                  },
                 ),
                 title: Text(
                   // The master-file importers answer with `code` and

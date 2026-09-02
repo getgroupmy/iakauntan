@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788355725.1898475,
-    "ast_hash": "c04ff147615b80d7fed4d4c4ecb88e45",
+    "mtime": 1788356767.060373,
+    "ast_hash": "f7ed6ccb73fac7fb2ed37221b8eac2db",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1625,8 +1625,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/imports/import_screen.dart": {
-    "mtime": 1786795077.3164113,
-    "ast_hash": "531e109c785270328a41db4009eaa353",
+    "mtime": 1788356999.9581816,
+    "ast_hash": "51409096a2a2032bcab90fb274e54083",
     "semantic_hash": ""
   },
   "app/test/csv_test.dart": {
@@ -7292,6 +7292,21 @@
   "supabase/tests/prospect_quotation.sql": {
     "mtime": 1788355720.1678221,
     "ast_hash": "77dbccd174a94f169ad8e4487fb75b1a",
+    "semantic_hash": ""
+  },
+  "app/test/contact_import_test.dart": {
+    "mtime": 1788357045.019901,
+    "ast_hash": "e2002d929381a0e41241bf1b8c7ec80e",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0479_a_file_with_no_code_column.sql": {
+    "mtime": 1788356678.1835775,
+    "ast_hash": "7358ed75e663576e8131bb3acf7b1857",
+    "semantic_hash": ""
+  },
+  "supabase/tests/contact_import_codes.sql": {
+    "mtime": 1788356757.140106,
+    "ast_hash": "3cc4e82d02a09b367ab362d44d7d3e4e",
     "semantic_hash": ""
   }
 }
