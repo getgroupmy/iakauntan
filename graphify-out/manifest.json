@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788330914.0943823,
-    "ast_hash": "55d95ee1a2cb34498314e99f4c4227f1",
+    "mtime": 1788342271.3546987,
+    "ast_hash": "5c0bdd3306d3360a4d4da390bde75890",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1788339675.5975058,
-    "ast_hash": "45385eca99d17ceda0b2ddbdaf9b948f",
+    "mtime": 1788342312.566541,
+    "ast_hash": "ca9153286d6f71b0cd286146edd8b009",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788339558.0030527,
-    "ast_hash": "d7f12ac7e364bebc1dcb8299fe53cc1b",
+    "mtime": 1788342218.966556,
+    "ast_hash": "e10f15a9331e6f15580f037efbae943e",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1788339575.0932279,
-    "ast_hash": "49a2c71390f15469ddeabf8e6bfab605",
+    "mtime": 1788342312.5669868,
+    "ast_hash": "6f891fa110b4a9b56f4be196d7b046de",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -3450,8 +3450,8 @@
     "semantic_hash": ""
   },
   "app/test/module_surface_test.dart": {
-    "mtime": 1788341686.3871171,
-    "ast_hash": "e9179dc5b52fc86569e9d52f0359c40a",
+    "mtime": 1788342393.371558,
+    "ast_hash": "eeccc6ddadfb4488c362c1b0336e4f9e",
     "semantic_hash": ""
   },
   "app/test/offline_store_test.dart": {
@@ -7155,13 +7155,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/feedback/screen_catalogue.dart": {
-    "mtime": 1788339575.0934613,
-    "ast_hash": "751f0080bd68441ad5a9c81b423fdb6f",
+    "mtime": 1788342322.2230406,
+    "ast_hash": "b10a8488814c270eacaf606e04060ea2",
     "semantic_hash": ""
   },
   "app/test/feedback_where_test.dart": {
-    "mtime": 1788336515.0120838,
-    "ast_hash": "40963cbe419d6c53891159b9eb5ad2de",
+    "mtime": 1788342678.3841252,
+    "ast_hash": "bbdd9d624f3838cdc4b24a874d92e2b8",
     "semantic_hash": ""
   },
   "app/test/screen_catalogue_test.dart": {
@@ -7222,6 +7222,21 @@
   "supabase/tests/credit_hold_is_visible.sql": {
     "mtime": 1788341022.9207308,
     "ast_hash": "66823f306d326eee272542b932737664",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/ai/ask_screen.dart": {
+    "mtime": 1788342271.3402724,
+    "ast_hash": "6aab56cb6a6ec32c921f1c4194eff2c8",
+    "semantic_hash": ""
+  },
+  "app/test/ask_screen_test.dart": {
+    "mtime": 1788342377.0934832,
+    "ast_hash": "fe9e698b75c413f7470e7efab46cc190",
+    "semantic_hash": ""
+  },
+  "supabase/functions/ask/index.ts": {
+    "mtime": 1788342175.836229,
+    "ast_hash": "2c0ab054908113dc91dfae03e4ee758d",
     "semantic_hash": ""
   }
 }

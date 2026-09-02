@@ -3155,6 +3155,69 @@ class Repo {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  // ------------------------------------------------------------------
+  // Ask about your books
+  // ------------------------------------------------------------------
+
+  /// Put a question to the assistant and wait for the answer.
+  ///
+  /// Everything that matters is decided server-side under this session's
+  /// own token: whether the company holds the module, whether there is
+  /// credit, and — for every report the assistant reads — whether this
+  /// person may see it. Nothing here can widen any of that, which is
+  /// why the whole call is one round trip to an edge function rather
+  /// than a conversation the client drives.
+  Future<Map<String, dynamic>> aiAsk(
+    String question, {
+    String? conversationId,
+  }) async {
+    final res = await client.functions.invoke(
+      'ask',
+      body: {
+        'org_id': orgId,
+        'question': question,
+        if (conversationId != null) 'conversation_id': conversationId,
+      },
+    );
+    if (res.status >= 400) {
+      // The refusals worth reading — no credit, module off, not your
+      // conversation — are written by the database for a person, and
+      // arrive here as the body. Flattening them into "the assistant
+      // failed" would throw away the only useful part.
+      final data = res.data;
+      final message = data is Map && data['error'] is String
+          ? data['error'] as String
+          : '$data';
+      throw Exception(message);
+    }
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  /// This person's conversations in this company, newest first.
+  Future<List<Map<String, dynamic>>> aiConversations() async {
+    final rows = await callRpc('ai_conversations_for', params: {
+      'p_org_id': orgId,
+    });
+    return (rows as List).map((r) => Map<String, dynamic>.from(r as Map))
+        .toList();
+  }
+
+  /// One conversation and everything said in it.
+  Future<Map<String, dynamic>> aiConversation(String id) async {
+    final row = await callRpc('ai_conversation', params: {'p_id': id});
+    return Map<String, dynamic>.from(row as Map);
+  }
+
+  /// What the assistant is able to read, so the screen can say so
+  /// rather than leaving somebody guessing what it knows.
+  Future<List<Map<String, dynamic>>> aiTools() async {
+    final rows = await callRpc('ai_tool_catalogue', params: {
+      'p_org_id': orgId,
+    });
+    return (rows as List).map((r) => Map<String, dynamic>.from(r as Map))
+        .toList();
+  }
+
   Future<void> chatMarkRead(String conversationId) =>
       callRpc('chat_mark_read', params: {'p_conversation_id': conversationId});
 

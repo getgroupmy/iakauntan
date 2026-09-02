@@ -787,6 +787,16 @@ final _destinations = <_Dest>[
     module: 'mailbox',
   ),
   _Dest('Settings', Icons.settings_outlined, Icons.settings, '/settings'),
+  // The assistant. One entry, because it is one screen — the module's
+  // whole surface is a question box.
+  _Dest(
+    'Ask about your books',
+    Icons.auto_awesome_outlined,
+    Icons.auto_awesome,
+    '/ask',
+    primary: true,
+    module: 'ai',
+  ),
   // No module, and last: reporting a fault is not a feature a company
   // buys, and a company that has stopped paying for one is exactly the
   // company most likely to want to say why.

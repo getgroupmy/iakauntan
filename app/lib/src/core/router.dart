@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/ai/ask_screen.dart';
 import '../features/feedback/feedback_screen.dart';
 import '../features/firms/practice_screen.dart';
 import '../features/auth/reset_password_screen.dart';
@@ -615,6 +616,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
           GoRoute(path: '/team', builder: (_, __) => const TeamScreen()),
+          // The AI module's only door. Nothing here gates it: the
+          // sidebar hides it without the module and every server call
+          // behind it refuses without one, so a typed address reaches a
+          // screen that says so rather than a blank page.
+          GoRoute(path: '/ask', builder: (_, __) => const AskScreen()),
           GoRoute(
             path: '/feedback',
             builder: (_, __) => const FeedbackScreen(),

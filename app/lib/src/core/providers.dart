@@ -381,6 +381,21 @@ final customerCreditProvider = FutureProvider.autoDispose
       return requireRepo(ref).customerCreditStatus(contactId);
     });
 
+/// What the assistant is able to read for this company.
+///
+/// Read from the server rather than listed in the app: a screen that
+/// promises a report the assistant cannot reach is worse than one that
+/// promises nothing.
+final aiToolsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).aiTools();
+    });
+
+final aiConversationsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).aiConversations();
+    });
+
 final recurringJournalsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
       return requireRepo(ref).recurringJournals();

@@ -122,6 +122,22 @@ void main() {
     expect(find.text('Withholding tax'), findsNothing);
     expect(find.text('Reports'), findsNothing);
     expect(find.text('Exchange rates'), findsNothing);
+
+    // The assistant is a module like any other. It is the newest one
+    // here and the easiest to leave ungated, because its whole surface
+    // is a single screen and a single screen is easy to hang off the
+    // bottom of the list without a tag.
+    expect(find.text('Ask about your books'), findsNothing);
+  });
+
+  testWidgets('a company that bought the assistant gets its door', (
+    tester,
+  ) async {
+    // The other half. Asserting only the absence above would pass just
+    // as well against a destination nobody ever added, which is the
+    // state 0470 actually left this in.
+    await onADesktop(tester, shell(const {'ai', 'contacts'}));
+    expect(find.text('Ask about your books'), findsOneWidget);
   });
 
   testWidgets('a company that keeps books still gets all of it', (

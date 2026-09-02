@@ -77,6 +77,12 @@ verify_jwt = true
 [functions.ocr]
 verify_jwt = true
 
+# The assistant. Everything it may read is decided by RLS under the
+# caller's own token, which requires there to *be* a caller — so a JWT
+# is not a formality here, it is the whole access-control story.
+[functions.ask]
+verify_jwt = true
+
 [functions.call-token]
 verify_jwt = true
 

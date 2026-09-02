@@ -39,7 +39,13 @@ void main() {
     await tester.pumpAndSettle();
     // The menu is taller than the dialog for the longer lists, so the
     // item has to be brought into view before it can be tapped.
-    final item = find.text(label).last;
+    //
+    // `skipOffstage: false` because a dropdown builds every item at
+    // once and leaves the ones past the fold offstage. Once the module
+    // list grew past what fits, the default finder stopped seeing them
+    // and this failed with "Bad state: No element" — which reads like
+    // the item is missing rather than merely out of sight.
+    final item = find.text(label, skipOffstage: false).last;
     await tester.ensureVisible(item);
     await tester.pumpAndSettle();
     await tester.tap(item);

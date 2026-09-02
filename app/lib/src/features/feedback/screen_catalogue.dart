@@ -204,6 +204,9 @@ final List<ScreenModule> appScreenCatalogue = [
     ]),
     ScreenArea('Messages', [AppScreen('Chat', '/chat')]),
   ]),
+  ScreenModule('AI assistant', [
+    ScreenArea('Asking', [AppScreen('Ask about your books', '/ask')]),
+  ]),
   ScreenModule('Setup and administration', [
     ScreenArea('This company', [
       AppScreen('Settings', '/settings'),
