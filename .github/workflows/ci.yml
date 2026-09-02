@@ -252,6 +252,7 @@ jobs:
                    supabase/tests/demo_shop_and_factory.sql \
                    supabase/tests/module_self_service.sql \
                    supabase/tests/module_subscription.sql \
+                   supabase/tests/customer_portal.sql \
                    supabase/tests/company_handover.sql \
                    supabase/tests/company_export.sql \
                    supabase/tests/sst_taxable_period.sql \

@@ -260,8 +260,9 @@ begin
       select 1 from pg_policies
        where tablename = 'payslip_access_requests' and cmd <> 'SELECT'));
 
-  -- Ten functions are deliberately open to an unauthenticated caller,
-  -- and each earned its place by someone who has no account needing to
+  -- Seventeen functions are deliberately open to an unauthenticated
+  -- caller, and each earned its place by someone who has no account
+  -- needing to
   -- do exactly one thing: a director signing one resolution, a customer
   -- reading one invoice they were sent a link to, and — since 0262 — a
   -- customer at a table reading the menu on the QR sticker in front of
@@ -269,10 +270,18 @@ begin
   --
   -- The allowlist is the point. Deleting this check would be easier and
   -- would stop it doing its job — it caught `open_shared_document` on
-  -- the commit that added it, which is what an allowlist is for. Adding
-  -- a name here should feel like a decision, and anybody doing it should
-  -- be able to say which stranger needs the function and why nothing
-  -- else in the database is reachable through it.
+  -- the commit that added it, and `open_customer_portal` on `0493`,
+  -- which is what an allowlist is for. Adding a name here should feel
+  -- like a decision, and anybody doing it should be able to say which
+  -- stranger needs the function and why nothing else in the database is
+  -- reachable through it.
+  --
+  -- The count in the sentence above had drifted to five behind the list
+  -- by `0493` — it said ten against fifteen names. The assertion never
+  -- cared, because it is written against the list rather than the
+  -- number, which is why nothing caught it; but a comment that
+  -- undercounts the open doors by a third is worse than no count, so
+  -- it is worth correcting whenever a name goes in.
   perform pg_temp.check_true('nothing new is exposed to anon',
     not exists (
       select 1
@@ -327,6 +336,38 @@ begin
            -- `supabase/tests/shared_invoice_payment.sql` asserts all
            -- three refusals under `set local role anon`.
            'shared_payment_options',
+           -- 0493, and the pair of them widen `open_shared_document`
+           -- by exactly one step: from the document to the contact
+           -- that owes it. A customer with three invoices held three
+           -- links and had nowhere to see what they owed altogether.
+           --
+           -- `open_customer_portal` takes a portal token and answers
+           -- with one contact's outstanding invoices: number, dates,
+           -- currency, what is still owed on each, and the total.
+           -- Every clause that keeps it to one account is asserted in
+           -- `supabase/tests/customer_portal.sql` -- another
+           -- customer's invoice, a draft, a settled one, an expired
+           -- token and a revoked one all produce nothing. No lines, no
+           -- costs, no internal notes: those stay behind
+           -- `open_shared_document`, which the customer reaches only
+           -- through the function below.
+           'open_customer_portal',
+           -- The one that mints a credential, and so the more
+           -- dangerous of the two. It hands a portal holder a normal
+           -- document share token for one of *their own* invoices, so
+           -- everything from there is 0067's and 0414's code
+           -- unchanged. Without the clause that checks the document
+           -- belongs to this account, a portal token would be a key to
+           -- every invoice in the tenant -- which is the assertion
+           -- "a portal cannot open somebody else's invoice", and the
+           -- reason the migration's self-check also greps for that
+           -- clause by name.
+           --
+           -- It revokes nothing, deliberately: a customer clicking
+           -- through their own account has sent nobody anything, and
+           -- killing the link the tenant emailed them last week would
+           -- be a bug wearing a rule's clothes.
+           'portal_document_token',
            -- 0390, and the pair of them are the reader and the writer
            -- of one conversation. `ticket_comments.author_contact_id`
            -- has existed since `0192` with a check constraint demanding
@@ -470,7 +511,7 @@ begin
   --
   -- So assert the exposure. A share link that has silently stopped
   -- working is found by a customer, not by us.
-  perform pg_temp.check_eq('and the thirteen that need anon still have it',
+  perform pg_temp.check_eq('and the fifteen that need anon still have it',
     (select count(*)
        from pg_proc p
        join pg_namespace n on n.oid = p.pronamespace
@@ -479,6 +520,11 @@ begin
         and has_function_privilege('anon', p.oid, 'execute')
         and p.proname in ('corp_open_signing_link', 'corp_sign_with_link',
                           'open_shared_document', 'report_failed_sign_in',
+                          -- 0493. A portal link that has silently
+                          -- stopped working is found by a customer who
+                          -- thinks they are being chased for money
+                          -- they cannot see.
+                          'open_customer_portal', 'portal_document_token',
                           -- A ticket link that has silently stopped
                           -- working is found by a customer who thinks
                           -- they are being ignored.
@@ -506,7 +552,7 @@ begin
                           -- email first is found by a shift standing at
                           -- a till typing a password nobody will take.
                           'may_sign_in_here')),
-    13);
+    15);
 
   perform pg_temp.check_true('and the link tables stay shut to anon',
     not exists (
@@ -523,7 +569,12 @@ begin
                             -- anonymous request and every live link in
                             -- the system.
                             'document_share_links',
-                            'ticket_share_links')));
+                            'ticket_share_links',
+                            -- 0493, and the same shape as the two
+                            -- above: a column of token hashes, each
+                            -- one a live door into a customer's whole
+                            -- account rather than a single document.
+                            'customer_portal_links')));
 
   -- The whole permission layer hangs off this one predicate, and the
   -- twenty-six guards written as `if not app.can_x(...) then raise` only

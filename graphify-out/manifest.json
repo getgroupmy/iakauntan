@@ -740,8 +740,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory.sql": {
-    "mtime": 1788285600.5116541,
-    "ast_hash": "e4c00588a4bb518f035e427ea0034742",
+    "mtime": 1788384811.5786135,
+    "ast_hash": "7728aaf241725055bcc0aadf8a06dbe3",
     "semantic_hash": ""
   },
   ".claude/CLAUDE.md": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788378021.693526,
-    "ast_hash": "444f88ebfef86abb307ead3db9aa2a6c",
+    "mtime": 1788384551.3480573,
+    "ast_hash": "5eb2d7e7846c9d1fb59578202a8f09f0",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7472,6 +7472,16 @@
   "supabase/migrations/0492_four_companies_one_stationer.sql": {
     "mtime": 1788381784.8955152,
     "ast_hash": "460abc479f0bb925bc3c2b3f14473ce9",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0493_the_customer_who_holds_three_links.sql": {
+    "mtime": 1788384604.327079,
+    "ast_hash": "baf773864c4294a3da0dbcc5baa68eb0",
+    "semantic_hash": ""
+  },
+  "supabase/tests/customer_portal.sql": {
+    "mtime": 1788384586.0800087,
+    "ast_hash": "8e389cb12710f99d9fcbbc942ce1d228",
     "semantic_hash": ""
   }
 }
