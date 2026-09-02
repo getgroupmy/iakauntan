@@ -22,7 +22,7 @@ it saw more than it did is worse than one that says where it stops.
 |---|---|---|
 | Sign-in | trigger on `auth.sessions` insert | **No.** GoTrue writes the row; the trigger is on the table. |
 | Session ended | trigger on `auth.sessions` delete | **No.** Covers signing out, expiry and revocation alike, which is why it is not called "signed out". An account *being deleted* is the exception — see below. |
-| Data change | `audit_changes` on 43 tables | **No.** A trigger, and the API cannot turn it off. |
+| Data change | `audit_changes` on 45 tables | **No.** A trigger, and the API cannot turn it off. |
 | Export | `record_export`, called by `exportTextFile`/`exportBytesFile` | Only by not using the app. Every download path goes through those two. |
 | Sensitive read | `app.note_read`, inside `security_log` and `audit_trail` | **No.** Reading either log records the read. |
 | Refusal | `report_denied`, called by `Repo.callRpc` on a 42501 | **Yes** — see below. |
@@ -150,6 +150,38 @@ admits a platform administrator to the rows whose `org_id` is null, and
 `audit_redaction.sql` asserts both halves: that a platform administrator
 sees the statutory trail, and that they see **not one row** of any
 company's own.
+
+### The tenant-scoped half of the same question, and what it cost
+
+0442 answered "what should be audited and is not" for the platform-wide
+tables and left the tenant-scoped ones unasked. **0443** is that half.
+
+`leave_types` and `leave_entitlement_bands` decide how many days of
+annual and sick leave every employee of a company is entitled to, are
+edited from the HR setup screens by anybody who passes
+`app.can_manage_hr`, and were audited by nothing — measured, inserting a
+band wrote 0 rows and editing it from 8 days to 99 wrote 0 more, while
+every neighbouring HR table that decides money was audited. Leave is
+money: s.60E(3) of the Employment Act requires payment for untaken
+annual leave on termination, and the band says how much. That takes the
+count to 45.
+
+The second thing 0443 found is a cost of 0442. `leave_entitlement_bands`
+has no `org_id`; it names its tenant through `leave_type_id`.
+`access_type_modules` has had exactly that shape since 0236, and on a
+cascade — delete the parent, the children follow — the lookup finds no
+parent and resolves to null. Measured: one audit row, `org_id` null,
+`table_name` `access_type_modules`. Before 0442 that row was readable by
+nobody and the mistake was invisible; after 0442 it is a company's
+deleted permission set sitting in the trail every platform administrator
+reads. **0442 did not create the null. It gave it a reader.**
+
+So the rule is now explicit and enforced in `write_audit_log`: a null
+`org_id` means the platform, and only `statutory_schedules` and
+`statutory_rates` may write one. Anything else that cannot name its
+tenant writes nothing — which loses no event, because those rows only
+arise on a cascade and the parent's own deletion is audited against the
+right company.
 
 ## The ledger is not append-only
 

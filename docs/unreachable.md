@@ -5364,3 +5364,77 @@ Before re-measuring a number in a document, read what tense the sentence
 around it is in. "Counted before writing it" is not a stale claim to be
 refreshed; it is a citation. The correction that `pre-deployment.md`
 needed would have been vandalism here.
+
+## The tenant-scoped half of 0442's question
+
+0442 asked what, outside the 41 tables carrying an `audit_changes`
+trigger, ought to be inside — and answered it for the platform-wide
+half. The tenant-scoped half went unasked, so it was asked here.
+
+### The predicate, and what it caught
+
+Every table in `public` with no `audit_changes` trigger, split by
+whether it has an `org_id` column: **47** without one. Of those, the
+ones with a write policy at all — the ones a person can actually
+change — number 18, and they fall into three groups. Chat, presence,
+device tokens and profiles are communications and identity. Landing
+pages, site pages, reserved names, OCR providers and platform settings
+are platform configuration. What is left is the interesting group: a
+table with no `org_id` that nonetheless belongs to one company, naming
+its tenant through a parent.
+
+**`leave_entitlement_bands` is that shape, and it decides money.**
+`app.leave_entitlement` reads it for every employee's years of service;
+`leave_bands_dialog.dart` edits it. Measured before 0443: inserting a
+band wrote 0 audit rows, and editing that band from 8 days to 99 wrote 0
+more. `leave_types` above it was equally unaudited. Every neighbouring
+HR table that moves money — `payroll_settings`, `salary_components`,
+`employee_salary_components`, `employee_tax_reliefs` — has been audited
+since 0055 or 0236.
+
+### The part that was 0442's own fault
+
+`write_audit_log` takes `org_id` from the row it audits. For a table
+that names its tenant through a parent it does a lookup, and on a
+cascade the parent is already gone, so the lookup resolves to null.
+`access_type_modules` has had that shape since 0236. Measured:
+
+```
+null-org rows after access_type cascade: 1 (access_type_modules)
+```
+
+Before 0442 a null `org_id` was readable by nobody and this was
+invisible. 0442 gave those rows a reader — every platform
+administrator — and so turned a harmless null into one company's
+deleted permission set filed under the platform. **A change that gives
+an existing value a new meaning inherits every place that value was
+already being written.** That is the lesson worth keeping from this
+one; the leave tables were the easy half.
+
+0443 makes the rule explicit in the function: a null `org_id` means the
+platform, and only the two statutory tables may write one. Anything
+else that cannot name its tenant writes nothing. No event is lost —
+those rows only arise on a cascade, and the parent's own deletion is
+audited against the right company, which is why 0443 also audits
+`leave_types` rather than only its bands.
+
+### What the rest of the sweep found
+
+Nothing else, and the reasons are worth recording so the list is not
+re-derived:
+
+- **`tax_brackets` and `tax_reliefs`** feed `app.annual_tax` and
+  `app.calc_pcb` — the same statutory class 0442 named — and are *not*
+  audited, deliberately. There is no write path: RLS is on, the only
+  policy is `for select using (true)`, and no function writes them.
+  They change by migration, and the migration is the record: numbered,
+  append-only, in git, with its applied date in `schema_migrations`. A
+  trigger would record `user_id` null every time and add nothing.
+- **`platform_admins`** — who may see every tenant — has one policy,
+  `for select using (user_id = auth.uid())`, and no write policy at
+  all, so the API cannot change it. Same reasoning as above.
+- **`pos_promotions` and its three child tables** are org-scoped and
+  unaudited, and a promotion does move money. That is a real question
+  and a separate one: the child tables are the same parent-lookup shape
+  0443 solves, so it can be answered whenever the discount trail is
+  worth having. It is recorded here as noticed, not as done.

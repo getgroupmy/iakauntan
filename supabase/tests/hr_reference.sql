@@ -239,4 +239,105 @@ begin
   end;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- How many days' leave a person gets (0443)
+--
+-- `leave_types` and `leave_entitlement_bands` decide the annual and
+-- sick leave entitlement of every employee of a company, are edited
+-- from the app by anybody who passes `app.can_manage_hr`, and were
+-- audited by nothing. Measured before 0443: inserting a band wrote 0
+-- rows to `audit_logs`, and editing it from 8 days to 99 wrote 0 more.
+--
+-- The band has no `org_id` -- it names its tenant through
+-- `leave_type_id` -- and since 0442 a null `org_id` means the
+-- platform's own trail, which every platform administrator reads. So
+-- the second assertion here is about where the row is filed, not just
+-- that it exists.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.test_org('Cuti Tahunan Sdn Bhd');
+  v_lt   uuid;
+  v_band uuid;
+  v_n    integer;
+  v_seen uuid;
+  v_to   jsonb;
+begin
+  insert into public.leave_types (org_id, code, name, is_paid)
+  values (v_org, 'AL', 'Annual leave', true) returning id into v_lt;
+
+  select count(*) into v_n from public.audit_logs
+   where org_id = v_org and table_name = 'leave_types';
+  perform pg_temp.check_eq('creating a leave type is recorded', v_n, 1);
+
+  insert into public.leave_entitlement_bands
+    (leave_type_id, service_years_from, service_years_to, days)
+  values (v_lt, 0, 2, 8) returning id into v_band;
+
+  select count(*) into v_n from public.audit_logs
+   where org_id = v_org and table_name = 'leave_entitlement_bands';
+  perform pg_temp.check_eq('so is the band under it', v_n, 1);
+
+  select org_id into v_seen from public.audit_logs
+   where table_name = 'leave_entitlement_bands' and record_id = v_band;
+  perform pg_temp.check_eq(
+    'the band''s trail is filed under its own company', v_seen, v_org);
+
+  -- The edit that matters: eight days becomes five.
+  update public.leave_entitlement_bands set days = 5 where id = v_band;
+
+  select new_data into v_to from public.audit_logs
+   where table_name = 'leave_entitlement_bands' and action = 'update'
+     and record_id = v_band;
+  perform pg_temp.check_eq(
+    'and the day count it was moved to is in the row',
+    v_to ->> 'days', '5.00');
+
+  -- Deleting the type cascades to its bands. The type's own deletion is
+  -- audited against the company; the orphaned band must not appear in
+  -- the platform's trail, where it could be read by a platform
+  -- administrator and by nobody in the company it belonged to.
+  delete from public.leave_types where id = v_lt;
+
+  -- Null is the platform's own trail, and this file publishes statutory
+  -- schedules of its own above, so the claim is about everything else.
+  select count(*) into v_n from public.audit_logs
+   where org_id is null
+     and table_name not in ('statutory_schedules', 'statutory_rates');
+  perform pg_temp.check_eq(
+    'and a cascade leaves nothing in the platform''s trail', v_n, 0);
+
+  select count(*) into v_n from public.audit_logs
+   where org_id = v_org and table_name = 'leave_types' and action = 'delete';
+  perform pg_temp.check_eq('while the deletion itself is recorded', v_n, 1);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The same shape, one table older
+--
+-- `access_type_modules` has named its tenant through `access_types`
+-- since 0236 and hit the same cascade. Measured before 0443: deleting
+-- an access type left one audit row with a null `org_id` -- a company's
+-- deleted permission set, filed under the platform.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.test_org('Kebenaran Sdn Bhd');
+  v_at  uuid;
+  v_n   integer;
+begin
+  insert into public.access_types (org_id, name)
+  values (v_org, 'Front desk') returning id into v_at;
+  insert into public.access_type_modules (access_type_id, module_code, access)
+  values (v_at, 'accounting', 'write');
+
+  delete from public.access_types where id = v_at;
+
+  select count(*) into v_n from public.audit_logs
+   where org_id is null
+     and table_name not in ('statutory_schedules', 'statutory_rates');
+  perform pg_temp.check_eq(
+    'no orphaned module row reaches the platform trail', v_n, 0);
+end $$;
+
 rollback;
