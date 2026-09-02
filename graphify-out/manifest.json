@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788348429.756283,
-    "ast_hash": "34b39410c621bd8b3bc745cb8e7910aa",
+    "mtime": 1788353194.2031345,
+    "ast_hash": "0f374d4be7fdf97681bdd6243f4d7878",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788348429.7370086,
-    "ast_hash": "a4a18acbe3137554293badf5bc59ce9e",
+    "mtime": 1788353172.5156708,
+    "ast_hash": "c090066be48adbc728446d6dd3f2a141",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -125,13 +125,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
-    "mtime": 1788339591.0361774,
-    "ast_hash": "0eb1489626b0a600da71c13990ce950f",
+    "mtime": 1788353561.4762223,
+    "ast_hash": "e4f79c18cfaabb84a68869cde4572194",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contacts_screen.dart": {
-    "mtime": 1788348514.1223938,
-    "ast_hash": "ad3b6f26c0f1134b9a97a2f60aa0cd2d",
+    "mtime": 1788353227.0753868,
+    "ast_hash": "1376df5a7fc3af36c657b4d12a5c7854",
     "semantic_hash": ""
   },
   "app/lib/src/features/crm/pipeline_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788348294.0936856,
-    "ast_hash": "71d0c32ade79bc73a3616e8faad0d26d",
+    "mtime": 1788353016.340018,
+    "ast_hash": "2c9f376e41b872e2c9296360b212d4e1",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7249,24 +7249,34 @@
     "ast_hash": "8d65680ed44075d2c531073651dfe82c",
     "semantic_hash": ""
   },
-  "app/lib/src/features/contacts/convert_contact.dart": {
-    "mtime": 1788348489.3073924,
-    "ast_hash": "47482771e47f89ece7ea7c3afa2ab39a",
-    "semantic_hash": ""
-  },
-  "app/test/convert_contact_test.dart": {
-    "mtime": 1788348545.4303372,
-    "ast_hash": "47a244da22d0db2526e06de96c9064e2",
-    "semantic_hash": ""
-  },
   "supabase/migrations/0476_a_contact_can_change_what_it_is.sql": {
     "mtime": 1788348411.8378623,
     "ast_hash": "963a740b4eebf8457453f413c11fdbf8",
     "semantic_hash": ""
   },
-  "supabase/tests/contact_conversion.sql": {
-    "mtime": 1788348377.8631892,
-    "ast_hash": "2bbb7341df36c7439fb9e518d5ce1730",
+  "app/lib/src/features/contacts/contact_records.dart": {
+    "mtime": 1788353387.5556836,
+    "ast_hash": "33e64ae9fc06eb2ad54d87e97b733dec",
+    "semantic_hash": ""
+  },
+  "app/test/contact_records_test.dart": {
+    "mtime": 1788353387.2116835,
+    "ast_hash": "981ceb786aa531955aac996423739fbe",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0477_one_company_one_record_per_role.sql": {
+    "mtime": 1788352729.4596443,
+    "ast_hash": "03fb7e507fb1880375434a221409353a",
+    "semantic_hash": ""
+  },
+  "supabase/tests/contact_records.sql": {
+    "mtime": 1788353007.955661,
+    "ast_hash": "f68bafbb713855e8c9a12205eb577bfd",
+    "semantic_hash": ""
+  },
+  "app/test/contact_code_test.dart": {
+    "mtime": 1788353599.0636961,
+    "ast_hash": "815593648d29bab6fe4ce2704d2e3782",
     "semantic_hash": ""
   }
 }

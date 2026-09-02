@@ -381,20 +381,20 @@ final customerCreditProvider = FutureProvider.autoDispose
       return requireRepo(ref).customerCreditStatus(contactId);
     });
 
+/// The other records of the same company, and which roles are open.
+///
+/// Family-keyed and autoDispose so the sheet asks afresh each time it
+/// opens: a record created from another screen changes the answer.
+final contactRecordsProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, String>((ref, contactId) {
+      return requireRepo(ref).contactRecords(contactId);
+    });
+
 /// What the assistant is able to read for this company.
 ///
 /// Read from the server rather than listed in the app: a screen that
 /// promises a report the assistant cannot reach is worse than one that
 /// promises nothing.
-/// What one contact may be turned into.
-///
-/// Family-keyed and autoDispose so the sheet asks afresh each time it
-/// opens: a bill raised five minutes ago changes the answer.
-final contactConversionsProvider = FutureProvider.autoDispose
-    .family<Map<String, dynamic>, String>((ref, contactId) {
-      return requireRepo(ref).contactConversions(contactId);
-    });
-
 final aiToolsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
       return requireRepo(ref).aiTools();

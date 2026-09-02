@@ -9,7 +9,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../shared/scan_intake.dart';
 import 'contact_editor.dart';
-import 'convert_contact.dart';
+import 'contact_records.dart';
 
 class ContactsScreen extends ConsumerStatefulWidget {
   const ContactsScreen({super.key, this.initialType});
@@ -201,15 +201,16 @@ class _ContactTile extends StatelessWidget {
                   size: 18, color: context.colors.warning),
             ),
           const SizedBox(width: 8),
-          // The chip is the type, so the way to change the type is on
-          // the chip. Tapping it opens the sheet; tapping anywhere else
-          // on the row still opens the contact.
+          // The chip is the role, so the company's other records -- and
+          // the roles it has none for yet -- are behind the chip.
+          // Tapping it opens the sheet; tapping anywhere else on the
+          // row still opens the contact.
           InkWell(
-            key: ValueKey('convert-${contact.id}'),
+            key: ValueKey('records-${contact.id}'),
             borderRadius: BorderRadius.circular(20),
-            onTap: () => showConvertContact(context, contact.id),
+            onTap: () => showContactRecords(context, contact.id),
             child: Tooltip(
-              message: 'Change what this contact is',
+              message: 'Records of this company',
               child: StatusChip(contact.contactType, compact: true),
             ),
           ),

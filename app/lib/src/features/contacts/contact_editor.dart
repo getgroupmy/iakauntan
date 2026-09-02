@@ -59,15 +59,32 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
   bool _saving = false;
   bool _verifying = false;
   bool? _tinValid;
+  // The codes the series has suggested for this new contact, one per
+  // prefix, so that changing the type re-suggests (C- becomes S- or P-)
+  // without drawing a second number from a series already drawn on, and
+  // never over a code the user has typed themselves.
+  final Map<String, String> _suggested = {};
 
   @override
   void initState() {
     super.initState();
     _contactType = widget.contactType;
     for (final key in const [
-      'code', 'name', 'legalName', 'tin', 'registrationNo', 'idValue',
-      'sstNo', 'email', 'phone', 'mobile', 'address1', 'address2',
-      'city', 'postcode', 'creditLimit',
+      'code',
+      'name',
+      'legalName',
+      'tin',
+      'registrationNo',
+      'idValue',
+      'sstNo',
+      'email',
+      'phone',
+      'mobile',
+      'address1',
+      'address2',
+      'city',
+      'postcode',
+      'creditLimit',
     ]) {
       _controllers[key] = TextEditingController();
     }
@@ -84,17 +101,47 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
 
   TextEditingController _c(String key) => _controllers[key]!;
 
+  /// Whether the code field still holds a suggestion rather than a code
+  /// the user typed.
+  bool _codeIsSuggested() {
+    final current = _c('code').text.trim();
+    return current.isEmpty || _suggested.containsValue(current);
+  }
+
+  /// Fills the code field from the series for the current type, unless the
+  /// user has already typed a code of their own. Non-fatal when the series
+  /// cannot be reached: the user can type a code.
+  Future<void> _suggestCode() async {
+    final repo = ref.read(repoProvider);
+    if (repo == null) return;
+    if (!_codeIsSuggested()) return;
+    final type = _contactType;
+    final prefix = Repo.contactCodePrefix(type);
+    final drawn = _suggested[prefix];
+    if (drawn != null) {
+      setState(() => _c('code').text = drawn);
+      return;
+    }
+    try {
+      final code = await repo.nextContactCode(type);
+      if (!mounted) return;
+      _suggested[prefix] = code;
+      // The type may have moved on while the series was being asked.
+      if (_contactType != type || !_codeIsSuggested()) return;
+      setState(() => _c('code').text = code);
+    } catch (_) {
+      // Non-fatal: the user can type their own code.
+    }
+  }
+
   Future<void> _load() async {
     final repo = ref.read(repoProvider);
     if (repo == null) return;
 
     if (widget.contactId == null) {
-      // Suggest the next contact code so the user does not invent one.
-      try {
-        _c('code').text = await repo.nextDocumentNumber('contact');
-      } catch (_) {
-        // Non-fatal: the user can type their own code.
-      }
+      // Suggest the next code of the series for this type (C-, S- or P-)
+      // so the user does not invent one.
+      await _suggestCode();
       final read = widget.scanned;
       if (read != null) {
         _c('name').text = read.supplierName ?? '';
@@ -157,8 +204,9 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
     } catch (e) {
       if (mounted) {
         setState(() => _loading = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Could not load contact: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not load contact: $e')));
       }
     }
   }
@@ -184,8 +232,9 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
       // at through.
       final supplier = _contactType == 'supplier';
       final documents = await repo.outstandingFor(
-          kind: supplier ? DocKind.purchase : DocKind.sales,
-          contactId: widget.contactId!);
+        kind: supplier ? DocKind.purchase : DocKind.sales,
+        contactId: widget.contactId!,
+      );
       final asAt = DateTime.now();
 
       final bytes = await buildStatementPdf(
@@ -200,21 +249,27 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
             : LetterheadMode.printed,
       );
 
-      final stem =
-          contact.code.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
+      final stem = contact.code
+          .replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-')
+          .toLowerCase();
       final saved = await exportBytesFile(
-          ref,
-          '${supplier ? 'supplier-statement' : 'statement'}'
-          '-$stem-${Fmt.iso(asAt)}.pdf',
-          'application/pdf',
-          bytes,
-          what: supplier ? 'Supplier statement' : 'Customer statement',
-          detail: '${contact.name} to ${Fmt.iso(asAt)}');
-      messenger.showSnackBar(SnackBar(
-        content: Text(saved
-            ? 'Downloaded'
-            : 'PDF download is only available in the browser'),
-      ));
+        ref,
+        '${supplier ? 'supplier-statement' : 'statement'}'
+            '-$stem-${Fmt.iso(asAt)}.pdf',
+        'application/pdf',
+        bytes,
+        what: supplier ? 'Supplier statement' : 'Customer statement',
+        detail: '${contact.name} to ${Fmt.iso(asAt)}',
+      );
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            saved
+                ? 'Downloaded'
+                : 'PDF download is only available in the browser',
+          ),
+        ),
+      );
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('$e')));
     } finally {
@@ -223,32 +278,33 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
   }
 
   Contact _build() => Contact(
-        id: widget.contactId ?? '',
-        code: _c('code').text.trim(),
-        name: _c('name').text.trim(),
-        contactType: _contactType,
-        legalName: _nullIfEmpty(_c('legalName').text),
-        tin: _nullIfEmpty(_c('tin').text.toUpperCase()),
-        registrationNo: _nullIfEmpty(_c('registrationNo').text),
-        idType: _idType,
-        idValue: _nullIfEmpty(_c('idValue').text) ??
-            _nullIfEmpty(_c('registrationNo').text),
-        sstRegistrationNo: _nullIfEmpty(_c('sstNo').text),
-        email: _nullIfEmpty(_c('email').text),
-        phone: _nullIfEmpty(_c('phone').text),
-        mobile: _nullIfEmpty(_c('mobile').text),
-        addressLine1: _nullIfEmpty(_c('address1').text),
-        addressLine2: _nullIfEmpty(_c('address2').text),
-        city: _nullIfEmpty(_c('city').text),
-        postcode: _nullIfEmpty(_c('postcode').text),
-        stateCode: _stateCode,
-        entityType: _entityType,
-        creditLimit: double.tryParse(_c('creditLimit').text) ?? 0,
-        creditHold: _creditHold,
-        receivableAccountId: _receivableAccountId,
-        payableAccountId: _payableAccountId,
-        priceLevelId: _priceLevelId,
-      );
+    id: widget.contactId ?? '',
+    code: _c('code').text.trim(),
+    name: _c('name').text.trim(),
+    contactType: _contactType,
+    legalName: _nullIfEmpty(_c('legalName').text),
+    tin: _nullIfEmpty(_c('tin').text.toUpperCase()),
+    registrationNo: _nullIfEmpty(_c('registrationNo').text),
+    idType: _idType,
+    idValue:
+        _nullIfEmpty(_c('idValue').text) ??
+        _nullIfEmpty(_c('registrationNo').text),
+    sstRegistrationNo: _nullIfEmpty(_c('sstNo').text),
+    email: _nullIfEmpty(_c('email').text),
+    phone: _nullIfEmpty(_c('phone').text),
+    mobile: _nullIfEmpty(_c('mobile').text),
+    addressLine1: _nullIfEmpty(_c('address1').text),
+    addressLine2: _nullIfEmpty(_c('address2').text),
+    city: _nullIfEmpty(_c('city').text),
+    postcode: _nullIfEmpty(_c('postcode').text),
+    stateCode: _stateCode,
+    entityType: _entityType,
+    creditLimit: double.tryParse(_c('creditLimit').text) ?? 0,
+    creditHold: _creditHold,
+    receivableAccountId: _receivableAccountId,
+    payableAccountId: _payableAccountId,
+    priceLevelId: _priceLevelId,
+  );
 
   static String? _nullIfEmpty(String v) => v.trim().isEmpty ? null : v.trim();
 
@@ -266,9 +322,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         // as a column on the update: the link asserts that two
         // companies are related, and 0142 checks both ends before
         // believing it.
-        await ref
-            .read(repoProvider)!
-            .linkGroupContact(saved.id, _linkedOrgId);
+        await ref.read(repoProvider)!.linkGroupContact(saved.id, _linkedOrgId);
       },
       successMessage: 'Contact saved',
     );
@@ -283,19 +337,24 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
   /// Checks the TIN against LHDN so an invoice is not rejected later.
   Future<void> _verifyTin() async {
     final tin = _c('tin').text.trim();
-    final idValue = _nullIfEmpty(_c('idValue').text) ??
+    final idValue =
+        _nullIfEmpty(_c('idValue').text) ??
         _nullIfEmpty(_c('registrationNo').text);
 
     if (tin.isEmpty || idValue == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Enter both the TIN and the registration/ID number.'),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter both the TIN and the registration/ID number.'),
+        ),
+      );
       return;
     }
 
     setState(() => _verifying = true);
     try {
-      final result = await ref.read(repoProvider)!.validateTin(
+      final result = await ref
+          .read(repoProvider)!
+          .validateTin(
             tin: tin,
             idType: _idType,
             idValue: idValue,
@@ -303,16 +362,23 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
           );
       if (!mounted) return;
       setState(() => _tinValid = result['valid'] == true);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(_tinValid == true
-            ? 'TIN verified with LHDN.'
-            : 'LHDN could not match this TIN to $idValue.'),
-        backgroundColor: _tinValid == true ? context.colors.success : context.colors.danger,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tinValid == true
+                ? 'TIN verified with LHDN.'
+                : 'LHDN could not match this TIN to $idValue.',
+          ),
+          backgroundColor: _tinValid == true
+              ? context.colors.success
+              : context.colors.danger,
+        ),
+      );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
       }
     } finally {
       if (mounted) setState(() => _verifying = false);
@@ -369,34 +435,44 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                       _Pair(
                         left: TextFormField(
                           controller: _c('code'),
-                          decoration: const InputDecoration(labelText: 'Code *'),
-                          validator: (v) => (v ?? '').trim().isEmpty
-                              ? 'Enter a code'
-                              : null,
+                          decoration: const InputDecoration(
+                            labelText: 'Code *',
+                          ),
+                          validator: (v) =>
+                              (v ?? '').trim().isEmpty ? 'Enter a code' : null,
                         ),
                         right: DropdownButtonFormField<String>(
                           value: _contactType,
                           decoration: const InputDecoration(labelText: 'Type'),
                           items: const [
                             DropdownMenuItem(
-                                value: 'customer', child: Text('Customer')),
+                              value: 'customer',
+                              child: Text('Customer'),
+                            ),
                             DropdownMenuItem(
-                                value: 'supplier', child: Text('Supplier')),
+                              value: 'supplier',
+                              child: Text('Supplier'),
+                            ),
                             DropdownMenuItem(
-                                value: 'both', child: Text('Customer & Supplier')),
+                              value: 'both',
+                              child: Text('Customer & Supplier'),
+                            ),
                             DropdownMenuItem(
-                                value: 'prospect', child: Text('Prospect')),
+                              value: 'prospect',
+                              child: Text('Prospect'),
+                            ),
                           ],
-                          onChanged: (v) =>
-                              setState(() => _contactType = v ?? 'customer'),
+                          onChanged: (v) {
+                            setState(() => _contactType = v ?? 'customer');
+                            if (widget.contactId == null) _suggestCode();
+                          },
                         ),
                       ),
                       const SizedBox(height: 14),
                       TextFormField(
                         controller: _c('name'),
                         textCapitalization: TextCapitalization.words,
-                        decoration:
-                            const InputDecoration(labelText: 'Name *'),
+                        decoration: const InputDecoration(labelText: 'Name *'),
                         validator: (v) =>
                             (v ?? '').trim().isEmpty ? 'Enter a name' : null,
                       ),
@@ -411,24 +487,39 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                       const SizedBox(height: 14),
                       DropdownButtonFormField<String>(
                         value: _entityType,
-                        decoration:
-                            const InputDecoration(labelText: 'Entity type'),
+                        decoration: const InputDecoration(
+                          labelText: 'Entity type',
+                        ),
                         items: const [
                           DropdownMenuItem(
-                              value: 'sdn_bhd', child: Text('Sdn Bhd')),
+                            value: 'sdn_bhd',
+                            child: Text('Sdn Bhd'),
+                          ),
                           DropdownMenuItem(value: 'bhd', child: Text('Berhad')),
                           DropdownMenuItem(
-                              value: 'enterprise', child: Text('Enterprise')),
+                            value: 'enterprise',
+                            child: Text('Enterprise'),
+                          ),
                           DropdownMenuItem(
-                              value: 'sole_proprietor',
-                              child: Text('Sole Proprietor')),
+                            value: 'sole_proprietor',
+                            child: Text('Sole Proprietor'),
+                          ),
                           DropdownMenuItem(
-                              value: 'partnership', child: Text('Partnership')),
+                            value: 'partnership',
+                            child: Text('Partnership'),
+                          ),
                           DropdownMenuItem(
-                              value: 'individual', child: Text('Individual')),
+                            value: 'individual',
+                            child: Text('Individual'),
+                          ),
                           DropdownMenuItem(
-                              value: 'government', child: Text('Government')),
-                          DropdownMenuItem(value: 'other', child: Text('Other')),
+                            value: 'government',
+                            child: Text('Government'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'other',
+                            child: Text('Other'),
+                          ),
                         ],
                         onChanged: (v) =>
                             setState(() => _entityType = v ?? 'sdn_bhd'),
@@ -441,7 +532,9 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                         action: _tinValid == null
                             ? null
                             : Icon(
-                                _tinValid! ? Icons.verified : Icons.error_outline,
+                                _tinValid!
+                                    ? Icons.verified
+                                    : Icons.error_outline,
                                 color: _tinValid!
                                     ? context.colors.success
                                     : context.colors.danger,
@@ -469,18 +562,29 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                       _Pair(
                         left: DropdownButtonFormField<String>(
                           value: _idType,
-                          decoration:
-                              const InputDecoration(labelText: 'ID type'),
+                          decoration: const InputDecoration(
+                            labelText: 'ID type',
+                          ),
                           items: const [
                             DropdownMenuItem(
-                                value: 'BRN', child: Text('BRN (business)')),
+                              value: 'BRN',
+                              child: Text('BRN (business)'),
+                            ),
                             DropdownMenuItem(
-                                value: 'NRIC', child: Text('NRIC (individual)')),
+                              value: 'NRIC',
+                              child: Text('NRIC (individual)'),
+                            ),
                             DropdownMenuItem(
-                                value: 'PASSPORT', child: Text('Passport')),
-                            DropdownMenuItem(value: 'ARMY', child: Text('Army')),
+                              value: 'PASSPORT',
+                              child: Text('Passport'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'ARMY',
+                              child: Text('Army'),
+                            ),
                           ],
-                          onChanged: (v) => setState(() => _idType = v ?? 'BRN'),
+                          onChanged: (v) =>
+                              setState(() => _idType = v ?? 'BRN'),
                         ),
                         right: TextFormField(
                           controller: _c('idValue'),
@@ -496,7 +600,8 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                           controller: _c('sstNo'),
                           textCapitalization: TextCapitalization.characters,
                           decoration: const InputDecoration(
-                              labelText: 'SST registration no.'),
+                            labelText: 'SST registration no.',
+                          ),
                         ),
                         right: OutlinedButton.icon(
                           onPressed: _verifying ? null : _verifyTin,
@@ -504,8 +609,9 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                               ? const SizedBox(
                                   height: 16,
                                   width: 16,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const Icon(Icons.verified_outlined, size: 18),
                           label: const Text('Verify TIN with LHDN'),
@@ -518,14 +624,12 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                         left: TextFormField(
                           controller: _c('email'),
                           keyboardType: TextInputType.emailAddress,
-                          decoration:
-                              const InputDecoration(labelText: 'Email'),
+                          decoration: const InputDecoration(labelText: 'Email'),
                         ),
                         right: TextFormField(
                           controller: _c('phone'),
                           keyboardType: TextInputType.phone,
-                          decoration:
-                              const InputDecoration(labelText: 'Phone'),
+                          decoration: const InputDecoration(labelText: 'Phone'),
                         ),
                       ),
 
@@ -554,16 +658,18 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                       const SizedBox(height: 14),
                       TextFormField(
                         controller: _c('address2'),
-                        decoration:
-                            const InputDecoration(labelText: 'Address line 2'),
+                        decoration: const InputDecoration(
+                          labelText: 'Address line 2',
+                        ),
                       ),
                       const SizedBox(height: 14),
                       _Pair(
                         left: TextFormField(
                           controller: _c('postcode'),
                           keyboardType: TextInputType.number,
-                          decoration:
-                              const InputDecoration(labelText: 'Postcode'),
+                          decoration: const InputDecoration(
+                            labelText: 'Postcode',
+                          ),
                         ),
                         right: TextFormField(
                           controller: _c('city'),
@@ -594,8 +700,9 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                       const SectionHeader('Commercial terms'),
                       TextFormField(
                         controller: _c('creditLimit'),
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
                         decoration: const InputDecoration(
                           labelText: 'Credit limit',
                           prefixText: 'RM ',
@@ -644,18 +751,21 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                           ),
                           items: [
                             const DropdownMenuItem(
-                                value: null, child: Text('Standard')),
+                              value: null,
+                              child: Text('Standard'),
+                            ),
                             for (final l
                                 in ref.watch(priceLevelsProvider).value ??
                                     const [])
                               DropdownMenuItem(
                                 value: l['id'] as String,
-                                child: Text(l['name'] as String,
-                                    overflow: TextOverflow.ellipsis),
+                                child: Text(
+                                  l['name'] as String,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                           ],
-                          onChanged: (v) =>
-                              setState(() => _priceLevelId = v),
+                          onChanged: (v) => setState(() => _priceLevelId = v),
                         ),
                       // Only where there is a group to point at. A
                       // company that stands alone has no sister to link
@@ -741,7 +851,10 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
           helperText: 'Leave it alone unless this one is kept apart',
         ),
         items: [
-          const DropdownMenuItem(value: null, child: Text(kDefaultControlAccount)),
+          const DropdownMenuItem(
+            value: null,
+            child: Text(kDefaultControlAccount),
+          ),
           for (final a in choices)
             DropdownMenuItem(value: a.id, child: Text('${a.code} — ${a.name}')),
         ],
@@ -753,8 +866,9 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
   }
 }
 
-final _statesRefProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final _statesRefProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
   final repo = ref.watch(repoProvider);
   if (repo == null) return const [];
   return repo.states();

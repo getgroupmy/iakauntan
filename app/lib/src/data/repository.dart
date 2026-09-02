@@ -701,11 +701,14 @@ class Repo {
     for (var attempt = 1; ; attempt++) {
       String code;
       try {
-        code = await nextDocumentNumber('contact');
+        code = await nextContactCode(contact.contactType);
       } catch (_) {
         // The numbering is a convenience. A supplier with an awkward
-        // code beats a scan that failed at the last step.
-        code = 'C-${DateTime.now().microsecondsSinceEpoch}';
+        // code beats a scan that failed at the last step -- but in its
+        // own series, so it still reads as what it is.
+        code =
+            '${contactCodePrefix(contact.contactType)}'
+            '${DateTime.now().microsecondsSinceEpoch}';
       }
 
       try {
@@ -733,31 +736,55 @@ class Repo {
     return Contact.fromJson(data);
   }
 
-  /// What this contact could be turned into, and what stops the rest.
+  /// The next code in the series for a contact of this type.
   ///
-  /// Asked rather than worked out here: the same helper answers the
-  /// trigger that enforces it, so a menu built from this cannot offer
-  /// something the save will refuse.
-  Future<Map<String, dynamic>> contactConversions(String contactId) async {
+  /// One series per role -- `C-2026-00013`, `S-2026-00001`,
+  /// `P-2026-00343` -- so the editor's suggestion and the record
+  /// `create_contact_as` makes are numbered from the same place.
+  Future<String> nextContactCode(String contactType) async {
+    final v = await callRpc(
+      'next_contact_code',
+      params: {'p_org_id': orgId, 'p_type': contactType},
+    );
+    return v as String;
+  }
+
+  /// The letter each series starts with, for the fallback code when
+  /// the counter cannot be reached. The same mapping the database's
+  /// `app.contact_series` makes: `both` is numbered among customers.
+  static String contactCodePrefix(String contactType) => switch (contactType) {
+    'supplier' => 'S-',
+    'prospect' => 'P-',
+    _ => 'C-',
+  };
+
+  /// The other records of this company, and which roles it has no
+  /// record for yet.
+  ///
+  /// Asked rather than worked out here: `contact_records` reads the
+  /// same helper `create_contact_as` refuses on, so a menu built from
+  /// this cannot offer a record the database will refuse to make.
+  Future<Map<String, dynamic>> contactRecords(String contactId) async {
     final row = await callRpc(
-      'contact_conversions',
+      'contact_records',
       params: {'p_contact_id': contactId},
     );
     return Map<String, dynamic>.from(row as Map);
   }
 
-  /// Say what a contact is now.
+  /// A second record of the same company, in another role.
   ///
-  /// A plain update, because that is what the contact editor does and a
-  /// second path would be a second set of rules. The refusal, when
-  /// there is one, comes from the trigger and is already written for
-  /// somebody to read.
-  Future<void> convertContact(String contactId, String toType) =>
-      client
-          .from('contacts')
-          .update({'contact_type': toType})
-          .eq('id', contactId)
-          .eq('org_id', orgId);
+  /// The company's details, addresses and people are copied, the code
+  /// comes from that role's own series, and the record this was made
+  /// from is left exactly as it was -- its code, its type and its
+  /// documents. Returns the new record's id.
+  Future<String> createContactAs(String contactId, String asType) async {
+    final id = await callRpc(
+      'create_contact_as',
+      params: {'p_contact_id': contactId, 'p_type': asType},
+    );
+    return id as String;
+  }
 
   // ------------------------------------------------------------------
   // Items
