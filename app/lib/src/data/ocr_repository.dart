@@ -154,6 +154,61 @@ class OcrLine {
 ///
 /// Every field is nullable, and that is the point: "the tax number is not
 /// printed on this receipt" is a useful answer and a zero is not.
+/// Folds a reader's continuation rows back into the item above them.
+///
+/// A charge often takes more than one printed line — the item on the
+/// first, a part number or a period covered on the second — and a reader
+/// asked for "one entry per printed line" hands back two rows, the
+/// second carrying a description and no money at all.
+///
+/// Left alone, that second row becomes a line on somebody's bill at
+/// quantity one and price zero: a phantom charge with the real charge's
+/// detail in it. Dropping it instead loses what they are being charged
+/// for. Neither is right, so it is folded into the description above it,
+/// which is where the paper put it.
+///
+/// A row with no money and **nothing above it** is kept as a line of its
+/// own: it may be a genuine item whose price the reader could not make
+/// out, and inventing a rule that swallows the first line of a document
+/// would be worse than the problem.
+///
+/// This runs whatever the reader was. The prompt asks for the right
+/// shape; this is what makes the wrong shape harmless, and a reader
+/// swapped for another next year does not get to reintroduce the bug.
+List<OcrLine> foldOcrContinuations(List<OcrLine> lines) {
+  final out = <OcrLine>[];
+  for (final line in lines) {
+    final text = (line.description ?? '').trim();
+    final hasMoney =
+        (line.unitPrice != null && line.unitPrice != 0) ||
+        (line.amount != null && line.amount != 0) ||
+        (line.quantity != null && line.quantity != 0);
+
+    if (text.isEmpty) {
+      // Nothing printed and nothing charged. Not a line and not a
+      // continuation of one.
+      if (hasMoney) out.add(line);
+      continue;
+    }
+
+    if (!hasMoney && out.isNotEmpty) {
+      final above = out.removeLast();
+      out.add(
+        OcrLine(
+          description: '${(above.description ?? '').trim()}\n$text',
+          quantity: above.quantity,
+          unitPrice: above.unitPrice,
+          amount: above.amount,
+        ),
+      );
+      continue;
+    }
+
+    out.add(line);
+  }
+  return out;
+}
+
 class OcrExtraction {
   const OcrExtraction({
     this.supplierName,

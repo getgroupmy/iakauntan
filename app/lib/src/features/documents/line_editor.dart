@@ -634,6 +634,18 @@ class _ItemField extends StatelessWidget {
             controller: controller,
             enabled: editable,
             onChanged: onTextChanged,
+            // A charge often needs more than one line to describe: a
+            // part number, a period covered, a site address. The field
+            // was single-line, which meant a description carrying a
+            // newline could be neither read nor typed — a scanned bill
+            // whose item ran to two printed lines showed one run-on
+            // line and there was no way to put the break back.
+            //
+            // Grows to three and then scrolls, so an ordinary one-line
+            // description costs the same height it always did.
+            minLines: 1,
+            maxLines: 3,
+            keyboardType: TextInputType.multiline,
             decoration: const InputDecoration(
               hintText: 'Description',
               isDense: true,

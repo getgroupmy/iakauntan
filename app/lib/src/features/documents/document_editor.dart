@@ -291,7 +291,11 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       );
       if (!blank) return;
 
-      final lines = read.lines
+      // Continuation rows folded back into the item above them first.
+      // A reader that splits a wrapped description into two rows would
+      // otherwise put a phantom line at price zero on the bill, with
+      // the real charge's detail in it. See `foldOcrContinuations`.
+      final lines = foldOcrContinuations(read.lines)
           .where((l) => (l.description ?? '').trim().isNotEmpty)
           .map(
             (l) => LineDraft(

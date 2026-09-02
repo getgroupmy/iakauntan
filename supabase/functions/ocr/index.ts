@@ -223,14 +223,26 @@ const SCHEMA = {
     lines: {
       type: "array",
       description:
-        "One entry per printed line. Empty if the document is a single " +
-        "undifferentiated total.",
+        "One entry per item charged — NOT one per printed line. A " +
+        "description that wraps onto a second or third printed line is " +
+        "one entry whose description keeps every line of it, joined " +
+        "with newlines, in the order printed. A continuation line, a " +
+        "part number, a serial number or a period covered belongs in " +
+        "the description of the item above it, never in an entry of " +
+        "its own. Empty if the document is a single undifferentiated " +
+        "total.",
       items: {
         type: "object",
         additionalProperties: false,
         required: ["description", "quantity", "unit_price", "amount"],
         properties: {
-          description: { type: ["string", "null"] },
+          description: {
+            type: ["string", "null"],
+            description:
+              "Everything printed about this item, newlines preserved. " +
+              "Two printed lines describing one charge is one " +
+              "description with a newline in it.",
+          },
           quantity: { type: ["number", "null"] },
           unit_price: { type: ["number", "null"] },
           amount: { type: ["number", "null"] },
@@ -254,6 +266,13 @@ const SYSTEM = [
   "present it as read — if the subtotal is not on the document, that",
   "field is null, and if the arithmetic on the document does not foot,",
   "say so in `note` and report the printed figures unchanged.",
+  "",
+  "A charge often takes more than one printed line: the item on the",
+  "first, the detail on the second — a part number, a period covered, a",
+  "site address, a serial. That is one entry, and the second line goes",
+  "in its description after a newline. Splitting it into a second entry",
+  "with no price puts a phantom line on somebody's bill; dropping it",
+  "loses what they are actually being charged for.",
   "",
   "Malaysian documents worth knowing: amounts are prefixed RM; service",
   "tax appears as SST, and older documents show GST; a tax-inclusive",
