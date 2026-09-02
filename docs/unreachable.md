@@ -5789,3 +5789,56 @@ tested with one call.** The first step of the drift is correct. A
 quarterly schedule's first failure looks like a warning. Where the
 output of one call is the input of the next, the assertion has to run
 the loop.
+
+## Two setup screens with nothing on them, and what the mutants found
+
+0446 put a checkbox on the HR setup screen. Then, measured on
+production:
+
+| company | employees | runs | payslips | components | leave types |
+|---|---|---|---|---|---|
+| Sinar Teknologi | 4 | 7 | 28 | **0** | **0** |
+
+Every other tenant has none of any of it, correctly — they do not buy
+payroll. Sinar does, and has run it seven times without a single
+allowance, deduction or kind of leave. Two setup screens showed their
+empty state in the only company that can open them, and the checkbox
+0446 added had nothing to sit beside.
+
+**This is not the demo register reopening.** That sweep asked which
+modules had no tenant at all, and is closed. This is a shape it could
+not see: a module with a tenant, real transactions, posted books — and
+two of its tables empty.
+
+0448 seeds the allowances, a February-only bonus marked as additional
+remuneration, the leave types with the Act's bands applied by
+`apply_statutory_leave_bands`, and rolls the leave year so there are
+balances. It runs before the payroll loop, so the payslips carry it.
+
+### The mutants found two things that were not mutants
+
+**The demonstration was on the wrong person.** The bonus first went to
+the highest earner, and the assertion about February's deduction passed
+whether the flag was set or not. Measured: on RM9,500 a month the two
+methods give 3,741.35 and 3,469.75 — seven per cent apart, because she
+is already near the top band, so annualising buys little extra tax and
+dividing by eleven hands most of it back. On RM5,200 the same bonus
+gives 2,641.35 and 1,268.95.
+
+An assertion that cannot fail is not always the assertion's fault. **A
+demonstration has to be built on a case where the thing demonstrated is
+visible**, and mutation testing is what said the first one was not.
+
+**And the obvious assertion cannot be written in a demo at all.** The
+natural check is that February's deduction is below the annualised one,
+recomputed by handing the payslip's own figures back to `calc_pcb`. It
+passes with the flag removed. `calc_pcb` reads `payroll_ytd`, and by
+the time the test looks that holds the whole year rather than the one
+month February saw, so the recomputed figure is not the figure February
+took.
+
+*A figure that depends on accumulated state cannot be checked by
+recomputing it later.* The arithmetic is asserted where the inputs are
+controlled — `payroll_run.sql` — and what belongs in the demo is that
+the flag is carried onto the payslip and that the bonus month costs
+more than an ordinary one.

@@ -1346,4 +1346,114 @@ begin
   end;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The payroll screens with nothing on them (0448)
+--
+-- Sinar had four employees, seven payroll runs and twenty-eight
+-- payslips, and not one salary component or leave type: two setup
+-- screens showing their empty state in the only company that can open
+-- them, and the checkbox 0446 added with nothing to sit beside.
+--
+-- These assertions are written against relationships rather than
+-- figures, because the demo year is the current one and the number of
+-- runs grows with the calendar. The one exception is the count of
+-- bonus lines, which is one by construction.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_sinar   uuid;
+  v_n       integer;
+  v_slips   integer;
+  v_emp     uuid;
+  v_bonus   numeric;
+  v_bonus_pcb numeric;
+  v_other   numeric;
+begin
+  select id into v_sinar from public.organizations
+   where name = 'Sinar Teknologi Sdn Bhd';
+
+  select count(*) into v_n from public.salary_components
+   where org_id = v_sinar;
+  perform pg_temp.check_true(
+    'the allowances screen has something on it', v_n >= 3);
+
+  select count(*) into v_n from public.leave_types where org_id = v_sinar;
+  perform pg_temp.check_true('and so does the leave one', v_n >= 3);
+
+  -- The bands come from the Act through apply_statutory_leave_bands,
+  -- so three of them per scaling type rather than a number typed here.
+  select count(*) into v_n
+    from public.leave_entitlement_bands b
+    join public.leave_types t on t.id = b.leave_type_id
+   where t.org_id = v_sinar;
+  perform pg_temp.check_true(
+    'with the statutory bands under them', v_n >= 6);
+
+  select count(*) into v_n from public.leave_balances where org_id = v_sinar;
+  perform pg_temp.check_true(
+    'and a balance for each person to look at', v_n > 0);
+
+  -- Every payslip carries the travelling allowance, which is what
+  -- proves the extras were seeded before the runs rather than after.
+  select count(*) into v_slips from public.payslips where org_id = v_sinar;
+  select count(*) into v_n
+    from public.payslip_lines l
+    join public.payslips p on p.id = l.payslip_id
+   where p.org_id = v_sinar and l.code = 'TRAVEL';
+  if v_slips > 0 then
+    perform pg_temp.check_eq(
+      'the allowance reaches a payslip, and every one of them',
+      v_n, v_slips);
+  end if;
+
+  -- The bonus, which is February's and February's only.
+  select count(*) into v_n
+    from public.payslip_lines l
+    join public.payslips p on p.id = l.payslip_id
+   where p.org_id = v_sinar and l.code = 'BONUS';
+
+  -- Nothing to check before March, because the February run has not
+  -- happened: the demo raises runs for months that have closed.
+  if v_n > 0 then
+    perform pg_temp.check_eq('the bonus is paid once', v_n, 1);
+
+    perform pg_temp.check_true('and is marked as paid once',
+      (select l.is_additional_remuneration
+         from public.payslip_lines l
+         join public.payslips p on p.id = l.payslip_id
+        where p.org_id = v_sinar and l.code = 'BONUS' limit 1));
+
+    select p.employee_id, p.pcb, l.amount
+      into v_emp, v_bonus_pcb, v_bonus
+      from public.payslips p
+      join public.payslip_lines l on l.payslip_id = p.id and l.code = 'BONUS'
+     where p.org_id = v_sinar limit 1;
+
+    select avg(p.pcb) into v_other
+      from public.payslips p
+     where p.org_id = v_sinar and p.employee_id = v_emp
+       and not exists (select 1 from public.payslip_lines l
+                        where l.payslip_id = p.id and l.code = 'BONUS');
+
+    -- What is *not* asserted here, and why, because it was tried.
+    --
+    -- The obvious assertion is that February's deduction is smaller
+    -- than the annualised one, computed by handing the payslip's own
+    -- figures back to `calc_pcb` the old way. It does not work.
+    -- `calc_pcb` reads `payroll_ytd`, which by the time this test runs
+    -- holds the whole year rather than the one month February saw, so
+    -- the recomputed figure is not the figure February took and the
+    -- comparison passes whether the bonus is marked or not -- measured,
+    -- with the flag removed and the assertion left in.
+    --
+    -- **A figure that depends on accumulated state cannot be checked by
+    -- recomputing it later.** The PCB arithmetic is asserted where the
+    -- inputs are controlled, in `payroll_run.sql`; what belongs here is
+    -- that the demo carries the flag and that the bonus month costs
+    -- more than an ordinary one.
+    perform pg_temp.check_true('a bonus month costs more than an ordinary one',
+      v_bonus_pcb > v_other * 2);
+  end if;
+end $$;
+
 rollback;
