@@ -37,12 +37,14 @@ const _roles = <String, (String, String)>{
   'prospect': ('Prospect', 'Somebody you have not sold to yet'),
 };
 
-String _roleLabel(String type) => switch (type) {
+/// What a role is called on screen: `both` is spelt out, the rest
+/// as [_roles] has them.
+String contactRoleLabel(String type) => switch (type) {
   'both' => 'Customer & Supplier',
   _ => _roles[type]?.$1 ?? Fmt.label(type),
 };
 
-IconData _roleIcon(String type) => switch (type) {
+IconData contactRoleIcon(String type) => switch (type) {
   'customer' => Icons.person_outline,
   'supplier' => Icons.local_shipping_outlined,
   'both' => Icons.swap_horiz,
@@ -81,7 +83,7 @@ class _RecordsSheet extends ConsumerWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${data['code']} · ${_roleLabel('${data['contact_type']}')}',
+                '${data['code']} · ${contactRoleLabel('${data['contact_type']}')}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 16),
@@ -101,11 +103,11 @@ class _RecordsSheet extends ConsumerWidget {
                     child: ListTile(
                       key: ValueKey('record-${r['id']}'),
                       leading: Icon(
-                        _roleIcon('${r['contact_type']}'),
+                        contactRoleIcon('${r['contact_type']}'),
                         size: 20,
                       ),
                       title: Text('${r['code']}'),
-                      subtitle: Text(_roleLabel('${r['contact_type']}')),
+                      subtitle: Text(contactRoleLabel('${r['contact_type']}')),
                       trailing: const Icon(Icons.chevron_right, size: 18),
                       onTap: () {
                         Navigator.pop(context);
@@ -164,7 +166,7 @@ class _CreateOption extends ConsumerWidget {
         key: ValueKey('create-as-$as'),
         enabled: open,
         leading: Icon(
-          _roleIcon(as),
+          contactRoleIcon(as),
           size: 20,
           color: open ? null : Theme.of(context).disabledColor,
         ),

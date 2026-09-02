@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -18,6 +20,7 @@ import '../../data/places_repository.dart';
 import '../../data/repository.dart';
 import 'statement_pdf.dart';
 import 'contact_extras.dart';
+import 'contact_lookalikes.dart';
 
 class ContactEditor extends ConsumerStatefulWidget {
   const ContactEditor({
@@ -65,6 +68,15 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
   // never over a code the user has typed themselves.
   final Map<String, String> _suggested = {};
 
+  // What is already on file under the number or name being typed,
+  // asked a moment after the typing pauses. Armed once the form holds
+  // what the person typed rather than what was loaded into it, so an
+  // existing record is not reported against itself on the way in.
+  List<Lookalike> _lookalikes = const [];
+  Timer? _lookalikeTimer;
+  int _lookalikeAsk = 0;
+  bool _lookalikesArmed = false;
+
   @override
   void initState() {
     super.initState();
@@ -88,15 +100,75 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
     ]) {
       _controllers[key] = TextEditingController();
     }
+    for (final key in const ['name', 'registrationNo', 'tin', 'idValue']) {
+      _c(key).addListener(_scheduleLookalikes);
+    }
+    _lookalikesArmed = widget.contactId == null;
     _load();
   }
 
   @override
   void dispose() {
+    _lookalikeTimer?.cancel();
     for (final c in _controllers.values) {
       c.dispose();
     }
     super.dispose();
+  }
+
+  /// Ask once the typing pauses, not on every keystroke.
+  void _scheduleLookalikes() {
+    if (!_lookalikesArmed) return;
+    _lookalikeTimer?.cancel();
+    _lookalikeTimer = Timer(
+      const Duration(milliseconds: 400),
+      _askLookalikes,
+    );
+  }
+
+  /// What is on file under what has been typed so far. Nothing said
+  /// until there is something worth asking about, and a lookup that
+  /// fails is silence rather than a snackbar in the way of the typing:
+  /// the database says it again, harder, if a duplicate is made
+  /// through `create_contact_as`, and links the record on Save
+  /// whatever this showed.
+  Future<void> _askLookalikes() async {
+    final repo = ref.read(repoProvider);
+    if (repo == null || !mounted) return;
+    String? typed(String key) {
+      final v = _c(key).text.trim();
+      return v.isEmpty ? null : v;
+    }
+
+    final name = _c('name').text;
+    if (!worthAskingAbout(
+      name: name,
+      registrationNo: typed('registrationNo'),
+      tin: typed('tin'),
+      idValue: typed('idValue'),
+    )) {
+      if (_lookalikes.isNotEmpty) setState(() => _lookalikes = const []);
+      return;
+    }
+    final ask = ++_lookalikeAsk;
+    try {
+      final rows = await repo.contactLookalikes(
+        contactType: _contactType,
+        name: name.trim(),
+        registrationNo: typed('registrationNo'),
+        tin: typed('tin'),
+        idType: _idType,
+        idValue: typed('idValue'),
+        excludeId: widget.contactId,
+      );
+      // A later question has been asked; its answer is the one to show.
+      if (!mounted || ask != _lookalikeAsk) return;
+      setState(
+        () => _lookalikes = rows.map(Lookalike.fromJson).toList(),
+      );
+    } catch (_) {
+      // Left as it was.
+    }
   }
 
   TextEditingController _c(String key) => _controllers[key]!;
@@ -188,6 +260,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         _tinValid = contact.isTinVerified ? true : null;
         _loading = false;
       });
+      _lookalikesArmed = true;
       // Read separately, because it is not on the model: see
       // `RepoGroupContacts`. Its own try, so that a company without the
       // group feature — or a transient failure on one extra column —
@@ -465,6 +538,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                           onChanged: (v) {
                             setState(() => _contactType = v ?? 'customer');
                             if (widget.contactId == null) _suggestCode();
+                            _scheduleLookalikes();
                           },
                         ),
                       ),
@@ -525,6 +599,8 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                             setState(() => _entityType = v ?? 'sdn_bhd'),
                       ),
 
+                      ContactLookalikesNotice(rows: _lookalikes),
+
                       const SizedBox(height: 24),
                       SectionHeader(
                         'Tax identifiers',
@@ -584,7 +660,10 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                             ),
                           ],
                           onChanged: (v) =>
-                              setState(() => _idType = v ?? 'BRN'),
+                              setState(() {
+                                _idType = v ?? 'BRN';
+                                _scheduleLookalikes();
+                              }),
                         ),
                         right: TextFormField(
                           controller: _c('idValue'),

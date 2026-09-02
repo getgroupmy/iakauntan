@@ -805,6 +805,40 @@ class Repo {
     return id as String;
   }
 
+  /// The records already on file that carry what is being typed: the
+  /// same registration number, ID, TIN or name.
+  ///
+  /// Each row is `{id, code, name, contact_type, matched_on,
+  /// same_role}`, the ones already in [contactType] first -- those are
+  /// the records a Save would duplicate. Save is not refused on this;
+  /// the editor says what is on file and lets the person decide. A
+  /// matching number links the saved record to the company's party on
+  /// the way in, so the sheet on either shows both.
+  Future<List<Map<String, dynamic>>> contactLookalikes({
+    required String contactType,
+    required String name,
+    String? registrationNo,
+    String? tin,
+    String? idType,
+    String? idValue,
+    String? excludeId,
+  }) async {
+    final rows = await callRpc(
+      'contact_lookalikes',
+      params: {
+        'p_org_id': orgId,
+        'p_contact_type': contactType,
+        'p_name': name,
+        'p_registration_no': registrationNo,
+        'p_tin': tin,
+        'p_id_type': idType,
+        'p_id_value': idValue,
+        'p_exclude': excludeId,
+      },
+    );
+    return _rows(rows);
+  }
+
   // ------------------------------------------------------------------
   // Items
   // ------------------------------------------------------------------
