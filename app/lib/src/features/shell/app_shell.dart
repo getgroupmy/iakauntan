@@ -1479,10 +1479,16 @@ class _OrgSwitcher extends ConsumerWidget {
     final orgs =
         ref.watch(organizationsProvider).value ?? const <Organization>[];
 
+    // Multi-Company is a module (0486). The sheet opens for somebody
+    // who has one company and may add another, as well as for somebody
+    // who has several -- otherwise the only door to a second company
+    // would be one you need a second company to reach.
+    final canAdd = ref.watch(canAddCompanyProvider).valueOrNull ?? false;
+
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: orgs.length < 2
+        onTap: orgs.length < 2 && !canAdd
             ? null
             : () => showDialog<void>(
                 context: context,
@@ -1506,6 +1512,24 @@ class _OrgSwitcher extends ConsumerWidget {
                           Navigator.pop(ctx);
                         },
                       ),
+                    // Absent rather than present and refusing: the
+                    // server answers `can_add_company`, so a company
+                    // without the module is not offered a door that
+                    // opens onto an error.
+                    if (canAdd) ...[
+                      const Divider(height: 1),
+                      ListTile(
+                        key: const ValueKey('add-company'),
+                        leading: const Icon(Icons.add_business_outlined),
+                        title: const Text('Add a company'),
+                        subtitle: const Text('Another set of books on '
+                            'this sign-in'),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          context.go('/companies/new');
+                        },
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1558,7 +1582,8 @@ class _OrgSwitcher extends ConsumerWidget {
                   ],
                 ),
               ),
-              if (orgs.length > 1) const Icon(Icons.unfold_more, size: 16),
+              if (orgs.length > 1 || canAdd)
+                const Icon(Icons.unfold_more, size: 16),
             ],
           ),
         ),

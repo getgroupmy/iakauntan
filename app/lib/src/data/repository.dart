@@ -871,6 +871,16 @@ class Repo {
   Future<void> unlinkContactRecord(String contactId) =>
       callRpc('unlink_contact_record', params: {'p_contact_id': contactId});
 
+  /// Whether this account may stand up another company.
+  ///
+  /// The first is what signing up is for; every one after it is the
+  /// Multi-Company module (0486). Asked rather than worked out here so
+  /// the button can be absent instead of present and refusing.
+  Future<bool> canAddCompany() async {
+    final v = await callRpc('can_add_company');
+    return v == true;
+  }
+
   // ------------------------------------------------------------------
   // Items
   // ------------------------------------------------------------------

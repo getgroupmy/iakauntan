@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788361718.4902658,
-    "ast_hash": "80d404e44c88e156d37ca5dbb8f85e71",
+    "mtime": 1788367721.2237537,
+    "ast_hash": "62365dcfdcd4ce17d05028d79bdae7b4",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788361710.1927056,
-    "ast_hash": "be8b49336dbc9f9e563d53bfaad9042c",
+    "mtime": 1788367721.222534,
+    "ast_hash": "a7d4d58ff2ef9cb4cd2df5fe8b6e422f",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/app_shell.dart": {
-    "mtime": 1788342312.5669868,
-    "ast_hash": "6f891fa110b4a9b56f4be196d7b046de",
+    "mtime": 1788367757.926449,
+    "ast_hash": "680ea76eb59ac270ca583a9535e80d72",
     "semantic_hash": ""
   },
   "app/lib/src/features/team/audit_trail_card.dart": {
@@ -725,8 +725,8 @@
     "semantic_hash": "200dfde266fb67d41983b3a17fa1e187"
   },
   "supabase/tests/_helpers.sql": {
-    "mtime": 1787197084.935863,
-    "ast_hash": "b0eaaa35dbe6f95b3e993935fece697d",
+    "mtime": 1788367562.8759754,
+    "ast_hash": "ea75405c52a56f7e30a0a51e07fbd37b",
     "semantic_hash": ""
   },
   "supabase/tests/ledger.sql": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788363961.7165842,
-    "ast_hash": "4e20f8c708f8c480641da8be24a3a11b",
+    "mtime": 1788367237.1685417,
+    "ast_hash": "6d20475f090ec6b7bc078d8bcacf7e37",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -5250,8 +5250,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/company_country.sql": {
-    "mtime": 1788285600.499654,
-    "ast_hash": "23426657b992671e5b85d1c08eb989f6",
+    "mtime": 1788367562.894281,
+    "ast_hash": "7f434b38c62b6beefe0124cb2046e6e1",
     "semantic_hash": ""
   },
   "docs/address-suggestions.md": {
@@ -7000,8 +7000,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/group_payment_screen.dart": {
-    "mtime": 1788331695.9024014,
-    "ast_hash": "15f313ba4268777c056c987b955cfb22",
+    "mtime": 1788367810.7295704,
+    "ast_hash": "f600fb1023ce7b1e235816398b24d42b",
     "semantic_hash": ""
   },
   "app/lib/src/features/expenses/expense_voucher_pdf.dart": {
@@ -7025,8 +7025,8 @@
     "semantic_hash": ""
   },
   "app/test/group_payment_screen_test.dart": {
-    "mtime": 1788331695.902676,
-    "ast_hash": "85bd981207cf0776b6a6e1f810660ea8",
+    "mtime": 1788368473.5716066,
+    "ast_hash": "862397ea2cdee8a56dd841d4ef28d1f5",
     "semantic_hash": ""
   },
   "app/test/line_description_multiline_test.dart": {
@@ -7387,6 +7387,21 @@
   "supabase/migrations/0485_one_call_that_restores_the_whole_demo.sql": {
     "mtime": 1788366322.9089081,
     "ast_hash": "848fc18a507f2e8d92ad5c9bd8dd11ab",
+    "semantic_hash": ""
+  },
+  "app/test/add_company_test.dart": {
+    "mtime": 1788367893.1262197,
+    "ast_hash": "f2c3bc1901962948356dac8a51c914c6",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0486_multi_company_is_a_module.sql": {
+    "mtime": 1788367536.58974,
+    "ast_hash": "6aef4a47269da468d2aee02bc42d11fd",
+    "semantic_hash": ""
+  },
+  "supabase/tests/multi_company.sql": {
+    "mtime": 1788367164.3402894,
+    "ast_hash": "eea05267ac343ffe3ce857e660a3ceff",
     "semantic_hash": ""
   }
 }

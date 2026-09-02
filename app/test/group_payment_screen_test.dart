@@ -41,10 +41,12 @@ void main() {
     open('d3', 'o2', 'Awan Dua Sdn Bhd', 'INV-B1', 2500),
   ];
 
-  Widget harness(List<Map<String, dynamic>> rows) => ProviderScope(
+  Widget harness(List<Map<String, dynamic>> rows, {bool canAdd = true}) =>
+      ProviderScope(
     overrides: [
       repoProvider.overrideWithValue(null),
       openAcrossCompaniesProvider.overrideWith((ref, kind) async => rows),
+      canAddCompanyProvider.overrideWith((_) async => canAdd),
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
@@ -149,5 +151,18 @@ void main() {
     // set up yet, and the honest answer is the form that sets one up.
     expect(find.text('Nothing outstanding'), findsOneWidget);
     expect(find.text('Add a company'), findsOneWidget);
+  });
+
+  testWidgets('but not to an account that may not add one', (tester) async {
+    await tester.pumpWidget(harness(const [], canAdd: false));
+    await tester.pumpAndSettle();
+
+    // 0486 makes a second company the Multi-Company module, and the
+    // server is the one that decides. A button that opens a form which
+    // refuses at Save is worse than no button: the person has typed a
+    // company's details in by then.
+    expect(find.text('Nothing outstanding'), findsOneWidget);
+    expect(find.text('Company not listed?'), findsOneWidget);
+    expect(find.text('Add a company'), findsNothing);
   });
 }

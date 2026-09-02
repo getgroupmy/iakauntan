@@ -390,6 +390,17 @@ final contactRecordsProvider = FutureProvider.autoDispose
       return requireRepo(ref).contactRecords(contactId);
     });
 
+/// Whether this account may add another company.
+///
+/// Multi-Company is a module (0486): the first company is free and the
+/// rest are bought. Watched rather than assumed, so a screen offers
+/// the door only when it opens.
+final canAddCompanyProvider = FutureProvider.autoDispose<bool>((ref) async {
+  final repo = ref.watch(repoProvider);
+  if (repo == null) return false;
+  return repo.canAddCompany();
+});
+
 /// The records on file twice, for the screen that offers to link
 /// them. autoDispose so it is asked afresh: a group linked a moment
 /// ago is not a group any more.

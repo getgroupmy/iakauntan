@@ -453,11 +453,11 @@ class _DocumentRow extends StatelessWidget {
 /// Every company here is one this person may post in. A company they
 /// have never set up is not missing from a filter — it does not exist
 /// yet, and the honest answer is the form that creates one.
-class _AddCompanyRow extends StatelessWidget {
+class _AddCompanyRow extends ConsumerWidget {
   const _AddCompanyRow();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -466,11 +466,15 @@ class _AddCompanyRow extends StatelessWidget {
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(width: Space.sm),
-        TextButton.icon(
-          onPressed: () => context.go('/companies/new'),
-          icon: const Icon(Icons.add_business_outlined, size: 18),
-          label: const Text('Add a company'),
-        ),
+        // Offered only when it would work. Adding a company is the
+        // Multi-Company module (0486), and a button that refuses is
+        // worse than no button.
+        if (ref.watch(canAddCompanyProvider).valueOrNull ?? false)
+          TextButton.icon(
+            onPressed: () => context.go('/companies/new'),
+            icon: const Icon(Icons.add_business_outlined, size: 18),
+            label: const Text('Add a company'),
+          ),
       ],
     );
   }

@@ -50,6 +50,7 @@ declare
   v_country text;
 begin
   perform pg_temp.sign_in_as(v_user);
+  perform pg_temp.allow_many_companies();
 
   v_org := public.create_organization(
     p_name => 'Lion City Books Pte Ltd',
@@ -75,6 +76,7 @@ declare
   v_country text;
 begin
   perform pg_temp.sign_in_as(v_user);
+  perform pg_temp.allow_many_companies();
 
   v_org := public.create_organization(
     p_name => 'Kedai Lama Sdn Bhd',
@@ -96,6 +98,7 @@ declare
   v_country text;
 begin
   perform pg_temp.sign_in_as(v_user);
+  perform pg_temp.allow_many_companies();
 
   v_org := public.create_organization(
     p_name => 'Kedai Kosong Sdn Bhd',

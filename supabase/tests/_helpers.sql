@@ -180,6 +180,26 @@ $$;
 -- assertion into a no-op. Granting everything by default is convenient;
 -- granting everything unconditionally deletes exactly the tests worth
 -- having.
+-- 0486 makes the second company an entitlement: the first is what
+-- signing up is for, the rest are the Multi-Company module. A file
+-- testing what a company *is* -- its country, its tax registration,
+-- its ledger -- is not a file about paying for one, so it says this
+-- once and goes on standing up as many as it needs.
+--
+-- Deliberately after the fact rather than a blanket exemption: the
+-- entitlement is granted on the companies the caller already owns,
+-- which is exactly how somebody buys it in the product.
+create or replace function pg_temp.allow_many_companies()
+returns void language sql as $$
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select m.org_id, 'multi_company', true
+    from public.org_members m
+   where m.user_id = (nullif(current_setting('request.jwt.claims', true), '')
+                        ::jsonb ->> 'sub')::uuid
+     and m.role = 'owner'
+  on conflict (org_id, module_code) do update set is_enabled = true;
+$$;
+
 create or replace function pg_temp.test_org(
   p_name    text,
   p_modules text[] default null)
