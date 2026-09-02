@@ -3035,8 +3035,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_rebuild.sql": {
-    "mtime": 1788318732.5902236,
-    "ast_hash": "a0b902f3be3dc29ddd13e93be899618f",
+    "mtime": 1788365910.4327736,
+    "ast_hash": "35fe13dc6eb3c67c8ebc154c6684e3b3",
     "semantic_hash": ""
   },
   "supabase/tests/demo_teardown.sql": {
@@ -7382,6 +7382,11 @@
   "supabase/migrations/0484_the_practice_under_its_own_name.sql": {
     "mtime": 1788364586.24947,
     "ast_hash": "d02dcbb9b8b02dc71af418716b3fe0d3",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0485_one_call_that_restores_the_whole_demo.sql": {
+    "mtime": 1788366322.9089081,
+    "ast_hash": "848fc18a507f2e8d92ad5c9bd8dd11ab",
     "semantic_hash": ""
   }
 }

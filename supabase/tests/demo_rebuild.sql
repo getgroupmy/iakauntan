@@ -54,8 +54,24 @@ begin
   select count(*) into v_users from auth.users
    where raw_app_meta_data ->> 'demo' = 'true';
 
-  perform pg_temp.check_eq('seven demo companies', v_orgs, 7);
-  perform pg_temp.check_eq('nine demo logins', v_users, 9);
+  -- Seven tenants plus the practice's four: the firm's own books and
+  -- its three client companies. 0485 builds them in the same call,
+  -- because the teardown at the top of this function takes every
+  -- `is_demo` company and used to leave those four deleted.
+  perform pg_temp.check_eq('eleven demo companies', v_orgs, 11);
+  perform pg_temp.check_eq('fourteen demo logins', v_users, 14);
+
+  -- The office holds two people. `invite_firm_member` was broken from
+  -- 0450 to 0483, so until then it could only ever hold one.
+  perform pg_temp.check_eq('the practice has two people in it',
+    (select count(*)::integer from public.firm_members m
+       join auth.users u on u.id = m.user_id
+      where u.email in ('accountant@iakauntan.com', 'audit@iakauntan.com')
+        and m.status = 'active'), 2);
+  perform pg_temp.check_eq('and the manager sees the whole portfolio',
+    (select count(*)::integer from public.org_members m
+       join auth.users u on u.id = m.user_id
+      where u.email = 'audit@iakauntan.com'), 4);
 
   -- --------------------------------------------------------------
   -- The promise on the sign-in page
@@ -1281,7 +1297,13 @@ begin
       'Seri Ayu Salon & Spa Sdn Bhd -> einvoice',
       'Sinar Teknologi Sdn Bhd -> einvoice',
       'Warung Sedap Enterprise -> einvoice',
-      'Guaman Aziz & Rakan -> einvoice'];
+      'Guaman Aziz & Rakan -> einvoice',
+      -- 0485 brings the practice's four into the same rebuild, and the
+      -- reason above covers them unchanged.
+      'Accountant & Co. -> einvoice',
+      'Bayu Digital Sdn Bhd -> einvoice',
+      'Kilang Lestari Sdn Bhd -> einvoice',
+      'Pinang Holdings Berhad -> einvoice'];
       -- Nothing else. Every line left is an `einvoice` line above, and
       -- every one of those is deliberate.
   begin
@@ -1519,6 +1541,32 @@ begin
                and s.status = 'completed'
                and m.movement_type = 'sales_delivery'
                and m.quantity < 0));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And what the teardown leaves behind
+-- ---------------------------------------------------------------------
+-- Last, because it takes the whole demo away. A firm is not a company:
+-- `demo_teardown` deletes organizations and demo logins, and the
+-- `firms` row survives both -- with nobody in it and nothing under it.
+--
+-- That is not merely untidy. `demo_practice_rebuild` finds its firm
+-- through the partner's membership, which the teardown has just swept,
+-- so an empty firm left standing is invisible to the next run and a
+-- second firm appears beside it. Then a third. 0485 clears it away.
+do $$
+declare
+  v_before integer;
+  v_after  integer;
+begin
+  select count(*) into v_before from public.firms;
+  perform pg_temp.check_true('the demo built a firm', v_before > 0);
+
+  perform app.demo_teardown();
+
+  select count(*) into v_after from public.firms;
+  perform pg_temp.check_eq(
+    'a firm nobody is left in goes with the teardown', v_after, 0);
 end $$;
 
 rollback;
