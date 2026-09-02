@@ -77,13 +77,16 @@ class PipelineScreen extends ConsumerWidget {
               return const EmptyState(
                 icon: Icons.view_column_outlined,
                 title: 'No pipeline configured',
-                message: 'Create a pipeline with stages to start tracking deals.',
+                message:
+                    'Create a pipeline with stages to start tracking deals.',
               );
             }
 
             final total = deals.fold<double>(0, (s, d) => s + d.amount);
-            final weighted =
-                deals.fold<double>(0, (s, d) => s + d.weightedAmount);
+            final weighted = deals.fold<double>(
+              0,
+              (s, d) => s + d.weightedAmount,
+            );
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -200,8 +203,10 @@ class _StageColumn extends StatelessWidget {
                 Container(
                   width: 8,
                   height: 8,
-                  decoration:
-                      BoxDecoration(color: _color, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: _color,
+                    shape: BoxShape.circle,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -211,8 +216,10 @@ class _StageColumn extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Text('${deals.length}',
-                    style: Theme.of(context).textTheme.bodySmall),
+                Text(
+                  '${deals.length}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ],
             ),
             const SizedBox(height: 2),
@@ -250,8 +257,9 @@ class _DealCard extends ConsumerWidget {
     final go = await confirm(
       context,
       title: 'Quote ${deal.name}?',
-      message: 'A quotation goes out to ${deal.contactName ?? 'the '
-          'customer'} at ${Fmt.money(deal.amount, currency: deal.currency)}, '
+      message:
+          'A quotation goes out to ${deal.contactName ?? 'the '
+                  'customer'} at ${Fmt.money(deal.amount, currency: deal.currency)}, '
           'valid for thirty days, and this deal is linked to it. Price it '
           'properly on the document; the deal follows.',
       confirmLabel: 'Raise it',
@@ -281,26 +289,30 @@ class _DealCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Expanded(
-              child: Text(
-                deal.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style:
-                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  deal.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
               ),
-            ),
-            if (draggable && !deal.isQuoted && deal.status == 'open')
-              IconButton(
-                tooltip: 'Raise a quotation',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: const Icon(Icons.request_quote_outlined, size: 16),
-                onPressed: () => _quote(context, ref),
-              ),
-          ]),
+              if (draggable && !deal.isQuoted && deal.status == 'open')
+                IconButton(
+                  tooltip: 'Raise a quotation',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: const Icon(Icons.request_quote_outlined, size: 16),
+                  onPressed: () => _quote(context, ref),
+                ),
+            ],
+          ),
           if (deal.contactName != null) ...[
             const SizedBox(height: 4),
             Text(
@@ -316,7 +328,9 @@ class _DealCard extends ConsumerWidget {
               Text(
                 Fmt.money(deal.amount, currency: deal.currency),
                 style: const TextStyle(
-                    fontWeight: FontWeight.w700, fontSize: 13),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
               ),
               const Spacer(),
               Text(
@@ -415,8 +429,7 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
         'stage_id': stage.id,
         'amount': double.tryParse(_amount.text) ?? 0,
         'probability': stage.probability,
-        'expected_close_date':
-            _closeDate == null ? null : Fmt.iso(_closeDate!),
+        'expected_close_date': _closeDate == null ? null : Fmt.iso(_closeDate!),
       }),
       successMessage: 'Deal created',
     );
@@ -432,9 +445,13 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
   @override
   Widget build(BuildContext context) {
     final stages = ref.watch(pipelineStagesProvider).value ?? const [];
+    // A deal is not a sale, so the company it is with may be a
+    // prospect -- that is what most of them are.
     final contacts =
-        ref.watch(contactsProvider((type: 'customer', search: ''))).value ??
-            const <Contact>[];
+        ref
+            .watch(contactsProvider((type: 'customer_or_prospect', search: '')))
+            .value ??
+        const <Contact>[];
 
     _stageId ??= stages.isNotEmpty ? stages.first.id : null;
 
@@ -464,36 +481,42 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
                 onChanged: (v) => setState(() => _contactId = v),
               ),
               const SizedBox(height: 12),
-              Row(children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _amount,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                        labelText: 'Deal value', prefixText: 'RM '),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _amount,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Deal value',
+                        prefixText: 'RM ',
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _stageId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Stage'),
-                    items: [
-                      for (final s in stages)
-                        DropdownMenuItem(value: s.id, child: Text(s.name)),
-                    ],
-                    onChanged: (v) => setState(() => _stageId = v),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _stageId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Stage'),
+                      items: [
+                        for (final s in stages)
+                          DropdownMenuItem(value: s.id, child: Text(s.name)),
+                      ],
+                      onChanged: (v) => setState(() => _stageId = v),
+                    ),
                   ),
-                ),
-              ]),
+                ],
+              ),
               const SizedBox(height: 12),
               InkWell(
                 onTap: () async {
                   final picked = await showDatePicker(
                     context: context,
-                    initialDate: _closeDate ??
+                    initialDate:
+                        _closeDate ??
                         DateTime.now().add(const Duration(days: 30)),
                     firstDate: DateTime(2000),
                     lastDate: DateTime(2100),

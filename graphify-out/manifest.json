@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788353172.5156708,
-    "ast_hash": "c090066be48adbc728446d6dd3f2a141",
+    "mtime": 1788355947.6998358,
+    "ast_hash": "baafa17c3570223f206dc509e1b5dfbf",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -135,8 +135,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/crm/pipeline_screen.dart": {
-    "mtime": 1788285599.911654,
-    "ast_hash": "726c96bb4ee95aeff7e9d594d2b2d49c",
+    "mtime": 1788355947.9238358,
+    "ast_hash": "8684f861f951403dcffe2e9d45a9e97d",
     "semantic_hash": ""
   },
   "app/lib/src/features/dashboard/dashboard_screen.dart": {
@@ -145,13 +145,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/doc_types.dart": {
-    "mtime": 1788285599.911654,
-    "ast_hash": "aded114508d9ee838af64b4f6415c3c4",
+    "mtime": 1788355932.079794,
+    "ast_hash": "d5bbd37d215dce51ddd895d313fca3c4",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1788341105.1014662,
-    "ast_hash": "b5ddb48d8a0b61c188822478180710a4",
+    "mtime": 1788355947.8718357,
+    "ast_hash": "c8d1a90fe7ed3c093372dbffcdabdef6",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788353016.340018,
-    "ast_hash": "2c9f376e41b872e2c9296360b212d4e1",
+    "mtime": 1788355725.1898475,
+    "ast_hash": "c04ff147615b80d7fed4d4c4ecb88e45",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7277,6 +7277,21 @@
   "app/test/contact_code_test.dart": {
     "mtime": 1788353599.0636961,
     "ast_hash": "815593648d29bab6fe4ce2704d2e3782",
+    "semantic_hash": ""
+  },
+  "app/test/contact_type_for_test.dart": {
+    "mtime": 1788355947.9398358,
+    "ast_hash": "3c62cea50b2d32a07e023a181f97abce",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0478_the_quotation_a_prospect_accepted.sql": {
+    "mtime": 1788355663.1720753,
+    "ast_hash": "52f570b068269faffec02a02ea55cc17",
+    "semantic_hash": ""
+  },
+  "supabase/tests/prospect_quotation.sql": {
+    "mtime": 1788355720.1678221,
+    "ast_hash": "77dbccd174a94f169ad8e4487fb75b1a",
     "semantic_hash": ""
   }
 }

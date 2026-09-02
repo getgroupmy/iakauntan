@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/models.dart';
+import 'document_dates.dart';
 
 /// Everything the generic list and editor screens need to know about a
 /// document type. Keeping it in one table is what lets a single editor
@@ -167,6 +168,21 @@ const docTypes = <String, DocTypeMeta>{
 
 DocTypeMeta metaFor(String docType) =>
     docTypes[docType] ?? docTypes['invoice']!;
+
+/// Who a document of this type may be made out to: the picker's
+/// contact filter, in the terms `Repo.contactTypesFor` reads.
+///
+/// An offer -- a quotation or a proforma, the two documents that carry
+/// a validity -- may be made to a prospect. Somebody you have not sold
+/// to yet is exactly who you send a quotation to, and until 0478 the
+/// picker offered customers only, so quoting a prospect meant making a
+/// customer record for a company that had bought nothing. The documents
+/// that record a sale still pick from customers: `transfer_document`
+/// lands an accepted offer on the company's customer record, and
+/// refuses where there is none.
+String contactTypeFor(String docType) => showsValidUntil(docType)
+    ? 'customer_or_prospect'
+    : metaFor(docType).kind.contactType;
 
 /// Document types shown in the type switcher, in cycle order.
 Iterable<MapEntry<String, DocTypeMeta>> docTypesFor(DocKind kind) =>

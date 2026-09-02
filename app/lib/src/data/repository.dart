@@ -536,10 +536,12 @@ class Repo {
   Future<List<Map<String, dynamic>>> openAcrossCompanies({
     String kind = 'invoice',
     String? search,
-  }) async => _rows(await callRpc(
-    'open_documents_across_companies',
-    params: {'p_kind': kind, 'p_search': search},
-  ));
+  }) async => _rows(
+    await callRpc(
+      'open_documents_across_companies',
+      params: {'p_kind': kind, 'p_search': search},
+    ),
+  );
 
   /// Settle documents in several companies with one payment. Each entry
   /// names one document, never a company: the company is read off the
@@ -566,12 +568,14 @@ class Repo {
     final payload = [
       for (final l in lines)
         {
-          if (l.isSales) 'invoice_id': l.documentId else 'bill_id': l.documentId,
+          if (l.isSales)
+            'invoice_id': l.documentId
+          else
+            'bill_id': l.documentId,
           'amount': l.amount,
           if (l.discount > 0) 'discount': l.discount,
           if (l.bankAccountId != null) 'bank_account_id': l.bankAccountId,
-          if (l.paymentModeCode != null)
-            'payment_mode_code': l.paymentModeCode,
+          if (l.paymentModeCode != null) 'payment_mode_code': l.paymentModeCode,
         },
     ];
     final id = await callRpc(
@@ -589,22 +593,23 @@ class Repo {
   /// The companies' own lines on one batch — only the ones the reader
   /// belongs to.
   Future<List<Map<String, dynamic>>> paymentBatchLines(String batchId) async =>
-      _rows(await callRpc(
-        'payment_batch_lines',
-        params: {'p_batch': batchId},
-      ));
+      _rows(await callRpc('payment_batch_lines', params: {'p_batch': batchId}));
 
-  Future<List<Map<String, dynamic>>> statutoryRemittances() async =>
-      _rows(await callRpc(
-        'report_statutory_remittances',
-        params: {'p_org_id': orgId, 'p_from': null, 'p_to': null},
-      ));
+  Future<List<Map<String, dynamic>>> statutoryRemittances() async => _rows(
+    await callRpc(
+      'report_statutory_remittances',
+      params: {'p_org_id': orgId, 'p_from': null, 'p_to': null},
+    ),
+  );
 
-  Future<List<Map<String, dynamic>>> statutoryDue({int withinDays = 30}) async =>
-      _rows(await callRpc(
-        'report_statutory_due',
-        params: {'p_org_id': orgId, 'p_within_days': withinDays},
-      ));
+  Future<List<Map<String, dynamic>>> statutoryDue({
+    int withinDays = 30,
+  }) async => _rows(
+    await callRpc(
+      'report_statutory_due',
+      params: {'p_org_id': orgId, 'p_within_days': withinDays},
+    ),
+  );
 
   Future<void> recordStatutoryRemittance({
     required String periodId,
@@ -645,6 +650,27 @@ class Repo {
   // ------------------------------------------------------------------
   // Contacts
   // ------------------------------------------------------------------
+  /// The `contact_type` values a listing or picker filter stands for;
+  /// null where it stands for all of them.
+  ///
+  /// `both` is customer *and* supplier, so it belongs in those two
+  /// listings and in no others. Folding it into every filter would put
+  /// every customer-and-supplier contact under Prospects, which is
+  /// where the list stops meaning anything.
+  ///
+  /// `customer_or_prospect` is the offer's picker: a quotation or a
+  /// proforma may be made to somebody you have not sold to yet -- that
+  /// is who a quotation is for -- and `transfer_document` (0478) lands
+  /// the accepted one on the company's customer record. It is not the
+  /// invoice's picker, because an invoice records a sale and a prospect
+  /// is by definition somebody there has been none to.
+  static List<String>? contactTypesFor(String? type) => switch (type) {
+    null || 'all' => null,
+    'customer_or_prospect' => const ['customer', 'both', 'prospect'],
+    final String t when t == 'customer' || t == 'supplier' => [t, 'both'],
+    final String t => [t],
+  };
+
   Future<List<Contact>> contacts({String? type, String? search}) async {
     var query = client
         .from('contacts')
@@ -652,16 +678,9 @@ class Repo {
         .eq('org_id', orgId)
         .isFilter('deleted_at', null);
 
-    if (type != null && type != 'all') {
-      // `both` is customer *and* supplier, so it belongs in those two
-      // listings and in no others. Folding it into every filter would
-      // put every customer-and-supplier contact under Prospects, which
-      // is where the list stops meaning anything.
-      final withBoth = type == 'customer' || type == 'supplier';
-      query = query.inFilter(
-        'contact_type',
-        withBoth ? [type, 'both'] : [type],
-      );
+    final types = contactTypesFor(type);
+    if (types != null) {
+      query = query.inFilter('contact_type', types);
     }
     if (search != null && search.trim().isNotEmpty) {
       final q = search.trim();
@@ -3248,10 +3267,12 @@ class Repo {
 
   /// This person's conversations in this company, newest first.
   Future<List<Map<String, dynamic>>> aiConversations() async {
-    final rows = await callRpc('ai_conversations_for', params: {
-      'p_org_id': orgId,
-    });
-    return (rows as List).map((r) => Map<String, dynamic>.from(r as Map))
+    final rows = await callRpc(
+      'ai_conversations_for',
+      params: {'p_org_id': orgId},
+    );
+    return (rows as List)
+        .map((r) => Map<String, dynamic>.from(r as Map))
         .toList();
   }
 
@@ -3264,10 +3285,12 @@ class Repo {
   /// What the assistant is able to read, so the screen can say so
   /// rather than leaving somebody guessing what it knows.
   Future<List<Map<String, dynamic>>> aiTools() async {
-    final rows = await callRpc('ai_tool_catalogue', params: {
-      'p_org_id': orgId,
-    });
-    return (rows as List).map((r) => Map<String, dynamic>.from(r as Map))
+    final rows = await callRpc(
+      'ai_tool_catalogue',
+      params: {'p_org_id': orgId},
+    );
+    return (rows as List)
+        .map((r) => Map<String, dynamic>.from(r as Map))
         .toList();
   }
 

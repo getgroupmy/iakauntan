@@ -42,13 +42,13 @@ import 'share_dialog.dart';
 /// them, so the sum is what could be set against this document — not
 /// what was ever taken.
 double depositsHeldTotal(Iterable<Map<String, dynamic>> rows) => double.parse(
-      rows
-          .fold<double>(
-            0,
-            (a, r) => a + (double.tryParse('${r['balance'] ?? 0}') ?? 0),
-          )
-          .toStringAsFixed(2),
-    );
+  rows
+      .fold<double>(
+        0,
+        (a, r) => a + (double.tryParse('${r['balance'] ?? 0}') ?? 0),
+      )
+      .toStringAsFixed(2),
+);
 
 /// How the held deposits read on the banner.
 ///
@@ -478,8 +478,9 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           if (showsValidUntil(widget.docType))
             'valid_until': _validUntil == null ? null : Fmt.iso(_validUntil!),
           if (showsDeliveryDate(widget.docType))
-            'delivery_date':
-                _deliveryDate == null ? null : Fmt.iso(_deliveryDate!),
+            'delivery_date': _deliveryDate == null
+                ? null
+                : Fmt.iso(_deliveryDate!),
           'contact_id': _contactId,
           'reference': _nullIfBlank(_reference.text),
           if (!_kind.isSales)
@@ -602,8 +603,9 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
 
     final ok = await runWithFeedback(
       context,
-      action: () =>
-          ref.read(repoProvider)!.extendDocumentValidity(widget.documentId!, picked),
+      action: () => ref
+          .read(repoProvider)!
+          .extendDocumentValidity(widget.documentId!, picked),
       successMessage: 'Good until ${Fmt.date(picked)}',
     );
     if (ok && mounted) setState(() => _validUntil = picked);
@@ -705,10 +707,10 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   }
 
   String? get _voidBlocked => voidBlockedBecause(
-        status: _status,
-        paidAmount: _paidAmount,
-        einvoiceStatus: _einvoiceStatus,
-      );
+    status: _status,
+    paidAmount: _paidAmount,
+    einvoiceStatus: _einvoiceStatus,
+  );
 
   Future<void> _void() async {
     final id = widget.documentId;
@@ -867,8 +869,10 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     );
     if (made == null || !mounted) return;
     _toast('Credit note created', success: true);
-    context.go('${_kind.routePrefix}/'
-        '${purchase ? 'purchase_credit_note' : 'credit_note'}/$made');
+    context.go(
+      '${_kind.routePrefix}/'
+      '${purchase ? 'purchase_credit_note' : 'credit_note'}/$made',
+    );
   }
 
   Future<void> _settle() async {
@@ -1341,8 +1345,8 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         // 1 and defers like an invoice, and quotations
                         // and orders carry the period 0311 takes
                         // forward to the document that will defer it.
-                        defers: _kind.isSales &&
-                            widget.docType != 'credit_note',
+                        defers:
+                            _kind.isSales && widget.docType != 'credit_note',
                         // Sales only: a price level is what we charge a
                         // customer, not what a supplier charges us.
                         priceFor: _kind.isSales && _contactId != null
@@ -1835,8 +1839,9 @@ class _HeaderCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // An offer may be made to a prospect; a sale may not. 0478.
     final contacts = ref.watch(
-      contactsProvider((type: kind.contactType, search: '')),
+      contactsProvider((type: contactTypeFor(docType), search: '')),
     );
     final narrow = MediaQuery.sizeOf(context).width < 700;
 
