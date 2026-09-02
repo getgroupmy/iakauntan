@@ -563,6 +563,254 @@ begin
     (select subtotal from public.platform_invoices where id = v_inv),
     (select monthly_price from public.platform_modules
       where code = 'multi_company'));
+
+  -- Put the queue back. The replacement above would otherwise stand
+  -- for the rest of the file, and every later block that bills a month
+  -- would silently queue nothing while still passing -- which is a
+  -- test file quietly disarming itself. This is 0491's own body, one
+  -- line of it.
+  create or replace function app.queue_platform_invoice_email(
+    p_invoice_id uuid)
+  returns uuid language plpgsql security definer
+  set search_path = public, app, pg_temp as $f$
+  declare v_no text;
+  begin
+    select invoice_no into v_no
+      from public.platform_invoices where id = p_invoice_id;
+    if v_no is null then return null; end if;
+    return app.queue_platform_mail(
+      p_invoice_id, 'platform_invoice', 'platform-invoice:' || v_no);
+  end $f$;
+end $$;
+
+-- And it works again, which is what makes the restore above real
+-- rather than decorative.
+do $$
+declare v_org uuid; v_inv uuid; v_n integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Syarikat Pos Pulih Sdn Bhd', array['crm']);
+  update public.organizations set email = 'akaun@pulih.test' where id = v_org;
+  perform pg_temp.held(v_org, 'multi_company',
+                       timestamptz '2025-11-04 09:00+08');
+  v_inv := app.bill_org_modules(v_org, pg_temp.jan());
+  select count(*) into v_n from public.email_outbox
+   where org_id = v_org and template_code = 'platform_invoice';
+  perform pg_temp.check_eq('the queue is working again after the break',
+    v_n, 1);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Chasing it, and being thanked for paying it
+-- ---------------------------------------------------------------------
+-- 0490 sends the bill once, on the first. 0491 is the rest of the
+-- conversation: an unpaid invoice gets chased on the days the platform
+-- named, and a company that pays is told the money arrived.
+create or replace function pg_temp.reminders(p_org uuid)
+returns integer language sql as $$
+  select count(*)::integer from public.email_outbox
+   where org_id = p_org and template_code = 'platform_invoice_reminder';
+$$;
+
+do $$
+declare
+  v_org  uuid;
+  v_inv  uuid;
+  v_mail public.email_outbox;
+  v_paid integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Syarikat Kejar Sdn Bhd', array['crm']);
+  update public.organizations set email = 'akaun@kejar.test' where id = v_org;
+  perform pg_temp.held(v_org, 'multi_company',
+                       timestamptz '2025-11-04 09:00+08');
+
+  -- The platform chases on the 7th, 14th and 30th day.
+  insert into public.platform_settings (key, value)
+  values ('platform_issuer', jsonb_build_object(
+    'name', 'Kabeer Holdings Sdn Bhd', 'sst_registered', true,
+    'sst_rate', 8, 'invoice_prefix', 'KH',
+    'reminder_days', jsonb_build_array(7, 14, 30)))
+  on conflict (key) do update set value = excluded.value;
+
+  v_inv := app.bill_org_modules(v_org, pg_temp.jan());
+  -- 0489 dates the invoice the first of the following month.
+  perform pg_temp.check_true('the invoice is dated the 1st of February',
+    (select issue_date from public.platform_invoices where id = v_inv)
+      = date '2026-02-01');
+
+  -- ------------------------------------------------------------------
+  -- The chase
+  -- ------------------------------------------------------------------
+  perform app.chase_platform_invoices(date '2026-02-05');
+  perform pg_temp.check_eq('and not on the days in between',
+    pg_temp.reminders(v_org), 0);
+
+  perform app.chase_platform_invoices(date '2026-02-08');
+  perform pg_temp.check_eq('an invoice still unpaid after a week is chased',
+    pg_temp.reminders(v_org), 1);
+  select * into v_mail from public.email_outbox
+   where org_id = v_org and template_code = 'platform_invoice_reminder';
+  perform pg_temp.check_true('the chase names the invoice',
+    v_mail.subject like '%' ||
+      (select invoice_no from public.platform_invoices where id = v_inv) || '%');
+  perform pg_temp.check_true('and says how long it has been',
+    v_mail.body like '%7 days ago%');
+
+  -- The scheduler runs daily and could be run twice on the same day.
+  perform app.chase_platform_invoices(date '2026-02-08');
+  perform pg_temp.check_eq('chasing the same day twice sends one mail',
+    pg_temp.reminders(v_org), 1);
+
+  -- The 15th is the 14th day, and a second reminder.
+  perform app.chase_platform_invoices(date '2026-02-15');
+  perform pg_temp.check_eq('but the second reminder is its own mail',
+    pg_temp.reminders(v_org), 2);
+
+  -- ------------------------------------------------------------------
+  -- Paying it
+  -- ------------------------------------------------------------------
+  update public.platform_invoices
+     set status = 'paid', paid_at = now() where id = v_inv;
+  perform app.chase_platform_invoices(date '2026-03-03');
+  perform pg_temp.check_eq('an invoice already paid is left alone',
+    pg_temp.reminders(v_org), 2);
+
+  perform pg_temp.check_true('a company that pays is told the money arrived',
+    app.queue_platform_payment_received(v_inv) is not null);
+  select count(*) into v_paid from public.email_outbox
+   where org_id = v_org and template_code = 'platform_payment_received';
+  perform pg_temp.check_eq('once, however often the callback arrives',
+    v_paid, 1);
+  perform pg_temp.check_true('and again is nothing new',
+    app.queue_platform_payment_received(v_inv) is null);
+  select * into v_mail from public.email_outbox
+   where org_id = v_org and template_code = 'platform_payment_received';
+  perform pg_temp.check_true('the thank-you names the invoice and the amount',
+    v_mail.body like '%' ||
+      (select invoice_no from public.platform_invoices where id = v_inv)
+      || '%'
+    and v_mail.body like '%' || to_char(
+      (select total_amount from public.platform_invoices where id = v_inv),
+      'FM999G999G990D00') || '%');
+
+  -- An invoice that was never paid gets no thank-you: the guard is the
+  -- invoice's own status, not the caller's word for it.
+  update public.platform_invoices
+     set status = 'issued', paid_at = null where id = v_inv;
+  delete from public.email_outbox
+   where org_id = v_org and template_code = 'platform_payment_received';
+  perform pg_temp.check_true('an underpaid bill is not a paid one',
+    app.queue_platform_payment_received(v_inv) is null);
+end $$;
+
+-- A cancelled invoice, and the daily pass. Its own block so the
+-- fixtures above are not disturbed.
+do $$
+declare
+  v_org uuid;
+  v_inv uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Syarikat Batal Sdn Bhd', array['crm']);
+  update public.organizations set email = 'akaun@batal.test' where id = v_org;
+  perform pg_temp.held(v_org, 'multi_company',
+                       timestamptz '2025-11-04 09:00+08');
+  v_inv := app.bill_org_modules(v_org, pg_temp.jan());
+
+  update public.platform_invoices set status = 'void' where id = v_inv;
+  perform app.chase_platform_invoices(date '2026-02-08');
+  perform pg_temp.check_eq('and so is one that was cancelled',
+    pg_temp.reminders(v_org), 0);
+
+  -- Back to outstanding, and let the scheduler find it rather than
+  -- calling the chase by hand. This is the whole point: a function
+  -- nothing calls chases nobody.
+  update public.platform_invoices set status = 'issued' where id = v_inv;
+  perform app.run_daily_jobs(date '2026-02-08');
+  perform pg_temp.check_eq('the daily pass chases them',
+    pg_temp.reminders(v_org), 1);
+end $$;
+
+-- The gateway callback, which is how most of them will actually be
+-- paid. Asserted through `settle_gateway_payment` rather than by
+-- calling the queue directly: a mutant that took the call out of the
+-- callback survived a test that only ever reached the queue by hand.
+do $$
+declare
+  v_org  uuid;
+  v_inv  uuid;
+  v_ref  text := 'bp-0491-' || substr(gen_random_uuid()::text, 1, 8);
+  v_out  text;
+  v_n    integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Syarikat Gerbang Sdn Bhd', array['crm']);
+  update public.organizations set email = 'akaun@gerbang.test' where id = v_org;
+  perform pg_temp.held(v_org, 'multi_company',
+                       timestamptz '2025-11-04 09:00+08');
+  v_inv := app.bill_org_modules(v_org, pg_temp.jan());
+
+  insert into public.platform_payments
+    (invoice_id, org_id, gateway_code, provider_ref, amount)
+  select v_inv, v_org, 'billplz', v_ref, i.total_amount
+    from public.platform_invoices i where i.id = v_inv;
+
+  -- Less than was owed is not a payment, and is not thanked.
+  v_out := public.settle_gateway_payment('billplz', v_ref, true, 1.00, null);
+  perform pg_temp.check_eq('a short payment is refused', v_out, 'underpaid');
+  select count(*) into v_n from public.email_outbox
+   where org_id = v_org and template_code = 'platform_payment_received';
+  perform pg_temp.check_eq('and nothing is sent for it', v_n, 0);
+
+  -- The real thing. The row is back to pending first, because 0297
+  -- refuses to reconsider one it has already settled.
+  update public.platform_payments
+     set state = 'pending', paid_amount = null where provider_ref = v_ref;
+  v_out := public.settle_gateway_payment(
+    'billplz', v_ref, true,
+    (select total_amount from public.platform_invoices where id = v_inv), null);
+  perform pg_temp.check_eq('the callback settles it', v_out, 'paid');
+  select count(*) into v_n from public.email_outbox
+   where org_id = v_org and template_code = 'platform_payment_received';
+  perform pg_temp.check_eq(
+    'a company that pays through the gateway is told the money arrived',
+    v_n, 1);
+end $$;
+
+-- Settling one by hand. A platform administrator reconciling a bank
+-- transfer is the other way an invoice becomes paid, and the company
+-- that made the transfer has no other way of learning it landed.
+do $$
+declare
+  v_org   uuid;
+  v_inv   uuid;
+  v_admin uuid;
+  v_n     integer;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Syarikat Pindah Sdn Bhd', array['crm']);
+  update public.organizations set email = 'akaun@pindah.test' where id = v_org;
+  perform pg_temp.held(v_org, 'multi_company',
+                       timestamptz '2025-11-04 09:00+08');
+  v_inv := app.bill_org_modules(v_org, pg_temp.jan());
+
+  v_admin := pg_temp.another_user('platform-0491@iakauntan.test');
+  insert into public.platform_admins (user_id) values (v_admin)
+  on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+
+  perform public.platform_mark_invoice_paid(v_inv, 'Bank transfer');
+  select count(*) into v_n from public.email_outbox
+   where org_id = v_org and template_code = 'platform_payment_received';
+  perform pg_temp.check_eq('and so is one settled by hand', v_n, 1);
+  perform pg_temp.check_eq('the invoice is paid',
+    (select status from public.platform_invoices where id = v_inv), 'paid');
 end $$;
 
 -- ---------------------------------------------------------------------

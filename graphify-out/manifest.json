@@ -7455,13 +7455,18 @@
     "semantic_hash": ""
   },
   "supabase/tests/module_subscription.sql": {
-    "mtime": 1788377552.964235,
-    "ast_hash": "a5af314189d527bccb7e0ae15bbe9d51",
+    "mtime": 1788379642.6012442,
+    "ast_hash": "5d0381ac1862a50a2b86c202b07fbd17",
     "semantic_hash": ""
   },
   "supabase/migrations/0490_the_bill_that_arrives.sql": {
     "mtime": 1788377615.6005275,
     "ast_hash": "8ede2a8fbb0ac57a7a9e074e8d28e5f5",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0491_the_rest_of_the_conversation_about_money.sql": {
+    "mtime": 1788379663.7368803,
+    "ast_hash": "42edd85f8388724af4212ad282835f0d",
     "semantic_hash": ""
   }
 }
