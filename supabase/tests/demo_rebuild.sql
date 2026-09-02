@@ -75,6 +75,82 @@ begin
       where u.email = 'audit@iakauntan.com'), 4);
 
   -- --------------------------------------------------------------
+  -- Four companies, four sets of books
+  -- --------------------------------------------------------------
+  -- 0485 gave every company under the practice the same purchase: the
+  -- same stationer, the same RM 1,250, the same expense account, the
+  -- same Maybank account number. Nothing was wrong with it; it was
+  -- visibly generated, and a demo whose seams show argues against the
+  -- product. 0492 gives each of them what its own business buys.
+  perform pg_temp.check_eq(
+    'each company in the portfolio buys from its own supplier',
+    (select count(distinct c.name)::integer
+       from public.contacts c
+       join public.organizations o on o.id = c.org_id
+      where o.firm_id = (select id from public.firms
+                          where name = 'Accountant & Co.')
+        and c.contact_type in ('supplier', 'both')), 4);
+
+  -- The expense *code*, not the account row: every company has its own
+  -- chart, so counting `account_id` counts companies and would pass
+  -- with all four posting to 6230. It did, and the mutant that shares
+  -- the account survived it.
+  perform pg_temp.check_eq(
+    'and posts it where that business would post it',
+    (select count(distinct a.code)::integer
+       from public.purchase_document_lines pl
+       join public.purchase_documents d on d.id = pl.document_id
+       join public.accounts a on a.id = pl.account_id
+       join public.organizations o on o.id = d.org_id
+      where o.firm_id = (select id from public.firms
+                          where name = 'Accountant & Co.')
+        and d.doc_type = 'bill'), 4);
+
+  -- Insurance for the practice, connectivity for the software house,
+  -- machine repairs for the moulder, professional fees for the holding
+  -- company. Named rather than counted, because "four different codes"
+  -- is also true of four wrong ones.
+  perform pg_temp.check_eq('and each of them where it belongs',
+    (select string_agg(distinct a.code, ',' order by a.code)
+       from public.purchase_document_lines pl
+       join public.purchase_documents d on d.id = pl.document_id
+       join public.accounts a on a.id = pl.account_id
+       join public.organizations o on o.id = d.org_id
+      where o.firm_id = (select id from public.firms
+                          where name = 'Accountant & Co.')
+        and d.doc_type = 'bill'),
+    '6220,6240,6280,6290');
+
+  -- No two of these bills carry the same figure. Written as a
+  -- comparison rather than a number, because 0432 gives each company
+  -- two bills -- one settled and one still owed -- so the count is
+  -- eight, and hard-coding eight would break the day that rule
+  -- changes for a reason that has nothing to do with this.
+  perform pg_temp.check_eq('and the amounts are not all the same figure',
+    (select count(distinct d.total_amount)::integer
+       from public.purchase_documents d
+       join public.organizations o on o.id = d.org_id
+      where o.firm_id = (select id from public.firms
+                          where name = 'Accountant & Co.')
+        and d.doc_type = 'bill'),
+    (select count(*)::integer
+       from public.purchase_documents d
+       join public.organizations o on o.id = d.org_id
+      where o.firm_id = (select id from public.firms
+                          where name = 'Accountant & Co.')
+        and d.doc_type = 'bill'));
+
+  -- Every one of them still has a bill at all, which is 0432's rule
+  -- and the reason the list falls back rather than matching exactly.
+  perform pg_temp.check_eq('and every one of them still buys something',
+    (select count(distinct d.org_id)::integer
+       from public.purchase_documents d
+       join public.organizations o on o.id = d.org_id
+      where o.firm_id = (select id from public.firms
+                          where name = 'Accountant & Co.')
+        and d.doc_type = 'bill'), 4);
+
+  -- --------------------------------------------------------------
   -- The promise on the sign-in page
   -- --------------------------------------------------------------
   select m.role::text into v_role

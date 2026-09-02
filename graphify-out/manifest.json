@@ -3035,8 +3035,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/demo_rebuild.sql": {
-    "mtime": 1788369700.2672613,
-    "ast_hash": "ec9017d6fb642fc9b035106e49224af4",
+    "mtime": 1788381742.6724405,
+    "ast_hash": "6c69103541a0c7d44dcab2a0cb760bf3",
     "semantic_hash": ""
   },
   "supabase/tests/demo_teardown.sql": {
@@ -7467,6 +7467,11 @@
   "supabase/migrations/0491_the_rest_of_the_conversation_about_money.sql": {
     "mtime": 1788379663.7368803,
     "ast_hash": "42edd85f8388724af4212ad282835f0d",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0492_four_companies_one_stationer.sql": {
+    "mtime": 1788381784.8955152,
+    "ast_hash": "460abc479f0bb925bc3c2b3f14473ce9",
     "semantic_hash": ""
   }
 }
