@@ -257,6 +257,7 @@ jobs:
                    supabase/tests/feedback.sql \
                    supabase/tests/group_payment.sql \
                    supabase/tests/demo_practice.sql \
+                   supabase/tests/over_allocation.sql \
                    supabase/tests/bucket_survives_a_bad_path.sql \
                    supabase/tests/app_writers_are_not_a_client_surface.sql \
                    supabase/tests/revenue_recognition.sql \

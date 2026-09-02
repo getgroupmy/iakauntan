@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788332119.8864431,
-    "ast_hash": "562d1a3655c6767f90ef8804b76b69d7",
+    "mtime": 1788332629.8755548,
+    "ast_hash": "e844c842de3e7092092d86e7dcbac166",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7097,6 +7097,16 @@
   "supabase/tests/group_payment.sql": {
     "mtime": 1788331003.8888044,
     "ast_hash": "4d95fbd77e6c55ba50849e44ca66b2ed",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0464_a_document_cannot_be_paid_more_than_it_is_for.sql": {
+    "mtime": 1788332827.825495,
+    "ast_hash": "f7e568634087cdd93f80a658ceecb415",
+    "semantic_hash": ""
+  },
+  "supabase/tests/over_allocation.sql": {
+    "mtime": 1788332786.809746,
+    "ast_hash": "cf1ae3834782f11631f6f4b3dc40ffc8",
     "semantic_hash": ""
   }
 }
