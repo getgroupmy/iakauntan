@@ -85,6 +85,7 @@ import '../features/ledger/recurring_screen.dart';
 import '../features/reports/group_reports_screen.dart';
 import '../features/reports/reports_screen.dart';
 import '../features/secretarial/entity_editor.dart';
+import '../features/documents/customer_portal_page.dart';
 import '../features/documents/shared_document_page.dart';
 import '../features/ticketing/shared_ticket_page.dart';
 import '../features/settings/email_screen.dart';
@@ -235,6 +236,9 @@ String? routeFor({
   // The other page that works with no account: a customer opening a
   // link to their own invoice.
   if (path.startsWith('/share/')) return null;
+  // And 0493's widening of it: the same customer opening their whole
+  // account rather than one document.
+  if (path.startsWith('/account/')) return null;
   // And a customer replying to their own support ticket, for the same
   // reason: they will not sign up to an accounting system to answer a
   // question about their printer.
@@ -529,6 +533,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/share/:token',
         builder: (_, state) =>
             SharedDocumentPage(token: state.pathParameters['token']!),
+      ),
+      // And the same customer's whole account: every invoice still
+      // owed, in one place. It renders none of them — tapping one asks
+      // for a document token and comes back through `/share/` above.
+      GoRoute(
+        path: '/account/:token',
+        builder: (_, state) =>
+            CustomerPortalPage(token: state.pathParameters['token']!),
       ),
       // And a customer reading — and replying to — their own support
       // ticket. `0192` built the requester's half of the conversation

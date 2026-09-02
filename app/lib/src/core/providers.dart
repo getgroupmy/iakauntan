@@ -416,6 +416,16 @@ final moduleChargesProvider =
     });
 
 
+/// The portal links issued to one customer — whether one is live, and
+/// whether they have opened it. autoDispose: issuing or revoking one is
+/// exactly when the answer changes.
+final customerPortalLinksProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, contactId) async {
+      final repo = ref.watch(repoProvider);
+      if (repo == null) return const [];
+      return repo.customerPortalLinks(contactId);
+    });
+
 /// The records on file twice, for the screen that offers to link
 /// them. autoDispose so it is asked afresh: a group linked a moment
 /// ago is not a group any more.

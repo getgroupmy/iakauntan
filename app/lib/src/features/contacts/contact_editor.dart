@@ -20,6 +20,7 @@ import '../../data/places_repository.dart';
 import '../../data/repository.dart';
 import 'statement_pdf.dart';
 import 'contact_extras.dart';
+import 'customer_portal_card.dart';
 import 'contact_lookalikes.dart';
 
 class ContactEditor extends ConsumerStatefulWidget {
@@ -897,6 +898,16 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                       // one until this has been saved once.
                       if (widget.contactId != null)
                         ContactExtras(contactId: widget.contactId!),
+                      // 0493. Only on a saved contact, for the same
+                      // reason as the extras above: a portal hangs off
+                      // a contact_id, and there isn't one until this
+                      // has been saved once.
+                      if (widget.contactId != null)
+                        CustomerPortalCard(
+                          contactId: widget.contactId!,
+                          contactType: _contactType,
+                          email: _c('email').text.trim(),
+                        ),
                       const SizedBox(height: 40),
                     ],
                   ),

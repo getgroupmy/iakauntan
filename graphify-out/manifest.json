@@ -70,13 +70,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788376460.7209148,
-    "ast_hash": "9da7d7903d4205917211988cb4501a18",
+    "mtime": 1788386146.0274558,
+    "ast_hash": "1f3fd6bf2ff179a0e6710611d73fcae8",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
-    "mtime": 1788361782.3677464,
-    "ast_hash": "8c35118475d3e95a7f54c59dea992e4d",
+    "mtime": 1788385986.144197,
+    "ast_hash": "667cf78b0c39788dcd1dc2f53e47767e",
     "semantic_hash": ""
   },
   "app/lib/src/core/theme.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788376329.5666063,
-    "ast_hash": "949fed26507749160f11c1fc77f42b39",
+    "mtime": 1788386146.0265834,
+    "ast_hash": "fae43a17fe7dc5561da1d0cefb094f68",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -125,8 +125,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
-    "mtime": 1788360807.9460194,
-    "ast_hash": "42939cfb5bcd910372f179d9bb0fa96d",
+    "mtime": 1788386198.9809585,
+    "ast_hash": "f3ec50069faebfdc64011a342c77ccc8",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contacts_screen.dart": {
@@ -7487,6 +7487,26 @@
   "supabase/migrations/0494_a_portal_link_that_leads_somewhere.sql": {
     "mtime": 1788385634.003352,
     "ast_hash": "ec174def5bd407ac40ff4111c15aecdf",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/contacts/customer_portal_card.dart": {
+    "mtime": 1788386227.1560192,
+    "ast_hash": "ff0ab8bae3c35ccc64eb0f610d40a6f3",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/customer_portal_page.dart": {
+    "mtime": 1788385986.1312082,
+    "ast_hash": "9689eba025f17e9dad54bd9807713ca6",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/customer_portal_summary.dart": {
+    "mtime": 1788386127.8672051,
+    "ast_hash": "9f616cb0507551cd4f652d5f13877e08",
+    "semantic_hash": ""
+  },
+  "app/test/customer_portal_summary_test.dart": {
+    "mtime": 1788386251.5535588,
+    "ast_hash": "8dc033f61e54e2896a4b216b613fb032",
     "semantic_hash": ""
   }
 }

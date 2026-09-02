@@ -6431,6 +6431,52 @@ extension RepoHrSetup on Repo {
   // so a caller that loses it has to issue a new link rather than look
   // the old one up.
   // ------------------------------------------------------------------
+  /// Give one customer a link to their whole account.
+  ///
+  /// 0493. The sibling of [shareDocument], one step wider: that shares
+  /// a document, this shares what the customer owes. Returns the URL
+  /// and the address it was emailed to, so somebody reading it out over
+  /// the phone can, and a contact with no address on file is not a
+  /// reason to refuse.
+  Future<Map<String, dynamic>> shareCustomerPortal(
+    String contactId, {
+    int validDays = 60,
+    String? email,
+  }) async {
+    final data = await callRpc(
+      'share_customer_portal',
+      params: {
+        'p_contact_id': contactId,
+        'p_valid_days': validDays,
+        'p_email': email,
+      },
+    );
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<void> revokeCustomerPortal(String contactId) => callRpc(
+    'revoke_customer_portal',
+    params: {'p_contact_id': contactId},
+  );
+
+  /// The links issued to this customer, newest first.
+  ///
+  /// Read off the table rather than through a function: a member of the
+  /// company may select it, and what the screen needs is whether one is
+  /// live and whether it has been opened. The token itself is not
+  /// there — only its hash ever was.
+  Future<List<Map<String, dynamic>>> customerPortalLinks(
+    String contactId,
+  ) async => Repo._rows(
+    await client
+        .from('customer_portal_links')
+        .select('expires_at, revoked_at, last_opened_at, open_count, '
+            'sent_to_email, created_at')
+        .eq('contact_id', contactId)
+        .order('created_at', ascending: false)
+        .limit(10),
+  );
+
   Future<String> shareDocument(
     String documentId, {
     int validDays = 30,
