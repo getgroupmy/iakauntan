@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/download.dart';
 import '../../core/format.dart';
+import '../../core/pdf_kit.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -9,6 +11,7 @@ import '../../data/attachments_repository.dart';
 import '../../data/models.dart';
 import '../../data/ocr_repository.dart';
 import '../shared/attachments_card.dart';
+import 'expense_voucher_pdf.dart';
 import '../shared/doc_scanner.dart';
 import '../shared/receipt_capture.dart';
 import '../shared/scan_intake.dart';
@@ -680,11 +683,60 @@ class _ExpenseDetail extends ConsumerWidget {
         ),
       ),
       actions: [
+        // The paper an SME staples the receipt to, and the one an
+        // auditor asks for when a cash payment has no supplier invoice
+        // behind it. Offered on a posted expense only: a voucher for
+        // something not in the books is a document that says the
+        // company paid when it has not decided that yet.
+        if ('${expense['status']}' == 'posted')
+          TextButton.icon(
+            onPressed: () => _printVoucher(context, ref),
+            icon: const Icon(Icons.print_outlined, size: 18),
+            label: const Text('Payment voucher'),
+          ),
         FilledButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Close'),
         ),
       ],
     );
+  }
+
+  Future<void> _printVoucher(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final org = ref.read(currentOrgProvider).valueOrNull;
+    final repo = ref.read(repoProvider);
+    if (org == null || repo == null) return;
+    try {
+      // Re-read rather than print what the list is holding: the list
+      // deliberately fetches neither the payee nor the bank account,
+      // and a voucher missing both is not a voucher.
+      final full = await repo.expenseForVoucher('${expense['id']}');
+      if (full == null) return;
+      final bytes = await buildExpenseVoucherPdf(
+        org: org,
+        expense: full,
+        logo: await ref.read(orgLogoProvider.future),
+        mode: org.usesPreprintedLetterhead
+            ? LetterheadMode.stationery
+            : LetterheadMode.printed,
+      );
+      final name =
+          'voucher-${full['expense_no'] ?? full['id']}.pdf'
+              .replaceAll(RegExp(r'[^A-Za-z0-9.\-]+'), '-');
+      final saved = await saveBytesFile(name, 'application/pdf', bytes);
+      if (!saved) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Vouchers are downloaded from the web app; open it in a '
+              'browser to save the file.',
+            ),
+          ),
+        );
+      }
+    } catch (err) {
+      messenger.showSnackBar(SnackBar(content: Text('$err')));
+    }
   }
 }

@@ -3390,6 +3390,25 @@ class Repo {
     return _rows(data);
   }
 
+  /// One expense with everything a payment voucher prints.
+  ///
+  /// A separate read from [expenses] because of the double foreign key
+  /// that list comment describes: an expense points at `contacts`
+  /// twice, so the payee has to be asked for by constraint name or
+  /// PostgREST refuses the whole request rather than choosing.
+  Future<Map<String, dynamic>?> expenseForVoucher(String id) async {
+    final row = await client
+        .from('expenses')
+        .select(
+          '*, accounts(code, name), bank_accounts(name), '
+          'contacts!expenses_contact_id_fkey(name)',
+        )
+        .eq('org_id', orgId)
+        .eq('id', id)
+        .maybeSingle();
+    return row == null ? null : Map<String, dynamic>.from(row);
+  }
+
   /// Creates an expense and posts it in one step — expenses are always
   /// money already spent, so there is no useful draft state.
   /// Returns the id of the expense created, so a receipt photographed
