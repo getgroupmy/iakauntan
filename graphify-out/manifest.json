@@ -1500,8 +1500,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-akaunting.md": {
-    "mtime": 1788285599.947654,
-    "ast_hash": "dc0b4740612881599d80fb02afd74636",
+    "mtime": 1788383704.3471985,
+    "ast_hash": "0d2fa3a03edad6d8776bb9d0277084bc",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/email_screen.dart": {

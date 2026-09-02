@@ -21,42 +21,70 @@ multi-tenancy). Akaunting is ahead on **everything that happens after a
 document exists**: getting it to the customer, getting money back, and
 getting data in.
 
-Every gap below is in that second category. That is the finding.
+Every gap below started in that second category. That was the finding,
+and most of them have since closed.
 
-## 1. Nothing ever leaves the system
+## What is still open
 
-There is no email anywhere in iAkauntan. No mail in `supabase/functions`,
-no send action in the app, no SMTP configuration, nothing.
+The short answer, so nobody has to reach it by scrolling. Everything
+else on this page has been built, and the sections say where.
 
-Akaunting has:
+- **A customer portal login.** A signed link per invoice exists; an
+  account where a customer sees all of theirs does not. Section 2.
+- **No ringgit has been through the payment flow.** It is built end to
+  end and there is no acquirer sandbox in the environment it was built
+  in, so it has never been exercised against a real gateway. Section 3.
+- **Per-document history**, **configurable dashboards**, **split
+  transaction**, **bulk actions** and an **in-app notification
+  centre**. Section 10.
 
-- eleven seeded templates in `database/seeds/EmailTemplates.php`
-  (`invoice_new_customer`, `invoice_remind_customer`, `invoice_recur_customer`,
-  `invoice_payment_customer`, `bill_remind_admin`, `payment_received_customer`
-  and the rest), each editable from `settings/email-templates`;
-- `app/Console/Commands/InvoiceReminder.php` and `BillReminder.php`, run
-  on a schedule;
-- a notification to the admin when a customer *views* an invoice.
+That is the whole of it. This document has twice been left saying a
+thing was missing for months after it was built — sections 1, 2 and 9
+each said so until this revision — so the list above is the part to
+distrust first if it has not been re-queried lately.
 
-iAkauntan builds a PDF and the user downloads it. Nobody is ever chased
-for payment. `balance_amount`, `due_date` and the `iakauntan-daily` cron
-already exist, so the reminder logic is nearly free — the mail transport
-is the work, and it needs a provider and a secret.
+## 1. Getting a document to the customer
 
-**This is the largest gap on the list.**
+~~Nothing ever leaves the system.~~ Closed, and it was the largest gap
+on this list when it was written. What it said then — "no mail in
+`supabase/functions`, no send action in the app, no SMTP configuration,
+nothing" — stayed on the page long after it stopped being true, which
+is the failure this document warns about in its last paragraph and had
+not applied to its own first section.
 
-## 2. No customer portal, and no shareable invoice link
+Built: `email_outbox` with a dedupe key and a retry count,
+`send-email` sending through Resend, `email_document` and
+`email_receipt` from the app with a choice of queueing or sending now,
+a per-document log of what went where, and `email_templates` letting a
+company override the wording per template code over
+`app.default_email_template`. `queue_overdue_reminders` chases an
+overdue invoice on the days that company chose, from the daily pass.
+`receive-email` handles the inbound direction, which Akaunting does
+not do at all.
 
-`routes/signed.php` lets somebody with a signed URL view, print,
-download and **pay** an invoice with no account at all.
-`routes/portal.php` gives a customer a login where they see their own
-invoices and payments.
+The same machinery now carries the platform's own subscription
+invoices to its tenants — `0490` sends the bill, `0491` chases it and
+confirms the payment — which is the clearest sign it is real rather
+than demonstrated once.
 
-iAkauntan already built this mechanism — `corp_signing_links`, scoped
-tokens for people who are not staff — and never pointed it at an
-invoice.
+## 2. The shareable link, built; the portal, still not
 
-## 3. No payment collection *by a tenant, from their customer*
+Two different things, and this section used to treat them as one.
+
+**The signed link is built.** `issue_share_token` and `share_url` point
+the mechanism at a sales document, so somebody with the link views the
+invoice and pays it with no account at all — which is what
+`routes/signed.php` does in Akaunting. The token is scoped to the one
+document and carries the address it was issued to.
+
+**The portal is not.** `routes/portal.php` gives a customer a login of
+their own where they see every invoice and payment on their account.
+iAkauntan has no such login: a customer holding three invoices holds
+three links. This is the part of section 2 that is still open, and
+stating it that precisely is the point — the previous wording claimed
+both were missing, and half of that had been false since `0067`.
+
+## 3. Taking payment from a tenant's customer
 
 Akaunting has offline payment methods, gateway apps, a
 `Portal/PaymentReceived` notification and a confirm/finish flow on the
@@ -118,7 +146,7 @@ against real bills, with the tenant's key instead of the platform's.
 Section closed as far as code goes; a first live ringgit is still a
 thing somebody has to do.
 
-## 4. Missing reports, two of them statutory
+## 4. The reports, including the two statutory ones
 
 - ~~**Aged receivables and aged payables.**~~ Built — `report_ar_aging`
   and `report_ap_aging`, as at a date rather than as of now, footing to
@@ -133,7 +161,7 @@ thing somebody has to do.
   sheet. With these, the set of financial statements MFRS 101 and MPERS
   Section 3 ask for is complete.
 
-## 5. Recurring covers journals only
+## 5. Recurring documents
 
 `app/Models/Common/Recurring.php` is polymorphic — `recurable_type` —
 so an invoice, a bill or a transaction can recur, with `auto_send` and
@@ -146,7 +174,7 @@ month's billing. `limit_by` is an end date or a number of occurrences,
 either or neither. The nightly run catches up rather than raising one
 document per run, and posts through the same code a person does.
 
-## 6. No bank-to-bank transfer
+## 6. Bank-to-bank transfer
 
 Built — `bank_transfers`, one document with both ends on it. Sent,
 received and the fee are three separate figures that have to reconcile,
@@ -159,7 +187,7 @@ are cash, so a transfer moves nothing — is what the test asserts, since
 a transfer that inflated operating cash would flatter every set of
 accounts filed.
 
-## 7. Import is bank statements only
+## 7. Import
 
 Contacts and items are built — `import_contacts` and `import_items`,
 with the header row mapped onto field names so a file exported from
@@ -348,19 +376,28 @@ sheet at cost. `trace_lot` answers the recall question in both
 directions, which is the only thing that justifies making somebody type a
 batch number on every receipt.
 
-## 9. Coarse permissions
+## 9. Permissions
 
-Akaunting seeds per-resource permissions (`database/seeds/Permissions.php`)
-and composes roles from them. iAkauntan has a fixed role set behind
-`can_post`, `can_write`, `can_admin` and `can_manage_hr`. Adequate until
-somebody wants "sees purchases, not payroll".
+Akaunting seeds per-resource permissions
+(`database/seeds/Permissions.php`) and composes roles from them.
+
+~~iAkauntan has a fixed role set behind `can_post`, `can_write`,
+`can_admin` and `can_manage_hr`. Adequate until somebody wants "sees
+purchases, not payroll".~~ Closed at `0127` and `0129`: `access_types`
+and `access_type_modules` compose what a person may reach, the Team
+screen edits it, and `app.module_access` answers per person as well as
+per company — so exactly "sees purchases, not payroll" is now
+expressible. The Order section below has said so for some time while
+this section went on saying the opposite.
 
 ## 10. Smaller
 
 - **Split transaction** — one payment divided across several accounts.
 - **Per-document history.** `Document/DocumentHistory.php` gives an
-  invoice its own timeline. iAkauntan has a global audit trail, which
-  answers a different question.
+  invoice its own timeline. iAkauntan has `audit_logs`, a global trail
+  that answers a different question — "who changed what" rather than
+  "what happened to this invoice". Still open, and the distinction is
+  the reason it is worth listing.
 - **Configurable dashboards and widgets.** `Common/Dashboard.php`,
   `Common/Widget.php`, and eight widgets a user arranges themselves.
   iAkauntan's dashboard is fixed.
@@ -377,16 +414,24 @@ statutory statements, and so is bank transfer, and so is importing the
 master files — and so, now, is the whole opening position: the open
 invoices and bills, the trial balance that squares them off, and the
 stock behind the inventory figure. Together they are what makes moving
-onto this system mid-year possible at all. Nothing is left on this list that has not been built. Compound tax
-closed at `0410`, in the shape a Malaysian bill actually has one, and
-taking payment at `0412`–`0414` — with the caveat above, which is that
-no ringgit has yet gone through it.
+onto this system mid-year possible at all. Compound tax closed at
+`0410`, in the shape a Malaysian bill actually has one, and taking
+payment at `0412`–`0414` — with the caveat above, which is that no
+ringgit has yet gone through it.
+
+What is left is listed at the top of this page rather than here, which
+is the change this revision makes to the shape of the document: the
+answer to "what can it not do" was previously only reachable by
+reading to the end, and the beginning said things that had been false
+for months.
 
 **Granular permissions closed** — `access_types` and
 `access_type_modules` in `0127`, who holds which one in `0129`, and the
 editor on the Team screen. `app.module_access` answers per person as
 well as per company, so a member can be let into purchasing and kept out
-of sales. This line listed it as open until `6207faa`.
+of sales. This line listed it as open until `6207faa`, and section 9
+went on contradicting this line until the revision that added the
+summary at the top.
 
 The other two were "confirmed open by querying for them rather than by
 memory", and one of them has since stopped being true in the form it was
