@@ -5295,3 +5295,72 @@ were caught were caught by reading a sentence and disbelieving it.
 So this predicate is recorded as tried and unproductive, and the number
 is here so nobody re-derives it: 269, then 250, then 35, then none. The
 method that works on this class is still the slow one.
+
+## Re-measuring a document that was never claiming to be current
+
+`docs/pre-deployment.md` was corrected this session because it stated
+counts in the present tense — "306 tables", "796 SECURITY DEFINER" — and
+the numbers had moved since somebody wrote them. The obvious next move
+was to do the same to `docs/security.md`, which is dense with figures:
+238 and 228 grants, 247 tables and 2 views, 249 relations, 240 of them
+holding `MAINTAIN`, 250 with RLS, 41 audited. One of those lines is what
+produced 0442.
+
+They were measured. Then the change was not made, and this is why.
+
+### The figures there are dated evidence, not live claims
+
+`security.md` is a record of what each migration found and what it did
+about it. Its numbers are the counts *at the moment the migration was
+written*, and the prose says so — the grant table is introduced with
+"**Counted on production before writing it:**", and the `TRUNCATE`
+paragraph reads "Supabase grants `TRUNCATE` to `authenticated` on every
+table in `public` by default — 238 of them here."
+
+Renumbering those to today's 308 relations would say that 0240 revoked
+three privileges from 308 tables. It did not; it revoked them from the
+247 that existed. The default-privileges half of 0240 is precisely what
+covers the 61 tables created since. Updating the number would delete the
+evidence that the second half was needed, which is the whole point of
+that section.
+
+So: a figure in a *checklist* is a claim about now and goes stale. A
+figure in a *narrative* is an observation with a date attached and stays
+true. `pre-deployment.md` is the first kind and was wrong;
+`security.md` is the second kind and is right. The two documents needed
+opposite treatment, and treating them alike would have damaged one of
+them.
+
+### The one line in it that is a live claim
+
+There is an exception in the same passage, and it is the sentence that
+matters most:
+
+> It is inert only because every one of the 249 relations in `public` is
+> owned by `postgres`. `table_grants.sql` asserts that premise rather
+> than trusting it: if a relation ever appears under another owner, the
+> test fails.
+
+That is present tense about the database as it stands, because a
+`supabase_admin` default ACL that `postgres` cannot revoke is only
+harmless while nothing in `public` is owned by anyone else. Measured on
+production:
+
+| | |
+|---|---|
+| relations in `public` | 308 |
+| not owned by `postgres` | 0 |
+| client roles holding `MAINTAIN` | 0 |
+
+and `table_grants.sql` does assert it — it reads `pg_get_userbyid(c.relowner)`
+and fails on any owner that is not `postgres`, and it checks the default
+ACLs' `defaclrole` the same way. The premise holds, the assertion is
+real, and the 249 in that sentence is the count 0240 was written
+against. It stays.
+
+### The general form
+
+Before re-measuring a number in a document, read what tense the sentence
+around it is in. "Counted before writing it" is not a stale claim to be
+refreshed; it is a citation. The correction that `pre-deployment.md`
+needed would have been vandalism here.
