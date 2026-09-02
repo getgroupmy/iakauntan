@@ -7480,8 +7480,13 @@
     "semantic_hash": ""
   },
   "supabase/tests/customer_portal.sql": {
-    "mtime": 1788384586.0800087,
-    "ast_hash": "8e389cb12710f99d9fcbbc942ce1d228",
+    "mtime": 1788385608.6251068,
+    "ast_hash": "46e5adbc9c9dfeb6814791f2c0233bc2",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0494_a_portal_link_that_leads_somewhere.sql": {
+    "mtime": 1788385634.003352,
+    "ast_hash": "ec174def5bd407ac40ff4111c15aecdf",
     "semantic_hash": ""
   }
 }

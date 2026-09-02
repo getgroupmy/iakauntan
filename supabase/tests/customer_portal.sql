@@ -107,6 +107,16 @@ begin
   v_out := public.share_customer_portal(v_them, 60);
   v_token := regexp_replace(v_out ->> 'url', '^.*/', '');
   perform pg_temp.check_true('a token comes back', length(v_token) = 64);
+
+  -- 0494. Every portal link 0493 sent went to `/#/share/`, which is the
+  -- route that renders one *document* -- so the customer opened a page
+  -- saying their link was invalid. This assertion did not exist and
+  -- `^.*/` above is happy with either path, which is why nothing caught
+  -- it until somebody went to build the page.
+  perform pg_temp.check_true(
+    'the link goes to the account page, not the document page',
+    v_out ->> 'url' like '%/#/account/' || v_token
+    and (v_out ->> 'url') not like '%/#/share/%');
   perform pg_temp.check_eq('sent to the address on the contact',
     v_out ->> 'sent_to', 'buyer@example.test');
 
@@ -115,7 +125,8 @@ begin
   perform pg_temp.check_true('and only its hash is kept',
     (select token_hash <> v_token
         and token_hash = app.corp_token_hash(v_token)
-       from public.customer_portal_links where contact_id = v_them));
+       from public.customer_portal_links
+      where contact_id = v_them and revoked_at is null));
 
   select count(*)::integer into v_n from public.email_outbox
    where org_id = v_org and template_code = 'customer_portal';
@@ -201,6 +212,36 @@ begin
   -- A token nobody issued.
   perform pg_temp.check_eq('and one nobody issued is invalid',
     public.open_customer_portal('not-a-token') ->> 'state', 'invalid');
+end $$;
+
+-- Where the link points, on a platform that has been told its own
+-- address. Its own block and its own contact: issuing a second portal
+-- for the customer above would revoke their first and queue a second
+-- mail, and two assertions there count both.
+do $$
+declare
+  v_org   uuid := pg_temp.test_org('Portal Site Sdn Bhd');
+  v_them  uuid;
+  v_out   jsonb;
+  v_token text;
+begin
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-001', 'Buyer Bhd', 'customer')
+  returning id into v_them;
+
+  -- Set, then asserted. Written first with an `or not exists` escape
+  -- for the case where no site is configured, which made it vacuously
+  -- true on a test database that configures none -- so a builder
+  -- ignoring the setting entirely passed it.
+  insert into public.platform_settings (key, value)
+  values ('site_url', to_jsonb('https://books.example'::text))
+  on conflict (key) do update set value = excluded.value;
+
+  v_out := public.share_customer_portal(v_them, 60);
+  v_token := regexp_replace(v_out ->> 'url', '^.*/', '');
+  perform pg_temp.check_true(
+    'and it is built on the site the platform is configured for',
+    v_out ->> 'url' = 'https://books.example/#/account/' || v_token);
 end $$;
 
 -- ---------------------------------------------------------------------
