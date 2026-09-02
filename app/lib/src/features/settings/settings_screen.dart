@@ -4,7 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
-import '../../core/safe_link.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -767,14 +766,16 @@ class _CreditBalance extends StatelessWidget {
   }
 }
 
-/// The balance, and the invoices raised for it.
+/// The scanning balance, and how the platform is paid.
 ///
 /// `creditInvoicesProvider` has existed since 0111 and had no consumer:
 /// a company could be billed for scanning credit and had nowhere to see
-/// the invoice, let alone settle it. The only instruction was the
-/// sentence in the card above — "ask us to top it up" — which is a fine
-/// thing to say when there is no other way to pay and a poor one now
-/// that there is.
+/// the invoice, let alone settle it. That list lived here from then
+/// until 0489, when `platform_invoices` stopped being only about
+/// scanning — it now carries every company's monthly module bill, and
+/// this section is drawn only when the OCR key source is 'platform'.
+/// The list is on the subscription card now; what is left here is the
+/// balance itself and the ways the platform can be paid.
 class _BillingSection extends StatelessWidget {
   const _BillingSection({required this.ocr});
 
@@ -787,157 +788,18 @@ class _BillingSection extends StatelessWidget {
       children: [
         _CreditBalance(ocr: ocr),
         const SizedBox(height: 12),
-        const _PlatformInvoices(),
-        const SizedBox(height: 12),
+        // 0489. The invoice list used to be here, and only here --
+        // inside the scanning card, drawn only when the key source was
+        // 'platform'. It was written in 0111 for scanning credit, which
+        // is what `platform_invoices` held then; now the table also
+        // holds every company's monthly module bill, and a company on
+        // its own OCR key could not see that bill at all. It is on the
+        // subscription card, which is drawn for an owner or admin
+        // whatever this company does about scanning.
         const _WaysToPay(),
         const SizedBox(height: Space.lg),
         const CollectPaymentsCard(),
       ],
-    );
-  }
-}
-
-/// What the platform has billed this company, and a way to settle it.
-///
-/// Pressing Pay asks `billplz-checkout` for a bill and opens Billplz's
-/// own page. A card number never reaches this app, which is the whole
-/// reason for a hosted checkout rather than a form here.
-///
-/// Nothing on this screen decides whether an invoice may be paid. The
-/// button is drawn for an outstanding one and hidden otherwise, which is
-/// a convenience and not a control: `billplz-checkout` reads the invoice
-/// under the caller's own token and 0297 decides the rest. A screen that
-/// enforced it would only be a second opinion, and the wrong one to
-/// trust.
-class _PlatformInvoices extends ConsumerStatefulWidget {
-  const _PlatformInvoices();
-
-  @override
-  ConsumerState<_PlatformInvoices> createState() => _PlatformInvoicesState();
-}
-
-class _PlatformInvoicesState extends ConsumerState<_PlatformInvoices> {
-  String? _busyId;
-
-  Future<void> _pay(Map<String, dynamic> invoice) async {
-    final id = '${invoice['id']}';
-    // Read nullable rather than asserted. This section only draws once
-    // the invoice list has loaded, which cannot happen without a
-    // repository — but `ref.read(repoProvider)!` is the exact shape that
-    // took the platform console down earlier, and being right about why
-    // it is safe here is not worth a crash if the reasoning ever stops
-    // holding.
-    final repo = ref.read(repoProvider);
-    if (repo == null) return;
-    setState(() => _busyId = id);
-    try {
-      final url = await repo.startInvoiceCheckout(id);
-      final opened = await launchExternal(url);
-      if (!mounted) return;
-      if (!opened) {
-        // The bill exists at Billplz whether or not the browser
-        // cooperated, so saying "something went wrong" would be wrong:
-        // the address is real and going there again works.
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not open the payment page. Try again.'),
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e')),
-      );
-    } finally {
-      // Both guarded. Somebody who taps Pay and immediately navigates
-      // away disposes this widget while the function call is still in
-      // flight, and `ref` after dispose throws — inside a `finally`,
-      // where it would replace whatever was actually being handled.
-      if (mounted) {
-        setState(() => _busyId = null);
-        ref.invalidate(creditInvoicesProvider);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final invoices = ref.watch(creditInvoicesProvider);
-    // Drawn only when this app can actually start the payment. The
-    // button called `billplz-checkout` unconditionally, so a platform
-    // that had switched on any other gateway offered every tenant a Pay
-    // that failed with whatever the edge function said about missing
-    // credentials. Not knowing yet counts as no: a button that appears
-    // a second later is better than one that was never going to work.
-    final gateways = ref
-            .watch(gatewaysForCountryProvider(
-                ref.watch(currentOrgProvider).valueOrNull?.countryCode))
-            .valueOrNull ??
-        const <Map<String, dynamic>>[];
-    final canPayOnline = hostedCheckout(gateways) != null;
-
-    return invoices.maybeWhen(
-      data: (rows) {
-        if (rows.isEmpty) return const SizedBox.shrink();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Invoices',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 4),
-            for (final r in rows.take(6))
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${r['invoice_no']} · '
-                            '${Fmt.money(Fmt.toDouble(r['total_amount']))}',
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                          Text(
-                            '${r['description']}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: context.scheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (r['status'] == 'issued' && canPayOnline)
-                      FilledButton.tonal(
-                        onPressed: _busyId == null ? () => _pay(r) : null,
-                        child: _busyId == '${r['id']}'
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('Pay'),
-                      )
-                    else
-                      StatusChip('${r['status']}', compact: true),
-                  ],
-                ),
-              ),
-          ],
-        );
-      },
-      // A billing list that will not load must not take the settings
-      // screen with it. The scanning balance above is the thing somebody
-      // came here for.
-      orElse: () => const SizedBox.shrink(),
     );
   }
 }

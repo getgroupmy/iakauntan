@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788374697.0766172,
-    "ast_hash": "690dbf21a1a409c206fc460567fef1fa",
+    "mtime": 1788376460.7209148,
+    "ast_hash": "9da7d7903d4205917211988cb4501a18",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788374654.6209476,
-    "ast_hash": "92fb78e8c1a78bdbb39a42043e623a9b",
+    "mtime": 1788376329.5666063,
+    "ast_hash": "949fed26507749160f11c1fc77f42b39",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1788374789.3996203,
-    "ast_hash": "bb57b97432e4b43f2a9ebbdab5eee8bf",
+    "mtime": 1788376423.7267582,
+    "ast_hash": "06c9a29c3db3b57f64641eb82732737c",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -7435,8 +7435,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/subscription_card.dart": {
-    "mtime": 1788374742.660953,
-    "ast_hash": "9c28e086d740e170f9d29a1503e7d39c",
+    "mtime": 1788376423.7260463,
+    "ast_hash": "150c7b299ba448f95f55c64577af8683",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/subscription_summary.dart": {
@@ -7445,8 +7445,8 @@
     "semantic_hash": ""
   },
   "app/test/subscription_summary_test.dart": {
-    "mtime": 1788375244.220353,
-    "ast_hash": "b04dddb068f9fd4ff78ff532d82a1e17",
+    "mtime": 1788376742.1809335,
+    "ast_hash": "4a67f242fb2651970e00559ffea32428",
     "semantic_hash": ""
   },
   "supabase/migrations/0489_the_month_the_modules_cost.sql": {

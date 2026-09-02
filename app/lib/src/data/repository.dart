@@ -4525,22 +4525,6 @@ extension RepoExtras on Repo {
     return Map<String, dynamic>.from(data as Map);
   }
 
-  /// The subscription invoices already raised against this company,
-  /// newest first.
-  ///
-  /// Read straight off the table rather than through an RPC: its own
-  /// policy already limits it to an administrator of the company it
-  /// names, so a function would only restate the rule in a second
-  /// place.
-  Future<List<Map<String, dynamic>>> myPlatformInvoices() async => Repo._rows(
-    await client
-        .from('platform_invoices')
-        .select()
-        .eq('org_id', orgId)
-        .order('issue_date', ascending: false)
-        .limit(24),
-  );
-
   /// Figures for the modules this company actually uses, keyed by module
   /// code. A company with no such module gets an empty map and keeps the
   /// accounting dashboard.

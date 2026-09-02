@@ -131,6 +131,32 @@ void main() {
       );
     });
 
+    test('one list, both kinds of bill', () {
+      // `platform_invoices` carries scanning credit top-ups (0111) and
+      // module subscriptions (0489). They were in two different places
+      // on the settings screen and only one of them could be paid; the
+      // outstanding total is over both, because what a company owes the
+      // platform is one number.
+      final rows = [
+        {
+          'id': 'a',
+          'invoice_no': 'KH-2026-0001',
+          'status': 'issued',
+          'total_amount': 16.31,
+          'description': 'Modules for January 2026\nMulti-Company · 12/31 days',
+        },
+        {
+          'id': 'b',
+          'invoice_no': 'KH-2026-0002',
+          'status': 'issued',
+          'total_amount': 108.00,
+          'description': 'Document scanning credit',
+        },
+      ];
+      expect(subscriptionOutstanding(rows), 124.31);
+      expect(rows.every(subscriptionInvoiceOwing), isTrue);
+    });
+
     test('the word beside each one', () {
       expect(subscriptionInvoiceStatus(inv('issued', 1)), 'Due');
       expect(subscriptionInvoiceStatus(inv('paid', 1)), 'Paid');

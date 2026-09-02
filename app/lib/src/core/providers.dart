@@ -415,13 +415,6 @@ final moduleChargesProvider =
       return SubscriptionMonth.fromMap(await repo.moduleCharges());
     });
 
-/// The subscription invoices already raised against this company.
-final myPlatformInvoicesProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-      final repo = ref.watch(repoProvider);
-      if (repo == null) return const [];
-      return repo.myPlatformInvoices();
-    });
 
 /// The records on file twice, for the screen that offers to link
 /// them. autoDispose so it is asked afresh: a group linked a moment
@@ -1931,6 +1924,13 @@ final creditLedgerProvider =
       return requireRepo(ref).creditLedger();
     });
 
+/// What the platform has billed *this* company -- module subscriptions
+/// since 0489, scanning credit since 0111, both in `platform_invoices`.
+///
+/// `RepoOcr.creditInvoices` filters on `org_id` itself, which matters
+/// more than it used to: the read policy also lets a platform
+/// administrator see every tenant's invoices, so an unscoped select
+/// would put all of them on their own company's settings card.
 final creditInvoicesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
       return requireRepo(ref).creditInvoices();
