@@ -8166,7 +8166,10 @@ extension RepoPos on Repo {
   Future<List<Map<String, dynamic>>> posRegisters() async => Repo.rows(
     await client
         .from('pos_registers')
-        .select('*, pos_outlets(id, name, code, business_type)')
+        // Named because 0517 added a same-org composite key alongside
+        // the plain one, so 'pos_outlets' can now be joined two ways
+        // and PostgREST refuses the embed with PGRST201.
+        .select('*, pos_outlets!pos_registers_outlet_id_fkey(id, name, code, business_type)')
         .eq('org_id', orgId)
         .eq('is_active', true)
         .order('code'),

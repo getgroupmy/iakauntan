@@ -161,9 +161,9 @@ end $$;
 -- nobody. A row that names somebody has to name somebody here.
 --
 -- 0510 did the same for `warehouses`, 0512 for `contacts`, 0513 for
--- `items`, 0514 for `accounts`, 0515 for `gl_entries` and 0516 for
--- `sales_documents`, and all seven parents are probed and covered in
--- the one block below.
+-- `items`, 0514 for `accounts`, 0515 for `gl_entries`, 0516 for
+-- `sales_documents` and 0517 for `pos_outlets`, and all eight parents
+-- are probed and covered in the one block below.
 -- `contacts` is the widest and the one where a wrong id is money: an
 -- invoice raised in this company against another company's customer
 -- reads as an ordinary invoice, and only the aged receivable shows the
@@ -179,6 +179,7 @@ declare
   v_acc_a uuid; v_acc_b uuid;
   v_ent_a uuid; v_ent_b uuid;
   v_doc_b uuid;
+  v_out_a uuid; v_out_b uuid;
   v_tried integer := 0; v_refused integer := 0;
   v_uncovered text;
 begin
@@ -560,7 +561,41 @@ begin
       sqlerrm;
   end;
 
-  if v_refused <> v_tried or v_tried < 20 then
+  -- 15. And an outlet, which is 0517, and which has a history worth
+  -- stating. The 0505 audit cleared `merge_pos_sales`, `move_pos_sale`
+  -- and `seat_table` on the grounds that each refuses two different
+  -- outlets, and an outlet belongs to one company. That was right about
+  -- the functions and rested on a fact the schema did not enforce:
+  -- nothing stopped a register in A naming B's outlet in the first
+  -- place. The guard held because the data happened to be right.
+  --
+  -- Sixteen of the seventeen columns are NOT NULL, so these keys bite
+  -- on nearly every row rather than only the ones that name somebody.
+  insert into public.pos_outlets (org_id, code, name, business_type)
+  values (v_a, 'OUT-A', 'A''s shop', 'retail') returning id into v_out_a;
+  insert into public.pos_outlets (org_id, code, name, business_type)
+  values (v_b, 'OUT-B', 'B''s shop', 'retail') returning id into v_out_b;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.pos_registers (org_id, outlet_id, code, name)
+    values (v_a, v_out_b, 'REG-X', 'Kaunter');
+    raise exception 'a register in A was put in B''s outlet';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.pos_registers (org_id, outlet_id, code, name)
+    values (v_a, v_out_a, 'REG-OWN', 'Kaunter A');
+    v_refused := v_refused + 1;
+  exception when others then
+    raise exception
+      'the new keys refuse a register in its own outlet: %', sqlerrm;
+  end;
+
+  if v_refused <> v_tried or v_tried < 22 then
     raise exception 'employee and warehouse boundary: % probes ran, % behaved',
       v_tried, v_refused;
   end if;
@@ -573,13 +608,13 @@ begin
   -- notices.
   --
   -- `employees` (0507-0509), `warehouses` (0510), `contacts` (0512),
-  -- `items` (0513), `accounts` (0514), `gl_entries` (0515) and
-  -- `sales_documents` (0516) are closed. The list is deliberately not
-  -- every parent in the schema: `pos_outlets` still has columns on
-  -- plain keys and is the next batch, and roughly a hundred smaller
-  -- parents follow it. Adding a parent here before its migration would
-  -- make this file fail for work that has not been done, which is a
-  -- worse signal than not asserting it yet.
+  -- `items` (0513), `accounts` (0514), `gl_entries` (0515),
+  -- `sales_documents` (0516) and `pos_outlets` (0517) are closed. The
+  -- list is deliberately not every parent in the schema: roughly a
+  -- hundred smaller ones, with one to eleven columns each, are still to
+  -- come. Adding a parent here before its migration would make this
+  -- file fail for work that has not been done, which is a worse signal
+  -- than not asserting it yet.
   select string_agg(
            c.confrelid::regclass::text || ' <- ' ||
            c.conrelid::regclass::text || '.' || a.attname, ', ')
@@ -594,7 +629,8 @@ begin
                          'public.items'::regclass,
                          'public.accounts'::regclass,
                          'public.gl_entries'::regclass,
-                         'public.sales_documents'::regclass)
+                         'public.sales_documents'::regclass,
+                         'public.pos_outlets'::regclass)
      and cardinality(c.conkey) = 1
      and exists (select 1 from pg_attribute o
                   where o.attrelid = c.conrelid and o.attname = 'org_id'
@@ -625,9 +661,9 @@ begin
   end if;
 
   raise notice
-    'employee, warehouse, contact, item, account, journal and invoice '
-    'boundaries: 13 cross-company writes refused, 13 same-company '
-    'writes allowed, 0 columns uncovered';
+    'employee, warehouse, contact, item, account, journal, invoice and '
+    'outlet boundaries: 14 cross-company writes refused, 14 '
+    'same-company writes allowed, 0 columns uncovered';
 end $$;
 
 -- Deleting a row somebody else names has to empty the reference, not
