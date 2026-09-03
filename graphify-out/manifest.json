@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788397502.386082,
-    "ast_hash": "fd3ecf7ac496e1484a64ac6ff6ee6d05",
+    "mtime": 1788398252.758241,
+    "ast_hash": "df6ac8fe98d13f0a76735923bee42019",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7597,6 +7597,11 @@
   "supabase/tests/tax_bands.sql": {
     "mtime": 1788397364.5652716,
     "ast_hash": "256da0d6f4d9882abe3e5b849bf6ae19",
+    "semantic_hash": ""
+  },
+  "supabase/tests/foreign_worker_payroll.sql": {
+    "mtime": 1788398247.353774,
+    "ast_hash": "797083fd3edf2055d334aff5973280a9",
     "semantic_hash": ""
   }
 }

@@ -258,6 +258,7 @@ jobs:
                    supabase/tests/notifications.sql \
                    supabase/tests/bulk_actions.sql \
                    supabase/tests/tax_bands.sql \
+                   supabase/tests/foreign_worker_payroll.sql \
                    supabase/tests/company_handover.sql \
                    supabase/tests/company_export.sql \
                    supabase/tests/sst_taxable_period.sql \
