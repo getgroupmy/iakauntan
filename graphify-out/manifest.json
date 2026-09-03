@@ -1185,8 +1185,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/multicurrency.sql": {
-    "mtime": 1786515320.545066,
-    "ast_hash": "72e59ce5e1be78cf6fe90f5a13340ee5",
+    "mtime": 1788401861.2181559,
+    "ast_hash": "0fafe1a8a4610a99ebb14205cf22a83f",
     "semantic_hash": ""
   },
   "docs/gaps-against-autocount.md": {
