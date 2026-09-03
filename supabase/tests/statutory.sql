@@ -576,6 +576,81 @@ begin
                             -- account rather than a single document.
                             'customer_portal_links')));
 
+  -- 0498, and the reason the assertion above needed a list at all: a
+  -- table carries an `anon` grant from the moment it is created, so
+  -- until 0498 the only tables shut to a stranger were the ones whose
+  -- migration remembered. Two hundred and sixty-seven did not.
+  --
+  -- Not an open door even then -- row level security is on everywhere
+  -- and every guard is false for somebody not signed in -- but the
+  -- grant is what makes a `using (true)` typed in a hurry reachable
+  -- rather than inert, which is the whole point of a second line.
+  perform pg_temp.check_true('nothing in public is readable by a stranger',
+    not exists (
+      select 1 from pg_class c
+       where c.relnamespace = 'public'::regnamespace
+         and c.relkind in ('r', 'p', 'v', 'm')
+         and not (c.relname = any(app.anon_readable_tables()))
+         and has_table_privilege('anon', c.oid, 'select')));
+
+  -- The four that are meant to be: the front page's three and the
+  -- statutory remittance calendar, each with an unguarded policy to
+  -- match. A sweep that took these would empty the front page quietly.
+  perform pg_temp.check_eq(
+    'except the four the front page and the calendar need',
+    (select count(*)::integer from unnest(app.anon_readable_tables()) t
+      where has_table_privilege('anon', 'public.' || quote_ident(t),
+                                'select')), 4);
+
+  -- And the half that stops it coming back. Without the default
+  -- privilege revoked, the next table added is exposed again and the
+  -- assertion above passes until somebody adds one.
+  create table if not exists public.zz_anon_probe (id integer);
+  perform pg_temp.check_true('and a table made after this one is shut too',
+    not has_table_privilege('anon', 'public.zz_anon_probe', 'select'));
+  drop table public.zz_anon_probe;
+
+  -- 0499, and the same shape one role along: a table privilege that no
+  -- policy permits cannot do anything, and is one policy typed wrong
+  -- away from being able to do everything. `payslip_access_log` is the
+  -- one that made this visible -- an authenticated DELETE against the
+  -- record of who read whose payslip was allowed to run and stopped by
+  -- row level security matching no rows, rather than refused.
+  perform pg_temp.check_true(
+    'no write privilege outlives the policy that would permit it',
+    not exists (
+      select 1 from pg_class c
+      cross join unnest(array['insert', 'update', 'delete']) cmd
+       where c.relnamespace = 'public'::regnamespace
+         and c.relkind in ('r', 'p')
+         and has_table_privilege('authenticated', c.oid, cmd)
+         and not app.policy_permits(c.relname::text, cmd)));
+
+  -- The other half. A sweep with an off-by-one in it would take the
+  -- privileges the product runs on, and the first thing anybody would
+  -- notice is an invoice that cannot be saved.
+  -- `corp_officers` is the one that matters most here: its writes come
+  -- from a single `for all` policy rather than a policy per command, so
+  -- a sweep that read only the per-command policies would take it and
+  -- leave the two obvious tables standing.
+  perform pg_temp.check_true('an invoice can still be raised from the API',
+    has_table_privilege('authenticated', 'public.sales_documents', 'insert')
+    and has_table_privilege('authenticated', 'public.contacts', 'update')
+    and has_table_privilege('authenticated', 'public.corp_officers',
+                            'insert'));
+
+  -- A module gate is restrictive: it narrows what a permissive policy
+  -- allows and grants nothing by itself. Counting one as permission
+  -- would keep exactly the privileges that have no way to be used, so
+  -- the predicate is asked about a table that has nothing but a gate.
+  create table if not exists public.zz_gate_probe (org_id uuid);
+  alter table public.zz_gate_probe enable row level security;
+  create policy zz_gate on public.zz_gate_probe
+    as restrictive for insert to authenticated with check (true);
+  perform pg_temp.check_true('a module gate is not a permission',
+    not app.policy_permits('zz_gate_probe', 'insert'));
+  drop table public.zz_gate_probe;
+
   -- The whole permission layer hangs off this one predicate, and the
   -- twenty-six guards written as `if not app.can_x(...) then raise` only
   -- fire on a hard false. A null here reopens every one of them.

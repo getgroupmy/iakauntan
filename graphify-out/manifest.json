@@ -740,8 +740,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory.sql": {
-    "mtime": 1788384811.5786135,
-    "ast_hash": "7728aaf241725055bcc0aadf8a06dbe3",
+    "mtime": 1788393918.075158,
+    "ast_hash": "096a44e7cfd97692cccaef8eadf8a2fd",
     "semantic_hash": ""
   },
   ".claude/CLAUDE.md": {
@@ -5720,8 +5720,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/_local_stack.sql": {
-    "mtime": 1788392713.1682014,
-    "ast_hash": "59e8663c780bab4f7bbe4d8df249ddd4",
+    "mtime": 1788393405.8641813,
+    "ast_hash": "37bf0ea9155160aaa5e184563dc1b0dd",
     "semantic_hash": ""
   },
   "supabase/tests/run_locally.sh": {
@@ -7562,6 +7562,16 @@
   "supabase/tests/notifications.sql": {
     "mtime": 1788391270.5875962,
     "ast_hash": "15b7d61486843a2bad6147554f71d117",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0498_a_stranger_gets_nothing.sql": {
+    "mtime": 1788393939.085088,
+    "ast_hash": "859e73a979acdde2c8e0d78920cffa5f",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0499_a_privilege_no_policy_permits.sql": {
+    "mtime": 1788393939.0853014,
+    "ast_hash": "46fb152159e48ce3654b90956fa6390a",
     "semantic_hash": ""
   }
 }
