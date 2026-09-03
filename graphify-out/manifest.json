@@ -1270,8 +1270,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/fixed_assets.sql": {
-    "mtime": 1786851088.8861635,
-    "ast_hash": "868aaaa6eaea846ddb824029042f5290",
+    "mtime": 1788400881.8061454,
+    "ast_hash": "2c5de834e48d6412468052c864069576",
     "semantic_hash": ""
   },
   "app/lib/src/features/banking/reconciliation_screen.dart": {

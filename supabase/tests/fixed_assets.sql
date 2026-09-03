@@ -111,6 +111,7 @@ begin
   perform pg_temp.check_eq('depreciated to cost less residual',
     (select accumulated_depreciation from public.fixed_assets where id = v_asset),
     5400);
+
   perform pg_temp.check_true('and marked as finished',
     (select status = 'fully_depreciated' from public.fixed_assets where id = v_asset));
 
@@ -312,6 +313,74 @@ begin
   perform pg_temp.check_true('and the engine is internal',
     not has_function_privilege('authenticated',
       'app.accumulated_depreciation_at(public.fixed_assets, date)', 'execute'));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Reducing balance
+--
+-- Everything else in this file is straight line, so four things about
+-- the other method could be changed with nothing failing: the base it
+-- is charged on, the floor at the residual value, the floor at zero,
+-- and what an asset is worth before it was bought. Found by changing
+-- each and re-running.
+--
+-- Its own company, because the block above asserts that its company has
+-- nothing left to depreciate a year on, and an asset still depreciating
+-- in 2027 makes that false.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.fa_org('Reducing Balance Sdn Bhd');
+  v_rb  uuid;
+begin
+  -- RM 10,000 at 20% a year, compounded monthly at a twelfth of that,
+  -- with RM 2,000 residual.
+  insert into public.fixed_assets
+    (org_id, asset_no, name, acquisition_date, cost, residual_value,
+     method, useful_life_months, rate_percent)
+  values (v_org, 'FA-RB', 'Compressor', date '2026-01-01', 10000, 2000,
+          'reducing_balance', 120, 20)
+  returning id into v_rb;
+  -- Charged on cost, not on cost less residual. Under reducing balance
+  -- the residual is a floor, not a smaller base: charging 20% of
+  -- RM 8,000 would give RM 1,461.18 after a year and under-depreciate
+  -- the asset for its whole life.
+  perform pg_temp.check_eq('reducing balance is charged on cost',
+    (select app.accumulated_depreciation_at(a, date '2026-12-31')
+       from public.fixed_assets a where a.id = v_rb), 1826.48);
+  -- And it stops at the residual. Compounding never reaches zero on its
+  -- own -- thirty years of it comes to RM 9,976.43 on this asset, which
+  -- is RM 1,976.43 more than the company may ever charge.
+  perform pg_temp.check_eq('and never takes more than the depreciable amount',
+    (select app.accumulated_depreciation_at(a, date '2056-01-01')
+       from public.fixed_assets a where a.id = v_rb), 8000.00);
+  perform pg_temp.check_eq('so the net book value floors at the residual',
+    (select a.cost - app.accumulated_depreciation_at(a, date '2056-01-01')
+       from public.fixed_assets a where a.id = v_rb), 2000.00);
+  -- Before it was bought there is nothing to depreciate, which a
+  -- schedule that starts before the acquisition will ask for.
+  perform pg_temp.check_eq('nothing is charged before the asset existed',
+    (select app.accumulated_depreciation_at(a, date '2025-06-30')
+       from public.fixed_assets a where a.id = v_rb), 0);
+  -- The month it arrived in is charged whole, which is the convention
+  -- `months_held` implements and not an accident: an asset bought on
+  -- the 1st and one bought on the 28th both carry January. Asserted so
+  -- that a change to pro-rating by days is a decision somebody makes
+  -- rather than one that slips in.
+  perform pg_temp.check_eq('the month it arrived in is charged whole',
+    (select app.accumulated_depreciation_at(a, date '2026-01-01')
+       from public.fixed_assets a where a.id = v_rb), 166.67);
+  perform pg_temp.check_eq('however late in that month it arrived',
+    (select app.accumulated_depreciation_at(a, date '2026-01-31')
+       from public.fixed_assets a where a.id = v_rb), 166.67);
+  -- Never negative, whichever method. A negative accumulated
+  -- depreciation is an asset worth more than it cost.
+  perform pg_temp.check_eq('and no charge is ever negative',
+    (select count(*)::integer from public.fixed_assets a,
+            lateral (values (date '2025-01-01'), (date '2026-01-01'),
+                            (date '2026-06-30'), (date '2056-01-01')) d(on_date)
+      where a.org_id = v_org
+        and app.accumulated_depreciation_at(a, d.on_date) < 0), 0);
 end $$;
 
 rollback;
