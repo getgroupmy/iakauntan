@@ -156,6 +156,46 @@ begin
             at time zone tz, fmt) = 'Mon 2026-08-17 09:20');
   delete from public.public_holidays where org_id = v_org;
 
+  -- ------------------------------------------------------------------
+  -- Whose holiday it is
+  --
+  -- Half of Malaysia's public holidays belong to particular states.
+  -- Thaipusam is a holiday in Selangor and a working day in
+  -- Terengganu, and a desk in one has no business pausing for the
+  -- other's. The policy carries the state it keeps and each holiday
+  -- carries the state it belongs to; until this block the fixture used
+  -- nationwide holidays only, so dropping the comparison between them
+  -- changed nothing anywhere.
+  -- ------------------------------------------------------------------
+  update public.sla_policies set holiday_state_code = '10' where id = v_bh;
+  insert into public.public_holidays
+    (org_id, holiday_date, name, is_working, state_code)
+  values (v_org, date '2026-08-17', 'Terengganu only', false, '11');
+  perform pg_temp.check_true(
+    'another state''s holiday does not pause this desk''s clock',
+    to_char(app.sla_advance(v_org, v_bh, timestamptz '2026-08-14 17:50+08', 30)
+            at time zone tz, fmt) = 'Mon 2026-08-17 09:20');
+
+  update public.public_holidays set state_code = '10'
+   where org_id = v_org and holiday_date = date '2026-08-17';
+  perform pg_temp.check_true(
+    'and its own state''s holiday does',
+    to_char(app.sla_advance(v_org, v_bh, timestamptz '2026-08-14 17:50+08', 30)
+            at time zone tz, fmt) = 'Tue 2026-08-18 09:20');
+
+  -- A nationwide holiday carries no state and stops everybody, which is
+  -- the case the block above this one already covered and the reason
+  -- the comparison has to allow null rather than requiring a match.
+  update public.public_holidays set state_code = null
+   where org_id = v_org and holiday_date = date '2026-08-17';
+  perform pg_temp.check_true(
+    'and a nationwide one stops every desk whatever state it keeps',
+    to_char(app.sla_advance(v_org, v_bh, timestamptz '2026-08-14 17:50+08', 30)
+            at time zone tz, fmt) = 'Tue 2026-08-18 09:20');
+
+  update public.sla_policies set holiday_state_code = null where id = v_bh;
+  delete from public.public_holidays where org_id = v_org;
+
   -- No policy, no promise. A deadline invented where none was agreed
   -- would be breached on a report somebody trusts.
   perform pg_temp.check_true('no policy means no deadline, not a default one',
