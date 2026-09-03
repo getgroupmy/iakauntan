@@ -2742,7 +2742,10 @@ class Repo {
   Future<List<Map<String, dynamic>>> billsOfMaterials() async => _rows(
     await client
         .from('bills_of_materials')
-        .select('*, items(code, name)')
+        // Named because 0513 added a same-org composite key alongside
+        // the plain one, so 'items' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, items!bills_of_materials_item_id_fkey(code, name)')
         .eq('org_id', orgId)
         .eq('is_active', true)
         .order('code'),
@@ -2883,7 +2886,10 @@ class Repo {
   }) async {
     var q = client
         .from('manufacturing_orders')
-        .select('*, items(code, name), bills_of_materials(code)')
+        // Named because 0513 added a same-org composite key alongside
+        // the plain one, so 'items' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, items!manufacturing_orders_item_id_fkey(code, name), bills_of_materials(code)')
         .eq('org_id', orgId);
     if (openOnly) {
       q = q.inFilter('status', ['draft', 'confirmed', 'in_progress']);
@@ -8866,7 +8872,10 @@ extension RepoPos on Repo {
   Future<List<Map<String, dynamic>>> posServices() async => Repo.rows(
     await client
         .from('pos_services')
-        .select('*, items(id, name, code, unit_price)')
+        // Named because 0513 added a same-org composite key alongside
+        // the plain one, so 'items' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, items!pos_services_item_id_fkey(id, name, code, unit_price)')
         .eq('org_id', orgId)
         .eq('is_active', true),
   );

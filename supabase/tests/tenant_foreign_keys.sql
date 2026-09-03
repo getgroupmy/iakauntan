@@ -160,8 +160,9 @@ end $$;
 -- nullable and therefore unenforced by MATCH SIMPLE when it names
 -- nobody. A row that names somebody has to name somebody here.
 --
--- 0510 did the same for `warehouses` and 0512 for `contacts`, and all
--- three parents are probed and covered in the one block below.
+-- 0510 did the same for `warehouses`, 0512 for `contacts` and 0513 for
+-- `items`, and all four parents are probed and covered in the one block
+-- below.
 -- `contacts` is the widest and the one where a wrong id is money: an
 -- invoice raised in this company against another company's customer
 -- reads as an ordinary invoice, and only the aged receivable shows the
@@ -173,6 +174,7 @@ declare
   v_emp_a uuid; v_emp_b uuid;
   v_wh_a uuid; v_wh_b uuid; v_wh_a2 uuid;
   v_con_a uuid; v_con_b uuid;
+  v_item_a uuid; v_item_b uuid; v_doc_a uuid;
   v_tried integer := 0; v_refused integer := 0;
   v_uncovered text;
 begin
@@ -315,7 +317,80 @@ begin
       'no supplier at all: %', sqlerrm;
   end;
 
-  if v_refused <> v_tried or v_tried < 8 then
+  -- 7. And an item, which is 0513. A stock movement is the NOT NULL
+  -- case and the one that costs money twice over: the quantity moves
+  -- against the item named, so a movement written in A against B's item
+  -- takes stock off B's shelf and values it on A's balance sheet.
+  insert into public.items
+    (org_id, code, name, item_type, uom_code, track_inventory)
+  values (v_a, 'IT-A', 'A''s item', 'stock', 'EA', true)
+  returning id into v_item_a;
+  insert into public.items
+    (org_id, code, name, item_type, uom_code, track_inventory)
+  values (v_b, 'IT-B', 'B''s item', 'stock', 'EA', true)
+  returning id into v_item_b;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.stock_movements
+      (org_id, movement_no, movement_date, movement_type, item_id,
+       warehouse_id, quantity, unit_cost, total_cost, balance_quantity,
+       balance_value, average_cost_after)
+    values (v_a, 'SM-X', current_date, 'purchase_receipt', v_item_b, v_wh_a,
+            5, 10, 50, 5, 50, 10);
+    raise exception 'a movement in A moved B''s item';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  -- 8. The nullable case on the same parent: an invoice line. A line
+  -- may carry no item at all -- that is what line_type 'description'
+  -- is -- so MATCH SIMPLE leaves it alone, and a line that DOES name
+  -- an item has to name one of this company's.
+  --
+  -- The self-reference `items.parent_item_id` is deliberately not the
+  -- probe here, though it is the obvious one. `app.items_variant_guard`
+  -- from 0211 already refuses a variant of another company's style and
+  -- raises before the key is ever reached, so a probe on it would pass
+  -- whether or not 0513 exists. The coverage query below is what proves
+  -- that key is there.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id)
+  values (v_a, 'invoice', 'INV-ITEM', current_date, v_con_a)
+  returning id into v_doc_a;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.sales_document_lines
+      (org_id, document_id, line_no, line_type, description, item_id,
+       quantity, unit_price, line_subtotal, line_total)
+    values (v_a, v_doc_a, 1, 'item', 'B''s item', v_item_b,
+            1, 10, 10, 10);
+    raise exception 'an invoice line in A sold B''s item';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.sales_document_lines
+      (org_id, document_id, line_no, line_type, description, item_id,
+       quantity, unit_price, line_subtotal, line_total)
+    values (v_a, v_doc_a, 2, 'item', 'A''s item', v_item_a,
+            1, 10, 10, 10);
+    insert into public.sales_document_lines
+      (org_id, document_id, line_no, line_type, description, item_id,
+       quantity, unit_price, line_subtotal, line_total)
+    values (v_a, v_doc_a, 3, 'description', 'Terima kasih', null,
+            0, 0, 0, 0);
+    v_refused := v_refused + 1;
+  exception when others then
+    raise exception
+      'the new keys refuse a line for its own item, or a line with no '
+      'item at all: %', sqlerrm;
+  end;
+
+  if v_refused <> v_tried or v_tried < 11 then
     raise exception 'employee and warehouse boundary: % probes ran, % behaved',
       v_tried, v_refused;
   end if;
@@ -327,10 +402,10 @@ begin
   -- is what says so on the day it is added rather than the day somebody
   -- notices.
   --
-  -- `employees` (0507-0509), `warehouses` (0510) and `contacts` (0512)
-  -- are closed. The list is deliberately not every parent in the
-  -- schema: `items`, `accounts`, `gl_entries`, `sales_documents` and
-  -- `pos_outlets` still have columns on plain keys and are the next
+  -- `employees` (0507-0509), `warehouses` (0510), `contacts` (0512) and
+  -- `items` (0513) are closed. The list is deliberately not every
+  -- parent in the schema: `accounts`, `gl_entries`, `sales_documents`
+  -- and `pos_outlets` still have columns on plain keys and are the next
   -- batches. Adding a parent here before its migration would make this
   -- file fail for work that has not been done, which is a worse signal
   -- than not asserting it yet.
@@ -344,7 +419,8 @@ begin
    where c.contype = 'f'
      and c.confrelid in ('public.employees'::regclass,
                          'public.warehouses'::regclass,
-                         'public.contacts'::regclass)
+                         'public.contacts'::regclass,
+                         'public.items'::regclass)
      and cardinality(c.conkey) = 1
      and exists (select 1 from pg_attribute o
                   where o.attrelid = c.conrelid and o.attname = 'org_id'
@@ -361,8 +437,8 @@ begin
   end if;
 
   raise notice
-    'employee, warehouse and contact boundaries: 5 cross-company writes '
-    'refused, 5 same-company writes allowed, 0 columns uncovered';
+    'employee, warehouse, contact and item boundaries: 7 cross-company '
+    'writes refused, 7 same-company writes allowed, 0 columns uncovered';
 end $$;
 
 -- Deleting a row somebody else names has to empty the reference, not
