@@ -804,4 +804,86 @@ begin
       where sl.item_id = v_item and sl.warehouse_id = v_b), 8);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Van Keempat Sdn Bhd: calling off a transfer that has not left
+--
+-- Cancelling is three lines of code and had one assertion behind it —
+-- that a van already on the road cannot be called back.  Sweeping
+-- cancel_stock_transfer left the other three open: a transfer id that
+-- is not a transfer reported as cancelled, a stranger calling off
+-- another company's transfer, and the transfer left sitting in draft
+-- after the call was made.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid;
+  v_a     uuid;
+  v_b     uuid;
+  v_item  uuid;
+  v_t     uuid;
+  v_owner uuid := pg_temp.test_user();
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Van Keempat Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['inventory','pos']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'SATU', 'Store one', true) returning id into v_a;
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'DUA', 'Store two') returning id into v_b;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values (v_org, 'BEG', 'Bag', 'stock', true, 'C62', 4.00)
+  returning id into v_item;
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_org, 'VK-0001', current_date, 'opening_balance', v_item, v_a, 12, 4);
+
+  v_t := public.upsert_stock_transfer(
+    null, v_org, v_a, v_b, current_date,
+    jsonb_build_array(jsonb_build_object(
+      'item', v_item, 'quantity', 5, 'uom', 'C62')),
+    'Five bags');
+
+  -- ------------------------------------------------------------------
+  -- A transfer that is not a transfer
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_true(
+    'an id that names no transfer cannot be called off',
+    public.cancel_stock_transfer(gen_random_uuid()) = false);
+
+  -- ------------------------------------------------------------------
+  -- Who may call it off
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-batal@example.test'));
+  begin
+    perform public.cancel_stock_transfer(v_t);
+    raise exception 'FAIL a stranger called off another company''s transfer';
+  exception when insufficient_privilege then
+    raise notice 'ok   somebody outside the company cannot call off its transfer';
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('and the transfer is still standing in draft',
+    (select t.status::text = 'draft' from public.stock_transfers t
+      where t.id = v_t));
+
+  -- ------------------------------------------------------------------
+  -- Called off before it left
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_true('a transfer still in the yard is called off',
+    public.cancel_stock_transfer(v_t) = true);
+  perform pg_temp.check_true('and the transfer says it was cancelled',
+    (select t.status::text = 'cancelled' from public.stock_transfers t
+      where t.id = v_t));
+  perform pg_temp.check_eq('with no stock moved out of the first store',
+    (select sl.quantity from public.stock_levels sl
+      where sl.item_id = v_item and sl.warehouse_id = v_a), 12);
+end $$;
+
 rollback;
