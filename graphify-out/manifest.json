@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788398252.758241,
-    "ast_hash": "df6ac8fe98d13f0a76735923bee42019",
+    "mtime": 1788401416.8339,
+    "ast_hash": "3bc796cdc59c68a36b7671f9af77d359",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7607,6 +7607,11 @@
   "app/test/einvoice_cancel_window_test.dart": {
     "mtime": 1788399779.6433969,
     "ast_hash": "0ab89a026d26fad47ea0aa8c90504b10",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pos_rounding.sql": {
+    "mtime": 1788401362.1154177,
+    "ast_hash": "7163bcc5abc5461338d0b561e9c099fc",
     "semantic_hash": ""
   }
 }
