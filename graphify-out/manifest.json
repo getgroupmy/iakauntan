@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788454117.4280148,
-    "ast_hash": "69706efa914b836854e5a0dabf743b77",
+    "mtime": 1788454692.4233801,
+    "ast_hash": "1fec24639178533a4f1701de1e29730d",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -2765,8 +2765,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/tenant_foreign_keys.sql": {
-    "mtime": 1788454149.528014,
-    "ast_hash": "43aa158c908e554e4fbfc2180aec2ac6",
+    "mtime": 1788454915.077036,
+    "ast_hash": "1f4e1170cbdda4c50ab0a5d2f21a38a8",
     "semantic_hash": ""
   },
   "docs/property.md": {
@@ -7702,6 +7702,11 @@
   "supabase/migrations/0515_a_journal_belongs_to_one_companys_ledger.sql": {
     "mtime": 1788454099.0423665,
     "ast_hash": "32b71278c788d86d57ec53ce52486348",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0516_an_invoice_belongs_to_one_companys_sales_ledger.sql": {
+    "mtime": 1788454902.8175576,
+    "ast_hash": "f1a0916d783876582cbd674b098974c3",
     "semantic_hash": ""
   }
 }

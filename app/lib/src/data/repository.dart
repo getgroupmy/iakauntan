@@ -6905,7 +6905,10 @@ extension RepoHrSetup on Repo {
   Future<List<Map<String, dynamic>>> emailOutbox({String? status}) async {
     var q = client
         .from('email_outbox')
-        .select('*, sales_documents(doc_no)')
+        // Named because 0516 added a same-org composite key alongside
+        // the plain one, so 'sales_documents' can now be joined two
+        // ways and PostgREST refuses the embed with PGRST201.
+        .select('*, sales_documents!email_outbox_document_id_fkey(doc_no)')
         .eq('org_id', orgId);
     if (status != null && status != 'all') q = q.eq('status', status);
     return Repo._rows(await q.order('queued_at', ascending: false).limit(200));

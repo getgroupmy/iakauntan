@@ -161,8 +161,9 @@ end $$;
 -- nobody. A row that names somebody has to name somebody here.
 --
 -- 0510 did the same for `warehouses`, 0512 for `contacts`, 0513 for
--- `items`, 0514 for `accounts` and 0515 for `gl_entries`, and all six
--- parents are probed and covered in the one block below.
+-- `items`, 0514 for `accounts`, 0515 for `gl_entries` and 0516 for
+-- `sales_documents`, and all seven parents are probed and covered in
+-- the one block below.
 -- `contacts` is the widest and the one where a wrong id is money: an
 -- invoice raised in this company against another company's customer
 -- reads as an ordinary invoice, and only the aged receivable shows the
@@ -177,6 +178,7 @@ declare
   v_item_a uuid; v_item_b uuid; v_doc_a uuid;
   v_acc_a uuid; v_acc_b uuid;
   v_ent_a uuid; v_ent_b uuid;
+  v_doc_b uuid;
   v_tried integer := 0; v_refused integer := 0;
   v_uncovered text;
 begin
@@ -506,7 +508,59 @@ begin
       'own entry, or a journal that reverses nothing: %', sqlerrm;
   end;
 
-  if v_refused <> v_tried or v_tried < 17 then
+  -- 13. And an invoice, which is 0516. The share link is the probe
+  -- worth having, because it is the one that leaves the building: it
+  -- is the token a customer with no account follows to see a document,
+  -- and it is read with that token rather than a session, so RLS is no
+  -- help. A link in A pointing at B's invoice shows B's invoice to
+  -- somebody who was never meant to see it.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id)
+  values (v_b, 'invoice', 'INV-B', current_date, v_con_b)
+  returning id into v_doc_b;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.document_share_links
+      (org_id, document_id, token_hash, expires_at)
+    values (v_a, v_doc_b, 'hash-x', now() + interval '7 days');
+    raise exception 'a share link in A pointed at B''s invoice';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  -- 14. The self-reference that would move money: a credit note in A
+  -- naming B's invoice as the one it cancels.
+  v_tried := v_tried + 1;
+  begin
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, contact_id, original_invoice_id)
+    values (v_a, 'credit_note', 'CN-X', current_date, v_con_a, v_doc_b);
+    raise exception 'a credit note in A cancelled B''s invoice';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.document_share_links
+      (org_id, document_id, token_hash, expires_at)
+    values (v_a, v_doc_a, 'hash-own', now() + interval '7 days');
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, contact_id, original_invoice_id)
+    values (v_a, 'credit_note', 'CN-OWN', current_date, v_con_a, v_doc_a);
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, contact_id, original_invoice_id)
+    values (v_a, 'invoice', 'INV-A2', current_date, v_con_a, null);
+    v_refused := v_refused + 1;
+  exception when others then
+    raise exception
+      'the new keys refuse a link to its own invoice, a credit note '
+      'against its own invoice, or an invoice that cancels nothing: %',
+      sqlerrm;
+  end;
+
+  if v_refused <> v_tried or v_tried < 20 then
     raise exception 'employee and warehouse boundary: % probes ran, % behaved',
       v_tried, v_refused;
   end if;
@@ -519,12 +573,13 @@ begin
   -- notices.
   --
   -- `employees` (0507-0509), `warehouses` (0510), `contacts` (0512),
-  -- `items` (0513), `accounts` (0514) and `gl_entries` (0515) are
-  -- closed. The list is deliberately not every parent in the schema:
-  -- `sales_documents` and `pos_outlets` still have columns on plain
-  -- keys and are the next batches. Adding a parent here before its
-  -- migration would make this file fail for work that has not been
-  -- done, which is a worse signal than not asserting it yet.
+  -- `items` (0513), `accounts` (0514), `gl_entries` (0515) and
+  -- `sales_documents` (0516) are closed. The list is deliberately not
+  -- every parent in the schema: `pos_outlets` still has columns on
+  -- plain keys and is the next batch, and roughly a hundred smaller
+  -- parents follow it. Adding a parent here before its migration would
+  -- make this file fail for work that has not been done, which is a
+  -- worse signal than not asserting it yet.
   select string_agg(
            c.confrelid::regclass::text || ' <- ' ||
            c.conrelid::regclass::text || '.' || a.attname, ', ')
@@ -538,7 +593,8 @@ begin
                          'public.contacts'::regclass,
                          'public.items'::regclass,
                          'public.accounts'::regclass,
-                         'public.gl_entries'::regclass)
+                         'public.gl_entries'::regclass,
+                         'public.sales_documents'::regclass)
      and cardinality(c.conkey) = 1
      and exists (select 1 from pg_attribute o
                   where o.attrelid = c.conrelid and o.attname = 'org_id'
@@ -547,7 +603,21 @@ begin
        select 1 from pg_constraint c2
         where c2.contype = 'f' and c2.conrelid = c.conrelid
           and c2.confrelid = c.confrelid and cardinality(c2.conkey) > 1
-          and k.attnum = any (c2.conkey));
+          and k.attnum = any (c2.conkey))
+     -- One exemption, and it is a feature rather than a gap.
+     -- Inter-company billing is one company in a group invoicing
+     -- another: the seller raises a sales document, the buyer gets a
+     -- purchase document, and this column is the link between them, so
+     -- it points at another company's row on purpose. 0516 tried to
+     -- close it like the other nineteen and
+     -- `supabase/tests/intercompany_billing.sql` failed, which is how
+     -- it was found. Naming it here rather than leaving it out of the
+     -- query keeps it visible: it reads as a decision, not an
+     -- oversight, and any OTHER column on `purchase_documents` still
+     -- has to say which company's document it means.
+     and (c.conrelid, a.attname)
+         <> ('public.purchase_documents'::regclass,
+             'source_sales_document_id');
   if v_uncovered is not null then
     raise exception
       'these columns name a row without saying which company''s: %',
@@ -555,8 +625,8 @@ begin
   end if;
 
   raise notice
-    'employee, warehouse, contact, item, account and journal '
-    'boundaries: 11 cross-company writes refused, 11 same-company '
+    'employee, warehouse, contact, item, account, journal and invoice '
+    'boundaries: 13 cross-company writes refused, 13 same-company '
     'writes allowed, 0 columns uncovered';
 end $$;
 
