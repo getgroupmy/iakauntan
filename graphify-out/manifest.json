@@ -4080,8 +4080,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/deposits.sql": {
-    "mtime": 1788427510.6460612,
-    "ast_hash": "4aca2d34ecaf00c54e3fe654089e113b",
+    "mtime": 1788464438.318029,
+    "ast_hash": "28a2974d90da64c09dc78d6f9126943b",
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/budgets_screen.dart": {

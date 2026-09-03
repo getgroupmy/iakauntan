@@ -1013,4 +1013,130 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- What create_deposit refuses, and the date it books the money on
+--
+-- A mutation sweep of `create_deposit`, `void_deposit` and
+-- `app.refresh_deposit` read 14 of 18 caught by the file above. These
+-- are the four it did not, and two of them are only half a gap.
+--
+-- The contact check and the kind check are both REDUNDANT now, and
+-- that was established by probe rather than by reading. With the
+-- contact check removed, a deposit naming another company's customer
+-- is refused by `deposit_notes_contact_same_org` -- one of the keys
+-- 0512 added, which did not exist when this function was written. With
+-- the kind check removed, `app.deposit_kind` refuses the cast. Neither
+-- is untested in the sense of unguarded.
+--
+-- They are asserted anyway, and by their WHOLE message rather than a
+-- fragment, because the message is the difference. A person who types
+-- the wrong thing should be told "No such contact.", not
+-- `insert or update on table "deposit_notes" violates foreign key
+-- constraint "deposit_notes_contact_same_org"`. Comparing the whole
+-- message is what makes these assertions kill their mutants: the
+-- fallback refuses too, but it does not say that.
+--
+-- The other two are real gaps. A deposit for nothing was accepted, and
+-- the journal was dated from the day it was typed rather than the day
+-- the money arrived -- which puts it in the wrong period, and the
+-- period lock and the trial balance both read entry_date.
+-- ---------------------------------------------------------------------
+
+do $$
+declare
+  v_owner uuid := pg_temp.test_user();
+  v_org   uuid;
+  v_org2  uuid;
+  v_cust  uuid;
+  v_theirs uuid;
+  v_dep   uuid;
+  v_msg   text;
+  v_when  date := current_date - 9;
+  v_t     text;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Wang Muka Enggan Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  v_org2 := pg_temp.test_org('Syarikat Jiran Deposit Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+  -- Last year AND this one. The deposit below is dated nine days back,
+  -- which is this year's period unless the run happens to be in the
+  -- first nine days of January -- so both are created rather than
+  -- reasoning about which.
+  perform public.create_fiscal_year(v_org,
+    (date_trunc('year', current_date) - interval '1 year')::date);
+  perform public.create_fiscal_year(v_org,
+    date_trunc('year', current_date)::date);
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Pelanggan', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org2, 'C-J', 'Pelanggan jiran', 'customer')
+  returning id into v_theirs;
+
+  -- A deposit for nothing is not a deposit.
+  begin
+    perform public.create_deposit(v_org, 'customer', v_cust, v_when, 0);
+    perform pg_temp.check_true('a deposit for nothing is refused', false);
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'a deposit for nothing is refused: ' || v_msg,
+      v_msg = 'A deposit has to be for something.');
+  end;
+
+  begin
+    perform public.create_deposit(v_org, 'customer', v_cust, v_when, -50);
+    perform pg_temp.check_true('and so is one for less than nothing', false);
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'and so is one for less than nothing: ' || v_msg,
+      v_msg = 'A deposit has to be for something.');
+  end;
+
+  -- The whole message, not a fragment. The schema refuses this too --
+  -- see the note above -- but it does not say this.
+  begin
+    perform public.create_deposit(v_org, 'customer', v_theirs, v_when, 500);
+    perform pg_temp.check_true(
+      'a deposit cannot be taken for another company''s customer', false);
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'a deposit cannot be taken for another company''s customer, and it '
+      'says so in words: ' || v_msg,
+      v_msg = 'No such contact.');
+  end;
+
+  begin
+    perform public.create_deposit(v_org, 'landlord', v_cust, v_when, 500);
+    perform pg_temp.check_true(
+      'a deposit is taken from a customer or paid to a supplier', false);
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'a deposit is taken from a customer or paid to a supplier, and it '
+      'says which: ' || v_msg,
+      v_msg = 'A deposit is either taken from a customer or paid to a '
+              'supplier.');
+  end;
+
+  -- And the day the money arrived is the day it is booked on. A deposit
+  -- entered on Monday for money banked the previous week belongs in the
+  -- earlier period: `app.guard_period_lock` and `report_trial_balance`
+  -- both read entry_date, and so does every deposit ageing.
+  v_dep := public.create_deposit(v_org, 'customer', v_cust, v_when, 500);
+  select e.entry_date::text into v_t
+    from public.gl_entries e
+    join public.deposit_notes d on d.gl_entry_id = e.id
+   where d.id = v_dep;
+  perform pg_temp.check_eq(
+    'the journal is dated the day the money came in, not the day it was '
+    'typed', v_t, v_when::text);
+
+  raise notice 'create_deposit: 4 refusals, and the date the money arrived';
+end $$;
+
 rollback;
