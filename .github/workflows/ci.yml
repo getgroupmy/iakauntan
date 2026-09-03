@@ -318,6 +318,7 @@ jobs:
                    supabase/tests/item_bundles.sql \
                    supabase/tests/einvoice_credentials.sql \
                    supabase/tests/einvoice_statutory.sql \
+                   supabase/tests/pos_einvoice_consolidation.sql \
                    supabase/tests/einvoice_totals_reconcile.sql \
                    supabase/tests/recurring_template_carries_the_document.sql \
                    supabase/tests/transfer_carries_the_price_agreed.sql \

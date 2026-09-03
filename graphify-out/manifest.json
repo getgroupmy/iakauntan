@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788401416.8339,
-    "ast_hash": "3bc796cdc59c68a36b7671f9af77d359",
+    "mtime": 1788414069.049974,
+    "ast_hash": "9395b8577e3a69fc6b3a034193898252",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1295,8 +1295,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/bank_reconciliation.sql": {
-    "mtime": 1788406431.6891418,
-    "ast_hash": "16f010100b5ca8533d95a8294051afde",
+    "mtime": 1788413351.2151039,
+    "ast_hash": "b7ee69824e173e0745d55e666f1ed2ec",
     "semantic_hash": ""
   },
   "app/test/no_dead_interpolation_test.dart": {
@@ -7612,6 +7612,16 @@
   "supabase/tests/pos_rounding.sql": {
     "mtime": 1788401362.1154177,
     "ast_hash": "7163bcc5abc5461338d0b561e9c099fc",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0501_filing_a_return_is_not_a_reading_job.sql": {
+    "mtime": 1788414052.184931,
+    "ast_hash": "9666ab6467dd15d5e42ac9bd36d14487",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pos_einvoice_consolidation.sql": {
+    "mtime": 1788414265.245215,
+    "ast_hash": "51332c1a2ab1d91bd88d0bda39f43371",
     "semantic_hash": ""
   }
 }
