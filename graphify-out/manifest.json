@@ -6980,8 +6980,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory_remittances.sql": {
-    "mtime": 1788405569.1223435,
-    "ast_hash": "9b5fb45429325926db4dd48ba9a7f1af",
+    "mtime": 1788414995.9509158,
+    "ast_hash": "f7b870da75662d010757d55b0a5d227c",
     "semantic_hash": ""
   },
   "app/lib/src/core/amount_words.dart": {
@@ -7622,6 +7622,11 @@
   "supabase/tests/pos_einvoice_consolidation.sql": {
     "mtime": 1788414265.245215,
     "ast_hash": "51332c1a2ab1d91bd88d0bda39f43371",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0502_a_period_belongs_to_one_company.sql": {
+    "mtime": 1788414923.9456856,
+    "ast_hash": "3a3c70a566cd7f1f6283e5b628333fc3",
     "semantic_hash": ""
   }
 }

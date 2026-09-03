@@ -14,6 +14,15 @@
 -- February -- and a company that reads the period instead is a month
 -- early all year and a month late once.
 --
+-- One clause in the report is deliberately not asserted, and could not
+-- be: `sr.org_id = p_org_id` on the join to recorded payments. Since
+-- `0502` no row can disagree with its period's company -- the composite
+-- key refuses it, and a period id is unique to one company anyway -- so
+-- there is no fixture that makes dropping the clause observable. It
+-- stays because the join reads as an answer to "whose payment is this",
+-- and because a defence that is currently redundant is the cheap half
+-- of the pair.
+--
 -- Nothing is written; the file rolls back.
 -- =====================================================================
 \set ON_ERROR_STOP on
@@ -325,6 +334,144 @@ begin
   exception when sqlstate '42501' then v_took := false;
   end;
   perform pg_temp.check_true('nor may they record one', not v_took);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Two months, and the window between them
+-- ---------------------------------------------------------------------
+-- What each body is owed, one figure at a time, and which month it
+-- belongs to. Everything above this block asserts a single month, so
+-- until now the from-date and the to-date had nothing to exclude and
+-- the two halves of a contribution had nothing to be confused with.
+do $$
+declare
+  v      record;
+  v_p2   uuid;
+  v_run  uuid;
+  v_msg  text;
+  v_them record;
+  v_id   uuid;
+  v_e    numeric;
+  v_r    numeric;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  perform pg_temp.allow_many_companies();
+  select * into v from pg_temp.paid_payroll('Kilang Dua Bulan Sdn Bhd',
+                                            2026, 1, date '2026-01-31');
+  perform pg_temp.allow_many_companies();
+
+  -- February, paid on the twenty-eighth, for the same one employee.
+  v_p2 := public.ensure_pay_period(v.org, 2026, 2);
+  update public.pay_periods set pay_date = date '2026-02-28' where id = v_p2;
+  v_run := public.create_payroll_run(v.org, v_p2, 'February');
+  perform public.calculate_payroll_run(v_run);
+  perform public.post_payroll_run(v_run);
+
+  perform pg_temp.check_eq('two months of contributions are owed',
+    (select count(distinct pay_date)::integer
+       from public.report_statutory_remittances(v.org)), 2);
+
+  -- ------------------------------------------------------------------
+  -- What each body gets, and from whom
+  -- ------------------------------------------------------------------
+  -- RM 5,000 basic. KWSP takes 11 per cent from the employee and 13
+  -- from the company; PERKESO takes 0.5 and 1.75. The two halves are
+  -- different numbers and they go on different lines of a different
+  -- form, so a report that has them the wrong way round is wrong in a
+  -- way that adds up.
+  select employee_amount, employer_amount into v_e, v_r
+    from public.report_statutory_remittances(v.org)
+   where code = 'epf' and pay_date = date '2026-01-31';
+  perform pg_temp.check_eq('the employee''s eleven per cent to KWSP', v_e, 550.00);
+  perform pg_temp.check_eq('and the company''s thirteen', v_r, 650.00);
+  perform pg_temp.check_true('which are not the same figure', v_e <> v_r);
+
+  select employee_amount, employer_amount into v_e, v_r
+    from public.report_statutory_remittances(v.org)
+   where code = 'socso' and pay_date = date '2026-01-31';
+  perform pg_temp.check_eq('the employee''s half per cent to PERKESO', v_e, 25.00);
+  perform pg_temp.check_eq('and the company''s one and three quarters', v_r, 87.50);
+
+  -- PCB is withheld from the employee and paid over by the company, so
+  -- it is the company's line on this list and never the employee's.
+  perform pg_temp.check_eq('PCB is remitted by the company',
+    (select employee_amount from public.report_statutory_remittances(v.org)
+      where code = 'pcb' and pay_date = date '2026-01-31'), 0);
+  perform pg_temp.check_true('and it is not nothing',
+    (select employer_amount from public.report_statutory_remittances(v.org)
+      where code = 'pcb' and pay_date = date '2026-01-31') > 0);
+
+  -- ------------------------------------------------------------------
+  -- The window
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq('asked from February, January is not on the list',
+    (select count(*)::integer
+       from public.report_statutory_remittances(v.org, date '2026-02-01')
+      where pay_date = date '2026-01-31'), 0);
+  perform pg_temp.check_true('and February still is',
+    (select count(*) from public.report_statutory_remittances(v.org, date '2026-02-01')
+      where pay_date = date '2026-02-28') > 0);
+  perform pg_temp.check_eq('asked to January, February is not',
+    (select count(*)::integer
+       from public.report_statutory_remittances(v.org, null, date '2026-01-31')
+      where pay_date = date '2026-02-28'), 0);
+  perform pg_temp.check_true('and January still is',
+    (select count(*) from public.report_statutory_remittances(v.org, null, date '2026-01-31')
+      where pay_date = date '2026-01-31') > 0);
+
+  -- ------------------------------------------------------------------
+  -- Paying it
+  -- ------------------------------------------------------------------
+  -- No date given is today, not nothing. A remittance with no date is
+  -- a payment nobody can say was on time.
+  v_id := public.record_statutory_remittance(v.org, v.period, 'epf', 1200.00);
+  perform pg_temp.check_true('a payment with no date is dated today',
+    (select paid_on = app.today() from public.statutory_remittances
+      where id = v_id));
+  perform pg_temp.check_true('and KWSP is no longer waiting for January',
+    (select not is_overdue and paid_on is not null
+       from public.report_statutory_remittances(v.org)
+      where code = 'epf' and pay_date = date '2026-01-31'));
+
+  -- Recording it again is a correction, not a second payment.
+  perform public.record_statutory_remittance(
+    v.org, v.period, 'epf', 1234.56, date '2026-02-14', 'KWSP/2026/01');
+  perform pg_temp.check_eq('recording it again leaves one payment',
+    (select count(*)::integer from public.statutory_remittances
+      where org_id = v.org and period_id = v.period and code = 'epf'), 1);
+  perform pg_temp.check_eq('for the corrected figure',
+    (select amount from public.statutory_remittances
+      where org_id = v.org and period_id = v.period and code = 'epf'), 1234.56);
+
+  -- ------------------------------------------------------------------
+  -- Somebody else's period
+  -- ------------------------------------------------------------------
+  -- The message matters as much as the refusal: the next guard down
+  -- refuses this too, for saying the payroll is not posted, which sends
+  -- somebody looking at the wrong company's payroll.
+  select * into v_them from pg_temp.paid_payroll('Kilang Jiran Sdn Bhd',
+                                                 2026, 1, date '2026-01-31');
+  perform pg_temp.allow_many_companies();
+  begin
+    perform public.record_statutory_remittance(v.org, v_them.period, 'epf', 100);
+    raise exception 'FAIL recorded a payment against another company''s period';
+  exception when sqlstate '22023' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'a period belonging to another company is refused as such',
+      v_msg like '%No such pay period in this company%');
+  end;
+
+  -- And `0502`: the pair cannot be written by any route, not merely by
+  -- the two functions that know to check.
+  begin
+    insert into public.statutory_remittances
+      (org_id, period_id, code, amount, paid_on)
+    values (v.org, v_them.period, 'epf', 100, date '2026-02-14');
+    raise exception 'FAIL wrote a payment against another company''s period';
+  exception when foreign_key_violation then
+    raise notice 'ok   nor can such a row be written directly';
+  end;
 end $$;
 
 rollback;
