@@ -491,4 +491,300 @@ begin
   end;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Wang Muka Sdn Bhd: what applying a deposit refuses, and where it posts
+--
+-- Sweeping `apply_deposit` killed five of seventeen mutants. What the
+-- journal does with a good application is covered — the liability is
+-- discharged, the allocation is written, the balance is recomputed.
+-- Almost every way of getting there wrongly was not.
+--
+-- Nine of the twelve survivors were refusals: a stranger, a voided
+-- deposit, nothing applied, more than the deposit holds, more than the
+-- invoice owes, another company's invoice, a deleted one, and one in a
+-- currency the deposit is not in. The other three were where the money
+-- lands: a contact with a control account of its own had it ignored in
+-- favour of 1210 and 2110 without a single assertion noticing, and the
+-- date somebody typed could be thrown away for today's.
+--
+-- The control accounts are the ones worth the trouble. A company that
+-- keeps its intercompany or its retail debtors in a separate control
+-- account gets its trial balance quietly wrong on every deposit
+-- applied, and the ledger still balances, so nothing says so.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid; v_org2 uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_cust  uuid; v_sup uuid; v_cust2 uuid;
+  v_ar    uuid; v_ap uuid; v_held_c uuid; v_held_s uuid;
+  v_item  uuid; v_bank uuid;
+  v_dep   uuid; v_depv uuid; v_deps uuid;
+  v_inv   uuid; v_inv_usd uuid; v_inv_gone uuid; v_inv_other uuid;
+  v_bill  uuid; v_entry uuid;
+  v_when  date := current_date - 10;
+  v_msg   text;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Wang Muka Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_org,
+    (date_trunc('year', current_date) - interval '1 year')::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['sales','purchases','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  -- Control accounts of their own at both ends, so falling through to
+  -- 1210 and 2110 is visible.
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype, is_group,
+     parent_id, sort_order)
+  values (v_org, '1215', 'Trade debtors, projects', 'asset', 'accounts_receivable',
+          false, (select parent_id from public.accounts
+                   where org_id = v_org and code = '1210'), 1500)
+  returning id into v_ar;
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype, is_group,
+     parent_id, sort_order)
+  values (v_org, '2115', 'Trade creditors, projects', 'liability', 'accounts_payable',
+          false, (select parent_id from public.accounts
+                   where org_id = v_org and code = '2110'), 1500)
+  returning id into v_ap;
+
+  insert into public.contacts
+    (org_id, code, name, contact_type, receivable_account_id)
+  values (v_org, 'CUST', 'Encik Rahman', 'customer', v_ar)
+  returning id into v_cust;
+  insert into public.contacts
+    (org_id, code, name, contact_type, payable_account_id)
+  values (v_org, 'SUP', 'Pembekal Jaya', 'supplier', v_ap)
+  returning id into v_sup;
+
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, unit_price)
+  values (v_org, 'KERJA', 'Site work', 'service', false, 1000)
+  returning id into v_item;
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, account_number, currency,
+     opening_balance, current_balance, is_default)
+  values (v_org,
+          (select id from public.accounts where org_id = v_org and code = '1120'),
+          'Current account', 'Maybank', '598765432101', 'MYR', 0, 0, true)
+  returning id into v_bank;
+
+  v_dep := public.create_deposit(
+    v_org, 'customer', v_cust, current_date - 20, 5000, v_bank, '02',
+    'CHQ 90', 'Up front');
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-W', current_date - 15, current_date, v_cust,
+          'MYR', 1, 'draft')
+  returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_inv, 1, 'item', v_item, 'Stage one', 3, 1000);
+  perform public.post_sales_document(v_inv);
+
+  -- ------------------------------------------------------------------
+  -- Amounts it will not take
+  -- ------------------------------------------------------------------
+  begin
+    perform public.apply_deposit(v_dep, v_inv, 0);
+    raise exception 'FAIL applied nothing';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('an application has to be for something',
+      v_msg like '%has to be for something%');
+  end;
+  begin
+    perform public.apply_deposit(v_dep, v_inv, -100);
+    raise exception 'FAIL applied a negative amount';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('and minus a hundred is not an amount',
+      v_msg like '%has to be for something%');
+  end;
+  begin
+    perform public.apply_deposit(v_dep, v_inv, 6000);
+    raise exception 'FAIL applied more than the deposit holds';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a deposit cannot give more than it holds',
+      v_msg like '%left and this would take%');
+  end;
+  -- Four thousand is inside the deposit and outside the invoice, so the
+  -- two ceilings are tested separately rather than one masking the other.
+  begin
+    perform public.apply_deposit(v_dep, v_inv, 4000);
+    raise exception 'FAIL applied more than the invoice owes';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('nor more than the invoice actually owes',
+      v_msg like '%outstanding and this would apply%');
+  end;
+
+  -- ------------------------------------------------------------------
+  -- Documents it will not settle
+  -- ------------------------------------------------------------------
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-USD', current_date - 15, current_date,
+          v_cust, 'USD', 4.5, 'draft')
+  returning id into v_inv_usd;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_inv_usd, 1, 'item', v_item, 'Export stage', 1, 1000);
+  perform public.post_sales_document(v_inv_usd);
+  begin
+    perform public.apply_deposit(v_dep, v_inv_usd, 100);
+    raise exception 'FAIL settled a foreign invoice from a ringgit deposit';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'a ringgit deposit does not settle a dollar invoice',
+      v_msg like '%Settle it with a receipt%');
+  end;
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-GONE', current_date - 15, current_date,
+          v_cust, 'MYR', 1, 'draft')
+  returning id into v_inv_gone;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_inv_gone, 1, 'item', v_item, 'Cancelled stage', 1, 1000);
+  perform public.post_sales_document(v_inv_gone);
+  update public.sales_documents set deleted_at = now() where id = v_inv_gone;
+  begin
+    perform public.apply_deposit(v_dep, v_inv_gone, 100);
+    raise exception 'FAIL settled an invoice that had been deleted';
+  exception when sqlstate 'P0002' then
+    raise notice 'ok   a deleted invoice is not there to settle';
+  end;
+
+  -- Another company's invoice, with the same fixture user in both, so
+  -- what is being tested is the org filter on the lookup rather than
+  -- who is signed in.
+  v_org2 := pg_temp.test_org('Syarikat Jiran Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+  perform public.create_fiscal_year(v_org2, date_trunc('year', current_date)::date);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org2, 'CUST', 'Their customer', 'customer') returning id into v_cust2;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, unit_price)
+  values (v_org2, 'KERJA', 'Site work', 'service', false, 1000)
+  returning id into v_inv_other;
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org2, 'invoice', 'INV-THEIRS', current_date - 15, current_date,
+          v_cust2, 'MYR', 1, 'draft')
+  returning id into v_inv_other;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org2, v_inv_other, 1, 'item',
+          (select id from public.items where org_id = v_org2 and code = 'KERJA'),
+          'Their stage', 1, 1000);
+  perform public.post_sales_document(v_inv_other);
+  begin
+    perform public.apply_deposit(v_dep, v_inv_other, 100);
+    raise exception 'FAIL settled another company''s invoice';
+  exception when sqlstate 'P0002' then
+    raise notice 'ok   a deposit cannot reach into another company''s ledger';
+  end;
+
+  -- ------------------------------------------------------------------
+  -- Deposits it will not draw on
+  -- ------------------------------------------------------------------
+  v_depv := public.create_deposit(
+    v_org, 'customer', v_cust, current_date - 20, 500, v_bank, '02',
+    'CHQ 91', 'Returned');
+  perform public.void_deposit(v_depv, 'Cheque bounced');
+  begin
+    perform public.apply_deposit(v_depv, v_inv, 100);
+    raise exception 'FAIL drew on a voided deposit';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a voided deposit has nothing to give',
+      v_msg like '%was voided%');
+  end;
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-muka@example.test'));
+  begin
+    perform public.apply_deposit(v_dep, v_inv, 100);
+    raise exception 'FAIL a stranger spent another company''s deposit';
+  exception when sqlstate '42501' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('somebody outside the company cannot spend it',
+      v_msg like '%not permitted to write%');
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_eq('and every sen of it is still there',
+    (select n.balance_amount from public.deposit_notes n where n.id = v_dep),
+    5000::numeric);
+
+  -- ------------------------------------------------------------------
+  -- Applied, on the day it was applied, to the accounts they name
+  -- ------------------------------------------------------------------
+  v_entry := public.apply_deposit(v_dep, v_inv, 3000, v_when);
+
+  perform pg_temp.check_true('the journal is dated the day it was applied',
+    (select e.entry_date = v_when from public.gl_entries e where e.id = v_entry));
+  perform pg_temp.check_eq('the customer''s own control account is relieved',
+    (select round(sum(gl.credit), 2) from public.gl_lines gl
+      where gl.entry_id = v_entry and gl.account_id = v_ar), 3000::numeric);
+  perform pg_temp.check_eq('and the default one is not touched',
+    (select count(*)::integer from public.gl_lines gl
+       join public.accounts a on a.id = gl.account_id
+      where gl.entry_id = v_entry and a.code = '1210'), 0);
+  perform pg_temp.check_eq('the invoice is settled',
+    (select d.balance_amount from public.sales_documents d where d.id = v_inv),
+    0::numeric);
+  perform pg_temp.check_eq('and two thousand of the deposit is left',
+    (select n.balance_amount from public.deposit_notes n where n.id = v_dep),
+    2000::numeric);
+
+  -- ------------------------------------------------------------------
+  -- The supplier side names its own control account too
+  -- ------------------------------------------------------------------
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'bill', 'BILL-W', current_date - 15, v_sup, 'MYR', 1, 'draft')
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_bill, 1, 'item', v_item, 'Materials on account', 1, 1200);
+  perform public.post_purchase_document(v_bill);
+
+  v_deps := public.create_deposit(
+    v_org, 'supplier', v_sup, current_date - 20, 2000, v_bank, '02',
+    'CHQ 92', 'Paid up front');
+  v_entry := public.apply_deposit(v_deps, v_bill, 1200, v_when);
+
+  perform pg_temp.check_eq('the supplier''s own control account is charged',
+    (select round(sum(gl.debit), 2) from public.gl_lines gl
+      where gl.entry_id = v_entry and gl.account_id = v_ap), 1200::numeric);
+  perform pg_temp.check_eq('and 2110 is left alone',
+    (select count(*)::integer from public.gl_lines gl
+       join public.accounts a on a.id = gl.account_id
+      where gl.entry_id = v_entry and a.code = '2110'), 0);
+  perform pg_temp.check_eq('the bill is paid off the money already advanced',
+    (select d.balance_amount from public.purchase_documents d where d.id = v_bill),
+    0::numeric);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

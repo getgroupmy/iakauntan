@@ -437,7 +437,7 @@ declare
   v_batu   uuid; v_pasir uuid;
   v_bill_a uuid; v_bill_b uuid; v_inv uuid;
   v_a1 uuid; v_a2 uuid; v_a3 uuid; v_inv_acct uuid;
-  v_run    uuid; v_entry uuid; v_bare uuid;
+  v_run    uuid; v_entry uuid; v_bare uuid; v_entry_run uuid;
   v_when   date := current_date - 30;
   v_msg    text;
 begin
@@ -542,6 +542,7 @@ begin
       where p.item_code = 'BATU'), 100::numeric);
 
   v_entry := public.post_landed_cost_run(v_run);
+  v_entry_run := v_run;
 
   -- A third of three hundred is a hundred, and a third of each hundred
   -- is 33.33 with a sen over. The sen goes to the last line, which is
@@ -673,6 +674,51 @@ begin
   end;
   update public.accounts set code = '1310'
    where org_id = v_org and code = '1312' and not is_group;
+
+  -- ------------------------------------------------------------------
+  -- Cancelling one
+  --
+  -- `cancel_landed_cost_run` had no assertion of its own that could
+  -- fail: the file cancels a draft run and then checks the average cost
+  -- has not moved, which is equally true of a function that does
+  -- nothing at all. All four of its decisions were open.
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_true('an id that names no run cannot be cancelled',
+    (select not exists (select 1 from public.landed_cost_runs
+                         where id = '00000000-0000-0000-0000-000000000001')));
+  begin
+    perform public.cancel_landed_cost_run(
+      '00000000-0000-0000-0000-000000000001'::uuid);
+    raise exception 'FAIL cancelled a run that does not exist';
+  exception when sqlstate 'P0002' then
+    raise notice 'ok   and it says so rather than reporting success';
+  end;
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-batal-kos@example.test'));
+  begin
+    perform public.cancel_landed_cost_run(v_run);
+    raise exception 'FAIL a stranger cancelled another company''s run';
+  exception when sqlstate '42501' then
+    raise notice 'ok   somebody outside the company cannot cancel one';
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- The posted run from the top of this block. Stock it has already
+  -- revalued cannot be un-revalued by changing a status.
+  begin
+    perform public.cancel_landed_cost_run(v_entry_run);
+    raise exception 'FAIL cancelled a run that had already revalued stock';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a posted run is undone with an adjustment',
+      v_msg like '%stock adjustment%');
+  end;
+
+  perform pg_temp.check_true('a draft run is cancelled',
+    public.cancel_landed_cost_run(v_run) = true);
+  perform pg_temp.check_true('and the run says cancelled, not draft',
+    (select r.status = 'cancelled' from public.landed_cost_runs r
+      where r.id = v_run));
 
   perform pg_temp.sign_out();
 end $$;
