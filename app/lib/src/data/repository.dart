@@ -5301,7 +5301,10 @@ extension RepoHr on Repo {
   }) async {
     var q = client
         .from('attendance_records')
-        .select('*, employees(full_name)')
+        // Named because 0508 added a same-org composite key alongside
+        // the plain one, so 'employees' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, employees!attendance_records_employee_id_fkey(full_name)')
         .eq('org_id', orgId);
     if (employeeId != null) q = q.eq('employee_id', employeeId);
     if (from != null) q = q.gte('work_date', Fmt.iso(from));
@@ -5446,7 +5449,7 @@ extension RepoHr on Repo {
   }) async {
     var q = client
         .from('expense_claims')
-        .select('*, employees(full_name)')
+        .select('*, employees!expense_claims_employee_id_fkey(full_name)')
         .eq('org_id', orgId);
     if (status != null && status != 'all') q = q.eq('status', status);
     if (employeeId != null) q = q.eq('employee_id', employeeId);
@@ -5474,7 +5477,7 @@ extension RepoHr on Repo {
     return Repo._rows(
       await client
           .from('expense_claims')
-          .select('*, employees(full_name)')
+          .select('*, employees!expense_claims_employee_id_fkey(full_name)')
           .inFilter('id', ids)
           .order('claim_date', ascending: false)
           .limit(200),
