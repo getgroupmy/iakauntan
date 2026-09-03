@@ -2310,8 +2310,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/manufacturing.sql": {
-    "mtime": 1786719628.8465548,
-    "ast_hash": "46b52c0569a08f23a16bacf8643e75a3",
+    "mtime": 1788476632.496168,
+    "ast_hash": "ec95681ae82a847a91b51c8d1c36b002",
     "semantic_hash": ""
   },
   "docs/call-signalling.md": {

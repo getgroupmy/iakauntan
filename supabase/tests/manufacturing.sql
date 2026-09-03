@@ -543,4 +543,209 @@ begin
       'select'));
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- The eight a mutation sweep found
+-- ---------------------------------------------------------------------
+-- Twenty-seven one-line mutants of `post_manufacturing_order` against
+-- eleven test files. Nineteen died on the first run, and they are all
+-- the COSTING: the ratio for a short run, components scaled and issued
+-- with the right sign, actual minutes preferred over planned, planned
+-- minutes scaled, the work centre's rate, minutes costed as minutes,
+-- conversion added to what the goods cost, finished goods received at a
+-- unit cost rather than a total, and every direction in the journal.
+--
+-- The eight that survived are the front door and the state machine --
+-- the same split payroll showed an hour ago, where every rate held and
+-- the eligibility flags and ceilings did not. THE ARITHMETIC GETS
+-- ASSERTED; WHAT SURROUNDS IT DOES NOT.
+--
+-- Two of the eight are a pair worth naming, because each is only
+-- invisible while the other works.
+--
+--   `if v_mo.posted_at is not null` and `if v_mo.status not in
+--   ('confirmed', 'in_progress')` both refuse a second posting, and the
+--   update at the end sets both. Break either one alone and the other
+--   still refuses; break the state it reads and the other guard covers
+--   for it. So the existing "but not a second time" assertion passes
+--   against three of the four mutations in that square.
+--
+-- The answer is to assert the WHOLE message of the refusal, so that
+-- which guard fired is part of what is asserted, and to assert the
+-- state itself rather than only its consequence. Both are done below.
+-- A second posting would double the finished goods on hand and credit
+-- the components twice, so this is the square worth being careful in.
+do $$
+declare
+  v_org   uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_wh    uuid;
+  v_flour uuid;
+  v_bread uuid;
+  v_bom   uuid;
+  v_mo    uuid;
+  v_group uuid;
+  v_msg   text;
+  v_qty   numeric;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Kilang Sapu Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', app.today())::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['inventory','manufacturing','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'KILANG', 'Factory', true) returning id into v_wh;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values (v_org, 'TEPUNG', 'Flour', 'stock', true, 'KGM', 2.00)
+  returning id into v_flour;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code)
+  values (v_org, 'ROTI', 'Bread', 'stock', true, 'C62')
+  returning id into v_bread;
+
+  -- Stock to consume.
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_org, 'OPEN-1', app.today(), 'opening_balance', v_flour, v_wh, 100, 2.00);
+
+  insert into public.bills_of_materials
+    (org_id, item_id, code, name, output_quantity, is_active)
+  values (v_org, v_bread, 'BOM-1', 'Bread', 10, true) returning id into v_bom;
+  insert into public.bom_lines (org_id, bom_id, line_no, item_id, quantity)
+  values (v_org, v_bom, 1, v_flour, 20);
+
+  -- ==================================================================
+  -- 1. The front door
+  -- ==================================================================
+  begin
+    perform public.post_manufacturing_order(gen_random_uuid());
+    raise exception 'an order that does not exist was posted';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('an order that is not there is refused',
+      v_msg, 'No such manufacturing order');
+  end;
+
+  insert into public.manufacturing_orders
+    (org_id, order_no, item_id, bom_id, warehouse_id, quantity, status)
+  values (v_org, 'MO-SAPU-1', v_bread, v_bom, v_wh, 10, 'draft')
+  returning id into v_mo;
+  insert into public.mo_components
+    (org_id, mo_id, item_id, quantity_required)
+  values (v_org, v_mo, v_flour, 20);
+
+  perform public.confirm_manufacturing_order(v_mo);
+
+  begin
+    perform public.post_manufacturing_order(v_mo, 0);
+    raise exception 'an order producing nothing was posted';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('an order that produced nothing is refused',
+      v_msg, 'Nothing was produced');
+  end;
+
+  begin
+    perform public.post_manufacturing_order(v_mo, -5);
+    raise exception 'an order producing less than nothing was posted';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('and so is one producing less than nothing',
+      v_msg, 'Nothing was produced');
+  end;
+
+  -- ==================================================================
+  -- 2. Posting, and the state it leaves behind
+  --
+  -- Asserted as state and not only as consequence, because the guard
+  -- that reads this state and the guard beside it cover for each other.
+  -- ==================================================================
+  perform public.post_manufacturing_order(v_mo);
+
+  perform pg_temp.check_eq('a posted order is done',
+    (select status::text from public.manufacturing_orders where id = v_mo),
+    'done');
+  perform pg_temp.check_true('and carries the day it was posted',
+    (select posted_at is not null from public.manufacturing_orders
+      where id = v_mo));
+  perform pg_temp.check_eq('and what each component actually gave up',
+    (select quantity_issued from public.mo_components where mo_id = v_mo),
+    20::numeric);
+
+  -- The second posting is refused by the posted_at guard, and the WHOLE
+  -- message is what says so. Refused by the status guard instead, the
+  -- message is 'Only a confirmed order can be posted; this one is done'
+  -- -- true, and a different sentence, and the difference is the whole
+  -- assertion.
+  begin
+    perform public.post_manufacturing_order(v_mo);
+    raise exception 'a manufacturing order was posted twice';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq(
+      'a second posting is refused, by the guard that reads posted_at',
+      v_msg, 'This order has already been posted');
+  end;
+
+  -- And nothing moved twice: the finished goods on hand are one run's
+  -- worth, not two.
+  select coalesce(sum(quantity), 0) into v_qty
+    from public.stock_movements
+   where org_id = v_org and item_id = v_bread;
+  perform pg_temp.check_eq('so the finished goods are one run, not two',
+    v_qty, 10::numeric);
+
+  -- ==================================================================
+  -- 3. The inventory account is a posting account, and there is one
+  --
+  -- The lookup is `code = '1310' and not is_group`, and the null check
+  -- below it. Both were unasserted, and they are asserted together
+  -- because one fixture reaches both: make 1310 a heading and the
+  -- lookup finds nothing.
+  --
+  -- Without `not is_group` the heading is used, and the run's whole
+  -- value is posted to an account that is a total of its children --
+  -- where no report adds it up, and where the trial balance
+  -- double-counts it against the detail beneath. Without the null check
+  -- the failure arrives from inside create_gl_entry_internal, as a
+  -- constraint on a column nobody mentioned.
+  -- ==================================================================
+  insert into public.manufacturing_orders
+    (org_id, order_no, item_id, bom_id, warehouse_id, quantity, status)
+  values (v_org, 'MO-SAPU-2', v_bread, v_bom, v_wh, 10, 'draft')
+  returning id into v_mo;
+  insert into public.mo_components
+    (org_id, mo_id, item_id, quantity_required)
+  values (v_org, v_mo, v_flour, 20);
+  perform public.confirm_manufacturing_order(v_mo);
+
+  perform pg_temp.check_true('1310 is a posting account, as seeded',
+    (select not is_group from public.accounts
+      where org_id = v_org and code = '1310'));
+  update public.accounts set is_group = true
+   where org_id = v_org and code = '1310';
+
+  begin
+    perform public.post_manufacturing_order(v_mo);
+    raise exception
+      'a manufacturing order posted its inventory to a heading';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq(
+      'with no posting account for inventory, the order refuses in words',
+      v_msg, 'The chart of accounts has no inventory account');
+  end;
+
+  update public.accounts set is_group = false
+   where org_id = v_org and code = '1310';
+  perform pg_temp.check_true('and posts once there is one again',
+    public.post_manufacturing_order(v_mo) is not null);
+
+  raise notice 'ok   manufacturing: the eight a sweep found';
+end $$;
+
 rollback;
