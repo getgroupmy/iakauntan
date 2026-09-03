@@ -763,4 +763,170 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- =====================================================================
+-- Matching, and what a closed month will not do
+--
+-- The block above covers the suggestions -- which document a statement
+-- line could be. This one covers the act: tying a line to a document,
+-- and closing the month over the lines that are tied.
+--
+-- A sweep found the arithmetic of closing well asserted (a period
+-- cannot be closed twice, a reconciliation that does not balance cannot
+-- be completed) and almost everything about WHICH LINES a completed
+-- reconciliation claims left open. That is the half that matters to an
+-- auditor: a reconciliation stamping a line the bank has not shown, or
+-- a line an earlier month already claimed, is a record of an agreement
+-- that did not happen.
+--
+--   * a document that never reached the ledger cannot be matched --
+--     there is no journal for the bank to have seen;
+--   * nor one belonging to another company. The lookup is by id, and
+--     the org in that lookup is the only thing scoping it;
+--   * matching and closing are both posting decisions. Somebody who may
+--     read the books may not decide what the bank has agreed;
+--   * a line inside a completed reconciliation cannot be matched again.
+--     `unmatch` was already refused; `match` was not;
+--   * and a month takes its own lines and no others. March leaves
+--     April's line alone -- matched already, so only its date keeps it
+--     out -- and April, closing on top of March, takes one line rather
+--     than both. Nor does either month stamp a line that was never
+--     matched to anything: the bank's own error and its reversal stay
+--     open.
+-- =====================================================================
+
+do $$
+declare
+  v_org uuid := pg_temp.sug_org('Padan Tutup Sdn Bhd');
+  v_them uuid; v_acct uuid; v_bank uuid; v_cust uuid;
+  v_r1 uuid; v_r2 uuid; v_draft uuid; v_theirs uuid;
+  v_march uuid; v_april uuid; v_err1 uuid; v_err2 uuid; v_rec uuid;
+  v_clerk uuid; v_owner uuid := pg_temp.test_user();
+begin
+  select id into v_acct from public.accounts where org_id = v_org and code = '1120';
+  insert into public.bank_accounts (org_id, account_id, name, bank_name, account_number)
+  values (v_org, v_acct, 'Maybank current', 'Maybank', '5001')
+  returning id into v_bank;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-001', 'Buyer Bhd', 'customer') returning id into v_cust;
+
+  v_r1 := pg_temp.sug_receipt(v_org, v_bank, v_cust, 'RCP-1', 1000,
+                              date '2026-03-10', 0, true);
+  -- Banked in April, so it belongs to April's reconciliation.
+  v_r2 := pg_temp.sug_receipt(v_org, v_bank, v_cust, 'RCP-2', 500,
+                              date '2026-04-05', 0, true);
+  -- Never posted, so there is no journal for the bank to have seen.
+  v_draft := pg_temp.sug_receipt(v_org, v_bank, v_cust, 'RCP-3', 1000,
+                                 date '2026-03-10', 0, false);
+
+  v_march := pg_temp.sug_line(v_bank, date '2026-03-10', 1000, 'March in');
+  v_april := pg_temp.sug_line(v_bank, date '2026-04-05', 500, 'April in');
+
+  -- The bank debited us in error on the twelfth and put it back the same
+  -- day. Neither line answers to anything in the books, and the pair nets
+  -- to nothing, so March still agrees with the statement.
+  v_err1 := pg_temp.sug_line(v_bank, date '2026-03-12', -25, 'Bank error');
+  v_err2 := pg_temp.sug_line(v_bank, date '2026-03-12', 25, 'Bank error put back');
+
+  -- ------------------------------------------------------------------
+  -- What cannot be matched
+  -- ------------------------------------------------------------------
+  begin
+    perform public.match_bank_transaction(v_march, 'receipts', v_draft);
+    raise exception 'FAIL: an unposted receipt was matched';
+  exception when sqlstate 'P0002' then
+    raise notice 'ok   a receipt that never reached the ledger cannot be matched';
+  end;
+
+  v_them := pg_temp.sug_org('Bukan Kita Sdn Bhd');
+  v_theirs := pg_temp.sug_foreign_receipt(v_them, 1000, date '2026-03-10');
+  begin
+    perform public.match_bank_transaction(v_march, 'receipts', v_theirs);
+    raise exception 'FAIL: another company''s receipt was matched';
+  exception when sqlstate 'P0002' then
+    raise notice 'ok   nor one belonging to another company';
+  end;
+
+  -- Matching is a posting decision, not a reading one.
+  v_clerk := pg_temp.another_user('clerk@example.test');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_clerk, 'viewer', 'active', now())
+  on conflict (org_id, user_id) do update set role = 'viewer', status = 'active';
+  perform pg_temp.sign_in_as(v_clerk);
+  begin
+    perform public.match_bank_transaction(v_march, 'receipts', v_r1);
+    raise exception 'FAIL: somebody who cannot post matched a line';
+  exception when insufficient_privilege then
+    raise notice 'ok   and matching needs somebody who may post';
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- ------------------------------------------------------------------
+  -- Closing March
+  -- ------------------------------------------------------------------
+  perform public.match_bank_transaction(v_march, 'receipts', v_r1);
+
+  -- The same receipt against the same line is that match keyed twice,
+  -- not a second deposit. Refusing it would make a repeated click look
+  -- like money arriving twice.
+  perform public.match_bank_transaction(v_march, 'receipts', v_r1);
+  perform pg_temp.check_eq('keying the same match again changes nothing',
+    (select count(*)::integer from public.bank_transactions
+      where matched_table = 'receipts' and matched_id = v_r1), 1);
+
+  -- April's line is matched before March closes, so nothing but its date
+  -- keeps it out of March's reconciliation.
+  perform public.match_bank_transaction(v_april, 'receipts', v_r2);
+
+  perform pg_temp.sign_in_as(v_clerk);
+  begin
+    perform public.complete_bank_reconciliation(v_bank, date '2026-03-31', 1000);
+    raise exception 'FAIL: somebody who cannot post closed the month';
+  exception when insufficient_privilege then
+    raise notice 'ok   closing the month needs somebody who may post';
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+
+  v_rec := public.complete_bank_reconciliation(v_bank, date '2026-03-31', 1000);
+  perform pg_temp.check_true('March closes', v_rec is not null);
+
+  -- The April line is April's business. A reconciliation that swept it
+  -- in would claim the bank had shown money it had not, and April would
+  -- open with a line already spoken for.
+  perform pg_temp.check_true('and April''s line is left for April',
+    (select reconciliation_id is null from public.bank_transactions
+      where id = v_april));
+  perform pg_temp.check_true('while March''s is stamped with it',
+    (select reconciliation_id = v_rec from public.bank_transactions
+      where id = v_march));
+
+  -- A reconciliation says which lines the bank and the books agreed on.
+  -- The two the bank raised and took back agreed with nothing, so the
+  -- month leaves them open rather than closing over them.
+  perform pg_temp.check_eq(
+    'and the lines nothing was matched to are left open',
+    (select count(*)::integer from public.bank_transactions
+      where id in (v_err1, v_err2)
+        and not is_reconciled and reconciliation_id is null), 2);
+
+  -- ------------------------------------------------------------------
+  -- And what a closed month refuses
+  -- ------------------------------------------------------------------
+  begin
+    perform public.match_bank_transaction(v_march, 'receipts', v_r1);
+    raise exception 'FAIL: a line inside a closed reconciliation was rematched';
+  exception when check_violation then
+    raise notice 'ok   a line inside a closed month cannot be matched again';
+  end;
+
+  -- ------------------------------------------------------------------
+  -- Closing April
+  -- ------------------------------------------------------------------
+  v_rec := public.complete_bank_reconciliation(v_bank, date '2026-04-30', 1500);
+  perform pg_temp.check_true('April closes on top of March', v_rec is not null);
+  perform pg_temp.check_true(
+    'and takes only its own line, not the one March already claimed',
+    (select count(*) = 1 from public.bank_transactions
+      where reconciliation_id = v_rec));
+end $$;
+
 rollback;
