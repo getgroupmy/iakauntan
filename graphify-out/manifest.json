@@ -3935,8 +3935,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/stock_transfers.sql": {
-    "mtime": 1787822946.0345898,
-    "ast_hash": "6f97fd1756eacb3d75e60ce40ef1c466",
+    "mtime": 1788420794.2003663,
+    "ast_hash": "cd9043673eeed922cb4cac7ecbb2b0f5",
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/scales_screen.dart": {

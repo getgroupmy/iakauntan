@@ -507,4 +507,189 @@ begin
   raise notice 'ok   stock_transfers';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- What sending a van refuses
+-- ---------------------------------------------------------------------
+-- The block above asserts the two arithmetics — value conserved on the
+-- road, value conserved under the knife — and the shortfall. It does
+-- not assert the state machine around them, and a sweep of
+-- `send_stock_transfer` found every refusal open: sending twice,
+-- sending nothing, sending as somebody outside the company, and the
+-- setting that lets a company go short on purpose.
+--
+-- The permission case uses a stranger rather than a viewer, because a
+-- member with no access type assigned has module write whatever their
+-- role (`0501`). A viewer is not refused here and asserting that they
+-- are would be asserting something untrue.
+do $$
+declare
+  v_org   uuid;
+  v_a     uuid;
+  v_b     uuid;
+  v_item  uuid;
+  v_t     uuid;
+  v_empty uuid;
+  v_short uuid;
+  v_tracked uuid;
+  v_batch uuid;
+  v_lot   uuid;
+  v_mv    uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_msg   text;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Van Kedua Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['inventory','pos']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'SATU', 'Store one', true) returning id into v_a;
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'DUA', 'Store two') returning id into v_b;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values (v_org, 'KOTAK', 'Kotak', 'stock', true, 'C62', 5.00)
+  returning id into v_item;
+
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_org, 'VK-0001', current_date, 'opening_balance', v_item, v_a, 20, 5);
+
+  -- ------------------------------------------------------------------
+  -- Nothing on it
+  -- ------------------------------------------------------------------
+  v_empty := public.upsert_stock_transfer(
+    null, v_org, v_a, v_b, current_date, '[]'::jsonb, 'Empty van');
+  begin
+    perform public.send_stock_transfer(v_empty);
+    raise exception 'FAIL sent a transfer with nothing on it';
+  exception when check_violation then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('an empty van is not a transfer',
+      v_msg like '%nothing on this transfer%');
+  end;
+
+  -- ------------------------------------------------------------------
+  -- Who may send it
+  -- ------------------------------------------------------------------
+  v_t := public.upsert_stock_transfer(
+    null, v_org, v_a, v_b, current_date,
+    jsonb_build_array(jsonb_build_object(
+      'item', v_item, 'quantity', 5, 'uom', 'C62')),
+    'Five boxes');
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-van@example.test'));
+  begin
+    perform public.send_stock_transfer(v_t);
+    raise exception 'FAIL a stranger sent a transfer';
+  exception when insufficient_privilege then
+    raise notice 'ok   somebody outside the company cannot send its stock';
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- ------------------------------------------------------------------
+  -- Once
+  -- ------------------------------------------------------------------
+  perform public.send_stock_transfer(v_t);
+  perform pg_temp.check_eq('five boxes leave the first store',
+    (select sl.quantity from public.stock_levels sl
+      where sl.item_id = v_item and sl.warehouse_id = v_a), 15);
+
+  begin
+    perform public.send_stock_transfer(v_t);
+    raise exception 'FAIL sent the same transfer twice';
+  exception when check_violation then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('and a van already gone cannot go again',
+      v_msg like '%already sent%');
+  end;
+  perform pg_temp.check_eq('so the store is down five, not ten',
+    (select sl.quantity from public.stock_levels sl
+      where sl.item_id = v_item and sl.warehouse_id = v_a), 15);
+
+  -- ------------------------------------------------------------------
+  -- Going short on purpose
+  -- ------------------------------------------------------------------
+  -- Fifteen left and twenty asked for. A company that has not said it
+  -- allows negative stock is refused; one that has is not. Both halves
+  -- are asserted, because the setting is only a setting if turning it
+  -- on changes something.
+  v_short := public.upsert_stock_transfer(
+    null, v_org, v_a, v_b, current_date,
+    jsonb_build_array(jsonb_build_object(
+      'item', v_item, 'quantity', 20, 'uom', 'C62')),
+    'More than there is');
+  begin
+    perform public.send_stock_transfer(v_short);
+    raise exception 'FAIL sent more than the store held';
+  exception when check_violation then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a store cannot send what it does not have',
+      v_msg like '%not that much%');
+  end;
+
+  insert into public.pos_settings (org_id, allow_negative_stock)
+  values (v_org, true)
+  on conflict (org_id) do update set allow_negative_stock = true;
+
+  perform public.send_stock_transfer(v_short);
+  perform pg_temp.check_eq(
+    'unless the company has said it may, and then the store goes negative',
+    (select sl.quantity from public.stock_levels sl
+      where sl.item_id = v_item and sl.warehouse_id = v_a), -5);
+
+  -- ------------------------------------------------------------------
+  -- A batch nobody has
+  -- ------------------------------------------------------------------
+  -- Allowing negative stock is a decision about the COUNT. It is not a
+  -- decision about batches: a batch-tracked item can only move if the
+  -- batches are there to move, because a van cannot carry a lot number
+  -- that does not exist. The setting is left on here deliberately, so
+  -- the refusal can only be coming from the lot check.
+  -- Brought in untracked and then declared batch-tracked, which is how
+  -- the other lot fixtures do it: a movement of a tracked item has to
+  -- name its lots as it posts, so the stock arrives first and the
+  -- batches are attached to it afterwards.
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values (v_org, 'UBAT', 'Ubat', 'stock', true, 'C62', 9.00)
+  returning id into v_tracked;
+
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_org, 'VK-0002', current_date, 'opening_balance', v_tracked, v_a, 6, 9)
+  returning id into v_mv;
+
+  update public.items set tracking = 'batch' where id = v_tracked;
+  insert into public.stock_lots (org_id, item_id, lot_ref, kind, expiry_date)
+  values (v_org, v_tracked, 'LOT-A', 'batch', current_date + 365)
+  returning id into v_lot;
+  insert into public.stock_movement_lots (org_id, movement_id, lot_id, quantity)
+  values (v_org, v_mv, v_lot, 6);
+
+  perform pg_temp.check_eq('six in the batch, and six on the shelf',
+    app.lot_available(v_tracked, v_a), 6);
+
+  v_batch := public.upsert_stock_transfer(
+    null, v_org, v_a, v_b, current_date,
+    jsonb_build_array(jsonb_build_object(
+      'item', v_tracked, 'quantity', 10, 'uom', 'C62')),
+    'Ten of six');
+  begin
+    perform public.send_stock_transfer(v_batch);
+    raise exception 'FAIL sent more batches than exist';
+  exception when check_violation then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'a van cannot carry a batch nobody has, negative stock or not',
+      v_msg like '%batches of%');
+  end;
+end $$;
+
 rollback;
