@@ -4060,8 +4060,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/contra.sql": {
-    "mtime": 1788420108.7975972,
-    "ast_hash": "cb330defbde75c46d14c4bf6ff1a409d",
+    "mtime": 1788470773.3686402,
+    "ast_hash": "02b12f2424f62e470b00858fca13bbed",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/deposits_screen.dart": {
