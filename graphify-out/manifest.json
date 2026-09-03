@@ -4290,8 +4290,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/payroll_run.sql": {
-    "mtime": 1788315211.8747652,
-    "ast_hash": "1ad555bb2976f315c04d95f31305a2b1",
+    "mtime": 1788475762.8837013,
+    "ast_hash": "04f1d38c1be07c020f478331d6057ac4",
     "semantic_hash": ""
   },
   "supabase/tests/payslip_access.sql": {

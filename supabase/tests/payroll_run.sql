@@ -652,4 +652,297 @@ begin
     (select p.pcb from public.payslips p where p.id = v_slip), 1115.30);
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- The ten a mutation sweep found
+-- ---------------------------------------------------------------------
+-- Thirty-five one-line mutants of `calculate_payroll_run` against
+-- twenty-seven test files. Twenty-five die, which is what CLAUDE.md's
+-- rule about statutory arithmetic is supposed to buy: the EPF category,
+-- the SOCSO age split, the PCB annualisation, the additional
+-- remuneration, the relief for zakat and for SOCSO and EIS, the
+-- overtime multipliers, the proration for a joiner -- all held.
+--
+-- The ten that survived are not rates. They are the things AROUND the
+-- rates, and they fall into three groups.
+--
+--   * THE ELIGIBILITY FLAGS. Every employee row carries epf_eligible,
+--     socso_eligible and hrdf_eligible, and all three could be ignored
+--     with nothing noticing. Contributing for somebody who is not
+--     liable is not a rounding error: it is money deducted from a
+--     person's pay and remitted to a board that will not credit it.
+--
+--   * THE CEILINGS. SOCSO and EIS are charged on an INSURED wage, which
+--     stops at a ceiling; the payslip records that insured figure and
+--     not the whole wage. Replace app.insured_wage with the raw wage
+--     and every contribution stays right while the wage printed beside
+--     it, and reported on the Borang, is wrong for everybody paid above
+--     the ceiling.
+--
+--   * WHETHER ANYBODY CHECKED. schedules_verified is what tells a
+--     payroll officer these figures came from a gazetted schedule
+--     somebody has confirmed. It could be set to true unconditionally.
+--     That is worse than a wrong number, because it is a wrong number
+--     wearing a badge.
+--
+-- Two more are arithmetic after all: voluntary EPF rounds UP to the
+-- ringgit and could round down, and the public holiday overtime
+-- multiplier could quietly become the rest day one.
+do $$
+declare
+  v_org     uuid;
+  v_period  uuid;
+  v_run     uuid;
+  v_optout  uuid;   -- liable for nothing
+  v_high    uuid;   -- paid above every ceiling
+  v_vol     uuid;   -- voluntary EPF at a rate that exposes the rounding
+  v_hol     uuid;   -- overtime on a public holiday only
+  v_sched   uuid;
+  v_comp    uuid;
+  v_slip    uuid;
+  v_ins_soc numeric;
+  v_ins_eis numeric;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.test_org('Payroll Sapu Sdn Bhd');
+  insert into public.payroll_settings (org_id, hrdf_category)
+  values (v_org, 'mandatory_10plus')
+  on conflict (org_id) do update set hrdf_category = excluded.hrdf_category;
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-03', date '2026-03-01', date '2026-03-31',
+          date '2026-03-31')
+  returning id into v_period;
+
+  -- ==================================================================
+  -- 1. Somebody liable for none of it
+  --
+  -- All three flags off. The rates are right and would be charged
+  -- anyway: what is asserted here is that the question was asked.
+  -- ==================================================================
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     working_days_per_month, working_hours_per_day, date_of_birth,
+     marital_status, residency_status,
+     epf_eligible, socso_eligible, eis_eligible, hrdf_eligible)
+  values (v_org, 'X1', 'Liable for nothing', date '2020-01-01', 4000,
+          25, 8, date '1990-01-01', 'single', 'citizen',
+          false, false, false, false)
+  returning id into v_optout;
+
+  -- ==================================================================
+  -- 2. Somebody paid above every ceiling
+  --
+  -- RM20,000 is above the SOCSO and EIS insured maxima, so the wage
+  -- recorded on the payslip must be the CEILING and not the pay.
+  -- ==================================================================
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     working_days_per_month, working_hours_per_day, date_of_birth,
+     marital_status, residency_status)
+  values (v_org, 'X2', 'Paid above the ceilings', date '2020-01-01', 20000,
+          25, 8, date '1985-01-01', 'married', 'citizen')
+  returning id into v_high;
+
+  -- ==================================================================
+  -- 3. Voluntary EPF, at a rate whose exact answer is not a ringgit
+  --
+  -- RM3,333 at 1% is 33.33, which EPF rounds UP to 34. Rounding down
+  -- gives 33 -- one ringgit a month, on every member with a voluntary
+  -- rate, in the wrong direction for the member.
+  -- ==================================================================
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     working_days_per_month, working_hours_per_day, date_of_birth,
+     marital_status, residency_status, epf_voluntary_employee_rate)
+  values (v_org, 'X3', 'Voluntary EPF at one per cent', date '2020-01-01',
+          3333, 25, 8, date '1990-01-01', 'single', 'citizen', 1)
+  returning id into v_vol;
+
+  -- ==================================================================
+  -- 4. Overtime on a public holiday and on nothing else
+  --
+  -- Eight hours at RM25 an hour. At the holiday multiplier of three
+  -- that is RM600; at the rest day multiplier of two it is RM400. Only
+  -- holiday minutes, so the two answers cannot be confused with the
+  -- ordinary rate.
+  -- ==================================================================
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     working_days_per_month, working_hours_per_day, date_of_birth,
+     marital_status, residency_status)
+  values (v_org, 'X4', 'Worked the holiday', date '2020-01-01', 5000,
+          25, 8, date '1990-01-01', 'single', 'citizen')
+  returning id into v_hol;
+  insert into public.attendance_records
+    (org_id, employee_id, work_date, ot_holiday_minutes)
+  values (v_org, v_hol, date '2026-03-09', 480);
+
+  -- And a bonus for the same person, because it is the one thing that
+  -- makes the EPF wage and the levy's wage differ. A bonus is EPF
+  -- wages and is named in the PSMB Act's exclusions, so it is not levy
+  -- wages -- without it both bases are the basic salary and "charged on
+  -- the wrong wage" is a mutation no fixture can see.
+  insert into public.salary_components
+    (org_id, code, name, kind, default_amount,
+     is_taxable, is_epf_liable, is_socso_liable, is_eis_liable,
+     is_hrdf_liable, is_additional_remuneration)
+  values (v_org, 'BONUS-S', 'Bonus', 'earning', 3000,
+          true, true, false, false, false, true)
+  returning id into v_comp;
+  insert into public.employee_salary_components
+    (org_id, employee_id, component_id, amount, effective_from)
+  values (v_org, v_hol, v_comp, 3000, date '2020-01-01');
+
+  insert into public.payroll_runs (org_id, period_id, run_no, status)
+  values (v_org, v_period, 'PR-SAPU-1', 'draft') returning id into v_run;
+  perform public.calculate_payroll_run(v_run);
+
+  -- ------------------------------------------------------------------
+  -- What the flags did
+  -- ------------------------------------------------------------------
+  select id into v_slip from public.payslips
+   where run_id = v_run and employee_id = v_optout;
+
+  perform pg_temp.check_eq('somebody not in EPF has no EPF deducted',
+    (select epf_employee from public.payslips where id = v_slip), 0::numeric);
+  perform pg_temp.check_eq('nor contributed for',
+    (select epf_employer from public.payslips where id = v_slip), 0::numeric);
+  perform pg_temp.check_eq('somebody not covered by SOCSO has none deducted',
+    (select socso_employee from public.payslips where id = v_slip), 0::numeric);
+  perform pg_temp.check_eq('nor contributed for',
+    (select socso_employer from public.payslips where id = v_slip), 0::numeric);
+  perform pg_temp.check_eq('and no levy is paid for them',
+    (select hrdf from public.payslips where id = v_slip), 0::numeric);
+
+  -- And they were paid, or the five zeroes above are satisfied by an
+  -- employee the run skipped entirely.
+  perform pg_temp.check_eq('and they are on the payroll all the same',
+    (select gross_pay from public.payslips where id = v_slip), 4000::numeric);
+
+  -- ------------------------------------------------------------------
+  -- The insured wage, which is not the wage
+  -- ------------------------------------------------------------------
+  select id into v_slip from public.payslips
+   where run_id = v_run and employee_id = v_high;
+
+  v_ins_soc := app.insured_wage('socso', 'act4', 20000, date '2026-03-31');
+  v_ins_eis := app.insured_wage('eis', 'default', 20000, date '2026-03-31');
+
+  perform pg_temp.check_true(
+    'the ceiling is below the pay, or this asserts nothing',
+    v_ins_soc < 20000 and v_ins_eis < 20000);
+  perform pg_temp.check_eq(
+    'the payslip records the SOCSO wage the contribution was charged on',
+    (select socso_wage from public.payslips where id = v_slip), v_ins_soc);
+  perform pg_temp.check_eq('and the EIS one',
+    (select eis_wage from public.payslips where id = v_slip), v_ins_eis);
+  -- The EPF wage has no ceiling, so it is the pay -- which is what
+  -- makes the two above a statement about ceilings rather than about
+  -- wages being recorded at all.
+  perform pg_temp.check_eq('while the EPF wage is the whole pay',
+    (select epf_wage from public.payslips where id = v_slip), 20000::numeric);
+
+  -- ------------------------------------------------------------------
+  -- Voluntary EPF rounds up
+  -- ------------------------------------------------------------------
+  select id into v_slip from public.payslips
+   where run_id = v_run and employee_id = v_vol;
+  perform pg_temp.check_eq(
+    'one per cent of RM3,333 is RM34 of voluntary EPF, not RM33',
+    (select epf_employee from public.payslips where id = v_slip)
+      - (select c.employee_amount from app.calc_statutory('epf',
+           app.epf_category('citizen', 36), 3333, date '2026-03-31') c),
+    34::numeric);
+
+  -- ------------------------------------------------------------------
+  -- The holiday multiplier is the holiday one
+  -- ------------------------------------------------------------------
+  select id into v_slip from public.payslips
+   where run_id = v_run and employee_id = v_hol;
+  perform pg_temp.check_eq(
+    'eight hours on a public holiday is three times the hourly rate',
+    (select ot_amount from public.payslips where id = v_slip), 600::numeric);
+
+  -- ------------------------------------------------------------------
+  -- Whether anybody checked the schedules
+  --
+  -- `schedules_verified` is what tells a payroll officer these figures
+  -- came from a gazetted schedule somebody has confirmed. Unasserted,
+  -- it could be set true unconditionally -- a wrong number wearing a
+  -- badge.
+  --
+  -- The seeded schedules are all `is_verified = false`, which is the
+  -- honest default: nobody at this company has checked them against the
+  -- gazette. So the flag reads false here, and that is asserted FIRST,
+  -- because it is the direction that catches a function claiming
+  -- verification it does not have.
+  -- ------------------------------------------------------------------
+  perform pg_temp.check_eq(
+    'unchecked schedules are not reported as verified',
+    (select count(*)::integer from public.payslips
+      where run_id = v_run and schedules_verified), 0);
+
+  -- Verified, and it says so -- or the assertion above holds for a
+  -- function that never sets the flag at all.
+  update public.statutory_schedules set is_verified = true
+   where body in ('epf', 'socso', 'eis', 'pcb', 'hrdf');
+  update public.payroll_runs set status = 'draft' where id = v_run;
+  perform public.calculate_payroll_run(v_run);
+  perform pg_temp.check_eq('and once checked, they are',
+    (select count(*)::integer from public.payslips
+      where run_id = v_run and not schedules_verified), 0);
+
+  -- Now the levy alone. It reaches the payslip by a different road from
+  -- the other four -- read once before the loop rather than through
+  -- app.calc_statutory -- so its verification had to be added by hand
+  -- and can be dropped by hand.
+  select s.id into v_sched
+    from public.statutory_rates r
+    join public.statutory_schedules s on s.id = r.schedule_id
+   where s.body = 'hrdf' and r.category = 'mandatory_10plus'
+     and s.effective_from <= date '2026-03-31'
+     and (s.effective_to is null or s.effective_to >= date '2026-03-31')
+   order by s.effective_from desc limit 1;
+  perform pg_temp.check_true('the levy has a schedule of its own',
+    v_sched is not null);
+  update public.statutory_schedules set is_verified = false where id = v_sched;
+
+  update public.payroll_runs set status = 'draft' where id = v_run;
+  perform public.calculate_payroll_run(v_run);
+  perform pg_temp.check_true(
+    'an unchecked levy schedule is not reported as verified either',
+    (select not schedules_verified from public.payslips
+      where run_id = v_run and employee_id = v_high));
+  -- And somebody the levy is not due for is unaffected by it, which is
+  -- what "it counts only where it was actually consulted" means.
+  perform pg_temp.check_true(
+    'while somebody the levy is not due for is still verified',
+    (select schedules_verified from public.payslips
+      where run_id = v_run and employee_id = v_optout));
+  update public.statutory_schedules set is_verified = true where id = v_sched;
+
+  -- ------------------------------------------------------------------
+  -- The levy is charged on its own wage, and only where it is due
+  -- ------------------------------------------------------------------
+  update public.payroll_runs set status = 'draft' where id = v_run;
+  perform public.calculate_payroll_run(v_run);
+  select id into v_slip from public.payslips
+   where run_id = v_run and employee_id = v_hol;
+  perform pg_temp.check_true(
+    'overtime and the bonus are in the pay but not in the levy''s wage',
+    (select hrdf_wage < gross_pay from public.payslips where id = v_slip));
+  perform pg_temp.check_true(
+    'and the levy''s wage is not the EPF wage either -- the bonus is in '
+    'one and not the other',
+    (select hrdf_wage <> epf_wage from public.payslips where id = v_slip));
+  perform pg_temp.check_eq('so the levy is charged on the levy''s wage',
+    (select hrdf from public.payslips where id = v_slip),
+    (select round(hrdf_wage * 1.0 / 100, 2) from public.payslips
+      where id = v_slip));
+
+  raise notice 'ok   payroll: the ten a sweep found';
+end $$;
+
 rollback;
