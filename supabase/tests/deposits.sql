@@ -358,4 +358,137 @@ begin
   raise notice 'ok   deposits';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Voiding a deposit, and what the bank makes of it
+-- ---------------------------------------------------------------------
+-- The block above voids a deposit and checks the ledger and the note.
+-- Nothing checked the bank BALANCE, which `void_deposit` moves by hand
+-- rather than by posting: money taken in has to be taken back out, and
+-- money paid out has to come back. Both directions and the fact that it
+-- happens at all were open.
+--
+-- The permission assertions are made against a stranger and against a
+-- company that does not hold the module, deliberately. A member with no
+-- access type assigned gets module write whatever their role -- see
+-- `0501` -- so a `viewer` is not refused here and asserting that they
+-- are would be asserting something untrue.
+do $$
+declare
+  v_org  uuid;
+  v_cust uuid;
+  v_supp uuid;
+  v_bank uuid;
+  v_in   uuid;
+  v_out  uuid;
+  v_msg  text;
+  v_owner uuid := pg_temp.test_user();
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Deposit Batal Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-001', 'Puan Siti', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-001', 'Pembekal Bhd', 'supplier') returning id into v_supp;
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, account_number, currency,
+     opening_balance, current_balance, is_default)
+  values (v_org,
+          (select id from public.accounts where org_id = v_org and code = '1120'),
+          'Current account', 'Maybank', '512345678999', 'MYR', 0, 0, true)
+  returning id into v_bank;
+
+  -- Money in from a customer, money out to a supplier.
+  v_in := public.create_deposit(v_org, 'customer', v_cust, current_date,
+                                10000, v_bank, '02', 'CHQ 45', 'Up front');
+  perform pg_temp.check_eq('ten thousand in leaves ten thousand in the bank',
+    (select b.current_balance from public.bank_accounts b where b.id = v_bank),
+    10000::numeric);
+
+  v_out := public.create_deposit(v_org, 'supplier', v_supp, current_date,
+                                 3000, v_bank, '02', 'CHQ 46', 'Deposit paid');
+  perform pg_temp.check_eq('and three thousand out leaves seven',
+    (select b.current_balance from public.bank_accounts b where b.id = v_bank),
+    7000::numeric);
+
+  -- ------------------------------------------------------------------
+  -- What voiding refuses
+  -- ------------------------------------------------------------------
+  begin
+    perform public.void_deposit(v_in, '   ');
+    raise exception 'FAIL voided a deposit without saying why';
+  exception when check_violation then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a void with no reason is refused',
+      v_msg like '%Say why%');
+  end;
+
+  -- A stranger, because a member with no access type has module write
+  -- whatever their role.
+  perform pg_temp.sign_in_as(pg_temp.another_user('orang-luar@example.test'));
+  begin
+    perform public.void_deposit(v_in, 'not mine to void');
+    raise exception 'FAIL a stranger voided a deposit';
+  exception when insufficient_privilege then
+    raise notice 'ok   somebody outside the company cannot void its deposits';
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- ------------------------------------------------------------------
+  -- And what it does to the bank
+  -- ------------------------------------------------------------------
+  perform public.void_deposit(v_in, 'Cheque bounced');
+  perform pg_temp.check_eq(
+    'voiding the money in takes it back out of the bank',
+    (select b.current_balance from public.bank_accounts b where b.id = v_bank),
+    -3000::numeric);
+  perform pg_temp.check_eq('and the note has nothing left to spend',
+    (select n.balance_amount from public.deposit_notes n where n.id = v_in),
+    0::numeric);
+
+  perform public.void_deposit(v_out, 'Never sent');
+  perform pg_temp.check_eq(
+    'and voiding the money out puts it back, leaving the bank where it started',
+    (select b.current_balance from public.bank_accounts b where b.id = v_bank),
+    0::numeric);
+
+  -- Twice is a mistake, and saying so is the point.
+  begin
+    perform public.void_deposit(v_in, 'again');
+    raise exception 'FAIL voided the same deposit twice';
+  exception when check_violation then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a deposit is voided once',
+      v_msg like '%already void%');
+  end;
+
+  -- ------------------------------------------------------------------
+  -- Which module a deposit belongs to
+  -- ------------------------------------------------------------------
+  -- Money held for a customer is a sales matter and money paid to a
+  -- supplier is a purchases one. A company that holds one module and
+  -- not the other is the only fixture that can tell the two apart --
+  -- with both switched on, the question never gets asked twice.
+  v_in  := public.create_deposit(v_org, 'customer', v_cust, current_date,
+                                 500, v_bank, '02', 'CHQ 47', null);
+  v_out := public.create_deposit(v_org, 'supplier', v_supp, current_date,
+                                 400, v_bank, '02', 'CHQ 48', null);
+  update public.org_modules set is_enabled = false
+   where org_id = v_org and module_code = 'purchases';
+
+  perform public.void_deposit(v_in, 'Customer changed their mind');
+  perform pg_temp.check_true('a customer deposit is voided under sales',
+    (select n.status = 'void' from public.deposit_notes n where n.id = v_in));
+
+  begin
+    perform public.void_deposit(v_out, 'and this one is not');
+    raise exception 'FAIL voided a supplier deposit with no purchases module';
+  exception when insufficient_privilege then
+    raise notice 'ok   and a supplier deposit under purchases, which this company gave up';
+  end;
+end $$;
+
 rollback;

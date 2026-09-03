@@ -4060,8 +4060,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/contra.sql": {
-    "mtime": 1787822946.0225897,
-    "ast_hash": "12b927129203bd527f0375e12cd7d2ca",
+    "mtime": 1788420108.7975972,
+    "ast_hash": "cb330defbde75c46d14c4bf6ff1a409d",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/deposits_screen.dart": {
@@ -4080,8 +4080,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/deposits.sql": {
-    "mtime": 1787822946.0225897,
-    "ast_hash": "5f18cabca0a21904e1276c0dd620b9d7",
+    "mtime": 1788419985.7737114,
+    "ast_hash": "cbdb4bb9b25dcf29ae70b60ca3076d79",
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/budgets_screen.dart": {

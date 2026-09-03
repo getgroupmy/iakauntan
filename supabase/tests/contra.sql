@@ -395,4 +395,112 @@ begin
   raise notice 'ok   contra';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Who may unpick a contra
+-- ---------------------------------------------------------------------
+-- A contra touches both subsidiary ledgers, so `void_contra` asks for
+-- write on BOTH sales and purchases. Neither half of that was asserted:
+-- with both modules on, one check does the same job as two, and the
+-- fixture above never involves anybody who lacks either.
+--
+-- As with deposits, the person tried here is a stranger rather than a
+-- viewer: a member with no access type assigned has module write
+-- whatever their role (`0501`), so a viewer is not refused and pretending
+-- otherwise would assert something untrue.
+do $$
+declare
+  v_org   uuid;
+  v_party uuid;
+  v_inv   uuid;
+  v_bill  uuid;
+  v_ctr   uuid;
+  v_item  uuid;
+  v_owner uuid := pg_temp.test_user();
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Contra Kebenaran Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['sales','purchases','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'DUA', 'Kedua Pihak Bhd', 'both') returning id into v_party;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, unit_price)
+  values (v_org, 'KHIDMAT', 'Service', 'service', false, 100)
+  returning id into v_item;
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'invoice', 'INV-K1', current_date, current_date, v_party,
+          'MYR', 1, 'draft')
+  returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_inv, 1, 'item', v_item, 'Service', 40, 100);
+  perform public.post_sales_document(v_inv);
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_org, 'bill', 'BILL-K1', current_date, v_party, 'MYR', 1, 'draft')
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_bill, 1, 'item', v_item, 'Hire', 40, 100);
+  perform public.post_purchase_document(v_bill);
+
+  v_ctr := public.create_contra(
+    v_org, current_date,
+    jsonb_build_array(jsonb_build_object('document', v_inv, 'amount', 4000)),
+    jsonb_build_array(jsonb_build_object('document', v_bill, 'amount', 4000)),
+    'Set off');
+
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-contra@example.test'));
+  begin
+    perform public.void_contra(v_ctr, 'not mine');
+    raise exception 'FAIL a stranger unpicked a contra';
+  exception when insufficient_privilege then
+    raise notice 'ok   somebody outside the company cannot unpick its contra';
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- One module is not enough. A contra puts money back on an invoice
+  -- AND on a bill, so a company that has given up either side cannot
+  -- undo one.
+  update public.org_modules set is_enabled = false
+   where org_id = v_org and module_code = 'purchases';
+  begin
+    perform public.void_contra(v_ctr, 'without the purchases side');
+    raise exception 'FAIL unpicked a contra with only the sales module';
+  exception when insufficient_privilege then
+    raise notice 'ok   and unpicking one needs both sides of it';
+  end;
+
+  -- The sales half of that condition is NOT asserted, and cannot be.
+  -- `sales` is a CORE module and `purchases` is an add-on, so
+  -- `can_write_module(org, 'sales')` is true for every member of every
+  -- company whatever they have bought — the clause can only be false
+  -- for somebody who is not a member at all, and for them the purchases
+  -- clause is false too. Tried both routes before writing this down:
+  -- switching `sales` off in `org_modules` changes nothing, because a
+  -- core module is not entitlement-gated. The clause stays because it
+  -- says what the function means, and if `sales` ever stops being core
+  -- it starts doing work.
+
+  -- With both back, it comes apart as it should.
+  update public.org_modules set is_enabled = true
+   where org_id = v_org and module_code = 'purchases';
+  perform public.void_contra(v_ctr, 'agreed to settle in cash instead');
+  perform pg_temp.check_eq('and the invoice is whole again',
+    (select d.balance_amount from public.sales_documents d where d.id = v_inv),
+    4000::numeric);
+end $$;
+
 rollback;
