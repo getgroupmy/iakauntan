@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788467979.260153,
-    "ast_hash": "2d89557bc1522a829b0dddb9bcfe0042",
+    "mtime": 1788469516.1191463,
+    "ast_hash": "823f210819faca62bbf43de0ed93652a",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7752,6 +7752,16 @@
   "supabase/migrations/0523_the_customer_at_the_tender_sheet.sql": {
     "mtime": 1788468461.0978756,
     "ast_hash": "e4e41ea6e962727165e0e1b8f52913b5",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0524_a_row_that_names_somebody_who_works_here.sql": {
+    "mtime": 1788469480.0859318,
+    "ast_hash": "f12342fdb2d65243bae3f167024957d6",
+    "semantic_hash": ""
+  },
+  "supabase/tests/a_colleague_not_a_stranger.sql": {
+    "mtime": 1788469509.5896122,
+    "ast_hash": "23188dd3753a82b0fc45cb4c27c76b8a",
     "semantic_hash": ""
   }
 }
