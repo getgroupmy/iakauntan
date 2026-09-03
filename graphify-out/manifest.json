@@ -100,8 +100,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/corp_repository.dart": {
-    "mtime": 1788285599.903654,
-    "ast_hash": "5a3c17ae129bc363215129432837067e",
+    "mtime": 1788458459.085788,
+    "ast_hash": "10d0bd07088805e2048a7fbe99226786",
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788457193.3217845,
-    "ast_hash": "cc2a920d16724848009d12918649ff25",
+    "mtime": 1788458459.087967,
+    "ast_hash": "13cc3385c9feeb1a3c487238acee5a08",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -2765,8 +2765,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/tenant_foreign_keys.sql": {
-    "mtime": 1788457229.302783,
-    "ast_hash": "d292a09764a64928fcd1b0e000b82980",
+    "mtime": 1788458538.482736,
+    "ast_hash": "d536ce754c2086c308d8dc6130e45674",
     "semantic_hash": ""
   },
   "docs/property.md": {
@@ -7717,6 +7717,11 @@
   "supabase/migrations/0518_a_tax_code_a_bill_and_a_sale.sql": {
     "mtime": 1788457185.2664397,
     "ast_hash": "e66bbef64c32eb0e291a55f4eac25b2e",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0519_seven_more_parents.sql": {
+    "mtime": 1788458441.2581172,
+    "ast_hash": "f1592b9bafbe66c4786ffd99b21e5b93",
     "semantic_hash": ""
   }
 }

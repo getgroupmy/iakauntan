@@ -105,7 +105,10 @@ extension RepoCorp on Repo {
       {bool includeResigned = true}) async {
     var q = client
         .from('corp_officers')
-        .select('*, corp_persons(full_name, nric, passport_no, '
+        // corp_persons is named because 0519 added a same-org
+        // composite key alongside the plain one, so it can be joined
+        // two ways and PostgREST refuses an unqualified embed.
+        .select('*, corp_persons!corp_officers_person_id_fkey(full_name, nric, passport_no, '
             'registration_no), '
             // Whose place an alternate acts in, by name, because "acting
             // as an alternate" without one is what `0380` is about.
@@ -233,7 +236,11 @@ extension RepoCorp on Repo {
           String entityId) async =>
       Repo.rows(await client
               .from('corp_beneficial_owners')
-              .select('*, corp_persons(full_name, nric, registration_no)')
+              // corp_persons is named because 0519 added a same-org
+              // composite key alongside the plain one, so it can be
+              // joined two ways and PostgREST refuses an unqualified
+              // embed.
+              .select('*, corp_persons!corp_beneficial_owners_person_id_fkey(full_name, nric, registration_no)')
               .eq('entity_id', entityId)
               .order('entered_on', ascending: false))
           .map(CorpBeneficialOwner.fromJson)

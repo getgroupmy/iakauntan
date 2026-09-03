@@ -5698,7 +5698,10 @@ extension RepoHr on Repo {
   Future<List<JobRequisition>> requisitions() async => Repo._rows(
     await client
         .from('job_requisitions')
-        .select('*, departments(name), applicants(count)')
+        // departments is named because 0519 added a same-org composite
+        // key alongside the plain one, so it can be joined two ways
+        // and PostgREST refuses an unqualified embed.
+        .select('*, departments!job_requisitions_department_id_fkey(name), applicants(count)')
         .eq('org_id', orgId)
         .order('created_at', ascending: false),
   ).map(JobRequisition.fromJson).toList();

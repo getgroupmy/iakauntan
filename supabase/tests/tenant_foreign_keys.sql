@@ -162,9 +162,11 @@ end $$;
 --
 -- 0510 did the same for `warehouses`, 0512 for `contacts`, 0513 for
 -- `items`, 0514 for `accounts`, 0515 for `gl_entries`, 0516 for
--- `sales_documents`, 0517 for `pos_outlets` and 0518 for `tax_codes`,
--- `purchase_documents` and `pos_sales`, and all eleven parents are
--- probed and covered in the one block below.
+-- `sales_documents`, 0517 for `pos_outlets`, 0518 for `tax_codes`,
+-- `purchase_documents` and `pos_sales`, and 0519 for `bank_accounts`,
+-- `branches`, `corp_entities`, `corp_persons`, `departments`,
+-- `einvoice_documents` and `pos_registers`. All eighteen parents are
+-- probed or covered in the one block below.
 -- `contacts` is the widest and the one where a wrong id is money: an
 -- invoice raised in this company against another company's customer
 -- reads as an ordinary invoice, and only the aged receivable shows the
@@ -182,6 +184,7 @@ declare
   v_doc_b uuid;
   v_out_a uuid; v_out_b uuid;
   v_tax_b uuid; v_bill_a uuid; v_bill_b uuid;
+  v_ent2_a uuid; v_per_a uuid; v_per_b uuid;
   v_tried integer := 0; v_refused integer := 0;
   v_uncovered text;
 begin
@@ -663,7 +666,58 @@ begin
       'that cancels nothing: %', sqlerrm;
   end;
 
-  if v_refused <> v_tried or v_tried < 25 then
+  -- 18. An officer, which is 0519. The register of directors and
+  -- secretaries is what SSM is told, so a person from another
+  -- company's register appearing on this one's board is a filing that
+  -- names the wrong human being.
+  --
+  -- The corporate secretarial module looked like it ought to cross the
+  -- boundary, since a practice handles other people's companies. It
+  -- does not: a `corp_entities` row is the PRACTICE's record of a
+  -- company it acts for and carries the practice's own org_id, and
+  -- every officer, charge and share event hangs off that record inside
+  -- the same practice. That was checked against the hosted data before
+  -- the keys were written, not assumed.
+  --
+  -- `corp_share_events` would be the better probe -- it names TWO
+  -- people, the pairing shape of probe 4 -- but it cannot be used:
+  -- a trigger refuses a transfer when the holder has no shares, and it
+  -- fires before the foreign key is reached, so the probe would pass
+  -- whether or not 0519 exists. Both its columns are left to the
+  -- coverage query, which reads the catalogue and cannot be fooled that
+  -- way. This is the third time in this programme an existing guard has
+  -- shadowed a probe; the pattern is now expected rather than
+  -- surprising.
+  insert into public.corp_entities (org_id, name, entity_type, status)
+  values (v_a, 'A''s client company', 'sdn_bhd', 'incorporated')
+  returning id into v_ent2_a;
+  insert into public.corp_persons (org_id, kind, full_name)
+  values (v_a, 'individual', 'Encik A') returning id into v_per_a;
+  insert into public.corp_persons (org_id, kind, full_name)
+  values (v_b, 'individual', 'Encik B') returning id into v_per_b;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.corp_officers
+      (org_id, entity_id, person_id, role, appointed_on)
+    values (v_a, v_ent2_a, v_per_b, 'director', current_date - 30);
+    raise exception 'B''s person was appointed to A''s board';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.corp_officers
+      (org_id, entity_id, person_id, role, appointed_on)
+    values (v_a, v_ent2_a, v_per_a, 'director', current_date - 30);
+    v_refused := v_refused + 1;
+  exception when others then
+    raise exception
+      'the new keys refuse A''s own person on A''s own board: %', sqlerrm;
+  end;
+
+  if v_refused <> v_tried or v_tried < 27 then
     raise exception 'employee and warehouse boundary: % probes ran, % behaved',
       v_tried, v_refused;
   end if;
@@ -677,13 +731,15 @@ begin
   --
   -- `employees` (0507-0509), `warehouses` (0510), `contacts` (0512),
   -- `items` (0513), `accounts` (0514), `gl_entries` (0515),
-  -- `sales_documents` (0516), `pos_outlets` (0517) and `tax_codes`,
-  -- `purchase_documents` and `pos_sales` (0518) are closed. The list is
-  -- deliberately not every parent in the schema: about a hundred
-  -- smaller ones, with one to nine columns each, are still to come.
-  -- Adding a parent here before its migration would make this file fail
-  -- for work that has not been done, which is a worse signal than not
-  -- asserting it yet.
+  -- `sales_documents` (0516), `pos_outlets` (0517), `tax_codes`,
+  -- `purchase_documents` and `pos_sales` (0518), and `bank_accounts`,
+  -- `branches`, `corp_entities`, `corp_persons`, `departments`,
+  -- `einvoice_documents` and `pos_registers` (0519) are closed. The
+  -- list is deliberately not every parent in the schema: a long tail of
+  -- smaller ones, one to four columns each, is still to come. Adding a
+  -- parent here before its migration would make this file fail for work
+  -- that has not been done, which is a worse signal than not asserting
+  -- it yet.
   select string_agg(
            c.confrelid::regclass::text || ' <- ' ||
            c.conrelid::regclass::text || '.' || a.attname, ', ')
@@ -702,7 +758,14 @@ begin
                          'public.pos_outlets'::regclass,
                          'public.tax_codes'::regclass,
                          'public.purchase_documents'::regclass,
-                         'public.pos_sales'::regclass)
+                         'public.pos_sales'::regclass,
+                         'public.bank_accounts'::regclass,
+                         'public.branches'::regclass,
+                         'public.corp_entities'::regclass,
+                         'public.corp_persons'::regclass,
+                         'public.departments'::regclass,
+                         'public.einvoice_documents'::regclass,
+                         'public.pos_registers'::regclass)
      and cardinality(c.conkey) = 1
      and exists (select 1 from pg_attribute o
                   where o.attrelid = c.conrelid and o.attname = 'org_id'
@@ -733,10 +796,8 @@ begin
   end if;
 
   raise notice
-    'employee, warehouse, contact, item, account, journal, invoice, '
-    'outlet, tax code, bill and sale boundaries: 16 cross-company '
-    'writes refused, 16 same-company writes allowed, 0 columns '
-    'uncovered';
+    'eighteen parents: 17 cross-company writes refused, 17 same-company '
+    'writes allowed, 0 columns uncovered';
 end $$;
 
 -- Deleting a row somebody else names has to empty the reference, not
