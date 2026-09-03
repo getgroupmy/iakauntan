@@ -520,4 +520,82 @@ begin
   perform pg_temp.check_true('and somebody let into neither is refused', not v_ok);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Cek Jiran Sdn Bhd: a cheque clears into its own company's bank
+--
+-- `clear_pdc` takes an optional bank account to clear the cheque into.
+-- It checked that account against the cheque's company in one place —
+-- the lookup that resolves which ledger account to post to — while the
+-- balance it updates and the account it writes back onto the cheque
+-- both used the argument raw. Clearing into another company's account
+-- moved THEIR balance. That is 0506, and it is the same shape 0505
+-- closed in settle_deposit.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid; v_org2 uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_cust  uuid; v_bank uuid; v_theirs uuid; v_pdc uuid;
+  v_msg   text;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Cek Kami Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['sales','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CUST', 'Encik Zul', 'customer') returning id into v_cust;
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, account_number, currency,
+     opening_balance, current_balance, is_default)
+  values (v_org,
+          (select id from public.accounts where org_id = v_org and code = '1120'),
+          'Our account', 'Maybank', '544444444444', 'MYR', 0, 0, true)
+  returning id into v_bank;
+
+  v_org2 := pg_temp.test_org('Cek Jiran Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, account_number, currency,
+     opening_balance, current_balance, is_default)
+  values (v_org2,
+          (select id from public.accounts where org_id = v_org2 and code = '1120'),
+          'Their account', 'RHB', '555555555555', 'MYR', 0, 6000, true)
+  returning id into v_theirs;
+
+  insert into public.post_dated_cheques
+    (org_id, pdc_no, direction, contact_id, cheque_no, cheque_date, amount,
+     received_on, bank_account_id, status)
+  values (v_org, 'PDC-JIRAN', 'incoming', v_cust, '600001', current_date,
+          800, current_date, v_bank, 'held')
+  returning id into v_pdc;
+
+  begin
+    perform public.clear_pdc(v_pdc, current_date, v_theirs);
+    raise exception 'FAIL cleared a cheque into another company''s account';
+  exception when sqlstate '42501' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a cheque cannot clear into another company',
+      v_msg like '%belongs to another company%');
+  end;
+  perform pg_temp.check_eq('and their balance did not move',
+    (select b.current_balance from public.bank_accounts b where b.id = v_theirs),
+    6000::numeric);
+  perform pg_temp.check_true('the cheque is still waiting, in its own bank',
+    (select c.status::text = 'held' and c.bank_account_id = v_bank
+       from public.post_dated_cheques c where c.id = v_pdc));
+
+  -- Into its own, it clears.
+  perform public.clear_pdc(v_pdc, current_date, v_bank);
+  perform pg_temp.check_eq('cleared into its own account, the money arrives',
+    (select b.current_balance from public.bank_accounts b where b.id = v_bank),
+    800::numeric);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

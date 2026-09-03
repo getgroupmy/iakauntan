@@ -987,6 +987,29 @@ begin
     (select n.balance_amount from public.deposit_notes n where n.id = v_dep),
     2500::numeric);
 
+  -- ------------------------------------------------------------------
+  -- And taking one IN has the same boundary
+  --
+  -- 0505 was found in settle_deposit; reading every function that
+  -- writes bank_accounts.current_balance found the same shape in
+  -- create_deposit, which is 0506. Money coming in could be booked into
+  -- another company's balance, and their account recorded on this
+  -- company's deposit note.
+  -- ------------------------------------------------------------------
+  begin
+    perform public.create_deposit(
+      v_org, 'customer', v_cust, current_date - 20, 700, v_bank_theirs,
+      '02', 'CHQ 99', 'Into their bank');
+    raise exception 'FAIL banked a deposit into another company''s account';
+  exception when sqlstate '42501' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a deposit cannot be banked into another company',
+      v_msg like '%belongs to another company%');
+  end;
+  perform pg_temp.check_eq('and their balance is still untouched',
+    (select b.current_balance from public.bank_accounts b
+      where b.id = v_bank_theirs), 9000::numeric);
+
   perform pg_temp.sign_out();
 end $$;
 
