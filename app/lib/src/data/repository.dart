@@ -5590,10 +5590,16 @@ extension RepoHr on Repo {
   // ------------------------------------------------------------------
   // Payroll
   // ------------------------------------------------------------------
+  // The constraint is named because `0502` gave `payroll_runs` a second
+  // foreign key to `pay_periods` -- the composite one that stops a run
+  // naming another company's period. Two keys between the same pair of
+  // tables is two ways to join them, and PostgREST answers PGRST201
+  // rather than guess, which takes out the whole screen. Any embed of
+  // `pay_periods` from here has to say which key it means.
   Future<List<PayrollRun>> payrollRuns() async => Repo._rows(
     await client
         .from('payroll_runs')
-        .select('*, pay_periods(code, pay_date)')
+        .select('*, pay_periods!payroll_runs_period_id_fkey(code, pay_date)')
         .eq('org_id', orgId)
         .order('created_at', ascending: false),
   ).map(PayrollRun.fromJson).toList();
@@ -5601,7 +5607,7 @@ extension RepoHr on Repo {
   Future<List<Payslip>> payslips({String? runId, String? employeeId}) async {
     var q = client
         .from('payslips')
-        .select('*, payroll_runs(run_no, pay_periods(code))')
+        .select('*, payroll_runs(run_no, pay_periods!payroll_runs_period_id_fkey(code))')
         .eq('org_id', orgId);
     if (runId != null) q = q.eq('run_id', runId);
     if (employeeId != null) q = q.eq('employee_id', employeeId);
@@ -5613,7 +5619,7 @@ extension RepoHr on Repo {
   Future<Payslip?> payslip(String id) async {
     final row = await client
         .from('payslips')
-        .select('*, payslip_lines(*), payroll_runs(run_no, pay_periods(code))')
+        .select('*, payslip_lines(*), payroll_runs(run_no, pay_periods!payroll_runs_period_id_fkey(code))')
         .eq('id', id)
         .maybeSingle();
     return row == null
