@@ -1004,7 +1004,10 @@ class Repo {
   Future<List<FiscalYear>> fiscalYears() async {
     final data = await client
         .from('fiscal_years')
-        .select('*, fiscal_periods(*)')
+        // Named because 0521 added a same-org composite key alongside
+        // the plain one, so 'fiscal_periods' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, fiscal_periods!fiscal_periods_fiscal_year_id_fkey(*)')
         .eq('org_id', orgId)
         .order('start_date', ascending: false);
     return _rows(data).map(FiscalYear.fromJson).toList();
@@ -5640,7 +5643,10 @@ extension RepoHr on Repo {
   Future<List<Payslip>> payslips({String? runId, String? employeeId}) async {
     var q = client
         .from('payslips')
-        .select('*, payroll_runs(run_no, pay_periods!payroll_runs_period_id_fkey(code))')
+        // Named because 0521 added a same-org composite key alongside
+        // the plain one, so 'payroll_runs' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, payroll_runs!payslips_run_id_fkey(run_no, pay_periods!payroll_runs_period_id_fkey(code))')
         .eq('org_id', orgId);
     if (runId != null) q = q.eq('run_id', runId);
     if (employeeId != null) q = q.eq('employee_id', employeeId);
@@ -5652,7 +5658,10 @@ extension RepoHr on Repo {
   Future<Payslip?> payslip(String id) async {
     final row = await client
         .from('payslips')
-        .select('*, payslip_lines(*), payroll_runs(run_no, pay_periods!payroll_runs_period_id_fkey(code))')
+        // Named because 0521 added a same-org composite key alongside
+        // the plain one, so 'payslip_lines and payroll_runs' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, payslip_lines!payslip_lines_payslip_id_fkey(*), payroll_runs!payslips_run_id_fkey(run_no, pay_periods!payroll_runs_period_id_fkey(code))')
         .eq('id', id)
         .maybeSingle();
     return row == null
@@ -5707,7 +5716,10 @@ extension RepoHr on Repo {
         // departments is named because 0519 added a same-org composite
         // key alongside the plain one, so it can be joined two ways
         // and PostgREST refuses an unqualified embed.
-        .select('*, departments!job_requisitions_department_id_fkey(name), applicants(count)')
+        // Named because 0521 added a same-org composite key alongside
+        // the plain one, so 'applicants' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, departments!job_requisitions_department_id_fkey(name), applicants!applicants_requisition_id_fkey(count)')
         .eq('org_id', orgId)
         .order('created_at', ascending: false),
   ).map(JobRequisition.fromJson).toList();
@@ -5872,7 +5884,10 @@ extension RepoAppraisalCycle on Repo {
   Future<List<AppraisalCycle>> appraisalCycles() async => Repo._rows(
     await client
         .from('appraisal_cycles')
-        .select('*, appraisals(count)')
+        // Named because 0521 added a same-org composite key alongside
+        // the plain one, so 'appraisals' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, appraisals!appraisals_cycle_id_fkey(count)')
         .eq('org_id', orgId)
         .order('period_end', ascending: false),
   ).map(AppraisalCycle.fromJson).toList();
@@ -6256,7 +6271,10 @@ extension RepoHrSetup on Repo {
       Repo._rows(
         await client
             .from('item_prices')
-            .select('*, price_levels(code, name)')
+            // Named because 0521 added a same-org composite key alongside
+        // the plain one, so 'price_levels' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, price_levels!item_prices_price_level_id_fkey(code, name)')
             .eq('item_id', itemId)
             .order('min_quantity'),
       );
@@ -9385,7 +9403,10 @@ extension RepoMemberships on Repo {
   ) async => Repo.rows(
     await client
         .from('pos_membership_subscriptions')
-        .select('id, status, pos_memberships(name, sessions_included)')
+        // Named because 0521 added a same-org composite key alongside
+        // the plain one, so 'pos_memberships' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('id, status, pos_memberships!pos_membership_subscriptions_membership_id_fkey(name, sessions_included)')
         .eq('org_id', orgId)
         .eq('contact_id', contactId)
         .eq('status', 'active')

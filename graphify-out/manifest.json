@@ -100,8 +100,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/corp_repository.dart": {
-    "mtime": 1788458459.085788,
-    "ast_hash": "10d0bd07088805e2048a7fbe99226786",
+    "mtime": 1788461604.3758435,
+    "ast_hash": "e4c1e03b7c12fd5fca62f62372205634",
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788459771.2410977,
-    "ast_hash": "d94aeecbc8441d3b8351a7df0febf670",
+    "mtime": 1788461604.3916078,
+    "ast_hash": "a3dddf09b66597b58b1df92f29112fd5",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -2765,8 +2765,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/tenant_foreign_keys.sql": {
-    "mtime": 1788460332.7866733,
-    "ast_hash": "1349009e5c5e2094da887c80dd1475c5",
+    "mtime": 1788461627.723853,
+    "ast_hash": "54daca965ff5d859521d3cd96c22e72f",
     "semantic_hash": ""
   },
   "docs/property.md": {
@@ -7727,6 +7727,11 @@
   "supabase/migrations/0520_the_long_tail_three_and_four.sql": {
     "mtime": 1788460315.3054633,
     "ast_hash": "df1dcb58e53757b0c00854c4b134bce5",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0521_the_rest_of_them.sql": {
+    "mtime": 1788461582.4272773,
+    "ast_hash": "efe5335c776c741bcebb821df30051a9",
     "semantic_hash": ""
   }
 }

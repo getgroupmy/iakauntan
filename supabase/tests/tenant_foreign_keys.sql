@@ -765,24 +765,26 @@ begin
       v_tried, v_refused;
   end if;
 
-  -- And the set is closed. The probes above prove the constraints that
-  -- exist do their job; this proves none is MISSING — including on a
-  -- table nobody has written yet. A new table that carries its own
-  -- org_id and names one of these has to say which company's, and this
-  -- is what says so on the day it is added rather than the day somebody
-  -- notices.
+  -- And the set is closed -- not for a list of parents, but for the
+  -- schema.
   --
-  -- `employees` (0507-0509), `warehouses` (0510), `contacts` (0512),
-  -- `items` (0513), `accounts` (0514), `gl_entries` (0515),
-  -- `sales_documents` (0516), `pos_outlets` (0517), `tax_codes`,
-  -- `purchase_documents` and `pos_sales` (0518), and `bank_accounts`,
-  -- `branches`, `corp_entities`, `corp_persons`, `departments`,
-  -- `einvoice_documents` and `pos_registers` (0519) are closed. The
-  -- list is deliberately not every parent in the schema: what is left
-  -- is the parents with one or two references each. Adding a parent
-  -- here before its migration would make this file fail for work that
-  -- has not been done, which is a worse signal than not asserting it
-  -- yet.
+  -- Every earlier version of this query named the parents it covered,
+  -- and said so deliberately: listing a parent before its migration
+  -- would have made this file fail for work that had not been done,
+  -- which is a worse signal than not asserting it yet. 0521 finished
+  -- the work, so the list is gone. What is asserted now is the rule
+  -- itself: if a table carries its own `org_id` and names a row in
+  -- another table that carries one too, it has to say WHICH company's
+  -- row it means.
+  --
+  -- That is the assertion the whole programme was for. It holds for
+  -- tables nobody has written yet: a new one gets the same treatment on
+  -- the day it is added, and this fails then rather than on the day
+  -- somebody notices a figure on the wrong books.
+  --
+  -- Two columns are exempt, both named below, both on
+  -- `purchase_documents`, both inter-company billing, and both found by
+  -- the SQL suite rather than by reading the schema.
   select string_agg(
            c.confrelid::regclass::text || ' <- ' ||
            c.conrelid::regclass::text || '.' || a.attname, ', ')
@@ -791,60 +793,23 @@ begin
     join unnest(c.conkey) k(attnum) on true
     join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
    where c.contype = 'f'
-     and c.confrelid in ('public.employees'::regclass,
-                         'public.warehouses'::regclass,
-                         'public.contacts'::regclass,
-                         'public.items'::regclass,
-                         'public.accounts'::regclass,
-                         'public.gl_entries'::regclass,
-                         'public.sales_documents'::regclass,
-                         'public.pos_outlets'::regclass,
-                         'public.tax_codes'::regclass,
-                         'public.purchase_documents'::regclass,
-                         'public.pos_sales'::regclass,
-                         'public.bank_accounts'::regclass,
-                         'public.branches'::regclass,
-                         'public.corp_entities'::regclass,
-                         'public.corp_persons'::regclass,
-                         'public.departments'::regclass,
-                         'public.einvoice_documents'::regclass,
-                         'public.pos_registers'::regclass,
-                         'public.bills_of_materials'::regclass,
-                         'public.contact_persons'::regclass,
-                         'public.corp_resolutions'::regclass,
-                         'public.item_categories'::regclass,
-                         'public.landed_cost_runs'::regclass,
-                         'public.matters'::regclass,
-                         'public.opportunities'::regclass,
-                         'public.payment_terms'::regclass,
-                         'public.pipeline_stages'::regclass,
-                         'public.pos_kitchen_stations'::regclass,
-                         'public.pos_modifier_groups'::regclass,
-                         'public.pos_sale_lines'::regclass,
-                         'public.pos_service_providers'::regclass,
-                         'public.pos_stalls'::regclass,
-                         'public.pos_tables'::regclass,
-                         'public.purchase_document_lines'::regclass,
-                         'public.receipts'::regclass,
-                         'public.sales_document_lines'::regclass,
-                         'public.tickets'::regclass)
      and cardinality(c.conkey) = 1
      and exists (select 1 from pg_attribute o
                   where o.attrelid = c.conrelid and o.attname = 'org_id'
-                    and o.attnum > 0)
+                    and o.attnum > 0 and not o.attisdropped)
+     -- The parent has to carry org_id too, or a same-org key is not
+     -- expressible. Twenty-two parents are in that position -- the
+     -- reference tables, and `organizations` itself.
+     and exists (select 1 from pg_attribute o2
+                  where o2.attrelid = c.confrelid and o2.attname = 'org_id'
+                    and o2.attnum > 0 and not o2.attisdropped)
      and not exists (
        select 1 from pg_constraint c2
         where c2.contype = 'f' and c2.conrelid = c.conrelid
           and c2.confrelid = c.confrelid and cardinality(c2.conkey) > 1
           and k.attnum = any (c2.conkey))
-     -- Two exemptions, and both are features rather than gaps. Both
-     -- are on `purchase_documents`, both are inter-company billing, and
-     -- both were found the same way: the constraint was written like
-     -- every other one, and `supabase/tests/intercompany_billing.sql`
-     -- failed.
-     --
      -- `source_sales_document_id` (0516) is the link from the buyer's
-     -- bill to the seller's invoice. Pointing at the other company's
+     -- bill to the seller's invoice: pointing at the other company's
      -- document IS the feature.
      --
      -- `payment_term_id` (0520) is subtler and cost two wrong turns.
@@ -855,15 +820,13 @@ begin
      -- asserted it, in an assertion whose own title says why: "and the
      -- terms it was raised on, not only the date they produce". The
      -- first wrong turn was adding the constraint; the second was
-     -- reading the failure as an implementation accident and changing
-     -- the function to stop copying the term, which failed the same
-     -- file on that assertion.
+     -- reading that failure as an implementation accident and changing
+     -- the function, which failed the same file again.
      --
-     -- They are named here rather than left out of the query, so they
-     -- read as decisions rather than oversights. Every OTHER column on
-     -- `purchase_documents` still has to say which company's row it
-     -- means, and that is checked: dropping
-     -- `purchase_documents_contact_same_org` still fails this query.
+     -- They are named here rather than filtered out silently, so they
+     -- read as decisions. That the exemption is exactly two columns
+     -- wide is checked by dropping
+     -- `purchase_documents_contact_same_org` and watching this fail.
      and (c.conrelid, a.attname) not in (
            ('public.purchase_documents'::regclass,
             'source_sales_document_id'),
@@ -876,8 +839,8 @@ begin
   end if;
 
   raise notice
-    'thirty-seven parents: 18 cross-company writes refused, 18 '
-    'same-company writes allowed, 0 columns uncovered';
+    'the whole schema: 18 cross-company writes refused, 18 same-company '
+    'writes allowed, 0 columns uncovered anywhere, 2 exempt by name';
 end $$;
 
 -- Deleting a row somebody else names has to empty the reference, not

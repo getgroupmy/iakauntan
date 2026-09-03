@@ -194,7 +194,10 @@ extension RepoCorp on Repo {
   Future<List<CorpShareEvent>> corpShareEvents(String entityId) async {
     final rows = await client
         .from('corp_share_events')
-        .select('*, corp_share_classes(name), '
+        // Named because 0521 added a same-org composite key alongside
+        // the plain one, so 'corp_share_classes' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, corp_share_classes!corp_share_events_share_class_id_fkey(name), '
             'from_person:corp_persons!corp_share_events_from_person_id_fkey(full_name), '
             'to_person:corp_persons!corp_share_events_to_person_id_fkey(full_name)')
         .eq('entity_id', entityId)
