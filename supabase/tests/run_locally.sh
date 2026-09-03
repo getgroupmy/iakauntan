@@ -61,6 +61,18 @@ start_cluster() {
     # has to be preloaded before any migration runs.
     printf "shared_preload_libraries = 'pg_cron'\ncron.database_name = 'postgres'\n" \
       >> "$PGDATA/postgresql.conf"
+    # `bootstrap` drops the whole public schema in ONE transaction, and
+    # a cascading drop takes a lock on every object it removes. The
+    # default 64 locks per transaction was enough until the same-org
+    # foreign keys went in; at around six hundred constraints the drop
+    # started failing with "out of shared memory / you might need to
+    # increase max_locks_per_transaction", which names the setting but
+    # not the transaction that ran out.
+    #
+    # CI does not hit this -- it builds a fresh database with
+    # `supabase start` and never drops anything -- so this is a limit of
+    # this script's rebuild, not of the schema.
+    printf "max_locks_per_transaction = 1024\n" >> "$PGDATA/postgresql.conf"
   fi
   su postgres -c \
     "$PGBIN/pg_ctl -D $PGDATA -l /var/tmp/pg.log -o '-k $PGSOCK -p $PGPORT' start" \
@@ -96,7 +108,7 @@ start_cluster() {
 # rather than `show`, because `show` on a GUC pg_cron never registered
 # is itself an error and would report the wrong thing.
 check_cluster() {
-  local libs cron_db here
+  local libs cron_db here locks
   libs="$($PSQL -tAc "select current_setting('shared_preload_libraries', true)")"
   cron_db="$($PSQL -tAc "select current_setting('cron.database_name', true)")"
   here="$($PSQL -tAc 'select current_database()')"
@@ -111,6 +123,16 @@ check_cluster() {
   if [ -n "$cron_db" ] && [ "$cron_db" != "$here" ]; then
     cluster_wrong \
       "pg_cron is pointed at database '$cron_db' but the migrations run in '$here'"
+  fi
+
+  # Checked for the same reason as the two above: a cluster built before
+  # this setting was added starts cleanly and then fails in `bootstrap`
+  # with "out of shared memory", which names max_locks_per_transaction
+  # but not the drop that exhausted it.
+  locks="$($PSQL -tAc "select current_setting('max_locks_per_transaction', true)")"
+  if [ -z "$locks" ] || [ "$locks" -lt 1024 ]; then
+    cluster_wrong \
+      "max_locks_per_transaction is ${locks:-unset}, and dropping the public schema needs at least 1024"
   fi
 }
 

@@ -2895,7 +2895,10 @@ class Repo {
         // Named because 0513 added a same-org composite key alongside
         // the plain one, so 'items' can now be joined two ways and
         // PostgREST refuses an unqualified embed with PGRST201.
-        .select('*, items!manufacturing_orders_item_id_fkey(code, name), bills_of_materials(code)')
+        // Named because 0520 added a same-org composite key alongside
+        // the plain one, so 'bills_of_materials' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, items!manufacturing_orders_item_id_fkey(code, name), bills_of_materials!manufacturing_orders_bom_id_fkey(code)')
         .eq('org_id', orgId);
     if (openOnly) {
       q = q.inFilter('status', ['draft', 'confirmed', 'in_progress']);
@@ -4096,7 +4099,10 @@ class Repo {
         // Named because 0512 added a same-org composite key alongside
         // the plain one, so 'contacts' can now be joined two ways and
         // PostgREST refuses an unqualified embed with PGRST201.
-        .select('*, contacts!activities_contact_id_fkey(name), opportunities(name)')
+        // Named because 0520 added a same-org composite key alongside
+        // the plain one, so 'opportunities' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, contacts!activities_contact_id_fkey(name), opportunities!activities_opportunity_id_fkey(name)')
         .eq('org_id', orgId);
     if (onlyPending) query = query.eq('status', 'pending');
     final data = await query.order('due_date').limit(100);
@@ -8554,7 +8560,10 @@ extension RepoPos on Repo {
       Repo.rows(
         await client
             .from('pos_sales')
-            .select('*, pos_tables(code, name)')
+            // Named because 0520 added a same-org composite key alongside
+        // the plain one, so 'pos_tables' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, pos_tables!pos_sales_table_id_fkey(code, name)')
             .eq('register_id', registerId)
             .eq('status', 'parked')
             .order('opened_at'),

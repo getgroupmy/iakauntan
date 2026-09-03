@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788458459.087967,
-    "ast_hash": "13cc3385c9feeb1a3c487238acee5a08",
+    "mtime": 1788459771.2410977,
+    "ast_hash": "d94aeecbc8441d3b8351a7df0febf670",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -2765,8 +2765,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/tenant_foreign_keys.sql": {
-    "mtime": 1788458538.482736,
-    "ast_hash": "d536ce754c2086c308d8dc6130e45674",
+    "mtime": 1788460332.7866733,
+    "ast_hash": "1349009e5c5e2094da887c80dd1475c5",
     "semantic_hash": ""
   },
   "docs/property.md": {
@@ -5725,8 +5725,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/run_locally.sh": {
-    "mtime": 1788340025.6184735,
-    "ast_hash": "d2ec0a0fd37f229d0209278c3c2f8fb8",
+    "mtime": 1788459900.713733,
+    "ast_hash": "c81a0db307d683970bd926dfb2fe5055",
     "semantic_hash": ""
   },
   "app/lib/src/features/mail/attachments.dart": {
@@ -7722,6 +7722,11 @@
   "supabase/migrations/0519_seven_more_parents.sql": {
     "mtime": 1788458441.2581172,
     "ast_hash": "f1592b9bafbe66c4786ffd99b21e5b93",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0520_the_long_tail_three_and_four.sql": {
+    "mtime": 1788460315.3054633,
+    "ast_hash": "df1dcb58e53757b0c00854c4b134bce5",
     "semantic_hash": ""
   }
 }

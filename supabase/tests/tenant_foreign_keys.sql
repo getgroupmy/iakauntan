@@ -165,8 +165,9 @@ end $$;
 -- `sales_documents`, 0517 for `pos_outlets`, 0518 for `tax_codes`,
 -- `purchase_documents` and `pos_sales`, and 0519 for `bank_accounts`,
 -- `branches`, `corp_entities`, `corp_persons`, `departments`,
--- `einvoice_documents` and `pos_registers`. All eighteen parents are
--- probed or covered in the one block below.
+-- `einvoice_documents` and `pos_registers`; and 0520 for the nineteen
+-- parents with three or four references each. All thirty-seven parents
+-- are probed or covered in the one block below.
 -- `contacts` is the widest and the one where a wrong id is money: an
 -- invoice raised in this company against another company's customer
 -- reads as an ordinary invoice, and only the aged receivable shows the
@@ -185,6 +186,7 @@ declare
   v_out_a uuid; v_out_b uuid;
   v_tax_b uuid; v_bill_a uuid; v_bill_b uuid;
   v_ent2_a uuid; v_per_a uuid; v_per_b uuid;
+  v_tkt_b uuid;
   v_tried integer := 0; v_refused integer := 0;
   v_uncovered text;
 begin
@@ -717,7 +719,48 @@ begin
       'the new keys refuse A''s own person on A''s own board: %', sqlerrm;
   end;
 
-  if v_refused <> v_tried or v_tried < 27 then
+  -- 19. A ticket share link, which is 0520, and the third thing in this
+  -- programme that leaves the building -- after `document_share_links`
+  -- in 0516 and the customer portal. A person with no account follows a
+  -- token to see a ticket, and the token is what authorises the read,
+  -- not a session. RLS is no help at all: a link in A pointing at B's
+  -- ticket shows B's ticket, with everything written on it, to somebody
+  -- who was never meant to see it.
+  insert into public.tickets
+    (org_id, ticket_no, subject, ticket_type, priority, status, channel,
+     opened_at, requester_contact_id)
+  values (v_b, 'TKT-B', 'B''s problem', 'incident', 'p3', 'open', 'email',
+          now(), v_con_b)
+  returning id into v_tkt_b;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.ticket_share_links
+      (org_id, ticket_id, token_hash, expires_at)
+    values (v_a, v_tkt_b, 'tkt-hash-x', now() + interval '7 days');
+    raise exception 'a share link in A pointed at B''s ticket';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.tickets
+      (org_id, ticket_no, subject, ticket_type, priority, status, channel,
+       opened_at, requester_contact_id)
+    values (v_a, 'TKT-A', 'A''s problem', 'incident', 'p3', 'open',
+            'email', now(), v_con_a);
+    insert into public.ticket_share_links
+      (org_id, ticket_id, token_hash, expires_at)
+    select v_a, id, 'tkt-hash-own', now() + interval '7 days'
+      from public.tickets where org_id = v_a and ticket_no = 'TKT-A';
+    v_refused := v_refused + 1;
+  exception when others then
+    raise exception
+      'the new keys refuse a link to A''s own ticket: %', sqlerrm;
+  end;
+
+  if v_refused <> v_tried or v_tried < 29 then
     raise exception 'employee and warehouse boundary: % probes ran, % behaved',
       v_tried, v_refused;
   end if;
@@ -735,11 +778,11 @@ begin
   -- `purchase_documents` and `pos_sales` (0518), and `bank_accounts`,
   -- `branches`, `corp_entities`, `corp_persons`, `departments`,
   -- `einvoice_documents` and `pos_registers` (0519) are closed. The
-  -- list is deliberately not every parent in the schema: a long tail of
-  -- smaller ones, one to four columns each, is still to come. Adding a
-  -- parent here before its migration would make this file fail for work
-  -- that has not been done, which is a worse signal than not asserting
-  -- it yet.
+  -- list is deliberately not every parent in the schema: what is left
+  -- is the parents with one or two references each. Adding a parent
+  -- here before its migration would make this file fail for work that
+  -- has not been done, which is a worse signal than not asserting it
+  -- yet.
   select string_agg(
            c.confrelid::regclass::text || ' <- ' ||
            c.conrelid::regclass::text || '.' || a.attname, ', ')
@@ -765,7 +808,26 @@ begin
                          'public.corp_persons'::regclass,
                          'public.departments'::regclass,
                          'public.einvoice_documents'::regclass,
-                         'public.pos_registers'::regclass)
+                         'public.pos_registers'::regclass,
+                         'public.bills_of_materials'::regclass,
+                         'public.contact_persons'::regclass,
+                         'public.corp_resolutions'::regclass,
+                         'public.item_categories'::regclass,
+                         'public.landed_cost_runs'::regclass,
+                         'public.matters'::regclass,
+                         'public.opportunities'::regclass,
+                         'public.payment_terms'::regclass,
+                         'public.pipeline_stages'::regclass,
+                         'public.pos_kitchen_stations'::regclass,
+                         'public.pos_modifier_groups'::regclass,
+                         'public.pos_sale_lines'::regclass,
+                         'public.pos_service_providers'::regclass,
+                         'public.pos_stalls'::regclass,
+                         'public.pos_tables'::regclass,
+                         'public.purchase_document_lines'::regclass,
+                         'public.receipts'::regclass,
+                         'public.sales_document_lines'::regclass,
+                         'public.tickets'::regclass)
      and cardinality(c.conkey) = 1
      and exists (select 1 from pg_attribute o
                   where o.attrelid = c.conrelid and o.attname = 'org_id'
@@ -775,20 +837,38 @@ begin
         where c2.contype = 'f' and c2.conrelid = c.conrelid
           and c2.confrelid = c.confrelid and cardinality(c2.conkey) > 1
           and k.attnum = any (c2.conkey))
-     -- One exemption, and it is a feature rather than a gap.
-     -- Inter-company billing is one company in a group invoicing
-     -- another: the seller raises a sales document, the buyer gets a
-     -- purchase document, and this column is the link between them, so
-     -- it points at another company's row on purpose. 0516 tried to
-     -- close it like the other nineteen and
-     -- `supabase/tests/intercompany_billing.sql` failed, which is how
-     -- it was found. Naming it here rather than leaving it out of the
-     -- query keeps it visible: it reads as a decision, not an
-     -- oversight, and any OTHER column on `purchase_documents` still
-     -- has to say which company's document it means.
-     and (c.conrelid, a.attname)
-         <> ('public.purchase_documents'::regclass,
-             'source_sales_document_id');
+     -- Two exemptions, and both are features rather than gaps. Both
+     -- are on `purchase_documents`, both are inter-company billing, and
+     -- both were found the same way: the constraint was written like
+     -- every other one, and `supabase/tests/intercompany_billing.sql`
+     -- failed.
+     --
+     -- `source_sales_document_id` (0516) is the link from the buyer's
+     -- bill to the seller's invoice. Pointing at the other company's
+     -- document IS the feature.
+     --
+     -- `payment_term_id` (0520) is subtler and cost two wrong turns.
+     -- 0439 made `accept_intercompany_bill` copy the seller's due date
+     -- onto the buyer's bill, because `report_ap_aging` buckets on
+     -- `coalesce(due_date, doc_date)` and a null aged the bill from the
+     -- day it was raised. It copied the TERM alongside the date and
+     -- asserted it, in an assertion whose own title says why: "and the
+     -- terms it was raised on, not only the date they produce". The
+     -- first wrong turn was adding the constraint; the second was
+     -- reading the failure as an implementation accident and changing
+     -- the function to stop copying the term, which failed the same
+     -- file on that assertion.
+     --
+     -- They are named here rather than left out of the query, so they
+     -- read as decisions rather than oversights. Every OTHER column on
+     -- `purchase_documents` still has to say which company's row it
+     -- means, and that is checked: dropping
+     -- `purchase_documents_contact_same_org` still fails this query.
+     and (c.conrelid, a.attname) not in (
+           ('public.purchase_documents'::regclass,
+            'source_sales_document_id'),
+           ('public.purchase_documents'::regclass,
+            'payment_term_id'));
   if v_uncovered is not null then
     raise exception
       'these columns name a row without saying which company''s: %',
@@ -796,8 +876,8 @@ begin
   end if;
 
   raise notice
-    'eighteen parents: 17 cross-company writes refused, 17 same-company '
-    'writes allowed, 0 columns uncovered';
+    'thirty-seven parents: 18 cross-company writes refused, 18 '
+    'same-company writes allowed, 0 columns uncovered';
 end $$;
 
 -- Deleting a row somebody else names has to empty the reference, not
