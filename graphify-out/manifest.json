@@ -7745,8 +7745,13 @@
     "semantic_hash": ""
   },
   "supabase/tests/two_companies_on_one_row.sql": {
-    "mtime": 1788467971.4270723,
-    "ast_hash": "c62b35897ec1f0e9944cb2ca80d6a5e7",
+    "mtime": 1788468500.9288623,
+    "ast_hash": "e71cdb31f843284ec2c54f368f00eb07",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0523_the_customer_at_the_tender_sheet.sql": {
+    "mtime": 1788468461.0978756,
+    "ast_hash": "e4e41ea6e962727165e0e1b8f52913b5",
     "semantic_hash": ""
   }
 }

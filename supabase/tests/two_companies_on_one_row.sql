@@ -58,11 +58,12 @@ do $$
 declare
   a uuid; b uuid;
   wh_a uuid; wh_b uuid; wi_a uuid; wi_b uuid;
-  out_a uuid; out_b uuid; item_a uuid; item_b uuid;
+  out_a uuid; out_b uuid; item_a uuid; item_b uuid; teh_a uuid;
   sched uuid; promo uuid;
   tk uuid; team_a uuid; stranger uuid; mate uuid;
   cust_b uuid; asset_b uuid;
   tax_a uuid; tax_b uuid;
+  reg uuid; cash uuid; sale uuid;
   v_msg text; v_off text; v_n integer;
 begin
   a := pg_temp.test_org('Two Companies A');
@@ -83,6 +84,12 @@ begin
   insert into public.items
     (org_id, code, name, item_type, track_inventory, uom_code, unit_price, cost_price)
     values (b,'NASI','B''s nasi lemak','stock',true,'C62',5,2) returning id into item_b;
+  -- On no schedule, so it is on the menu all day. The nasi lemak above
+  -- is deliberately put on one that is shut, which is what section 2 is
+  -- about, and section 7 needs something that can actually be sold.
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price, cost_price)
+    values (a,'TEH','A''s teh tarik','stock',true,'C62',5,2) returning id into teh_a;
   insert into public.pos_outlets
     (org_id, code, name, business_type, warehouse_id, walk_in_contact_id, prices_include_tax)
     values (a,'S','A''s shop','food_beverage',wh_a,wi_a,false) returning id into out_a;
@@ -310,6 +317,49 @@ begin
   delete from public.tax_codes where id = tax_a;
   perform pg_temp.check_true('deleting it empties the default, and the company lives',
     (select default_sales_tax_code_id is null from public.organizations where id = a));
+
+  -- ==================================================================
+  -- 7. And the customer at the tender sheet
+  --
+  -- The last of the fifteen. `sales_documents_contact_same_org` refused
+  -- this already and still does; 0523 moved the refusal to the top of
+  -- the function and gave it words. Compared whole, because the key's
+  -- own message contains neither of these words and a fragment match
+  -- would pass against it.
+  -- ==================================================================
+  insert into public.pos_registers (org_id, outlet_id, code, name)
+    values (a, out_a, 'T1', 'A''s till') returning id into reg;
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
+    values (a, 'CASH', 'Cash', 'cash', '01', true, true) returning id into cash;
+  perform public.create_fiscal_year(a, date_trunc('year', app.today())::date);
+  perform public.open_pos_shift(reg, 100.00);
+  sale := public.open_pos_sale(reg, null);
+  perform public.add_pos_sale_line(sale, teh_a, 1, 5.00);
+
+  begin
+    perform public.complete_pos_sale(
+      sale, jsonb_build_array(jsonb_build_object('type', cash, 'amount', 5)),
+      cust_b);
+    raise exception
+      'a counter sale was billed to another company''s customer';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq(
+      'a sale billed to another company''s customer is refused, in words',
+      v_msg, 'No such contact.');
+  end;
+
+  perform pg_temp.check_eq('and the bill is still open on the till',
+    (select status::text from public.pos_sales where id = sale), 'parked');
+
+  -- Its own customer settles it, or the refusal above is a function
+  -- that cannot take money at all.
+  perform public.complete_pos_sale(
+    sale, jsonb_build_array(jsonb_build_object('type', cash, 'amount', 5)),
+    wi_a);
+  perform pg_temp.check_eq('and its own customer settles it',
+    (select status::text from public.pos_sales where id = sale), 'completed');
 
   raise notice 'two companies on one row: every probe behaved';
 end $$;
