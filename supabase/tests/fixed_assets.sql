@@ -383,4 +383,289 @@ begin
         and app.accumulated_depreciation_at(a, d.on_date) < 0), 0);
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- The eleven a mutation sweep found
+-- ---------------------------------------------------------------------
+-- Twenty-seven one-line mutants of `dispose_fixed_asset` against seven
+-- test files. Sixteen died on the first run, and they are the
+-- arithmetic and the journal: the charge caught up to the day it left,
+-- the book value, the gain or loss measured against book value and
+-- posted to the right side, the accumulated depreciation written back,
+-- the asset relieved at COST rather than at book value, the proceeds
+-- banked, the catch-up recorded as a depreciation run tying to the
+-- schedule.
+--
+-- The eleven that survived are the front door, the accounts chosen, and
+-- the state -- the third function in a row with exactly this split, and
+-- the reason it is now the first thing this programme looks at rather
+-- than the last.
+--
+-- Two are worth naming beyond the list.
+--
+--   THE DATE. `p_date` is the day the asset left, and the journal takes
+--   it. Replace it with app.today() and a van sold in March, entered in
+--   April, depreciates to March and posts to April -- so the profit and
+--   loss disagrees with the schedule behind it, and a locked period
+--   does not stop it. Every sweep this session has found a date like
+--   this.
+--
+--   THE BANK. p_bank_account_id says where the money went. Ignored,
+--   every disposal lands in the current account, and the reconciliation
+--   for the account that actually received it will never balance.
+do $$
+declare
+  v_org    uuid;
+  v_owner  uuid := pg_temp.test_user();
+  v_asset  uuid;
+  v_other  uuid;
+  v_ac_van uuid;
+  v_bank   uuid;
+  v_bank_ac uuid;
+  v_who    uuid;
+  v_entry  uuid;
+  v_msg    text;
+  v_when   date := date '2026-03-31';
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Aset Sapu Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+
+  -- A second bank account, so "where the money went" has two answers
+  -- and naming one of them means something.
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype)
+  values (v_org, '1125', 'Second account', 'asset', 'bank')
+  returning id into v_bank_ac;
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, account_number, currency,
+     opening_balance, current_balance)
+  values (v_org, v_bank_ac, 'Disposal proceeds', 'CIMB', '800000000001',
+          'MYR', 0, 0)
+  returning id into v_bank;
+
+  -- And an account of the asset's own, so "the asset's own account" has
+  -- an answer that is not the default.
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype)
+  values (v_org, '1515', 'Motor vehicles', 'asset', 'fixed_asset')
+  returning id into v_ac_van;
+
+  insert into public.fixed_assets
+    (org_id, asset_no, name, acquisition_date, cost, residual_value,
+     method, useful_life_months, asset_account_id)
+  values (v_org, 'FA-SAPU-1', 'Delivery van', date '2026-01-01', 60000, 0,
+          'straight_line', 60, v_ac_van)
+  returning id into v_asset;
+
+  -- ==================================================================
+  -- 1. The front door
+  -- ==================================================================
+  begin
+    perform public.dispose_fixed_asset(gen_random_uuid(), v_when);
+    raise exception 'an asset that does not exist was disposed of';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('an asset that is not there is refused',
+      v_msg like 'Asset % not found');
+  end;
+
+  begin
+    perform public.dispose_fixed_asset(v_asset, date '2025-12-31');
+    raise exception 'an asset was disposed of before it was bought';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq(
+      'an asset cannot leave before it arrived',
+      v_msg,
+      'Asset FA-SAPU-1 was acquired on 2026-01-01, after the disposal '
+      'date 2025-12-31');
+  end;
+
+  v_who := pg_temp.another_user('asset-viewer@iakauntan.test');
+  insert into public.org_members (org_id, user_id, role, status, joined_at)
+  values (v_org, v_who, 'viewer', 'active', now());
+  perform pg_temp.sign_in_as(v_who);
+  begin
+    perform public.dispose_fixed_asset(v_asset, v_when);
+    raise exception 'somebody who may not post disposed of an asset';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('and not by somebody who may not post',
+      v_msg, 'Insufficient privileges to post');
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- ==================================================================
+  -- 2. The chart has to have somewhere to put it
+  --
+  -- Both refusals reached with one fixture: rename 1510 and 1590 out of
+  -- the way and the coalesce finds nothing. Without the check the
+  -- failure arrives from inside create_gl_entry_internal, about a null
+  -- account_id on a line nobody wrote by hand.
+  -- ==================================================================
+  insert into public.fixed_assets
+    (org_id, asset_no, name, acquisition_date, cost, residual_value,
+     method, useful_life_months)
+  values (v_org, 'FA-SAPU-2', 'Office chair', date '2026-01-01', 1200, 0,
+          'straight_line', 60)
+  returning id into v_other;
+
+  update public.accounts set code = '1511-moved'
+   where org_id = v_org and code = '1510';
+  begin
+    perform public.dispose_fixed_asset(v_other, v_when);
+    raise exception 'an asset was disposed of with nowhere to relieve it';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq(
+      'with no fixed asset account, the disposal refuses in words',
+      v_msg,
+      'No fixed asset (1510) or accumulated depreciation (1590) account in '
+      'the chart. Add them, or name accounts on the asset.');
+  end;
+  update public.accounts set code = '1510'
+   where org_id = v_org and code = '1511-moved';
+
+  -- The same for the expense account, which is only consulted when
+  -- there is a catch-up to charge -- so the asset must have gone
+  -- undepreciated, which FA-SAPU-2 has.
+  update public.accounts set code = '6401-moved'
+   where org_id = v_org and code = '6400';
+  begin
+    perform public.dispose_fixed_asset(v_other, v_when);
+    raise exception
+      'an asset was disposed of with its catch-up charged nowhere';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'and with no depreciation expense account, likewise',
+      v_msg like 'No depreciation expense (6400) account in the chart, and '
+                 'FA-SAPU-2 has not been depreciated up to %');
+  end;
+  update public.accounts set code = '6400'
+   where org_id = v_org and code = '6401-moved';
+
+  -- ==================================================================
+  -- 3. The accounts actually chosen
+  --
+  -- The asset carries its own 1515, and the proceeds are banked into
+  -- the second account. Both are coalesce fallbacks that could be
+  -- ignored, and neither changes a total -- they change which line of
+  -- the balance sheet moves, and which bank reconciliation balances.
+  -- ==================================================================
+  v_entry := public.dispose_fixed_asset(v_asset, v_when, 50000, v_bank);
+
+  perform pg_temp.check_eq(
+    'the asset is relieved from the account it was carried in',
+    (select round(sum(gl.credit), 2) from public.gl_lines gl
+      where gl.entry_id = v_entry and gl.account_id = v_ac_van),
+    60000::numeric);
+  perform pg_temp.check_eq('and not from the default one',
+    (select coalesce(round(sum(gl.credit), 2), 0) from public.gl_lines gl
+       join public.accounts a on a.id = gl.account_id
+      where gl.entry_id = v_entry and a.code = '1510'), 0::numeric);
+
+  perform pg_temp.check_eq('the proceeds reach the account they were paid into',
+    (select round(sum(gl.debit), 2) from public.gl_lines gl
+      where gl.entry_id = v_entry and gl.account_id = v_bank_ac),
+    50000::numeric);
+  perform pg_temp.check_eq('and not the current account',
+    (select coalesce(round(sum(gl.debit), 2), 0) from public.gl_lines gl
+       join public.accounts a on a.id = gl.account_id
+      where gl.entry_id = v_entry and a.code = '1120'), 0::numeric);
+
+  -- ==================================================================
+  -- 4. The day it left is the day it posts
+  --
+  -- A van sold in March and entered in April is depreciated to March
+  -- and posted to April: the profit and loss then disagrees with the
+  -- schedule behind it, and a locked period does not stop it.
+  -- ==================================================================
+  perform pg_temp.check_true('the day it left is not today',
+    v_when <> app.today());
+  perform pg_temp.check_true('and the journal is dated that day',
+    (select e.entry_date = v_when from public.gl_entries e
+      where e.id = v_entry));
+
+  -- ==================================================================
+  -- 5. What the disposal leaves on the asset and in the schedule
+  -- ==================================================================
+  perform pg_temp.check_eq('the proceeds are recorded on the asset',
+    (select disposal_proceeds from public.fixed_assets where id = v_asset),
+    50000::numeric);
+  perform pg_temp.check_eq(
+    'and the catch-up recorded in the run is the catch-up charged',
+    (select r.total_amount from public.depreciation_runs r
+      where r.gl_entry_id = v_entry),
+    (select round(sum(gl.debit), 2) from public.gl_lines gl
+       join public.accounts a on a.id = gl.account_id
+      where gl.entry_id = v_entry and a.code = '6400'));
+  perform pg_temp.check_true('which is not nothing',
+    (select r.total_amount > 0 from public.depreciation_runs r
+      where r.gl_entry_id = v_entry));
+
+  -- ==================================================================
+  -- 6. A catch-up cannot be negative
+  --
+  -- `greatest(..., 0)`. An asset already depreciated past what the
+  -- straight line says -- a manual adjustment, or a life shortened
+  -- after the fact -- would otherwise post a NEGATIVE depreciation
+  -- charge, crediting the profit and loss with a write-back nobody
+  -- authorised.
+  -- ==================================================================
+  insert into public.fixed_assets
+    (org_id, asset_no, name, acquisition_date, cost, residual_value,
+     method, useful_life_months, accumulated_depreciation, depreciated_to)
+  values (v_org, 'FA-SAPU-3', 'Over-depreciated press', date '2026-01-01',
+          12000, 0, 'straight_line', 60, 9000, date '2026-03-31')
+  returning id into v_other;
+
+  v_entry := public.dispose_fixed_asset(v_other, v_when, 0, null);
+  perform pg_temp.check_eq(
+    'an asset already depreciated past the line charges nothing more',
+    (select coalesce(round(sum(gl.debit), 2), 0) from public.gl_lines gl
+       join public.accounts a on a.id = gl.account_id
+      where gl.entry_id = v_entry and a.code = '6400'), 0::numeric);
+  perform pg_temp.check_eq('and no depreciation run is raised for nothing',
+    (select count(*)::integer from public.depreciation_runs r
+      where r.gl_entry_id = v_entry), 0);
+  perform pg_temp.check_eq(
+    'while what it was carrying is still written off in full',
+    (select round(sum(gl.debit), 2) from public.gl_lines gl
+       join public.accounts a on a.id = gl.account_id
+      where gl.entry_id = v_entry and a.account_subtype = 'accumulated_depreciation'),
+    9000::numeric);
+
+  -- ==================================================================
+  -- What the sweep could not kill, and why
+  -- ==================================================================
+  -- Twenty-seven mutants; twenty-six die against the assertions above.
+  -- The twenty-seventh is EQUIVALENT, and it is the `greatest(..., 0)`
+  -- the block immediately above is about.
+  --
+  --     v_catchup := greatest(v_accum - a.accumulated_depreciation, 0);
+  --
+  -- Remove the greatest and v_catchup goes negative for the press --
+  -- and nothing downstream reads it, because all three places that do
+  -- are inside `if v_catchup > 0`. The journal line, the depreciation
+  -- run and the depreciation entry are all guarded, so a negative and a
+  -- zero produce the same books.
+  --
+  -- The assertions above hold under both, which is the probe: they were
+  -- written expecting to kill it and they do not. The greatest is
+  -- shadowed by the guards below it, exactly as `posted_at` and the
+  -- status check shadow each other in post_manufacturing_order.
+  --
+  -- Left in place. It states the intent at the point the number is
+  -- computed rather than three branches later, and a later edit that
+  -- relaxed any of those guards would need it. That is the third
+  -- equivalent mutant this programme has recorded rather than worked
+  -- around: the round(..., 2) beside a numeric(18, 2) in contra.sql,
+  -- the delete before a raise in credit_note_return.sql, and this.
+  -- All three are code that is right, doing nothing, and worth keeping.
+
+  raise notice 'ok   fixed assets: the eleven a sweep found';
+end $$;
+
 rollback;
