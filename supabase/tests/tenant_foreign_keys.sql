@@ -305,4 +305,118 @@ begin
     '3 same-company writes allowed, 0 columns uncovered';
 end $$;
 
+-- Deleting a row somebody else names has to empty the reference, not
+-- raise.
+--
+-- A composite key with `on delete set null` and no column list nulls
+-- EVERY referencing column, and the first of ours is always `org_id`,
+-- which is NOT NULL -- so the delete failed with 23502 instead of
+-- clearing the reference. 0511 re-added the twenty affected keys naming
+-- only the child column.
+--
+-- The ticketing probe is the one that mattered. `employees.manager_id`
+-- also had the defect but its delete succeeded anyway, because the
+-- plain single-column key beside it nulls the column first and the
+-- composite key then matches nothing -- trigger firing order standing
+-- in for a correct constraint. `ticket_categories.team_id` has no plain
+-- sibling, so nothing rescued it and the delete raised. Both are probed
+-- here: one for the failure that was real, one for the near miss.
+
+do $$
+declare
+  v_org  uuid;
+  v_team uuid;
+  v_cat  uuid;
+  v_boss uuid;
+  v_kaki uuid;
+  v_bad  text;
+begin
+  v_org := pg_temp.test_org('Buang Ketua Sdn Bhd', array['ticketing']);
+
+  -- 1. The one that raised. A category names a team; deleting the team
+  -- has to leave the category with no team, not refuse.
+  insert into public.ticket_teams (org_id, code, name)
+  values (v_org, 'SOK', 'Sokongan') returning id into v_team;
+  insert into public.ticket_categories (org_id, code, name, team_id)
+  values (v_org, 'AM', 'Am', v_team) returning id into v_cat;
+
+  begin
+    delete from public.ticket_teams where id = v_team;
+  exception when others then
+    raise exception
+      'deleting a ticket team raised instead of emptying the reference: '
+      '% / %', sqlstate, sqlerrm;
+  end;
+
+  if not exists (select 1 from public.ticket_categories where id = v_cat) then
+    raise exception 'deleting the team took the category with it';
+  end if;
+  if (select team_id from public.ticket_categories where id = v_cat)
+     is not null then
+    raise exception 'the category kept a team that was deleted';
+  end if;
+
+  -- 2. The near miss, and the self-reference besides: a reporting line
+  -- and a department head, both pointing at the same person.
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, employment_status)
+  values (v_org, 'BK-1', 'Ketua', current_date - 400, 'active')
+  returning id into v_boss;
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, employment_status, manager_id)
+  values (v_org, 'BK-2', 'Kaki', current_date - 400, 'active', v_boss)
+  returning id into v_kaki;
+  insert into public.departments (org_id, code, name, head_employee_id)
+  values (v_org, 'OPS', 'Operations', v_boss);
+
+  begin
+    delete from public.employees where id = v_boss;
+  exception when others then
+    raise exception
+      'deleting a manager raised instead of emptying the reference: % / %',
+      sqlstate, sqlerrm;
+  end;
+
+  if not exists (select 1 from public.employees where id = v_kaki) then
+    raise exception 'deleting the manager took the subordinate with it';
+  end if;
+  if (select manager_id from public.employees where id = v_kaki)
+     is not null then
+    raise exception 'the reporting line survived the manager';
+  end if;
+  if (select head_employee_id from public.departments
+       where org_id = v_org and code = 'OPS') is not null then
+    raise exception 'the department kept a head who was deleted';
+  end if;
+
+  -- The two probes reach three of the twenty. This reaches all of them,
+  -- and any composite key a later migration adds: a `set null` rule
+  -- with no column list, or one that names a NOT NULL column, is the
+  -- defect 0511 fixed, and reads the same from `pg_constraint` whether
+  -- or not a test happens to delete through it. It is deliberately not
+  -- restricted to `%_same_org` -- the ticketing keys are not named that
+  -- way and were the ones actually failing.
+  select string_agg(c.conrelid::regclass::text || '.' || c.conname, ', ')
+    into v_bad
+    from pg_constraint c
+   where c.contype = 'f'
+     and cardinality(c.conkey) > 1
+     and c.confdeltype = 'n'
+     and (c.confdelsetcols is null
+          or exists (
+            select 1 from pg_attribute a
+             where a.attrelid = c.conrelid
+               and a.attnum = any (c.confdelsetcols)
+               and a.attnotnull));
+  if v_bad is not null then
+    raise exception
+      'these keys null a NOT NULL column on delete instead of the '
+      'reference: %', v_bad;
+  end if;
+
+  raise notice
+    'deleting a named row: 2 references emptied, 0 rows lost, '
+    '0 keys null a NOT NULL column';
+end $$;
+
 rollback;

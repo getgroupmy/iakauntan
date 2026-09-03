@@ -393,20 +393,20 @@ begin
     (org_id, site_id, kind, authority, account_no, period_year, amount,
      due_date)
   values (v_org, v_site, 'quit_rent', 'Pejabat Tanah dan Galian',
-          'QR-99', 2026, 1250.00, current_date + 20);
+          'QR-99', 2026, 1250.00, app.today() + 20);
 
   insert into public.property_statutory_charges
     (org_id, site_id, kind, authority, account_no, period_year, period_half,
      amount, due_date)
   values (v_org, v_site, 'assessment', 'Majlis Bandaraya', 'AS-77',
-          2026, 1, 880.00, current_date - 10);
+          2026, 1, 880.00, app.today() - 10);
 
   -- Paid, so it must not appear however overdue it looks.
   insert into public.property_statutory_charges
     (org_id, site_id, kind, authority, account_no, period_year, period_half,
      amount, due_date, paid_on, reference)
   values (v_org, v_site, 'assessment', 'Majlis Bandaraya', 'AS-77',
-          2025, 2, 880.00, current_date - 200, current_date - 190,
+          2025, 2, 880.00, app.today() - 200, app.today() - 190,
           -- The receipt, because `0387` refuses a paid date with
           -- nothing behind it: paid at the counter is a real way to pay
           -- an assessment, but it has to name what paid it.
@@ -428,7 +428,7 @@ begin
     (org_id, site_id, kind, authority, account_no, period_year, amount,
      due_date)
   values (v_org, v_site, 'quit_rent', 'Pejabat Tanah dan Galian',
-          'QR-98', 2027, 1250.00, current_date + 80);
+          'QR-98', 2027, 1250.00, app.today() + 80);
   select count(*) into v_due from public.property_statutory_due(v_org, 60);
   perform pg_temp.check_eq(
     'a bill beyond the window is not reported', v_due, 2);
@@ -444,7 +444,14 @@ begin
   perform pg_temp.check_eq('no window given is sixty days', v_due, 2);
 
   -- The countdown itself, which is what the screen sorts and colours by
-  -- and which nothing here read. It is days until, not days since: a
+  -- and which nothing here read.
+  --
+  -- The fixture above dates from `app.today()`, not `current_date`,
+  -- because that is what the function counts from. `app.today()` is
+  -- `app.malaysian_day(now())`, and the CI runner is UTC: after 16:00
+  -- UTC the two are different days, so a bill written `current_date +
+  -- 20` read 19 and this file failed for eight hours out of every
+  -- twenty-four. The clock was the only thing that changed. It is days until, not days since: a
   -- bill due in twenty days reads +20 and one missed ten days ago -10,
   -- and swapping them turns the urgent into the comfortable.
   select days_until into v_days
@@ -473,7 +480,7 @@ begin
     (org_id, site_id, kind, authority, account_no, period_year, amount,
      due_date)
   values (v_org2, v_site2, 'quit_rent', 'Pejabat Tanah dan Galian',
-          'QR-OTHER', 2026, 4000.00, current_date + 5);
+          'QR-OTHER', 2026, 4000.00, app.today() + 5);
 
   select count(*) into v_due from public.property_statutory_due(v_org, 60);
   perform pg_temp.check_eq(

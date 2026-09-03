@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788429372.618389,
-    "ast_hash": "fea9cc81119c52cabc5cd28cdbe09a2a",
+    "mtime": 1788452328.478811,
+    "ast_hash": "4bd493dead1732d0fda5c2025c1a077e",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -2760,13 +2760,13 @@
     "semantic_hash": ""
   },
   "supabase/tests/property.sql": {
-    "mtime": 1788403503.8782866,
-    "ast_hash": "bfc468386bd3d6013a85525e7f0f0b2d",
+    "mtime": 1788452048.2532136,
+    "ast_hash": "fe0e2d0f60be6e4010fc43c80c21943a",
     "semantic_hash": ""
   },
   "supabase/tests/tenant_foreign_keys.sql": {
-    "mtime": 1788431700.306342,
-    "ast_hash": "21e0318a6a06ec18af627aeecf7ba2a0",
+    "mtime": 1788452448.7859583,
+    "ast_hash": "86f12f38e20f3d027e58a494ee551cd4",
     "semantic_hash": ""
   },
   "docs/property.md": {
@@ -7677,6 +7677,16 @@
   "supabase/tests/posting_an_invoice_refuses.sql": {
     "mtime": 1788451045.9688537,
     "ast_hash": "6dde8c05d422789360346e8efb8c14bd",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0511_set_null_on_a_composite_key_nulls_both_columns.sql": {
+    "mtime": 1788451829.9828439,
+    "ast_hash": "c0aa085eb4dbff1397b1995e2b3208a0",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0512_a_contact_belongs_to_one_company.sql": {
+    "mtime": 1788452291.9662788,
+    "ast_hash": "96f8ee4215d64e11deb2ef628fa2a208",
     "semantic_hash": ""
   }
 }
