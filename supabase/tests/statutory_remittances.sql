@@ -152,6 +152,24 @@ begin
         and app.remittance_due(date '2026-01-31', body.code)
             is distinct from date '2026-02-15'), 0);
 
+  -- The same over a pay date that is not in January. The assertion
+  -- above cannot tell the month the wages were paid in from the year
+  -- they were paid in: truncate a January date to the year and you get
+  -- the same answer, so a function reading the wrong grain would pass
+  -- it and put every remittance of 2026 in February. June says which.
+  perform pg_temp.check_eq('and it follows the month the wages were paid in',
+    (select count(*)::integer from public.ref_statutory_remittances body
+      where body.due_day is not null
+        and app.remittance_due(date '2026-06-30', body.code)
+            is distinct from date '2026-07-15'), 0);
+
+  -- December's salary paid in January is February's remittance, which
+  -- is the sentence the function's own comment is written around: it
+  -- reads the pay date, not the period the wages were earned in.
+  perform pg_temp.check_true(
+    'a December salary paid in January is remitted in February',
+    app.remittance_due(date '2026-01-05', 'epf') = date '2026-02-15');
+
   -- The count as well, so a sixth body added later without a deadline
   -- of its own is noticed here rather than by whoever is late paying
   -- it. Five carry a date; zakat does not, and the block below says
@@ -170,6 +188,13 @@ begin
     (select due_day from public.ref_statutory_remittances
       where code = 'zakat') is null);
 
+  -- The function opens with `case when r.due_day is null then null`,
+  -- which is a shortcut rather than a guard: without it the arithmetic
+  -- adds `due_day - 1` to a date and a null day makes the whole
+  -- expression null anyway. A mutation sweep reports it as a survivor
+  -- for that reason. The assertion stays because it states the rule a
+  -- payroll clerk relies on, and it would catch somebody replacing the
+  -- addition with something that is not null-safe.
   perform pg_temp.check_true('so no date is invented for it',
     app.remittance_due(date '2026-01-31', 'zakat') is null);
 
