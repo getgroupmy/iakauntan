@@ -500,7 +500,7 @@
     "semantic_hash": "29a5a046d0326e0fc554c0538adfbb9b"
   },
   "supabase/migrations/0026_hrms_statutory_seed.sql": {
-    "mtime": 1786340573.4764163,
+    "mtime": 1788397134.9680912,
     "ast_hash": "59bdb5c3f9c0805704e99785aa8b9585",
     "semantic_hash": "59bdb5c3f9c0805704e99785aa8b9585"
   },
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788394726.9409893,
-    "ast_hash": "8b3e033ebc520d54bac8c6354996c15d",
+    "mtime": 1788397502.386082,
+    "ast_hash": "fd3ecf7ac496e1484a64ac6ff6ee6d05",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7592,6 +7592,11 @@
   "supabase/tests/bulk_actions.sql": {
     "mtime": 1788394690.2358992,
     "ast_hash": "09958e016ff47706ab6efc5e35e890fe",
+    "semantic_hash": ""
+  },
+  "supabase/tests/tax_bands.sql": {
+    "mtime": 1788397364.5652716,
+    "ast_hash": "256da0d6f4d9882abe3e5b849bf6ae19",
     "semantic_hash": ""
   }
 }
