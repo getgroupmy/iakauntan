@@ -765,4 +765,100 @@ begin
       where org_id = v_org) - v_n > 0);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The one the scheduler actually calls
+--
+-- Every assertion above runs `run_recurring_documents_for(org, date)`,
+-- which takes one company. What the nightly job calls is
+-- `app.run_recurring_documents(date)`, which takes none and sweeps
+-- every company on the platform. The two are near-duplicates -- the
+-- same loop over the same table calling the same
+-- `app.advance_recurring_document` -- and a mutation sweep found that
+-- the global one had almost no coverage at all: its filters could be
+-- removed and nothing in the suite noticed.
+--
+-- That is the wrong way round. The per-org function is called by a
+-- person who is looking at the result. The global one runs unattended
+-- at night across every tenant, and its two extra filters are exactly
+-- the ones a multi-tenant scheduler needs:
+--
+--   - `next_run_date <= p_on`, without which every template on the
+--     platform is raised on every run, whether or not it is due
+--   - `o.status = 'active'`, so a closed company's templates stop
+--
+-- and its return value is the number the job logs, which is how anybody
+-- would notice it had gone wrong.
+--
+-- Two of its four mutants survive this block, and both are equivalent
+-- rather than untested. `app.advance_recurring_document`, which the
+-- loop calls, re-checks both conditions itself -- `exit when not
+-- r.is_active` and `exit when r.next_run_date > p_on` -- and returns
+-- zero. So the two filters in the sweep are SELECTION, not correctness:
+-- they keep the nightly job from loading every template on the platform
+-- to be told no. Removing either changes the work done, not the result,
+-- and nothing short of also removing the worker's own guards would show
+-- it. The assertions below are kept because they pin the behaviour the
+-- scheduler has to have; they do not prove those two lines are
+-- load-bearing, and that was established by probe rather than assumed.
+-- ---------------------------------------------------------------------
+
+do $$
+declare
+  v_org   uuid;
+  v_cust  uuid;
+  v_seed  uuid;
+  v_sched uuid;
+  v_n     integer;
+  v_before integer;
+begin
+  v_org  := pg_temp.rec_org('Jadual Malam Sdn Bhd');
+  v_cust := pg_temp.customer(v_org, 'C-N', 'Tetap Bhd', 'ap@tetap.example');
+  v_seed := pg_temp.invoice(v_org, v_cust, 'INV-N',
+                            date '2026-01-01', date '2026-01-31');
+  v_sched := public.create_recurring_document(
+    p_document_id => v_seed,
+    p_name        => 'Monthly retainer',
+    p_frequency   => 'monthly',
+    p_start_date  => date '2026-02-01',
+    p_auto_post   => true);
+
+  -- Not due yet. The global sweep must leave it alone, and the count it
+  -- returns is what says so.
+  select count(*)::integer into v_before
+    from public.sales_documents where org_id = v_org;
+  v_n := app.run_recurring_documents(date '2026-01-31');
+  perform pg_temp.check_eq(
+    'the nightly sweep raises nothing before a template is due', v_n, 0);
+  perform pg_temp.check_eq('and writes nothing either',
+    (select count(*)::integer from public.sales_documents
+      where org_id = v_org), v_before);
+
+  -- Due. One document, and the function says one.
+  v_n := app.run_recurring_documents(date '2026-02-01');
+  perform pg_temp.check_eq(
+    'the nightly sweep raises the one that is due, and counts it',
+    v_n, 1);
+  perform pg_temp.check_eq('which is the document it wrote',
+    (select count(*)::integer from public.sales_documents
+      where org_id = v_org), v_before + 1);
+
+  -- And on the date it was asked for, not the date it ran. The
+  -- scheduler passes the day it is catching up to, and a run that
+  -- ignored it would date a February invoice today.
+  perform pg_temp.check_true(
+    'and dates it the day the sweep was asked for, not the day it ran',
+    exists (select 1 from public.sales_documents
+             where org_id = v_org and doc_date = date '2026-02-01'
+               and id <> v_seed));
+
+  -- Switched off, and the sweep leaves it.
+  update public.recurring_documents set is_active = false
+   where id = v_sched;
+  v_n := app.run_recurring_documents(date '2026-03-01');
+  perform pg_temp.check_eq(
+    'a template that is switched off is not raised by the sweep', v_n, 0);
+
+  raise notice 'the nightly sweep: due, not due, switched off, and counted';
+end $$;
+
 rollback;
