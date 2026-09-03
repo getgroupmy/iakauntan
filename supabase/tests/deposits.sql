@@ -787,4 +787,207 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Selesai Deposit Sdn Bhd: refunding and forfeiting, and the bank a
+-- refund is allowed to come out of
+--
+-- Sweeping `settle_deposit` killed nine of seventeen. The money is
+-- covered: which account a forfeit lands in, which way the bank
+-- balance moves, the reason being kept, the balance being recomputed.
+-- Every refusal was open, the caller's date could be thrown away for
+-- today's, and so could the bank account the caller named.
+--
+-- That last one was 0505, and it was not a cosmetic gap. The account
+-- was checked against the deposit's company in exactly one place -- the
+-- lookup that decides which ledger account to credit -- while the event
+-- row and the running balance used the raw argument. Naming another
+-- company's bank account took the refund out of THEIR balance, recorded
+-- THEIR account against this deposit, and posted this company's credit
+-- to its own 1120 fallback, so both companies ended up wrong and
+-- neither ledger said so. The function is SECURITY DEFINER, so row
+-- level security never came into it.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid; v_org2 uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_cust  uuid;
+  v_bank_a uuid; v_bank_b uuid; v_bank_theirs uuid;
+  v_acct_a uuid; v_acct_b uuid;
+  v_dep   uuid; v_depv uuid; v_entry uuid;
+  v_when  date := current_date - 5;
+  v_msg   text;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Selesai Deposit Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_org,
+    (date_trunc('year', current_date) - interval '1 year')::date);
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['sales','purchases','accounting']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CUST', 'Cik Farah', 'customer') returning id into v_cust;
+
+  -- Two bank accounts with ledger accounts of their own, so paying out
+  -- of the one the caller named rather than the one on the note is
+  -- visible in the journal as well as in the balances.
+  select id into v_acct_a from public.accounts
+   where org_id = v_org and code = '1120';
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype, is_group,
+     parent_id, sort_order)
+  values (v_org, '1125', 'Second current account', 'asset', 'bank', false,
+          (select parent_id from public.accounts
+            where org_id = v_org and code = '1120'), 1500)
+  returning id into v_acct_b;
+
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, account_number, currency,
+     opening_balance, current_balance, is_default)
+  values (v_org, v_acct_a, 'First account', 'Maybank', '511111111111',
+          'MYR', 0, 0, true)
+  returning id into v_bank_a;
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, account_number, currency,
+     opening_balance, current_balance, is_default)
+  values (v_org, v_acct_b, 'Second account', 'CIMB', '522222222222',
+          'MYR', 0, 0, false)
+  returning id into v_bank_b;
+
+  v_dep := public.create_deposit(
+    v_org, 'customer', v_cust, current_date - 20, 4000, v_bank_a, '02',
+    'CHQ 70', 'Booking');
+
+  -- ------------------------------------------------------------------
+  -- What it will not settle
+  -- ------------------------------------------------------------------
+  begin
+    perform public.settle_deposit(v_dep, 'transfer', 100, 'Moved it');
+    raise exception 'FAIL settled a deposit as something it cannot be';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a deposit is given back or kept, nothing else',
+      v_msg like '%given back or kept%');
+  end;
+  begin
+    perform public.settle_deposit(v_dep, 'refund', 0, null, v_bank_a);
+    raise exception 'FAIL refunded nothing';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a settlement has to be for something',
+      v_msg like '%has to be for something%');
+  end;
+  begin
+    perform public.settle_deposit(v_dep, 'refund', -50, null, v_bank_a);
+    raise exception 'FAIL refunded a negative amount';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('and minus fifty is not an amount either',
+      v_msg like '%has to be for something%');
+  end;
+
+  -- A bank account belonging to somebody else. Before 0505 this took
+  -- the money out of their balance and left this company crediting its
+  -- own 1120 instead.
+  v_org2 := pg_temp.test_org('Bank Jiran Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.bank_accounts
+    (org_id, account_id, name, bank_name, account_number, currency,
+     opening_balance, current_balance, is_default)
+  values (v_org2,
+          (select id from public.accounts where org_id = v_org2 and code = '1120'),
+          'Their account', 'RHB', '533333333333', 'MYR', 0, 9000, true)
+  returning id into v_bank_theirs;
+
+  begin
+    perform public.settle_deposit(v_dep, 'refund', 100, 'Wrong bank',
+                                  v_bank_theirs);
+    raise exception 'FAIL refunded out of another company''s bank account';
+  exception when sqlstate '42501' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a refund cannot be paid from another company',
+      v_msg like '%belongs to another company%');
+  end;
+  perform pg_temp.check_eq('and their balance is exactly where it was',
+    (select b.current_balance from public.bank_accounts b
+      where b.id = v_bank_theirs), 9000::numeric);
+
+  -- ------------------------------------------------------------------
+  -- Who may settle one
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-selesai@example.test'));
+  begin
+    perform public.settle_deposit(v_dep, 'refund', 100, null, v_bank_a);
+    raise exception 'FAIL a stranger refunded another company''s deposit';
+  exception when sqlstate '42501' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('somebody outside the company cannot settle it',
+      v_msg like '%not permitted to write%');
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_eq('and all four thousand is still held',
+    (select n.balance_amount from public.deposit_notes n where n.id = v_dep),
+    4000::numeric);
+
+  v_depv := public.create_deposit(
+    v_org, 'customer', v_cust, current_date - 20, 300, v_bank_a, '02',
+    'CHQ 71', 'Second booking');
+  perform public.void_deposit(v_depv, 'Keyed twice');
+  begin
+    perform public.settle_deposit(v_depv, 'refund', 100, null, v_bank_a);
+    raise exception 'FAIL settled a voided deposit';
+  exception when sqlstate '23514' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a voided deposit has nothing to settle',
+      v_msg like '%was voided%');
+  end;
+
+  -- ------------------------------------------------------------------
+  -- Refunded, out of the account the caller named, on the day given
+  -- ------------------------------------------------------------------
+  v_entry := public.settle_deposit(
+    v_dep, 'refund', 1000, 'Booking cancelled', v_bank_b, v_when);
+
+  perform pg_temp.check_true('the journal is dated the day of the refund',
+    (select e.entry_date = v_when from public.gl_entries e where e.id = v_entry));
+  perform pg_temp.check_eq('the money left the account the caller named',
+    (select round(sum(gl.credit), 2) from public.gl_lines gl
+      where gl.entry_id = v_entry and gl.account_id = v_acct_b), 1000::numeric);
+  perform pg_temp.check_eq('not the one the deposit happened to arrive in',
+    (select count(*)::integer from public.gl_lines gl
+      where gl.entry_id = v_entry and gl.account_id = v_acct_a), 0);
+  perform pg_temp.check_eq('so the second account is a thousand down',
+    (select b.current_balance from public.bank_accounts b where b.id = v_bank_b),
+    -1000::numeric);
+  -- Four thousand in, three hundred more in and voided straight back
+  -- out again, and nothing since: the refund did not touch it.
+  perform pg_temp.check_eq('and the first still holds what came in',
+    (select b.current_balance from public.bank_accounts b where b.id = v_bank_a),
+    4000::numeric);
+  perform pg_temp.check_true('the event names the account it went out of',
+    (select e.bank_account_id = v_bank_b from public.deposit_events e
+      where e.deposit_id = v_dep and e.kind = 'refund'));
+
+  -- ------------------------------------------------------------------
+  -- A forfeit never went through a bank, and does not pretend it did
+  -- ------------------------------------------------------------------
+  perform public.settle_deposit(
+    v_dep, 'forfeit', 500, 'Cancelled inside the notice period', null, v_when);
+  perform pg_temp.check_true('a forfeit records no bank account at all',
+    (select e.bank_account_id is null from public.deposit_events e
+      where e.deposit_id = v_dep and e.kind = 'forfeit'));
+  perform pg_temp.check_eq('and no bank balance moved with it',
+    (select b.current_balance from public.bank_accounts b where b.id = v_bank_a),
+    4000::numeric);
+  perform pg_temp.check_eq('two and a half thousand of the deposit is left',
+    (select n.balance_amount from public.deposit_notes n where n.id = v_dep),
+    2500::numeric);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
