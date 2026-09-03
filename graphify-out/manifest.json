@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788416747.7872674,
-    "ast_hash": "b7309b06a203753ad9e6ea27edd5ab66",
+    "mtime": 1788429372.618389,
+    "ast_hash": "fea9cc81119c52cabc5cd28cdbe09a2a",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788419255.5943909,
-    "ast_hash": "1db0c4372baf33492180fb6c8a136949",
+    "mtime": 1788450864.4109302,
+    "ast_hash": "3e062c0818ac7a9a773772edb2fc0d4d",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1325,8 +1325,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/stock_adjustments.sql": {
-    "mtime": 1786523182.1561542,
-    "ast_hash": "a4209a564c3733a53e9350a95b21a3a2",
+    "mtime": 1788423717.4724228,
+    "ast_hash": "9cc6f17ec26aeee01de7845106f78fd9",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/recurring_screen.dart": {
@@ -1610,8 +1610,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/bank_transfers.sql": {
-    "mtime": 1786543127.6515694,
-    "ast_hash": "4746dd87232a31526c66368a41946610",
+    "mtime": 1788423191.7933826,
+    "ast_hash": "38cbc6e665d75c717df4ca37e473fcff",
     "semantic_hash": ""
   },
   "supabase/tests/reversal.sql": {
@@ -2765,8 +2765,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/tenant_foreign_keys.sql": {
-    "mtime": 1786901841.4823883,
-    "ast_hash": "a0c4eb19f58bc7d8be7f72ed886dc2f6",
+    "mtime": 1788431700.306342,
+    "ast_hash": "21e0318a6a06ec18af627aeecf7ba2a0",
     "semantic_hash": ""
   },
   "docs/property.md": {
@@ -3935,8 +3935,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/stock_transfers.sql": {
-    "mtime": 1788420794.2003663,
-    "ast_hash": "cd9043673eeed922cb4cac7ecbb2b0f5",
+    "mtime": 1788422004.9178655,
+    "ast_hash": "2ae80a67dcdb799b0c3d2215ed94c31f",
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/scales_screen.dart": {
@@ -4035,8 +4035,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/landed_cost.sql": {
-    "mtime": 1787822946.0225897,
-    "ast_hash": "19f383755360cdfcc2abe5bbe75e0b77",
+    "mtime": 1788424934.0826437,
+    "ast_hash": "2edaaf222868f1295d7232400cf78718",
     "semantic_hash": ""
   },
   "supabase/tests/multi_uom_documents.sql": {
@@ -4080,8 +4080,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/deposits.sql": {
-    "mtime": 1788419985.7737114,
-    "ast_hash": "cbdb4bb9b25dcf29ae70b60ca3076d79",
+    "mtime": 1788427510.6460612,
+    "ast_hash": "4aca2d34ecaf00c54e3fe654089e113b",
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/budgets_screen.dart": {
@@ -4120,8 +4120,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/post_dated_cheques.sql": {
-    "mtime": 1788286491.7146974,
-    "ast_hash": "80328581de7f02dd4a1f4060a9505d51",
+    "mtime": 1788427537.1750562,
+    "ast_hash": "fbd11d12f473a143534dd44b41819887",
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/cash_forecast_screen.dart": {
@@ -4270,8 +4270,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/leave_requests.sql": {
-    "mtime": 1788285600.503654,
-    "ast_hash": "4af1952d40e3e4c50df969d6cb3fa62e",
+    "mtime": 1788428659.9981053,
+    "ast_hash": "46e975e053e84932f1914981bf2c3030",
     "semantic_hash": ""
   },
   "supabase/tests/lot_report.sql": {
@@ -7637,6 +7637,46 @@
   "supabase/tests/void_an_invoice.sql": {
     "mtime": 1788419309.6564972,
     "ast_hash": "5956b02c2afbf447d8c34da5cd5577a2",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0504_a_bank_fee_is_inside_the_amount_sent.sql": {
+    "mtime": 1788422584.589048,
+    "ast_hash": "8ec65c0f955a5da1f58a806214a61886",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0505_a_refund_stays_inside_the_company.sql": {
+    "mtime": 1788426554.5858998,
+    "ast_hash": "d01a392afa396677b2611a3bd23550ae",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0506_the_same_hole_in_two_more_places.sql": {
+    "mtime": 1788427485.787929,
+    "ast_hash": "020b02fdabb403b62b6d8211e114f24c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0507_an_employee_belongs_to_one_company.sql": {
+    "mtime": 1788428612.0327492,
+    "ast_hash": "2f8574bf2b470ce32e2d52504806871e",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0508_the_payroll_tables_name_their_own_employees.sql": {
+    "mtime": 1788429350.9853728,
+    "ast_hash": "d7d6845133d159fb91ebf6bd868af07d",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0509_the_rest_of_the_employee_references.sql": {
+    "mtime": 1788430059.0554268,
+    "ast_hash": "32e0073a91b1901faef1f2624f56c277",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0510_stock_stays_in_its_own_companys_store.sql": {
+    "mtime": 1788431646.6693738,
+    "ast_hash": "74fad619ba597b64a9a10a11eddac42f",
+    "semantic_hash": ""
+  },
+  "supabase/tests/posting_an_invoice_refuses.sql": {
+    "mtime": 1788451045.9688537,
+    "ast_hash": "6dde8c05d422789360346e8efb8c14bd",
     "semantic_hash": ""
   }
 }

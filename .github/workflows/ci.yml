@@ -244,6 +244,7 @@ jobs:
                    supabase/tests/ledger_is_written_only_by_functions.sql \
                    supabase/tests/posted_payslip_is_frozen.sql \
                    supabase/tests/posted_document_is_frozen.sql \
+                   supabase/tests/posting_an_invoice_refuses.sql \
                    supabase/tests/posted_link_is_immutable.sql \
                    supabase/tests/no_tenant_sees_another.sql \
                    supabase/tests/firm_portfolio.sql \
