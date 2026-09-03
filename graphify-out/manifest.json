@@ -1535,8 +1535,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/aged_balances.sql": {
-    "mtime": 1786533506.275474,
-    "ast_hash": "4babd6f8fb0fa490af9ce8be13b4f1e6",
+    "mtime": 1788402915.5257385,
+    "ast_hash": "7a674673f6fff89810963b41db5bff8b",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/recurring_documents_screen.dart": {
