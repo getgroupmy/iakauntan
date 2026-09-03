@@ -3330,8 +3330,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_loyalty.sql": {
-    "mtime": 1787822946.0305898,
-    "ast_hash": "1d347c121e0d7f9485e6a99977ea0069",
+    "mtime": 1788404693.509639,
+    "ast_hash": "d5656dd98aacfa9b491226611909777c",
     "semantic_hash": ""
   },
   "supabase/tests/pos_offline.sql": {
