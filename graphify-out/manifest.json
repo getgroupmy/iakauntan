@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788452830.7765856,
-    "ast_hash": "b150ba40cf5928e4e540cb3122b0b0cd",
+    "mtime": 1788453477.7945437,
+    "ast_hash": "5a34a0d1d83a478b23b0c7a9ca0136df",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -2765,8 +2765,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/tenant_foreign_keys.sql": {
-    "mtime": 1788452945.2368422,
-    "ast_hash": "a06a80f15d720c22737ee7601f43cbf3",
+    "mtime": 1788453516.2456684,
+    "ast_hash": "fa8b39a4afc698896544a3b871d831cb",
     "semantic_hash": ""
   },
   "docs/property.md": {
@@ -7692,6 +7692,11 @@
   "supabase/migrations/0513_an_item_belongs_to_one_companys_catalogue.sql": {
     "mtime": 1788452818.760324,
     "ast_hash": "74b6885ea9bf8953cb6c8b8c36c97c1a",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0514_an_account_belongs_to_one_companys_chart.sql": {
+    "mtime": 1788453466.2385116,
+    "ast_hash": "ab8e3255cd8f856bada6a66df879a609",
     "semantic_hash": ""
   }
 }

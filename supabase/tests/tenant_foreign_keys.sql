@@ -160,9 +160,9 @@ end $$;
 -- nullable and therefore unenforced by MATCH SIMPLE when it names
 -- nobody. A row that names somebody has to name somebody here.
 --
--- 0510 did the same for `warehouses`, 0512 for `contacts` and 0513 for
--- `items`, and all four parents are probed and covered in the one block
--- below.
+-- 0510 did the same for `warehouses`, 0512 for `contacts`, 0513 for
+-- `items` and 0514 for `accounts`, and all five parents are probed and
+-- covered in the one block below.
 -- `contacts` is the widest and the one where a wrong id is money: an
 -- invoice raised in this company against another company's customer
 -- reads as an ordinary invoice, and only the aged receivable shows the
@@ -175,6 +175,7 @@ declare
   v_wh_a uuid; v_wh_b uuid; v_wh_a2 uuid;
   v_con_a uuid; v_con_b uuid;
   v_item_a uuid; v_item_b uuid; v_doc_a uuid;
+  v_acc_a uuid; v_acc_b uuid;
   v_tried integer := 0; v_refused integer := 0;
   v_uncovered text;
 begin
@@ -390,7 +391,60 @@ begin
       'item at all: %', sqlerrm;
   end;
 
-  if v_refused <> v_tried or v_tried < 11 then
+  -- 9. And an account, which is 0514. This one closes a different
+  -- shape of failure from the four above. `gl_lines.account_id` has
+  -- been held to the organization since 0160, so a wrong account never
+  -- reached the ledger; what it did was stop the posting. An item
+  -- pointed at an account outside this company's chart types fine,
+  -- sells fine, and then fails at the moment somebody presses post,
+  -- with a foreign key error naming a constraint they cannot act on.
+  -- 0514 refuses it where the person can see what they did.
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype)
+  values (v_a, '4999', 'A''s sales', 'revenue', 'sales')
+  returning id into v_acc_a;
+  insert into public.accounts
+    (org_id, code, name, account_type, account_subtype)
+  values (v_b, '4999', 'B''s sales', 'revenue', 'sales')
+  returning id into v_acc_b;
+
+  v_tried := v_tried + 1;
+  begin
+    update public.items set sales_account_id = v_acc_b where id = v_item_a;
+    raise exception 'A''s item was pointed at B''s sales account';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  -- 10. The self-reference: the chart is a tree, and a branch of A's
+  -- chart may not hang off B's.
+  v_tried := v_tried + 1;
+  begin
+    insert into public.accounts
+      (org_id, code, name, account_type, account_subtype, parent_id)
+    values (v_a, '4999-1', 'A''s sub-account', 'revenue', 'sales', v_acc_b);
+    raise exception 'A''s account hung off B''s';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  v_tried := v_tried + 1;
+  begin
+    update public.items set sales_account_id = v_acc_a where id = v_item_a;
+    insert into public.accounts
+      (org_id, code, name, account_type, account_subtype, parent_id)
+    values (v_a, '4999-2', 'A''s own sub-account', 'revenue', 'sales', v_acc_a);
+    insert into public.accounts
+      (org_id, code, name, account_type, account_subtype, parent_id)
+    values (v_a, '4998', 'A''s top-level', 'revenue', 'sales', null);
+    v_refused := v_refused + 1;
+  exception when others then
+    raise exception
+      'the new keys refuse an item pointed at its own account, or a '
+      'top-level account with no parent: %', sqlerrm;
+  end;
+
+  if v_refused <> v_tried or v_tried < 14 then
     raise exception 'employee and warehouse boundary: % probes ran, % behaved',
       v_tried, v_refused;
   end if;
@@ -402,13 +456,13 @@ begin
   -- is what says so on the day it is added rather than the day somebody
   -- notices.
   --
-  -- `employees` (0507-0509), `warehouses` (0510), `contacts` (0512) and
-  -- `items` (0513) are closed. The list is deliberately not every
-  -- parent in the schema: `accounts`, `gl_entries`, `sales_documents`
-  -- and `pos_outlets` still have columns on plain keys and are the next
-  -- batches. Adding a parent here before its migration would make this
-  -- file fail for work that has not been done, which is a worse signal
-  -- than not asserting it yet.
+  -- `employees` (0507-0509), `warehouses` (0510), `contacts` (0512),
+  -- `items` (0513) and `accounts` (0514) are closed. The list is
+  -- deliberately not every parent in the schema: `gl_entries`,
+  -- `sales_documents` and `pos_outlets` still have columns on plain
+  -- keys and are the next batches. Adding a parent here before its
+  -- migration would make this file fail for work that has not been
+  -- done, which is a worse signal than not asserting it yet.
   select string_agg(
            c.confrelid::regclass::text || ' <- ' ||
            c.conrelid::regclass::text || '.' || a.attname, ', ')
@@ -420,7 +474,8 @@ begin
      and c.confrelid in ('public.employees'::regclass,
                          'public.warehouses'::regclass,
                          'public.contacts'::regclass,
-                         'public.items'::regclass)
+                         'public.items'::regclass,
+                         'public.accounts'::regclass)
      and cardinality(c.conkey) = 1
      and exists (select 1 from pg_attribute o
                   where o.attrelid = c.conrelid and o.attname = 'org_id'
@@ -437,8 +492,9 @@ begin
   end if;
 
   raise notice
-    'employee, warehouse, contact and item boundaries: 7 cross-company '
-    'writes refused, 7 same-company writes allowed, 0 columns uncovered';
+    'employee, warehouse, contact, item and account boundaries: '
+    '9 cross-company writes refused, 9 same-company writes allowed, '
+    '0 columns uncovered';
 end $$;
 
 -- Deleting a row somebody else names has to empty the reference, not

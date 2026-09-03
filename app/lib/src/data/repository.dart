@@ -3730,7 +3730,10 @@ class Repo {
     // for it by constraint: `contacts!expenses_contact_id_fkey(name)`.
     final data = await client
         .from('expenses')
-        .select('*, accounts(code, name)')
+        // Named because 0514 added a same-org composite key alongside
+        // the plain one, so 'accounts' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, accounts!expenses_account_id_fkey(code, name)')
         .eq('org_id', orgId)
         .isFilter('deleted_at', null)
         .order('expense_date', ascending: false)
@@ -10804,7 +10807,10 @@ extension RepoLandedCost on Repo {
       Repo.rows(
         await client
             .from('landed_cost_charges')
-            .select('*, accounts(code, name)')
+        // Named because 0514 added a same-org composite key alongside
+        // the plain one, so 'accounts' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, accounts!landed_cost_charges_account_id_fkey(code, name)')
             .eq('run_id', runId)
             .order('line_no'),
       );
