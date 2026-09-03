@@ -1310,8 +1310,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/credit_control.sql": {
-    "mtime": 1788285600.499654,
-    "ast_hash": "849744224e65d240a7bafc5c499266d6",
+    "mtime": 1788407555.6805954,
+    "ast_hash": "eaa3708289a7bbc560f8c048ce150648",
     "semantic_hash": ""
   },
   "app/lib/src/features/stock/stock_take_screen.dart": {

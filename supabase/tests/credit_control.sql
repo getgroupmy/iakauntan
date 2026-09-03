@@ -252,4 +252,226 @@ begin
       'app.enforce_credit_limit()', 'execute'));
 end $$;
 
+-- =====================================================================
+-- What is counted against the limit
+--
+-- The blocks above assert the guards: the hold, the warn/block mode, a
+-- customer with no limit set, an opening balance, and a counter sale
+-- paid in full. A mutation sweep found all five of those covered and
+-- everything else open. What went untested was the sum itself --
+--
+--   select coalesce(sum(d.balance_amount * coalesce(d.exchange_rate, 1)), 0)
+--     from public.sales_documents d
+--    where d.org_id = new.org_id and d.contact_id = new.contact_id
+--      and d.gl_entry_id is not null and d.status <> 'void'
+--      and d.deleted_at is null and d.id <> new.id
+--
+-- -- every filter on it, the exchange rate, and the comparison at the
+-- end. A limit that counts the wrong things is worse than no limit: it
+-- refuses good business and lets bad business through, and does both
+-- silently.
+--
+-- The fixtures above are one customer with one posted invoice, which is
+-- the shape where none of that can show. Below, the customer sits at
+-- exactly their limit and everything that must not count is put in
+-- front of them at once.
+--
+-- Two clauses in that sum survive any assertion, and both were checked
+-- rather than assumed:
+--
+--   * `d.org_id = new.org_id` is implied by `d.contact_id =
+--     new.contact_id`. `contacts.id` is a primary key, so a contact
+--     belongs to exactly one company and naming the contact already
+--     names the company. No contact in the database sits in two.
+--   * `d.id <> new.id` cannot be observed either. The trigger is BEFORE
+--     UPDATE, so the row still carries its old `gl_entry_id` -- null,
+--     for the document being posted -- and `d.gl_entry_id is not null`
+--     already leaves it out of its own sum. The other route in, an
+--     update to a document that was already posted, is closed by the
+--     early return the block below asserts.
+--
+-- Both stay: they say what the query means, and the first also keeps
+-- the planner on the org index.
+-- =====================================================================
+
+create or replace function pg_temp.doc_for(
+  p_org uuid, p_cust uuid, p_type text, p_no text, p_amount numeric,
+  p_ccy text, p_rate numeric)
+returns uuid language plpgsql as $$
+declare v_doc uuid;
+begin
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status)
+  values (p_org, p_type::app.sales_doc_type, p_no, date '2026-03-01', p_cust,
+          p_ccy, p_rate, p_amount, p_amount, p_amount, 'draft')
+  returning id into v_doc;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (p_org, v_doc, 1, 'Sale', 1, p_amount);
+  return v_doc;
+end; $$;
+
+create or replace function pg_temp.foreign_debt(
+  p_org uuid, p_code text, p_amount numeric)
+returns uuid language plpgsql as $$
+declare v_c uuid; v_doc uuid;
+begin
+  insert into public.contacts (org_id, code, name, contact_type, credit_limit)
+  values (p_org, p_code, 'Their buyer', 'customer', 50000) returning id into v_c;
+  v_doc := pg_temp.invoice_for(p_org, v_c, 'INV-THEIRS', p_amount);
+  perform public.post_sales_document(v_doc);
+  return v_doc;
+end; $$;
+
+do $$
+declare
+  v_org uuid := pg_temp.cc_org('Baki Kredit Sdn Bhd', 'block');
+  v_them uuid;
+  v_cust uuid; v_other uuid; v_void_cust uuid;
+  v_dn_cust uuid; v_fx_cust uuid; v_cut_cust uuid;
+  v_doc uuid; v_msg text;
+begin
+  insert into public.contacts (org_id, code, name, contact_type, credit_limit)
+  values (v_org, 'C-001', 'Tepat Buyer', 'customer', 5000)
+  returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type, credit_limit)
+  values (v_org, 'C-002', 'Somebody Else', 'customer', 5000)
+  returning id into v_other;
+
+  -- ------------------------------------------------------------------
+  -- Exactly at the limit is inside it
+  -- ------------------------------------------------------------------
+  -- A limit of RM 5,000 means five thousand may be owed, not four
+  -- thousand nine hundred and ninety-nine. Nothing above asserted the
+  -- boundary from the inside, so refusing at exactly the limit would
+  -- have passed.
+  v_doc := pg_temp.invoice_for(v_org, v_cust, 'INV-AT', 5000);
+  perform public.post_sales_document(v_doc);
+  perform pg_temp.check_true('an invoice that reaches the limit exactly posts',
+    (select gl_entry_id is not null from public.sales_documents where id = v_doc));
+
+  -- And one ringgit past it does not.
+  v_doc := pg_temp.invoice_for(v_org, v_cust, 'INV-OVER', 1);
+  begin
+    perform public.post_sales_document(v_doc);
+    raise exception 'FAIL: a ringgit over the limit was posted';
+  exception when check_violation then
+    raise notice 'ok   and a ringgit more is refused';
+  end;
+
+  -- ------------------------------------------------------------------
+  -- What is counted against it
+  -- ------------------------------------------------------------------
+  -- Everything below would let the customer through if it were counted,
+  -- or keep them out if it were not. The customer is at exactly their
+  -- limit, so any miscounting shows up at once.
+
+  -- A draft invoice is not a debt. It is not in the ledger.
+  perform pg_temp.invoice_for(v_org, v_cust, 'INV-DRAFT', 9000);
+  -- Another customer's debt is their own.
+  v_doc := pg_temp.invoice_for(v_org, v_other, 'INV-THEM', 4000);
+  perform public.post_sales_document(v_doc);
+  -- And another company's books are nothing to do with this one. The
+  -- same person is a member of both, so `is_org_member` is no guard
+  -- here; the org_id in the sum is.
+  v_them := pg_temp.cc_org('Syarikat Lain Sdn Bhd', 'block');
+  perform pg_temp.foreign_debt(v_them, 'C-001', 9000);
+
+  -- None of those moved this customer, so the sen is still refused
+  -- rather than being refused twice over, and a credit note still
+  -- makes room.
+  v_doc := pg_temp.invoice_for(v_org, v_cust, 'INV-OVER-2', 1);
+  begin
+    perform public.post_sales_document(v_doc);
+    raise exception 'FAIL: a ringgit over the limit was posted';
+  exception when check_violation then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'a draft, another customer and another company are not this debt',
+      v_msg like '%5,001.00%' or v_msg like '%5001.00%');
+  end;
+
+  -- ------------------------------------------------------------------
+  -- A voided invoice is not owed
+  -- ------------------------------------------------------------------
+  -- Its own customer, because the one above is at their limit and
+  -- nothing more can be posted to them in order to be voided.
+  insert into public.contacts (org_id, code, name, contact_type, credit_limit)
+  values (v_org, 'C-003', 'Void Buyer', 'customer', 5000)
+  returning id into v_void_cust;
+
+  v_doc := pg_temp.invoice_for(v_org, v_void_cust, 'INV-VOID', 3000);
+  perform public.post_sales_document(v_doc);
+  update public.sales_documents set status = 'void' where id = v_doc;
+
+  -- With the three thousand voided there is the whole limit to use. If
+  -- a voided invoice still counted, five thousand on top of it would be
+  -- eight and this would be refused.
+  v_doc := pg_temp.invoice_for(v_org, v_void_cust, 'INV-FULL', 5000);
+  perform public.post_sales_document(v_doc);
+  perform pg_temp.check_true('a voided invoice is not owed and not counted',
+    (select gl_entry_id is not null from public.sales_documents where id = v_doc));
+  -- ------------------------------------------------------------------
+  -- A limit decides the next sale, not the last one
+  -- ------------------------------------------------------------------
+  -- The trigger returns early when the document was already posted. Cut
+  -- a customer's limit after they have bought, and every posted invoice
+  -- of theirs is now over it -- so without that early return, correcting
+  -- a reference or a note on an old invoice would be refused, and the
+  -- only way to fix a typo would be to raise the limit back.
+  insert into public.contacts (org_id, code, name, contact_type, credit_limit)
+  values (v_org, 'C-006', 'Cut Buyer', 'customer', 5000)
+  returning id into v_cut_cust;
+  v_doc := pg_temp.invoice_for(v_org, v_cut_cust, 'INV-CUT', 5000);
+  perform public.post_sales_document(v_doc);
+
+  update public.contacts set credit_limit = 1000 where id = v_cut_cust;
+  update public.sales_documents set reference = 'PO-88' where id = v_doc;
+  perform pg_temp.check_eq(
+    'a posted invoice can still be corrected after the limit is cut',
+    (select reference from public.sales_documents where id = v_doc), 'PO-88');
+
+  -- ------------------------------------------------------------------
+  -- A debit note is credit too
+  -- ------------------------------------------------------------------
+  -- The trigger names two document types and every fixture used the
+  -- first. A debit note is how a further charge is raised against a
+  -- customer who already has an invoice, so leaving it out would let
+  -- the limit be walked past by choosing a different form.
+  insert into public.contacts (org_id, code, name, contact_type, credit_limit)
+  values (v_org, 'C-004', 'Note Buyer', 'customer', 5000)
+  returning id into v_dn_cust;
+  v_doc := pg_temp.invoice_for(v_org, v_dn_cust, 'INV-DN', 5000);
+  perform public.post_sales_document(v_doc);
+
+  v_doc := pg_temp.doc_for(v_org, v_dn_cust, 'debit_note', 'DN-1', 1, 'MYR', 1);
+  begin
+    perform public.post_sales_document(v_doc);
+    raise exception 'FAIL: a debit note walked past the limit';
+  exception when check_violation then
+    raise notice 'ok   a debit note is credit like any other';
+  end;
+
+  -- ------------------------------------------------------------------
+  -- A dollar invoice is counted in ringgit
+  -- ------------------------------------------------------------------
+  -- The limit is a ringgit figure. USD 2,000 at 4.70 is RM 9,400 of
+  -- exposure, not two thousand of it, and every fixture until now was
+  -- in ringgit at a rate of one -- where multiplying by the rate and
+  -- forgetting to are the same arithmetic.
+  insert into public.contacts (org_id, code, name, contact_type, credit_limit)
+  values (v_org, 'C-005', 'Dollar Buyer', 'customer', 5000)
+  returning id into v_fx_cust;
+  v_doc := pg_temp.doc_for(v_org, v_fx_cust, 'invoice', 'INV-USD', 2000, 'USD', 4.70);
+  begin
+    perform public.post_sales_document(v_doc);
+    raise exception 'FAIL: a dollar invoice was counted in dollars';
+  exception when check_violation then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a foreign invoice is measured in ringgit',
+      v_msg like '%9,400%' or v_msg like '%9400%');
+  end;
+end $$;
+
 rollback;
