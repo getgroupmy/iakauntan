@@ -644,4 +644,125 @@ begin
       where id = v_j), '2026-03-31');
 end $$;
 
+-- =====================================================================
+-- The stops, and the one that is not a date
+--
+-- 0447 pinned the calendar and the assertions above cover it: a quarter
+-- is three months, a year is a year, the 31st is the 28th in February
+-- and the 31st again in March. A mutation sweep confirms all six of
+-- those die. What it also found was the other half of the scheduler --
+-- the rules about when to stop -- largely open.
+--
+-- Three of the survivors are masked rather than untested, and are
+-- recorded here rather than chased:
+--
+--   * `exit when not r.is_active` inside the loop and `where d.is_active`
+--     in the runner each cover the other. Break one and the other still
+--     refuses; only breaking both would let a stopped schedule run, and
+--     a sweep changes one thing at a time.
+--   * the same pair for `next_run_date <= p_on`: the runner selects on
+--     it and the loop exits on it.
+--
+-- The rest are real, and the block below is about the shapes that reach
+-- them: a schedule left alone for most of a year, one whose ceiling has
+-- already been reached and is switched back on, a company that has been
+-- suspended, and the date helper called with an interval no schedule in
+-- the table could carry.
+-- =====================================================================
+
+do $$
+declare
+  v_org uuid := pg_temp.rec_org('Jadual Sdn Bhd');
+  v_cust uuid; v_seed uuid; v_sched uuid; v_doc uuid; v_n integer;
+begin
+  v_cust := pg_temp.customer(v_org, 'C-001', 'Steady Bhd');
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     subtotal, total_amount, balance_amount, status, due_date)
+  values (v_org,'invoice','INV-1', date '2026-01-01', v_cust,'MYR',1,
+          100,100,100,'draft', date '2026-01-31')
+  returning id into v_seed;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, description, quantity, unit_price)
+  values (v_org, v_seed, 1, 'Retainer', 1, 100);
+  perform public.post_sales_document(v_seed);
+
+  -- ------------------------------------------------------------------
+  -- The helper's own contract
+  -- ------------------------------------------------------------------
+  -- `interval_count` is CHECKed at one or more, so no schedule in the
+  -- table can carry nought. `app.advance_schedule` is a general date
+  -- helper with its own callers, and an interval of nought there would
+  -- return the date it was given -- a schedule that never moves and is
+  -- therefore due for ever. The floor is what stops that.
+  perform pg_temp.check_true('an interval of nought still advances a month',
+    app.advance_schedule(date '2026-01-15', 'monthly', 0, date '2026-01-15')
+      = date '2026-02-15');
+  perform pg_temp.check_true('and so does an interval of nothing at all',
+    app.advance_schedule(date '2026-01-15', 'monthly', null, date '2026-01-15')
+      = date '2026-02-15');
+
+  -- ------------------------------------------------------------------
+  -- Sixty at a time
+  -- ------------------------------------------------------------------
+  -- A daily schedule left alone for half a year is the shape that turns
+  -- one overnight job into a two-hundred-invoice run. The cap stops at
+  -- sixty and the rest wait for tomorrow, so a mistake is a long
+  -- catch-up rather than a flood nobody can unpick.
+  v_sched := public.create_recurring_document(
+    p_document_id => v_seed, p_name => 'Daily, forgotten',
+    p_frequency => 'daily', p_start_date => date '2026-01-01');
+  perform pg_temp.check_eq('a long-forgotten schedule catches up sixty at a time',
+    public.run_recurring_documents_for(v_org, date '2026-12-31'), 60);
+  perform pg_temp.check_eq('and the rest are still waiting',
+    (select occurrences from public.recurring_documents where id = v_sched), 60);
+  update public.recurring_documents set is_active = false where id = v_sched;
+
+  -- ------------------------------------------------------------------
+  -- A ceiling stays a ceiling
+  -- ------------------------------------------------------------------
+  -- Reaching the agreed number switches the schedule off, and switching
+  -- it back on is not the same as agreeing to more: the count is still
+  -- against the ceiling. Somebody restarting a finished instalment plan
+  -- has to raise the number, not just tick the box.
+  v_sched := public.create_recurring_document(
+    p_document_id => v_seed, p_name => 'Two instalments',
+    p_frequency => 'monthly', p_start_date => date '2026-02-01',
+    p_max_occurrences => 2);
+  perform pg_temp.check_eq('two, and it stops',
+    public.run_recurring_documents_for(v_org, date '2026-12-31'), 2);
+
+  update public.recurring_documents set is_active = true where id = v_sched;
+  perform pg_temp.check_eq('turning it back on does not buy a third',
+    public.run_recurring_documents_for(v_org, date '2026-12-31'), 0);
+  perform pg_temp.check_eq('and the count is where it was',
+    (select occurrences from public.recurring_documents where id = v_sched), 2);
+  update public.recurring_documents set is_active = false where id = v_sched;
+
+  -- ------------------------------------------------------------------
+  -- A company that has been suspended is not billed
+  -- ------------------------------------------------------------------
+  v_sched := public.create_recurring_document(
+    p_document_id => v_seed, p_name => 'Monthly, suspended',
+    p_frequency => 'monthly', p_start_date => date '2026-02-01');
+  -- Counted against this company rather than against the run's own
+  -- total: `app.run_recurring_documents` is the nightly job for the
+  -- whole platform, and the blocks above this one leave schedules of
+  -- their own standing due in other companies.
+  select count(*)::integer into v_n from public.sales_documents
+   where org_id = v_org;
+  update public.organizations set status = 'suspended' where id = v_org;
+  perform app.run_recurring_documents(date '2026-12-31');
+  perform pg_temp.check_eq(
+    'a suspended company raises nothing on the nightly run',
+    (select count(*)::integer from public.sales_documents
+      where org_id = v_org) - v_n, 0);
+
+  update public.organizations set status = 'active' where id = v_org;
+  perform app.run_recurring_documents(date '2026-12-31');
+  perform pg_temp.check_true('and starts again when it is put back',
+    (select count(*)::integer from public.sales_documents
+      where org_id = v_org) - v_n > 0);
+end $$;
+
 rollback;
