@@ -498,6 +498,43 @@ begin
       jsonb_build_array(
         jsonb_build_object('invoice_id', v_inv_a, 'amount', 300)))
     is not null);
+
+  -- And the other way round, which is what makes this an assertion
+  -- about the LOOP rather than about one company.
+  --
+  -- `for v_org in select distinct org_id from pg_temp._gp loop` visits
+  -- every company. Cut it to `limit 1` and it visits one, chosen by
+  -- whatever order the scan happens to produce -- and the probe above
+  -- passes or fails depending on which. It was caught by a mutation
+  -- sweep, and then SURVIVED the same sweep after unrelated fixtures
+  -- were added further down this file and the ordering changed.
+  --
+  -- Asserted from both ends, one company cannot satisfy both: whichever
+  -- one is visited, the other is the one being refused for.
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  -- Fresh documents: INV-H1 was settled by TT-10 just above, and a
+  -- settled invoice is refused for being over-allocated rather than for
+  -- the rights this probe is about.
+  v_inv_a := pg_temp.gp_invoice(v_a, 'INV-H3', 300);
+  v_inv_b := pg_temp.gp_invoice(v_b, 'INV-H4', 300);
+  update public.org_members set role = 'viewer'
+   where org_id = v_a and user_id = v_who;
+  update public.org_members set role = 'accountant'
+   where org_id = v_b and user_id = v_who;
+  perform pg_temp.sign_in_as(v_who);
+
+  begin
+    perform public.record_group_payment(current_date, 'TT-11',
+      jsonb_build_array(
+        jsonb_build_object('invoice_id', v_inv_a, 'amount', 300),
+        jsonb_build_object('invoice_id', v_inv_b, 'amount', 300)));
+    raise exception 'a viewer at the first company was paid there';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'and names the first company when that is the one without rights',
+      v_msg like '%Hak Satu Sdn Bhd%');
+  end;
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -594,6 +631,322 @@ begin
   perform pg_temp.check_eq('and it is the company they may post in',
     (select doc_no from public.open_documents_across_companies('invoice')
       where doc_no like 'INV-S%'), 'INV-S2');
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- The ten a mutation sweep found
+-- ---------------------------------------------------------------------
+-- Twenty-five one-line mutants of `record_group_payment`; ten survived
+-- everything this file and seven others asserted. Three shapes account
+-- for all of them, and each is the kind of thing that reads as covered.
+--
+--   * THE SECOND BRANCH. This function is written twice -- receipts for
+--     invoices, purchase payments for bills -- and the bill half was
+--     asserted for what it settles but not for the date it settles on
+--     or the discount it carries. Two near-duplicate branches is where
+--     a fault lives longest, and `create_contra` had exactly the same
+--     shape.
+--
+--   * THE DISCOUNT. `amount + discount` is what a document is being
+--     asked to accept, and `amount` alone is what leaves the payer's
+--     bank. Three mutants live in the gap between the two, and all
+--     three cost money: the balance check reading only `amount` lets a
+--     document be over-settled, and dropping the discount from either
+--     allocation leaves an invoice open by exactly the discount the
+--     customer was told they had.
+--
+--   * FOREIGN CURRENCY. Nothing in this file was in anything but
+--     ringgit, so `v_rate` could be set to 1 outright and every
+--     assertion still held. A receipt for USD 1,000 taken at par
+--     records RM 1,000 against a receivable of RM 4,700.
+do $$
+declare
+  v_a      uuid;
+  v_b      uuid;
+  v_inv    uuid;
+  v_inv2   uuid;
+  v_bill   uuid;
+  v_term   uuid;
+  v_usd    uuid;
+  v_myr    uuid;
+  v_batch  uuid;
+  v_msg    text;
+  v_when   date := (date_trunc('month', app.today()) - interval '1 day')::date;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_a := pg_temp.gp_org('Sapu Satu Sdn Bhd');
+  v_b := pg_temp.gp_org('Sapu Dua Sdn Bhd');
+  perform public.create_fiscal_year(v_a,
+    (date_trunc('year', app.today()) - interval '1 year')::date);
+
+  -- Terms that actually offer a settlement discount. Without one,
+  -- allocate_with_discount refuses the discount outright -- which is
+  -- correct, and would have made the three discount probes below assert
+  -- that rule instead of the ones they are about.
+  insert into public.payment_terms
+    (org_id, code, name, days, term_type, discount_percent, discount_days)
+  values (v_a, '10-30', '10% in 30 days', 30, 'net', 10, 30)
+  returning id into v_term;
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status, payment_term_id)
+  values (v_a, 'invoice', 'INV-Z1', app.today(), app.today(),
+          pg_temp.gp_contact(v_a, 'CUST'), 'MYR', 1, 'draft', v_term)
+  returning id into v_inv;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_a, v_inv, 1, 'item',
+          (select id from public.items where org_id = v_a and code = 'SVC'),
+          'Work done', 1, 1000);
+  perform public.post_sales_document(v_inv);
+
+  v_inv2 := pg_temp.gp_invoice(v_a, 'INV-Z2', 1000);
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency,
+     exchange_rate, status, payment_term_id)
+  values (v_a, 'bill', 'BILL-Z1', app.today(),
+          pg_temp.gp_contact(v_a, 'SUP'), 'MYR', 1, 'draft', v_term)
+  returning id into v_bill;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_a, v_bill, 1, 'item',
+          (select id from public.items where org_id = v_a and code = 'SVC'),
+          'Work bought', 1, 400);
+  perform public.post_purchase_document(v_bill);
+
+  -- ==================================================================
+  -- 1. A payment happened on a day
+  -- ==================================================================
+  begin
+    perform public.record_group_payment(null, 'X',
+      jsonb_build_array(jsonb_build_object('invoice_id', v_inv, 'amount', 100)));
+    raise exception 'a payment was recorded on no day at all';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('a payment with no date is refused',
+      v_msg, 'A payment happened on a day.');
+  end;
+
+  -- ==================================================================
+  -- 2. An allocation is of something
+  --
+  -- Nought settles nothing and adds nothing; a negative one takes money
+  -- back out of a document while the payer's bank shows it going in.
+  -- ==================================================================
+  begin
+    perform public.record_group_payment(app.today(), 'X',
+      jsonb_build_array(jsonb_build_object('invoice_id', v_inv, 'amount', 0)));
+    raise exception 'an allocation of nothing was accepted';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('an allocation of nothing is refused',
+      v_msg, 'An allocation is of something.');
+  end;
+
+  begin
+    perform public.record_group_payment(app.today(), 'X',
+      jsonb_build_array(jsonb_build_object('invoice_id', v_inv, 'amount', -100)));
+    raise exception 'a negative allocation was accepted';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('and so is one for less than nothing',
+      v_msg, 'An allocation is of something.');
+  end;
+
+  -- ==================================================================
+  -- 3. A document that is not there
+  --
+  -- The count check exists because the join simply drops a row it
+  -- cannot match: without it, a payment naming five documents and
+  -- finding four would settle the four and say nothing about the fifth.
+  -- ==================================================================
+  begin
+    perform public.record_group_payment(app.today(), 'X',
+      jsonb_build_array(
+        jsonb_build_object('invoice_id', v_inv, 'amount', 100),
+        jsonb_build_object('invoice_id', gen_random_uuid(), 'amount', 100)));
+    raise exception 'a payment named a document that does not exist';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('a document that is not there is refused',
+      v_msg, 'A document on this payment does not exist.');
+  end;
+
+  -- ==================================================================
+  -- 4. What a document is asked to accept is the cash AND the discount
+  --
+  -- The first of the three discount gaps, and the one that lets a
+  -- balance go negative. An invoice owing a thousand, offered a
+  -- thousand in cash and a hundred in settlement discount, is being
+  -- asked to accept eleven hundred.
+  -- ==================================================================
+  begin
+    perform public.record_group_payment(app.today(), 'X',
+      jsonb_build_array(jsonb_build_object(
+        'invoice_id', v_inv, 'amount', 1000, 'discount', 100)));
+    raise exception
+      'a document accepted more than it owed once a discount was added';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'the discount counts towards what the document is asked to accept',
+      v_msg like 'More than is outstanding: INV-Z1 owes 1,000.00 and is offered 1,100.00.');
+  end;
+
+  -- ==================================================================
+  -- 5. And the discount actually reaches the allocation
+  --
+  -- Cash of nine hundred and a discount of a hundred settles a thousand
+  -- in full. Drop the discount on the way to `allocate_with_discount`
+  -- and the invoice stays open for exactly the hundred the customer was
+  -- told they had -- which is then chased, and is not owed.
+  -- ==================================================================
+  v_batch := public.record_group_payment(app.today(), 'DISC-1',
+    jsonb_build_array(jsonb_build_object(
+      'invoice_id', v_inv, 'amount', 900, 'discount', 100)));
+  perform pg_temp.check_eq(
+    'cash and discount together settle the invoice in full',
+    (select balance_amount from public.sales_documents where id = v_inv),
+    0::numeric);
+  perform pg_temp.check_eq('and the receipt is for the cash alone',
+    (select amount from public.receipts where batch_id = v_batch),
+    900::numeric);
+
+  -- The same on the bill side, which had no discount assertion at all.
+  v_batch := public.record_group_payment(app.today(), 'DISC-2',
+    jsonb_build_array(jsonb_build_object(
+      'bill_id', v_bill, 'amount', 360, 'discount', 40)));
+  perform pg_temp.check_eq(
+    'and a supplier''s discount settles the bill in full',
+    (select balance_amount from public.purchase_documents where id = v_bill),
+    0::numeric);
+  perform pg_temp.check_eq('with the payment for the cash alone',
+    (select amount from public.purchase_payments where batch_id = v_batch),
+    360::numeric);
+
+  -- ==================================================================
+  -- 6. The day the money moved, on both sides
+  --
+  -- Every call in this file passed `current_date`, so `p_paid_on` could
+  -- be replaced by `app.today()` in either branch and nothing moved. A
+  -- transfer that cleared on the last day of a month belongs in that
+  -- month: app.guard_period_lock and report_trial_balance both read the
+  -- journal's entry_date, and so does every ageing.
+  -- ==================================================================
+  perform pg_temp.check_true('and the day it cleared is not today',
+    v_when <> app.today());
+
+  v_batch := public.record_group_payment(v_when, 'DATE-1',
+    jsonb_build_array(jsonb_build_object('invoice_id', v_inv2, 'amount', 1000)));
+  perform pg_temp.check_true('a receipt is dated the day the money cleared',
+    (select r.receipt_date = v_when from public.receipts r
+      where r.batch_id = v_batch));
+  perform pg_temp.check_true('and so is the journal behind it',
+    (select e.entry_date = v_when
+       from public.gl_entries e
+       join public.receipts r on r.gl_entry_id = e.id
+      where r.batch_id = v_batch));
+
+  v_bill := pg_temp.gp_bill(v_a, 'BILL-Z2', 250);
+  v_batch := public.record_group_payment(v_when, 'DATE-2',
+    jsonb_build_array(jsonb_build_object('bill_id', v_bill, 'amount', 250)));
+  perform pg_temp.check_true('a supplier payment likewise',
+    (select p.payment_date = v_when from public.purchase_payments p
+      where p.batch_id = v_batch));
+  perform pg_temp.check_true('and its journal',
+    (select e.entry_date = v_when
+       from public.gl_entries e
+       join public.purchase_payments p on p.gl_entry_id = e.id
+      where p.batch_id = v_batch));
+
+  -- ==================================================================
+  -- 7. A foreign receipt at the day's rate, not at par
+  --
+  -- Nothing in this file was in anything but ringgit, so `v_rate` could
+  -- be set to 1 outright and every assertion above still held. USD
+  -- 1,000 at 4.70 is a receivable of RM 4,700; taken at par it is
+  -- RM 1,000, and the difference lands as an unexplained balance on the
+  -- receivable that no reconciliation will clear.
+  -- ==================================================================
+  insert into public.exchange_rates
+    (org_id, from_currency, to_currency, rate, rate_date, source)
+  values (v_a, 'USD', 'MYR', 4.70, app.today() - 7, 'manual');
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_a, 'invoice', 'INV-USD', app.today(), app.today(),
+          pg_temp.gp_contact(v_a, 'CUST'), 'USD', 4.70, 'draft')
+  returning id into v_usd;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_a, v_usd, 1, 'item',
+          (select id from public.items where org_id = v_a and code = 'SVC'),
+          'Exported work', 1, 1000);
+  perform public.post_sales_document(v_usd);
+
+  v_batch := public.record_group_payment(app.today(), 'FX-1',
+    jsonb_build_array(jsonb_build_object('invoice_id', v_usd, 'amount', 1000)));
+
+  perform pg_temp.check_eq('a foreign receipt is taken at the day''s rate',
+    (select exchange_rate from public.receipts where batch_id = v_batch),
+    4.70::numeric);
+  perform pg_temp.check_eq('and the ringgit that reached the bank says so',
+    (select round(sum(gl.debit), 2) from public.gl_lines gl
+       join public.accounts ac on ac.id = gl.account_id
+       join public.receipts r on r.gl_entry_id = gl.entry_id
+      where r.batch_id = v_batch and ac.code = '1120'),
+    4700::numeric);
+
+  -- ==================================================================
+  -- 8. One company's share, one currency
+  --
+  -- The receipt carries a single rate, so two currencies under one
+  -- company and one contact would have to strike an average nobody
+  -- agreed. Refused rather than averaged.
+  -- ==================================================================
+  v_myr := pg_temp.gp_invoice(v_a, 'INV-Z3', 500);
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
+     exchange_rate, status)
+  values (v_a, 'invoice', 'INV-USD2', app.today(), app.today(),
+          pg_temp.gp_contact(v_a, 'CUST'), 'USD', 4.70, 'draft')
+  returning id into v_usd;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_a, v_usd, 1, 'item',
+          (select id from public.items where org_id = v_a and code = 'SVC'),
+          'More exported work', 1, 200);
+  perform public.post_sales_document(v_usd);
+
+  begin
+    perform public.record_group_payment(app.today(), 'X',
+      jsonb_build_array(
+        jsonb_build_object('invoice_id', v_myr, 'amount', 500),
+        jsonb_build_object('invoice_id', v_usd, 'amount', 200)));
+    raise exception 'one receipt covered two currencies';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq(
+      'one company''s share of a payment is in one currency',
+      v_msg,
+      'One company''s share of this payment is in two currencies. A '
+      'receipt is in one, and the rate belongs to it.');
+  end;
+
+  -- None of the refusals in this block left anything behind.
+  perform pg_temp.check_eq('and no refusal wrote a batch',
+    (select count(*)::integer from public.payment_batches
+      where reference = 'X'), 0);
+
+  raise notice 'ok   group payment: the ten a sweep found';
 end $$;
 
 rollback;
