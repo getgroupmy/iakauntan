@@ -164,6 +164,7 @@ do $$
 declare
   v_a uuid; v_b uuid;
   v_emp_a uuid; v_emp_b uuid;
+  v_wh_a uuid; v_wh_b uuid; v_wh_a2 uuid;
   v_tried integer := 0; v_refused integer := 0;
   v_uncovered text;
 begin
@@ -216,23 +217,74 @@ begin
       'one headed by nobody: %', sqlerrm;
   end;
 
-  if v_refused <> v_tried or v_tried < 3 then
-    raise exception 'employee boundary: % probes ran, % behaved',
+  -- 4. And the warehouse pairing, which is 0510. A transfer names two
+  -- stores; the one that goes wrong quietly is a van leaving this
+  -- company's store and arriving in somebody else's, because both ends
+  -- read as valid warehouses and the stock simply lands elsewhere.
+  --
+  -- The stores are created OUTSIDE the probe: a `begin ... exception`
+  -- block rolls back everything it did when it raises, so warehouses
+  -- created inside it would be gone by the time the next probe used
+  -- them, and the failure would read as the boundary key when it was
+  -- really a dangling id.
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_a, 'WA', 'A''s store', true) returning id into v_wh_a;
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_b, 'WB', 'B''s store', true) returning id into v_wh_b;
+  insert into public.warehouses (org_id, code, name)
+  values (v_a, 'WA2', 'A''s second store') returning id into v_wh_a2;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.stock_transfers
+      (org_id, transfer_no, transfer_date, from_warehouse_id, to_warehouse_id)
+    values (v_a, 'TR-CROSS', current_date, v_wh_a, v_wh_b);
+    raise exception 'a transfer left A''s store and arrived in B''s';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  -- 5. Its own two stores, which is the ordinary case.
+  v_tried := v_tried + 1;
+  begin
+    insert into public.stock_transfers
+      (org_id, transfer_no, transfer_date, from_warehouse_id, to_warehouse_id)
+    values (v_a, 'TR-OWN', current_date, v_wh_a, v_wh_a2);
+    v_refused := v_refused + 1;
+  exception when others then
+    raise exception
+      'the new keys refuse a transfer between two of its own stores: %',
+      sqlerrm;
+  end;
+
+  if v_refused <> v_tried or v_tried < 5 then
+    raise exception 'employee and warehouse boundary: % probes ran, % behaved',
       v_tried, v_refused;
   end if;
 
   -- And the set is closed. The probes above prove the constraints that
   -- exist do their job; this proves none is MISSING — including on a
   -- table nobody has written yet. A new table that carries its own
-  -- org_id and names an employee has to say which company's employee,
-  -- and this is what says so on the day it is added rather than the day
-  -- somebody notices.
-  select string_agg(c.conrelid::regclass::text || '.' || a.attname, ', ')
+  -- org_id and names one of these has to say which company's, and this
+  -- is what says so on the day it is added rather than the day somebody
+  -- notices.
+  --
+  -- `employees` (0507-0509) and `warehouses` (0510) are closed. The
+  -- list is deliberately not every parent in the schema: `items`,
+  -- `contacts` and `pos_outlets` still have columns on plain keys and
+  -- are the next batches. Adding a parent here before its migration
+  -- would make this file fail for work that has not been done, which is
+  -- a worse signal than not asserting it yet.
+  select string_agg(
+           c.confrelid::regclass::text || ' <- ' ||
+           c.conrelid::regclass::text || '.' || a.attname, ', ')
     into v_uncovered
     from pg_constraint c
     join unnest(c.conkey) k(attnum) on true
     join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
-   where c.contype = 'f' and c.confrelid = 'public.employees'::regclass
+   where c.contype = 'f'
+     and c.confrelid in ('public.employees'::regclass,
+                         'public.warehouses'::regclass)
      and cardinality(c.conkey) = 1
      and exists (select 1 from pg_attribute o
                   where o.attrelid = c.conrelid and o.attname = 'org_id'
@@ -244,13 +296,13 @@ begin
           and k.attnum = any (c2.conkey));
   if v_uncovered is not null then
     raise exception
-      'these columns name an employee without saying which company''s: %',
+      'these columns name a row without saying which company''s: %',
       v_uncovered;
   end if;
 
   raise notice
-    'employee boundaries: 2 cross-company writes refused, 2 same-company '
-    'writes allowed, 0 columns uncovered';
+    'employee and warehouse boundaries: 3 cross-company writes refused, '
+    '3 same-company writes allowed, 0 columns uncovered';
 end $$;
 
 rollback;
