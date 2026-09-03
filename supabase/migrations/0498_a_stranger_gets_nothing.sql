@@ -150,10 +150,23 @@ begin
   end if;
 
   -- The default privilege, which is what stops this coming back.
+  --
+  -- Scoped to `postgres`, and that is the whole subtlety. A hosted
+  -- project carries two default-ACL entries for tables in `public`:
+  -- one for `postgres` and one for `supabase_admin`. A default ACL
+  -- only governs tables created *by that role*, and every table in
+  -- this schema is created by a migration, which runs as `postgres`.
+  -- The `supabase_admin` entry belongs to Supabase's own machinery,
+  -- is not ours to alter, and governs nothing in here.
+  --
+  -- Checking every entry instead of that one is what refused this
+  -- migration the first time CI ran it: the sweep was right and the
+  -- self-check was asking about somebody else's default.
   if exists (
     select 1 from pg_default_acl d
      where d.defaclnamespace = 'public'::regnamespace
        and d.defaclobjtype = 'r'
+       and d.defaclrole = 'postgres'::regrole
        and array_to_string(d.defaclacl, ',') like '%anon=%') then
     raise exception '0498: the next table will be exposed again';
   end if;

@@ -5720,8 +5720,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/_local_stack.sql": {
-    "mtime": 1788393405.8641813,
-    "ast_hash": "37bf0ea9155160aaa5e184563dc1b0dd",
+    "mtime": 1788395961.3497903,
+    "ast_hash": "e7cb139922d96e641155dae628001a3c",
     "semantic_hash": ""
   },
   "supabase/tests/run_locally.sh": {
@@ -7565,8 +7565,8 @@
     "semantic_hash": ""
   },
   "supabase/migrations/0498_a_stranger_gets_nothing.sql": {
-    "mtime": 1788393939.085088,
-    "ast_hash": "859e73a979acdde2c8e0d78920cffa5f",
+    "mtime": 1788396169.886107,
+    "ast_hash": "0bb1ec35a759b8594cc18f5fc69d7b7c",
     "semantic_hash": ""
   },
   "supabase/migrations/0499_a_privilege_no_policy_permits.sql": {

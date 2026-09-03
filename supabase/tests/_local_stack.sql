@@ -29,6 +29,13 @@ do $b$ begin create role supabase_auth_admin login noinherit createrole;
   exception when duplicate_object then null; end $b$;
 do $b$ begin create role supabase_storage_admin login noinherit createrole;
   exception when duplicate_object then null; end $b$;
+-- Not used to create anything here, and present for one reason: a
+-- hosted project carries a second set of default privileges under this
+-- role, and a check that reads every default-ACL entry rather than the
+-- one belonging to the role that creates the tables will pass locally
+-- and fail against production. That is exactly what happened to 0498.
+do $b$ begin create role supabase_admin login noinherit createrole superuser;
+  exception when duplicate_object then null; end $b$;
 grant anon, authenticated, service_role to authenticator;
 grant anon, authenticated, service_role to postgres;
 
@@ -57,10 +64,25 @@ grant usage on schema public to anon, authenticated, service_role;
 -- migration are a pair: take either away and the assertion in
 -- `statutory.sql` about what a stranger can read stops meaning
 -- anything.
+-- Copied from what a hosted project actually has, rather than from
+-- what "grant all" would suggest: `anon` gets SELECT and nothing else,
+-- `authenticated` gets the four data commands, and `service_role`
+-- gets everything. Overstating anon's default here would make the
+-- sweep in 0498 look like it was closing more than it was.
 alter default privileges for role postgres in schema public
-  grant all on tables to anon, authenticated, service_role;
+  grant select on tables to anon;
+alter default privileges for role postgres in schema public
+  grant select, insert, update, delete on tables to authenticated;
+alter default privileges for role postgres in schema public
+  grant all on tables to service_role;
 alter default privileges for role postgres in schema public
   grant all on sequences to anon, authenticated, service_role;
+-- The second entry, which governs only what `supabase_admin` creates
+-- and therefore governs nothing in this schema. Here so that a check
+-- which forgets to say whose default it is asking about fails on this
+-- machine rather than in CI.
+alter default privileges for role supabase_admin in schema public
+  grant all on tables to anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------
 -- auth
