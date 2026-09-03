@@ -694,4 +694,213 @@ begin
 end;
 $$;
 
+-- =====================================================================
+-- What the till refuses
+--
+-- The block above asserts what the till DOES: the rounding, the change,
+-- the posted invoice and the posted receipt. A mutation sweep over
+-- `complete_pos_sale` found that side well covered and the refusals
+-- almost entirely open — every `raise exception` in the function has a
+-- message written for a particular counter mistake, and most of them
+-- had never been reached.
+--
+-- Each one below is a way a till can take money and record the wrong
+-- thing:
+--
+--   * a tender of nothing, which is a keying slip that would otherwise
+--     complete a sale nobody paid for;
+--   * a tender type belonging to another company, or one this shop has
+--     withdrawn. Both are foreign keys that resolve; only the org and
+--     the active flag keep them off this till;
+--   * a basket with nothing tendered at all;
+--   * a card charged more than the basket, which is a refund waiting to
+--     happen rather than a sale;
+--   * a completed sale rung up a second time. This is the one that
+--     costs a customer money: without it the same basket takes payment
+--     twice and raises a second invoice;
+--   * an outlet with no walk-in customer set, where an anonymous sale
+--     has nobody to bill;
+--   * and somebody selling for a company they are not a member of.
+--
+-- One refusal is deliberately not here. `if v_change < 0` is masked: a
+-- short payment is already refused further down, by the constraint that
+-- will not let a sale be completed without a receipt or an on-account
+-- amount that covers it. Checked rather than assumed -- the guard was
+-- removed and "a short payment is refused" above still held. It stays
+-- in the function because it is the message a cashier should see, and
+-- the assertion above still pins the behaviour.
+-- =====================================================================
+
+do $$
+declare
+  v_org uuid; v_them uuid; v_wh uuid; v_walkin uuid; v_item uuid;
+  v_outlet uuid; v_bare uuid; v_reg uuid; v_reg2 uuid;
+  v_cash uuid; v_card uuid; v_gone uuid; v_theirs uuid;
+  v_sale uuid; v_stranger uuid; v_msg text;
+  v_owner uuid := pg_temp.test_user();
+begin
+  v_org := pg_temp.test_org('Kaunter Ujian Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['pos','inventory']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.warehouses (org_id, code, name)
+  values (v_org,'MAIN','Shop floor') returning id into v_wh;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org,'WALK-IN','Counter sales','customer') returning id into v_walkin;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, unit_price, cost_price)
+  values (v_org,'SVC','Servis','service',false,'C62',10.00,0)
+  returning id into v_item;
+
+  insert into public.pos_outlets
+    (org_id, code, name, business_type, warehouse_id, walk_in_contact_id,
+     prices_include_tax)
+  values (v_org,'SHOP','The shop','retail',v_wh,v_walkin,false)
+  returning id into v_outlet;
+  insert into public.pos_registers (org_id, outlet_id, code, name)
+  values (v_org, v_outlet,'T1','Counter') returning id into v_reg;
+  insert into public.pos_settings (org_id, round_cash_to_5sen) values (v_org, false);
+
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
+  values (v_org,'CASH','Cash','cash','01',true,true) returning id into v_cash;
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
+  values (v_org,'CARD','Card','card','03',false,false) returning id into v_card;
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change,
+     is_active)
+  values (v_org,'OLD','Withdrawn voucher','voucher','06',false,false,false)
+  returning id into v_gone;
+
+  -- Another company, with a till of its own.
+  v_them := pg_temp.test_org('Kedai Lain Sdn Bhd');
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  values (v_them,'pos',true)
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  insert into public.pos_tender_types
+    (org_id, code, name, kind, payment_mode_code, counts_in_drawer, gives_change)
+  values (v_them,'CASH','Cash','cash','01',true,true) returning id into v_theirs;
+
+  perform public.open_pos_shift(v_reg, 100.00);
+
+  -- ==================================================================
+  -- What the till will not take
+  -- ==================================================================
+  v_sale := public.open_pos_sale(v_reg);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 10.00);
+
+  -- The message matters as much as the refusal. Every one of these is
+  -- also stopped further down -- by the short-payment check, or by a
+  -- NOT NULL column -- so a cashier would be refused either way. What
+  -- the guard buys is being told what to fix: "a tender needs an
+  -- amount" is a keying slip, "short by ten ringgit" is a customer who
+  -- has not finished paying, and they are different problems.
+  begin
+    perform * from public.complete_pos_sale(v_sale, jsonb_build_array(
+      jsonb_build_object('type', v_cash, 'amount', 0)));
+    raise exception 'FAIL: a tender of nothing was accepted';
+  exception when check_violation then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a tender of nothing is a keying slip, and says so',
+      v_msg like '%tender needs an amount%');
+  end;
+
+  begin
+    perform * from public.complete_pos_sale(v_sale, jsonb_build_array(
+      jsonb_build_object('type', v_theirs, 'amount', 10.00)));
+    raise exception 'FAIL: another company''s tender type was accepted';
+  exception when sqlstate 'P0002' then
+    raise notice 'ok   another company''s tender type is not one of ours';
+  end;
+
+  begin
+    perform * from public.complete_pos_sale(v_sale, jsonb_build_array(
+      jsonb_build_object('type', v_gone, 'amount', 10.00)));
+    raise exception 'FAIL: a withdrawn tender type was accepted';
+  exception when sqlstate 'P0002' then
+    raise notice 'ok   nor is one the shop has withdrawn';
+  end;
+
+  begin
+    perform * from public.complete_pos_sale(v_sale, '[]'::jsonb);
+    raise exception 'FAIL: a basket was rung up with nothing tendered';
+  exception when check_violation then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a basket with something on it has to be paid for',
+      v_msg like '%has to be paid for%');
+  end;
+
+  -- A card is not cash: it cannot over-pay, because the difference has
+  -- nowhere to go but a refund.
+  begin
+    perform * from public.complete_pos_sale(v_sale, jsonb_build_array(
+      jsonb_build_object('type', v_card, 'amount', 50.00)));
+    raise exception 'FAIL: a card was charged more than the basket';
+  exception when check_violation then
+    raise notice 'ok   a card cannot be charged more than the basket';
+  end;
+
+  -- ==================================================================
+  -- And what it will not take twice
+  -- ==================================================================
+  perform * from public.complete_pos_sale(v_sale, jsonb_build_array(
+    jsonb_build_object('type', v_cash, 'amount', 10.00)));
+  perform pg_temp.check_true('the sale completes once',
+    (select status = 'completed' from public.pos_sales where id = v_sale));
+
+  begin
+    perform * from public.complete_pos_sale(v_sale, jsonb_build_array(
+      jsonb_build_object('type', v_cash, 'amount', 10.00)));
+    raise exception 'FAIL: a completed sale was rung up again';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'and a completed sale cannot be rung up again',
+      v_msg like '%already completed%');
+  end;
+  perform pg_temp.check_eq('with one invoice against it, not two',
+    (select count(*)::integer from public.sales_documents
+      where org_id = v_org and doc_type = 'invoice'), 1);
+
+  -- ==================================================================
+  -- An outlet with nobody to bill
+  -- ==================================================================
+  insert into public.pos_outlets
+    (org_id, code, name, business_type, warehouse_id, prices_include_tax)
+  values (v_org,'BARE','No walk-in set','retail',v_wh,false)
+  returning id into v_bare;
+  insert into public.pos_registers (org_id, outlet_id, code, name)
+  values (v_org, v_bare,'T2','Second counter') returning id into v_reg2;
+  perform public.open_pos_shift(v_reg2, 0);
+  v_sale := public.open_pos_sale(v_reg2);
+  perform public.add_pos_sale_line(v_sale, v_item, 1, 10.00);
+  begin
+    perform * from public.complete_pos_sale(v_sale, jsonb_build_array(
+      jsonb_build_object('type', v_cash, 'amount', 10.00)));
+    raise exception 'FAIL: an anonymous sale was billed to nobody';
+  exception when not_null_violation then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'an outlet with no walk-in customer says what to set',
+      v_msg like '%walk-in customer%');
+  end;
+
+  -- ==================================================================
+  -- Somebody else's till
+  -- ==================================================================
+  v_stranger := pg_temp.another_user('stranger@example.test');
+  perform pg_temp.sign_in_as(v_stranger);
+  begin
+    perform * from public.complete_pos_sale(v_sale, jsonb_build_array(
+      jsonb_build_object('type', v_cash, 'amount', 10.00)));
+    raise exception 'FAIL: a stranger rang up a sale';
+  exception when insufficient_privilege then
+    raise notice 'ok   a stranger cannot sell for a company they are not in';
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+end $$;
+
 rollback;

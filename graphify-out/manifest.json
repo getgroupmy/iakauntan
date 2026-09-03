@@ -3315,8 +3315,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos.sql": {
-    "mtime": 1788285600.507654,
-    "ast_hash": "d2897261361287b7345c3b49c2f76b31",
+    "mtime": 1788412179.113577,
+    "ast_hash": "bb8a913e434d6c36bb588de55027950c",
     "semantic_hash": ""
   },
   "supabase/tests/pos_fnb.sql": {
