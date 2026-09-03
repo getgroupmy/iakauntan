@@ -150,6 +150,54 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- A standing journal keeps the day it was set on
+-- ---------------------------------------------------------------------
+-- The block above starts on the first of the month, where there is no
+-- day to lose. Rent is usually the last day, and the last day is where
+-- every recurrence scheme goes wrong: February has no 31st, so a
+-- schedule that advances from its own last run lands on the 28th and
+-- never climbs back. `app.advance_schedule` takes an anchor for exactly
+-- this, and `0503` is here because the nightly job passed it and the
+-- button a person presses did not — so the same journal drifted or did
+-- not depending on which one ran the month, and they share a column.
+do $$
+declare
+  v_org uuid := pg_temp.pl_org('Sewa Bulanan Sdn Bhd');
+  v_exp uuid; v_ap uuid; v_rj uuid;
+begin
+  select id into v_exp from public.accounts where org_id = v_org and code = '6100';
+  select id into v_ap  from public.accounts where org_id = v_org and code = '2110';
+
+  insert into public.recurring_journals
+    (org_id, name, frequency, interval_count, start_date, next_run_date,
+     auto_post, is_active, template)
+  values (v_org, 'Rent, last day', 'monthly', 1, date '2026-01-31',
+          date '2026-01-31', true, true,
+          jsonb_build_object('lines', jsonb_build_array(
+            jsonb_build_object('account_id', v_exp, 'debit', 5000, 'credit', 0),
+            jsonb_build_object('account_id', v_ap, 'debit', 0, 'credit', 5000))))
+  returning id into v_rj;
+
+  perform pg_temp.check_eq('January runs',
+    public.run_recurring_journals_for(v_org, date '2026-01-31'), 1);
+  perform pg_temp.check_true('and February has no 31st to offer',
+    (select next_run_date = date '2026-02-28'
+       from public.recurring_journals where id = v_rj));
+
+  -- The one that matters. Advanced from the 28th alone this is the
+  -- 28th of March, and the 28th of every month after it.
+  perform pg_temp.check_eq('February runs',
+    public.run_recurring_journals_for(v_org, date '2026-02-28'), 1);
+  perform pg_temp.check_true('and March gives the day back',
+    (select next_run_date = date '2026-03-31'
+       from public.recurring_journals where id = v_rj));
+
+  perform pg_temp.check_eq('both months posted',
+    (select count(*)::integer from public.gl_entries
+      where org_id = v_org and source = 'recurring'), 2);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- Reachability
 -- ---------------------------------------------------------------------
 do $$

@@ -1340,8 +1340,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pricing_and_dimensions.sql": {
-    "mtime": 1786523522.4737241,
-    "ast_hash": "7789e106abf08dacb1d7a4aa15cdfaad",
+    "mtime": 1788418477.6864822,
+    "ast_hash": "8fb8257f8adc7454161f8c4b6f8367da",
     "semantic_hash": ""
   },
   "scripts/reachability.py": {
@@ -7627,6 +7627,11 @@
   "supabase/migrations/0502_a_period_belongs_to_one_company.sql": {
     "mtime": 1788414923.9456856,
     "ast_hash": "3a3c70a566cd7f1f6283e5b628333fc3",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0503_a_standing_journal_keeps_its_day.sql": {
+    "mtime": 1788418443.8528306,
+    "ast_hash": "fdbe25416fffec6ced7c47af3a7d5692",
     "semantic_hash": ""
   }
 }
