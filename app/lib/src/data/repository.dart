@@ -1036,7 +1036,10 @@ class Repo {
   }) async {
     var q = client
         .from('gl_entries')
-        .select('*, gl_lines(*, accounts(code, name))')
+        // Named because 0515 added a same-org composite key alongside
+        // the plain one, so 'gl_lines' can now be joined to a journal
+        // two ways and PostgREST refuses the embed with PGRST201.
+        .select('*, gl_lines!gl_lines_entry_id_fkey(*, accounts(code, name))')
         .eq('org_id', orgId);
     if (from != null) q = q.gte('entry_date', Fmt.iso(from));
     if (to != null) q = q.lte('entry_date', Fmt.iso(to));

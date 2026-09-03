@@ -161,8 +161,8 @@ end $$;
 -- nobody. A row that names somebody has to name somebody here.
 --
 -- 0510 did the same for `warehouses`, 0512 for `contacts`, 0513 for
--- `items` and 0514 for `accounts`, and all five parents are probed and
--- covered in the one block below.
+-- `items`, 0514 for `accounts` and 0515 for `gl_entries`, and all six
+-- parents are probed and covered in the one block below.
 -- `contacts` is the widest and the one where a wrong id is money: an
 -- invoice raised in this company against another company's customer
 -- reads as an ordinary invoice, and only the aged receivable shows the
@@ -176,6 +176,7 @@ declare
   v_con_a uuid; v_con_b uuid;
   v_item_a uuid; v_item_b uuid; v_doc_a uuid;
   v_acc_a uuid; v_acc_b uuid;
+  v_ent_a uuid; v_ent_b uuid;
   v_tried integer := 0; v_refused integer := 0;
   v_uncovered text;
 begin
@@ -444,7 +445,68 @@ begin
       'top-level account with no parent: %', sqlerrm;
   end;
 
-  if v_refused <> v_tried or v_tried < 14 then
+  -- 11. And a journal, which is 0515. `gl_lines.entry_id` is the one
+  -- column in this whole programme that is NOT NULL on the child and
+  -- names the parent as its own identity: a line IS part of a journal.
+  -- So the key is enforced on every row rather than only the ones that
+  -- name somebody, and a line written into another company's journal
+  -- is a line on their trial balance.
+  --
+  -- The block leaves one-sided journals behind on purpose; the file
+  -- header explains why that is safe here (the deferred
+  -- `assert_balanced` trigger is never reached, because this
+  -- transaction rolls back).
+  insert into public.gl_entries
+    (org_id, entry_no, entry_date, source, total_debit, total_credit)
+  values (v_a, 'JV-A', current_date, 'manual', 0, 0)
+  returning id into v_ent_a;
+  insert into public.gl_entries
+    (org_id, entry_no, entry_date, source, total_debit, total_credit)
+  values (v_b, 'JV-B', current_date, 'manual', 0, 0)
+  returning id into v_ent_b;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.gl_lines
+      (org_id, entry_id, line_no, account_id, debit, credit)
+    values (v_a, v_ent_b, 1, v_acc_a, 100, 0);
+    raise exception 'a line in A was written into B''s journal';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  -- 12. The self-reference: a reversal in A cancelling an entry in B.
+  v_tried := v_tried + 1;
+  begin
+    insert into public.gl_entries
+      (org_id, entry_no, entry_date, source, total_debit, total_credit,
+       is_reversal, reversed_entry_id)
+    values (v_a, 'JV-A-REV', current_date, 'manual', 0, 0, true, v_ent_b);
+    raise exception 'a reversal in A cancelled B''s journal';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.gl_lines
+      (org_id, entry_id, line_no, account_id, debit, credit)
+    values (v_a, v_ent_a, 1, v_acc_a, 100, 0);
+    insert into public.gl_entries
+      (org_id, entry_no, entry_date, source, total_debit, total_credit,
+       is_reversal, reversed_entry_id)
+    values (v_a, 'JV-A-REV', current_date, 'manual', 0, 0, true, v_ent_a);
+    insert into public.gl_entries
+      (org_id, entry_no, entry_date, source, total_debit, total_credit)
+    values (v_a, 'JV-A2', current_date, 'manual', 0, 0);
+    v_refused := v_refused + 1;
+  exception when others then
+    raise exception
+      'the new keys refuse a line in its own journal, a reversal of its '
+      'own entry, or a journal that reverses nothing: %', sqlerrm;
+  end;
+
+  if v_refused <> v_tried or v_tried < 17 then
     raise exception 'employee and warehouse boundary: % probes ran, % behaved',
       v_tried, v_refused;
   end if;
@@ -457,8 +519,8 @@ begin
   -- notices.
   --
   -- `employees` (0507-0509), `warehouses` (0510), `contacts` (0512),
-  -- `items` (0513) and `accounts` (0514) are closed. The list is
-  -- deliberately not every parent in the schema: `gl_entries`,
+  -- `items` (0513), `accounts` (0514) and `gl_entries` (0515) are
+  -- closed. The list is deliberately not every parent in the schema:
   -- `sales_documents` and `pos_outlets` still have columns on plain
   -- keys and are the next batches. Adding a parent here before its
   -- migration would make this file fail for work that has not been
@@ -475,7 +537,8 @@ begin
                          'public.warehouses'::regclass,
                          'public.contacts'::regclass,
                          'public.items'::regclass,
-                         'public.accounts'::regclass)
+                         'public.accounts'::regclass,
+                         'public.gl_entries'::regclass)
      and cardinality(c.conkey) = 1
      and exists (select 1 from pg_attribute o
                   where o.attrelid = c.conrelid and o.attname = 'org_id'
@@ -492,9 +555,9 @@ begin
   end if;
 
   raise notice
-    'employee, warehouse, contact, item and account boundaries: '
-    '9 cross-company writes refused, 9 same-company writes allowed, '
-    '0 columns uncovered';
+    'employee, warehouse, contact, item, account and journal '
+    'boundaries: 11 cross-company writes refused, 11 same-company '
+    'writes allowed, 0 columns uncovered';
 end $$;
 
 -- Deleting a row somebody else names has to empty the reference, not
