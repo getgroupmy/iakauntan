@@ -2765,8 +2765,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/tenant_foreign_keys.sql": {
-    "mtime": 1788452448.7859583,
-    "ast_hash": "86f12f38e20f3d027e58a494ee551cd4",
+    "mtime": 1788452516.49369,
+    "ast_hash": "9d8827aa7b7f7375947793096e345623",
     "semantic_hash": ""
   },
   "docs/property.md": {

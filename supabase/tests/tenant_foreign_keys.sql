@@ -159,12 +159,20 @@ end $$;
 -- row, which is NOT NULL, and the "who did it" column, which is
 -- nullable and therefore unenforced by MATCH SIMPLE when it names
 -- nobody. A row that names somebody has to name somebody here.
+--
+-- 0510 did the same for `warehouses` and 0512 for `contacts`, and all
+-- three parents are probed and covered in the one block below.
+-- `contacts` is the widest and the one where a wrong id is money: an
+-- invoice raised in this company against another company's customer
+-- reads as an ordinary invoice, and only the aged receivable shows the
+-- debt sitting on books it does not belong to.
 -- ---------------------------------------------------------------------
 do $$
 declare
   v_a uuid; v_b uuid;
   v_emp_a uuid; v_emp_b uuid;
   v_wh_a uuid; v_wh_b uuid; v_wh_a2 uuid;
+  v_con_a uuid; v_con_b uuid;
   v_tried integer := 0; v_refused integer := 0;
   v_uncovered text;
 begin
@@ -257,7 +265,57 @@ begin
       sqlerrm;
   end;
 
-  if v_refused <> v_tried or v_tried < 5 then
+  -- 5. And a contact, which is 0512. An invoice is the NOT NULL case:
+  -- `sales_documents.contact_id` is who owes the money, and an invoice
+  -- raised in A against B's customer puts A's receivable on a name that
+  -- is not on A's books.
+  insert into public.contacts (org_id, contact_type, code, name)
+  values (v_a, 'customer', 'C-A', 'A''s customer') returning id into v_con_a;
+  insert into public.contacts (org_id, contact_type, code, name)
+  values (v_b, 'customer', 'C-B', 'B''s customer') returning id into v_con_b;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.sales_documents
+      (org_id, doc_type, doc_no, doc_date, contact_id)
+    values (v_a, 'invoice', 'INV-X', current_date, v_con_b);
+    raise exception 'an invoice in A was raised against B''s customer';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  -- 6. The nullable case on the same parent, and the positive control:
+  -- an asset bought from B's supplier is refused, one bought from A's
+  -- own and one with no supplier at all both go in.
+  v_tried := v_tried + 1;
+  begin
+    insert into public.fixed_assets
+      (org_id, asset_no, name, acquisition_date, cost,
+       useful_life_months, supplier_id)
+    values (v_a, 'FA-X', 'Van', current_date - 30, 90000, 60, v_con_b);
+    raise exception 'an asset in A was bought from B''s supplier';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.fixed_assets
+      (org_id, asset_no, name, acquisition_date, cost,
+       useful_life_months, supplier_id)
+    values (v_a, 'FA-OWN', 'Lori', current_date - 30, 90000, 60, v_con_a);
+    insert into public.fixed_assets
+      (org_id, asset_no, name, acquisition_date, cost,
+       useful_life_months, supplier_id)
+    values (v_a, 'FA-NONE', 'Meja', current_date - 30, 900, 60, null);
+    v_refused := v_refused + 1;
+  exception when others then
+    raise exception
+      'the new keys refuse an asset from its own supplier, or one from '
+      'no supplier at all: %', sqlerrm;
+  end;
+
+  if v_refused <> v_tried or v_tried < 8 then
     raise exception 'employee and warehouse boundary: % probes ran, % behaved',
       v_tried, v_refused;
   end if;
@@ -269,12 +327,13 @@ begin
   -- is what says so on the day it is added rather than the day somebody
   -- notices.
   --
-  -- `employees` (0507-0509) and `warehouses` (0510) are closed. The
-  -- list is deliberately not every parent in the schema: `items`,
-  -- `contacts` and `pos_outlets` still have columns on plain keys and
-  -- are the next batches. Adding a parent here before its migration
-  -- would make this file fail for work that has not been done, which is
-  -- a worse signal than not asserting it yet.
+  -- `employees` (0507-0509), `warehouses` (0510) and `contacts` (0512)
+  -- are closed. The list is deliberately not every parent in the
+  -- schema: `items`, `accounts`, `gl_entries`, `sales_documents` and
+  -- `pos_outlets` still have columns on plain keys and are the next
+  -- batches. Adding a parent here before its migration would make this
+  -- file fail for work that has not been done, which is a worse signal
+  -- than not asserting it yet.
   select string_agg(
            c.confrelid::regclass::text || ' <- ' ||
            c.conrelid::regclass::text || '.' || a.attname, ', ')
@@ -284,7 +343,8 @@ begin
     join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
    where c.contype = 'f'
      and c.confrelid in ('public.employees'::regclass,
-                         'public.warehouses'::regclass)
+                         'public.warehouses'::regclass,
+                         'public.contacts'::regclass)
      and cardinality(c.conkey) = 1
      and exists (select 1 from pg_attribute o
                   where o.attrelid = c.conrelid and o.attname = 'org_id'
@@ -301,8 +361,8 @@ begin
   end if;
 
   raise notice
-    'employee and warehouse boundaries: 3 cross-company writes refused, '
-    '3 same-company writes allowed, 0 columns uncovered';
+    'employee, warehouse and contact boundaries: 5 cross-company writes '
+    'refused, 5 same-company writes allowed, 0 columns uncovered';
 end $$;
 
 -- Deleting a row somebody else names has to empty the reference, not

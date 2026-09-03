@@ -2130,7 +2130,10 @@ class Repo {
   Future<List<FixedAsset>> fixedAssets({bool includeDisposed = false}) async {
     var q = client
         .from('fixed_assets')
-        .select('*, purchase_documents(doc_no), contacts(name)')
+        // Named because 0512 added a same-org composite key alongside
+        // the plain one, so 'contacts' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, purchase_documents(doc_no), contacts!fixed_assets_supplier_id_fkey(name)')
         .eq('org_id', orgId)
         .isFilter('deleted_at', null);
     if (!includeDisposed) q = q.neq('status', 'disposed');
@@ -4075,7 +4078,10 @@ class Repo {
   }) async {
     var query = client
         .from('activities')
-        .select('*, contacts(name), opportunities(name)')
+        // Named because 0512 added a same-org composite key alongside
+        // the plain one, so 'contacts' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, contacts!activities_contact_id_fkey(name), opportunities(name)')
         .eq('org_id', orgId);
     if (onlyPending) query = query.eq('status', 'pending');
     final data = await query.order('due_date').limit(100);
@@ -4761,7 +4767,10 @@ extension RepoExtras on Repo {
   Future<List<Matter>> matters({String? status, String? search}) async {
     var query = client
         .from('matters')
-        .select('*, contacts(name)')
+        // Named because 0512 added a same-org composite key alongside
+        // the plain one, so 'contacts' can now be joined two ways and
+        // PostgREST refuses an unqualified embed with PGRST201.
+        .select('*, contacts!matters_client_id_fkey(name)')
         .eq('org_id', orgId)
         .isFilter('deleted_at', null);
 
