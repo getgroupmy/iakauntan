@@ -487,4 +487,280 @@ begin
       'public.report_bank_reconciliations(uuid, uuid)', 'execute'));
 end $$;
 
+-- =====================================================================
+-- Which document a statement line could be
+--
+-- `suggest_bank_matches` is what a bookkeeper actually works from: it
+-- reads a statement line and offers the receipts, supplier payments and
+-- expenses it might be. Until now the file called it once, against a
+-- book holding a single receipt, and asserted that the receipt came
+-- back. A mutation sweep put fourteen changes through it — the sign of
+-- the line, the bank charge on either side, the date window, the
+-- already-matched exclusion, the company, the posted-only rule and the
+-- ordering — and every one of them survived. With one candidate in the
+-- book, the right answer comes back whatever the filters say.
+--
+-- What the filters are for is a book with more than one thing in it:
+--
+--   * the sign. A statement credit is a receipt and a debit is a
+--     payment or an expense. Offering the wrong side invites a
+--     bookkeeper to tie a customer's money to a supplier's bill;
+--   * the bank charge. A customer sends RM 1,000 and the bank credits
+--     RM 990, keeping ten; paying a supplier RM 1,000 costs RM 1,010.
+--     The statement and the document never carry the same figure, and
+--     the charge is subtracted on one side and added on the other;
+--   * the window. Seven days by default, so a receipt for the same
+--     amount a fortnight later is a different receipt;
+--   * what is already taken. A document tied to another line must not
+--     be offered again, or the same money is banked twice;
+--   * the company, and posted only. A draft receipt is not in the
+--     ledger to reconcile against.
+--
+-- The block below builds one book holding all of those at once.
+-- =====================================================================
+
+create or replace function pg_temp.sug_org(p_name text)
+returns uuid language plpgsql as $$
+declare v_org uuid;
+begin
+  v_org := pg_temp.test_org(p_name);
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+  return v_org;
+end; $$;
+
+create or replace function pg_temp.sug_receipt(
+  p_org uuid, p_bank uuid, p_contact uuid, p_no text, p_amount numeric,
+  p_on date, p_charges numeric, p_post boolean)
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
+  insert into public.receipts
+    (org_id, receipt_no, receipt_date, contact_id, amount, unapplied_amount,
+     currency, exchange_rate, bank_account_id, bank_charges)
+  values (p_org, p_no, p_on, p_contact, p_amount, p_amount, 'MYR', 1,
+          p_bank, p_charges)
+  returning id into v_id;
+  if p_post then perform public.post_receipt(v_id); end if;
+  return v_id;
+end; $$;
+
+create or replace function pg_temp.sug_payment(
+  p_org uuid, p_bank uuid, p_contact uuid, p_no text, p_amount numeric,
+  p_on date, p_charges numeric)
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
+  insert into public.purchase_payments
+    (org_id, payment_no, payment_date, contact_id, amount, unapplied_amount,
+     currency, exchange_rate, bank_account_id, bank_charges, payment_mode_code)
+  values (p_org, p_no, p_on, p_contact, p_amount, p_amount, 'MYR', 1,
+          p_bank, p_charges, '02')
+  returning id into v_id;
+  perform public.post_purchase_payment(v_id);
+  return v_id;
+end; $$;
+
+create or replace function pg_temp.sug_expense(
+  p_org uuid, p_bank uuid, p_contact uuid, p_account uuid, p_no text,
+  p_amount numeric, p_on date)
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
+  insert into public.expenses
+    (org_id, expense_no, expense_date, contact_id, account_id, bank_account_id,
+     description, currency, exchange_rate, amount, total_amount,
+     payment_mode_code)
+  values (p_org, p_no, p_on, p_contact, p_account, p_bank, 'Sundry', 'MYR', 1,
+          p_amount, p_amount, '02')
+  returning id into v_id;
+  perform public.post_expense(v_id);
+  return v_id;
+end; $$;
+
+create or replace function pg_temp.sug_line(
+  p_bank uuid, p_on date, p_amount numeric, p_desc text)
+returns uuid language plpgsql as $$
+declare v_id uuid;
+begin
+  perform public.import_bank_transactions(p_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date', p_on::text, 'description', p_desc,
+                       'reference', p_desc, 'amount', p_amount)));
+  select id into v_id from public.bank_transactions
+   where bank_account_id = p_bank and transaction_date = p_on
+     and amount = p_amount and description = p_desc
+   order by created_at desc limit 1;
+  return v_id;
+end; $$;
+
+create or replace function pg_temp.sug_foreign_receipt(
+  p_org uuid, p_amount numeric, p_on date)
+returns uuid language plpgsql as $$
+declare v_acct uuid; v_bank uuid; v_c uuid; v_id uuid;
+begin
+  select id into v_acct from public.accounts where org_id = p_org and code = '1120';
+  insert into public.bank_accounts (org_id, account_id, name, bank_name, account_number)
+  values (p_org, v_acct, 'Their bank', 'CIMB', '7777') returning id into v_bank;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (p_org, 'C-X', 'Their buyer', 'customer') returning id into v_c;
+  insert into public.receipts
+    (org_id, receipt_no, receipt_date, contact_id, amount, unapplied_amount,
+     currency, exchange_rate, bank_account_id)
+  values (p_org, 'RCP-X', p_on, v_c, p_amount, p_amount, 'MYR', 1, v_bank)
+  returning id into v_id;
+  perform public.post_receipt(v_id);
+  return v_id;
+end; $$;
+
+do $$
+declare
+  v_org uuid := pg_temp.sug_org('Padan Bank Sdn Bhd');
+  v_other uuid;
+  v_bank uuid; v_acct uuid;
+  v_cust uuid; v_supp uuid; v_exp_acct uuid;
+  v_in uuid; v_out uuid; v_net uuid; v_charged uuid; v_two uuid;
+  v_r1 uuid; v_r2 uuid; v_r3 uuid; v_r4 uuid; v_r7 uuid; v_r8 uuid; v_r9 uuid;
+  v_p1 uuid; v_p2 uuid; v_p3 uuid; v_e1 uuid;
+  v_spare uuid; v_taken uuid;
+  v_n integer; r record;
+begin
+  select id into v_acct from public.accounts where org_id = v_org and code = '1120';
+  insert into public.bank_accounts (org_id, account_id, name, bank_name, account_number)
+  values (v_org, v_acct, 'Maybank current', 'Maybank', '9001')
+  returning id into v_bank;
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-001', 'Buyer Bhd', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S-001', 'Parts Bhd', 'supplier') returning id into v_supp;
+  select id into v_exp_acct from public.accounts
+   where org_id = v_org and account_type = 'expense' limit 1;
+
+  -- ------------------------------------------------------------------
+  -- Money in on the tenth
+  -- ------------------------------------------------------------------
+  v_r1 := pg_temp.sug_receipt(v_org, v_bank, v_cust, 'RCP-1', 1000, date '2026-03-10', 0, true);
+  -- Same money, a fortnight later: outside the seven-day window.
+  v_r2 := pg_temp.sug_receipt(v_org, v_bank, v_cust, 'RCP-2', 1000, date '2026-03-25', 0, true);
+  -- Same money, two days out, but already tied to another line.
+  v_r3 := pg_temp.sug_receipt(v_org, v_bank, v_cust, 'RCP-3', 1000, date '2026-03-12', 0, true);
+  -- Same money, a day out, and never posted.
+  v_r4 := pg_temp.sug_receipt(v_org, v_bank, v_cust, 'RCP-4', 1000, date '2026-03-11', 0, false);
+  -- The same amount going the other way on the same day.
+  v_p1 := pg_temp.sug_payment(v_org, v_bank, v_supp, 'PAY-1', 1000, date '2026-03-10', 0);
+  -- And another company's receipt for the same amount on the same day.
+  v_other := pg_temp.sug_org('Bukan Kita Sdn Bhd');
+  v_spare := pg_temp.sug_foreign_receipt(v_other, 1000, date '2026-03-10');
+
+  v_in := pg_temp.sug_line(v_bank, date '2026-03-10', 1000, 'Transfer in');
+  -- Park RCP-3 against a line of its own so it is genuinely taken.
+  v_two := pg_temp.sug_line(v_bank, date '2026-03-12', 1000, 'Another transfer in');
+  perform public.match_bank_transaction(v_two, 'receipts', v_r3);
+
+  select count(*)::integer into v_n from public.suggest_bank_matches(v_in);
+  perform pg_temp.check_eq(
+    'one statement line, one receipt it could be', v_n, 1);
+  select * into r from public.suggest_bank_matches(v_in);
+  perform pg_temp.check_eq('and it is the one banked that day', r.doc_no, 'RCP-1');
+  perform pg_temp.check_eq('with no days between them', r.day_gap, 0);
+
+  -- ------------------------------------------------------------------
+  -- Money out on the fifteenth
+  -- ------------------------------------------------------------------
+  v_p2 := pg_temp.sug_payment(v_org, v_bank, v_supp, 'PAY-2', 800, date '2026-03-15', 0);
+  v_e1 := pg_temp.sug_expense(v_org, v_bank, v_supp, v_exp_acct, 'EXP-1', 800,
+                              date '2026-03-15');
+  perform pg_temp.sug_receipt(v_org, v_bank, v_cust, 'RCP-5', 800, date '2026-03-15', 0, true);
+
+  v_out := pg_temp.sug_line(v_bank, date '2026-03-15', -800, 'Transfer out');
+  perform pg_temp.check_eq('money out offers the payment and the expense',
+    (select count(*)::integer from public.suggest_bank_matches(v_out)), 2);
+  perform pg_temp.check_eq('and never a receipt',
+    (select count(*)::integer from public.suggest_bank_matches(v_out)
+      where source_table = 'receipts'), 0);
+  perform pg_temp.check_eq('nor does money in offer a payment',
+    (select count(*)::integer from public.suggest_bank_matches(v_in)
+      where source_table <> 'receipts'), 0);
+
+  -- A payment already tied to a line drops off the same way a receipt
+  -- does. The two exclusions are written separately, one per branch, so
+  -- one of them holding says nothing about the other.
+  v_taken := pg_temp.sug_line(v_bank, date '2026-03-15', -800, 'Paid, and matched');
+  perform public.match_bank_transaction(v_taken, 'purchase_payments', v_p2);
+  perform pg_temp.check_eq('a payment already taken is not offered again',
+    (select count(*)::integer from public.suggest_bank_matches(v_out)
+      where source_table = 'purchase_payments'), 0);
+  perform pg_temp.check_eq('and the expense is still there to choose',
+    (select count(*)::integer from public.suggest_bank_matches(v_out)), 1);
+
+  -- ------------------------------------------------------------------
+  -- A line for nothing
+  -- ------------------------------------------------------------------
+  -- Both sides carry a sign test as well as the amount comparison, and
+  -- for every non-zero line the comparison alone would do the work: a
+  -- receipt and a payment are both CHECKed at nought or more, so
+  -- neither can equal a debit. Nought is the one figure where the sign
+  -- tests earn their place -- a zero receipt can be posted and a zero
+  -- statement line can be imported, and without them a line for nothing
+  -- would offer every zero document in the book, on both sides at once.
+  -- One of each, because the two sign tests are written separately and
+  -- a zero receipt says nothing about the payment branch.
+  perform pg_temp.sug_receipt(v_org, v_bank, v_cust, 'RCP-NIL', 0,
+                              date '2026-03-18', 0, true);
+  perform pg_temp.sug_payment(v_org, v_bank, v_supp, 'PAY-NIL', 0,
+                              date '2026-03-18', 0);
+  v_taken := pg_temp.sug_line(v_bank, date '2026-03-18', 0, 'Nothing at all');
+  perform pg_temp.check_eq('a statement line for nothing matches nothing',
+    (select count(*)::integer from public.suggest_bank_matches(v_taken)), 0);
+
+  -- ------------------------------------------------------------------
+  -- What the bank kept
+  -- ------------------------------------------------------------------
+  -- The customer sent RM 1,000 and the bank credited RM 990, keeping ten
+  -- ringgit for the transfer. The statement says 990 and the receipt
+  -- says 1,000, and the ten ringgit is the whole reason the two do not
+  -- look alike.
+  v_r7 := pg_temp.sug_receipt(v_org, v_bank, v_cust, 'RCP-6', 1000, date '2026-03-20', 10, true);
+  v_net := pg_temp.sug_line(v_bank, date '2026-03-20', 990, 'Transfer in less charge');
+  perform pg_temp.check_eq('a receipt is matched net of what the bank kept',
+    (select count(*)::integer from public.suggest_bank_matches(v_net)), 1);
+  perform pg_temp.check_eq('and it is the receipt for the gross',
+    (select doc_no from public.suggest_bank_matches(v_net)), 'RCP-6');
+
+  -- And the other way: paying a supplier RM 1,000 costs RM 1,010,
+  -- because the charge is on top rather than out of it.
+  v_p3 := pg_temp.sug_payment(v_org, v_bank, v_supp, 'PAY-3', 1000, date '2026-03-22', 10);
+  v_charged := pg_temp.sug_line(v_bank, date '2026-03-22', -1010, 'Transfer out plus charge');
+  perform pg_temp.check_eq('a payment is matched with the charge added on',
+    (select count(*)::integer from public.suggest_bank_matches(v_charged)), 1);
+  perform pg_temp.check_eq('and it is the payment for the net',
+    (select doc_no from public.suggest_bank_matches(v_charged)), 'PAY-3');
+
+  -- ------------------------------------------------------------------
+  -- The nearest one first
+  -- ------------------------------------------------------------------
+  v_r8 := pg_temp.sug_receipt(v_org, v_bank, v_cust, 'RCP-7', 500, date '2026-03-05', 0, true);
+  v_r9 := pg_temp.sug_receipt(v_org, v_bank, v_cust, 'RCP-8', 500, date '2026-03-08', 0, true);
+  v_two := pg_temp.sug_line(v_bank, date '2026-03-05', 500, 'Five hundred in');
+  perform pg_temp.check_eq('both are offered',
+    (select count(*)::integer from public.suggest_bank_matches(v_two)), 2);
+  perform pg_temp.check_eq('and the closest date is first',
+    (select doc_no from public.suggest_bank_matches(v_two) limit 1), 'RCP-7');
+
+  -- ------------------------------------------------------------------
+  -- Somebody else's statement
+  -- ------------------------------------------------------------------
+  -- The suggestions name every unmatched receipt and payment of a size,
+  -- with the customer against each. That is a readable summary of a
+  -- company's banking, and the membership check is the only thing
+  -- between it and anybody holding a session.
+  perform pg_temp.sign_in_as(pg_temp.another_user('nosy@example.test'));
+  begin
+    perform * from public.suggest_bank_matches(v_in);
+    raise exception 'FAIL: a stranger read the suggestions';
+  exception when insufficient_privilege then
+    raise notice 'ok   a stranger cannot see what a company banked';
+  end;
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
