@@ -386,10 +386,10 @@ begin
   exception when sqlstate '42501' then
     -- `reverse_gl_entry` refuses a stranger too, with the same
     -- SQLSTATE and one word less, so the message is what says which
-    -- of the two turned them away.
+    -- of the two turned them away. Whole message, not a fragment.
     get stacked diagnostics v_msg = message_text;
     perform pg_temp.check_true('somebody who cannot post cannot void either',
-      v_msg like '%privileges to post%');
+      v_msg = 'Insufficient privileges to post');
   end;
   perform pg_temp.sign_in_as(v_owner);
   perform pg_temp.check_eq('and the money did not move on the attempt',
@@ -477,6 +477,95 @@ begin
     (select current_balance from public.bank_accounts where id = v_usd2), 0);
   perform pg_temp.check_eq('leaving the sending account whole',
     (select current_balance from public.bank_accounts where id = v_myr2), 0);
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Posting one: what it refuses, and what it carries onto the journal
+--
+-- Sweeping `post_bank_transfer` killed fifteen of twenty mutants and
+-- left the same shape behind as everywhere else: every figure in the
+-- journal and every running balance was caught, and none of the three
+-- refusals was. A transfer already deleted, a transfer already posted,
+-- and a stranger posting one all went through in silence.
+--
+-- The date and the reference survived too. Both are how a transfer is
+-- found again: the date decides which month's accounts it lands in,
+-- and the reference is what somebody types into the search box when
+-- the bank statement says IBG and nothing else.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.tr_org('Catat Pindahan Sdn Bhd');
+  v_a uuid; v_b uuid; v_id uuid; v_gone uuid; v_entry uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_msg text;
+begin
+  v_a := pg_temp.bank(v_org, 'Current account', '1121');
+  v_b := pg_temp.bank(v_org, 'Savings account', '1122');
+
+  -- ------------------------------------------------------------------
+  -- A transfer that is no longer there
+  -- ------------------------------------------------------------------
+  v_gone := public.create_bank_transfer(v_a, v_b, 100, date '2026-03-02');
+  update public.bank_transfers set deleted_at = now() where id = v_gone;
+  begin
+    perform public.post_bank_transfer(v_gone);
+    raise exception 'FAIL posted a transfer that had been deleted';
+  exception when sqlstate 'P0002' then
+    raise notice 'ok   a deleted transfer is not there to post';
+  end;
+
+  v_id := public.create_bank_transfer(
+    p_from_account_id => v_a, p_to_account_id => v_b,
+    p_amount_sent => 2000, p_transfer_date => date '2026-03-01',
+    p_reference => 'IBG 20260301');
+
+  -- ------------------------------------------------------------------
+  -- Who may post it
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-catat@example.test'));
+  begin
+    perform public.post_bank_transfer(v_id);
+    raise exception 'FAIL a stranger posted another company''s transfer';
+  exception when sqlstate '42501' then
+    -- `create_gl_entry` would refuse them as well, further down, and
+    -- its wording ends '...to post to the ledger', so this has to be
+    -- the whole message rather than a fragment of it: a `like` on
+    -- 'privileges to post' is satisfied by either function.
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('somebody outside the company cannot post it',
+      v_msg = 'Insufficient privileges to post');
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_true('and it is still sitting in draft',
+    (select status = 'draft' and gl_entry_id is null
+       from public.bank_transfers where id = v_id));
+
+  -- ------------------------------------------------------------------
+  -- Posted once, and only once
+  -- ------------------------------------------------------------------
+  v_entry := public.post_bank_transfer(v_id);
+
+  perform pg_temp.check_true('the journal is dated the day of the transfer',
+    (select entry_date = date '2026-03-01' from public.gl_entries
+      where id = v_entry));
+  perform pg_temp.check_true('and carries the reference the bank will quote',
+    (select reference = 'IBG 20260301' from public.gl_entries
+      where id = v_entry));
+
+  begin
+    perform public.post_bank_transfer(v_id);
+    raise exception 'FAIL posted the same transfer twice';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a transfer is only posted once',
+      v_msg like '%already posted%');
+  end;
+  perform pg_temp.check_eq('so there is one journal for it, not two',
+    (select count(*)::integer from public.gl_entries
+      where source_table = 'bank_transfers' and source_id = v_id), 1);
 
   perform pg_temp.sign_out();
 end $$;
