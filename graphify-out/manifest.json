@@ -1225,8 +1225,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/transfer.sql": {
-    "mtime": 1787822946.0345898,
-    "ast_hash": "48a6da27579c597301fe2977ce5c9c8b",
+    "mtime": 1788474438.6519675,
+    "ast_hash": "7c1596b0c1120548b0d3aaef40b8b2ec",
     "semantic_hash": ""
   },
   "supabase/migrations/0083_fx_revaluation.sql": {

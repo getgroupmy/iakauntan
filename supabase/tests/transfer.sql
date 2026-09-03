@@ -438,4 +438,298 @@ begin
       'app.refresh_sales_progress(uuid)', 'execute'));
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- The thirteen a mutation sweep found
+-- ---------------------------------------------------------------------
+-- Thirty one-line mutants of `transfer_document` against fifteen test
+-- files. Thirteen survived, and eleven of the thirteen fall into two
+-- groups that between them describe how this function was tested.
+--
+-- THE PURCHASE BRANCH. `transfer_document` is written twice -- once for
+-- the selling cycle, once for the buying one -- and FIVE rules are
+-- asserted on the sales side and on neither the buying side:
+--
+--   taking more forward than is outstanding
+--   counting what has already been billed
+--   prorating a line discount onto a part transfer
+--   apportioning the carriage
+--   apportioning the header discount
+--
+-- Every one of those has a sales twin in this file that is asserted and
+-- dies. This is the third function in a row with the shape, and it is
+-- the most complete example of it: the buying half of a two-cycle
+-- function is where a fault lives longest, because the tests were
+-- written while thinking about selling.
+--
+-- THE FRONT DOOR. Four refusals at the top -- a voided source on either
+-- side, a source that does not exist, and a caller who may not write --
+-- none asserted. Every sweep this session has found this.
+--
+-- The other two are a payment term that is never read (so every
+-- transferred invoice falls due in thirty days whatever the customer
+-- agreed) and a currency that is not carried (so a quotation in USD
+-- becomes an invoice in ringgit at par).
+do $$
+declare
+  v_org    uuid;
+  v_owner  uuid := pg_temp.test_user();
+  v_cust   uuid;
+  v_sup    uuid;
+  v_item   uuid;
+  v_term   uuid;
+  v_quote  uuid;
+  v_po     uuid;
+  v_bill   uuid;
+  v_inv    uuid;
+  v_new    uuid;
+  v_line   uuid;
+  v_pline  uuid;
+  v_zero   uuid;
+  v_usd    uuid;
+  v_who    uuid;
+  v_msg    text;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  v_org := pg_temp.test_org('Pindah Sapu Sdn Bhd');
+  perform public.create_fiscal_year(v_org, date_trunc('year', app.today())::date);
+
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'CUST', 'Pembeli', 'customer') returning id into v_cust;
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'SUP', 'Pembekal', 'supplier') returning id into v_sup;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, unit_price)
+  values (v_org, 'SVC', 'Consulting', 'service', false, 100)
+  returning id into v_item;
+  insert into public.payment_terms (org_id, code, name, days, term_type)
+  values (v_org, 'N60', 'Net 60', 60, 'net') returning id into v_term;
+
+  -- ==================================================================
+  -- 1. The front door
+  -- ==================================================================
+  begin
+    perform public.transfer_document(gen_random_uuid(), 'sales_order');
+    raise exception 'a document that does not exist was transferred';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a source that is not there is refused',
+      v_msg like 'Document % not found');
+  end;
+
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     status)
+  values (v_org, 'quotation', 'QT-VOID', app.today(), v_cust, 'MYR', 1, 'void')
+  returning id into v_quote;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_quote, 1, 'item', v_item, 'Withdrawn', 10, 100);
+
+  begin
+    perform public.transfer_document(v_quote, 'sales_order');
+    raise exception 'a voided quotation was transferred';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('a voided quotation cannot be taken forward',
+      v_msg, 'Document QT-VOID has been voided');
+  end;
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     status)
+  values (v_org, 'purchase_order', 'PO-VOID', app.today(), v_sup, 'MYR', 1, 'void')
+  returning id into v_po;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_po, 1, 'item', v_item, 'Cancelled', 10, 100);
+
+  begin
+    perform public.transfer_document(v_po, 'bill');
+    raise exception 'a voided purchase order was transferred';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('nor a voided purchase order',
+      v_msg, 'Document PO-VOID has been voided');
+  end;
+
+  -- And by somebody who may not write at all.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     status, payment_term_id)
+  values (v_org, 'quotation', 'QT-OK', app.today(), v_cust, 'MYR', 1, 'draft',
+          v_term)
+  returning id into v_quote;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price, discount_amount)
+  values (v_org, v_quote, 1, 'item', v_item, 'Advice', 10, 100, 60);
+
+  v_who := pg_temp.another_user('transfer-outsider@iakauntan.test');
+  perform pg_temp.sign_in_as(v_who);
+  begin
+    perform public.transfer_document(v_quote, 'sales_order');
+    raise exception 'somebody outside the company transferred its quotation';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('and not by somebody who may not write here',
+      v_msg, 'Insufficient privileges to transfer');
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- ==================================================================
+  -- 2. The due date is the one the customer agreed
+  --
+  -- The term is read off the source and its days added; drop the lookup
+  -- and every transferred invoice falls due in thirty days whatever was
+  -- agreed. Net 60 here, so thirty would be visible.
+  -- ==================================================================
+  v_inv := public.transfer_document(v_quote, 'invoice');
+  perform pg_temp.check_true('an invoice falls due on the agreed terms',
+    (select due_date = app.today() + 60 from public.sales_documents
+      where id = v_inv));
+  perform pg_temp.check_true('which is not the thirty-day default',
+    (app.today() + 60) <> (app.today() + 30));
+
+  -- ==================================================================
+  -- 3. A foreign quotation becomes a foreign invoice
+  --
+  -- Nothing in this file leaves ringgit, so the currency and the rate
+  -- could both be replaced by the company's own at par -- turning a
+  -- quotation for USD 1,000 into an invoice for RM 1,000, which is not
+  -- the price anybody agreed.
+  -- ==================================================================
+  insert into public.exchange_rates
+    (org_id, from_currency, to_currency, rate, rate_date, source)
+  values (v_org, 'USD', 'MYR', 4.70, app.today() - 7, 'manual');
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     status)
+  values (v_org, 'quotation', 'QT-USD', app.today(), v_cust, 'USD', 4.70, 'draft')
+  returning id into v_usd;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_usd, 1, 'item', v_item, 'Exported advice', 10, 100);
+
+  v_new := public.transfer_document(v_usd, 'sales_order');
+  perform pg_temp.check_eq('a foreign quotation keeps its currency',
+    (select currency::text from public.sales_documents where id = v_new), 'USD');
+  perform pg_temp.check_eq('and the rate it was struck at',
+    (select exchange_rate from public.sales_documents where id = v_new),
+    4.70::numeric);
+
+  -- ==================================================================
+  -- 4. The buying cycle, rule for rule
+  --
+  -- Five rules whose selling twins are asserted above and whose buying
+  -- copies were asserted nowhere. A purchase order for ten, with
+  -- carriage and a discount on the header and a discount on the line,
+  -- billed in two halves.
+  -- ==================================================================
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     status, shipping_amount, discount_amount)
+  values (v_org, 'purchase_order', 'PO-1', app.today(), v_sup, 'MYR', 1,
+          'draft', 80, 40)
+  returning id into v_po;
+  insert into public.purchase_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price, discount_amount)
+  values (v_org, v_po, 1, 'item', v_item, 'Contract work', 10, 100, 60)
+  returning id into v_pline;
+
+  -- Half of it, billed.
+  v_bill := public.transfer_document(v_po, 'bill',
+    jsonb_build_array(jsonb_build_object('line_id', v_pline, 'quantity', 5)));
+
+  perform pg_temp.check_eq('half a purchase order takes half the carriage',
+    (select shipping_amount from public.purchase_documents where id = v_bill),
+    40::numeric);
+  perform pg_temp.check_eq('and half the header discount',
+    (select discount_amount from public.purchase_documents where id = v_bill),
+    20::numeric);
+  perform pg_temp.check_eq('and half the line discount, not all of it',
+    (select discount_amount from public.purchase_document_lines
+      where document_id = v_bill), 30::numeric);
+
+  -- What is already billed is counted, so only five are left.
+  begin
+    perform public.transfer_document(v_po, 'bill',
+      jsonb_build_array(jsonb_build_object('line_id', v_pline, 'quantity', 6)));
+    raise exception 'a purchase order was billed for more than it has left';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true(
+      'a bill cannot take more than the order has left',
+      v_msg like 'Line 1 has 5%outstanding; 6%was asked for.');
+  end;
+
+  -- The rest of it goes, and then there is nothing.
+  v_new := public.transfer_document(v_po, 'bill');
+  perform pg_temp.check_eq('the remaining half bills',
+    (select quantity from public.purchase_document_lines
+      where document_id = v_new), 5::numeric);
+  perform pg_temp.check_eq('taking the other half of the carriage',
+    (select shipping_amount from public.purchase_documents where id = v_new),
+    40::numeric);
+
+  -- ==================================================================
+  -- 5. The service charge, the one header amount only sales has
+  -- ==================================================================
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     status, service_charge_amount)
+  values (v_org, 'quotation', 'QT-SVC', app.today(), v_cust, 'MYR', 1, 'draft', 100)
+  returning id into v_quote;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price)
+  values (v_org, v_quote, 1, 'item', v_item, 'Served', 10, 100)
+  returning id into v_line;
+
+  v_new := public.transfer_document(v_quote, 'sales_order',
+    jsonb_build_array(jsonb_build_object('line_id', v_line, 'quantity', 4)));
+  perform pg_temp.check_eq(
+    'two fifths of a quotation takes two fifths of the service charge',
+    (select service_charge_amount from public.sales_documents where id = v_new),
+    40::numeric);
+
+  -- ==================================================================
+  -- 6. A document whose lines come to nothing
+  --
+  -- The function's comment calls all-on-a-whole and none-on-a-partial
+  -- the only defensible answers. The whole half was asserted; the
+  -- partial half was not, and inverting it puts the entire delivery
+  -- charge on a transfer of one line out of two.
+  -- ==================================================================
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, currency, exchange_rate,
+     status, shipping_amount)
+  values (v_org, 'quotation', 'QT-ZERO', app.today(), v_cust, 'MYR', 1,
+          'draft', 90)
+  returning id into v_zero;
+  insert into public.sales_document_lines
+    (org_id, document_id, line_no, line_type, item_id, description,
+     quantity, unit_price, discount_amount)
+  values (v_org, v_zero, 1, 'item', v_item, 'Swapped out', 1, 100, 100),
+         (v_org, v_zero, 2, 'item', v_item, 'Swapped in',  1, 100, 100);
+  perform pg_temp.check_eq('the quotation nets to nothing',
+    (select coalesce(subtotal, 0) from public.sales_documents where id = v_zero),
+    0::numeric);
+
+  select l.id into v_line from public.sales_document_lines l
+   where l.document_id = v_zero and l.line_no = 1;
+  v_new := public.transfer_document(v_zero, 'sales_order',
+    jsonb_build_array(jsonb_build_object('line_id', v_line, 'quantity', 1)));
+  perform pg_temp.check_eq(
+    'a partial transfer of it takes none of the delivery charge',
+    (select shipping_amount from public.sales_documents where id = v_new),
+    0::numeric);
+
+  raise notice 'ok   transfer: the thirteen a sweep found';
+end $$;
+
 rollback;
