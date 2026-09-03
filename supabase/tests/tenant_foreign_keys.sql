@@ -838,9 +838,64 @@ begin
       v_uncovered;
   end if;
 
+  -- ------------------------------------------------------------------
+  -- And the class the query above cannot see
+  --
+  -- The filter says the table must carry `org_id`. A table with none
+  -- at all is therefore skipped rather than reported -- and a join
+  -- table holding two foreign keys and nothing else is exactly that
+  -- shape. It names a row from one company's configuration and a row
+  -- from anybody's catalogue, with nothing on the row to hold the two
+  -- together.
+  --
+  -- Four such tables existed when 0522 was written. Three were the POS
+  -- scope tables, and the consequence was not theoretical: one company
+  -- could put another company's dish on a schedule that was shut and
+  -- take it off the other company's own menu, because
+  -- `app.pos_item_off` matched schedule rows by item alone. The fourth
+  -- was `organizations`, whose own org_id is called `id`.
+  --
+  -- This is the query that would have found them. `organizations` is
+  -- excluded from the LEFT of it, not the right: it is the one table
+  -- whose tenant column is `id`, so it is covered by the query above's
+  -- rule under a different name, and 0522 gave it both keys.
+  select string_agg(t.relname || '.' || a.attname || ' -> ' ||
+                    f.confrelid::regclass::text, ', ')
+    into v_uncovered
+    from pg_class t
+    join pg_namespace n on n.oid = t.relnamespace
+    join pg_constraint f on f.conrelid = t.oid and f.contype = 'f'
+                        and cardinality(f.conkey) = 1
+    join pg_attribute a on a.attrelid = t.oid and a.attnum = f.conkey[1]
+   where n.nspname = 'public' and t.relkind = 'r'
+     and t.relname <> 'organizations'
+     and not exists (select 1 from pg_attribute o
+                      where o.attrelid = t.oid and o.attname = 'org_id'
+                        and o.attnum > 0 and not o.attisdropped)
+     -- Only where the parent has a company, so a link to a reference
+     -- table is not reported.
+     and exists (select 1 from pg_attribute o2
+                  where o2.attrelid = f.confrelid and o2.attname = 'org_id'
+                    and o2.attnum > 0 and not o2.attisdropped)
+     -- Two or more such columns is what makes it a join table: one
+     -- alone cannot disagree with anything.
+     and (select count(*) from pg_constraint f2
+           where f2.conrelid = t.oid and f2.contype = 'f'
+             and cardinality(f2.conkey) = 1
+             and exists (select 1 from pg_attribute o3
+                          where o3.attrelid = f2.confrelid
+                            and o3.attname = 'org_id'
+                            and o3.attnum > 0 and not o3.attisdropped)) >= 2;
+  if v_uncovered is not null then
+    raise exception
+      'these tables name two companies'' rows with no company of their '
+      'own to hold them together: %', v_uncovered;
+  end if;
+
   raise notice
     'the whole schema: 18 cross-company writes refused, 18 same-company '
-    'writes allowed, 0 columns uncovered anywhere, 2 exempt by name';
+    'writes allowed, 0 columns uncovered anywhere, 0 join tables without '
+    'a company, 2 exempt by name';
 end $$;
 
 -- Deleting a row somebody else names has to empty the reference, not

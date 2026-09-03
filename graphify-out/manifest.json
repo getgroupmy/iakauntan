@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788463079.2204275,
-    "ast_hash": "cdefbe489e7e51afa793230d503dc4e9",
+    "mtime": 1788467979.260153,
+    "ast_hash": "2d89557bc1522a829b0dddb9bcfe0042",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -2765,8 +2765,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/tenant_foreign_keys.sql": {
-    "mtime": 1788461627.723853,
-    "ast_hash": "54daca965ff5d859521d3cd96c22e72f",
+    "mtime": 1788467879.0826094,
+    "ast_hash": "18e531735d65a4ef6329db22bab6579b",
     "semantic_hash": ""
   },
   "docs/property.md": {
@@ -3315,13 +3315,13 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos.sql": {
-    "mtime": 1788412179.113577,
-    "ast_hash": "bb8a913e434d6c36bb588de55027950c",
+    "mtime": 1788467854.6161215,
+    "ast_hash": "573ef2bd94c95760aae28b5dd12cf920",
     "semantic_hash": ""
   },
   "supabase/tests/pos_fnb.sql": {
-    "mtime": 1787323484.3355248,
-    "ast_hash": "a1b9f936aad258e531e6c87bbd6bee6c",
+    "mtime": 1788467854.6240768,
+    "ast_hash": "8321d972ab4204593d7c7244d5508088",
     "semantic_hash": ""
   },
   "supabase/tests/pos_kiosk.sql": {
@@ -4305,8 +4305,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_promotion_admin.sql": {
-    "mtime": 1788313803.760281,
-    "ast_hash": "dd8db691226d29a881c19f62964ccdac",
+    "mtime": 1788467854.6189148,
+    "ast_hash": "7f5b3e21728fbfd900d0cd774d573090",
     "semantic_hash": ""
   },
   "supabase/tests/sst_summary.sql": {
@@ -7737,6 +7737,16 @@
   "supabase/tests/posting_a_bill.sql": {
     "mtime": 1788463145.5483887,
     "ast_hash": "bf508a82f3eff5462b0d72e9b9ad91f9",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0522_a_row_that_names_two_companies_at_once.sql": {
+    "mtime": 1788467829.311701,
+    "ast_hash": "b9cc0f2f307587328d1accc7fc348d63",
+    "semantic_hash": ""
+  },
+  "supabase/tests/two_companies_on_one_row.sql": {
+    "mtime": 1788467971.4270723,
+    "ast_hash": "c62b35897ec1f0e9944cb2ca80d6a5e7",
     "semantic_hash": ""
   }
 }

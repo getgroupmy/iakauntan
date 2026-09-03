@@ -1424,8 +1424,8 @@ begin
           (v_clock - interval '3 hours')::time,
           (v_clock - interval '1 hour')::time)
   returning id into v_sched;
-  insert into public.pos_menu_schedule_items (schedule_id, item_id)
-  values (v_sched, v_item);
+  insert into public.pos_menu_schedule_items (org_id, schedule_id, item_id)
+  values (v_org, v_sched, v_item);
 
   perform pg_temp.check_true('outside its hours the dish is off',
     app.pos_item_off(v_item, v_outlet) is not null);
@@ -1438,8 +1438,8 @@ begin
   values (v_org, 'All day', (v_clock - interval '1 hour')::time,
           (v_clock + interval '1 hour')::time)
   returning id into v_sched2;
-  insert into public.pos_menu_schedule_items (schedule_id, item_id)
-  values (v_sched2, v_item);
+  insert into public.pos_menu_schedule_items (org_id, schedule_id, item_id)
+  values (v_org, v_sched2, v_item);
   perform pg_temp.check_true('a second open schedule puts it back on',
     app.pos_item_off(v_item, v_outlet) is null);
 

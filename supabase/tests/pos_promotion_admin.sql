@@ -470,8 +470,8 @@ begin
   insert into public.pos_promotions (org_id, name, kind, amount)
   values (v_org, 'Five off the drinks', 'amount_off', 5.00)
   returning id into v_promo;
-  insert into public.pos_promotion_items (promotion_id, item_id)
-  values (v_promo, v_teh);
+  insert into public.pos_promotion_items (org_id, promotion_id, item_id)
+  values (v_org, v_promo, v_teh);
 
   v_sale := public.open_pos_sale(v_reg);
   perform public.add_pos_sale_line(v_sale, v_teh, 1, 3.00);

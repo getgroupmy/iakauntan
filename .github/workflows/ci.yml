@@ -226,6 +226,7 @@ jobs:
                    supabase/tests/close_my_account.sql \
                    supabase/tests/search_path.sql \
                    supabase/tests/tenant_foreign_keys.sql \
+                   supabase/tests/two_companies_on_one_row.sql \
                    supabase/tests/property.sql \
                    supabase/tests/months_between.sql \
                    supabase/tests/timesheets.sql \
