@@ -2630,8 +2630,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/stock_card.sql": {
-    "mtime": 1786849099.249582,
-    "ast_hash": "6c62652572c5308a2fd2f0c5ad82bfa1",
+    "mtime": 1788417788.1446698,
+    "ast_hash": "5c4104baf40d6e159e230c81a10ecd67",
     "semantic_hash": ""
   },
   "docs/migrations.md": {
