@@ -162,8 +162,9 @@ end $$;
 --
 -- 0510 did the same for `warehouses`, 0512 for `contacts`, 0513 for
 -- `items`, 0514 for `accounts`, 0515 for `gl_entries`, 0516 for
--- `sales_documents` and 0517 for `pos_outlets`, and all eight parents
--- are probed and covered in the one block below.
+-- `sales_documents`, 0517 for `pos_outlets` and 0518 for `tax_codes`,
+-- `purchase_documents` and `pos_sales`, and all eleven parents are
+-- probed and covered in the one block below.
 -- `contacts` is the widest and the one where a wrong id is money: an
 -- invoice raised in this company against another company's customer
 -- reads as an ordinary invoice, and only the aged receivable shows the
@@ -180,6 +181,7 @@ declare
   v_ent_a uuid; v_ent_b uuid;
   v_doc_b uuid;
   v_out_a uuid; v_out_b uuid;
+  v_tax_b uuid; v_bill_a uuid; v_bill_b uuid;
   v_tried integer := 0; v_refused integer := 0;
   v_uncovered text;
 begin
@@ -595,7 +597,73 @@ begin
       'the new keys refuse a register in its own outlet: %', sqlerrm;
   end;
 
-  if v_refused <> v_tried or v_tried < 22 then
+  -- 16. A tax code, a bill and its self-reference, which is 0518.
+  --
+  -- The tax code is the one that reaches a statutory return.
+  -- tax_codes' own accounts were held to the organization by 0514, so
+  -- the account a tax collects INTO is already right; what was not is
+  -- the code named on the line. A line pointing at another company's
+  -- tax code takes their rate and their registration into this
+  -- company's SST return.
+  insert into public.tax_codes
+    (org_id, code, name, tax_type_code, rate, applies_to)
+  values (v_b, 'SR-B', 'B''s standard rate', '01', 8, 'both')
+  returning id into v_tax_b;
+
+  v_tried := v_tried + 1;
+  begin
+    update public.sales_document_lines set tax_code_id = v_tax_b
+     where org_id = v_a and document_id = v_doc_a and line_no = 2;
+    raise exception 'a line in A was charged at B''s tax code';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  -- 17. The buy side of 0516, and its self-reference: a debit note in A
+  -- naming B's bill as the one it cancels.
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, total_amount,
+     base_total_amount, balance_amount)
+  values (v_a, 'bill', 'BILL-A', current_date, v_con_a, 100, 100, 100)
+  returning id into v_bill_a;
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, contact_id, total_amount,
+     base_total_amount, balance_amount)
+  values (v_b, 'bill', 'BILL-B', current_date, v_con_b, 100, 100, 100)
+  returning id into v_bill_b;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.purchase_documents
+      (org_id, doc_type, doc_no, doc_date, contact_id, total_amount,
+       base_total_amount, balance_amount, original_bill_id)
+    values (v_a, 'purchase_debit_note', 'DN-X', current_date, v_con_a,
+            100, 100, 100, v_bill_b);
+    raise exception 'a debit note in A cancelled B''s bill';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  v_tried := v_tried + 1;
+  begin
+    insert into public.purchase_documents
+      (org_id, doc_type, doc_no, doc_date, contact_id, total_amount,
+       base_total_amount, balance_amount, original_bill_id)
+    values (v_a, 'purchase_debit_note', 'DN-OWN', current_date, v_con_a,
+            100, 100, 100, v_bill_a);
+    insert into public.purchase_documents
+      (org_id, doc_type, doc_no, doc_date, contact_id, total_amount,
+       base_total_amount, balance_amount, original_bill_id)
+    values (v_a, 'bill', 'BILL-A2', current_date, v_con_a,
+            100, 100, 100, null);
+    v_refused := v_refused + 1;
+  exception when others then
+    raise exception
+      'the new keys refuse a debit note against its own bill, or a bill '
+      'that cancels nothing: %', sqlerrm;
+  end;
+
+  if v_refused <> v_tried or v_tried < 25 then
     raise exception 'employee and warehouse boundary: % probes ran, % behaved',
       v_tried, v_refused;
   end if;
@@ -609,12 +677,13 @@ begin
   --
   -- `employees` (0507-0509), `warehouses` (0510), `contacts` (0512),
   -- `items` (0513), `accounts` (0514), `gl_entries` (0515),
-  -- `sales_documents` (0516) and `pos_outlets` (0517) are closed. The
-  -- list is deliberately not every parent in the schema: roughly a
-  -- hundred smaller ones, with one to eleven columns each, are still to
-  -- come. Adding a parent here before its migration would make this
-  -- file fail for work that has not been done, which is a worse signal
-  -- than not asserting it yet.
+  -- `sales_documents` (0516), `pos_outlets` (0517) and `tax_codes`,
+  -- `purchase_documents` and `pos_sales` (0518) are closed. The list is
+  -- deliberately not every parent in the schema: about a hundred
+  -- smaller ones, with one to nine columns each, are still to come.
+  -- Adding a parent here before its migration would make this file fail
+  -- for work that has not been done, which is a worse signal than not
+  -- asserting it yet.
   select string_agg(
            c.confrelid::regclass::text || ' <- ' ||
            c.conrelid::regclass::text || '.' || a.attname, ', ')
@@ -630,7 +699,10 @@ begin
                          'public.accounts'::regclass,
                          'public.gl_entries'::regclass,
                          'public.sales_documents'::regclass,
-                         'public.pos_outlets'::regclass)
+                         'public.pos_outlets'::regclass,
+                         'public.tax_codes'::regclass,
+                         'public.purchase_documents'::regclass,
+                         'public.pos_sales'::regclass)
      and cardinality(c.conkey) = 1
      and exists (select 1 from pg_attribute o
                   where o.attrelid = c.conrelid and o.attname = 'org_id'
@@ -661,9 +733,10 @@ begin
   end if;
 
   raise notice
-    'employee, warehouse, contact, item, account, journal, invoice and '
-    'outlet boundaries: 14 cross-company writes refused, 14 '
-    'same-company writes allowed, 0 columns uncovered';
+    'employee, warehouse, contact, item, account, journal, invoice, '
+    'outlet, tax code, bill and sale boundaries: 16 cross-company '
+    'writes refused, 16 same-company writes allowed, 0 columns '
+    'uncovered';
 end $$;
 
 -- Deleting a row somebody else names has to empty the reference, not

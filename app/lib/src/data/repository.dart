@@ -2136,7 +2136,10 @@ class Repo {
         // Named because 0512 added a same-org composite key alongside
         // the plain one, so 'contacts' can now be joined two ways and
         // PostgREST refuses an unqualified embed with PGRST201.
-        .select('*, purchase_documents(doc_no), contacts!fixed_assets_supplier_id_fkey(name)')
+        // Named because 0518 added a same-org composite key alongside
+        // the plain one, so 'purchase_documents' can now be joined two
+        // ways and PostgREST refuses the embed with PGRST201.
+        .select('*, purchase_documents!fixed_assets_purchase_document_id_fkey(doc_no), contacts!fixed_assets_supplier_id_fkey(name)')
         .eq('org_id', orgId)
         .isFilter('deleted_at', null);
     if (!includeDisposed) q = q.neq('status', 'disposed');
@@ -10808,7 +10811,10 @@ extension RepoLandedCost on Repo {
       Repo.rows(
         await client
             .from('landed_cost_targets')
-            .select('bill_id, purchase_documents(doc_no, doc_date)')
+        // Named because 0518 added a same-org composite key alongside
+        // the plain one, so 'purchase_documents' can now be joined two
+        // ways and PostgREST refuses the embed with PGRST201.
+        .select('bill_id, purchase_documents!landed_cost_targets_bill_id_fkey(doc_no, doc_date)')
             .eq('run_id', runId),
       );
 
