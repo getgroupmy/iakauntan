@@ -6980,8 +6980,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory_remittances.sql": {
-    "mtime": 1788323978.8335302,
-    "ast_hash": "23c1d0e3150ec09daf105a7c8795efb2",
+    "mtime": 1788398775.8332407,
+    "ast_hash": "de0ef14f1fe8346e0d2145fe5579c871",
     "semantic_hash": ""
   },
   "app/lib/src/core/amount_words.dart": {

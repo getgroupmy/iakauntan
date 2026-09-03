@@ -139,6 +139,26 @@ begin
     (select count(distinct x.due_date)::integer
        from public.report_statutory_remittances(v.org) x
       where x.due_date is not null), 1);
+
+  -- And every body with a federal deadline, not only the ones this
+  -- company happens to owe. The assertion above reads the report, and
+  -- the report answers for what has been recorded -- so the HRD Corp
+  -- levy, which nothing in this fixture remits, sat outside it and its
+  -- date could have moved unnoticed. Found by changing each due_day in
+  -- turn and seeing which the suite failed to catch.
+  perform pg_temp.check_eq('every federal deadline is the fifteenth after',
+    (select count(*)::integer from public.ref_statutory_remittances body
+      where body.due_day is not null
+        and app.remittance_due(date '2026-01-31', body.code)
+            is distinct from date '2026-02-15'), 0);
+
+  -- The count as well, so a sixth body added later without a deadline
+  -- of its own is noticed here rather than by whoever is late paying
+  -- it. Five carry a date; zakat does not, and the block below says
+  -- why.
+  perform pg_temp.check_eq('five bodies carry one',
+    (select count(*)::integer from public.ref_statutory_remittances
+      where due_day is not null), 5);
 end $$;
 
 -- ---------------------------------------------------------------------
