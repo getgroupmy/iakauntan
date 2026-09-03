@@ -282,6 +282,30 @@ begin
   perform pg_temp.check_true('one transaction in three years ends dormancy',
     not r.qualifies);
 
+  -- ------------------------------------------------------------------
+  -- Zero revenue, which is not the same as dormant
+  --
+  -- The company above now has a transaction and still no revenue, which
+  -- is exactly the second ground: no turnover in three years and total
+  -- assets never above RM300,000. Its own ceiling had no test — raising
+  -- it to half a million changed nothing anywhere — because the ground
+  -- was only ever asserted negatively.
+  -- ------------------------------------------------------------------
+  select * into r from public.fs_audit_exemption(v_2025)
+   where ground = 'zero_revenue';
+  perform pg_temp.check_true('no revenue and small assets is the second ground',
+    r.qualifies);
+
+  -- Capital paid in, not turnover: revenue is still nil and the ground
+  -- ends anyway, which is the whole point of the assets half of it.
+  perform pg_temp.jv(v_org, 'JV-D2', date '2023-07-01', v_bank, v_cap, 400000);
+  select * into r from public.fs_audit_exemption(v_2025)
+   where ground = 'zero_revenue';
+  perform pg_temp.check_true('assets over RM300,000 end it even with no revenue',
+    not r.qualifies);
+  perform pg_temp.check_true('and it says that was the ceiling',
+    r.reason like '%RM300,000%');
+
   -- Threshold-qualified: small in all three years.
   v_org := pg_temp.mbrs_org('Probe MBRS Small');
   -- A year at a time: period control refuses a journal dated outside an
@@ -346,6 +370,46 @@ begin
    where ground = 'threshold_qualified';
   perform pg_temp.check_true('a missing headcount is "cannot tell"',
     not r.qualifies and r.reason like 'Cannot tell%');
+
+  -- ------------------------------------------------------------------
+  -- The other two ceilings
+  --
+  -- Everything above crosses the revenue ceiling and nothing crosses
+  -- the other two, so until now the RM300,000 of assets and the five
+  -- employees could both be changed to anything at all and this file
+  -- still passed. Found by changing each and re-running.
+  --
+  -- Put the fixture back inside every ceiling first, so what follows
+  -- crosses one at a time.
+  -- ------------------------------------------------------------------
+  update public.fs_filings set employee_count = 4 where id = v_2024;
+  perform pg_temp.jv(v_org, 'JV-S8', date '2023-09-30', v_sales, v_bank, 30000);
+  select * into r from public.fs_audit_exemption(v_2025)
+   where ground = 'threshold_qualified';
+  perform pg_temp.check_true('with the extra revenue reversed it qualifies again',
+    r.qualifies);
+
+  -- Six in one year. The ceiling somebody crosses by hiring rather
+  -- than by trading, and the oldest year again, because that is the
+  -- one a person checking only this year would miss.
+  update public.fs_filings set employee_count = 6 where id = v_2023;
+  select * into r from public.fs_audit_exemption(v_2025)
+   where ground = 'threshold_qualified';
+  perform pg_temp.check_true('six employees in one year ends it',
+    not r.qualifies);
+  perform pg_temp.check_true('and it says it was the headcount',
+    r.reason like '%five employee ceiling%');
+  update public.fs_filings set employee_count = 2 where id = v_2023;
+
+  -- Assets over RM300,000, which the revenue ceiling cannot catch
+  -- because this is capital paid in and not turnover.
+  perform pg_temp.jv(v_org, 'JV-S9', date '2024-03-01', v_bank, v_cap, 400000);
+  select * into r from public.fs_audit_exemption(v_2025)
+   where ground = 'threshold_qualified';
+  perform pg_temp.check_true('assets over the ceiling end it too',
+    not r.qualifies);
+  perform pg_temp.check_true('and it says which ceiling that was',
+    r.reason like '%RM300,000%');
 
   raise notice 'mbrs: all three exemption grounds tested in both directions';
 end $$;
