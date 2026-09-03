@@ -692,4 +692,116 @@ begin
   end;
 end $$;
 
+-- ---------------------------------------------------------------------
+-- What receiving a van refuses
+-- ---------------------------------------------------------------------
+-- The same shape again. Everything about what receiving DOES to the
+-- ledger is asserted — the price it arrives at, the shortfall charged
+-- to 5900, transit cleared of both what came and what was lost — and
+-- everything about when it may happen was open.
+do $$
+declare
+  v_org   uuid;
+  v_a     uuid;
+  v_b     uuid;
+  v_item  uuid;
+  v_t     uuid;
+  v_line  uuid;
+  v_owner uuid := pg_temp.test_user();
+  v_msg   text;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Van Ketiga Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_org, date_trunc('year', current_date)::date);
+  insert into public.org_modules (org_id, module_code, is_enabled)
+  select v_org, m, true from unnest(array['inventory','pos']) m
+  on conflict (org_id, module_code) do update set is_enabled = true;
+
+  insert into public.warehouses (org_id, code, name, is_default)
+  values (v_org, 'SATU', 'Store one', true) returning id into v_a;
+  insert into public.warehouses (org_id, code, name)
+  values (v_org, 'DUA', 'Store two') returning id into v_b;
+  insert into public.items
+    (org_id, code, name, item_type, track_inventory, uom_code, cost_price)
+  values (v_org, 'TIN', 'Tin', 'stock', true, 'C62', 3.00)
+  returning id into v_item;
+  insert into public.stock_movements
+    (org_id, movement_no, movement_date, movement_type, item_id,
+     warehouse_id, quantity, unit_cost)
+  values (v_org, 'VT-0001', current_date, 'opening_balance', v_item, v_a, 20, 3);
+
+  v_t := public.upsert_stock_transfer(
+    null, v_org, v_a, v_b, current_date,
+    jsonb_build_array(jsonb_build_object(
+      'item', v_item, 'quantity', 8, 'uom', 'C62')),
+    'Eight tins');
+
+  -- ------------------------------------------------------------------
+  -- Nothing is on its way yet
+  -- ------------------------------------------------------------------
+  begin
+    perform public.receive_stock_transfer(v_t);
+    raise exception 'FAIL received a transfer that was never sent';
+  exception when check_violation then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a van still in the yard has not arrived',
+      v_msg like '%nothing on its way%');
+  end;
+
+  perform public.send_stock_transfer(v_t);
+  select l.id into v_line from public.stock_transfer_lines l
+   where l.transfer_id = v_t;
+
+  -- ------------------------------------------------------------------
+  -- Who may sign for it
+  -- ------------------------------------------------------------------
+  perform pg_temp.sign_in_as(pg_temp.another_user('luar-terima@example.test'));
+  begin
+    perform public.receive_stock_transfer(v_t);
+    raise exception 'FAIL a stranger signed for a delivery';
+  exception when insufficient_privilege then
+    raise notice 'ok   somebody outside the company cannot sign for its stock';
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+
+  -- ------------------------------------------------------------------
+  -- A count that is not a count
+  -- ------------------------------------------------------------------
+  begin
+    perform public.receive_stock_transfer(v_t, jsonb_build_array(
+      jsonb_build_object('line', v_line, 'quantity', -2)));
+    raise exception 'FAIL accepted a negative count';
+  exception when check_violation then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('minus two tins is not a count',
+      v_msg like '%cannot be negative%');
+  end;
+
+  -- ------------------------------------------------------------------
+  -- Signed for once
+  -- ------------------------------------------------------------------
+  perform public.receive_stock_transfer(v_t, jsonb_build_array(
+    jsonb_build_object('line', v_line, 'quantity', 8)));
+  perform pg_temp.check_true('the transfer says it has arrived',
+    (select t.status::text = 'received' from public.stock_transfers t
+      where t.id = v_t));
+  perform pg_temp.check_eq('and the eight tins are in the second store',
+    (select sl.quantity from public.stock_levels sl
+      where sl.item_id = v_item and sl.warehouse_id = v_b), 8);
+
+  begin
+    perform public.receive_stock_transfer(v_t);
+    raise exception 'FAIL signed for the same delivery twice';
+  exception when check_violation then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('and a van already unloaded cannot arrive again',
+      v_msg like '%nothing on its way%');
+  end;
+  perform pg_temp.check_eq('so the second store has eight, not sixteen',
+    (select sl.quantity from public.stock_levels sl
+      where sl.item_id = v_item and sl.warehouse_id = v_b), 8);
+end $$;
+
 rollback;
