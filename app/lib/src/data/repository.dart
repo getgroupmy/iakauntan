@@ -3800,6 +3800,26 @@ class Repo {
   }
 
   // ------------------------------------------------------------------
+  // A pile at a time
+  // ------------------------------------------------------------------
+
+  /// Post many sales documents. Comes back a row per document saying
+  /// whether it went and, when it did not, what the database said —
+  /// see 0500. One document failing is not the batch failing.
+  Future<List<Map<String, dynamic>>> bulkPostDocuments(
+          List<String> ids) async =>
+      Repo._rows(
+        await callRpc('bulk_post_documents', params: {'p_ids': ids}),
+      );
+
+  Future<List<Map<String, dynamic>>> bulkEmailDocuments(List<String> ids,
+          {String template = 'document_new'}) async =>
+      Repo._rows(
+        await callRpc('bulk_email_documents',
+            params: {'p_ids': ids, 'p_template_code': template}),
+      );
+
+  // ------------------------------------------------------------------
   // What is waiting for somebody
   // ------------------------------------------------------------------
 

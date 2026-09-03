@@ -9,6 +9,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/ocr_repository.dart';
+import 'bulk_plan.dart';
 import 'doc_types.dart';
 import 'late_orders_dialog.dart';
 import '../shared/scan_intake.dart';
@@ -226,6 +227,87 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
   String _status = 'all';
   String _search = '';
 
+  /// Ticked, for a batch. Empty means the list behaves exactly as it
+  /// did before 0500: tapping a row opens it.
+  final _picked = <String>{};
+  bool _running = false;
+
+  void _toggle(String id) => setState(() {
+        if (!_picked.remove(id)) _picked.add(id);
+      });
+
+  Future<void> _runBatch(
+    List<BusinessDocument> docs,
+    String verb,
+    Future<List<Map<String, dynamic>>> Function(List<String>) action,
+    String field,
+  ) async {
+    if (docs.isEmpty || _running) return;
+    setState(() => _running = true);
+    List<Map<String, dynamic>> rows = const [];
+    try {
+      rows = await action([for (final d in docs) d.id]);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$verb failed: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _running = false);
+    }
+    if (!mounted || rows.isEmpty) return;
+
+    setState(_picked.clear);
+    ref.invalidate(documentsProvider);
+    refreshLedgerData(ref);
+
+    final failed = [for (final r in rows) if (r[field] != true) r];
+    if (failed.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(BulkPlan.outcome(rows, field))));
+      return;
+    }
+    // Named, not counted. "2 failed" is not something anybody can act
+    // on; "INV-19 is dated into a closed period" is.
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(BulkPlan.outcome(rows, field)),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final r in failed)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: Space.sm),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(r['doc_no']?.toString() ?? 'A document',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600)),
+                        Text(r['problem']?.toString() ?? 'Refused.',
+                            style: Theme.of(ctx).textTheme.bodySmall),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final meta = metaFor(widget.docType);
@@ -427,12 +509,100 @@ class _DocumentListScreenState extends ConsumerState<DocumentListScreen> {
                     doc: list[i],
                     docType: widget.docType,
                     kind: kind,
+                    // Only where a batch could do something: the two
+                    // bulk functions are the sales side's, and somebody
+                    // who cannot post or send has nothing to tick for.
+                    picked: _picked.contains(list[i].id),
+                    onPick: kind.isSales && (canPost || canWrite)
+                        ? () => _toggle(list[i].id)
+                        : null,
                   ),
                 ),
               ),
+              if (_picked.isNotEmpty)
+                _BatchBar(
+                  plan: BulkPlan.of(list, _picked, widget.docType),
+                  running: _running,
+                  onClear: () => setState(_picked.clear),
+                  onPost: canPost
+                      ? (docs) => _runBatch(docs, 'Post',
+                          ref.read(repoProvider)!.bulkPostDocuments, 'posted')
+                      : null,
+                  onEmail: canWrite
+                      ? (docs) => _runBatch(docs, 'Email',
+                          ref.read(repoProvider)!.bulkEmailDocuments, 'sent')
+                      : null,
+                ),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// The bar that appears once something is ticked.
+///
+/// What each button says comes from [BulkPlan], which knows that a
+/// quotation writes no journal and a posted invoice does not post
+/// twice — so "Post 12 of 40" is said before the batch rather than
+/// discovered after it.
+class _BatchBar extends StatelessWidget {
+  const _BatchBar({
+    required this.plan,
+    required this.running,
+    required this.onClear,
+    required this.onPost,
+    required this.onEmail,
+  });
+
+  final BulkPlan plan;
+  final bool running;
+  final VoidCallback onClear;
+  final void Function(List<BusinessDocument>)? onPost;
+  final void Function(List<BusinessDocument>)? onEmail;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: Space.lg, vertical: Space.sm),
+        child: Row(children: [
+          Text('${plan.selected.length} selected',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          const Spacer(),
+          if (running)
+            const Padding(
+              padding: EdgeInsets.only(right: Space.md),
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          TextButton(onPressed: running ? null : onClear,
+              child: const Text('Clear')),
+          const SizedBox(width: Space.sm),
+          if (onEmail != null)
+            OutlinedButton(
+              onPressed: running || plan.emailable.isEmpty
+                  ? null
+                  : () => onEmail!(plan.emailable),
+              child: Text(plan.emailLabel()),
+            ),
+          if (onPost != null) ...[
+            const SizedBox(width: Space.sm),
+            FilledButton(
+              onPressed: running || plan.postable.isEmpty
+                  ? null
+                  : () => onPost!(plan.postable),
+              child: Text(plan.postLabel()),
+            ),
+          ],
+        ]),
       ),
     );
   }
@@ -443,11 +613,15 @@ class _DocumentTile extends StatelessWidget {
     required this.doc,
     required this.docType,
     required this.kind,
+    this.picked = false,
+    this.onPick,
   });
 
   final BusinessDocument doc;
   final String docType;
   final DocKind kind;
+  final bool picked;
+  final VoidCallback? onPick;
 
   @override
   Widget build(BuildContext context) {
@@ -455,6 +629,12 @@ class _DocumentTile extends StatelessWidget {
 
     return ListTile(
       onTap: () => context.go('${kind.routePrefix}/$docType/${doc.id}'),
+      leading: onPick == null
+          ? null
+          : Checkbox(
+              value: picked,
+              onChanged: (_) => onPick!(),
+            ),
       contentPadding: const EdgeInsets.symmetric(
         horizontal: Space.lg,
         vertical: Space.xs,

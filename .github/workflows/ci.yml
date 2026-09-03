@@ -256,6 +256,7 @@ jobs:
                    supabase/tests/document_history.sql \
                    supabase/tests/expense_split.sql \
                    supabase/tests/notifications.sql \
+                   supabase/tests/bulk_actions.sql \
                    supabase/tests/company_handover.sql \
                    supabase/tests/company_export.sql \
                    supabase/tests/sst_taxable_period.sql \

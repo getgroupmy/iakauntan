@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788391330.1311197,
-    "ast_hash": "c14f6aa39c44726e1b71a22b988b53aa",
+    "mtime": 1788394843.8062797,
+    "ast_hash": "e83c1fabf1a7ef7d0795514970d49235",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -155,8 +155,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
-    "mtime": 1788285599.911654,
-    "ast_hash": "053744e533abd69944af88d030924649",
+    "mtime": 1788394879.6086078,
+    "ast_hash": "801d646f02559487ab1c73a4f45ce2ec",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/line_draft.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788391307.4507005,
-    "ast_hash": "2cc796548a3c6fb53588ebec2d4ccaf7",
+    "mtime": 1788394726.9409893,
+    "ast_hash": "8b3e033ebc520d54bac8c6354996c15d",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1500,8 +1500,8 @@
     "semantic_hash": ""
   },
   "docs/gaps-against-akaunting.md": {
-    "mtime": 1788392277.047874,
-    "ast_hash": "24380562cf1daa19692eadcc97d3dfb8",
+    "mtime": 1788395248.4475927,
+    "ast_hash": "9b92266df09c77897232d3b0322e0b23",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/email_screen.dart": {
@@ -7572,6 +7572,26 @@
   "supabase/migrations/0499_a_privilege_no_policy_permits.sql": {
     "mtime": 1788393939.0853014,
     "ast_hash": "46fb152159e48ce3654b90956fa6390a",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/documents/bulk_plan.dart": {
+    "mtime": 1788394801.4378266,
+    "ast_hash": "3f1ac1c6e9bea828a23fb865138b3e15",
+    "semantic_hash": ""
+  },
+  "app/test/bulk_plan_test.dart": {
+    "mtime": 1788394826.760342,
+    "ast_hash": "1853185477969e9894e79945599097ed",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0500_the_month_end_pile.sql": {
+    "mtime": 1788395431.6522095,
+    "ast_hash": "12f1ba8c609c858ff58c685195761d9e",
+    "semantic_hash": ""
+  },
+  "supabase/tests/bulk_actions.sql": {
+    "mtime": 1788394690.2358992,
+    "ast_hash": "09958e016ff47706ab6efc5e35e890fe",
     "semantic_hash": ""
   }
 }
