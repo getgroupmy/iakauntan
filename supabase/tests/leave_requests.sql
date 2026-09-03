@@ -690,4 +690,87 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- ---------------------------------------------------------------------
+-- Cuti Jiran Sdn Bhd: an employee belongs to one company
+--
+-- `leave_type_id` has been held to the organization by a composite
+-- foreign key since it was written. `employee_id` had only a plain
+-- reference to `employees(id)`, so HR in one company could file leave
+-- naming another company's employee: the request was written with this
+-- company's org_id and their employee, and a `leave_balances` row was
+-- created for them here as well.
+--
+-- 0507 refuses it in the function, so the message is readable, AND adds
+-- the composite keys so no future writer can do it either. Both halves
+-- matter: the guard explains, the constraint enforces.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_a uuid; v_b uuid; v_owner uuid := pg_temp.test_user();
+  v_emp_a uuid; v_emp_b uuid; v_type uuid;
+  v_msg text;
+begin
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.allow_many_companies();
+  v_a := pg_temp.test_org('Cuti Kami Sdn Bhd');
+  perform pg_temp.allow_many_companies();
+  perform public.create_fiscal_year(v_a, date_trunc('year', current_date)::date);
+  insert into public.employees
+    (org_id, employee_no, user_id, full_name, hire_date, employment_status)
+  values (v_a, 'EMP-A', v_owner, 'Our employee', current_date - 400, 'active')
+  returning id into v_emp_a;
+  insert into public.leave_types (org_id, code, name, default_days, is_paid)
+  values (v_a, 'AL', 'Annual', 14, true) returning id into v_type;
+  insert into public.leave_balances
+    (org_id, employee_id, leave_type_id, leave_year, entitled_days)
+  values (v_a, v_emp_a, v_type, extract(year from current_date)::int, 14)
+  on conflict do nothing;
+
+  v_b := pg_temp.test_org('Cuti Jiran Sdn Bhd');
+  perform pg_temp.sign_in_as(v_owner);
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, employment_status)
+  values (v_b, 'EMP-B', 'Their employee', current_date - 400, 'active')
+  returning id into v_emp_b;
+
+  begin
+    perform public.submit_leave_request(
+      v_a, v_type, current_date + 10, current_date + 11, 2,
+      'Filed against their employee', false, null, v_emp_b, null);
+    raise exception 'FAIL filed leave for another company''s employee';
+  exception when sqlstate '42501' then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('leave cannot be filed for another company',
+      v_msg = 'That employee belongs to another company.');
+  end;
+
+  perform pg_temp.check_eq('no request was written against their employee',
+    (select count(*)::integer from public.leave_requests
+      where employee_id = v_emp_b), 0);
+  perform pg_temp.check_eq('and no balance row was opened for them here',
+    (select count(*)::integer from public.leave_balances
+      where org_id = v_a and employee_id = v_emp_b), 0);
+
+  -- The constraint, not just the function: even a direct insert with
+  -- this company's org_id and their employee is refused now.
+  begin
+    insert into public.leave_requests
+      (org_id, request_no, employee_id, leave_type_id, start_date, end_date,
+       total_days, status)
+    values (v_a, 'LR-JIRAN', v_emp_b, v_type, current_date + 10,
+            current_date + 11, 2, 'submitted');
+    raise exception 'FAIL wrote a request for another company''s employee';
+  exception when foreign_key_violation then
+    raise notice 'ok   and the key refuses it even without the function';
+  end;
+
+  -- Filed for its own, it goes through.
+  perform pg_temp.check_true('leave for its own employee is filed',
+    public.submit_leave_request(
+      v_a, v_type, current_date + 10, current_date + 11, 2,
+      'Ours', false, null, v_emp_a, null) is not null);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;
