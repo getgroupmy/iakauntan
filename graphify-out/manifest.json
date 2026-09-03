@@ -4005,8 +4005,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/credit_note_return.sql": {
-    "mtime": 1788303719.0393963,
-    "ast_hash": "544b2a93cfa0010071e1634098cf20c7",
+    "mtime": 1788473153.5691454,
+    "ast_hash": "d2ed4f07e5c480496cdd9d883b550c07",
     "semantic_hash": ""
   },
   "app/lib/src/features/stock/landed_cost_screen.dart": {
