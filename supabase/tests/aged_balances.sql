@@ -13,6 +13,13 @@
 -- ledger — an invoice settled after the as-at date, and cash received
 -- before it against an invoice raised after it.
 --
+-- And the columns themselves. Both listings put every document into one
+-- of five buckets, and each of the four boundaries is asserted from
+-- both sides: the last day inside a column and the first day outside
+-- it. A boundary asserted from one side only can be moved outwards and
+-- nothing fails, which is how the sixty-day division on the receivables
+-- side and every division on the payables side came to be movable.
+--
 -- Nothing is written; the file rolls back.
 -- =====================================================================
 
@@ -222,9 +229,99 @@ begin
   perform pg_temp.check_true('thirty-one days over is not',
     (select aging_bucket = '31_60' and days_overdue = 31
        from public.report_ar_aging(v_org, date '2026-04-01')));
+  -- Sixty and sixty-one, which the block did not divide. The 30 and 90
+  -- boundaries were each asserted from both sides and this one from
+  -- neither, so it could be moved anywhere between them and nothing
+  -- failed. Found by moving it.
+  perform pg_temp.check_true('sixty days over is thirty-one to sixty',
+    (select aging_bucket = '31_60' and days_overdue = 60
+       from public.report_ar_aging(v_org, date '2026-04-30')));
+  perform pg_temp.check_true('sixty-one is not',
+    (select aging_bucket = '61_90' and days_overdue = 61
+       from public.report_ar_aging(v_org, date '2026-05-01')));
+  perform pg_temp.check_true('and ninety days over is still sixty-one to ninety',
+    (select aging_bucket = '61_90' and days_overdue = 90
+       from public.report_ar_aging(v_org, date '2026-05-30')));
   perform pg_temp.check_true('ninety-one days over is the last column',
     (select aging_bucket = 'over_90'
        from public.report_ar_aging(v_org, date '2026-05-31')));
+
+  -- An invoice with no due date ages from the day it was raised, which
+  -- is the only date there is. Nothing in the app requires a due date,
+  -- and an unallocated receipt reaches this listing with none by
+  -- construction, so the fallback is load-bearing rather than defensive.
+  perform pg_temp.sales_doc(v_org, v_cust, 'invoice', 'INV-2', 50,
+                            date '2026-02-01', null);
+  perform pg_temp.check_true('an invoice with no due date ages from its own date',
+    (select aging_bucket = '31_60' and days_overdue = 58
+       from public.report_ar_aging(v_org, date '2026-03-31')
+      where doc_no = 'INV-2'));
+  -- And is current on the day it was raised. This is the assertion the
+  -- one above cannot make: `days_overdue` and all four bands below
+  -- `current` fall back to the document date independently, so only the
+  -- `current` test itself is left unguarded, and it fails towards
+  -- one-to-thirty -- an invoice raised this morning, already overdue.
+  perform pg_temp.check_true('and is current on the day it was raised',
+    (select aging_bucket = 'current' and days_overdue = 0
+       from public.report_ar_aging(v_org, date '2026-02-01')
+      where doc_no = 'INV-2'));
+
+  perform pg_temp.sign_out();
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And the same divisions on the supplier side
+--
+-- The block below asserts one bill four weeks past due, which crosses
+-- no boundary at all: every one of the four could be moved anywhere and
+-- nothing failed. A payables ageing is what a company reads to decide
+-- who to pay, so the columns have to mean what they say.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid := pg_temp.aged_org('AP Bucket Sdn Bhd');
+  v_supp uuid;
+begin
+  v_supp := pg_temp.party(v_org, 'S-001', 'Parts Bhd', 'supplier');
+  perform pg_temp.bill(v_org, v_supp, 'bill', 'BILL-1', 100,
+                       date '2026-02-01', date '2026-03-01');
+
+  perform pg_temp.check_true('current on the day it falls due',
+    (select aging_bucket = 'current' and days_overdue = 0
+       from public.report_ap_aging(v_org, date '2026-03-01')));
+  perform pg_temp.check_true('one day over is one to thirty',
+    (select aging_bucket = '1_30'
+       from public.report_ap_aging(v_org, date '2026-03-02')));
+  perform pg_temp.check_true('thirty days over is still one to thirty',
+    (select aging_bucket = '1_30' and days_overdue = 30
+       from public.report_ap_aging(v_org, date '2026-03-31')));
+  perform pg_temp.check_true('thirty-one days over is not',
+    (select aging_bucket = '31_60' and days_overdue = 31
+       from public.report_ap_aging(v_org, date '2026-04-01')));
+  perform pg_temp.check_true('sixty days over is thirty-one to sixty',
+    (select aging_bucket = '31_60' and days_overdue = 60
+       from public.report_ap_aging(v_org, date '2026-04-30')));
+  perform pg_temp.check_true('sixty-one is sixty-one to ninety',
+    (select aging_bucket = '61_90' and days_overdue = 61
+       from public.report_ap_aging(v_org, date '2026-05-01')));
+  perform pg_temp.check_true('ninety days over is still sixty-one to ninety',
+    (select aging_bucket = '61_90' and days_overdue = 90
+       from public.report_ap_aging(v_org, date '2026-05-30')));
+  perform pg_temp.check_true('ninety-one days over is the last column',
+    (select aging_bucket = 'over_90'
+       from public.report_ap_aging(v_org, date '2026-05-31')));
+
+  -- And the same fallback: a bill with no due date ages from its own.
+  perform pg_temp.bill(v_org, v_supp, 'bill', 'BILL-2', 50,
+                       date '2026-02-01', null);
+  perform pg_temp.check_true('a bill with no due date ages from its own date',
+    (select aging_bucket = '31_60' and days_overdue = 58
+       from public.report_ap_aging(v_org, date '2026-03-31')
+      where doc_no = 'BILL-2'));
+  perform pg_temp.check_true('and is current on the day it was raised',
+    (select aging_bucket = 'current' and days_overdue = 0
+       from public.report_ap_aging(v_org, date '2026-02-01')
+      where doc_no = 'BILL-2'));
 
   perform pg_temp.sign_out();
 end $$;
