@@ -1,6 +1,31 @@
 -- =====================================================================
 -- iAkauntan :: shared test helpers
 --
+-- EVERY FAILURE HERE IS RAISED WITH ERRCODE 'P0004', assert_failure,
+-- and that is not decoration. PL/pgSQL's `when others` does not catch
+-- assert_failure -- it is one of the two conditions (with
+-- query_canceled) that pass straight through. Without it, this shape,
+-- which the suite uses everywhere, quietly asserts nothing:
+--
+--   begin
+--     perform <the thing that must be refused>;
+--     perform pg_temp.check_true('a contra between two parties', false);
+--   exception when others then
+--     get stacked diagnostics v_msg = message_text;
+--     perform pg_temp.check_true('... is refused',
+--       v_msg like '%two parties%');
+--   end;
+--
+-- When the refusal does NOT happen, `check_true(..., false)` raises
+-- `FAIL a contra between two parties: expected true` -- and the handler
+-- immediately below catches it and matches its own label against the
+-- pattern. The test passes BECAUSE it failed. It was found by a
+-- mutation sweep of create_contra: app.same_party could be deleted
+-- outright and contra.sql still read green.
+--
+-- With P0004 the marker escapes the handler and reaches psql, which is
+-- what a failure is supposed to do.
+--
 -- Included by the other files in this directory with
 --
 --   \i supabase/tests/_helpers.sql
@@ -14,7 +39,8 @@ create or replace function pg_temp.check_eq(
 returns void language plpgsql as $$
 begin
   if p_actual is distinct from p_expected then
-    raise exception 'FAIL %: expected %, got %', p_label, p_expected, p_actual;
+    raise exception 'FAIL %: expected %, got %', p_label, p_expected, p_actual
+      using errcode = 'P0004';
   end if;
   raise notice 'ok   % = %', p_label, p_actual;
 end;
@@ -37,7 +63,8 @@ create or replace function pg_temp.check_eq(
 returns void language plpgsql as $$
 begin
   if p_actual is distinct from p_expected then
-    raise exception 'FAIL %: expected %, got %', p_label, p_expected, p_actual;
+    raise exception 'FAIL %: expected %, got %', p_label, p_expected, p_actual
+      using errcode = 'P0004';
   end if;
   raise notice 'ok   % = %', p_label, p_actual;
 end;
@@ -48,7 +75,8 @@ create or replace function pg_temp.check_eq(
 returns void language plpgsql as $$
 begin
   if p_actual is distinct from p_expected then
-    raise exception 'FAIL %: expected %, got %', p_label, p_expected, p_actual;
+    raise exception 'FAIL %: expected %, got %', p_label, p_expected, p_actual
+      using errcode = 'P0004';
   end if;
   raise notice 'ok   %', p_label;
 end;
@@ -58,7 +86,8 @@ create or replace function pg_temp.check_true(p_label text, p_value boolean)
 returns void language plpgsql as $$
 begin
   if p_value is not true then
-    raise exception 'FAIL %: expected true', p_label;
+    raise exception 'FAIL %: expected true', p_label
+      using errcode = 'P0004';
   end if;
   raise notice 'ok   %', p_label;
 end;

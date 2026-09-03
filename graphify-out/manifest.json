@@ -725,8 +725,8 @@
     "semantic_hash": "200dfde266fb67d41983b3a17fa1e187"
   },
   "supabase/tests/_helpers.sql": {
-    "mtime": 1788367562.8759754,
-    "ast_hash": "ea75405c52a56f7e30a0a51e07fbd37b",
+    "mtime": 1788469983.5672784,
+    "ast_hash": "cb32e465b698cd5c2d6fd8bf0fee6477",
     "semantic_hash": ""
   },
   "supabase/tests/ledger.sql": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788469516.1191463,
-    "ast_hash": "823f210819faca62bbf43de0ed93652a",
+    "mtime": 1788470265.7359338,
+    "ast_hash": "bb98561752d90c980fa3f7aa6f15b3aa",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7762,6 +7762,11 @@
   "supabase/tests/a_colleague_not_a_stranger.sql": {
     "mtime": 1788469509.5896122,
     "ast_hash": "23188dd3753a82b0fc45cb4c27c76b8a",
+    "semantic_hash": ""
+  },
+  "supabase/tests/the_helpers_fail_loudly.sql": {
+    "mtime": 1788470260.2372115,
+    "ast_hash": "c84c82f94f81894ed977272d8ac6fc80",
     "semantic_hash": ""
   }
 }
