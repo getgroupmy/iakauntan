@@ -145,4 +145,112 @@ begin
     'write allowed';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- And an employee belongs to one company too
+--
+-- The same shape as the bank account above, on the HR side. 0507 found
+-- it through `submit_leave_request`: `leave_requests.leave_type_id` had
+-- been held to the organization by a composite key since it was written
+-- and `employee_id` had not, so HR in one company could file leave
+-- naming another company's employee and open a balance row against
+-- them. 0507, 0508 and 0509 closed all twenty-six columns.
+--
+-- Two probes, because the columns come in two shapes: the subject of the
+-- row, which is NOT NULL, and the "who did it" column, which is
+-- nullable and therefore unenforced by MATCH SIMPLE when it names
+-- nobody. A row that names somebody has to name somebody here.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_a uuid; v_b uuid;
+  v_emp_a uuid; v_emp_b uuid;
+  v_tried integer := 0; v_refused integer := 0;
+  v_uncovered text;
+begin
+  v_a := pg_temp.test_org('Employee Boundary A');
+  v_b := pg_temp.test_org('Employee Boundary B');
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, employment_status)
+  values (v_a, 'EB-A', 'A''s employee', current_date - 400, 'active')
+  returning id into v_emp_a;
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, employment_status)
+  values (v_b, 'EB-B', 'B''s employee', current_date - 400, 'active')
+  returning id into v_emp_b;
+
+  -- 1. An attendance record in A for B's employee: the subject of the
+  -- row, and NOT NULL, so the composite key is always enforced.
+  v_tried := v_tried + 1;
+  begin
+    insert into public.attendance_records (org_id, employee_id, work_date)
+    values (v_a, v_emp_b, current_date);
+    raise exception 'a day in A was recorded against B''s employee';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  -- 2. A department in A headed by B's employee: the nullable kind.
+  v_tried := v_tried + 1;
+  begin
+    insert into public.departments (org_id, code, name, head_employee_id)
+    values (v_a, 'OPS', 'Operations', v_emp_b);
+    raise exception 'a department in A was headed by B''s employee';
+  exception when foreign_key_violation then
+    v_refused := v_refused + 1;
+  end;
+
+  -- 3. The positive control: A''s own employee, and a department with no
+  -- head at all, both go in. Without this the two blocks above could be
+  -- refusing for some reason that has nothing to do with the boundary.
+  v_tried := v_tried + 1;
+  begin
+    insert into public.departments (org_id, code, name, head_employee_id)
+    values (v_a, 'FIN', 'Finance', v_emp_a);
+    insert into public.departments (org_id, code, name, head_employee_id)
+    values (v_a, 'ADM', 'Admin', null);
+    v_refused := v_refused + 1;
+  exception when others then
+    raise exception
+      'the new keys refuse a department headed by its own employee, or '
+      'one headed by nobody: %', sqlerrm;
+  end;
+
+  if v_refused <> v_tried or v_tried < 3 then
+    raise exception 'employee boundary: % probes ran, % behaved',
+      v_tried, v_refused;
+  end if;
+
+  -- And the set is closed. The probes above prove the constraints that
+  -- exist do their job; this proves none is MISSING — including on a
+  -- table nobody has written yet. A new table that carries its own
+  -- org_id and names an employee has to say which company's employee,
+  -- and this is what says so on the day it is added rather than the day
+  -- somebody notices.
+  select string_agg(c.conrelid::regclass::text || '.' || a.attname, ', ')
+    into v_uncovered
+    from pg_constraint c
+    join unnest(c.conkey) k(attnum) on true
+    join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
+   where c.contype = 'f' and c.confrelid = 'public.employees'::regclass
+     and cardinality(c.conkey) = 1
+     and exists (select 1 from pg_attribute o
+                  where o.attrelid = c.conrelid and o.attname = 'org_id'
+                    and o.attnum > 0)
+     and not exists (
+       select 1 from pg_constraint c2
+        where c2.contype = 'f' and c2.conrelid = c.conrelid
+          and c2.confrelid = c.confrelid and cardinality(c2.conkey) > 1
+          and k.attnum = any (c2.conkey));
+  if v_uncovered is not null then
+    raise exception
+      'these columns name an employee without saying which company''s: %',
+      v_uncovered;
+  end if;
+
+  raise notice
+    'employee boundaries: 2 cross-company writes refused, 2 same-company '
+    'writes allowed, 0 columns uncovered';
+end $$;
+
 rollback;
