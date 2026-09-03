@@ -301,6 +301,7 @@ jobs:
                    supabase/tests/withholding.sql \
                    supabase/tests/financial_statements.sql \
                    supabase/tests/reversal.sql \
+                   supabase/tests/void_an_invoice.sql \
                    supabase/tests/bank_transfers.sql \
                    supabase/tests/csv_import.sql \
                    supabase/tests/exchange_rate_feed.sql \

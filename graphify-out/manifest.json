@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788414069.049974,
-    "ast_hash": "9395b8577e3a69fc6b3a034193898252",
+    "mtime": 1788419255.5943909,
+    "ast_hash": "1db0c4372baf33492180fb6c8a136949",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7632,6 +7632,11 @@
   "supabase/migrations/0503_a_standing_journal_keeps_its_day.sql": {
     "mtime": 1788418443.8528306,
     "ast_hash": "fdbe25416fffec6ced7c47af3a7d5692",
+    "semantic_hash": ""
+  },
+  "supabase/tests/void_an_invoice.sql": {
+    "mtime": 1788419309.6564972,
+    "ast_hash": "5956b02c2afbf447d8c34da5cd5577a2",
     "semantic_hash": ""
   }
 }
