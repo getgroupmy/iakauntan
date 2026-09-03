@@ -1235,8 +1235,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/fx_revaluation.sql": {
-    "mtime": 1786545343.8661914,
-    "ast_hash": "976b6ced776d1fe75a9bfc2ee2c3ec52",
+    "mtime": 1788403173.1928282,
+    "ast_hash": "790e883c600bfd8a42d1cb9381be69a8",
     "semantic_hash": ""
   },
   "app/lib/src/features/assets/asset_editor.dart": {
@@ -2760,8 +2760,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/property.sql": {
-    "mtime": 1788285600.507654,
-    "ast_hash": "9b7e5f031937767bf5b012d190864c69",
+    "mtime": 1788403503.8782866,
+    "ast_hash": "bfc468386bd3d6013a85525e7f0f0b2d",
     "semantic_hash": ""
   },
   "supabase/tests/tenant_foreign_keys.sql": {
@@ -4320,8 +4320,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/strata_preview.sql": {
-    "mtime": 1787822946.0345898,
-    "ast_hash": "db61fae70cfaa6831e6edee39c45fe9d",
+    "mtime": 1788403687.0448067,
+    "ast_hash": "1f2a7d342d48608219eb6a5804481ddc",
     "semantic_hash": ""
   },
   "brand/README.md": {

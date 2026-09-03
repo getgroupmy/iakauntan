@@ -284,6 +284,7 @@ declare
   v_full numeric; v_part numeric; v_months numeric;
   v_count integer; v_total numeric; v_invoiced numeric;
   v_due integer; v_overdue boolean;
+  v_org2 uuid; v_site2 uuid; v_days integer;
 begin
   v_org := pg_temp.test_org('Probe Property Holdings');
 
@@ -433,6 +434,52 @@ begin
     'a bill beyond the window is not reported', v_due, 2);
   select count(*) into v_due from public.property_statutory_due(v_org, 120);
   perform pg_temp.check_eq('and is, when the window reaches it', v_due, 3);
+
+  -- The window with nothing in it is sixty days, not for ever. The app
+  -- passes a non-null integer, but the function is an RPC and anything
+  -- holding a session can call it with no window at all; falling back
+  -- to every bill on file would turn "what is due next" into the whole
+  -- register.
+  select count(*) into v_due from public.property_statutory_due(v_org, null);
+  perform pg_temp.check_eq('no window given is sixty days', v_due, 2);
+
+  -- The countdown itself, which is what the screen sorts and colours by
+  -- and which nothing here read. It is days until, not days since: a
+  -- bill due in twenty days reads +20 and one missed ten days ago -10,
+  -- and swapping them turns the urgent into the comfortable.
+  select days_until into v_days
+    from public.property_statutory_due(v_org, 60)
+   where account_no = 'QR-99';
+  perform pg_temp.check_eq('a bill due in twenty days counts down', v_days, 20);
+  select days_until into v_days
+    from public.property_statutory_due(v_org, 60)
+   where account_no = 'AS-77' and period = '2026 H1';
+  perform pg_temp.check_eq('and a missed one counts up past zero',
+                           v_days, -10);
+
+  -- And it is this company's register. A managing agent's own books and
+  -- the schemes they manage sit in one login, so `is_org_member` passes
+  -- for every company on the screen and is no help at all here: the
+  -- only thing keeping one site's quit rent off another's report is the
+  -- org_id in the where clause.
+  v_org2 := pg_temp.test_org('Probe Estates');
+  insert into public.org_modules (org_id, module_code, is_enabled, enabled_at)
+  values (v_org2, 'property_nonstrata', true, now())
+  on conflict (org_id, module_code) do update set is_enabled = true;
+  insert into public.property_sites (org_id, code, name, tenure)
+  values (v_org2, 'ROW2', 'Somebody else''s shoplots', 'non_strata')
+  returning id into v_site2;
+  insert into public.property_statutory_charges
+    (org_id, site_id, kind, authority, account_no, period_year, amount,
+     due_date)
+  values (v_org2, v_site2, 'quit_rent', 'Pejabat Tanah dan Galian',
+          'QR-OTHER', 2026, 4000.00, current_date + 5);
+
+  select count(*) into v_due from public.property_statutory_due(v_org, 60);
+  perform pg_temp.check_eq(
+    'and another company''s bills are not on this one''s report', v_due, 2);
+  select count(*) into v_due from public.property_statutory_due(v_org2, 60);
+  perform pg_temp.check_eq('while its own company still sees it', v_due, 1);
 
   raise notice 'non-strata: % tenancies billed, rent %', v_count, v_total;
 end $$;
