@@ -6512,3 +6512,59 @@ have had each other's exchange difference booked against them.
 Four of those are the same move for the sixth time: **a survivor that is
 equivalent because of a rule enforced elsewhere is answered by asserting
 that rule.**
+
+### The aged listings: 20 of 42, then 38
+
+`aged_balances.sql` does the hard part. It foots the listing against the
+control account, and it pins all four bucket boundaries from both sides
+— the last day inside a column and the first day outside it. Every
+bucket mutant died on the first pass.
+
+Everything else lived, and all of it was about **what is on the listing**
+rather than which column a row lands in. A settled invoice, an
+unallocated receipt, a voided receipt, a credit note half used, a
+settlement discount, a foreign invoice: each is an ordinary row, and
+each of the two reports has a `where` clause that exists to keep it off
+or a piece of arithmetic that exists to net it down.
+
+**The two reports are one function written twice.** The tail —
+`round`, `days_overdue`, the bucket ladder, the ordering, the
+membership filter — is word for word the same in both. Nine mutants
+were therefore applied to each, and the payables half failed every one
+the receivables half failed, for the same reason: the fixtures exercise
+receivables. That is also how, as `aged_balances.sql`'s own header
+records, "every division on the payables side came to be movable".
+
+**The one that would have cost the most.** `and r.status <> 'void'` on
+the ALLOCATIONS join, not on the receipt arm. Voiding a receipt has to
+give the invoice back; without that condition the allocation still
+settles it, the invoice drops off the listing, and a real debt is owed
+by nobody. The fixture voids a receipt and asserts the invoice returns
+at its full RM3,000.
+
+**A credit note keeps its full total in `balance_amount` however much of
+it has been used**, so how much is LEFT can only be worked out from the
+allocations. RM2,000 raised and RM1,200 applied is RM800 of credit —
+and a mutant standing it at RM2,000 for ever understates the debtors by
+twelve hundred.
+
+**And a settlement discount can only be written through its own
+function.** `allocation_discount_guard` refuses a discount written
+straight into an allocation, because taking it off the document without
+taking it off the ledger overstates the control account for ever. The
+fixture goes through `allocate_with_discount`, inside the ten days the
+terms allow, which is the only window in which the discount exists.
+
+#### The four equivalent mutants
+
+| Mutant | Why it cannot matter |
+|---|---|
+| `round(d.outstanding, 2)` deleted, on both reports | Every figure the subtraction touches is `numeric(18,2)` — six columns across five tables — so the difference cannot carry a third decimal. The fixture asserts all six scales. |
+| the `doc_type in (...)` filter dropped | The list is word for word the list in `post_sales_document_internal`, and the next condition is `gl_entry_id is not null`. Nothing outside those four can ever reach the ledger. The fixture asserts the pairing by refusing each of the other four types at the ledger door. |
+| `a.org_id = p_org_id` dropped from the allocations | A foreign allocation names a foreign invoice, and the outer query only asks for allocations against documents in this organization. The `0512` composite keys make the cross-company row unstorable anyway; the fixture asserts both keys. |
+
+Seventh time the answer to an equivalent mutant has been **assert the
+rule it depends on** — and the second time (after the depreciation
+`accumulated_depreciation_at` / `months_held` pair) that the rule turned
+out to be *two lists in two files having to stay identical*, which is
+exactly the kind of agreement nothing re-checks.
