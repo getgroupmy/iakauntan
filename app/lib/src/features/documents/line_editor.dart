@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../items/new_item_dialog.dart';
 import 'line_draft.dart';
 import '../stock/lot_dialog.dart';
 
@@ -270,6 +271,21 @@ class _WideLineState extends State<_WideLine> {
   /// waiting: the round trip is short but not instant, and a line that
   /// sits blank while it resolves reads as broken.
   Future<void> _applyItem(Item item) async {
+    // The offer rather than an item: ask for the details, and bind the
+    // line to what comes back. Declining leaves the line exactly as it
+    // was, which for the description box means the free text somebody
+    // typed is still there.
+    if (item.id == kCreateItemId) {
+      final created = await showDialog<Item>(
+        context: context,
+        builder: (_) => NewItemDialog(
+          seedCode: item.code.isEmpty ? null : item.code,
+          seedName: item.name.isEmpty ? null : item.name,
+        ),
+      );
+      if (created == null || !mounted) return;
+      return _applyItem(created);
+    }
     setState(() {
       applyItemToLine(widget.line, item, widget.taxCodes);
       _code.text = item.code;
@@ -534,6 +550,21 @@ class _NarrowLineState extends State<_NarrowLine> {
   /// The same as the wide row: item defaults first, then what this
   /// customer actually pays.
   Future<void> _applyItem(Item item) async {
+    // The offer rather than an item: ask for the details, and bind the
+    // line to what comes back. Declining leaves the line exactly as it
+    // was, which for the description box means the free text somebody
+    // typed is still there.
+    if (item.id == kCreateItemId) {
+      final created = await showDialog<Item>(
+        context: context,
+        builder: (_) => NewItemDialog(
+          seedCode: item.code.isEmpty ? null : item.code,
+          seedName: item.name.isEmpty ? null : item.name,
+        ),
+      );
+      if (created == null || !mounted) return;
+      return _applyItem(created);
+    }
     setState(() {
       applyItemToLine(widget.line, item, widget.taxCodes);
       _code.text = item.code;
@@ -738,6 +769,31 @@ Widget itemOptionsView(
           itemCount: options.length,
           itemBuilder: (context, index) {
             final item = options.elementAt(index);
+            if (item.id == kCreateItemId) {
+              final typed = item.code.isNotEmpty ? item.code : item.name;
+              return InkWell(
+                onTap: () => onSelected(item),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.add, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Create "$typed"',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
             return InkWell(
               onTap: () => onSelected(item),
               child: Padding(
@@ -772,6 +828,52 @@ Widget itemOptionsView(
       ),
     ),
   );
+}
+
+/// The id of the row that means "this is not on the list — make it".
+///
+/// A sentinel rather than a separate widget because `RawAutocomplete`
+/// HIDES its overlay entirely when `optionsBuilder` returns nothing.
+/// The one moment somebody needs the offer is the moment nothing
+/// matches, so an offer that can only be drawn alongside matches is an
+/// offer that never appears. It rides in as an option instead, and the
+/// row builder and `onSelected` both check for it.
+const kCreateItemId = '__create__';
+
+/// The offer, carrying what was typed and which box it was typed in.
+Item createItemOption(String typed, {required bool asCode}) => Item(
+  id: kCreateItemId,
+  code: asCode ? typed.trim() : '',
+  name: asCode ? '' : typed.trim(),
+  itemType: 'stock',
+);
+
+/// What the boxes offer for what has been typed: the matches, and then
+/// the offer to create one.
+///
+/// The offer is LAST when there are matches and alone when there are
+/// none — it is a way out, not a suggestion, and putting it first would
+/// have somebody creating a second ITM-100 by pressing enter too
+/// quickly.
+Iterable<Item> itemOptionsFor(
+  List<Item> items,
+  String typed, {
+  required bool asCode,
+}) {
+  final query = typed.trim();
+  if (query.isEmpty) return const Iterable<Item>.empty();
+  final matches = itemsMatching(items, query).toList();
+  // An EXACT hit needs no offer: somebody who typed a whole part number
+  // that exists is not about to create it again.
+  final exact = matches.any(
+    (i) => asCode
+        ? i.code.toLowerCase() == query.toLowerCase()
+        : i.name.toLowerCase() == query.toLowerCase(),
+  );
+  return [
+    ...matches,
+    if (!exact) createItemOption(query, asCode: asCode),
+  ];
 }
 
 /// Which items match what has been typed, code first.
@@ -829,7 +931,7 @@ class _ItemCodeField extends StatelessWidget {
       focusNode: focusNode,
       displayStringForOption: (item) => item.code,
       optionsBuilder: (value) => editable
-          ? itemsMatching(items, value.text)
+          ? itemOptionsFor(items, value.text, asCode: true)
           : const Iterable<Item>.empty(),
       onSelected: onItemSelected,
       fieldViewBuilder: (context, textController, node, onFieldSubmitted) {
@@ -892,7 +994,7 @@ class _ItemField extends StatelessWidget {
             // box is for and what will print on the invoice.
             displayStringForOption: (item) => item.name,
             optionsBuilder: (value) => editable
-                ? itemsMatching(items, value.text)
+                ? itemOptionsFor(items, value.text, asCode: false)
                 : const Iterable<Item>.empty(),
             onSelected: onItemSelected,
             optionsViewBuilder: itemOptionsView,

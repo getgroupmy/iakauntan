@@ -237,4 +237,103 @@ void main() {
     expect(line.description, 'Audit fee for the year ended 31 December');
     expect(line.itemId, isNull);
   });
+
+  // -------------------------------------------------------------------
+  // The item that is not on the list yet
+  //
+  // Somebody reaches for a part number nobody has entered. Until now the
+  // only way through was to abandon a half-typed invoice, go to Items,
+  // add it, and start the line again. The offer rides in as an OPTION
+  // because `RawAutocomplete` hides its overlay entirely when nothing
+  // matches — and the one moment the offer is needed is the moment
+  // nothing matches.
+  // -------------------------------------------------------------------
+  group('the offer to create one', () {
+    final list = <Item>[
+      Item(id: 'i1', code: 'SMN-100', name: 'Simen Portland',
+          itemType: 'stock', unitPrice: 22.50),
+      Item(id: 'i2', code: 'BTA-200', name: 'Batu bata merah',
+          itemType: 'stock', unitPrice: 0.80),
+    ];
+
+    test('a number nobody has entered is offered for creation', () {
+      final options =
+          itemOptionsFor(list, 'ZZZ-999', asCode: true).toList();
+      expect(options, hasLength(1));
+      expect(options.single.id, kCreateItemId);
+      // Seeded with what was typed, in the box it was typed in.
+      expect(options.single.code, 'ZZZ-999');
+      expect(options.single.name, isEmpty);
+    });
+
+    test('and a description nobody has entered, seeded as the name', () {
+      final options =
+          itemOptionsFor(list, 'Pasir sungai', asCode: false).toList();
+      expect(options.single.id, kCreateItemId);
+      expect(options.single.name, 'Pasir sungai');
+      expect(options.single.code, isEmpty);
+    });
+
+    test('the offer comes LAST, after anything that matched', () {
+      // A way out, not a suggestion. First, and somebody pressing enter
+      // too quickly creates a second SMN-100.
+      final options = itemOptionsFor(list, 'SMN', asCode: true).toList();
+      expect(options.first.id, 'i1');
+      expect(options.last.id, kCreateItemId);
+    });
+
+    test('an exact part number is not offered for creation', () {
+      final options =
+          itemOptionsFor(list, 'SMN-100', asCode: true).toList();
+      expect(options, hasLength(1));
+      expect(options.single.id, 'i1');
+    });
+
+    test('nor an exact description', () {
+      final options =
+          itemOptionsFor(list, 'Simen Portland', asCode: false).toList();
+      expect(options.map((o) => o.id), isNot(contains(kCreateItemId)));
+    });
+
+    test('and case does not make it a different item', () {
+      // 'smn-100' is SMN-100. Offering to create it would put two rows
+      // on the item list that an invoice cannot tell apart.
+      final options =
+          itemOptionsFor(list, 'smn-100', asCode: true).toList();
+      expect(options.map((o) => o.id), isNot(contains(kCreateItemId)));
+    });
+
+    test('an empty box offers nothing at all, not even creation', () {
+      expect(itemOptionsFor(list, '', asCode: true), isEmpty);
+      expect(itemOptionsFor(list, '   ', asCode: false), isEmpty);
+    });
+  });
+
+  testWidgets('the create row appears in the item-number box',
+      (tester) async {
+    await pump(tester, LineDraft());
+
+    await tester.enterText(codeField(), 'ZZZ-999');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Create "ZZZ-999"'), findsOneWidget);
+  });
+
+  testWidgets('and in the description box', (tester) async {
+    await pump(tester, LineDraft());
+
+    await tester.enterText(descriptionField(), 'Pasir sungai');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Create "Pasir sungai"'), findsOneWidget);
+  });
+
+  testWidgets('but not for an item that is already there', (tester) async {
+    await pump(tester, LineDraft());
+
+    await tester.enterText(codeField(), 'SVC-100');
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Create "'), findsNothing);
+  });
 }
