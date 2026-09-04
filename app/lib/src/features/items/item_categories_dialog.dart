@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -217,28 +218,25 @@ class _CategorySheetState extends ConsumerState<_CategorySheet> {
               ),
             ),
             const SizedBox(height: Space.md),
-            DropdownButtonFormField<String?>(
+            SearchablePicker<String>(
+              options: [
+                for (final c in parents)
+                  PickerOption<String>(
+                    value: c['id'] as String,
+                    // The whole path, because "Drinks" under "Food" and
+                    // "Drinks" under "Retail" are two categories and the
+                    // leaf name alone cannot tell them apart.
+                    label: categoryPath(widget.all, c['id'] as String?),
+                  ),
+              ],
               value: parents.any((c) => c['id'] == _parentId)
                   ? _parentId
                   : null,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Filed under'),
-              items: [
-                const DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('Nothing — it is a top-level category'),
-                ),
-                for (final c in parents)
-                  DropdownMenuItem<String?>(
-                    value: c['id'] as String?,
-                    child: Text(
-                      categoryPath(widget.all, c['id'] as String?),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-              ],
-              onChanged:
-                  _saving ? null : (v) => setState(() => _parentId = v),
+              label: 'Filed under',
+              allowEmpty: true,
+              emptyLabel: 'Nothing — it is a top-level category',
+              enabled: !_saving,
+              onChanged: (v) => setState(() => _parentId = v),
             ),
             if (blocked != null || taken) ...[
               const SizedBox(height: Space.sm),

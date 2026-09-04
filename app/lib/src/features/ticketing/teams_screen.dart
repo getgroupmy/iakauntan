@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -334,16 +335,18 @@ class _RosterDialog extends ConsumerWidget {
                 ),
               if (canAdmin && addable.isNotEmpty) ...[
                 const Divider(height: Space.xl),
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Add somebody'),
-                  items: [
+                SearchablePicker<String>(
+                  options: [
                     for (final m in addable)
-                      DropdownMenuItem(
+                      PickerOption<String>(
                         value: '${m['user_id']}',
-                        child: Text('${m['name']}'),
+                        label: '${m['name']}',
                       ),
                   ],
+                  // Nothing stays chosen: picking somebody ADDS them and
+                  // the box goes back to empty, ready for the next one.
+                  value: null,
+                  label: 'Add somebody',
                   onChanged: (v) async {
                     if (v == null) return;
                     final ok = await runWithFeedback(

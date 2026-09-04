@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -213,26 +214,21 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
                       ?.copyWith(color: context.scheme.onSurfaceVariant),
                 ),
               ),
-            DropdownButtonFormField<String?>(
+            SearchablePicker<String>(
               key: const ValueKey('assign-person'),
-              value: _userId,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Assign to'),
-              items: [
-                const DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('Nobody — leave it in the queue'),
-                ),
+              options: [
                 for (final m in people)
-                  DropdownMenuItem<String?>(
-                    value: m.userId,
-                    child: Text(
-                      m.displayName,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                  PickerOption<String>(
+                    value: '${m.userId}',
+                    label: m.displayName,
                   ),
               ],
-              onChanged: _saving ? null : (v) => setState(() => _userId = v),
+              value: _userId,
+              label: 'Assign to',
+              allowEmpty: true,
+              emptyLabel: 'Nobody — leave it in the queue',
+              enabled: !_saving,
+              onChanged: (v) => setState(() => _userId = v),
             ),
             if (people.isEmpty)
               Padding(
@@ -384,42 +380,34 @@ class _EscalateSheetState extends ConsumerState<_EscalateSheet> {
               // other would be accepted and would quietly change
               // something nobody asked to change.
               if (escalationNeedsTeam(_kind))
-                DropdownButtonFormField<String?>(
+                SearchablePicker<String>(
                   key: const ValueKey('escalate-team'),
-                  value: _teamId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'To which team'),
-                  items: [
+                  options: [
                     for (final t in teams)
-                      DropdownMenuItem<String?>(
-                        value: t['id'] as String?,
-                        child: Text(
-                          (t['name'] ?? '—') as String,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      PickerOption<String>(
+                        value: '${t['id']}',
+                        label: (t['name'] ?? '—') as String,
                       ),
                   ],
-                  onChanged:
-                      _saving ? null : (v) => setState(() => _teamId = v),
+                  value: _teamId,
+                  label: 'To which team',
+                  enabled: !_saving,
+                  onChanged: (v) => setState(() => _teamId = v),
                 ),
               if (escalationNeedsUser(_kind))
-                DropdownButtonFormField<String?>(
+                SearchablePicker<String>(
                   key: const ValueKey('escalate-person'),
-                  value: _userId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'To whom'),
-                  items: [
+                  options: [
                     for (final m in people)
-                      DropdownMenuItem<String?>(
-                        value: m.userId,
-                        child: Text(
-                          m.displayName,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      PickerOption<String>(
+                        value: '${m.userId}',
+                        label: m.displayName,
                       ),
                   ],
-                  onChanged:
-                      _saving ? null : (v) => setState(() => _userId = v),
+                  value: _userId,
+                  label: 'To whom',
+                  enabled: !_saving,
+                  onChanged: (v) => setState(() => _userId = v),
                 ),
               const SizedBox(height: Space.md),
               TextFormField(

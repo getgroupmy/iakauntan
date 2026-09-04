@@ -26,13 +26,19 @@ import '../../data/places_repository.dart';
 ///
 /// Returns the person's id, so a caller that opened this to appoint an
 /// officer can carry straight on with the appointment.
+///
+/// [seedName] is what was typed into the picker that opened this. A
+/// director being appointed is usually a director who is not on file
+/// yet, and making somebody retype the name they just typed is the
+/// thing every "add from here" exists to stop.
 Future<String?> showPersonEditor(
   BuildContext context, {
   CorpPerson? person,
+  String? seedName,
 }) =>
     showDialog<String>(
       context: context,
-      builder: (_) => _PersonEditor(person: person),
+      builder: (_) => _PersonEditor(person: person, seedName: seedName),
     );
 
 /// What a person record is, given what was typed.
@@ -106,9 +112,12 @@ Map<String, dynamic> personValues({
 }
 
 class _PersonEditor extends ConsumerStatefulWidget {
-  const _PersonEditor({this.person});
+  const _PersonEditor({this.person, this.seedName});
 
   final CorpPerson? person;
+
+  /// What was typed into the picker this was opened from.
+  final String? seedName;
 
   @override
   ConsumerState<_PersonEditor> createState() => _PersonEditorState();
@@ -140,7 +149,7 @@ class _PersonEditorState extends ConsumerState<_PersonEditor> {
   void initState() {
     super.initState();
     final p = widget.person;
-    _ctl('full_name', p?.fullName);
+    _ctl('full_name', p?.fullName ?? widget.seedName);
     _ctl('former_name', p?.formerName);
     _ctl('nric', p?.nric);
     _ctl('passport_no', p?.passportNo);

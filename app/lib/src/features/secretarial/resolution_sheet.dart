@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/corp_repository.dart';
@@ -475,23 +477,15 @@ class _ResolutionSheetState extends ConsumerState<_ResolutionSheet> {
                   enabled: !_saving,
                   decoration: const InputDecoration(labelText: 'Where'),
                 ),
-                DropdownButtonFormField<String?>(
+                SearchablePicker<String>(
+                  options: corpPersonPickerOptions(people),
                   value: _chairmanId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'In the chair'),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Nobody recorded'),
-                    ),
-                    for (final p in people)
-                      DropdownMenuItem<String?>(
-                        value: p.id,
-                        child: Text(p.fullName, overflow: TextOverflow.ellipsis),
-                      ),
-                  ],
-                  onChanged:
-                      _saving ? null : (v) => setState(() => _chairmanId = v),
+                  label: 'In the chair',
+                  hint: 'Type a name or an NRIC',
+                  allowEmpty: true,
+                  emptyLabel: 'Nobody recorded',
+                  enabled: !_saving,
+                  onChanged: (v) => setState(() => _chairmanId = v),
                 ),
                 const SizedBox(height: Space.sm),
                 Align(

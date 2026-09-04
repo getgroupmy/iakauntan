@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -344,27 +345,26 @@ class _BomDialogState extends ConsumerState<BomDialog> {
                           children: [
                             SizedBox(
                               width: 180,
-                              child: DropdownButtonFormField<String>(
-                                value: _steps[i].workCentreId,
-                                isExpanded: true,
-                                decoration: const InputDecoration(
-                                  labelText: 'Where',
-                                ),
-                                items: [
+                              child: SearchablePicker<String>(
+                                options: [
                                   for (final w in centres)
-                                    DropdownMenuItem(
+                                    PickerOption<String>(
                                       value: w['id'] as String,
-                                      child: Text(
-                                        w['code']?.toString() ?? '',
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                                      label: w['code']?.toString() ?? '',
+                                      // The NAME as well: the dropdown
+                                      // showed only the code, which is
+                                      // fine for whoever set the centres
+                                      // up and opaque to everyone else.
+                                      sublabel: w['name']?.toString(),
+                                      keywords: [w['name']?.toString() ?? ''],
                                     ),
                                 ],
-                                onChanged: _saving
-                                    ? null
-                                    : (v) => setState(
-                                        () => _steps[i].workCentreId = v,
-                                      ),
+                                value: _steps[i].workCentreId,
+                                label: 'Where',
+                                enabled: !_saving,
+                                onChanged: (v) => setState(
+                                  () => _steps[i].workCentreId = v,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),

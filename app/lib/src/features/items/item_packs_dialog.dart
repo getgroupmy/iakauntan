@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -122,22 +123,19 @@ class _PacksDialogState extends ConsumerState<_PacksDialog> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (existing == null)
-                    DropdownButtonFormField<String>(
+                    SearchablePicker<String>(
                       key: const ValueKey('pack-uom'),
-                      value: uom,
-                      isExpanded: true,
-                      decoration:
-                          const InputDecoration(labelText: 'Bought as'),
-                      items: [
+                      options: [
                         for (final u in choices)
-                          DropdownMenuItem(
+                          PickerOption<String>(
                             value: u['code'] as String,
-                            child: Text(
-                              '${u['code']} · ${u['name']}',
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            label: '${u['name']}',
+                            sublabel: '${u['code']}',
+                            keywords: ['${u['code']}'],
                           ),
                       ],
+                      value: uom,
+                      label: 'Bought as',
                       onChanged: (v) => setLocal(() => uom = v),
                     )
                   else

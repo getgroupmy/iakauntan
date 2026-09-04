@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/corp_models.dart';
@@ -253,25 +255,21 @@ class _OfficerSheetState extends ConsumerState<_OfficerSheet> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                DropdownButtonFormField<String>(
+                SearchablePicker<String>(
                   key: const ValueKey('officer-person'),
+                  options: corpPersonPickerOptions(people),
                   value: _personId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Who'),
-                  items: [
-                    for (final p in people)
-                      DropdownMenuItem(
-                        value: p.id,
-                        child: Text(
-                          p.identifier == null
-                              ? p.fullName
-                              : '${p.fullName} (${p.identifier})',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                  ],
-                  onChanged:
-                      _saving ? null : (v) => setState(() => _personId = v),
+                  label: 'Who',
+                  hint: 'Type a name or an NRIC',
+                  enabled: !_saving,
+                  createLabel: 'Add person',
+                  // `showPersonEditor` returns the id it wrote, which
+                  // is exactly what a picker needs — somebody being
+                  // put on a register is very often somebody who is
+                  // not on file yet.
+                  onCreate: (typed) =>
+                      showPersonEditor(context, seedName: typed),
+                  onChanged: (v) => setState(() => _personId = v),
                   validator: (v) => v == null ? 'Choose who this is' : null,
                 ),
                 Align(

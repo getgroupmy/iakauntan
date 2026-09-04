@@ -102,16 +102,16 @@ class _StallsScreenState extends ConsumerState<StallsScreen>
               if (list.length > 1)
                 Padding(
                   padding: const EdgeInsets.all(Space.md),
-                  child: DropdownButtonFormField<String>(
-                    value: outlet,
-                    decoration: const InputDecoration(labelText: 'Court'),
-                    items: [
+                  child: SearchablePicker<String>(
+                    options: [
                       for (final o in list)
-                        DropdownMenuItem(
+                        PickerOption<String>(
                           value: o['id'] as String,
-                          child: Text('${o['name']}'),
+                          label: '${o['name']}',
                         ),
                     ],
+                    value: outlet,
+                    label: 'Court',
                     onChanged: (v) => setState(() => _outlet = v),
                   ),
                 ),

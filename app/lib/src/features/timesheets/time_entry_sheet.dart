@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -320,41 +321,38 @@ class _TimeEntrySheetState extends ConsumerState<_TimeEntrySheet> {
                   ],
                 ),
                 const SizedBox(height: Space.md),
-                DropdownButtonFormField<String?>(
+                SearchablePicker<String>(
                   key: const ValueKey('time-anchor'),
-                  value: _anchor,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Against'),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Nothing — this is not chargeable'),
-                    ),
+                  // Projects and matters in one box, as they were in one
+                  // dropdown: somebody recording an hour knows what they
+                  // worked on, not which table it lives in.
+                  options: [
                     for (final p in projects)
-                      DropdownMenuItem<String?>(
+                      PickerOption<String>(
                         value: anchorValue('project', p['id'] as String),
-                        child: Text(
-                          '${p['code']} · ${p['name']}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        label: '${p['name']}',
+                        sublabel: '${p['code']}',
+                        keywords: ['${p['code']}'],
                       ),
                     for (final m in matters)
-                      DropdownMenuItem<String?>(
+                      PickerOption<String>(
                         value: anchorValue('matter', m.id),
-                        child: Text(
-                          '${m.matterNo} · ${m.name}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        label: m.name,
+                        sublabel: m.matterNo,
+                        keywords: [m.matterNo],
                       ),
                   ],
-                  onChanged: _saving
-                      ? null
-                      : (v) => setState(() {
-                            _anchor = v;
-                            // An hour against nothing cannot be billed
-                            // to anybody, and the trigger says so.
-                            if (v == null) _billable = false;
-                          }),
+                  value: _anchor,
+                  label: 'Against',
+                  allowEmpty: true,
+                  emptyLabel: 'Nothing — this is not chargeable',
+                  enabled: !_saving,
+                  onChanged: (v) => setState(() {
+                    _anchor = v;
+                    // An hour against nothing cannot be billed to
+                    // anybody, and the trigger says so.
+                    if (v == null) _billable = false;
+                  }),
                 ),
                 if (projects.isEmpty && matters.isEmpty)
                   Padding(
@@ -390,27 +388,21 @@ class _TimeEntrySheetState extends ConsumerState<_TimeEntrySheet> {
                 ),
                 if (people.length > 1) ...[
                   const SizedBox(height: Space.md),
-                  DropdownButtonFormField<String?>(
+                  SearchablePicker<String>(
                     key: const ValueKey('time-person'),
-                    value: _userId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Whose time',
-                      helperText: 'The rate comes from this person’s rate '
-                          'card, not from yours.',
-                    ),
-                    items: [
+                    options: [
                       for (final m in people)
-                        DropdownMenuItem<String?>(
-                          value: m.userId,
-                          child: Text(
-                            m.displayName,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                        PickerOption<String>(
+                          value: '${m.userId}',
+                          label: m.displayName,
                         ),
                     ],
-                    onChanged:
-                        _saving ? null : (v) => setState(() => _userId = v),
+                    value: _userId,
+                    label: 'Whose time',
+                    helperText: 'The rate comes from this person’s rate '
+                        'card, not from yours.',
+                    enabled: !_saving,
+                    onChanged: (v) => setState(() => _userId = v),
                   ),
                 ],
                 const SizedBox(height: Space.sm),

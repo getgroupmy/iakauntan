@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -174,52 +175,47 @@ class _RateSheetState extends ConsumerState<_RateSheet> {
                       ?.copyWith(color: context.scheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: Space.md),
-                DropdownButtonFormField<String>(
+                SearchablePicker<String>(
                   key: const ValueKey('rate-person'),
-                  value: _userId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Person'),
-                  items: [
+                  options: [
                     // Only somebody who has accepted has a user_id to
                     // hang a rate on.
                     for (final m in team.where((m) => m.userId != null))
-                      DropdownMenuItem(
-                        value: m.userId,
-                        child: Text(
-                          m.fullName ?? m.email ?? '—',
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      PickerOption<String>(
+                        value: m.userId!,
+                        label: m.fullName ?? m.email ?? '—',
+                        // The email tells two people with the same name
+                        // apart, which a rate card has to do.
+                        sublabel: m.fullName == null ? null : m.email,
+                        keywords: [m.email ?? ''],
                       ),
                   ],
-                  onChanged: _saving ? null : (v) => setState(() => _userId = v),
+                  value: _userId,
+                  label: 'Person',
+                  enabled: !_saving,
+                  onChanged: (v) => setState(() => _userId = v),
                   validator: (v) => v == null ? 'Required' : null,
                 ),
                 const SizedBox(height: Space.md),
-                DropdownButtonFormField<String?>(
+                SearchablePicker<String>(
                   key: const ValueKey('rate-project'),
-                  value: _projectId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Applies to',
-                    helperText: 'Leave as the default unless this person '
-                        'charges differently on one project.',
-                  ),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Every project — the default rate'),
-                    ),
+                  options: [
                     for (final p in projects)
-                      DropdownMenuItem<String?>(
-                        value: p['id'] as String?,
-                        child: Text(
-                          '${p['code']} · ${p['name']}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      PickerOption<String>(
+                        value: '${p['id']}',
+                        label: '${p['name']}',
+                        sublabel: '${p['code']}',
+                        keywords: ['${p['code']}'],
                       ),
                   ],
-                  onChanged:
-                      _saving ? null : (v) => setState(() => _projectId = v),
+                  value: _projectId,
+                  label: 'Applies to',
+                  helperText: 'Leave as the default unless this person '
+                      'charges differently on one project.',
+                  allowEmpty: true,
+                  emptyLabel: 'Every project — the default rate',
+                  enabled: !_saving,
+                  onChanged: (v) => setState(() => _projectId = v),
                 ),
                 const SizedBox(height: Space.md),
                 Row(children: [

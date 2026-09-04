@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../data/models.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
+import '../items/new_item_dialog.dart';
 import 'recipe_requirement_dialog.dart';
 
 /// How a recipe line reads on one line of the editor.
@@ -341,16 +343,11 @@ class _RecipeSheetState extends ConsumerState<_RecipeSheet> {
             ),
             const SizedBox(height: Space.md),
             if (!editing)
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
+                options: itemPickerOptions(widget.items),
                 value: _item,
-                decoration: const InputDecoration(labelText: 'The dish'),
-                items: [
-                  for (final i in widget.items)
-                    DropdownMenuItem(
-                      value: i.id,
-                      child: Text(i.name),
-                    ),
-                ],
+                label: 'The dish',
+                hint: 'Type a name or a number',
                 onChanged: (v) => setState(() => _item = v),
               ),
             const SizedBox(height: Space.md),
@@ -443,16 +440,11 @@ class _IngredientDialogState extends ConsumerState<_IngredientDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            DropdownButtonFormField<String>(
+            SearchablePicker<String>(
+              options: itemPickerOptions(widget.items),
               value: _item,
-              decoration: const InputDecoration(labelText: 'What'),
-              items: [
-                for (final i in widget.items)
-                  DropdownMenuItem(
-                    value: i.id,
-                    child: Text(i.name),
-                  ),
-              ],
+              label: 'What',
+              hint: 'Type a name or a number',
               onChanged: (v) => setState(() {
                 _item = v;
                 _uom = null;
@@ -463,16 +455,18 @@ class _IngredientDialogState extends ConsumerState<_IngredientDialog> {
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: 'How much'),
             ),
-            DropdownButtonFormField<String>(
-              value: _uom,
-              decoration: const InputDecoration(labelText: 'In what unit'),
-              items: [
+            SearchablePicker<String>(
+              options: [
                 for (final o in options.valueOrNull ?? const [])
-                  DropdownMenuItem(
+                  PickerOption<String>(
                     value: '${o['uom_code']}',
-                    child: Text('${o['uom_name']}'),
+                    label: '${o['uom_name']}',
+                    keywords: ['${o['uom_code']}'],
                   ),
               ],
+              value: _uom,
+              label: 'In what unit',
+              enabled: _item != null,
               onChanged: (v) => setState(() => _uom = v),
             ),
             TextField(

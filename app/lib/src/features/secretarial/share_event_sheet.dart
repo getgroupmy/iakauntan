@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/corp_repository.dart';
@@ -235,23 +237,16 @@ class _ShareEventSheetState extends ConsumerState<_ShareEventSheet> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            DropdownButtonFormField<String>(
+            SearchablePicker<String>(
+              options: corpPersonPickerOptions(people),
               value: value,
-              isExpanded: true,
-              decoration: InputDecoration(labelText: label),
-              items: [
-                for (final p in people)
-                  DropdownMenuItem(
-                    value: p.id,
-                    child: Text(
-                      p.identifier == null
-                          ? p.fullName
-                          : '${p.fullName} (${p.identifier})',
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-              ],
-              onChanged: _saving ? null : onChanged,
+              label: label,
+              hint: 'Type a name or an NRIC',
+              enabled: !_saving,
+              createLabel: 'Add person',
+              onCreate: (typed) =>
+                  showPersonEditor(context, seedName: typed),
+              onChanged: onChanged,
               validator: (v) => v == null ? 'Required' : null,
             ),
             Align(
@@ -343,20 +338,20 @@ class _ShareEventSheetState extends ConsumerState<_ShareEventSheet> {
                 ),
 
                 const SizedBox(height: Space.md),
-                DropdownButtonFormField<String>(
-                  value: _classId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Class'),
-                  items: [
+                SearchablePicker<String>(
+                  options: [
                     for (final c in classes)
-                      DropdownMenuItem(
+                      PickerOption<String>(
                         value: c['id'] as String,
-                        child: Text(
-                            '${c['name'] ?? ''} (${c['code'] ?? ''})'),
+                        label: '${c['name'] ?? ''}',
+                        sublabel: '${c['code'] ?? ''}',
+                        keywords: ['${c['code'] ?? ''}'],
                       ),
                   ],
-                  onChanged:
-                      _saving ? null : (v) => setState(() => _classId = v),
+                  value: _classId,
+                  label: 'Class',
+                  enabled: !_saving,
+                  onChanged: (v) => setState(() => _classId = v),
                   validator: (v) => v == null ? 'Choose a class' : null,
                 ),
 

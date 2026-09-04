@@ -1,3 +1,4 @@
+import '../data/corp_models.dart';
 import '../data/models.dart';
 import 'searchable_picker.dart';
 
@@ -72,5 +73,25 @@ List<PickerOption<String>> employeePickerOptions(List<Employee> staff) => [
         if ((e.departmentName ?? '').isNotEmpty) e.departmentName!,
       ].where((p) => p.isNotEmpty).join(' · '),
       keywords: [e.employeeNo, e.departmentName ?? ''],
+    ),
+];
+
+/// The people on a company's corporate registers.
+///
+/// `corp_persons` is one record used as officer, member and beneficial
+/// owner alike, so one options helper serves all three registers.
+/// The IDENTIFIER — an NRIC, a passport number, a company registration
+/// number — is the second line and a search key, because that is what
+/// tells two people with the same name apart, and telling them apart is
+/// the whole point of a statutory register.
+List<PickerOption<String>> corpPersonPickerOptions(
+  List<CorpPerson> people,
+) => [
+  for (final p in people)
+    PickerOption<String>(
+      value: p.id,
+      label: p.fullName,
+      sublabel: p.identifier,
+      keywords: [p.identifier ?? ''],
     ),
 ];

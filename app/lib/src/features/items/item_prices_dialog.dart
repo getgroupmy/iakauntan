@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -218,18 +219,18 @@ class _PriceDialogState extends ConsumerState<_PriceDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            DropdownButtonFormField<String>(
-              value: _levelId,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Price level'),
-              items: [
+            SearchablePicker<String>(
+              options: [
                 for (final l in levels)
-                  DropdownMenuItem(
+                  PickerOption<String>(
                     value: l['id'] as String,
-                    child: Text('${l['code']} — ${l['name']}',
-                        overflow: TextOverflow.ellipsis),
+                    label: '${l['name']}',
+                    sublabel: '${l['code']}',
+                    keywords: ['${l['code']}'],
                   ),
               ],
+              value: _levelId,
+              label: 'Price level',
               onChanged: (v) => setState(() => _levelId = v),
             ),
             const SizedBox(height: Space.md),

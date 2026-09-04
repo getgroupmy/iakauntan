@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'channels.dart';
@@ -227,19 +228,16 @@ class _StationsScreenState extends ConsumerState<StationsScreen> {
               if (shops.length > 1)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: DropdownButtonFormField<String>(
-                    value: outlet,
-                    decoration: const InputDecoration(
-                      labelText: 'Outlet',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
+                  child: SearchablePicker<String>(
+                    options: [
                       for (final o in shops)
-                        DropdownMenuItem(
+                        PickerOption<String>(
                           value: o['id'] as String,
-                          child: Text('${o['name']}'),
+                          label: '${o['name']}',
                         ),
                     ],
+                    value: outlet,
+                    label: 'Outlet',
                     onChanged: (v) => setState(() => _outletId = v),
                   ),
                 ),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/widgets.dart';
 // `RepoPos` is an extension, and a Dart extension is only in scope
 // where its declaring library is imported.
@@ -515,19 +516,19 @@ class _BookingDialogState extends State<_BookingDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          DropdownButtonFormField<String>(
-            value: _itemId,
-            decoration: const InputDecoration(labelText: 'What'),
-            items: [
+          SearchablePicker<String>(
+            options: [
               for (final s in widget.services)
-                DropdownMenuItem(
-                  value: (s['items'] as Map?)?['id'] as String?,
-                  child: Text(
-                    '${(s['items'] as Map?)?['name'] ?? ''} · '
-                    '${s['duration_minutes']}m',
-                  ),
+                PickerOption<String>(
+                  value: '${(s['items'] as Map?)?['id']}',
+                  label: '${(s['items'] as Map?)?['name'] ?? ''}',
+                  // How long it takes, which is what decides whether it
+                  // fits in the gap somebody is booking into.
+                  sublabel: '${s['duration_minutes']}m',
                 ),
             ],
+            value: _itemId,
+            label: 'What',
             onChanged: (v) => setState(() => _itemId = v),
           ),
           const SizedBox(height: 12),

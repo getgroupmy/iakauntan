@@ -411,30 +411,22 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                     final all =
                         ref.watch(itemCategoriesProvider).valueOrNull ??
                         const <Map<String, dynamic>>[];
-                    return DropdownButtonFormField<String?>(
+                    return SearchablePicker<String>(
+                      options: [
+                        for (final c in all)
+                          PickerOption<String>(
+                            value: c['id'] as String,
+                            label: categoryPath(all, c['id'] as String?),
+                          ),
+                      ],
                       value: all.any((c) => c['id'] == _categoryId)
                           ? _categoryId
                           : null,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Filed under',
-                        helperText: 'How a kitchen sends every drink to one '
-                            'counter without naming them one at a time.',
-                      ),
-                      items: [
-                        const DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text('Nothing in particular'),
-                        ),
-                        for (final c in all)
-                          DropdownMenuItem<String?>(
-                            value: c['id'] as String?,
-                            child: Text(
-                              categoryPath(all, c['id'] as String?),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
+                      label: 'Filed under',
+                      helperText: 'How a kitchen sends every drink to one '
+                          'counter without naming them one at a time.',
+                      allowEmpty: true,
+                      emptyLabel: 'Nothing in particular',
                       onChanged: (v) => setState(() => _categoryId = v),
                     );
                   },
