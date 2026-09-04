@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../contacts/new_contact_dialog.dart';
 import '../secretarial/person_editor.dart' show StatutoryDateField;
 
 /// Where a tenancy is in its life.
@@ -265,21 +267,23 @@ class _TenancySheetState extends ConsumerState<_TenancySheet> {
                   validator: (v) => v == null ? 'Required' : null,
                 ),
                 const SizedBox(height: Space.md),
-                DropdownButtonFormField<String>(
+                SearchablePicker<String>(
                   key: const ValueKey('tenancy-tenant'),
+                  options: contactPickerOptions(contacts),
                   value: _tenantId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Tenant'),
-                  items: [
-                    for (final c in contacts)
-                      DropdownMenuItem(
-                        value: c.id,
-                        child:
-                            Text(c.name, overflow: TextOverflow.ellipsis),
-                      ),
-                  ],
-                  onChanged:
-                      _saving ? null : (v) => setState(() => _tenantId = v),
+                  label: 'Tenant',
+                  hint: 'Type a name or a code',
+                  enabled: !_saving,
+                  createLabel: 'Add tenant',
+                  // A new tenancy is usually a new tenant, so this is
+                  // the box where somebody is least likely to be on
+                  // file already.
+                  onCreate: (typed) => createContactFromPicker(
+                    context,
+                    contactType: 'customer',
+                    typed: typed,
+                  ),
+                  onChanged: (v) => setState(() => _tenantId = v),
                   validator: (v) => v == null ? 'Required' : null,
                 ),
                 const SizedBox(height: Space.md),

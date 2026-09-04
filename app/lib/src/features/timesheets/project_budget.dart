@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../contacts/new_contact_dialog.dart';
 
 /// The budget nothing was compared against.
 ///
@@ -429,22 +431,25 @@ class _ProjectEditorState extends ConsumerState<_ProjectEditor> {
                 ),
               ]),
               const SizedBox(height: Space.md),
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
                 key: const ValueKey('project-customer'),
+                options: contactPickerOptions(customers),
                 value: _contactId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Customer',
-                  helperText: 'Time on a project with no customer cannot '
-                      'be invoiced',
+                label: 'Customer',
+                helperText: 'Time on a project with no customer cannot '
+                    'be invoiced',
+                hint: 'Type a name or a code',
+                // Internal work is a real answer here, which is why the
+                // helper says what it costs rather than refusing.
+                allowEmpty: true,
+                enabled: !_saving,
+                createLabel: 'Add customer',
+                onCreate: (typed) => createContactFromPicker(
+                  context,
+                  contactType: 'customer',
+                  typed: typed,
                 ),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('None')),
-                  for (final c in customers)
-                    DropdownMenuItem(value: c.id, child: Text(c.name)),
-                ],
-                onChanged:
-                    _saving ? null : (v) => setState(() => _contactId = v),
+                onChanged: (v) => setState(() => _contactId = v),
               ),
               const SizedBox(height: Space.md),
               TextField(

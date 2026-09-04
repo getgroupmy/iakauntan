@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../contacts/new_contact_dialog.dart';
 
 /// Which way the cheque goes, in the words a shop uses.
 String chequeDirection(String? d) =>
@@ -369,15 +371,17 @@ class _ChequeDialogState extends ConsumerState<_ChequeDialog> {
                 }),
               ),
               const SizedBox(height: Space.md),
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
+                options: contactPickerOptions(contacts),
                 value: _contact,
-                decoration: InputDecoration(
-                  labelText: incoming ? 'From whom' : 'To whom',
+                label: incoming ? 'From whom' : 'To whom',
+                hint: 'Type a name or a code',
+                createLabel: incoming ? 'Add customer' : 'Add supplier',
+                onCreate: (typed) => createContactFromPicker(
+                  context,
+                  contactType: incoming ? 'customer' : 'supplier',
+                  typed: typed,
                 ),
-                items: [
-                  for (final c in contacts)
-                    DropdownMenuItem(value: c.id, child: Text(c.name)),
-                ],
                 onChanged: (v) => setState(() {
                   _contact = v;
                   _settles.clear();

@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../contacts/new_contact_dialog.dart';
 import 'close_deal_dialog.dart';
 import 'quote_mismatch_dialog.dart';
 import 'win_loss_dialog.dart';
@@ -470,14 +472,21 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
                 validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
+                options: contactPickerOptions(contacts),
                 value: _contactId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Customer'),
-                items: [
-                  for (final c in contacts)
-                    DropdownMenuItem(value: c.id, child: Text(c.name)),
-                ],
+                label: 'Customer',
+                hint: 'Type a name or a code',
+                createLabel: 'Add prospect',
+                // A PROSPECT rather than a customer: somebody being put
+                // on the pipeline has not bought anything yet, and
+                // filing them as a customer would put them in the
+                // ageing report owing nothing.
+                onCreate: (typed) => createContactFromPicker(
+                  context,
+                  contactType: 'prospect',
+                  typed: typed,
+                ),
                 onChanged: (v) => setState(() => _contactId = v),
               ),
               const SizedBox(height: 12),

@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../contacts/new_contact_dialog.dart';
 
 /// Which way the money runs, in the words a bookkeeper uses rather than
 /// the words the database uses.
@@ -197,13 +199,14 @@ class _ContraDialogState extends ConsumerState<_ContraDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
+                options: contactPickerOptions(contacts),
                 value: _contact,
-                decoration: const InputDecoration(labelText: 'Who'),
-                items: [
-                  for (final c in contacts)
-                    DropdownMenuItem(value: c.id, child: Text(c.name)),
-                ],
+                label: 'Who',
+                hint: 'Type a name or a code',
+                // No offer to add one: a contra needs somebody who is
+                // BOTH a customer and a supplier, with documents on
+                // each side. A contact created here would have neither.
                 onChanged: (v) => setState(() {
                   _contact = v;
                   _invoices.clear();

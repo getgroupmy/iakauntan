@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../contacts/new_contact_dialog.dart';
 import 'deposit_apply_sheet.dart';
 
 /// Which way the money went, in the words a shop uses.
@@ -266,15 +268,22 @@ class _DepositDialogState extends ConsumerState<_DepositDialog> {
                 }),
               ),
               const SizedBox(height: Space.md),
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
+                options: contactPickerOptions(contacts),
                 value: _contact,
-                decoration: InputDecoration(
-                  labelText: _kind == 'customer' ? 'From whom' : 'To whom',
+                label: _kind == 'customer' ? 'From whom' : 'To whom',
+                hint: 'Type a name or a code',
+                createLabel: _kind == 'customer'
+                    ? 'Add customer'
+                    : 'Add supplier',
+                // A deposit is often the FIRST thing a new customer
+                // does, before any invoice exists, so this is exactly
+                // the box where somebody is not on file yet.
+                onCreate: (typed) => createContactFromPicker(
+                  context,
+                  contactType: _kind == 'customer' ? 'customer' : 'supplier',
+                  typed: typed,
                 ),
-                items: [
-                  for (final c in contacts)
-                    DropdownMenuItem(value: c.id, child: Text(c.name)),
-                ],
                 onChanged: (v) => setState(() => _contact = v),
               ),
               TextField(

@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../contacts/new_contact_dialog.dart';
 import 'stall_items_dialog.dart';
 
 /// What a stall's row says under its name.
@@ -314,16 +316,19 @@ class _StallSheetState extends ConsumerState<_StallSheet> {
               decoration: const InputDecoration(labelText: 'Called'),
             ),
             const SizedBox(height: Space.md),
-            DropdownButtonFormField<String>(
+            SearchablePicker<String>(
+              options: contactPickerOptions(widget.contacts),
               value: _operator,
-              decoration: const InputDecoration(
-                labelText: 'Whose business it is',
-                helperText: 'The contact the settlement bill is raised against.',
+              label: 'Whose business it is',
+              helperText:
+                  'The contact the settlement bill is raised against.',
+              hint: 'Type a name or a code',
+              createLabel: 'Add operator',
+              onCreate: (typed) => createContactFromPicker(
+                context,
+                contactType: 'supplier',
+                typed: typed,
               ),
-              items: [
-                for (final c in widget.contacts)
-                  DropdownMenuItem(value: c.id, child: Text(c.name)),
-              ],
               onChanged: (v) => setState(() => _operator = v),
             ),
             const SizedBox(height: Space.md),

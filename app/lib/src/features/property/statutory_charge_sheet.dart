@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../contacts/new_contact_dialog.dart';
 import '../secretarial/person_editor.dart' show StatutoryDateField;
 import 'statutory_charge_payment.dart';
 
@@ -471,15 +473,21 @@ class _AuthorityPickerState extends ConsumerState<_AuthorityPicker> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            DropdownButtonFormField<String>(
+            SearchablePicker<String>(
               key: const ValueKey('statutory-authority'),
+              options: contactPickerOptions(suppliers),
               value: _id,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Authority'),
-              items: [
-                for (final c in suppliers)
-                  DropdownMenuItem(value: c.id, child: Text(c.name)),
-              ],
+              label: 'Authority',
+              hint: 'Type a name or a code',
+              createLabel: 'Add authority',
+              // The water board and the land office are suppliers like
+              // any other, and the first quit rent bill of the year is
+              // usually the first time either is on file.
+              onCreate: (typed) => createContactFromPicker(
+                context,
+                contactType: 'supplier',
+                typed: typed,
+              ),
               onChanged: (v) => setState(() => _id = v),
             ),
             const SizedBox(height: Space.md),

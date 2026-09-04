@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../data/models.dart';
 
 /// Add a customer or supplier without leaving the document.
@@ -180,4 +181,41 @@ class _NewContactDialogState extends ConsumerState<NewContactDialog> {
       if (mounted) setState(() => _saving = false);
     }
   }
+}
+
+
+/// The rows a contact picker offers.
+///
+/// Findable by CODE as well as name, because half the people who reach
+/// for a customer are reading a code off a piece of paper and the other
+/// half remember the name.
+List<PickerOption<String>> contactPickerOptions(List<Contact> contacts) => [
+  for (final c in contacts)
+    PickerOption<String>(
+      value: c.id,
+      label: c.name,
+      sublabel: c.code.trim().isEmpty ? null : c.code,
+      keywords: [c.code],
+    ),
+];
+
+
+/// Add a contact from the box that wanted one, and return its id.
+///
+/// The three lines every picker was otherwise repeating. Returns null
+/// if the person backed out, which is what `SearchablePicker.onCreate`
+/// reads as "leave the choice alone".
+Future<String?> createContactFromPicker(
+  BuildContext context, {
+  required String contactType,
+  required String typed,
+}) async {
+  final created = await showDialog<Contact>(
+    context: context,
+    builder: (_) => NewContactDialog(
+      contactType: contactType,
+      seedName: typed,
+    ),
+  );
+  return created?.id;
 }

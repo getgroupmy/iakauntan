@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../contacts/new_contact_dialog.dart';
 
 /// What a unit can be, given what the site is.
 ///
@@ -358,27 +360,22 @@ class _UnitSheetState extends ConsumerState<_UnitSheet> {
                 ],
                 if (!common) ...[
                   const SizedBox(height: Space.md),
-                  DropdownButtonFormField<String>(
+                  SearchablePicker<String>(
                     key: const ValueKey('unit-owner'),
+                    options: contactPickerOptions(contacts),
                     value: _ownerId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Owner',
-                      helperText: 'Who is billed. A contact, because an '
-                          'owner is invoiced, pays, and ages.',
+                    label: 'Owner',
+                    helperText: 'Who is billed. A contact, because an '
+                        'owner is invoiced, pays, and ages.',
+                    hint: 'Type a name or a code',
+                    enabled: !_saving,
+                    createLabel: 'Add owner',
+                    onCreate: (typed) => createContactFromPicker(
+                      context,
+                      contactType: 'customer',
+                      typed: typed,
                     ),
-                    items: [
-                      for (final c in contacts)
-                        DropdownMenuItem(
-                          value: c.id,
-                          child: Text(
-                            c.name,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
-                    onChanged:
-                        _saving ? null : (v) => setState(() => _ownerId = v),
+                    onChanged: (v) => setState(() => _ownerId = v),
                   ),
                   const SizedBox(height: Space.sm),
                   SwitchListTile(

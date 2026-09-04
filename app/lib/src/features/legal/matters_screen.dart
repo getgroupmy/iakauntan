@@ -4,10 +4,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../contacts/new_contact_dialog.dart';
 import 'matter_conflicts.dart';
 import 'over_agreed_fee_dialog.dart';
 
@@ -342,14 +344,19 @@ class _MatterDialogState extends ConsumerState<_MatterDialog> {
                       (v ?? '').trim().isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
+                SearchablePicker<String>(
+                  options: contactPickerOptions(clients),
                   value: _clientId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Client *'),
-                  items: [
-                    for (final c in clients)
-                      DropdownMenuItem(value: c.id, child: Text(c.name)),
-                  ],
+                  label: 'Client *',
+                  hint: 'Type a name or a code',
+                  createLabel: 'Add client',
+                  // A matter is often opened the day somebody walks in,
+                  // before they are anywhere on file.
+                  onCreate: (typed) => createContactFromPicker(
+                    context,
+                    contactType: 'customer',
+                    typed: typed,
+                  ),
                   onChanged: (v) {
                     setState(() => _clientId = v);
                     _recheck();

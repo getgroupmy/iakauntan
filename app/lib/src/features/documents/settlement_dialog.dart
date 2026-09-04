@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../contacts/new_contact_dialog.dart';
 import 'fx.dart';
 import 'settlement_discount.dart';
 
@@ -256,16 +258,14 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
+                options: contactPickerOptions(contacts),
                 value: _contactId,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: '${widget.kind.contactLabel} *',
-                ),
-                items: [
-                  for (final c in contacts)
-                    DropdownMenuItem(value: c.id, child: Text(c.name)),
-                ],
+                label: '${widget.kind.contactLabel} *',
+                hint: 'Type a name or a code',
+                // No offer to add one: a receipt settles documents that
+                // already exist, and somebody created here would have
+                // nothing to settle.
                 onChanged: (v) => setState(() {
                   _contactId = v;
                   _allocations.clear();
