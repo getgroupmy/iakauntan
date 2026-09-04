@@ -6316,3 +6316,70 @@ The first of those is the interesting shape, and it is one this campaign
 has now seen twice: **two guards that each hide the other's mutant.**
 Neither is dead. The only way to tell is to test the smaller function on
 its own.
+
+### The SST engine: 25 of 46, then 39
+
+Two functions: `app.sst_period_for`, which says which taxable period a
+date falls in, and `app.sst_output_due`, which says what falls due in
+one. `sst_taxable_period.sql` pins the two-month cycle and
+`service_tax_on_payment.sql` pins section 11's payment basis. Both are
+good files, and 21 mutants still lived.
+
+**A taxable period the Director General fixed by hand.** Section 8 of
+the Service Tax Regulations 2018 lets the Director General assign a
+different taxable period on application. The column is there, the code
+has three branches for it, and NOTHING in the suite had ever set it — so
+a mutant ignoring the column, one deleting the step back to the
+registration month, and one deleting the wrap into the following year
+all passed. The last of those is the subtle one: a month named EARLIER
+in the calendar than the registration month belongs to the *following*
+year, and without the `+ 12` a company registered in November with a
+January cycle gets a first taxable period beginning in October — before
+it was registered at all.
+
+**The day the twelve-month clock strikes.** Section 11(2) puts the tax
+due on the day FOLLOWING twelve months from the invoice. The mutant
+taking the anniversary itself passed, because nothing had ever paid an
+invoice on exactly its anniversary — the one day the two readings
+disagree. Two invoices dated the same day, one paid on the 15th and one
+on the 16th, separate them: the first is a payment, the second is a
+default, and the payment that arrives on the day of default must not be
+declared a second time.
+
+**The service charge is service tax on a payment basis.** It lives on
+the document HEADER, not on a line, because it is a percentage of all
+of them. A mutant dropping the whole second arm of the union passed —
+and writing the assertion turned up the thing worth knowing: a
+restaurant's ten per cent is not due when the bill is printed. It is
+service tax on an invoice, so it is due when the money arrives, and it
+does not appear in the return until the bill is paid.
+
+**A return has to be in sen.** The payment basis apportions by
+`p.amount / s.total`, which is a third of a ringgit as often as not.
+Both `round(..., 2)` calls had nothing on them.
+
+#### Seven equivalent mutants, and the reason for each
+
+| Mutant | Why it cannot matter |
+|---|---|
+| `not is_sst_registered` dropped | Masked by `sst_registered_from is null` |
+| `sst_registered_from is null` dropped | Masked by `not is_sst_registered` |
+| zero service charge admitted | Masked by `having sum(l.tax) <> 0` when the charge is service tax, and by the final `net <> 0 or tax <> 0` when it is sales tax |
+| `max(l.total_amount) > 0` dropped | The division it guards is unreachable: a payment cannot exist against a zero-total invoice, and `total > paid_by_then` cannot hold when the total is nought |
+| `a.org_id = p_org_id` on allocations | `payment_allocations_invoice_same_org` — the `0512` composite key already ties an allocation's company to its invoice's |
+| an invoice paid in full falls due again | It contributes `(total - paid) / total`, which is nought; over-allocation is refused elsewhere |
+| `x.tax is not null` dropped | The `(x.net <> 0 or x.tax <> 0)` on the next line is null for a null tax, so the row goes anyway |
+
+The first two are **the third mutually-masking pair this campaign has
+found**, after `months_held` / `accumulated_depreciation_at` and the two
+`>=`/`>` comparisons in `corp_upcoming_filings`. A company registered
+with no date, or unregistered with one, would tell them apart, and
+neither state exists — `set_sst_registration` writes the boolean and the
+date together and `guard_sst_registration` refuses any other writer. So
+the fixture asserts THE PAIRING: registering sets both, deregistering
+clears both, and the trigger refuses each field on its own.
+
+That is now the standard move when a survivor turns out to be equivalent
+because of a rule enforced elsewhere: **assert the rule, not the dead
+branch.** Four times now — the statutory band overlap, the corp-sec
+series bound, the residual-below-cost constraint, and this.

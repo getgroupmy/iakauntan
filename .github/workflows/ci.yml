@@ -120,6 +120,7 @@ jobs:
                    supabase/tests/payroll_run.sql \
                    supabase/tests/payroll_shapes.sql \
                    supabase/tests/payroll_voluntary_epf.sql \
+                   supabase/tests/sst_shapes.sql \
                    supabase/tests/sst_summary.sql \
                    supabase/tests/payroll_periods.sql \
                    supabase/tests/payslip_access.sql \
