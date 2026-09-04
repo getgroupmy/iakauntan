@@ -4120,8 +4120,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/post_dated_cheques.sql": {
-    "mtime": 1788427537.1750562,
-    "ast_hash": "fbd11d12f473a143534dd44b41819887",
+    "mtime": 1788487309.7168634,
+    "ast_hash": "1810deccd27479de41428891262fbcf1",
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/cash_forecast_screen.dart": {
