@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// One row a picker can offer.
 class PickerOption<T> {
@@ -133,6 +134,12 @@ class _SearchablePickerState<T> extends State<SearchablePicker<T>> {
   final _controller = TextEditingController();
   final _focus = FocusNode();
   final _layerLink = LayerLink();
+
+  /// The field and its overlay are ONE tap region, so a tap on a row
+  /// counts as a tap inside rather than a tap outside. See [initState]
+  /// for why that matters.
+  final _tapGroup = Object();
+
   OverlayEntry? _overlay;
   String _query = '';
 
@@ -141,24 +148,43 @@ class _SearchablePickerState<T> extends State<SearchablePicker<T>> {
     super.initState();
     _controller.text = _labelFor(widget.value);
     _focus.addListener(() {
-      if (_focus.hasFocus) {
-        // The whole text is selected on focus so the first keystroke
-        // REPLACES the current choice rather than appending to it.
-        // Without this, tapping a box that says "Ramli Enterprise" and
-        // typing "b" searches for "Ramli Enterpriseb".
-        _controller.selection = TextSelection(
-          baseOffset: 0,
-          extentOffset: _controller.text.length,
-        );
-        _open();
-      } else {
-        _close();
-        // Whatever was typed and not chosen is discarded. A picker is a
-        // CHOICE: half a name left in the box would read as a selection
-        // that was never made.
-        setState(() => _controller.text = _labelFor(widget.value));
-      }
+      if (!_focus.hasFocus) return;
+      // The whole text is selected on focus so the first keystroke
+      // REPLACES the current choice rather than appending to it.
+      // Without this, tapping a box that says "Ramli Enterprise" and
+      // typing "b" searches for "Ramli Enterpriseb".
+      _controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _controller.text.length,
+      );
+      _open();
     });
+  }
+
+  /// CLOSING ON BLUR IS THE BUG THIS AVOIDS, and it was reported from
+  /// the Record expense screen as "the list opens and tapping a row
+  /// does nothing".
+  ///
+  /// On the web a text field is a real DOM input, and the browser blurs
+  /// it on MOUSEDOWN — before the pointer is released, and so before
+  /// any row's `onTap` can fire. A blur listener that closed the
+  /// overlay therefore removed the row out from under the finger, every
+  /// time, in the browser only. No widget test showed it: in the test
+  /// harness the whole gesture lands in one frame and nothing blurs in
+  /// the middle of it.
+  ///
+  /// So the overlay is not closed on blur at all. It is closed when a
+  /// row is chosen, when Escape is pressed, and when a tap lands
+  /// genuinely OUTSIDE both the field and the overlay — which is what
+  /// [TapRegion] with a shared group id means by "outside".
+  void _dismiss() {
+    if (_overlay == null) return;
+    _close();
+    // Whatever was typed and not chosen is discarded. A picker is a
+    // CHOICE: half a name left in the box would read as a selection
+    // that was never made.
+    setState(() => _controller.text = _labelFor(widget.value));
+    _focus.unfocus();
   }
 
   @override
@@ -220,46 +246,49 @@ class _SearchablePickerState<T> extends State<SearchablePicker<T>> {
         link: _layerLink,
         showWhenUnlinked: false,
         offset: const Offset(0, 56),
-        child: Material(
-          elevation: 4,
-          borderRadius: BorderRadius.circular(8),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 320),
-            child: ListView(
-              shrinkWrap: true,
-              padding: EdgeInsets.zero,
-              children: [
-                if (widget.allowEmpty && _query.isEmpty)
-                  ListTile(
-                    dense: true,
-                    title: Text(widget.emptyLabel),
-                    onTap: () => _choose(null),
-                  ),
-                for (final option in matches)
-                  ListTile(
-                    dense: true,
-                    title: Text(option.label),
-                    subtitle: option.sublabel == null
-                        ? null
-                        : Text(option.sublabel!),
-                    onTap: () => _choose(option.value),
-                  ),
-                if (matches.isEmpty && widget.onCreate == null)
-                  const ListTile(
-                    dense: true,
-                    enabled: false,
-                    title: Text('Nothing matches that.'),
-                  ),
-                // Last, and only when there is something to add. It is a
-                // way out, not a suggestion.
-                if (widget.onCreate != null && _query.trim().isNotEmpty)
-                  ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.add, size: 18),
-                    title: Text('${widget.createLabel} "${_query.trim()}"'),
-                    onTap: _create,
-                  ),
-              ],
+        child: TapRegion(
+          groupId: _tapGroup,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 320),
+              child: ListView(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                children: [
+                  if (widget.allowEmpty && _query.isEmpty)
+                    ListTile(
+                      dense: true,
+                      title: Text(widget.emptyLabel),
+                      onTap: () => _choose(null),
+                    ),
+                  for (final option in matches)
+                    ListTile(
+                      dense: true,
+                      title: Text(option.label),
+                      subtitle: option.sublabel == null
+                          ? null
+                          : Text(option.sublabel!),
+                      onTap: () => _choose(option.value),
+                    ),
+                  if (matches.isEmpty && widget.onCreate == null)
+                    const ListTile(
+                      dense: true,
+                      enabled: false,
+                      title: Text('Nothing matches that.'),
+                    ),
+                  // Last, and only when there is something to add. It is a
+                  // way out, not a suggestion.
+                  if (widget.onCreate != null && _query.trim().isNotEmpty)
+                    ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.add, size: 18),
+                      title: Text('${widget.createLabel} "${_query.trim()}"'),
+                      onTap: _create,
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -295,26 +324,45 @@ class _SearchablePickerState<T> extends State<SearchablePicker<T>> {
   Widget build(BuildContext context) {
     return CompositedTransformTarget(
       link: _layerLink,
-      child: FormField<T>(
-        initialValue: widget.value,
-        validator: (_) => widget.validator?.call(widget.value),
-        builder: (state) => TextFormField(
-          controller: _controller,
-          focusNode: _focus,
-          enabled: widget.enabled,
-          decoration: InputDecoration(
-            labelText: widget.label,
-            hintText: widget.hint,
-            helperText: widget.helperText,
-            helperStyle: widget.helperStyle,
-            errorText: state.errorText,
-            suffixIcon: const Icon(Icons.arrow_drop_down),
+      child: TapRegion(
+        groupId: _tapGroup,
+        onTapOutside: (_) => _dismiss(),
+        child: FormField<T>(
+          initialValue: widget.value,
+          validator: (_) => widget.validator?.call(widget.value),
+          builder: (state) => Shortcuts(
+            shortcuts: const <ShortcutActivator, Intent>{
+              SingleActivator(LogicalKeyboardKey.escape): DismissIntent(),
+            },
+            child: Actions(
+              actions: <Type, Action<Intent>>{
+                DismissIntent: CallbackAction<DismissIntent>(
+                  onInvoke: (_) {
+                    _dismiss();
+                    return null;
+                  },
+                ),
+              },
+              child: TextFormField(
+                controller: _controller,
+                focusNode: _focus,
+                enabled: widget.enabled,
+                decoration: InputDecoration(
+                  labelText: widget.label,
+                  hintText: widget.hint,
+                  helperText: widget.helperText,
+                  helperStyle: widget.helperStyle,
+                  errorText: state.errorText,
+                  suffixIcon: const Icon(Icons.arrow_drop_down),
+                ),
+                onChanged: (v) {
+                  _query = v;
+                  _open();
+                  _refresh();
+                },
+              ),
+            ),
           ),
-          onChanged: (v) {
-            _query = v;
-            _open();
-            _refresh();
-          },
         ),
       ),
     );

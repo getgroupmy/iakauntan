@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iakauntan/src/core/searchable_picker.dart';
 
@@ -163,6 +164,77 @@ void main() {
       expect(chosen, 'c3');
     });
 
+    testWidgets('a row is chosen even though the tap blurs the box',
+        (tester) async {
+      // Reported from the Record expense screen: the list opens, and
+      // tapping a row does nothing.
+      //
+      // A tap anywhere that is not the text field BLURS it, and the
+      // focus listener closed the overlay — so between the finger going
+      // down and coming up, the row it was on stopped existing. A plain
+      // `tester.tap` never showed it, because the whole gesture lands
+      // in one frame with no blur in the middle. This one blurs where
+      // the browser blurs.
+      String? chosen;
+      await pump(tester, onChanged: (v) => chosen = v);
+      await tester.tap(find.byType(TextFormField));
+      await tester.pumpAndSettle();
+
+      final row = find.text('Kilang Lestari Sdn Bhd');
+      expect(row, findsOneWidget);
+      final gesture = await tester.startGesture(tester.getCenter(row));
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(chosen, 'c3');
+    });
+
+    testWidgets('and inside a dialog, which is where it is really used',
+        (tester) async {
+      // Reported from Record expense, which is an AlertDialog. The bare
+      // Scaffold above is not the shape the product uses it in: the
+      // overlay goes into the Navigator's overlay, and the dialog is
+      // there too.
+      String? chosen;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    content: SizedBox(
+                      width: 400,
+                      child: SearchablePicker<String>(
+                        options: contacts,
+                        value: null,
+                        onChanged: (v) => chosen = v,
+                        label: 'Customer',
+                      ),
+                    ),
+                  ),
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(TextFormField));
+      await tester.pumpAndSettle();
+      expect(find.text('Kilang Lestari Sdn Bhd'), findsOneWidget);
+
+      await tester.tap(find.text('Kilang Lestari Sdn Bhd'));
+      await tester.pumpAndSettle();
+      expect(chosen, 'c3');
+    });
+
     testWidgets('the offer to add appears only once something is typed',
         (tester) async {
       await pump(tester, onCreate: (_) async => null);
@@ -249,6 +321,52 @@ void main() {
       await tester.pumpWidget(build(contacts));
       await tester.pump();
       expect(find.text('Bayu Digital Sdn Bhd'), findsOneWidget);
+    });
+
+    testWidgets('a tap genuinely outside closes it and keeps the choice',
+        (tester) async {
+      // The other half of the fix: the overlay is no longer closed on
+      // blur, so something else has to close it. A tap outside both the
+      // field and the overlay is what "outside" means.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                SearchablePicker<String>(
+                  options: contacts,
+                  value: 'c1',
+                  onChanged: (_) {},
+                  label: 'Customer',
+                ),
+                const SizedBox(height: 400, child: Text('elsewhere')),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(TextFormField));
+      await tester.pumpAndSettle();
+      expect(find.text('Bayu Digital Sdn Bhd'), findsOneWidget);
+
+      await tester.tapAt(tester.getCenter(find.text('elsewhere')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bayu Digital Sdn Bhd'), findsNothing);
+      // And what was chosen before is still in the box, not half a
+      // name nobody selected.
+      expect(find.text('Ramli Enterprise Sdn Bhd'), findsOneWidget);
+    });
+
+    testWidgets('Escape closes it', (tester) async {
+      await pump(tester, value: 'c1');
+      await tester.tap(find.byType(TextFormField));
+      await tester.pumpAndSettle();
+      expect(find.text('Bayu Digital Sdn Bhd'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.text('Bayu Digital Sdn Bhd'), findsNothing);
     });
 
     testWidgets('"none" is offered only where it is an answer',

@@ -168,6 +168,350 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- What the PCB deduction actually turns on
+--
+-- Added after a mutation sweep of `app.calc_pcb` killed only 19 of 41
+-- one-line mutants. The three worked examples above pin the arithmetic
+-- for three people; almost every BRANCH between them was invisible. A
+-- deduction that quietly ignored a disability, a working spouse, a
+-- child's share, or the PCB somebody had already paid this year would
+-- have passed the suite unchanged.
+--
+-- Every figure below is the one the engine produces today, and every
+-- one of them differs from the RM108.25 baseline in a direction the
+-- Rules require. A test that only asserted "it is different" would die
+-- to a mutant that changed it in the wrong direction.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid;
+  v_e   uuid;
+  r     record;
+begin
+  v_org := pg_temp.test_org('Branches Co');
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'B1', 'Single, 5000', date '2020-01-01', 5000,
+          date '1990-01-01', 'single', 'citizen')
+  returning id into v_e;
+
+  -- The baseline everything below is measured against, restated here
+  -- so this block stands on its own.
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq('the baseline for this block', r.pcb, 108.25);
+
+  -- -----------------------------------------------------------------
+  -- Somebody PCB does not apply to
+  --
+  -- `pcb_eligible` is a column an admin can clear -- for somebody
+  -- taxed under a different arrangement -- and nothing asserted that
+  -- clearing it did anything at all.
+  -- -----------------------------------------------------------------
+  update public.employees set pcb_eligible = false where id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq('nobody ineligible is deducted', r.pcb, 0);
+  perform pg_temp.check_true('and no schedule is claimed for it',
+    r.schedule_id is null);
+  perform pg_temp.check_true('nor is it reported as verified',
+    not r.is_verified);
+  update public.employees set pcb_eligible = true where id = v_e;
+
+  -- -----------------------------------------------------------------
+  -- A foreign worker is a non-resident
+  --
+  -- The flat rate applies to BOTH non-resident statuses. Only
+  -- `expatriate` was ever exercised, so a foreign worker being taxed as
+  -- a resident -- with a full year's reliefs they are not entitled to --
+  -- was invisible.
+  -- -----------------------------------------------------------------
+  update public.employees set residency_status = 'foreign_worker'
+   where id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 0, 0, 0, date '2026-01-31');
+  perform pg_temp.check_eq('a foreign worker is deducted the flat rate',
+    r.pcb, 1500.00);
+
+  -- And a bonus is part of the month's pay at the flat rate: there is
+  -- no projection to distort, so nothing is set aside for it.
+  select * into r from app.calc_pcb(
+    v_e, 5000, 0, 0, 0, date '2026-01-31', 2000, 0);
+  perform pg_temp.check_eq(
+    'a non-resident bonus is taxed at the same flat rate',
+    r.pcb, 2100.00);
+  update public.employees set residency_status = 'citizen' where id = v_e;
+
+  -- -----------------------------------------------------------------
+  -- The spouse
+  -- -----------------------------------------------------------------
+  update public.employees
+     set marital_status = 'married', spouse_is_working = true
+   where id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'a working spouse earns no spouse relief', r.pcb, 108.25);
+
+  update public.employees set spouse_is_working = false where id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'a spouse who is not working earns RM4,000 of relief',
+    r.pcb, 88.25);
+
+  -- -----------------------------------------------------------------
+  -- Disability
+  -- -----------------------------------------------------------------
+  update public.employees set is_disabled = true where id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq('a disabled employee earns RM6,000 more relief',
+    r.pcb, 58.25);
+
+  update public.employees
+     set is_disabled = false, spouse_is_disabled = true
+   where id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq('a disabled spouse earns RM5,000 more',
+    r.pcb, 63.25);
+
+  update public.employees
+     set spouse_is_disabled = false, marital_status = 'single',
+         spouse_is_working = false
+   where id = v_e;
+
+  -- -----------------------------------------------------------------
+  -- Children
+  --
+  -- Four branches of one CASE, and only the RM2,000 one was ever
+  -- reached. The higher-education figure is the one that moves money.
+  -- -----------------------------------------------------------------
+  insert into public.employee_dependants
+    (org_id, employee_id, name, relationship, date_of_birth)
+  values (v_org, v_e, 'Anak', 'child', date '2015-01-01');
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq('a child is worth RM2,000 of relief',
+    r.pcb, 98.25);
+
+  update public.employee_dependants set in_higher_education = true
+   where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'a child in higher education is worth RM8,000', r.pcb, 68.25);
+
+  -- 0530. A disabled child is RM6,000, and a disabled child in higher
+  -- education is that PLUS the RM8,000 for the education -- section 48
+  -- makes the two cumulative. The engine gave RM8,000 flat, which is
+  -- what a child who is NOT disabled gets: the disability was read and
+  -- then thrown away for exactly the children entitled to most. Found
+  -- by a mutation sweep, which is also why both arms are pinned here
+  -- rather than one.
+  update public.employee_dependants
+     set in_higher_education = false, is_disabled = true
+   where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq('a disabled child is worth RM6,000',
+    r.pcb, 78.25);
+
+  update public.employee_dependants set in_higher_education = true
+   where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'a disabled child in higher education is worth RM14,000, not RM8,000',
+    r.pcb, 10.80);
+
+  update public.employee_dependants
+     set is_disabled = false, in_higher_education = false
+   where employee_id = v_e;
+
+  -- The share, which decides how two separated parents split one
+  -- child's relief between them.
+  update public.employee_dependants
+     set in_higher_education = false, relief_claim_percent = 50
+   where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq('half a child claimed is half the relief',
+    r.pcb, 103.25);
+
+  -- Two ways a dependant does not count, each of which the query has a
+  -- clause for and neither of which was exercised.
+  update public.employee_dependants
+     set relief_claim_percent = 100, is_tax_dependant = false
+   where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'a dependant not claimed for tax earns nothing', r.pcb, 108.25);
+
+  update public.employee_dependants
+     set is_tax_dependant = true, relationship = 'parent'
+   where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'a parent is not a child, whatever else they are', r.pcb, 108.25);
+  delete from public.employee_dependants where employee_id = v_e;
+
+  -- -----------------------------------------------------------------
+  -- The floors
+  --
+  -- Three `greatest(..., 0)` in the function, and not one of them was
+  -- ever reached. Each of them is the difference between a deduction
+  -- of nothing and a NEGATIVE deduction -- money paid to an employee
+  -- out of LHDN's account.
+  -- -----------------------------------------------------------------
+  select * into r from app.calc_pcb(v_e, 1200, 132, 12, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'reliefs beyond a year of pay leave nothing to deduct, not a refund',
+    r.pcb, 0);
+
+  select * into r from app.calc_pcb(
+    v_e, 5000, 550, 35, 5000, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'zakat beyond the tax leaves nothing to deduct, not a refund',
+    r.pcb, 0);
+
+  -- -----------------------------------------------------------------
+  -- What has already been deducted this year
+  --
+  -- PCB is a running settlement: what is taken this month is the
+  -- year's tax LESS what has already gone. Both halves of that -- this
+  -- employer's own deductions and a previous employer's -- could have
+  -- been dropped without a test noticing.
+  -- -----------------------------------------------------------------
+  insert into public.payroll_ytd
+    (org_id, employee_id, tax_year, taxable_income, epf_employee, pcb)
+  values (v_org, v_e, 2026, 30000, 3300, 0);
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-07-31');
+  perform pg_temp.check_eq('July, with nothing deducted yet', r.pcb, 217.90);
+
+  update public.payroll_ytd set pcb = 900 where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-07-31');
+  perform pg_temp.check_eq(
+    'RM900 already deducted is spread over the six months left',
+    r.pcb, 67.90);
+
+  -- Over-deducted: the year is already settled and more, and the
+  -- answer is nothing, not a refund through the payslip.
+  update public.payroll_ytd set pcb = 100000 where employee_id = v_e;
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-07-31');
+  perform pg_temp.check_eq(
+    'having over-deducted, this month deducts nothing', r.pcb, 0);
+
+  -- The same money, paid by a previous employer, has to count the same.
+  update public.payroll_ytd set pcb = 0 where employee_id = v_e;
+  insert into public.employee_ytd_opening
+    (org_id, employee_id, tax_year, pcb_paid)
+  values (v_org, v_e, 2026, 900);
+  select * into r from app.calc_pcb(v_e, 5000, 550, 35, 0, date '2026-07-31');
+  perform pg_temp.check_eq(
+    'and PCB paid by a previous employer counts the same', r.pcb, 67.90);
+
+  delete from public.employee_ytd_opening where employee_id = v_e;
+  delete from public.payroll_ytd where employee_id = v_e;
+
+  -- -----------------------------------------------------------------
+  -- The EPF deducted from a bonus
+  --
+  -- It is relieved, up to the same cap as ordinary EPF. This needs a
+  -- LOW earner to see: on RM5,000 a month the cap is already binding,
+  -- which is why the mutant that dropped this relief altogether
+  -- survived the sweep.
+  -- -----------------------------------------------------------------
+  select * into r from app.calc_pcb(
+    v_e, 3000, 330, 25, 0, date '2026-01-31');
+  perform pg_temp.check_eq('on RM3,000 a month there is nothing to deduct',
+    r.pcb, 0);
+
+  select * into r from app.calc_pcb(
+    v_e, 3000, 330, 25, 0, date '2026-01-31', 40000, 0);
+  perform pg_temp.check_eq('a RM40,000 bonus is taxed once, in full',
+    r.pcb, 2901.40);
+
+  select * into r from app.calc_pcb(
+    v_e, 3000, 330, 25, 0, date '2026-01-31', 40000, 4400);
+  perform pg_temp.check_eq(
+    'and the EPF deducted from it is relieved, under the cap',
+    r.pcb, 2897.00);
+
+  -- A bonus too small to move the band still moves the deduction by
+  -- its own tax and no more -- five sen, which is the rounding step.
+  select * into r from app.calc_pcb(
+    v_e, 5000, 550, 35, 0, date '2026-01-31', 1, 0);
+  perform pg_temp.check_eq('a bonus of one ringgit adds five sen',
+    r.pcb, 108.30);
+
+  -- The third floor, and the least obvious. A bonus RAISES the year's
+  -- income by its own amount and the year's relief by twelve times the
+  -- EPF taken from it, so a small bonus with a large EPF deduction
+  -- makes the year's tax go DOWN. Left unfloored the engine would hand
+  -- the difference back through the payslip; the deduction for the
+  -- bonus is nothing, and the relief is settled at assessment.
+  select * into r from app.calc_pcb(
+    v_e, 8000, 100, 25, 0, date '2026-01-31');
+  perform pg_temp.check_eq(
+    'on RM8,000 with barely any EPF, before any bonus', r.pcb, 553.75);
+
+  select * into r from app.calc_pcb(
+    v_e, 8000, 100, 25, 0, date '2026-01-31', 100, 2000);
+  perform pg_temp.check_eq(
+    'a bonus whose own EPF relieves more than it earns adds nothing, '
+    'and takes nothing back',
+    r.pcb, 553.75);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- What every PCB schedule has to carry
+--
+-- `app.calc_pcb` reaches for four rows on the schedule and falls back
+-- to a hard-coded number when each is missing: a non-resident rate, the
+-- EPF relief cap, the SOCSO relief cap, the spouse relief. Every one of
+-- those fallbacks is UNREACHABLE against the seeded data, which is why
+-- a mutation sweep could change three of them freely without a test
+-- noticing -- and it is unreachable only for as long as the seed keeps
+-- its side of the bargain.
+--
+-- So the bargain is asserted here rather than the dead branch. A
+-- schedule seeded without a non-resident rate would silently deduct
+-- NOTHING from every expatriate on it, which is the failure that
+-- carries a penalty rather than a refund.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_bad text;
+begin
+  select string_agg(s.name, ', ') into v_bad
+    from public.statutory_schedules s
+   where s.body = 'pcb'
+     and not exists (select 1 from public.statutory_rates r
+                      where r.schedule_id = s.id
+                        and r.category = 'nonresident');
+  perform pg_temp.check_true(
+    'every PCB schedule carries a non-resident rate' ||
+    coalesce(' -- but not ' || v_bad, ''),
+    v_bad is null);
+
+  for v_bad in
+    select code from (values ('individual'), ('epf'), ('socso_eis'),
+                             ('spouse')) as t(code)
+  loop
+    perform pg_temp.check_eq(
+      format('every PCB schedule carries the %s relief', v_bad),
+      (select count(*)::numeric from public.statutory_schedules s
+        where s.body = 'pcb'
+          and not exists (select 1 from public.tax_reliefs t
+                           where t.schedule_id = s.id and t.code = v_bad)),
+      0);
+  end loop;
+
+  -- And the two caps are the numbers the fallbacks assume, so a change
+  -- to either has to be a deliberate one.
+  perform pg_temp.check_eq('the EPF relief cap is RM4,000',
+    (select max(t.max_amount) from public.tax_reliefs t
+      join public.statutory_schedules s on s.id = t.schedule_id
+     where s.body = 'pcb' and t.code = 'epf'), 4000);
+  perform pg_temp.check_eq('the SOCSO and EIS relief cap is RM350',
+    (select max(t.max_amount) from public.tax_reliefs t
+      join public.statutory_schedules s on s.id = t.schedule_id
+     where s.body = 'pcb' and t.code = 'socso_eis'), 350);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- The tax year an employee brings with them
 --
 -- PCB projects the year from the month in hand, so a mid-year joiner

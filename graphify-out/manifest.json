@@ -740,8 +740,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory.sql": {
-    "mtime": 1788393918.075158,
-    "ast_hash": "096a44e7cfd97692cccaef8eadf8a2fd",
+    "mtime": 1788507735.2567317,
+    "ast_hash": "d80eb6b07730f71d01aeab1f94f0b85e",
     "semantic_hash": ""
   },
   ".claude/CLAUDE.md": {
@@ -7840,8 +7840,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/searchable_picker.dart": {
-    "mtime": 1788504774.7032783,
-    "ast_hash": "7d5435c8e67dc33afb9342d2ab205b8b",
+    "mtime": 1788508452.190772,
+    "ast_hash": "6d5575e13c33bdda3befda0328e0124c",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/new_contact_dialog.dart": {
@@ -7850,8 +7850,8 @@
     "semantic_hash": ""
   },
   "app/test/searchable_picker_test.dart": {
-    "mtime": 1788504751.412725,
-    "ast_hash": "fbd66ca88e015e93f431874017e088dc",
+    "mtime": 1788508746.8557549,
+    "ast_hash": "3bb24203b802f2df6b4211b824ff71c9",
     "semantic_hash": ""
   },
   "app/lib/src/features/stock/new_warehouse_dialog.dart": {
@@ -7912,6 +7912,11 @@
   "supabase/tests/quick_add_lists.sql": {
     "mtime": 1788506566.132381,
     "ast_hash": "9455a50f582e75ee36aadac4f6fdee96",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0530_a_disabled_child_in_higher_education.sql": {
+    "mtime": 1788507697.6570234,
+    "ast_hash": "53ada91e3800db2d890211fb053921ad",
     "semantic_hash": ""
   }
 }
