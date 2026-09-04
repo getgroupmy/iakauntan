@@ -168,7 +168,9 @@ class LineEditorCard extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: 8, top: 4),
       child: Row(
         children: [
-          Expanded(flex: 4, child: Text('Item / description', style: style)),
+          Expanded(flex: 2, child: Text('Item no.', style: style)),
+          const SizedBox(width: 8),
+          Expanded(flex: 4, child: Text('Description', style: style)),
           Expanded(flex: 2, child: Text('Qty', style: style)),
           Expanded(flex: 2, child: Text('Unit price', style: style)),
           Expanded(flex: 2, child: Text('Disc %', style: style)),
@@ -211,6 +213,8 @@ class _WideLine extends StatefulWidget {
 }
 
 class _WideLineState extends State<_WideLine> {
+  late final TextEditingController _code;
+  late final FocusNode _codeFocus;
   late final TextEditingController _description;
   late final TextEditingController _quantity;
   late final TextEditingController _price;
@@ -219,6 +223,8 @@ class _WideLineState extends State<_WideLine> {
   @override
   void initState() {
     super.initState();
+    _code = TextEditingController(text: _codeOf(widget.line.itemId));
+    _codeFocus = FocusNode();
     _description = TextEditingController(text: widget.line.description);
     _quantity = TextEditingController(text: Fmt.qty(widget.line.quantity));
     _price = TextEditingController(
@@ -229,8 +235,24 @@ class _WideLineState extends State<_WideLine> {
             : Fmt.qty(widget.line.discountPercent));
   }
 
+  /// The item list is fetched, so it is empty on the first frame and
+  /// arrives on a later one. A line reopened on an item therefore has no
+  /// code to show when this state is created, and would sit blank until
+  /// somebody typed over it. Filled in as soon as the list can answer,
+  /// and never over the top of anything already in the box.
+  @override
+  void didUpdateWidget(covariant _WideLine oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_code.text.isEmpty) {
+      final code = _codeOf(widget.line.itemId);
+      if (code.isNotEmpty) _code.text = code;
+    }
+  }
+
   @override
   void dispose() {
+    _code.dispose();
+    _codeFocus.dispose();
     _description.dispose();
     _quantity.dispose();
     _price.dispose();
@@ -247,6 +269,7 @@ class _WideLineState extends State<_WideLine> {
   Future<void> _applyItem(Item item) async {
     setState(() {
       applyItemToLine(widget.line, item, widget.taxCodes);
+      _code.text = item.code;
       _description.text = item.name;
       _price.text = item.unitPrice.toString();
     });
@@ -264,6 +287,19 @@ class _WideLineState extends State<_WideLine> {
     widget.onChanged();
   }
 
+
+  /// The number of the item this line is already bound to, for a
+  /// document being reopened rather than typed. Lines carry `item_id`,
+  /// not the code, so the code is looked up in the list the editor was
+  /// given; a line with no item, or one whose item has since been
+  /// deleted, simply shows nothing.
+  String _codeOf(String? itemId) {
+    if (itemId == null) return '';
+    for (final item in widget.items) {
+      if (item.id == itemId) return item.code;
+    }
+    return '';
+  }
 
   /// The item's own unit — what the shelf is counted in, and what the
   /// picker converts to.
@@ -296,6 +332,17 @@ class _WideLineState extends State<_WideLine> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          Expanded(
+            flex: 2,
+            child: _ItemCodeField(
+              controller: _code,
+              focusNode: _codeFocus,
+              items: widget.items,
+              editable: widget.editable,
+              onItemSelected: _applyItem,
+            ),
+          ),
+          const SizedBox(width: 8),
           Expanded(
             flex: 4,
             child: _ItemField(
@@ -430,6 +477,8 @@ class _NarrowLine extends StatefulWidget {
 }
 
 class _NarrowLineState extends State<_NarrowLine> {
+  late final TextEditingController _code;
+  late final FocusNode _codeFocus;
   late final TextEditingController _description;
   late final TextEditingController _quantity;
   late final TextEditingController _price;
@@ -438,6 +487,8 @@ class _NarrowLineState extends State<_NarrowLine> {
   @override
   void initState() {
     super.initState();
+    _code = TextEditingController(text: _codeOf(widget.line.itemId));
+    _codeFocus = FocusNode();
     _description = TextEditingController(text: widget.line.description);
     _quantity = TextEditingController(text: Fmt.qty(widget.line.quantity));
     _price = TextEditingController(
@@ -448,8 +499,24 @@ class _NarrowLineState extends State<_NarrowLine> {
             : Fmt.qty(widget.line.discountPercent));
   }
 
+  /// The item list is fetched, so it is empty on the first frame and
+  /// arrives on a later one. A line reopened on an item therefore has no
+  /// code to show when this state is created, and would sit blank until
+  /// somebody typed over it. Filled in as soon as the list can answer,
+  /// and never over the top of anything already in the box.
+  @override
+  void didUpdateWidget(covariant _NarrowLine oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_code.text.isEmpty) {
+      final code = _codeOf(widget.line.itemId);
+      if (code.isNotEmpty) _code.text = code;
+    }
+  }
+
   @override
   void dispose() {
+    _code.dispose();
+    _codeFocus.dispose();
     _description.dispose();
     _quantity.dispose();
     _price.dispose();
@@ -462,6 +529,7 @@ class _NarrowLineState extends State<_NarrowLine> {
   Future<void> _applyItem(Item item) async {
     setState(() {
       applyItemToLine(widget.line, item, widget.taxCodes);
+      _code.text = item.code;
       _description.text = item.name;
       _price.text = item.unitPrice.toString();
     });
@@ -479,6 +547,19 @@ class _NarrowLineState extends State<_NarrowLine> {
     widget.onChanged();
   }
 
+
+  /// The number of the item this line is already bound to, for a
+  /// document being reopened rather than typed. Lines carry `item_id`,
+  /// not the code, so the code is looked up in the list the editor was
+  /// given; a line with no item, or one whose item has since been
+  /// deleted, simply shows nothing.
+  String _codeOf(String? itemId) {
+    if (itemId == null) return '';
+    for (final item in widget.items) {
+      if (item.id == itemId) return item.code;
+    }
+    return '';
+  }
 
   /// The item's own unit — what the shelf is counted in, and what the
   /// picker converts to.
@@ -529,6 +610,14 @@ class _NarrowLineState extends State<_NarrowLine> {
                   onPressed: widget.onRemove,
                 ),
             ],
+          ),
+          const SizedBox(height: 8),
+          _ItemCodeField(
+            controller: _code,
+            focusNode: _codeFocus,
+            items: widget.items,
+            editable: widget.editable,
+            onItemSelected: _applyItem,
           ),
           const SizedBox(height: 8),
           _ItemField(
@@ -605,6 +694,116 @@ class _NarrowLineState extends State<_NarrowLine> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The item's own number, with the item list behind it.
+///
+/// Typing here searches the item master on BOTH the code and the
+/// description, because the two are how people actually look an item up:
+/// a storeman knows the number and whoever wrote the order knows what
+/// the thing is called. Matching only the code would make the box
+/// useless to half the people who reach for it.
+///
+/// Selecting fills the line the same way the picker beside the
+/// description does. Typing alone changes nothing but the text: a code
+/// half-entered is not a choice, and a line is only bound to an item
+/// when somebody picks one.
+class _ItemCodeField extends StatelessWidget {
+  const _ItemCodeField({
+    required this.controller,
+    required this.focusNode,
+    required this.items,
+    required this.editable,
+    required this.onItemSelected,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final List<Item> items;
+  final bool editable;
+  final ValueChanged<Item> onItemSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return RawAutocomplete<Item>(
+      textEditingController: controller,
+      focusNode: focusNode,
+      displayStringForOption: (item) => item.code,
+      optionsBuilder: (value) {
+        final query = value.text.trim().toLowerCase();
+        if (query.isEmpty || !editable) return const Iterable<Item>.empty();
+        // Code first, then description, so an exact part number is not
+        // buried under everything whose name happens to contain it.
+        final byCode = <Item>[];
+        final byName = <Item>[];
+        for (final item in items) {
+          if (item.code.toLowerCase().contains(query)) {
+            byCode.add(item);
+          } else if (item.name.toLowerCase().contains(query)) {
+            byName.add(item);
+          }
+        }
+        return [...byCode, ...byName].take(30);
+      },
+      onSelected: onItemSelected,
+      fieldViewBuilder: (context, textController, node, onFieldSubmitted) {
+        return TextFormField(
+          controller: textController,
+          focusNode: node,
+          enabled: editable,
+          onFieldSubmitted: (_) => onFieldSubmitted(),
+          decoration: const InputDecoration(
+            hintText: 'Item no.',
+            isDense: true,
+          ),
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 280, maxWidth: 360),
+              child: ListView.builder(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  final item = options.elementAt(index);
+                  return InkWell(
+                    onTap: () => onSelected(item),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            item.code,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          Text(
+                            '${item.name} \u00b7 ${Fmt.money(item.unitPrice)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

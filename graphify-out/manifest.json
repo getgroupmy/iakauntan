@@ -165,8 +165,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/line_editor.dart": {
-    "mtime": 1788327900.1504307,
-    "ast_hash": "054f683a7295c325303c01175d3dc146",
+    "mtime": 1788494453.0525224,
+    "ast_hash": "cb179e71d6f964541bab45667367da3f",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/settlement_dialog.dart": {
@@ -7772,6 +7772,11 @@
   "supabase/migrations/0525_reversing_it_has_to_be_enough.sql": {
     "mtime": 1788479466.0161555,
     "ast_hash": "91b87001f58500bd55f8e03792f4547f",
+    "semantic_hash": ""
+  },
+  "app/test/line_item_code_test.dart": {
+    "mtime": 1788494424.2432775,
+    "ast_hash": "cff8c7911456a359a9ff5ac4ef575b64",
     "semantic_hash": ""
   }
 }
