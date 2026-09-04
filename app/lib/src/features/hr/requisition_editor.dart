@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -207,40 +209,34 @@ class _RequisitionEditorState extends ConsumerState<_RequisitionEditor> {
                 ),
               ]),
               const SizedBox(height: Space.md),
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
                 key: const ValueKey('req-manager'),
+                options: employeePickerOptions(people),
                 value: _mgrId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Hiring manager',
-                  helperText: 'A vacancy cannot be opened without one',
-                ),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('Nobody yet')),
-                  for (final e in people)
-                    DropdownMenuItem(value: e.id, child: Text(e.fullName)),
-                ],
-                onChanged: _saving ? null : (v) => setState(() => _mgrId = v),
+                label: 'Hiring manager',
+                helperText: 'A vacancy cannot be opened without one',
+                hint: 'Type a name or a staff number',
+                allowEmpty: true,
+                emptyLabel: 'Nobody yet',
+                enabled: !_saving,
+                onChanged: (v) => setState(() => _mgrId = v),
               ),
               const SizedBox(height: Space.md),
               Row(children: [
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _deptId,
-                    isExpanded: true,
-                    decoration:
-                        const InputDecoration(labelText: 'Department'),
-                    items: [
-                      const DropdownMenuItem(
-                          value: null, child: Text('None')),
+                  child: SearchablePicker<String>(
+                    options: [
                       for (final d in departments)
-                        DropdownMenuItem(
+                        PickerOption<String>(
                           value: d['id'] as String,
-                          child: Text('${d['name']}'),
+                          label: '${d['name']}',
                         ),
                     ],
-                    onChanged:
-                        _saving ? null : (v) => setState(() => _deptId = v),
+                    value: _deptId,
+                    label: 'Department',
+                    allowEmpty: true,
+                    enabled: !_saving,
+                    onChanged: (v) => setState(() => _deptId = v),
                   ),
                 ),
                 const SizedBox(width: Space.md),

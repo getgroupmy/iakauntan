@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../data/repository.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -179,22 +181,12 @@ class _CollectPaymentsCardState extends ConsumerState<CollectPaymentsCard> {
                   ),
                 ),
                 const SizedBox(height: Space.md),
-                DropdownButtonFormField<String>(
+                SearchablePicker<String>(
+                  options: bankPickerOptions(banks),
                   value: _bankAccountId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Takings land in',
-                    helperText:
-                        'Required before customers are offered this way '
-                        'of paying',
-                  ),
-                  items: [
-                    for (final b in banks)
-                      DropdownMenuItem(
-                        value: b['id'] as String,
-                        child: Text('${b['name']}'),
-                      ),
-                  ],
+                  label: 'Takings land in',
+                  helperText: 'Required before customers are offered this '
+                      'way of paying',
                   onChanged: (v) => setState(() => _bankAccountId = v),
                 ),
                 const SizedBox(height: Space.md),

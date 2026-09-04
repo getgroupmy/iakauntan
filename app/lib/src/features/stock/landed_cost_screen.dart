@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -504,24 +506,14 @@ class _ChargeRow extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 flex: 2,
-                child: DropdownButtonFormField<String>(
+                child: SearchablePicker<String>(
+                  // The 200 the dropdown was capped at is gone with it:
+                  // the cap existed because a list that long is
+                  // unscrollable, and a box you type into is not.
+                  options: accountPickerOptions(accounts),
                   value: charge.accountId,
-                  isDense: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Comes off',
-                    hintText: 'Freight and Import Duty',
-                    isDense: true,
-                  ),
-                  items: [
-                    for (final a in accounts.where((a) => !a.isGroup).take(200))
-                      DropdownMenuItem(
-                        value: a.id,
-                        child: Text(
-                          '${a.code} ${a.name}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                  ],
+                  label: 'Comes off',
+                  hint: 'Freight and Import Duty',
                   onChanged: (v) {
                     charge.accountId = v;
                     onChanged();

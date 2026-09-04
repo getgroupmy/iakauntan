@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -205,21 +207,12 @@ class _LineEditorState extends ConsumerState<_LineEditor> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  DropdownButtonFormField<String>(
+                  SearchablePicker<String>(
                     key: const ValueKey('budget-account'),
+                    options: accountPickerOptions(postable),
                     value: accountId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Account'),
-                    items: [
-                      for (final a in postable)
-                        DropdownMenuItem(
-                          value: a.id,
-                          child: Text(
-                            '${a.code} · ${a.name}',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
+                    label: 'Account',
+                    hint: 'Type a number or a name',
                     onChanged: (v) => setLocal(() => accountId = v),
                   ),
                   const SizedBox(height: Space.md),

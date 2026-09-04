@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'book_balance.dart';
@@ -363,17 +365,10 @@ class _Controls extends StatelessWidget {
     final narrow = MediaQuery.sizeOf(context).width < 700;
 
     final fields = <Widget>[
-      DropdownButtonFormField<String>(
+      SearchablePicker<String>(
+        options: bankPickerOptions(banks),
         value: bankAccountId,
-        isExpanded: true,
-        decoration: const InputDecoration(labelText: 'Account'),
-        items: [
-          for (final b in banks)
-            DropdownMenuItem(
-              value: b['id'] as String,
-              child: Text(b['name'] as String, overflow: TextOverflow.ellipsis),
-            ),
-        ],
+        label: 'Account',
         onChanged: (v) => v == null ? null : onBank(v),
       ),
       InkWell(

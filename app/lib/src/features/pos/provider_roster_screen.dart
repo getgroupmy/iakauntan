@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -217,27 +219,17 @@ class _PersonSheetState extends ConsumerState<_PersonSheet> {
                 ),
               ),
               const SizedBox(height: Space.md),
-              DropdownButtonFormField<String?>(
+              SearchablePicker<String>(
+                options: employeePickerOptions(staff),
                 value: _employeeId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'On the payroll as',
-                  helperText: 'Optional. A chair may be rented by somebody '
-                      'who is not an employee at all.',
-                ),
-                items: [
-                  const DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('Nobody in particular'),
-                  ),
-                  for (final e in staff)
-                    DropdownMenuItem<String?>(
-                      value: e.id,
-                      child: Text(e.fullName, overflow: TextOverflow.ellipsis),
-                    ),
-                ],
-                onChanged:
-                    _saving ? null : (v) => setState(() => _employeeId = v),
+                label: 'On the payroll as',
+                helperText: 'Optional. A chair may be rented by somebody '
+                    'who is not an employee at all.',
+                hint: 'Type a name or a staff number',
+                allowEmpty: true,
+                emptyLabel: 'Nobody in particular',
+                enabled: !_saving,
+                onChanged: (v) => setState(() => _employeeId = v),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,

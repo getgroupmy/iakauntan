@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -324,19 +326,11 @@ class _JournalLineRowState extends State<_JournalLineRow> {
 
   @override
   Widget build(BuildContext context) {
-    final account = DropdownButtonFormField<String>(
+    final account = SearchablePicker<String>(
+      options: accountPickerOptions(widget.accounts),
       value: widget.line.accountId,
-      isExpanded: true,
-      decoration: const InputDecoration(isDense: true, labelText: 'Account'),
-      items: [
-        for (final a in widget.accounts)
-          if (!a.isGroup)
-            DropdownMenuItem(
-              value: a.id,
-              child:
-                  Text('${a.code} ${a.name}', overflow: TextOverflow.ellipsis),
-            ),
-      ],
+      label: 'Account',
+      hint: 'Type a number or a name',
       onChanged: (v) {
         widget.line.accountId = v;
         widget.onChanged();

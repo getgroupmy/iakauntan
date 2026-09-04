@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
@@ -291,19 +293,10 @@ class _PostClaimDialogState extends ConsumerState<_PostClaimDialog> {
             if (_reimburseNow && canReimburse)
               Padding(
                 padding: const EdgeInsets.only(left: 32, bottom: Space.sm),
-                child: DropdownButtonFormField<String>(
+                child: SearchablePicker<String>(
+                  options: bankPickerOptions(accounts),
                   value: _bankAccountId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                      isDense: true, labelText: 'Pay from'),
-                  items: [
-                    for (final a in accounts)
-                      DropdownMenuItem(
-                        value: a['id'] as String,
-                        child: Text(a['name']?.toString() ?? '',
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                  ],
+                  label: 'Pay from',
                   onChanged: (v) => setState(() => _bankAccountId = v),
                 ),
               ),

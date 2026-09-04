@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -137,43 +139,36 @@ class _ApplicantEditorState extends ConsumerState<_ApplicantEditor> {
                 ),
                 const SizedBox(height: Space.md),
               ],
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
                 key: const ValueKey('applicant-requisition'),
-                value: _requisitionId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'For which role'),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('None')),
+                options: [
                   for (final r in reqs)
-                    DropdownMenuItem(
+                    PickerOption<String>(
                       value: r.id,
-                      child: Text('${r.requisitionNo} · ${r.title}',
-                          overflow: TextOverflow.ellipsis),
+                      label: r.title,
+                      sublabel: r.requisitionNo,
+                      keywords: [r.requisitionNo],
                     ),
                 ],
-                onChanged:
-                    _saving ? null : (v) => setState(() => _requisitionId = v),
+                value: _requisitionId,
+                label: 'For which role',
+                allowEmpty: true,
+                enabled: !_saving,
+                onChanged: (v) => setState(() => _requisitionId = v),
               ),
               const SizedBox(height: Space.md),
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
                 key: const ValueKey('applicant-referrer'),
+                options: employeePickerOptions(staff),
                 value: _referredBy,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Referred by',
-                  helperText: 'Who introduced them, which is what a '
-                      'referral scheme pays on.',
-                ),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('Nobody')),
-                  for (final e in staff)
-                    DropdownMenuItem(
-                      value: e.id,
-                      child: Text(e.fullName, overflow: TextOverflow.ellipsis),
-                    ),
-                ],
-                onChanged:
-                    _saving ? null : (v) => setState(() => _referredBy = v),
+                label: 'Referred by',
+                helperText: 'Who introduced them, which is what a '
+                    'referral scheme pays on.',
+                hint: 'Type a name or a staff number',
+                allowEmpty: true,
+                emptyLabel: 'Nobody',
+                enabled: !_saving,
+                onChanged: (v) => setState(() => _referredBy = v),
               ),
             ],
           ),

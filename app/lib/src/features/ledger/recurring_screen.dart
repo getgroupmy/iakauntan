@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -447,19 +449,11 @@ class _JournalLine extends StatelessWidget {
         children: [
           Expanded(
             flex: 3,
-            child: DropdownButtonFormField<String>(
+            child: SearchablePicker<String>(
+              options: accountPickerOptions(accounts),
               value: line.accountId,
-              isExpanded: true,
-              decoration: const InputDecoration(isDense: true),
-              items: [
-                for (final a in accounts)
-                  if (!a.isGroup)
-                    DropdownMenuItem(
-                      value: a.id,
-                      child: Text('${a.code} ${a.name}',
-                          overflow: TextOverflow.ellipsis),
-                    ),
-              ],
+              label: 'Account',
+              hint: 'Type a number or a name',
               onChanged: (v) => onChanged((
                 accountId: v,
                 debit: line.debit,
