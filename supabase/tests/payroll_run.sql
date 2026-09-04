@@ -945,4 +945,400 @@ begin
   raise notice 'ok   payroll: the ten a sweep found';
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The thirty-eight a mutation sweep found
+--
+-- Fifty-two one-line mutants of `post_payroll_run` against twenty-one
+-- test files. THIRTEEN died -- the worst ratio of this programme -- and
+-- every one of the thirteen is a statutory remittance: EPF, SOCSO and
+-- EIS each owed as the employee's half PLUS the employer's, PCB owed to
+-- LHDN, the three employer contributions charged as a cost, and net pay
+-- owed to the staff. statutory_remittances.sql asserts those completely.
+--
+-- Nothing else was asserted at all. Not the front door, not zakat, not
+-- the HRD levy, not the journal's date or source, not the accounts a
+-- company names for itself, not the expense claims paid through the
+-- run, and NOT THE YEAR TO DATE.
+--
+-- THE YEAR TO DATE IS THE ONE THAT COMPOUNDS. payroll_ytd is what next
+-- month's PCB is computed against. A field that replaces instead of
+-- adding, or a month that is not counted, does not produce a wrong
+-- figure this month -- it produces a wrong figure for every remaining
+-- month of the year, for every employee, and the payslips all look
+-- right. It needs two months to see at all, which is why nothing saw
+-- it.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_owner uuid; v_stranger uuid;
+  v_emp uuid; v_other uuid;
+  v_p1 uuid; v_p2 uuid; v_r1 uuid; v_r2 uuid;
+  v_entry uuid; v_msg text;
+  v_ct uuid; v_claim uuid; v_stale uuid; v_late uuid; v_theirs uuid;
+  v_acct uuid; v_sal uuid; v_epfp uuid; v_netp uuid;
+  v_ytd record; v_slip record;
+begin
+  v_org := pg_temp.test_org('Gaji Sapu Sdn Bhd', array['hr', 'payroll']);
+  v_owner := (select user_id from public.org_members
+               where org_id = v_org and role = 'owner' limit 1);
+  perform public.create_fiscal_year(v_org, date '2026-01-01');
+
+  -- Accounts the company names for itself, so the coalesce fallbacks
+  -- are reached rather than the chart's defaults.
+  insert into public.accounts (org_id, code, name, account_type, account_subtype)
+  values (v_org, '6105', 'Wages — our own', 'expense', 'operating_expense')
+  returning id into v_sal;
+  insert into public.accounts (org_id, code, name, account_type, account_subtype)
+  values (v_org, '2151', 'EPF — our own', 'liability', 'other_liability')
+  returning id into v_epfp;
+  insert into public.accounts (org_id, code, name, account_type, account_subtype)
+  values (v_org, '2146', 'Net pay — our own', 'liability', 'other_liability')
+  returning id into v_netp;
+  insert into public.accounts (org_id, code, name, account_type, account_subtype)
+  values (v_org, '6910', 'Travel — claims', 'expense', 'operating_expense')
+  returning id into v_acct;
+
+  insert into public.payroll_settings
+    (org_id, hrdf_category, salary_expense_account_id,
+     epf_payable_account_id, salary_payable_account_id)
+  values (v_org, 'mandatory_10plus', v_sal, v_epfp, v_netp)
+  on conflict (org_id) do update
+    set hrdf_category = excluded.hrdf_category,
+        salary_expense_account_id = excluded.salary_expense_account_id,
+        epf_payable_account_id = excluded.epf_payable_account_id,
+        salary_payable_account_id = excluded.salary_payable_account_id;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, residency_status, zakat_monthly, cp38_monthly)
+  values (v_org, 'S1', 'Sapu Satu', date '2020-01-01', 6000,
+          date '1990-01-01', 'citizen', 30, 40) returning id into v_emp;
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, residency_status)
+  values (v_org, 'S2', 'Sapu Dua', date '2020-01-01', 4000,
+          date '1991-01-01', 'citizen') returning id into v_other;
+
+  insert into public.claim_types (org_id, code, name, expense_account_id)
+  values (v_org, 'TRV', 'Travel', v_acct) returning id into v_ct;
+
+  -- Four claims: one that should be paid, and three that should not.
+  insert into public.expense_claims
+    (org_id, claim_no, employee_id, claim_date, status,
+     total_amount, approved_amount, pay_with_payroll)
+  values (v_org, 'EC-1', v_emp, date '2026-01-10', 'approved', 200, 200, true)
+  returning id into v_claim;
+  insert into public.expense_claim_lines
+    (org_id, claim_id, claim_type_id, expense_date, description, amount)
+  values (v_org, v_claim, v_ct, date '2026-01-10', 'Perjalanan', 200);
+
+  -- Not approved.
+  insert into public.expense_claims
+    (org_id, claim_no, employee_id, claim_date, status,
+     total_amount, approved_amount, pay_with_payroll)
+  values (v_org, 'EC-2', v_emp, date '2026-01-11', 'submitted', 500, 500, true)
+  returning id into v_stale;
+  insert into public.expense_claim_lines
+    (org_id, claim_id, claim_type_id, expense_date, description, amount)
+  values (v_org, v_stale, v_ct, date '2026-01-11', 'Perjalanan', 500);
+
+  -- Approved, but not to be paid through payroll.
+  insert into public.expense_claims
+    (org_id, claim_no, employee_id, claim_date, status,
+     total_amount, approved_amount, pay_with_payroll)
+  values (v_org, 'EC-3', v_emp, date '2026-01-12', 'approved', 700, 700, false)
+  returning id into v_late;
+  insert into public.expense_claim_lines
+    (org_id, claim_id, claim_type_id, expense_date, description, amount)
+  values (v_org, v_late, v_ct, date '2026-01-12', 'Perjalanan', 700);
+
+  -- Approved and payable, but dated after the period ends.
+  insert into public.expense_claims
+    (org_id, claim_no, employee_id, claim_date, status,
+     total_amount, approved_amount, pay_with_payroll)
+  values (v_org, 'EC-4', v_emp, date '2026-02-20', 'approved', 900, 900, true)
+  returning id into v_theirs;
+  insert into public.expense_claim_lines
+    (org_id, claim_id, claim_type_id, expense_date, description, amount)
+  values (v_org, v_theirs, v_ct, date '2026-02-20', 'Perjalanan', 900);
+
+  v_p1 := public.ensure_pay_period(v_org, 2026, 1);
+  v_r1 := public.create_payroll_run(v_org, v_p1, 'January');
+
+  -- ==================================================================
+  -- 1. The front door
+  -- ==================================================================
+  begin
+    perform public.post_payroll_run(gen_random_uuid());
+    raise exception 'a run that does not exist was posted';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_eq('a run that does not exist',
+      v_msg, 'Payroll run not found');
+  end;
+
+  begin
+    perform public.post_payroll_run(v_r1);
+    raise exception 'a run that was never calculated was posted';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a run nobody has calculated cannot be posted',
+      v_msg like 'Only a calculated run can be posted; this one is draft');
+  end;
+
+  perform public.calculate_payroll_run(v_r1);
+
+  v_stranger := pg_temp.another_user('stranger@gaji.test');
+  perform pg_temp.sign_in_as(v_stranger);
+  begin
+    perform public.post_payroll_run(v_r1);
+    v_msg := null;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  perform pg_temp.check_eq('somebody who may not run payroll may not post it',
+    v_msg, 'Not permitted to post payroll');
+
+  -- An APPROVED run posts too. Narrow the guard to 'calculated' alone
+  -- and a company that requires approval can never pay anybody.
+  update public.payroll_runs set status = 'approved' where id = v_r1;
+  v_entry := public.post_payroll_run(v_r1);
+  perform pg_temp.check_true('an approved run posts', v_entry is not null);
+
+  begin
+    perform public.post_payroll_run(v_r1);
+    raise exception 'a posted run was posted again';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('and a posted one is not posted twice',
+      v_msg like 'Only a calculated run can be posted; this one is posted');
+  end;
+
+  -- ==================================================================
+  -- 2. The journal
+  -- ==================================================================
+  perform pg_temp.check_true('the journal is dated the day of the pay run',
+    (select e.entry_date = (select pay_date from public.pay_periods where id = v_p1)
+       from public.gl_entries e where e.id = v_entry));
+  perform pg_temp.check_eq('and is filed as payroll',
+    (select e.source::text from public.gl_entries e where e.id = v_entry),
+    'payroll');
+  perform pg_temp.check_eq('and points back at the run',
+    (select e.source_table from public.gl_entries e where e.id = v_entry),
+    'payroll_runs');
+  perform pg_temp.check_eq('while the run points at the journal',
+    (select gl_entry_id from public.payroll_runs where id = v_r1), v_entry);
+  perform pg_temp.check_eq('and reads as posted',
+    (select status::text from public.payroll_runs where id = v_r1), 'posted');
+
+  -- The accounts the company named for itself, not the chart's
+  -- defaults. THE COALESCE FALLBACK: every payroll test in this suite
+  -- leaves payroll_settings empty, so the fallback codes are what all
+  -- of them exercise.
+  perform pg_temp.check_true('wages go to the account the company names',
+    (select sum(l.debit) > 0 from public.gl_lines l
+      where l.entry_id = v_entry and l.account_id = v_sal));
+  perform pg_temp.check_true('EPF is owed on the account the company names',
+    (select sum(l.credit) > 0 from public.gl_lines l
+      where l.entry_id = v_entry and l.account_id = v_epfp));
+  perform pg_temp.check_true('and net pay on the one it names for that',
+    (select sum(l.credit) > 0 from public.gl_lines l
+      where l.entry_id = v_entry and l.account_id = v_netp));
+
+  -- Zakat and the HRD levy, the two statutory figures
+  -- statutory_remittances.sql does not reach.
+  perform pg_temp.check_eq('zakat withheld is owed',
+    (select coalesce(sum(l.credit), 0) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_entry and a.code = '2185'),
+    (select total_zakat from public.payroll_runs where id = v_r1));
+  perform pg_temp.check_true('and there is zakat to owe',
+    (select total_zakat > 0 from public.payroll_runs where id = v_r1));
+  perform pg_temp.check_eq('the HRD levy is charged as a cost',
+    (select coalesce(sum(l.debit), 0) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_entry and a.code = '6150'),
+    (select total_hrdf from public.payroll_runs where id = v_r1));
+  perform pg_temp.check_eq('and owed to HRD Corp',
+    (select coalesce(sum(l.credit), 0) from public.gl_lines l
+       join public.accounts a on a.id = l.account_id
+      where l.entry_id = v_entry and a.code = '2195'),
+    (select total_hrdf from public.payroll_runs where id = v_r1));
+  perform pg_temp.check_true('and there is a levy to charge',
+    (select total_hrdf > 0 from public.payroll_runs where id = v_r1));
+
+  -- ==================================================================
+  -- 3. The claims that ride along with the pay
+  --
+  -- A claim is a reimbursement, not wages: it is in the net the staff
+  -- are paid and it is NOT in the salary expense, because it is already
+  -- somebody's expense on its own account.
+  -- ==================================================================
+  perform pg_temp.check_eq('the run records what it reimbursed',
+    (select total_claims from public.payroll_runs where id = v_r1),
+    200::numeric);
+  perform pg_temp.check_eq('the claim is charged to the account its type names',
+    (select coalesce(sum(l.debit), 0) from public.gl_lines l
+      where l.entry_id = v_entry and l.account_id = v_acct), 200::numeric);
+  perform pg_temp.check_eq('and is not in the salary expense',
+    (select sum(l.debit) from public.gl_lines l
+      where l.entry_id = v_entry and l.account_id = v_sal),
+    (select total_gross - 200 from public.payroll_runs where id = v_r1));
+
+  perform pg_temp.check_true('the claim is marked paid',
+    (select paid_at is not null from public.expense_claims where id = v_claim));
+  perform pg_temp.check_eq('and carries the payroll journal',
+    (select gl_entry_id from public.expense_claims where id = v_claim), v_entry);
+
+  perform pg_temp.check_true('one nobody approved is not paid',
+    (select paid_at is null from public.expense_claims where id = v_stale));
+  perform pg_temp.check_true('nor one not marked for payroll',
+    (select paid_at is null from public.expense_claims where id = v_late));
+  perform pg_temp.check_true('nor one dated after the period',
+    (select paid_at is null from public.expense_claims where id = v_theirs));
+  perform pg_temp.check_eq('so only the one is charged at all',
+    (select coalesce(sum(l.debit), 0) from public.gl_lines l
+      where l.entry_id = v_entry and l.account_id = v_acct), 200::numeric);
+
+  -- ==================================================================
+  -- 4. The year to date
+  --
+  -- Two months, because one cannot show accumulation. The second run's
+  -- figures have to be ADDED to the first's, the month counted, and the
+  -- whole thing filed under the year the money was paid.
+  -- ==================================================================
+  select * into v_slip from public.payslips
+   where run_id = v_r1 and employee_id = v_emp;
+  select * into v_ytd from public.payroll_ytd
+   where employee_id = v_emp and tax_year = 2026;
+
+  perform pg_temp.check_eq('after one month the year to date is that month',
+    v_ytd.gross_pay, v_slip.gross_pay);
+  perform pg_temp.check_eq('with one month counted', v_ytd.months_paid, 1);
+  perform pg_temp.check_eq('and the tax paid so far includes CP38',
+    v_ytd.pcb, v_slip.pcb + v_slip.cp38);
+  perform pg_temp.check_true('and there is a CP38 for it to include',
+    v_slip.cp38 > 0);
+
+  v_p2 := public.ensure_pay_period(v_org, 2026, 2);
+  v_r2 := public.create_payroll_run(v_org, v_p2, 'February');
+  perform public.calculate_payroll_run(v_r2);
+  perform public.post_payroll_run(v_r2);
+
+  declare v_slip2 record; v_ytd2 record;
+  begin
+    select * into v_slip2 from public.payslips
+     where run_id = v_r2 and employee_id = v_emp;
+    select * into v_ytd2 from public.payroll_ytd
+     where employee_id = v_emp and tax_year = 2026;
+
+    perform pg_temp.check_eq('after two, it is the two added together',
+      v_ytd2.gross_pay, v_slip.gross_pay + v_slip2.gross_pay);
+    perform pg_temp.check_eq('the taxable income too',
+      v_ytd2.taxable_income, v_slip.taxable_income + v_slip2.taxable_income);
+    perform pg_temp.check_eq('the employee''s EPF too',
+      v_ytd2.epf_employee, v_slip.epf_employee + v_slip2.epf_employee);
+    perform pg_temp.check_eq('and the tax paid, which next month is read from',
+      v_ytd2.pcb, v_slip.pcb + v_slip.cp38 + v_slip2.pcb + v_slip2.cp38);
+    perform pg_temp.check_eq('with two months counted', v_ytd2.months_paid, 2);
+    perform pg_temp.check_eq('and nothing filed under any other year',
+      (select count(*) from public.payroll_ytd
+        where employee_id = v_emp and tax_year <> 2026), 0);
+    perform pg_temp.check_true('and the second month was not nothing',
+      v_slip2.gross_pay > 0);
+  end;
+
+  -- ==================================================================
+  -- 5. A run with nobody in it
+  --
+  -- An empty run posts an empty journal and marks itself done. The
+  -- month then reads as paid with nothing paid, and nobody looks again.
+  -- ==================================================================
+  declare v_empty_org uuid; v_ep uuid; v_er uuid;
+  begin
+    v_empty_org := pg_temp.test_org('Kosong Sdn Bhd', array['hr', 'payroll']);
+    perform public.create_fiscal_year(v_empty_org, date '2026-01-01');
+    v_ep := public.ensure_pay_period(v_empty_org, 2026, 1);
+    v_er := public.create_payroll_run(v_empty_org, v_ep, 'Nobody');
+    perform public.calculate_payroll_run(v_er);
+    perform pg_temp.check_eq('the run really is empty',
+      (select employee_count from public.payroll_runs where id = v_er), 0);
+    begin
+      perform public.post_payroll_run(v_er);
+      raise exception 'a run with nobody in it was posted';
+    exception when others then
+      get stacked diagnostics v_msg = message_text;
+      perform pg_temp.check_eq('and a run with nobody in it is refused',
+        v_msg, 'This run has no payslips to post');
+    end;
+  end;
+
+  -- ==================================================================
+  -- 6. The tax year is the year the money was PAID
+  --
+  -- Read off app.today() instead, a run posted in one calendar year for
+  -- a pay date in another files the whole month under the wrong year:
+  -- the EA form for that year is short, and the next year's PCB is
+  -- computed from a year-to-date that has a month in it that does not
+  -- belong. Reached only by a pay date in a year other than this one,
+  -- which is why nothing reached it.
+  -- ==================================================================
+  declare v_p3 uuid; v_r3 uuid;
+  begin
+    perform public.create_fiscal_year(v_org, date '2027-01-01');
+    v_p3 := public.ensure_pay_period(v_org, 2027, 1);
+    v_r3 := public.create_payroll_run(v_org, v_p3, 'January next year');
+    perform public.calculate_payroll_run(v_r3);
+    perform public.post_payroll_run(v_r3);
+    perform pg_temp.check_eq(
+      'a run paid next year is filed under next year',
+      (select months_paid from public.payroll_ytd
+        where employee_id = v_emp and tax_year = 2027), 1);
+    perform pg_temp.check_eq('and this year still has its own two',
+      (select months_paid from public.payroll_ytd
+        where employee_id = v_emp and tax_year = 2026), 2);
+  end;
+
+  -- ==================================================================
+  -- 7. A claim that already has a journal keeps it
+  --
+  -- `coalesce(c.gl_entry_id, v_entry)`: a claim posted to the ledger on
+  -- its own and then reimbursed through payroll must keep the entry
+  -- that recorded the expense. Overwritten with the payroll journal,
+  -- the expense's own posting is orphaned and "what happened to this
+  -- claim" points at the wrong document.
+  -- ==================================================================
+  declare v_own uuid; v_owner_entry uuid; v_p4 uuid; v_r4 uuid;
+  begin
+    insert into public.expense_claims
+      (org_id, claim_no, employee_id, claim_date, status,
+       total_amount, approved_amount, pay_with_payroll, gl_entry_id)
+    values (v_org, 'EC-5', v_other, date '2026-03-05', 'approved',
+            150, 150, true, v_entry)
+    returning id into v_own;
+    insert into public.expense_claim_lines
+      (org_id, claim_id, claim_type_id, expense_date, description, amount)
+    values (v_org, v_own, v_ct, date '2026-03-05', 'Perjalanan', 150);
+    v_owner_entry := v_entry;
+
+    v_p4 := public.ensure_pay_period(v_org, 2026, 3);
+    v_r4 := public.create_payroll_run(v_org, v_p4, 'March');
+    perform public.calculate_payroll_run(v_r4);
+    perform public.post_payroll_run(v_r4);
+
+    perform pg_temp.check_true('the claim is paid through the run',
+      (select paid_at is not null from public.expense_claims where id = v_own));
+    perform pg_temp.check_eq('but keeps the journal that recorded it',
+      (select gl_entry_id from public.expense_claims where id = v_own),
+      v_owner_entry);
+    perform pg_temp.check_true('which is not the payroll journal',
+      v_owner_entry <> (select gl_entry_id from public.payroll_runs
+                         where id = v_r4));
+  end;
+
+  perform pg_temp.sign_out();
+  raise notice 'ok   payroll posting: the thirty-eight a sweep found';
+end $$;
+
+
 rollback;
