@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -231,6 +232,26 @@ class _PriceDialogState extends ConsumerState<_PriceDialog> {
               ],
               value: _levelId,
               label: 'Price level',
+              createLabel: 'Add price level',
+              onCreate: (typed) => quickAdd(
+                context,
+                title: 'New price level',
+                blurb: 'Not on the list yet. A name and a code is all a '
+                    'level is; which customers get it is set on the '
+                    'Price levels screen.',
+                nameHint: 'Wholesale',
+                codeLabel: 'Code',
+                seed: typed,
+                save: ({required name, code}) async {
+                  final id = await ref.read(repoProvider)!.createQuickRow(
+                        QuickAddList.priceLevel,
+                        name: name,
+                        code: code,
+                      );
+                  ref.invalidate(priceLevelsProvider);
+                  return id;
+                },
+              ),
               onChanged: (v) => setState(() => _levelId = v),
             ),
             const SizedBox(height: Space.md),

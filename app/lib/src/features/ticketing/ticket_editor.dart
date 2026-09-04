@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/widgets.dart';
+import '../../data/models.dart';
 import '../../data/repository.dart';
 
 /// Raising one.
@@ -107,6 +109,30 @@ class _TicketEditorState extends ConsumerState<TicketEditor> {
                   label: 'Category',
                   helperText:
                       'Decides the team, the priority and the deadline',
+                  createLabel: 'Add category',
+                  onCreate: (typed) => quickAdd(
+                    context,
+                    title: 'New ticket category',
+                    // What the helper text above promises is exactly
+                    // what a category made here does NOT yet have, so
+                    // it is said rather than discovered.
+                    blurb: 'Not on the list yet. Its team, priority and '
+                        'deadline are set on the Categories screen; '
+                        'until then it uses the defaults.',
+                    nameHint: 'Hardware fault',
+                    codeLabel: 'Code',
+                    seed: typed,
+                    save: ({required name, code}) async {
+                      await ref.read(repoProvider)!.createQuickRow(
+                            QuickAddList.ticketCategory,
+                            name: name,
+                            code: code,
+                          );
+                      ref.invalidate(ticketCategoriesProvider);
+                      // This picker is keyed on the CODE, not the id.
+                      return code!;
+                    },
+                  ),
                   onChanged: (v) => setState(() => _category = v),
                 ),
                 orElse: () => const SizedBox.shrink(),

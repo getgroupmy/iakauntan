@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/models.dart';
 import '../../data/repository.dart';
 import 'deal_outcome.dart';
 
@@ -477,6 +479,26 @@ class _ConvertDialogState extends ConsumerState<_ConvertDialog> {
                   ],
                   value: _pipelineId,
                   label: 'Pipeline',
+                  createLabel: 'Add pipeline',
+                  onCreate: (typed) => quickAdd(
+                    context,
+                    title: 'New pipeline',
+                    // No code box: `pipelines` has no code column, and
+                    // asking for one would teach a rule that is not
+                    // there.
+                    blurb: 'Not on the list yet. Its stages are set up '
+                        'on the Pipeline screen afterwards.',
+                    nameHint: 'Enterprise sales',
+                    seed: typed,
+                    save: ({required name, code}) async {
+                      final id = await ref.read(repoProvider)!.createQuickRow(
+                            QuickAddList.pipeline,
+                            name: name,
+                          );
+                      ref.invalidate(pipelinesProvider);
+                      return id;
+                    },
+                  ),
                   onChanged: (v) => setState(() => _pipelineId = v),
                 ),
                 const SizedBox(height: Space.md),

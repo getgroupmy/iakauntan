@@ -3362,3 +3362,45 @@ class PayslipAccessLogEntry {
     );
   }
 }
+
+
+/// The short lists `Repo.createQuickRow` may add a row to.
+///
+/// An enum rather than a table name, so a typo is a compile error and
+/// not a 404 at the moment somebody is mid-invoice. Every one of these
+/// tables requires exactly `org_id`, `code` and `name` — `pipelines`
+/// requires no code — and nothing else, which is what makes one writer
+/// honest for all of them.
+enum QuickAddList {
+  project,
+  department,
+  priceLevel,
+  leaveType,
+  claimType,
+  ticketCategory,
+  outlet,
+  pipeline,
+}
+
+const quickAddTables = <QuickAddList, String>{
+  QuickAddList.project: 'projects',
+  QuickAddList.department: 'departments',
+  QuickAddList.priceLevel: 'price_levels',
+  QuickAddList.leaveType: 'leave_types',
+  QuickAddList.claimType: 'claim_types',
+  QuickAddList.ticketCategory: 'ticket_categories',
+  QuickAddList.outlet: 'pos_outlets',
+  QuickAddList.pipeline: 'pipelines',
+};
+
+/// Which of them have a code column. `pipelines` does not.
+const quickAddHasCode = <QuickAddList, bool>{
+  QuickAddList.project: true,
+  QuickAddList.department: true,
+  QuickAddList.priceLevel: true,
+  QuickAddList.leaveType: true,
+  QuickAddList.claimType: true,
+  QuickAddList.ticketCategory: true,
+  QuickAddList.outlet: true,
+  QuickAddList.pipeline: false,
+};

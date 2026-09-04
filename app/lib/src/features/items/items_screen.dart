@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
 
 import '../../core/format.dart';
@@ -427,6 +428,24 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                           'counter without naming them one at a time.',
                       allowEmpty: true,
                       emptyLabel: 'Nothing in particular',
+                      createLabel: 'Add category',
+                      onCreate: (typed) => quickAdd(
+                        context,
+                        title: 'New category',
+                        blurb: 'Not on the list yet. It will be a '
+                            'top-level category; move it under another '
+                            'on the Categories screen.',
+                        nameHint: 'Drinks',
+                        codeLabel: 'Code',
+                        seed: typed,
+                        save: ({required name, code}) async {
+                          final id = await ref
+                              .read(repoProvider)!
+                              .saveItemCategory(code: code!, name: name);
+                          ref.invalidate(itemCategoriesProvider);
+                          return id;
+                        },
+                      ),
                       onChanged: (v) => setState(() => _categoryId = v),
                     );
                   },

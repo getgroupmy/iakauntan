@@ -1651,16 +1651,28 @@ class Repo {
   /// `projects` had no writer at all until `0389` — the table was
   /// reachable only from a database connection, while four screens read
   /// it and one of them said "No projects yet" with no way to make one.
-  Future<void> saveProject(Map<String, dynamic> values, {String? id}) async {
+  ///
+  /// Returns the row's id, because a project is now also created from
+  /// the box that needed one — the hour being recorded against it, the
+  /// rate card being set — and that caller has to select what it made.
+  Future<String> saveProject(
+    Map<String, dynamic> values, {
+    String? id,
+  }) async {
     if (id == null) {
-      await client.from('projects').insert({...values, 'org_id': orgId});
-    } else {
-      await client
+      final row = await client
           .from('projects')
-          .update({...values, 'updated_at': DateTime.now().toIso8601String()})
-          .eq('id', id)
-          .eq('org_id', orgId);
+          .insert({...values, 'org_id': orgId})
+          .select('id')
+          .single();
+      return '${row['id']}';
     }
+    await client
+        .from('projects')
+        .update({...values, 'updated_at': DateTime.now().toIso8601String()})
+        .eq('id', id)
+        .eq('org_id', orgId);
+    return id;
   }
 
   /// Every project, with the budget beside what the ledger has against
@@ -2889,12 +2901,14 @@ class Repo {
         .order('code'),
   );
 
-  Future<void> saveWorkCentre({
+  /// Returns the row's id, so a work centre made from the box that
+  /// wanted one can be selected there.
+  Future<String> saveWorkCentre({
     String? id,
     required String code,
     required String name,
-    required num costPerHour,
-    required num capacityHoursPerDay,
+    num costPerHour = 0,
+    num capacityHoursPerDay = 8,
   }) async {
     final payload = {
       'code': code,
@@ -2903,14 +2917,19 @@ class Repo {
       'capacity_hours_per_day': capacityHoursPerDay,
     };
     if (id == null) {
-      await client.from('work_centres').insert({'org_id': orgId, ...payload});
-    } else {
-      await client
+      final row = await client
           .from('work_centres')
-          .update(payload)
-          .eq('id', id)
-          .eq('org_id', orgId);
+          .insert({'org_id': orgId, ...payload})
+          .select('id')
+          .single();
+      return '${row['id']}';
     }
+    await client
+        .from('work_centres')
+        .update(payload)
+        .eq('id', id)
+        .eq('org_id', orgId);
+    return id;
   }
 
   Future<void> retireWorkCentre(String id) => client
@@ -8020,7 +8039,9 @@ extension RepoTicketing on Repo {
         .order('name'),
   );
 
-  Future<void> saveTicketTeam({
+  /// Returns the row's id, so a team made from the box that wanted one
+  /// can be selected there.
+  Future<String> saveTicketTeam({
     String? id,
     required String code,
     required String name,
@@ -8029,13 +8050,14 @@ extension RepoTicketing on Repo {
     final patch = {'name': name, if (isActive != null) 'is_active': isActive};
     if (id != null) {
       await client.from('ticket_teams').update(patch).eq('id', id);
-      return;
+      return id;
     }
-    await client.from('ticket_teams').insert({
-      'org_id': orgId,
-      'code': code,
-      ...patch,
-    });
+    final row = await client
+        .from('ticket_teams')
+        .insert({'org_id': orgId, 'code': code, ...patch})
+        .select('id')
+        .single();
+    return '${row['id']}';
   }
 
   /// Who is on a team, leads first.
@@ -9123,6 +9145,40 @@ extension RepoPos on Repo {
         .eq('org_id', orgId)
         .order('name'),
   );
+
+  /// The short lists a company keeps: a project, a department, a price
+  /// level, a leave type, a claim category, a ticket category, an
+  /// outlet, a food court, a pipeline.
+  ///
+  /// Every one of them is `org_id`, `code` and `name` and nothing else
+  /// required — checked against `information_schema` rather than
+  /// assumed — so one writer serves all of them and there is one place
+  /// for the mistake instead of nine. The rest of each row keeps its
+  /// column default and is edited on the screen that maintains the
+  /// list, which is the same bargain `NewItemDialog` makes.
+  ///
+  /// The table name comes from [quickAddTables] and not from a caller's
+  /// string, so a typo is a compile error rather than a 404 at the
+  /// moment somebody is mid-invoice.
+  Future<String> createQuickRow(
+    QuickAddList list, {
+    required String name,
+    String? code,
+  }) async {
+    final table = quickAddTables[list]!;
+    final row = await client
+        .from(table)
+        .insert({
+          'org_id': orgId,
+          'name': name,
+          // `pipelines` is the one with no code column; passing one
+          // would be a 400 rather than a helpful default.
+          if (code != null) 'code': code,
+        })
+        .select('id')
+        .single();
+    return '${row['id']}';
+  }
 
   Future<String> saveItemCategory({
     String? id,

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -280,6 +281,30 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
                   ],
                   value: _typeId,
                   label: 'Leave type *',
+                  createLabel: 'Add leave type',
+                  onCreate: (typed) => quickAdd(
+                    context,
+                    title: 'New leave type',
+                    // Said plainly, because a type created here has NO
+                    // entitlement until somebody sets one, and a leave
+                    // type nobody is entitled to is a request that will
+                    // be refused.
+                    blurb: 'Not on the list yet. It will start with no '
+                        'entitlement — set the days, the carry-forward '
+                        'and who it applies to in HR setup.',
+                    nameHint: 'Compassionate leave',
+                    codeLabel: 'Code',
+                    seed: typed,
+                    save: ({required name, code}) async {
+                      final id = await ref.read(repoProvider)!.createQuickRow(
+                            QuickAddList.leaveType,
+                            name: name,
+                            code: code,
+                          );
+                      ref.invalidate(leaveTypesProvider);
+                      return id;
+                    },
+                  ),
                   onChanged: (v) => setState(() {
                     _typeId = v;
                     if (!_allowsHalfDay(list)) _halfDay = false;

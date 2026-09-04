@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/widgets.dart';
+import '../../data/models.dart';
 import '../../data/repository.dart';
 import 'channels.dart';
 import 'menu_links_screen.dart';
@@ -238,6 +240,28 @@ class _StationsScreenState extends ConsumerState<StationsScreen> {
                     ],
                     value: outlet,
                     label: 'Outlet',
+                    createLabel: 'Add outlet',
+                    onCreate: (typed) => quickAdd(
+                      context,
+                      title: 'New outlet',
+                      blurb: 'Not on the list yet. Its address, its '
+                          'registers and its receipt are set on the '
+                          'Outlets screen.',
+                      nameHint: 'Bangsar branch',
+                      codeLabel: 'Code',
+                      seed: typed,
+                      save: ({required name, code}) async {
+                        final id = await ref
+                            .read(repoProvider)!
+                            .createQuickRow(
+                              QuickAddList.outlet,
+                              name: name,
+                              code: code,
+                            );
+                        ref.invalidate(posOutletsProvider);
+                        return id;
+                      },
+                    ),
                     onChanged: (v) => setState(() => _outletId = v),
                   ),
                 ),

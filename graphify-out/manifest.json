@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788499144.900937,
-    "ast_hash": "63f22db8cc7ea8b9d31f3d43482445e1",
+    "mtime": 1788506514.0594296,
+    "ast_hash": "b462de766e3d8e42f1ae41cc26ce1549",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788505685.5809479,
-    "ast_hash": "c95760297160a8a3aee17f8f7153b6cd",
+    "mtime": 1788506514.0587077,
+    "ast_hash": "2b5b6c4c3b4b1994b1df63a63c026355",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -185,8 +185,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/claims_screen.dart": {
-    "mtime": 1788505741.585761,
-    "ast_hash": "19a2ca243223965e4928ce4de7aba9a0",
+    "mtime": 1788506612.8743737,
+    "ast_hash": "48a7b79ce0e773952d84c6d984f6ece0",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/employee_editor.dart": {
@@ -200,8 +200,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/leave_screen.dart": {
-    "mtime": 1788504408.2806828,
-    "ast_hash": "ff3e1da5c0511c606369d0014496b394",
+    "mtime": 1788506677.529752,
+    "ast_hash": "7dd702419e298a2fd625220c9fb81c0a",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/my_hr_screen.dart": {
@@ -240,8 +240,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/items/items_screen.dart": {
-    "mtime": 1788503725.0017083,
-    "ast_hash": "3fb6b78d309eb4304cfae023a646be03",
+    "mtime": 1788506421.6694102,
+    "ast_hash": "cdf7e52f6f2f0c4684f93d09a3382801",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journals_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788505675.212794,
-    "ast_hash": "b3ac41eaa48826d172d5b317ff96af06",
+    "mtime": 1788506690.6471226,
+    "ast_hash": "9412877061b1878555918d6c15e8106d",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1315,8 +1315,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/stock/stock_take_screen.dart": {
-    "mtime": 1788501107.6453393,
-    "ast_hash": "c166c1a960b80af4834094812110443f",
+    "mtime": 1788506439.56888,
+    "ast_hash": "399dbc9e505f02c0ce99cd020bb24acf",
     "semantic_hash": ""
   },
   "supabase/migrations/0087_stock_adjustments.sql": {
@@ -1425,8 +1425,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/crm/leads_screen.dart": {
-    "mtime": 1788504408.2823398,
-    "ast_hash": "715d0ded70827d46c365c2800dd727af",
+    "mtime": 1788506642.7340972,
+    "ast_hash": "e62670c59de304193c29af8893c9b7a8",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/appraisal_goals_dialog.dart": {
@@ -1455,8 +1455,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/items/item_prices_dialog.dart": {
-    "mtime": 1788503725.0020652,
-    "ast_hash": "f76029ec8a5a9ebf641824e27a9c0d16",
+    "mtime": 1788506612.8736136,
+    "ast_hash": "5484c59fb42e69824960f791d22f9706",
     "semantic_hash": ""
   },
   "supabase/migrations/0092_one_default_per_contact.sql": {
@@ -2225,8 +2225,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/manufacturing/bom_dialog.dart": {
-    "mtime": 1788502794.899699,
-    "ast_hash": "eb0f94463140f5a1ec23eee3992aad29",
+    "mtime": 1788506677.530924,
+    "ast_hash": "f49d547fa21448f020f98d33e8f3d06a",
     "semantic_hash": ""
   },
   "app/lib/src/features/manufacturing/manufacturing_screen.dart": {
@@ -3050,8 +3050,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/ticketing/ticket_editor.dart": {
-    "mtime": 1788504408.2812645,
-    "ast_hash": "fc34c1ccb85bdd890d82729cc4c5c48d",
+    "mtime": 1788506677.5300658,
+    "ast_hash": "f4af3f65307d52c7c6e4bbe09ae27ea3",
     "semantic_hash": ""
   },
   "app/lib/src/features/ticketing/ticket_screen.dart": {
@@ -3410,8 +3410,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/stations_screen.dart": {
-    "mtime": 1788502794.8990319,
-    "ast_hash": "c0e0401057ff6fec484724699dffca29",
+    "mtime": 1788506677.5305724,
+    "ast_hash": "e4410a596ecf62b33211a836257184af",
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/void_sheet.dart": {
@@ -5350,8 +5350,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/timesheets/billing_rate_sheet.dart": {
-    "mtime": 1788503106.1076558,
-    "ast_hash": "fb61e203a967125157ca27dbf598ab8a",
+    "mtime": 1788506642.734433,
+    "ast_hash": "82c09681114bd33fc3b1467a73cb83fa",
     "semantic_hash": ""
   },
   "app/test/matter_billing_test.dart": {
@@ -5365,8 +5365,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/ticketing/ticket_routing_sheet.dart": {
-    "mtime": 1788503106.1066737,
-    "ast_hash": "5ac96e8f2d323c36046af65f716d43c8",
+    "mtime": 1788506677.5312023,
+    "ast_hash": "4f6522b3f2df0d823b56ed56aebb740d",
     "semantic_hash": ""
   },
   "app/test/deposit_apply_test.dart": {
@@ -6415,8 +6415,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/requisition_editor.dart": {
-    "mtime": 1788502426.5091069,
-    "ast_hash": "1fb81c5ee62abf15cbef1f029fca6cb3",
+    "mtime": 1788506612.8730512,
+    "ast_hash": "7c10a5b03c2c7ccf4275759db7d86646",
     "semantic_hash": ""
   },
   "app/test/requisition_editor_test.dart": {
@@ -7897,6 +7897,21 @@
   "supabase/tests/bank_accounts.sql": {
     "mtime": 1788505665.3723967,
     "ast_hash": "9942160b2d1ede93407001f539238884",
+    "semantic_hash": ""
+  },
+  "app/lib/src/core/quick_add_dialog.dart": {
+    "mtime": 1788506328.8948205,
+    "ast_hash": "95f1396f3dddf1f39a7d373c13af3d6d",
+    "semantic_hash": ""
+  },
+  "app/test/quick_add_test.dart": {
+    "mtime": 1788506353.1664093,
+    "ast_hash": "5da253c280f007acb4d7220932ca8893",
+    "semantic_hash": ""
+  },
+  "supabase/tests/quick_add_lists.sql": {
+    "mtime": 1788506566.132381,
+    "ast_hash": "9455a50f582e75ee36aadac4f6fdee96",
     "semantic_hash": ""
   }
 }

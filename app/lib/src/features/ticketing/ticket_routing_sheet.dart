@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -392,6 +393,24 @@ class _EscalateSheetState extends ConsumerState<_EscalateSheet> {
                   value: _teamId,
                   label: 'To which team',
                   enabled: !_saving,
+                  createLabel: 'Add team',
+                  onCreate: (typed) => quickAdd(
+                    context,
+                    title: 'New team',
+                    blurb: 'Not on the list yet. It will have nobody on '
+                        'it until somebody is added on the Teams '
+                        'screen.',
+                    nameHint: 'Field engineers',
+                    codeLabel: 'Code',
+                    seed: typed,
+                    save: ({required name, code}) async {
+                      final id = await ref
+                          .read(repoProvider)!
+                          .saveTicketTeam(code: code!, name: name);
+                      ref.invalidate(ticketTeamsProvider);
+                      return id;
+                    },
+                  ),
                   onChanged: (v) => setState(() => _teamId = v),
                 ),
               if (escalationNeedsUser(_kind))

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -424,6 +425,25 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
                   ],
                   value: _typeId,
                   label: 'Category',
+                  createLabel: 'Add category',
+                  onCreate: (typed) => quickAdd(
+                    context,
+                    title: 'New claim category',
+                    blurb: 'Not on the list yet. The account it posts '
+                        'to and any cap per claim are set in HR setup.',
+                    nameHint: 'Mileage',
+                    codeLabel: 'Code',
+                    seed: typed,
+                    save: ({required name, code}) async {
+                      final id = await ref.read(repoProvider)!.createQuickRow(
+                            QuickAddList.claimType,
+                            name: name,
+                            code: code,
+                          );
+                      ref.invalidate(claimTypesProvider);
+                      return id;
+                    },
+                  ),
                   onChanged: (v) => setState(() => _typeId = v),
                 ),
               ),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/picker_options.dart';
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -236,6 +237,28 @@ class _RequisitionEditorState extends ConsumerState<_RequisitionEditor> {
                     label: 'Department',
                     allowEmpty: true,
                     enabled: !_saving,
+                    createLabel: 'Add department',
+                    onCreate: (typed) => quickAdd(
+                      context,
+                      title: 'New department',
+                      blurb: 'Not on the list yet. A name and a code is '
+                          'all it needs; its head and its cost centre '
+                          'are set in HR setup.',
+                      nameHint: 'Engineering',
+                      codeLabel: 'Code',
+                      seed: typed,
+                      save: ({required name, code}) async {
+                        final id = await ref
+                            .read(repoProvider)!
+                            .createQuickRow(
+                              QuickAddList.department,
+                              name: name,
+                              code: code,
+                            );
+                        ref.invalidate(departmentsProvider);
+                        return id;
+                      },
+                    ),
                     onChanged: (v) => setState(() => _deptId = v),
                   ),
                 ),

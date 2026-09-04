@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -362,6 +363,28 @@ class _BomDialogState extends ConsumerState<BomDialog> {
                                 value: _steps[i].workCentreId,
                                 label: 'Where',
                                 enabled: !_saving,
+                                createLabel: 'Add work centre',
+                                onCreate: (typed) => quickAdd(
+                                  context,
+                                  title: 'New work centre',
+                                  blurb: 'Not on the list yet. Its cost '
+                                      'per hour and daily capacity '
+                                      'start at nothing and eight; set '
+                                      'them on the Work centres screen.',
+                                  nameHint: 'Assembly line 2',
+                                  codeLabel: 'Code',
+                                  seed: typed,
+                                  save: ({required name, code}) async {
+                                    final id = await ref
+                                        .read(repoProvider)!
+                                        .saveWorkCentre(
+                                          code: code!,
+                                          name: name,
+                                        );
+                                    ref.invalidate(workCentresProvider);
+                                    return id;
+                                  },
+                                ),
                                 onChanged: (v) => setState(
                                   () => _steps[i].workCentreId = v,
                                 ),

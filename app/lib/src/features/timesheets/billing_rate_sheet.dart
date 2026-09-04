@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/models.dart';
 import '../../data/repository.dart';
 import '../secretarial/person_editor.dart' show StatutoryDateField;
 
@@ -215,6 +217,26 @@ class _RateSheetState extends ConsumerState<_RateSheet> {
                   allowEmpty: true,
                   emptyLabel: 'Every project — the default rate',
                   enabled: !_saving,
+                  createLabel: 'Add project',
+                  onCreate: (typed) => quickAdd(
+                    context,
+                    title: 'New project',
+                    blurb: 'Not on the list yet. A name and a code is '
+                        'all a project needs; the customer, the budget '
+                        'and the dates are set on the Projects screen.',
+                    nameHint: 'Menara Hijau fit-out',
+                    codeLabel: 'Code',
+                    seed: typed,
+                    save: ({required name, code}) async {
+                      final id = await ref.read(repoProvider)!.createQuickRow(
+                            QuickAddList.project,
+                            name: name,
+                            code: code,
+                          );
+                      ref.invalidate(projectsProvider);
+                      return id;
+                    },
+                  ),
                   onChanged: (v) => setState(() => _projectId = v),
                 ),
                 const SizedBox(height: Space.md),

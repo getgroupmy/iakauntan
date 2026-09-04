@@ -107,6 +107,22 @@ class _StockTakeScreenState extends ConsumerState<StockTakeScreen> {
                       _seeded = false;
                       _counted.clear();
                     }),
+                    onNewWarehouse: (typed) async {
+                      final created =
+                          await showDialog<Map<String, dynamic>>(
+                        context: context,
+                        builder: (_) =>
+                            NewWarehouseDialog(seedName: typed),
+                      );
+                      if (created == null || !mounted) return null;
+                      // A shelf with nothing counted against it yet, so
+                      // the seeding starts again from an empty count.
+                      setState(() {
+                        _seeded = false;
+                        _counted.clear();
+                      });
+                      return '${created['id']}';
+                    },
                     onDate: (d) => setState(() => _date = d),
                   ),
                   const SizedBox(height: 16),
@@ -214,6 +230,7 @@ class _Header extends StatelessWidget {
     required this.date,
     required this.reason,
     required this.onWarehouse,
+    required this.onNewWarehouse,
     required this.onDate,
   });
 
@@ -222,6 +239,9 @@ class _Header extends StatelessWidget {
   final DateTime date;
   final TextEditingController reason;
   final ValueChanged<String> onWarehouse;
+
+  /// Add one from the box, and select it.
+  final Future<String?> Function(String typed) onNewWarehouse;
   final ValueChanged<DateTime> onDate;
 
   @override
@@ -233,8 +253,14 @@ class _Header extends StatelessWidget {
         options: warehouseOptions(warehouses),
         value: warehouseId,
         label: 'Warehouse',
-        // No offer to add one: a count is of a shelf that exists, and
-        // a warehouse created here would hold nothing to count.
+        createLabel: 'Add warehouse',
+        // Reversing what this said an hour ago. I argued a count is of
+        // a shelf that already exists, so a warehouse created here
+        // would hold nothing. That is the wrong way round: a shop that
+        // opened last week has a shelf full of stock and no warehouse
+        // on file, and the FIRST thing anybody does with it is count
+        // it in.
+        onCreate: onNewWarehouse,
         onChanged: (v) => v == null ? null : onWarehouse(v),
       ),
       InkWell(
