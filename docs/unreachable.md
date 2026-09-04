@@ -6108,3 +6108,89 @@ It is not the same payslip. The line's DESCRIPTION carries an identical
 `case`, and that one is killed — a full month must not say "Basic
 salary (31 of 31 days)". The two arms exist to agree with each other,
 which is a reason to keep the branch rather than to delete it.
+
+### `corp_upcoming_filings`: 9 of 29, then 25
+
+The one list a company secretary works from, and the only place in the
+product where a silent wrong answer costs money to somebody who did
+nothing wrong. A filing that drops off this list is a filing nobody
+makes, and s.68 of the Companies Act 2016 carries a fine and a daily
+default penalty on top.
+
+Nine of twenty-nine. `secretarial.sql` pins the two **dates** the Act
+gives — thirty days from the anniversary, two hundred and ten from the
+year end — and pins that a Sdn Bhd holds no AGM. Nothing pinned **who
+is on the list at all**. Every one of these passed:
+
+- a company **struck off the register** still chased for its annual
+  return, which SSM would reject
+- a client the practice has **resigned from** still on the firm's list,
+  which is billing for work it has no authority to do
+- an **LLP** given a Companies Act s.68 annual return — the anniversary
+  join's `applies_to` had nothing on it, only the year-end join's, by
+  way of the AGM
+- a filing **approved** or marked **not applicable** still listed as
+  outstanding — three statuses take a filing off the list and one was
+  pinned
+- one company's lodged return **signing off another's**, because the
+  join was matched on filing type without the entity or the year
+
+`supabase/tests/corp_deadlines.sql` is 41 assertions over those shapes.
+
+**A filing due today is not late.** `due_date < v_today` versus `<=`
+decides what a secretary lodging on the last lawful day is told. That
+needs three companies whose returns fall due yesterday, today and in
+ten days, and nothing in the suite had one on any of those days.
+
+**Today is a Malaysian day.** `v_today` is
+`(now() at time zone 'Asia/Kuala_Lumpur')::date`, and a mutant using
+`current_date` — which follows the *session* time zone — passes
+everything, because a test that does not move the session clock cannot
+tell them apart. Between midnight and eight in the morning in Kuala
+Lumpur a server left on UTC is a day behind, and a return due yesterday
+is reported as due today.
+
+Asserting it needs a session time zone whose date differs from
+Malaysia's, and **which one does depends on the hour**. Kuala Lumpur is
+UTC+8. `Etc/GMT+12` is twenty hours behind it and differs except in the
+last four hours of a Malaysian day; `Pacific/Kiritimati` is six hours
+ahead and differs in the last six. The test picks whichever of the two
+currently differs, so it is a real assertion at every hour rather than
+one that quietly passes for most of the day.
+
+**The default window is two guards, not one.** `p_within_days integer
+DEFAULT 120` and `coalesce(p_within_days, 120)` catch two different
+callers: omitting the argument takes the SQL default, and PostgREST
+passing a JSON null takes the coalesce. The Flutter client's
+`withinDays` is a non-nullable `int`, so only the first was ever
+reached — and a mutant shrinking the coalesce to a fortnight lived
+until the test called the function with an explicit null.
+
+**Ordering needed a second company.** `order by c.due_date, c.name`
+mutated to `order by c.name` survived, because with one company on the
+books the two orderings agree. Two more, named so that alphabetical
+order is the exact reverse of deadline order, and it dies.
+
+#### The four equivalent mutants, and what each depends on
+
+| Mutant | Why it cannot matter |
+|---|---|
+| `e.incorporated_on is not null` dropped | The anniversary count is `extract(year from …incorporated_on)`, so a null makes the series bound null, and `generate_series(1, null)` returns **no rows**. Verified. |
+| `e.financial_year_end_month is not null` dropped | `app.corp_fye` returns null without a month, and `d.trigger_date is not null` on the next line already removes it. |
+| `d.trigger_date >= e.incorporated_on` dropped | Subsumed by the outer `c.trigger_date > (select incorporated_on)`, which is the same comparison one notch stricter. `>` implies `>=` for every pair of dates; verified over a year of them. |
+| `or c.due_date >= v_today - 365` dropped | Unreachable **for the year-end kinds**, because the year-end series runs over only the current calendar year and the one before it: the oldest year end it can produce is 31 December of last year, and 210 days after that is inside the 365-day window for all but a few weeks at the end of a year. |
+
+The last one is the interesting one, and it is equivalent **because of
+the series** rather than because the clause does nothing. Widen the
+series by a year and it becomes live again — so what the test asserts is
+the **series bound itself**, exactly as `statutory_bands.sql` asserts the
+band rule that makes its own survivor equivalent. Same shape, second
+time.
+
+And the one place the outer `>` earns its strictness: a company whose
+first financial year end is recorded as **the day it was incorporated**.
+The anniversary series can never reach the incorporation date — it
+starts a year after it — so that condition bites on one shape only, a
+financial year of zero days. It is a data-entry artefact, not a filing,
+and a deadline computed from it is a deadline for accounts that cannot
+exist. That company is now in the fixture.
