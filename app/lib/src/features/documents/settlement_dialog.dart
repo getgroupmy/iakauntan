@@ -8,6 +8,7 @@ import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../banking/new_bank_account_dialog.dart';
 import '../contacts/new_contact_dialog.dart';
 import 'fx.dart';
 import 'settlement_discount.dart';
@@ -349,6 +350,13 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                 Expanded(
                   child: SearchablePicker<String>(
                     options: bankPickerOptions(banks),
+                    createLabel: 'Add bank account',
+                    // 0529 made this list writable for the first
+                    // time. Until then a company that opened a
+                    // second account had nowhere in the product to
+                    // say so.
+                    onCreate: (typed) =>
+                        createBankAccountFromPicker(context, typed: typed),
                     value: _bankAccountId,
                     label: 'Bank account',
                     onChanged: (v) => setState(() => _bankAccountId = v),

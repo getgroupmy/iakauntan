@@ -3728,6 +3728,40 @@ class Repo {
     return _rows(data).map(BusinessDocument.fromJson).toList();
   }
 
+  /// Add or amend a bank account.
+  ///
+  /// 0529. One call, because a bank account is TWO rows that must not
+  /// disagree: the `bank_accounts` row every screen picks from, and the
+  /// GL account the ledger posts to. The function makes the GL account
+  /// itself unless one is named, so a company with three banks gets
+  /// three lines on its balance sheet rather than one.
+  Future<String> upsertBankAccount({
+    required String name,
+    String? bankName,
+    String? bankCode,
+    String? accountNumber,
+    String accountType = 'current',
+    String currency = 'MYR',
+    String? accountId,
+    String? id,
+  }) async {
+    final data = await callRpc(
+      'upsert_bank_account',
+      params: {
+        'p_name': name,
+        'p_bank_name': _orNull(bankName),
+        'p_bank_code': _orNull(bankCode),
+        'p_account_number': _orNull(accountNumber),
+        'p_account_type': accountType,
+        'p_currency': currency,
+        'p_account_id': accountId,
+        'p_id': id,
+        'p_org_id': id == null ? orgId : null,
+      },
+    );
+    return data as String;
+  }
+
   Future<List<Map<String, dynamic>>> bankAccounts() async {
     final data = await client
         .from('bank_accounts')

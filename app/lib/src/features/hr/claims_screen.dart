@@ -10,6 +10,7 @@ import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../banking/new_bank_account_dialog.dart';
 import '../shared/attachments_card.dart';
 import '../shared/receipt_capture.dart';
 import 'mileage_claim.dart';
@@ -295,6 +296,13 @@ class _PostClaimDialogState extends ConsumerState<_PostClaimDialog> {
                 padding: const EdgeInsets.only(left: 32, bottom: Space.sm),
                 child: SearchablePicker<String>(
                   options: bankPickerOptions(accounts),
+                  createLabel: 'Add bank account',
+                  // 0529 made this list writable for the first
+                  // time. Until then a company that opened a
+                  // second account had nowhere in the product to
+                  // say so.
+                  onCreate: (typed) =>
+                      createBankAccountFromPicker(context, typed: typed),
                   value: _bankAccountId,
                   label: 'Pay from',
                   onChanged: (v) => setState(() => _bankAccountId = v),

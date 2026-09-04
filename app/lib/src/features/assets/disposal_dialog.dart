@@ -8,6 +8,7 @@ import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../banking/new_bank_account_dialog.dart';
 
 /// Sells or scraps an asset.
 ///
@@ -116,6 +117,13 @@ class _DisposalDialogState extends ConsumerState<_DisposalDialog> {
               const SizedBox(height: 12),
               SearchablePicker<String>(
                 options: bankPickerOptions(banks),
+                createLabel: 'Add bank account',
+                // 0529 made this list writable for the first
+                // time. Until then a company that opened a
+                // second account had nowhere in the product to
+                // say so.
+                onCreate: (typed) =>
+                    createBankAccountFromPicker(context, typed: typed),
                 value: _bankAccountId,
                 label: 'Proceeds into',
                 helperText: 'Left blank, they go to cash',

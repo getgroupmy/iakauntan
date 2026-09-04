@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788500866.4800458,
-    "ast_hash": "c1382ad776ad82eff2238fdcc952d669",
+    "mtime": 1788505685.5809479,
+    "ast_hash": "c95760297160a8a3aee17f8f7153b6cd",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -170,8 +170,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/settlement_dialog.dart": {
-    "mtime": 1788504408.2798698,
-    "ast_hash": "3db023c154a8b5d290242d9ad9502e4f",
+    "mtime": 1788505741.5941696,
+    "ast_hash": "c298462aa07923fddb7f5b82d809631e",
     "semantic_hash": ""
   },
   "app/lib/src/features/einvoice/einvoice_screen.dart": {
@@ -180,13 +180,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/expenses/expenses_screen.dart": {
-    "mtime": 1788505130.0611176,
-    "ast_hash": "d7a3ab476f251f9c28b2554f470be53c",
+    "mtime": 1788505772.1349974,
+    "ast_hash": "f6d13a5eecaa15142ddaa37c933cbd56",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/claims_screen.dart": {
-    "mtime": 1788504408.2809465,
-    "ast_hash": "07f33109213dbd40ec691ffe6a1884d0",
+    "mtime": 1788505741.585761,
+    "ast_hash": "19a2ca243223965e4928ce4de7aba9a0",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/employee_editor.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788495466.9602387,
-    "ast_hash": "e791a1818f07103de6a96d33e12abead",
+    "mtime": 1788505675.212794,
+    "ast_hash": "b3ac41eaa48826d172d5b317ff96af06",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1255,8 +1255,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/assets/disposal_dialog.dart": {
-    "mtime": 1788502052.5472245,
-    "ast_hash": "711d7f7b4b69e182f6ff950b29432b3e",
+    "mtime": 1788505741.5867357,
+    "ast_hash": "58529c2b94d7a7a5c78fcd4c9faecccd",
     "semantic_hash": ""
   },
   "app/test/asset_register_test.dart": {
@@ -1275,8 +1275,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/banking/reconciliation_screen.dart": {
-    "mtime": 1788502032.4019034,
-    "ast_hash": "2c6ab655a2f6c0a07257ae1717f6a955",
+    "mtime": 1788505741.5898867,
+    "ast_hash": "672b1159d90e3b8d3fae1ed9c8ad9a6b",
     "semantic_hash": ""
   },
   "app/lib/src/features/banking/statement_import.dart": {
@@ -4065,8 +4065,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/deposits_screen.dart": {
-    "mtime": 1788504408.2793362,
-    "ast_hash": "1d48bfdfbda42e1f6d6600aa30819938",
+    "mtime": 1788505741.5961273,
+    "ast_hash": "567014970e6f6460efe7873029261fcd",
     "semantic_hash": ""
   },
   "app/test/deposits_test.dart": {
@@ -4105,8 +4105,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/cheques_screen.dart": {
-    "mtime": 1788504408.2787988,
-    "ast_hash": "d9ce50ae081026f3fdb98303c3d7c7c1",
+    "mtime": 1788505741.5916054,
+    "ast_hash": "533fb90e2bca04f4a015eb8f679d707a",
     "semantic_hash": ""
   },
   "app/test/cheques_test.dart": {
@@ -6625,8 +6625,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/collect_payments_card.dart": {
-    "mtime": 1788502032.401421,
-    "ast_hash": "c5b4be4f3a0bde28244633c6940632a4",
+    "mtime": 1788505741.5877216,
+    "ast_hash": "d0c81bf3d46bd4b5998d7e647818749c",
     "semantic_hash": ""
   },
   "supabase/functions/pay-invoice-callback/index.ts": {
@@ -7882,6 +7882,21 @@
   "app/test/new_account_test.dart": {
     "mtime": 1788505182.8068469,
     "ast_hash": "5b30e3872f4a508ae15d7e681a14bdfd",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/banking/new_bank_account_dialog.dart": {
+    "mtime": 1788505721.6468344,
+    "ast_hash": "4228c9e74688bd2dcb494e0ea6cf67ba",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0529_a_bank_account_you_can_actually_add.sql": {
+    "mtime": 1788505594.6708374,
+    "ast_hash": "8397e89ec3ac0c40f6a650126be5a3a2",
+    "semantic_hash": ""
+  },
+  "supabase/tests/bank_accounts.sql": {
+    "mtime": 1788505665.3723967,
+    "ast_hash": "9942160b2d1ede93407001f539238884",
     "semantic_hash": ""
   }
 }

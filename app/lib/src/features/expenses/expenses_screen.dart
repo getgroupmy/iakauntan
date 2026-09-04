@@ -11,6 +11,7 @@ import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/models.dart';
 import '../../data/ocr_repository.dart';
+import '../banking/new_bank_account_dialog.dart';
 import '../settings/new_account_dialog.dart';
 import '../shared/attachments_card.dart';
 import 'expense_split.dart';
@@ -617,6 +618,9 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                   emptyLabel: 'The default bank account',
                   label: 'Paid from',
                   helperText: 'Leave blank to use the default bank account',
+                  createLabel: 'Add bank account',
+                  onCreate: (typed) =>
+                      createBankAccountFromPicker(context, typed: typed),
                   onChanged: (v) => setState(() => _bankAccountId = v),
                 ),
                 const SizedBox(height: 12),

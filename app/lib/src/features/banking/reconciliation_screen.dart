@@ -8,6 +8,7 @@ import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import 'book_balance.dart';
+import 'new_bank_account_dialog.dart';
 import 'reconciliation_history_dialog.dart';
 import 'statement_import.dart';
 import 'transfer_dialog.dart';
@@ -367,6 +368,13 @@ class _Controls extends StatelessWidget {
     final fields = <Widget>[
       SearchablePicker<String>(
         options: bankPickerOptions(banks),
+        createLabel: 'Add bank account',
+        // 0529 made this list writable for the first
+        // time. Until then a company that opened a
+        // second account had nowhere in the product to
+        // say so.
+        onCreate: (typed) =>
+            createBankAccountFromPicker(context, typed: typed),
         value: bankAccountId,
         label: 'Account',
         onChanged: (v) => v == null ? null : onBank(v),

@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../banking/new_bank_account_dialog.dart';
 import '../contacts/new_contact_dialog.dart';
 import 'deposit_apply_sheet.dart';
 
@@ -297,6 +298,13 @@ class _DepositDialogState extends ConsumerState<_DepositDialog> {
               ),
               SearchablePicker<String>(
                 options: bankPickerOptions(banks),
+                createLabel: 'Add bank account',
+                // 0529 made this list writable for the first
+                // time. Until then a company that opened a
+                // second account had nowhere in the product to
+                // say so.
+                onCreate: (typed) =>
+                    createBankAccountFromPicker(context, typed: typed),
                 value: _bank,
                 label: 'In or out of',
                 onChanged: (v) => setState(() => _bank = v),

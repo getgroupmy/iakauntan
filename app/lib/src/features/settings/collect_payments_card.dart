@@ -7,6 +7,7 @@ import '../../core/searchable_picker.dart';
 import '../../data/repository.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../banking/new_bank_account_dialog.dart';
 
 /// Letting a customer pay an invoice they were sent a link to.
 ///
@@ -183,6 +184,13 @@ class _CollectPaymentsCardState extends ConsumerState<CollectPaymentsCard> {
                 const SizedBox(height: Space.md),
                 SearchablePicker<String>(
                   options: bankPickerOptions(banks),
+                  createLabel: 'Add bank account',
+                  // 0529 made this list writable for the first
+                  // time. Until then a company that opened a
+                  // second account had nowhere in the product to
+                  // say so.
+                  onCreate: (typed) =>
+                      createBankAccountFromPicker(context, typed: typed),
                   value: _bankAccountId,
                   label: 'Takings land in',
                   helperText: 'Required before customers are offered this '
