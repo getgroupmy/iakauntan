@@ -2625,8 +2625,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/opening_trial_balance.sql": {
-    "mtime": 1786791243.714262,
-    "ast_hash": "fd5345d03030f78b184afa6f3627c2d6",
+    "mtime": 1788479958.7598624,
+    "ast_hash": "d22a0e1169ea9463048d1a0b1086202f",
     "semantic_hash": ""
   },
   "supabase/tests/stock_card.sql": {
@@ -7767,6 +7767,11 @@
   "supabase/tests/the_helpers_fail_loudly.sql": {
     "mtime": 1788470260.2372115,
     "ast_hash": "c84c82f94f81894ed977272d8ac6fc80",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0525_reversing_it_has_to_be_enough.sql": {
+    "mtime": 1788479466.0161555,
+    "ast_hash": "91b87001f58500bd55f8e03792f4547f",
     "semantic_hash": ""
   }
 }
