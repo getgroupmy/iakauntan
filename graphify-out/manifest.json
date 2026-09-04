@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788511188.1041775,
-    "ast_hash": "12663c5924091d931539e3f6ca4c12da",
+    "mtime": 1788511836.5736291,
+    "ast_hash": "452bdfe8c003e78e17e9930c1c644851",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -4315,8 +4315,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/statutory_schedules.sql": {
-    "mtime": 1788285600.5116541,
-    "ast_hash": "45895d4c14df9e8414aa498ba189fe81",
+    "mtime": 1788511823.0252488,
+    "ast_hash": "1fbf7ad89038e851c40f89cfeeb18cbf",
     "semantic_hash": ""
   },
   "supabase/tests/strata_preview.sql": {
@@ -7942,6 +7942,11 @@
   "scripts/check_narrow_rows.py": {
     "mtime": 1788510763.2690127,
     "ast_hash": "29f88a0dffb7ba54e12b94ab4e977a9c",
+    "semantic_hash": ""
+  },
+  "supabase/tests/statutory_bands.sql": {
+    "mtime": 1788511823.0291622,
+    "ast_hash": "51d932b9b075ecbf4be924c2c13ac416",
     "semantic_hash": ""
   }
 }

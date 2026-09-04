@@ -499,4 +499,104 @@ begin
                            app.epf_category('foreign_worker', 60))), 4);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- What `app.calc_statutory` does at its edges
+--
+-- Added after a mutation sweep killed 19 of 24 one-line mutants. Four
+-- survived, and every one of them was a branch the suite reached and
+-- never looked at the answer of.
+--
+-- These run against the SEEDED tables rather than a fixture, because
+-- what is being pinned is the arithmetic a real payslip gets.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  r     record;
+  v_ver boolean;
+begin
+  -- -----------------------------------------------------------------
+  -- The RM20 step, and which way it goes
+  --
+  -- KWSP rounds the wage UP to the next RM20 before applying the rate.
+  -- Every wage the suite used was already a multiple of twenty, so
+  -- rounding to the NEAREST step gave the same answer everywhere and a
+  -- mutant that did so survived. RM5,001 is where the two part company:
+  -- up lands on 5,020, nearest lands back on 5,000 — and 5,000 is in a
+  -- different employer band, so the difference is not a rounding
+  -- difference, it is forty-seven ringgit of somebody's contribution.
+  -- -----------------------------------------------------------------
+  select * into r
+    from app.calc_statutory('epf', 'citizen_under60', 5000,
+                            date '2026-01-31');
+  perform pg_temp.check_eq('EPF on RM5,000: the employee pays 11%',
+    r.employee_amount, 550);
+  perform pg_temp.check_eq('and the employer 13%, being at the boundary',
+    r.employer_amount, 650);
+
+  select * into r
+    from app.calc_statutory('epf', 'citizen_under60', 5001,
+                            date '2026-01-31');
+  perform pg_temp.check_eq(
+    'one ringgit more rounds the wage UP to RM5,020', r.employee_amount, 553);
+  perform pg_temp.check_eq(
+    'and past the boundary the employer pays 12%', r.employer_amount, 603);
+
+  -- The whole step lands on one figure, which is what "up to the next
+  -- twenty" means and what a floor or a nearest would break.
+  select * into r
+    from app.calc_statutory('epf', 'citizen_under60', 5019,
+                            date '2026-01-31');
+  perform pg_temp.check_eq('RM5,019 rounds to the same RM5,020',
+    r.employee_amount, 553);
+  select * into r
+    from app.calc_statutory('epf', 'citizen_under60', 5020,
+                            date '2026-01-31');
+  perform pg_temp.check_eq('and RM5,020 is already there',
+    r.employee_amount, 553);
+
+  -- -----------------------------------------------------------------
+  -- A date no table covers
+  --
+  -- Not a hole inside a table -- that is asserted above -- but a date
+  -- before any schedule exists at all. Nothing to compute AND nothing
+  -- to trust, and the second half is the one that had no assertion: a
+  -- mutant returning `true` here put "these figures have been verified"
+  -- on a payslip computed from no table whatsoever.
+  -- -----------------------------------------------------------------
+  select * into r
+    from app.calc_statutory('epf', 'citizen_under60', 5000,
+                            date '1990-01-31');
+  perform pg_temp.check_eq('before any EPF table there is nothing to pay',
+    r.employee_amount, 0);
+  perform pg_temp.check_eq('on either side', r.employer_amount, 0);
+  perform pg_temp.check_true('and no schedule to name', r.schedule_id is null);
+  perform pg_temp.check_true(
+    'and nothing about it has been verified', not r.is_verified);
+
+  -- -----------------------------------------------------------------
+  -- An unverified schedule says so
+  --
+  -- The seeded tables in this repository are NOT checked against the
+  -- gazette -- `is_verified` is false on every one of them, and
+  -- `payslip_pdf.dart` prints its warning off that flag. Nothing
+  -- asserted that the flag survived the journey out of
+  -- `calc_statutory`, so a mutant hard-coding `true` took the warning
+  -- off every payslip in the product and passed.
+  -- -----------------------------------------------------------------
+  perform pg_temp.check_true('the seeded EPF table is not verified',
+    not (select s.is_verified from public.statutory_schedules s
+          where s.id = (app.statutory_schedule_on('epf',
+                                                  date '2026-01-31')).id));
+  select is_verified into v_ver
+    from app.calc_statutory('epf', 'citizen_under60', 5000,
+                            date '2026-01-31');
+  perform pg_temp.check_true('and the figure it produces says so', not v_ver);
+
+  -- Bands that do not overlap are what makes `calc_statutory` taking
+  -- the HIGHEST matching band equivalent to taking the lowest. That is
+  -- checked over the shipped schedules in `statutory_bands.sql`, which
+  -- has no fixtures of its own to trip over -- this file deliberately
+  -- builds a schedule WITH a hole in it, a few hundred lines up.
+end $$;
+
 rollback;
