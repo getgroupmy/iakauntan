@@ -290,6 +290,7 @@ jobs:
                    supabase/tests/module_self_service.sql \
                    supabase/tests/module_subscription.sql \
                    supabase/tests/customer_portal.sql \
+                   supabase/tests/customer_portal_shapes.sql \
                    supabase/tests/document_history.sql \
                    supabase/tests/expense_split.sql \
                    supabase/tests/notifications.sql \

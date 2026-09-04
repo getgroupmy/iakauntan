@@ -6829,3 +6829,62 @@ The sixth is `<` rather than `<=` on the dormancy boundary. It needs a
 card whose last activity is the same MICROSECOND as the cutoff — a
 coincidence rather than a case somebody can be in, and no fixture can
 produce it reliably.
+
+## The customer portal — the one door somebody who is not staff holds a key to
+
+`open_customer_portal`, `portal_document_token`,
+`share_customer_portal`, `revoke_customer_portal` and `app.portal_url`.
+A mutation sweep of 59 one-line mutants killed **17** — the worst result
+of this campaign, on the only function in the system granted to `anon`.
+
+**Two findings were serious enough to name.** `share_customer_portal`
+revokes the previous link with
+`where contact_id = p_contact_id and revoked_at is null`. Scoped to
+nothing, sending one customer a portal link revokes EVERY PORTAL ON THE
+PLATFORM. Scoped away entirely, the old link stays live beside the new
+one — and re-issuing is how somebody takes back a link that went to the
+wrong address. The function's own comment states the rule ("a revoke
+that leaves an older door open is not a revoke") and neither half of it
+was asserted.
+
+**And a cross-tenant hole that is real because of a missing constraint.**
+`contacts.party_id` links a customer filed twice (`0477`). It is a bare
+uuid: no foreign key, nothing scoping it to a company. So a contact in
+ANOTHER company can carry this company's party id, and
+`c2.org_id = l.org_id` is what stands between that and a portal token
+minting a link to a stranger's invoices. The fixture builds that
+impostor.
+
+#### Two mutually-masking pairs — the sixth and seventh
+
+Both are one tenancy rule written twice, which is exactly why they mask.
+`portal_document_token` refuses a document unless `d.org_id = l.org_id`
+AND its contact is found by a lookup that itself filters
+`c2.org_id = l.org_id`. Remove either and the other still refuses: the
+lookup starts from `c2.id = d.contact_id`, so once the document is in
+this company its contact is too. Only removing BOTH opens the door.
+`open_customer_portal`'s listing has the identical pair.
+
+Neither is dead code. They are two spellings of the same rule, and what
+the fixture proves is the PAIR — by building the thing that would get
+through if the rule were absent.
+
+#### The rest of the equivalents
+
+| Mutant | Why it is equivalent | The rule now asserted |
+|---|---|---|
+| `c.id is null then 'withdrawn'` | `customer_portal_links.contact_id` is a foreign key ON DELETE CASCADE, so a link cannot outlive its customer — deleting the contact deletes the link, and the token reads `invalid` | the cascade |
+| `coalesce(o.base_currency, 'MYR')` | the column is NOT NULL | third time this campaign |
+| `d.doc_type = 'invoice'` in the listing | the status filter already admits only `posted`/`partial`, and a quotation cannot reach either — the ledger door refuses it | a quotation cannot be posted |
+| the minted link's `l.org_id` | the guard four lines above has already established `d.org_id = l.org_id` | one company per link |
+| `c.party_id is not null` | `c2.party_id = null` is NULL, not true, so the arm cannot match anyway — the guard says out loud what three-valued logic does quietly | a null equals nothing, including a null |
+| `revoked_at is null` in the revoke's `where` | re-revoking a shut door changes no answer; it keeps the audit trail saying when it was closed rather than last re-closed | the state is unchanged |
+
+#### And a note on testing time inside one transaction
+
+`now()` is the TRANSACTION's clock, so three visits to a portal share a
+timestamp and `opened_at` cannot be told from `last_opened_at` by
+waiting. Backdating each in turn is what separates them: one is
+`coalesce`d and must not move, the other is assigned and must. The same
+trick pins the expiry boundary — a second either side cannot tell `<`
+from `<=`, but `expires_at = now()` can.
