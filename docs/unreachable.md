@@ -6383,3 +6383,51 @@ That is now the standard move when a survivor turns out to be equivalent
 because of a rule enforced elsewhere: **assert the rule, not the dead
 branch.** Four times now — the statutory band overlap, the corp-sec
 series bound, the residual-below-cost constraint, and this.
+
+### Withholding tax: 23 of 48, then 47 — and the method's own blind spot
+
+`withholding.sql` pins the eight rates in the Act, the arithmetic, the
+journal and the s.109(2) penalty. It also *appears* to pin the refusals.
+It does not, and why it does not is the most useful thing this campaign
+has turned up about how these tests are written:
+
+> **An assertion that catches an error code catches ANY error with that
+> code.**
+
+`withholding.sql` proves an unposted bill is refused by calling
+`create_withholding` on a draft and catching `22023`. Delete the
+unposted-bill guard entirely and the call still raises `22023` — from
+the *next* guard, because a draft bill with no lines has a balance of
+nought and any tax is more than nought. The test passes, the guard is
+gone, and nothing says so.
+
+The same shape appeared three more times in one function group:
+
+- **posting a certificate twice.** Without the guard the second post
+  inserts a second allocation, the bill goes over, and
+  `apply_allocation` raises. `when others` catches that too.
+- **a viewer remitting.** `remit_withholding` and `create_gl_entry` both
+  refuse with `42501`. Catching the code alone passes with the outer
+  guard deleted — and the outer one is what stops the bank balance and
+  the certificate being touched at all.
+- **a certificate on nothing.** Refused by `create_withholding` in one
+  place and `post_withholding` in another, in different words.
+
+The fix in every case is the same and it is cheap: `get stacked
+diagnostics` the message and assert on it. A guard is identified by what
+it SAYS, not by the class of error it belongs to. Where two guards word
+themselves identically there is nothing to assert, which is its own
+argument for wording them differently.
+
+What else lived: the whole of `remit_withholding`'s bank account — the
+cross-organization guard, the lookup, the fallback, the balance update
+and the `where id =` on it — because the existing file remits without
+naming an account, so five branches had one case between them; the
+supplier's own payable account, which a related company or a director's
+loan needs; and a foreign bill, where USD1,000 withheld at 4.50 is
+RM4,500 of liability and a mutant made it RM1,000.
+
+The one surviving mutant is `round(v_gross * v_rate / 100.0, 2)` with
+the round deleted, and it is equivalent because `tax_amount` is
+`numeric(18, 2)` — the column rounds what the function did not. So the
+fixture asserts **the column's scale**. Fifth time.
