@@ -110,7 +110,32 @@ jobs:
       # A throwaway local stack, so the assertions run against the
       # migrations in this commit rather than whatever the hosted project
       # happens to be at.
-      - run: supabase start
+      #
+      # Postgres and nothing else. This job runs SQL assertions: it has
+      # no use for the studio, the mail catcher, the image proxy or the
+      # edge runtime, and every one of them is a container to pull and a
+      # host port to bind.
+      #
+      # The mail catcher is the one that actually broke a build. `supabase
+      # start` hit an error, stopped the containers and retried, and the
+      # retry failed with `failed to bind host port for 0.0.0.0:54324:
+      # address already in use` — Docker had not finished releasing the
+      # port. A service this job never touches took a whole run down, and
+      # re-running it would have been treating a red build as weather.
+      #
+      # IT IS SPELLED `mailpit`, NOT `inbucket`. The container is still
+      # named `supabase_inbucket_<ref>` and the error above says so, but
+      # `supabase start -x` in 2.114.0 takes the service names
+      # gotrue, realtime, storage-api, imgproxy, kong, mailpit,
+      # postgrest, postgres-meta, studio, edge-runtime, logflare, vector
+      # and supavisor. Excluding "inbucket" would have left the mail
+      # catcher running and this change doing nothing at all.
+      #
+      # One line on purpose: a folded scalar joins its lines with a
+      # space, and a space inside a comma-separated argument makes the
+      # tail of the list a second argument. That was this change's own
+      # first draft.
+      - run: supabase start -x studio,mailpit,imgproxy,edge-runtime,logflare,vector
       - name: Run the database assertions
         run: |
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
