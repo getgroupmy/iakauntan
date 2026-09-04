@@ -8,6 +8,7 @@ import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../settings/new_account_dialog.dart';
 
 /// Journals that post themselves.
 ///
@@ -454,6 +455,9 @@ class _JournalLine extends StatelessWidget {
               value: line.accountId,
               label: 'Account',
               hint: 'Type a number or a name',
+              createLabel: 'Add account',
+              onCreate: (typed) =>
+                  createAccountFromPicker(context, typed: typed),
               onChanged: (v) => onChanged((
                 accountId: v,
                 debit: line.debit,

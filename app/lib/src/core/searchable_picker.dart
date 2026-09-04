@@ -164,7 +164,15 @@ class _SearchablePickerState<T> extends State<SearchablePicker<T>> {
   @override
   void didUpdateWidget(covariant SearchablePicker<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value && !_focus.hasFocus) {
+    if (_focus.hasFocus) return;
+    // The value changing is the obvious case. The OPTIONS changing is
+    // the one that was wrong: a screen that knows the chosen id before
+    // the list it belongs to has loaded — a reconciliation opened on a
+    // bank account, a document opened on its customer — had no row to
+    // find, so the box showed nothing, and went on showing nothing
+    // after the list arrived because only `value` was watched.
+    if (oldWidget.value != widget.value ||
+        oldWidget.options.length != widget.options.length) {
       _controller.text = _labelFor(widget.value);
     }
   }

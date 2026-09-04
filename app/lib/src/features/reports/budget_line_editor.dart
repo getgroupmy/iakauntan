@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../settings/new_account_dialog.dart';
 
 /// Changing the six lines that matter.
 ///
@@ -213,6 +214,9 @@ class _LineEditorState extends ConsumerState<_LineEditor> {
                     value: accountId,
                     label: 'Account',
                     hint: 'Type a number or a name',
+                    createLabel: 'Add account',
+                    onCreate: (typed) =>
+                        createAccountFromPicker(context, typed: typed),
                     onChanged: (v) => setLocal(() => accountId = v),
                   ),
                   const SizedBox(height: Space.md),

@@ -8,6 +8,7 @@ import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../settings/new_account_dialog.dart';
 
 /// A journal somebody writes by hand.
 ///
@@ -331,6 +332,8 @@ class _JournalLineRowState extends State<_JournalLineRow> {
       value: widget.line.accountId,
       label: 'Account',
       hint: 'Type a number or a name',
+      createLabel: 'Add account',
+      onCreate: (typed) => createAccountFromPicker(context, typed: typed),
       onChanged: (v) {
         widget.line.accountId = v;
         widget.onChanged();

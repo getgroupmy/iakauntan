@@ -180,8 +180,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/expenses/expenses_screen.dart": {
-    "mtime": 1788500329.059297,
-    "ast_hash": "e560eee2f8405152328796420895b608",
+    "mtime": 1788505130.0611176,
+    "ast_hash": "d7a3ab476f251f9c28b2554f470be53c",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/claims_screen.dart": {
@@ -1330,8 +1330,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/recurring_screen.dart": {
-    "mtime": 1788502011.2247307,
-    "ast_hash": "721cb1b7082b9a68c7366968a46b7624",
+    "mtime": 1788505130.0618079,
+    "ast_hash": "1a222f52d0d648ed2c05ff2edb1e08d9",
     "semantic_hash": ""
   },
   "supabase/migrations/0088_price_levels_and_dimensions.sql": {
@@ -1355,8 +1355,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
-    "mtime": 1788504103.4406033,
-    "ast_hash": "1f372147a669f696416667bbb765907c",
+    "mtime": 1788505130.0614839,
+    "ast_hash": "939f3433b8ca0073aec31678df25ac51",
     "semantic_hash": ""
   },
   "app/test/journal_problem_test.dart": {
@@ -4010,8 +4010,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/stock/landed_cost_screen.dart": {
-    "mtime": 1788502011.225209,
-    "ast_hash": "2661045b7f9f191425311b432ea5232a",
+    "mtime": 1788505130.0621824,
+    "ast_hash": "a83ac38d9bed63dd864e426b1b153333",
     "semantic_hash": ""
   },
   "app/test/landed_cost_test.dart": {
@@ -5435,8 +5435,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/budget_line_editor.dart": {
-    "mtime": 1788502011.2243297,
-    "ast_hash": "6e8a75c6d6b0216a340dc1b77f31d7b2",
+    "mtime": 1788505130.062448,
+    "ast_hash": "a3e71e7baccee89db3b40d68d8adb050",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/einvoice_credentials.dart": {
@@ -7840,8 +7840,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/searchable_picker.dart": {
-    "mtime": 1788498852.465495,
-    "ast_hash": "13fa674557bbd5a7689786e7da73c203",
+    "mtime": 1788504774.7032783,
+    "ast_hash": "7d5435c8e67dc33afb9342d2ab205b8b",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/new_contact_dialog.dart": {
@@ -7850,8 +7850,8 @@
     "semantic_hash": ""
   },
   "app/test/searchable_picker_test.dart": {
-    "mtime": 1788498742.1069942,
-    "ast_hash": "886f974f3c6bd8e0245b3e4c3c0d9269",
+    "mtime": 1788504751.412725,
+    "ast_hash": "fbd66ca88e015e93f431874017e088dc",
     "semantic_hash": ""
   },
   "app/lib/src/features/stock/new_warehouse_dialog.dart": {
@@ -7872,6 +7872,16 @@
   "app/lib/src/core/picker_options.dart": {
     "mtime": 1788503412.660297,
     "ast_hash": "b78197d1ff1ded0cedcb67d93b544325",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/settings/new_account_dialog.dart": {
+    "mtime": 1788505102.4228487,
+    "ast_hash": "a8c91363cc107888a868b43a12bf4c41",
+    "semantic_hash": ""
+  },
+  "app/test/new_account_test.dart": {
+    "mtime": 1788505182.8068469,
+    "ast_hash": "5b30e3872f4a508ae15d7e681a14bdfd",
     "semantic_hash": ""
   }
 }

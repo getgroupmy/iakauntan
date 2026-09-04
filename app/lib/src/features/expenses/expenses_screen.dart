@@ -11,6 +11,7 @@ import '../../core/widgets.dart';
 import '../../data/attachments_repository.dart';
 import '../../data/models.dart';
 import '../../data/ocr_repository.dart';
+import '../settings/new_account_dialog.dart';
 import '../shared/attachments_card.dart';
 import 'expense_split.dart';
 import 'expense_voucher_pdf.dart';
@@ -472,6 +473,13 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                     value: _accountId,
                     label: 'Expense account *',
                     hint: 'Type a number or a name',
+                    createLabel: 'Add account',
+                    // The chart of accounts IS a list a company extends
+                    // — a new expense heading, a new bank, a new
+                    // reserve. "Nothing matches that" was a dead end in
+                    // the box most likely to reach for something new.
+                    onCreate: (typed) =>
+                        createAccountFromPicker(context, typed: typed),
                     onChanged: (v) => setState(() => _accountId = v),
                     validator: (v) => v == null ? 'Choose an account' : null,
                   ),
@@ -714,6 +722,10 @@ class _SplitEditor extends StatelessWidget {
                     ],
                     value: split.lines[i].accountId,
                     label: 'Account',
+                    hint: 'Type a number or a name',
+                    createLabel: 'Add account',
+                    onCreate: (typed) =>
+                        createAccountFromPicker(context, typed: typed),
                     onChanged: (v) => onAccount(i, v),
                   ),
                 ),

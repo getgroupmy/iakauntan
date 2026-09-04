@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../settings/new_account_dialog.dart';
 
 /// What a run's row says under its number.
 ///
@@ -514,6 +515,9 @@ class _ChargeRow extends StatelessWidget {
                   value: charge.accountId,
                   label: 'Comes off',
                   hint: 'Freight and Import Duty',
+                  createLabel: 'Add account',
+                  onCreate: (typed) =>
+                      createAccountFromPicker(context, typed: typed),
                   onChanged: (v) {
                     charge.accountId = v;
                     onChanged();

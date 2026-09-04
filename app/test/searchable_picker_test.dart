@@ -226,6 +226,31 @@ void main() {
       expect(find.text('Ramli Enterprise Sdn Bhd'), findsOneWidget);
     });
 
+    testWidgets('a chosen row shows up when its list arrives late',
+        (tester) async {
+      // The screen knows the id before the list it belongs to has
+      // loaded — a reconciliation opened on a bank account, a document
+      // opened on its customer. The box was showing nothing, and went
+      // on showing nothing after the list arrived.
+      Widget build(List<PickerOption<String>> options) => MaterialApp(
+            home: Scaffold(
+              body: SearchablePicker<String>(
+                options: options,
+                value: 'c2',
+                onChanged: (_) {},
+                label: 'Customer',
+              ),
+            ),
+          );
+
+      await tester.pumpWidget(build(const []));
+      expect(find.text('Bayu Digital Sdn Bhd'), findsNothing);
+
+      await tester.pumpWidget(build(contacts));
+      await tester.pump();
+      expect(find.text('Bayu Digital Sdn Bhd'), findsOneWidget);
+    });
+
     testWidgets('"none" is offered only where it is an answer',
         (tester) async {
       await pump(tester, allowEmpty: true);
