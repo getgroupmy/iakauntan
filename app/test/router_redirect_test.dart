@@ -420,4 +420,47 @@ void _theTwoDoors() {
       }
     });
   });
+
+  // ---------------------------------------------------------------------
+  // Where a person lands, once they have said where they want to (0527)
+  // ---------------------------------------------------------------------
+  group('the landing page somebody chose', () {
+    String? at(String path, {String? landing, String? confinedTo}) => routeFor(
+      path: path,
+      signedIn: true,
+      recovering: false,
+      hasOrg: true,
+      isPlatformAdmin: false,
+      confinedTo: confinedTo,
+      confinedAllows: confinedTo == null ? const {} : const {'pos'},
+      moduleHeld: confinedTo == null ? null : true,
+      landingRoute: landing,
+    );
+
+    test('signing in opens the page they asked for', () {
+      expect(at('/signin', landing: '/todos'), '/todos');
+      expect(at('/login', landing: '/pos'), '/pos');
+    });
+
+    test('and the dashboard for somebody who has never chosen', () {
+      expect(at('/signin'), '/dashboard');
+    });
+
+    test('a preference that never arrives does not trap anybody', () {
+      // The failure this guards against is the bad one: holding the
+      // route until the preference loads turns a failed read -- an
+      // error, a dropped connection -- into a sign-in screen nobody can
+      // leave. Null means the dashboard, which is what everybody got
+      // before the preference existed.
+      expect(at('/signin', landing: null), '/dashboard');
+      expect(at('/login', landing: null), '/dashboard');
+    });
+
+    test('but a confined address still opens what it is pinned to', () {
+      // The address wins over the person. A tablet on a counter goes to
+      // the till whatever its user prefers, because that was chosen by
+      // whoever set the device up.
+      expect(at('/dashboard', landing: '/todos', confinedTo: '/pos'), '/pos');
+    });
+  });
 }

@@ -4114,6 +4114,120 @@ class Repo {
     return _rows(data);
   }
 
+  // ------------------------------------------------------------------
+  // The list you keep beside the books
+  //
+  // 0526. Personal, and written straight through PostgREST: there is no
+  // RPC because there is no rule a function would enforce that row
+  // level security does not. `user_id` is the signed-in user's own on
+  // every write, because the policy accepts nothing else.
+  // ------------------------------------------------------------------
+
+  /// Open items first, soonest due first, undated last — the order the
+  /// dashboard card and the list screen both show. `done` asks for the
+  /// cleared ones instead.
+  Future<List<Todo>> todos({bool done = false, int limit = 100}) async {
+    final uid = client.auth.currentUser?.id;
+    if (uid == null) return const [];
+    var query = client
+        .from('todos')
+        .select()
+        .eq('org_id', orgId)
+        .eq('user_id', uid);
+    query = done ? query.not('done_at', 'is', null) : query.isFilter('done_at', null);
+    final data = await query
+        .order('due_date', ascending: true, nullsFirst: false)
+        .order('created_at', ascending: true)
+        .limit(limit);
+    return _rows(data).map(Todo.fromJson).toList();
+  }
+
+  Future<void> addTodo({
+    required String title,
+    String? notes,
+    DateTime? dueDate,
+    String priority = 'normal',
+    String? link,
+  }) async {
+    final uid = client.auth.currentUser?.id;
+    if (uid == null) return;
+    await client.from('todos').insert({
+      'org_id': orgId,
+      'user_id': uid,
+      'title': title.trim(),
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      if (dueDate != null) 'due_date': Fmt.iso(dueDate),
+      'priority': priority,
+      if (link != null && link.isNotEmpty) 'link': link,
+    });
+  }
+
+  Future<void> updateTodo(
+    String id, {
+    String? title,
+    String? notes,
+    DateTime? dueDate,
+    bool clearDueDate = false,
+    String? priority,
+  }) async {
+    await client
+        .from('todos')
+        .update({
+          if (title != null) 'title': title.trim(),
+          if (notes != null) 'notes': notes.trim().isEmpty ? null : notes.trim(),
+          if (clearDueDate)
+            'due_date': null
+          else if (dueDate != null)
+            'due_date': Fmt.iso(dueDate),
+          if (priority != null) 'priority': priority,
+        })
+        .eq('id', id);
+  }
+
+  /// Clearing an item records WHEN, so "what did I finish yesterday"
+  /// has an answer. Putting it back is the same call the other way.
+  Future<void> setTodoDone(String id, bool done) async {
+    await client
+        .from('todos')
+        .update({'done_at': done ? DateTime.now().toIso8601String() : null})
+        .eq('id', id);
+  }
+
+  Future<void> deleteTodo(String id) async {
+    await client.from('todos').delete().eq('id', id);
+  }
+
+  // ------------------------------------------------------------------
+  // Where you land when you sign in
+  //
+  // 0527. One row per person, not per company, so this does not go
+  // through `orgId` at all.
+  // ------------------------------------------------------------------
+
+  /// The defaults when nothing has been saved. A person who has never
+  /// opened the settings screen has no row, and that is not an error.
+  Future<UserPreferences> userPreferences() async {
+    final uid = client.auth.currentUser?.id;
+    if (uid == null) return const UserPreferences();
+    final data = await client
+        .from('user_preferences')
+        .select()
+        .eq('user_id', uid)
+        .maybeSingle();
+    if (data == null) return const UserPreferences();
+    return UserPreferences.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  Future<void> saveUserPreferences(UserPreferences prefs) async {
+    final uid = client.auth.currentUser?.id;
+    if (uid == null) return;
+    await client.from('user_preferences').upsert({
+      'user_id': uid,
+      'landing_route': prefs.landingRoute,
+      'dashboard_cards': prefs.dashboardCards,
+    }, onConflict: 'user_id');
+  }
+
   static List<Map<String, dynamic>> _rows(dynamic data) =>
       (data as List? ?? const [])
           .map((e) => Map<String, dynamic>.from(e as Map))

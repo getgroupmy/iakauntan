@@ -9,6 +9,8 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/platform_catalog_repository.dart';
+import 'ticker.dart';
+import 'todo_card.dart';
 
 /// The dashboard a company gets is the one its modules make.
 ///
@@ -33,6 +35,14 @@ import '../../data/platform_catalog_repository.dart';
 /// Only ticketing, point of sale and the ledger report figures today.
 /// The rest get a tab and an honest sentence rather than a blank panel,
 /// because a blank panel under a module's name reads as broken.
+/// The panels a person has asked for, from `Settings > Landing page`.
+///
+/// Unset means the defaults rather than nothing: a person who has never
+/// opened the settings screen must not be handed a bare dashboard.
+List<String> _cardsFor(WidgetRef ref) =>
+    ref.watch(userPreferencesProvider).valueOrNull?.dashboardCards ??
+    UserPreferences.defaultDashboardCards;
+
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -52,6 +62,7 @@ class DashboardScreen extends ConsumerWidget {
     // one of them is allowed to empty the screen. Ordering by the
     // platform's own `sort_order` keeps the tabs agreeing with the side
     // menu, which is built from the same column.
+    final cards = _cardsFor(ref);
     final held = ref.watch(enabledModulesProvider);
     final codes = dashboardTabs(
       labels.keys,
@@ -136,11 +147,17 @@ class DashboardScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Only on the first tab. Repeating the greeting
-                        // under every one turns it into furniture.
+                        // Only on the first tab. Repeating these
+                        // under every one turns them into furniture.
                         if (code == codes.first) ...[
                           _Greeting(orgName: org?.name ?? ''),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 16),
+                          if (cards.contains('ticker'))
+                            const DashboardTicker(),
+                          if (cards.contains('todos')) ...[
+                            const TodoCard(),
+                            const SizedBox(height: 16),
+                          ],
                         ],
                         ModuleDashboardPane(code: code),
                         const SizedBox(height: 32),
@@ -167,25 +184,37 @@ class _Books extends ConsumerWidget {
     return AsyncView(
       value: summary,
       onRetry: () => ref.invalidate(dashboardProvider),
-      builder: (data) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _MetricGrid(data: data),
-          const SizedBox(height: 24),
-          if (moduleEnabled(ref, 'einvoice') &&
-              (data.einvoiceInvalid > 0 || data.einvoicePending > 0))
-            _EinvoiceBanner(data: data),
-          const _TrendCard(),
-          const SizedBox(height: 20),
-          if (moduleEnabled(ref, 'crm'))
-            const _TwoColumn(
-              left: _ReceivablesCard(),
-              right: _ActivitiesCard(),
-            )
-          else
-            const _ReceivablesCard(),
-        ],
-      ),
+      builder: (data) {
+        // What this person asked to see. The e-Invoice banner is not on
+        // the list on purpose: it is a REFUSAL waiting to be dealt with
+        // rather than a panel, and a rejected submission somebody has
+        // switched off is one LHDN is still waiting for.
+        final cards = _cardsFor(ref);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (cards.contains('metrics')) ...[
+              _MetricGrid(data: data),
+              const SizedBox(height: 24),
+            ],
+            if (moduleEnabled(ref, 'einvoice') &&
+                (data.einvoiceInvalid > 0 || data.einvoicePending > 0))
+              _EinvoiceBanner(data: data),
+            if (cards.contains('trend')) ...[
+              const _TrendCard(),
+              const SizedBox(height: 20),
+            ],
+            if (cards.contains('receivables'))
+              if (moduleEnabled(ref, 'crm'))
+                const _TwoColumn(
+                  left: _ReceivablesCard(),
+                  right: _ActivitiesCard(),
+                )
+              else
+                const _ReceivablesCard(),
+          ],
+        );
+      },
     );
   }
 }

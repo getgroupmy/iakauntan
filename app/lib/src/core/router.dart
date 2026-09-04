@@ -105,6 +105,8 @@ import '../features/hr/statutory_remittances_screen.dart';
 import '../features/hr/payslip_screen.dart';
 import '../features/hr/people_screen.dart';
 import '../features/hr/talent_screen.dart';
+import '../features/dashboard/todos_screen.dart';
+import '../features/settings/landing_settings.dart';
 import '../features/team/security_screen.dart';
 import '../features/team/team_screen.dart';
 import '../features/shell/app_shell.dart';
@@ -228,6 +230,18 @@ String? routeFor({
   String? confinedTo,
   Set<String> confinedAllows = const {},
   bool? moduleHeld,
+
+  /// Where this person has asked to land, from `Settings > Landing
+  /// page`. Null while the preference is still being read -- or if
+  /// reading it failed -- and null means the dashboard, which is what
+  /// everybody got before this existed.
+  ///
+  /// It does NOT override confinement. A device pinned to the till goes
+  /// to the till whatever its user prefers -- that is a property of the
+  /// ADDRESS, chosen by whoever set the device up, and a preference is
+  /// a property of the person. The confinement block below runs first
+  /// and returns before this is ever read.
+  String? landingRoute,
 }) {
   // The signing page is the one route that works with no account at
   // all: a director will not sign up to an accounting system to sign
@@ -340,7 +354,15 @@ String? routeFor({
   // hop to the dashboard and the hop from there to the till resolve as
   // one chain and nothing in between is ever drawn.
   if (path == '/signin' || path == '/login') {
-    return doorKnown ? '/dashboard' : null;
+    if (!doorKnown) return null;
+    // The dashboard while the preference is still being read, and NOT a
+    // hold. Holding would be tidier -- it would avoid the hop from the
+    // dashboard to wherever somebody actually asked for -- but it makes
+    // a preference that never arrives into a sign-in screen nobody can
+    // leave. A read that errors, a network that drops at exactly the
+    // wrong moment, and every user of the product is stuck at the door.
+    // One visible hop is the cheaper failure by a long way.
+    return landingRoute ?? '/dashboard';
   }
 
   // Organizations may still be loading; hold the current route until we
@@ -446,6 +468,23 @@ final routerProvider = Provider<GoRouter>((ref) {
         // other address, and nothing above changes.
         confinedTo: door?.landingPath,
         confinedAllows: door?.allows ?? const {},
+        // `read`, not `watch`, for the reason spelled out below: a
+        // watch here rebuilds the router and restarts it at
+        // `initialLocation`. Null while it loads, which `routeFor`
+        // reads as "wait".
+        landingRoute: ref.read(userPreferencesProvider).whenOrNull(
+          // `moduleAllowed` rather than `moduleEnabled`: the latter
+          // takes a WidgetRef and watches, and this is neither a widget
+          // nor a place that may watch.
+          data: (prefs) => landingRouteFor(
+            prefs,
+            (m) => moduleAllowed(
+              entitled: ref.read(enabledModulesProvider).valueOrNull,
+              access: ref.read(myModuleAccessProvider).valueOrNull,
+              code: m,
+            ),
+          ),
+        ),
         // `read`, like every other provider here, and the difference is
         // not stylistic. `watch` inside this callback makes
         // `routerProvider` itself depend on the modules, so the moment
@@ -566,6 +605,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/dashboard',
             builder: (_, __) => const DashboardScreen(),
+          ),
+          // The whole list, rather than the card at the top of the
+          // dashboard that shows five of it. 0526.
+          GoRoute(
+            path: '/todos',
+            builder: (_, __) => const TodosScreen(),
           ),
 
           // Sales and purchases share one list and one editor; the doc

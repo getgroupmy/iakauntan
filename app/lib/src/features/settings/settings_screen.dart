@@ -31,6 +31,7 @@ import 'credit_ledger_dialog.dart';
 import 'export_card.dart';
 import 'collect_payments_card.dart';
 import 'einvoice_credentials.dart';
+import 'landing_settings.dart';
 import 'tax_exemption.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -55,6 +56,12 @@ class SettingsScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // First, and above the company card, because it is
+                  // the only card here that is about YOU rather than
+                  // about the company -- and it is the one somebody
+                  // comes to this screen for on their first day.
+                  const LandingSettingsCard(),
+                  const SizedBox(height: 16),
                   if (organization == null) ...[
                     const EmptyState(
                       icon: Icons.business_outlined,

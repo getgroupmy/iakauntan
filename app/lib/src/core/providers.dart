@@ -269,6 +269,27 @@ final dashboardProvider = FutureProvider.autoDispose<DashboardSummary>((ref) {
   return requireRepo(ref).dashboard();
 });
 
+/// The list you keep beside the books. `autoDispose` so it is re-read
+/// whenever the dashboard or the list screen is opened, which is the
+/// only way an item ticked on one of them shows as ticked on the other.
+final todosProvider = FutureProvider.autoDispose.family<List<Todo>, bool>((
+  ref,
+  done,
+) {
+  return requireRepo(ref).todos(done: done);
+});
+
+/// Where this person lands and what they want on the dashboard.
+///
+/// NOT autoDispose: the router reads it on every redirect, and a
+/// provider that disposed between them would refetch on each navigation
+/// and land somebody on the default while it did.
+final userPreferencesProvider = FutureProvider<UserPreferences>((ref) async {
+  final repo = ref.watch(repoProvider);
+  if (repo == null) return const UserPreferences();
+  return repo.userPreferences();
+});
+
 final revenueTrendProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
       return requireRepo(ref).revenueTrend();

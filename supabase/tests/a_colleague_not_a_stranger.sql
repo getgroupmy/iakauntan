@@ -275,7 +275,17 @@ begin
            ('audit_logs',         'user_id'),
            ('idempotency_keys',   'user_id'),
            ('billing_rates',      'user_id'),
-           ('time_entries',       'user_id'));
+           ('time_entries',       'user_id'),
+           -- 0526. A to-do is never HANDED to anybody: the insert and
+           -- update policies both carry `user_id = auth.uid()`, so the
+           -- only row a person can write is their own and there is no
+           -- path -- RPC or straight through PostgREST -- by which one
+           -- can name somebody else. This is the far side of 0524's
+           -- line: the trigger guards where a person CHOOSES, and
+           -- nobody chooses anybody here. Asserted directly in
+           -- `supabase/tests/todos.sql`, which refuses the write from
+           -- the other person's own session.
+           ('todos',              'user_id'));
   if v_missing is not null then
     raise exception
       'these columns hand work to a person with nothing checking they '

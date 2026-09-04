@@ -1333,6 +1333,137 @@ class DashboardSummary {
   int get lowStock => Fmt.toInt(_raw['low_stock']);
 }
 
+/// One item on the list a bookkeeper keeps beside the books.
+///
+/// 0526. Personal: a to-do belongs to one person at one company, and
+/// nothing here can name anybody else — the row is written with the
+/// signed-in user's own id and row level security refuses any other.
+class Todo {
+  Todo({
+    required this.id,
+    required this.title,
+    this.notes,
+    this.dueDate,
+    this.priority = 'normal',
+    this.doneAt,
+    this.link,
+  });
+
+  factory Todo.fromJson(Map<String, dynamic> json) => Todo(
+    id: json['id'] as String,
+    title: json['title'] as String? ?? '',
+    notes: json['notes'] as String?,
+    dueDate: json['due_date'] == null
+        ? null
+        : DateTime.parse(json['due_date'] as String),
+    priority: json['priority'] as String? ?? 'normal',
+    doneAt: json['done_at'] == null
+        ? null
+        : DateTime.parse(json['done_at'] as String),
+    link: json['link'] as String?,
+  );
+
+  final String id;
+  final String title;
+  final String? notes;
+  final DateTime? dueDate;
+
+  /// `low`, `normal` or `high`.
+  final String priority;
+
+  /// When it was cleared, or null while it is still open. A time rather
+  /// than a flag, so "what did I finish yesterday" has an answer.
+  final DateTime? doneAt;
+
+  /// Where in the app this is about, if anywhere.
+  final String? link;
+
+  bool get isDone => doneAt != null;
+
+  /// Overdue is STRICTLY before today. An item due today is due, not
+  /// late, and colouring it red at one minute past midnight is how a
+  /// list trains somebody to ignore the colour.
+  bool isOverdue(DateTime today) {
+    final due = dueDate;
+    if (due == null || isDone) return false;
+    return DateTime(due.year, due.month, due.day)
+        .isBefore(DateTime(today.year, today.month, today.day));
+  }
+}
+
+/// Where somebody lands when they sign in, and what they want on the
+/// dashboard. 0527. One row per person, not per company.
+class UserPreferences {
+  const UserPreferences({
+    this.landingRoute = '/dashboard',
+    this.dashboardCards = defaultDashboardCards,
+  });
+
+  factory UserPreferences.fromJson(Map<String, dynamic> json) =>
+      UserPreferences(
+        landingRoute: json['landing_route'] as String? ?? '/dashboard',
+        dashboardCards: [
+          for (final c in (json['dashboard_cards'] as List? ?? const []))
+            c as String,
+        ],
+      );
+
+  final String landingRoute;
+  final List<String> dashboardCards;
+
+  /// What a person who has never opened the settings screen gets.
+  /// Mirrors the column default in 0527; the two are asserted against
+  /// each other in `supabase/tests/user_preferences.sql` and
+  /// `app/test/landing_preference_test.dart`.
+  static const defaultDashboardCards = <String>[
+    'todos',
+    'ticker',
+    'metrics',
+    'trend',
+    'receivables',
+  ];
+
+  bool shows(String card) => dashboardCards.contains(card);
+}
+
+/// The pages somebody may choose to land on, and what to call them.
+///
+/// Deliberately a short list rather than every route in the app: a
+/// landing page is a place to START, and an editor for one document or
+/// a screen that needs an id is not one. Each is checked against the
+/// modules the company holds before it is offered.
+const landingChoices = <({String route, String label, String? module})>[
+  (route: '/dashboard', label: 'Dashboard', module: null),
+  (route: '/todos', label: 'To-do list', module: null),
+  (route: '/sales/invoice', label: 'Invoices', module: null),
+  (route: '/purchases/bill', label: 'Bills', module: 'purchases'),
+  (route: '/customers', label: 'Customers', module: null),
+  (route: '/expenses', label: 'Expenses', module: null),
+  (route: '/reports', label: 'Reports', module: null),
+  (route: '/pos', label: 'Point of sale', module: 'pos'),
+];
+
+/// The panels the dashboard can show, in the order they are offered.
+const dashboardCardChoices = <({String code, String label, String hint})>[
+  (
+    code: 'todos',
+    label: 'To-do list',
+    hint: 'What you have told yourself to do, soonest first',
+  ),
+  (
+    code: 'ticker',
+    label: 'Ticker',
+    hint: 'The day\'s figures, running across the top',
+  ),
+  (code: 'metrics', label: 'Key figures', hint: 'Revenue, profit, cash, debt'),
+  (code: 'trend', label: 'Revenue trend', hint: 'The last twelve months'),
+  (
+    code: 'receivables',
+    label: 'Who owes you',
+    hint: 'The oldest debts, and what is overdue',
+  ),
+];
+
 // =====================================================================
 // Access control
 // =====================================================================

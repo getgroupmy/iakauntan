@@ -111,10 +111,52 @@ begin
   -- ------------------------------------------------------------------
   -- What is on the screens
   -- ------------------------------------------------------------------
+  -- Three clients AND the firm. 0528 put the practice on the register
+  -- it keeps for everybody else: a corp-sec firm files its own annual
+  -- declaration too, and a register with no sign of the company you
+  -- just signed into is a filing cabinet rather than a practice.
   perform pg_temp.check_eq('the practice keeps a statutory register',
     (select count(*)::integer from public.corp_entities e
        join public.organizations o on o.id = e.org_id
-      where o.firm_id = v_firm), 3);
+      where o.firm_id = v_firm), 4);
+
+  perform pg_temp.check_eq('and the firm is on it, under its own number',
+    (select e.registration_no from public.corp_entities e
+       join public.organizations o on o.id = e.org_id
+      where o.firm_id = v_firm and e.name = 'Accountant & Co.'),
+    (select o.registration_no from public.organizations o
+      where o.firm_id = v_firm and o.name = 'Accountant & Co.'));
+
+  -- An LLP, not a Sdn Bhd. It matters because the two file different
+  -- things: an annual declaration under s.68 of the LLP Act rather than
+  -- an annual return under s.68 of the Companies Act, and the deadline
+  -- screens read this column to decide which.
+  perform pg_temp.check_eq('as an LLP',
+    (select e.entity_type::text from public.corp_entities e
+       join public.organizations o on o.id = e.org_id
+      where o.firm_id = v_firm and e.name = 'Accountant & Co.'), 'llp');
+
+  -- Partners and a compliance officer, which is what an LLP has. A
+  -- director or a company secretary here would be the Companies Act
+  -- shape stamped on a body that is not under it.
+  perform pg_temp.check_eq('with two partners',
+    (select count(*)::integer from public.corp_officers x
+       join public.corp_entities e on e.id = x.entity_id
+       join public.organizations o on o.id = e.org_id
+      where o.firm_id = v_firm and e.name = 'Accountant & Co.'
+        and x.role = 'partner'), 2);
+  perform pg_temp.check_eq('and a compliance officer',
+    (select count(*)::integer from public.corp_officers x
+       join public.corp_entities e on e.id = x.entity_id
+       join public.organizations o on o.id = e.org_id
+      where o.firm_id = v_firm and e.name = 'Accountant & Co.'
+        and x.role = 'compliance_officer'), 1);
+  perform pg_temp.check_eq('and no company secretary, which an LLP has not',
+    (select count(*)::integer from public.corp_officers x
+       join public.corp_entities e on e.id = x.entity_id
+       join public.organizations o on o.id = e.org_id
+      where o.firm_id = v_firm and e.name = 'Accountant & Co.'
+        and x.role in ('secretary', 'director')), 0);
 
   perform pg_temp.check_true('the client books have posted invoices',
     (select count(*) from public.sales_documents d
