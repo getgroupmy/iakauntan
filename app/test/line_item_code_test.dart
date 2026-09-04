@@ -174,4 +174,67 @@ void main() {
       'BRG-001',
     );
   });
+
+  // -------------------------------------------------------------------
+  // The description box searches too
+  //
+  // Same search, both boxes: somebody typing in either one is doing the
+  // same thing, looking for an item. The description stays FREE TEXT --
+  // a charge is often something not on the item list at all, and a box
+  // that refused what was typed would make half the invoices in this
+  // system un-typeable.
+  // -------------------------------------------------------------------
+  Finder descriptionField() =>
+      find.widgetWithText(TextFormField, 'Description');
+
+  testWidgets('the description box finds an item by its name too',
+      (tester) async {
+    await pump(tester, LineDraft());
+
+    await tester.enterText(descriptionField(), 'bata');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Batu bata merah'), findsWidgets);
+    expect(find.text('Simen Portland'), findsNothing);
+  });
+
+  testWidgets('and by part number, for whoever types the code in the '
+      'wrong box', (tester) async {
+    await pump(tester, LineDraft());
+
+    await tester.enterText(descriptionField(), 'SVC-100');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Upah pemasangan simen'), findsWidgets);
+  });
+
+  testWidgets('picking from the description fills the line', (tester) async {
+    final line = LineDraft();
+    await pump(tester, line);
+
+    await tester.enterText(descriptionField(), 'Portland');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Simen Portland').last);
+    await tester.pumpAndSettle();
+
+    expect(line.itemId, 'i1');
+    expect(line.unitPrice, 22.50);
+  });
+
+  testWidgets('but a description that matches nothing is still typeable',
+      (tester) async {
+    final line = LineDraft();
+    await pump(tester, line);
+
+    // The charge that is not on the item list, which is most of them on
+    // a professional firm's invoice.
+    await tester.enterText(
+      descriptionField(),
+      'Audit fee for the year ended 31 December',
+    );
+    await tester.pumpAndSettle();
+
+    expect(line.description, 'Audit fee for the year ended 31 December');
+    expect(line.itemId, isNull);
+  });
 }

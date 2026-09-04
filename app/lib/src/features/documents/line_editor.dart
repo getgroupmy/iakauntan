@@ -216,6 +216,7 @@ class _WideLineState extends State<_WideLine> {
   late final TextEditingController _code;
   late final FocusNode _codeFocus;
   late final TextEditingController _description;
+  late final FocusNode _descriptionFocus;
   late final TextEditingController _quantity;
   late final TextEditingController _price;
   late final TextEditingController _discount;
@@ -226,6 +227,7 @@ class _WideLineState extends State<_WideLine> {
     _code = TextEditingController(text: _codeOf(widget.line.itemId));
     _codeFocus = FocusNode();
     _description = TextEditingController(text: widget.line.description);
+    _descriptionFocus = FocusNode();
     _quantity = TextEditingController(text: Fmt.qty(widget.line.quantity));
     _price = TextEditingController(
         text: widget.line.unitPrice == 0 ? '' : widget.line.unitPrice.toString());
@@ -254,6 +256,7 @@ class _WideLineState extends State<_WideLine> {
     _code.dispose();
     _codeFocus.dispose();
     _description.dispose();
+    _descriptionFocus.dispose();
     _quantity.dispose();
     _price.dispose();
     _discount.dispose();
@@ -347,6 +350,7 @@ class _WideLineState extends State<_WideLine> {
             flex: 4,
             child: _ItemField(
               controller: _description,
+              focusNode: _descriptionFocus,
               items: widget.items,
               editable: widget.editable,
               onItemSelected: _applyItem,
@@ -480,6 +484,7 @@ class _NarrowLineState extends State<_NarrowLine> {
   late final TextEditingController _code;
   late final FocusNode _codeFocus;
   late final TextEditingController _description;
+  late final FocusNode _descriptionFocus;
   late final TextEditingController _quantity;
   late final TextEditingController _price;
   late final TextEditingController _discount;
@@ -490,6 +495,7 @@ class _NarrowLineState extends State<_NarrowLine> {
     _code = TextEditingController(text: _codeOf(widget.line.itemId));
     _codeFocus = FocusNode();
     _description = TextEditingController(text: widget.line.description);
+    _descriptionFocus = FocusNode();
     _quantity = TextEditingController(text: Fmt.qty(widget.line.quantity));
     _price = TextEditingController(
         text: widget.line.unitPrice == 0 ? '' : widget.line.unitPrice.toString());
@@ -518,6 +524,7 @@ class _NarrowLineState extends State<_NarrowLine> {
     _code.dispose();
     _codeFocus.dispose();
     _description.dispose();
+    _descriptionFocus.dispose();
     _quantity.dispose();
     _price.dispose();
     _discount.dispose();
@@ -622,6 +629,7 @@ class _NarrowLineState extends State<_NarrowLine> {
           const SizedBox(height: 8),
           _ItemField(
             controller: _description,
+            focusNode: _descriptionFocus,
             items: widget.items,
             editable: widget.editable,
             onItemSelected: _applyItem,
@@ -698,6 +706,95 @@ class _NarrowLineState extends State<_NarrowLine> {
   }
 }
 
+/// The list an item box drops down.
+///
+/// It is the width of the FIELD, and that is a constraint rather than a
+/// choice: `RawAutocomplete` puts its options in an overlay whose
+/// constraints come from the box they hang under. Widening it with an
+/// `OverflowBox` does work visually — and makes the rows UNTAPPABLE,
+/// because the part that hangs outside the parent's bounds is never hit
+/// tested. A list you can read and cannot click is worse than a narrow
+/// one, so the name wraps to two lines instead of being cut off, which
+/// is what "Structured Ca…" needed.
+///
+/// The wide search is the DESCRIPTION box, which is twice the width and
+/// runs the same query. Somebody hunting by name has a box the size of
+/// the question.
+Widget itemOptionsView(
+  BuildContext context,
+  AutocompleteOnSelected<Item> onSelected,
+  Iterable<Item> options,
+) {
+  return Align(
+    alignment: Alignment.topLeft,
+    child: Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(8),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 280),
+        child: ListView.builder(
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          itemCount: options.length,
+          itemBuilder: (context, index) {
+            final item = options.elementAt(index);
+            return InkWell(
+              onTap: () => onSelected(item),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      item.code,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      item.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    Text(
+                      Fmt.money(item.unitPrice),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    ),
+  );
+}
+
+/// Which items match what has been typed, code first.
+///
+/// Shared by both boxes on the line, because somebody typing in either
+/// one is doing the same thing: looking for an item. Code matches come
+/// before name matches so an exact part number is not buried under
+/// everything whose name happens to contain it.
+Iterable<Item> itemsMatching(List<Item> items, String query) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return const Iterable<Item>.empty();
+  final byCode = <Item>[];
+  final byName = <Item>[];
+  for (final item in items) {
+    if (item.code.toLowerCase().contains(q)) {
+      byCode.add(item);
+    } else if (item.name.toLowerCase().contains(q)) {
+      byName.add(item);
+    }
+  }
+  return [...byCode, ...byName].take(30);
+}
+
 /// The item's own number, with the item list behind it.
 ///
 /// Typing here searches the item master on BOTH the code and the
@@ -731,22 +828,9 @@ class _ItemCodeField extends StatelessWidget {
       textEditingController: controller,
       focusNode: focusNode,
       displayStringForOption: (item) => item.code,
-      optionsBuilder: (value) {
-        final query = value.text.trim().toLowerCase();
-        if (query.isEmpty || !editable) return const Iterable<Item>.empty();
-        // Code first, then description, so an exact part number is not
-        // buried under everything whose name happens to contain it.
-        final byCode = <Item>[];
-        final byName = <Item>[];
-        for (final item in items) {
-          if (item.code.toLowerCase().contains(query)) {
-            byCode.add(item);
-          } else if (item.name.toLowerCase().contains(query)) {
-            byName.add(item);
-          }
-        }
-        return [...byCode, ...byName].take(30);
-      },
+      optionsBuilder: (value) => editable
+          ? itemsMatching(items, value.text)
+          : const Iterable<Item>.empty(),
       onSelected: onItemSelected,
       fieldViewBuilder: (context, textController, node, onFieldSubmitted) {
         return TextFormField(
@@ -760,58 +844,28 @@ class _ItemCodeField extends StatelessWidget {
           ),
         );
       },
-      optionsViewBuilder: (context, onSelected, options) {
-        return Align(
-          alignment: Alignment.topLeft,
-          child: Material(
-            elevation: 4,
-            borderRadius: BorderRadius.circular(8),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 280, maxWidth: 360),
-              child: ListView.builder(
-                shrinkWrap: true,
-                padding: EdgeInsets.zero,
-                itemCount: options.length,
-                itemBuilder: (context, index) {
-                  final item = options.elementAt(index);
-                  return InkWell(
-                    onTap: () => onSelected(item),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            item.code,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          Text(
-                            '${item.name} \u00b7 ${Fmt.money(item.unitPrice)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-        );
-      },
+      optionsViewBuilder: itemOptionsView,
     );
   }
 }
 
-/// Free-text description that also offers the item master as suggestions.
+/// The description, which is also a way to find an item.
+///
+/// It stays FREE TEXT: a charge is often something that is not on the
+/// item list at all, and a box that refused what was typed unless it
+/// matched a row would make half the invoices in this system
+/// un-typeable. What it adds is a search — the same one the item-number
+/// box runs, on the code and the name together — so somebody who starts
+/// typing "cabling" is offered the item rather than having to know it
+/// exists and open the picker.
+///
+/// The picker beside it stays too. It answers a different question:
+/// "what is on the list" rather than "is this thing on the list", and
+/// somebody who does not know what to type has nothing to type.
 class _ItemField extends StatelessWidget {
   const _ItemField({
     required this.controller,
+    required this.focusNode,
     required this.items,
     required this.editable,
     required this.onItemSelected,
@@ -819,6 +873,7 @@ class _ItemField extends StatelessWidget {
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final List<Item> items;
   final bool editable;
   final ValueChanged<Item> onItemSelected;
@@ -829,8 +884,23 @@ class _ItemField extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: TextFormField(
-            controller: controller,
+          child: RawAutocomplete<Item>(
+            textEditingController: controller,
+            focusNode: focusNode,
+            // The description, not the code: picking an item here fills
+            // the box with what the thing is called, which is what this
+            // box is for and what will print on the invoice.
+            displayStringForOption: (item) => item.name,
+            optionsBuilder: (value) => editable
+                ? itemsMatching(items, value.text)
+                : const Iterable<Item>.empty(),
+            onSelected: onItemSelected,
+            optionsViewBuilder: itemOptionsView,
+            fieldViewBuilder:
+                (context, textController, node, onFieldSubmitted) =>
+                    TextFormField(
+            controller: textController,
+            focusNode: node,
             enabled: editable,
             onChanged: onTextChanged,
             // A charge often needs more than one line to describe: a
@@ -849,6 +919,7 @@ class _ItemField extends StatelessWidget {
               hintText: 'Description',
               isDense: true,
             ),
+          ),
           ),
         ),
         if (editable && items.isNotEmpty)
