@@ -3315,8 +3315,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos.sql": {
-    "mtime": 1788467854.6161215,
-    "ast_hash": "573ef2bd94c95760aae28b5dd12cf920",
+    "mtime": 1788491761.5352976,
+    "ast_hash": "30719bff46e44c6a83d8abf71fa6ee73",
     "semantic_hash": ""
   },
   "supabase/tests/pos_fnb.sql": {
@@ -3825,8 +3825,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_delivery.sql": {
-    "mtime": 1787822946.0305898,
-    "ast_hash": "5da49630bd0881175ac89a95e64b943d",
+    "mtime": 1788491805.7633035,
+    "ast_hash": "36fdd99fccc3e22727b464d50fa44cc6",
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/receipt_settings_screen.dart": {

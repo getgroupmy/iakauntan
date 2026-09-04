@@ -426,6 +426,52 @@ begin
   perform pg_temp.check_true('and adds up what the rides earned',
     v_b.fees > 0);
 
+
+  -- ------------------------------------------------------------------
+  -- Points on the food, not on the ride
+  -- ------------------------------------------------------------------
+  -- The assertion this file is built around, part three, and the one
+  -- the header promised. `complete_pos_sale` hands
+  -- `app.pos_settle_loyalty` the bill LESS the delivery fee, because a
+  -- shop that pays points on a courier charge is paying points on money
+  -- it hands straight to a rider. Nothing asserted it: every loyalty
+  -- probe lives in a file with no delivery zone, and a fee set by hand
+  -- there is wiped by the recalculation the till runs before it takes
+  -- the money. It needs a zone, which is here.
+  declare
+    v_prog uuid; v_member uuid; v_acct uuid; v_lsale uuid;
+  begin
+    insert into public.org_modules (org_id, module_code, is_enabled)
+    values (v_org, 'loyalty', true)
+    on conflict (org_id, module_code) do update set is_enabled = true;
+    -- One point per ringgit, so the points ARE the ringgit and the two
+    -- readings are 24 and 29.
+    insert into public.loyalty_programs
+      (org_id, code, name, earn_points_per_myr, redeem_value_per_point)
+    values (v_org, 'KAD', 'Kad Mesra', 1, 0.01) returning id into v_prog;
+    insert into public.contacts (org_id, code, name, contact_type)
+    values (v_org, 'C-M1', 'Puan Aminah', 'customer') returning id into v_member;
+    v_acct := public.enrol_loyalty_member(v_member, 'CARD-0001');
+
+    v_lsale := public.open_pos_sale(v_reg);
+    perform public.add_pos_sale_line(v_lsale, v_item, 2, 12.00);
+    perform public.set_pos_delivery(
+      v_lsale, '12 Jalan Sri 3', '012-3456789', 'Taman Sri Indah',
+      'Kuala Lumpur', 'Wilayah Persekutuan', '58200', 'Puan Aminah');
+    perform pg_temp.check_eq('twenty-four of food and five of ride',
+      (select s.total_amount from public.pos_sales s where s.id = v_lsale),
+      29.00);
+
+    perform * from public.complete_pos_sale(v_lsale,
+      jsonb_build_array(jsonb_build_object('type', v_cash, 'amount', 29.00)),
+      v_member);
+    perform pg_temp.check_eq('the member earns on the food and not on the ride',
+      app.loyalty_balance(v_acct), 24);
+    perform pg_temp.check_eq('and the shop still took the whole twenty-nine',
+      (select s.total_amount from public.pos_sales s where s.id = v_lsale),
+      29.00);
+  end;
+
   -- ------------------------------------------------------------------
   -- A shop that does not deliver cannot record one
   -- ------------------------------------------------------------------
