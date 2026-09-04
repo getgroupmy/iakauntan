@@ -305,6 +305,7 @@ jobs:
                    supabase/tests/chart_of_accounts.sql \
                    supabase/tests/feedback.sql \
                    supabase/tests/group_payment.sql \
+                   supabase/tests/group_payment_shapes.sql \
                    supabase/tests/demo_practice.sql \
                    supabase/tests/over_allocation.sql \
                    supabase/tests/allocation_party.sql \

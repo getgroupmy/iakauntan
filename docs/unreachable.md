@@ -6704,3 +6704,65 @@ the shape recurs:
   third time this campaign has met a duplicated function where the
   unattended copy is the one with no coverage — after the two aged
   listings and the two document runners.
+
+## Paying several companies' invoices with one transfer
+
+`record_group_payment`, its line parser `app.group_payment_lines`, and
+`report_group_trial_balance`. A mutation sweep of 63 one-line mutants
+killed 35, and `group_payment.sql` deserves the credit: both permission
+checks, all three grouping keys, the overpayment guard from both sides
+and the duplicate-document check all died on the first pass.
+
+**What lived was one fixture decision with four consequences.** `gp_org`
+gives every company exactly ONE customer, ONE supplier and ONE bank
+account, every figure is a whole number of ringgit, and every payment is
+made today. So:
+
+* with one document per payer, `sum(amount)` and `max(amount)` are the
+  same number, and the figure banked was never really asserted
+* with one contact per company, the allocation loop's
+  `contact_id = g.contact_id` had nothing to cross, on either side
+* with one bank account, three of the four conditions on the default
+  fallback were unasserted — including that a CLOSED account must not
+  take the money
+* and paying today made `p_paid_on` and `current_date` the same date, so
+  the receipt's date, the allocation's date and **the day the exchange
+  rate is read on** could each be swapped unnoticed. Reading today's
+  4.80 instead of the day's 4.10 conjures RM700 of difference from
+  nowhere.
+
+#### The equivalent mutants
+
+Three survive the finished file.
+
+`coalesce(p_lines, '[]'::jsonb)` is belt over two braces:
+`record_group_payment` refuses a null payload several lines before the
+parser runs, and `jsonb_to_recordset` is strict anyway — given null it
+returns no rows rather than raising.
+
+The other two are **a mutually-masking pair, the fifth this campaign has
+found**. The parser rounds the discount to the sen; the overpayment
+guard rounds the sum it compares. Each hides the other: the parser
+rounds before the guard sees anything, and the guard rounds the sum
+regardless. What is stored is rounded again by
+`payment_allocations.discount_amount`'s own scale. The rule underneath
+all three is one rule — money is kept to the sen in the columns as well
+as in the arithmetic — and that is what the fixture asserts.
+
+The amount's rounding is NOT equivalent, and the difference is worth
+recording. One line of RM333.333… is rounded by the column and nothing
+shows. THREE lines are not: rounded first they come to RM999.99, left
+alone to RM1,000.00 — so the receipt would be banked a sen larger than
+the allocations that make it up, and an invoice settled by money nobody
+transferred. Same blind spot the withholding sweep recorded: a column
+with a scale hides a missing `round` until something adds the parts up.
+
+#### And one thing that is not a bug but should be written down
+
+`g.bank is distinct from g.bank_hi` cannot differ from a plain `<>`,
+because both sides come from `min()` and `max()` over the same column
+and aggregates ignore nulls — one side can be null only when both are.
+The consequence is a product decision nobody has stated: when one line
+of a company's share names a bank account and another leaves it blank,
+no refusal is raised, and the named account takes that company's whole
+share. The fixture pins it so it is a decision rather than a discovery.
