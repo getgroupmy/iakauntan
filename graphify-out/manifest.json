@@ -230,8 +230,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/talent_screen.dart": {
-    "mtime": 1788285599.923654,
-    "ast_hash": "c1cb9f4c3bc4c7ebc34e3ffa37f99733",
+    "mtime": 1788510804.2719269,
+    "ast_hash": "6feeb492f0e7456cff64b7c30abdf2fb",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/tax_year_section.dart": {
@@ -240,8 +240,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/items/items_screen.dart": {
-    "mtime": 1788509524.84025,
-    "ast_hash": "1b53e613d5ab77f915e108431f591efd",
+    "mtime": 1788511209.9591455,
+    "ast_hash": "924728f41d2bfe8bb230825883fdb32c",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journals_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788506690.6471226,
-    "ast_hash": "9412877061b1878555918d6c15e8106d",
+    "mtime": 1788511188.1041775,
+    "ast_hash": "12663c5924091d931539e3f6ca4c12da",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1425,8 +1425,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/crm/leads_screen.dart": {
-    "mtime": 1788506642.7340972,
-    "ast_hash": "e62670c59de304193c29af8893c9b7a8",
+    "mtime": 1788510804.2723744,
+    "ast_hash": "fd29f4b38916bb2438bef0d4d40069ae",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/appraisal_goals_dialog.dart": {
@@ -7920,13 +7920,28 @@
     "semantic_hash": ""
   },
   "app/test/item_row_actions_test.dart": {
-    "mtime": 1788509190.0547552,
-    "ast_hash": "9377e8e984cca62c66c0162fc11d35cc",
+    "mtime": 1788510594.1650338,
+    "ast_hash": "dc1a191aed98c9b77a18a84e83d82637",
     "semantic_hash": ""
   },
   "app/test/web_index_test.dart": {
     "mtime": 1788509964.5286193,
     "ast_hash": "b073d839c34ef155af6696dbf56831be",
+    "semantic_hash": ""
+  },
+  "app/lib/src/core/row_actions.dart": {
+    "mtime": 1788510882.0552287,
+    "ast_hash": "d8b9fdce14c7e9c3144c05bab7379d2c",
+    "semantic_hash": ""
+  },
+  "app/test/row_actions_test.dart": {
+    "mtime": 1788510854.358717,
+    "ast_hash": "97ada0d96d815abeaf0a4ded7205c960",
+    "semantic_hash": ""
+  },
+  "scripts/check_narrow_rows.py": {
+    "mtime": 1788510763.2690127,
+    "ast_hash": "29f88a0dffb7ba54e12b94ab4e977a9c",
     "semantic_hash": ""
   }
 }

@@ -26,37 +26,77 @@ void main() {
     uomCode: 'SET',
   );
 
-  List<String> labels(Item i, {required bool canWrite}) =>
-      itemRowActions(i, canWrite: canWrite).map((a) => a.label).toList();
+  /// The action list needs a context to open its dialogs with, so the
+  /// pure assertions run inside a pumped `Builder` rather than against
+  /// a second list that could drift from the real one.
+  Future<List<String>> labels(
+    WidgetTester tester,
+    Item i, {
+    required bool canWrite,
+  }) async {
+    late List<String> out;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            out = itemRowActions(context, i, canWrite: canWrite)
+                .map((a) => a.label)
+                .toList();
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+    return out;
+  }
 
   group('what a row offers', () {
-    test('a stock item somebody may edit offers all four', () {
-      expect(labels(item(), canWrite: true),
+    testWidgets('a stock item somebody may edit offers all four',
+        (tester) async {
+      expect(await labels(tester, item(), canWrite: true),
           ['Stock card', 'Prices', 'Variants', 'Packs']);
     });
 
-    test('a service has no shelf, so no card, no variants and no packs', () {
+    testWidgets('a service has no shelf, so no card, variants or packs',
+        (tester) async {
       // A variant and a pack are both about a thing you can hold.
-      expect(labels(item(stock: false), canWrite: true), ['Prices']);
+      expect(await labels(tester, item(stock: false), canWrite: true),
+          ['Prices']);
     });
 
-    test('somebody who may not edit still gets the stock card', () {
+    testWidgets('somebody who may not edit still gets the stock card',
+        (tester) async {
       // It changes nothing, and the person who has to answer for what
       // is on the shelf is often not the person who may edit prices.
-      expect(labels(item(), canWrite: false), ['Stock card']);
+      expect(await labels(tester, item(), canWrite: false), ['Stock card']);
     });
 
-    test('and a service they may not edit offers nothing at all', () {
-      expect(labels(item(stock: false), canWrite: false), isEmpty);
+    testWidgets('and a service they may not edit offers nothing at all',
+        (tester) async {
+      expect(await labels(tester, item(stock: false), canWrite: false),
+          isEmpty);
     });
 
-    test('every action carries a key of its own', () {
+    testWidgets('every action carries a key of its own', (tester) async {
       // Two rows in one list must not collide, so the id is in the key.
-      final a = itemRowActions(item(id: 'i1'), canWrite: true);
-      final b = itemRowActions(item(id: 'i2'), canWrite: true);
-      expect(a.map((x) => x.key).toSet().intersection(
-            b.map((x) => x.key).toSet(),
-          ), isEmpty);
+      late Set<String?> a;
+      late Set<String?> b;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              a = itemRowActions(context, item(id: 'i1'), canWrite: true)
+                  .map((x) => x.actionKey)
+                  .toSet();
+              b = itemRowActions(context, item(id: 'i2'), canWrite: true)
+                  .map((x) => x.actionKey)
+                  .toSet();
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      expect(a.intersection(b), isEmpty);
     });
   });
 
@@ -72,7 +112,10 @@ void main() {
               ListTile(
                 title: const Text('Network switch, 24 port'),
                 subtitle: const Text('ITM-130 · Stock · 29 SET on hand'),
-                trailing: itemRowTrailing(item(), canWrite: true),
+                trailing: Builder(
+                  builder: (context) =>
+                      itemRowTrailing(context, item(), canWrite: true),
+                ),
               ),
             ]),
           ),

@@ -360,6 +360,16 @@ jobs:
             psql "$DB" -v ON_ERROR_STOP=1 -f "$f"
           done
 
+      # A list row whose buttons leave its own words nowhere to go.
+      # `ListTile` gives its trailing the width it asks for; nothing
+      # warns when that leaves the title two pixels, and the text wraps
+      # ONE LETTER PER LINE rather than overflowing. It shipped on the
+      # items list. The analyzer sees a valid tree, the widget tests
+      # pass because a test surface is 800 wide, and Flutter's overflow
+      # banner never fires because nothing overflowed.
+      - name: Check every list row leaves room for its own words
+        run: python3 scripts/check_narrow_rows.py
+
       # The client's queries checked against the schema they will run
       # against. An ambiguous embed passes `flutter analyze`, passes the
       # widget tests, passes the SQL tests, and then takes out a whole

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/quick_add_dialog.dart';
+import '../../core/row_actions.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
@@ -222,35 +223,45 @@ class _LeadTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 12),
       ),
-      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        if (value > 0) Money(value, bold: true),
-        // Converting is what a lead is for. A converted one has nowhere
-        // left to go, and a lost one has to be reopened first — the
-        // database refuses both, so the button should not offer them.
-        if (canWrite && !converted && status != 'lost') ...[
-          const SizedBox(width: Space.sm),
-          FilledButton.tonal(
-            onPressed: onConvert,
-            child: const Text('Convert'),
-          ),
-          IconButton(
-            key: const ValueKey('lose-lead'),
-            tooltip: 'It came to nothing',
-            icon: const Icon(Icons.do_not_disturb_on_outlined, size: 18),
-            onPressed: onLose,
-          ),
+      // The value stays put; the actions become a menu on a phone,
+      // where this row ran 6 pixels past the edge of the screen.
+      trailing: RowActions(
+        menuKey: 'lead-actions',
+        leading: value > 0 ? Money(value, bold: true) : null,
+        actions: [
+          // Converting is what a lead is for. A converted one has
+          // nowhere left to go, and a lost one has to be reopened first
+          // — the database refuses both, so the button should not offer
+          // them.
+          if (canWrite && !converted && status != 'lost') ...[
+            RowAction(
+              actionKey: 'convert-lead',
+              label: 'Convert',
+              icon: Icons.person_add_alt_outlined,
+              emphasis: RowActionEmphasis.filled,
+              onTap: onConvert,
+            ),
+            RowAction(
+              actionKey: 'lose-lead',
+              label: 'It came to nothing',
+              icon: Icons.do_not_disturb_on_outlined,
+              // An icon on a wide screen, with its words as the
+              // tooltip; a line with its words on it in the menu.
+              iconOnly: true,
+              onTap: onLose,
+            ),
+          ],
+          // And back, because `convert_lead` has said "reopen it first"
+          // since `0093` about a state nothing could leave.
+          if (canWrite && status == 'lost')
+            RowAction(
+              actionKey: 'reopen-lead',
+              label: 'Reopen',
+              icon: Icons.restart_alt,
+              onTap: onReopen,
+            ),
         ],
-        // And back, because `convert_lead` has said "reopen it first"
-        // since `0093` about a state nothing could leave.
-        if (canWrite && status == 'lost') ...[
-          const SizedBox(width: Space.sm),
-          TextButton(
-            key: const ValueKey('reopen-lead'),
-            onPressed: onReopen,
-            child: const Text('Reopen'),
-          ),
-        ],
-      ]),
+      ),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/quick_add_dialog.dart';
+import '../../core/row_actions.dart';
 import '../../core/searchable_picker.dart';
 
 import '../../core/format.dart';
@@ -143,7 +144,7 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12),
                 ),
-                trailing: _ItemActions(item: item, canWrite: canWrite),
+                trailing: itemRowTrailing(context, item, canWrite: canWrite),
               );
             },
           );
@@ -180,97 +181,48 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
 ///   * PACKS is how big a carton is. The reference table leaves
 ///     packaging units out on purpose, so until a shop says, a quantity
 ///     written in cartons has nothing to convert by.
-List<({String key, String label, void Function(BuildContext) open})>
-    itemRowActions(Item item, {required bool canWrite}) => [
+List<RowAction> itemRowActions(
+  BuildContext context,
+  Item item, {
+  required bool canWrite,
+}) => [
   if (item.trackInventory)
-    (
-      key: 'stock-card-${item.id}',
+    RowAction(
+      actionKey: 'stock-card-${item.id}',
       label: 'Stock card',
-      open: (c) => showStockCard(c, item),
+      onTap: () => showStockCard(context, item),
     ),
   if (canWrite)
-    (
-      key: 'prices-${item.id}',
+    RowAction(
+      actionKey: 'prices-${item.id}',
       label: 'Prices',
-      open: (c) => showItemPrices(c, item),
+      onTap: () => showItemPrices(context, item),
     ),
   if (canWrite && item.trackInventory) ...[
-    (
-      key: 'variants-${item.id}',
+    RowAction(
+      actionKey: 'variants-${item.id}',
       label: 'Variants',
-      open: (c) => showItemVariants(c, item),
+      onTap: () => showItemVariants(context, item),
     ),
-    (
-      key: 'packs-${item.id}',
+    RowAction(
+      actionKey: 'packs-${item.id}',
       label: 'Packs',
-      open: (c) => showItemPacks(c, item),
+      onTap: () => showItemPacks(context, item),
     ),
   ],
 ];
 
 /// The price and the row's actions, for a caller that has its own
 /// `ListTile` — the items list, and the test that pins the layout.
-Widget itemRowTrailing(Item item, {required bool canWrite}) =>
-    _ItemActions(item: item, canWrite: canWrite);
-
-/// The price, and the ways into the item beside it.
-///
-/// ON A PHONE THEY COLLAPSE INTO ONE MENU, and that is the whole point
-/// of this widget. `ListTile` gives its `trailing` the width it asks
-/// for and leaves the title and subtitle whatever is left: four text
-/// buttons and a price want about 450 logical pixels, which on a 400
-/// pixel phone left the subtitle a column ONE CHARACTER WIDE. The item
-/// list was unreadable on the device most likely to be standing in
-/// front of the shelf.
-class _ItemActions extends StatelessWidget {
-  const _ItemActions({required this.item, required this.canWrite});
-
-  final Item item;
-  final bool canWrite;
-
-  /// Below this, the buttons become a menu. The same threshold the
-  /// stock take and the payroll screens use.
-  static const _narrow = 700.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final actions = itemRowActions(item, canWrite: canWrite);
-    final narrow = MediaQuery.sizeOf(context).width < _narrow;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Money(item.unitPrice, bold: true),
-        if (actions.isEmpty)
-          const SizedBox.shrink()
-        else if (narrow)
-          PopupMenuButton<int>(
-            key: ValueKey('item-actions-${item.id}'),
-            tooltip: 'More',
-            icon: const Icon(Icons.more_vert, size: 20),
-            onSelected: (i) => actions[i].open(context),
-            itemBuilder: (_) => [
-              for (var i = 0; i < actions.length; i++)
-                PopupMenuItem<int>(
-                  value: i,
-                  key: ValueKey(actions[i].key),
-                  child: Text(actions[i].label),
-                ),
-            ],
-          )
-        else
-          for (final action in actions) ...[
-            const SizedBox(width: Space.sm),
-            TextButton(
-              key: ValueKey(action.key),
-              onPressed: () => action.open(context),
-              child: Text(action.label),
-            ),
-          ],
-      ],
-    );
-  }
-}
+Widget itemRowTrailing(
+  BuildContext context,
+  Item item, {
+  required bool canWrite,
+}) => RowActions(
+  menuKey: 'item-actions-${item.id}',
+  leading: Money(item.unitPrice, bold: true),
+  actions: itemRowActions(context, item, canWrite: canWrite),
+);
 
 class _ItemDialog extends ConsumerStatefulWidget {
   const _ItemDialog({this.item});

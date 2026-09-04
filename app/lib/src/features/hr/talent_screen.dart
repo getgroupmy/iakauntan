@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/row_actions.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -216,29 +217,42 @@ class _CandidatesTab extends ConsumerWidget {
                 style: const TextStyle(fontSize: 12),
               ),
               onTap: () => showApplicantEditor(context, applicant: a),
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                TextButton(
-                  onPressed: () => showInterviews(context, a.id, a.fullName),
-                  child: const Text('Interviews'),
-                ),
-                // Hiring is not the next label on the pipeline: it makes
-                // the employee record out of this one and links the two,
-                // so nobody retypes the name, the phone number and the
-                // NRIC from the record in front of them.
-                if (!a.isHired && a.status == 'offer') ...[
-                  const SizedBox(width: Space.xs),
-                  FilledButton.tonal(
-                    onPressed: () => _hire(context, ref, a),
-                    child: const Text('Hire'),
+              // "Interviews" and "Move to Shortlisted" together want
+              // more than a phone has, so below a breakpoint they are
+              // one menu. `scripts/check_narrow_rows.py` measured this
+              // row at 104 pixels PAST the edge of a 360px screen.
+              trailing: RowActions(
+                menuKey: 'applicant-actions-${a.id}',
+                actions: [
+                  RowAction(
+                    actionKey: 'interviews-${a.id}',
+                    label: 'Interviews',
+                    icon: Icons.event_outlined,
+                    onTap: () => showInterviews(context, a.id, a.fullName),
                   ),
-                ] else if (next != null && !a.isHired) ...[
-                  const SizedBox(width: Space.xs),
-                  OutlinedButton(
-                    onPressed: () => _advance(context, ref, a, next),
-                    child: Text('Move to ${Fmt.label(next)}'),
-                  ),
+                  // Hiring is not the next label on the pipeline: it
+                  // makes the employee record out of this one and links
+                  // the two, so nobody retypes the name, the phone
+                  // number and the NRIC from the record in front of
+                  // them.
+                  if (!a.isHired && a.status == 'offer')
+                    RowAction(
+                      actionKey: 'hire-${a.id}',
+                      label: 'Hire',
+                      icon: Icons.badge_outlined,
+                      emphasis: RowActionEmphasis.filled,
+                      onTap: () => _hire(context, ref, a),
+                    )
+                  else if (next != null && !a.isHired)
+                    RowAction(
+                      actionKey: 'advance-${a.id}',
+                      label: 'Move to ${Fmt.label(next)}',
+                      icon: Icons.arrow_forward,
+                      emphasis: RowActionEmphasis.outlined,
+                      onTap: () => _advance(context, ref, a, next),
+                    ),
                 ],
-              ]),
+              ),
             );
           },
         );
