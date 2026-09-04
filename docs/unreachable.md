@@ -6568,3 +6568,60 @@ rule it depends on** — and the second time (after the depreciation
 `accumulated_depreciation_at` / `months_held` pair) that the rule turned
 out to be *two lists in two files having to stay identical*, which is
 exactly the kind of agreement nothing re-checks.
+
+### Group consolidation: 17 of 37, then 31
+
+`group_consolidation.sql` carries the assertion that matters most — the
+eliminations sum to zero — and pins the four directions an adjustment
+can go in. Twenty mutants lived anyway, and all of them were about the
+SELECTION rather than the arithmetic.
+
+`app.group_intercompany_lines` is one query with eight conditions on it,
+and the fixture posts one pair of entries between two companies in one
+group on one day. An entry outside the period, an unposted entry, a
+customer linked to a company outside the group, a company linked to
+itself, a bank line carrying a contact: every one is a row that query
+exists to exclude, and none had ever been written.
+
+A consolidation that eliminates the wrong thing **does not fail
+loudly**. It produces a balanced set of accounts that is wrong by
+whatever was taken out, which is the one error an auditor cannot see by
+looking.
+
+**Two companies is the smallest group and it is not enough.** With two,
+"the pair that reconciles" and "any pair" are the same set. With three —
+a holding company and two trading subsidiaries, which is what a group
+actually is — they come apart: A's reconciled balance with B would carry
+A's *unreconciled* balance with C out of the accounts with it,
+eliminating four hundred ringgit of revenue the group really did earn.
+
+**Two membership checks that mask each other.** `app.group_orgs` filters
+both the company asked about and each company returned, and somebody in
+neither is stopped by either — so a stranger cannot tell them apart. The
+person who can is a member of ONE company in the group: a subsidiary's
+bookkeeper, who must not be able to read the group's list from the
+parent's id and, through the reports built on it, the parent's ledger.
+
+**And a `limit 1` with no `order by` made the fixture lie.** Two
+`select id from accounts where account_type = 'revenue' … limit 1` calls
+in one test returned *different* accounts, so an invoice and its credit
+note landed on different codes and did not cancel. The same shape as
+`test_user()`'s ordering bug recorded in `_helpers.sql`: a fixture whose
+identity is decided by physical row order is a coin toss.
+
+#### The equivalent mutants, and a pair that hides itself
+
+Four are ordinary: a company with a null `group_id` is excluded by
+`null = <group>` being null rather than by the `is not null` test; a bank
+line's category `case` returns null, so its group sums to null and the
+`having … <> 0` drops it; a `left join` to contacts leaves
+`linked_org_id` null, and `null in (…)` is null.
+
+The fifth and sixth are the interesting ones and they are **a mutually-
+masking pair**, the fourth this campaign has found:
+`app.group_eliminations` groups by account code, and its only consumer
+re-groups by code and sums. Widen the inner grouping and the outer sum
+undoes it; weaken the outer `sum` to `max` and the inner grouping has
+already left one row. Neither is dead. The rule that makes both
+equivalent is that **one account code gets one adjustment**, and that is
+what the fixture now asserts.

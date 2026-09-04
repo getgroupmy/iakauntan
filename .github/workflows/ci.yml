@@ -355,6 +355,7 @@ jobs:
                    supabase/tests/group_reporting.sql \
                    supabase/tests/sst_registration.sql \
                    supabase/tests/intercompany_billing.sql \
+                   supabase/tests/group_shapes.sql \
                    supabase/tests/group_consolidation.sql \
                    supabase/tests/open_item_import.sql \
                    supabase/tests/opening_trial_balance.sql \
