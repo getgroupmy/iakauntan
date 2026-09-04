@@ -7125,8 +7125,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/allocation_party.sql": {
-    "mtime": 1788334012.0894668,
-    "ast_hash": "e44d5a27b495e1b102a8ef0b1eddc82b",
+    "mtime": 1788485756.5312045,
+    "ast_hash": "235d19ce1c044d4836f8748522199c8b",
     "semantic_hash": ""
   },
   "supabase/migrations/0466_an_opening_balance_is_not_a_new_sale.sql": {

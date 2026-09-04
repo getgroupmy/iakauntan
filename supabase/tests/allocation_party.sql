@@ -303,4 +303,218 @@ begin
     (select count(*) from public.payment_allocations where contra_id = v_id) = 2);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The other four money sources
+--
+-- A mutation sweep of `app.apply_allocation` read the party guard as
+-- six separate lookups, and this file asserted two of them. Delete the
+-- credit note, the deposit, the cheque or the withholding certificate
+-- from the coalesce and the whole suite stayed green -- so each of the
+-- four could still settle a different party's invoice, which is
+-- precisely the hole 0465 was written to close.
+--
+-- Asserted here by inserting the allocation directly. The trigger is
+-- what is under test, and reaching it through each source's own RPC
+-- would assert that RPC's guards instead of this one's.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_a uuid; v_b uuid; v_inv uuid;
+  v_cn uuid; v_dep uuid; v_pdc uuid; v_wht uuid;
+  v_msg text; v_took boolean;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.ap_org('Enam Sumber Sdn Bhd');
+  v_a   := pg_temp.ap_customer(v_org, 'A', 'Pelanggan A');
+  v_b   := pg_temp.ap_customer(v_org, 'B', 'Pelanggan B');
+  v_inv := pg_temp.ap_invoice(v_org, 'INV-B', v_b, 500);
+
+  -- A's credit note.
+  insert into public.sales_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+     currency, exchange_rate, subtotal, total_amount, balance_amount)
+  values (v_org, 'credit_note', 'CN-A', current_date, current_date, v_a,
+          'posted', 'MYR', 1, 500, 500, 500)
+  returning id into v_cn;
+
+  -- A's deposit.
+  insert into public.deposit_notes
+    (org_id, deposit_no, kind, contact_id, amount)
+  values (v_org, 'DEP-A', 'customer', v_a, 500) returning id into v_dep;
+
+  -- A's cheque.
+  insert into public.post_dated_cheques
+    (org_id, pdc_no, direction, contact_id, cheque_no, cheque_date, amount)
+  values (v_org, 'PDC-A', 'incoming', v_a, '000123',
+          current_date + 30, 500) returning id into v_pdc;
+
+  -- Tax withheld from A.
+  insert into public.withholding_certificates
+    (org_id, certificate_no, contact_id, wht_code, section, gross_amount,
+     rate, tax_amount, due_date)
+  values (v_org, 'WHT-A', v_a, 'S109_INTEREST', '109', 5000, 10, 500,
+          current_date + 30) returning id into v_wht;
+
+  -- Each in turn, against B's invoice.
+  v_took := false;
+  begin
+    insert into public.payment_allocations
+      (org_id, credit_note_id, invoice_id, amount)
+    values (v_org, v_cn, v_inv, 500);
+    v_took := true;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_true('A''s credit note cannot settle B''s invoice',
+    not v_took and v_msg like 'This money is Pelanggan A''s and the '
+                           || 'document belongs to Pelanggan B.%');
+
+  v_took := false;
+  begin
+    insert into public.payment_allocations
+      (org_id, deposit_id, invoice_id, amount)
+    values (v_org, v_dep, v_inv, 500);
+    v_took := true;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_true('nor A''s deposit',
+    not v_took and v_msg like 'This money is Pelanggan A''s%');
+
+  v_took := false;
+  begin
+    insert into public.payment_allocations
+      (org_id, pdc_id, invoice_id, amount)
+    values (v_org, v_pdc, v_inv, 500);
+    v_took := true;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_true('nor A''s cheque',
+    not v_took and v_msg like 'This money is Pelanggan A''s%');
+
+  v_took := false;
+  begin
+    insert into public.payment_allocations
+      (org_id, withholding_id, invoice_id, amount)
+    values (v_org, v_wht, v_inv, 500);
+    v_took := true;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_true('nor tax withheld from A',
+    not v_took and v_msg like 'This money is Pelanggan A''s%');
+
+  perform pg_temp.check_eq('and B''s invoice is untouched by any of them',
+    (select balance_amount from public.sales_documents where id = v_inv),
+    500::numeric);
+
+  -- The control. Four refusals are satisfied by a guard that refuses
+  -- everything, so each source settles its OWN party's invoice.
+  declare
+    v_inv_a uuid;
+  begin
+    v_inv_a := pg_temp.ap_invoice(v_org, 'INV-A', v_a, 2000);
+    insert into public.payment_allocations
+      (org_id, credit_note_id, invoice_id, amount) values (v_org, v_cn, v_inv_a, 500);
+    insert into public.payment_allocations
+      (org_id, deposit_id, invoice_id, amount) values (v_org, v_dep, v_inv_a, 500);
+    insert into public.payment_allocations
+      (org_id, pdc_id, invoice_id, amount) values (v_org, v_pdc, v_inv_a, 500);
+    insert into public.payment_allocations
+      (org_id, withholding_id, invoice_id, amount) values (v_org, v_wht, v_inv_a, 500);
+    perform pg_temp.check_eq(
+      'while all four settle their own party''s invoice',
+      (select paid_amount from public.sales_documents where id = v_inv_a),
+      2000::numeric);
+    perform pg_temp.check_eq('leaving it completed',
+      (select status::text from public.sales_documents where id = v_inv_a),
+      'completed');
+  end;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- The buying side of the same trigger, and what a removal puts back
+--
+-- ASYMMETRY. `app.apply_allocation` is symmetric twice over -- invoice
+-- against bill, receipt against payment -- and the sweep found the
+-- selling half asserted and the buying half not: a bill left unmarked
+-- when it is part paid, and a payment spread further than the money
+-- that left.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org uuid; v_sup uuid; v_bill uuid; v_pay uuid; v_alloc uuid;
+  v_msg text; v_took boolean;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_org := pg_temp.ap_org('Separuh Bayar Sdn Bhd');
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'S', 'Pembekal', 'supplier') returning id into v_sup;
+
+  insert into public.purchase_documents
+    (org_id, doc_type, doc_no, doc_date, due_date, contact_id, status,
+     currency, exchange_rate, subtotal, total_amount, balance_amount)
+  values (v_org, 'bill', 'BILL-1', current_date, current_date, v_sup,
+          'posted', 'MYR', 1, 1000, 1000, 1000)
+  returning id into v_bill;
+
+  insert into public.purchase_payments
+    (org_id, payment_no, payment_date, contact_id, bank_account_id,
+     currency, exchange_rate, amount, unapplied_amount)
+  values (v_org, 'PAY-1', current_date, v_sup,
+          (select id from public.bank_accounts where org_id = v_org limit 1),
+          'MYR', 1, 400, 400)
+  returning id into v_pay;
+
+  insert into public.payment_allocations
+    (org_id, payment_id, bill_id, amount)
+  values (v_org, v_pay, v_bill, 400) returning id into v_alloc;
+
+  perform pg_temp.check_eq('a part-paid bill is marked partial',
+    (select status::text from public.purchase_documents where id = v_bill),
+    'partial');
+  perform pg_temp.check_eq('owing the rest',
+    (select balance_amount from public.purchase_documents where id = v_bill),
+    600::numeric);
+  perform pg_temp.check_eq('and the payment has nothing left unapplied',
+    (select unapplied_amount from public.purchase_payments where id = v_pay),
+    0::numeric);
+
+  -- Spread further than the money that left.
+  v_took := false;
+  begin
+    insert into public.payment_allocations
+      (org_id, payment_id, bill_id, amount)
+    values (v_org, v_pay, v_bill, 100);
+    v_took := true;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_true(
+    'a payment cannot be spread further than the money that left',
+    not v_took and v_msg like 'Payment PAY-1 has been spread further than '
+                           || 'the money that left: 100.00 more than it is '
+                           || 'for.');
+
+  -- And taking the allocation away puts the bill back. What does that
+  -- is `coalesce(new.bill_id, old.bill_id)` at the top: on a DELETE
+  -- there is no NEW, so without the OLD half the trigger would have no
+  -- document to recompute and the bill would stay reading as part paid
+  -- with nothing paying it.
+  --
+  -- The `return coalesce(new, old)` at the bottom is a different thing
+  -- and is EQUIVALENT -- the tenth of this programme. The trigger is
+  -- AFTER, and Postgres ignores what an AFTER trigger returns. It is
+  -- kept because it is what the statement would have to be if the
+  -- trigger were ever made BEFORE, and because returning NEW from a
+  -- DELETE is a plainly wrong thing to leave written down.
+  delete from public.payment_allocations where id = v_alloc;
+  perform pg_temp.check_eq('removing the allocation puts the bill back',
+    (select balance_amount from public.purchase_documents where id = v_bill),
+    1000::numeric);
+  perform pg_temp.check_eq('and returns it from partial to posted',
+    (select status::text from public.purchase_documents where id = v_bill),
+    'posted');
+  perform pg_temp.check_eq('with the money unapplied again',
+    (select unapplied_amount from public.purchase_payments where id = v_pay),
+    400::numeric);
+end $$;
+
+
 rollback;
