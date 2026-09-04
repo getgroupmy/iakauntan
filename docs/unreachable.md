@@ -6194,3 +6194,55 @@ starts a year after it — so that condition bites on one shape only, a
 financial year of zero days. It is a data-entry artefact, not a filing,
 and a deadline computed from it is a deadline for accounts that cannot
 exist. That company is now in the fixture.
+
+### The s.258 and s.259 clock: 9 of 24, then 24
+
+Three functions carry one rule: `app.fs_lodge_by` is the rule,
+`public.fs_deadlines` is one filing's answer, and
+`public.report_fs_deadlines` is the list a practice works from. Swept
+together, because a mutant in the rule is only visible through the
+other two.
+
+`fs_statutory_order.sql` asserts the ORDER of the three dates —
+approved, circulated, lodged — and pins the thirty days that run from
+circulation. What nothing asserted was the filing that has **not been
+circulated yet**, which is every filing for the first six months after
+a year end and therefore most of them. Its lodgement date comes from
+`fy_end + 6 months + 30`, and the six months in that expression had no
+test at all: a mutant making it three passed the whole suite, and would
+have told every client in the country it was three months late.
+
+Also alive: the days-left countdown pointed at the wrong deadline, a
+filing already lodged reported late for ever, a filing late on the day
+it was due, another practice's accounts on this practice's list, and
+the report readable by a company that had not bought the module.
+
+**A date built from months does not survive a round trip.** The first
+draft of the fixture built a year end as `today - 6 months - 30 days`
+and expected the deadline back on today. It came back three days early:
+subtract six months from a date in early March and add them back, and
+February is short. The boundary cases are dated from the CIRCULATION
+instead — thirty days is thirty days — which is exact, and happens to
+exercise the branch that matters more anyway.
+
+**The sentence is not decoration.** `basis` is what the screen prints
+to tell a director *why* the date is the date, and the two sections
+describe two different obligations: a private company CIRCULATES the
+accounts under s.258, a public company LAYS them before a meeting under
+s.340. Three mutants lived in that one `case` — forced each way, and the
+`= 'bhd'` test widened to every company — because nothing had ever
+looked at the string. A private company told it must hold an AGM is a
+private company convening a meeting the 2016 Act abolished for it.
+
+**A tie-break needs five companies, not two.** The list is ordered by
+deadline and then by name. Replacing the name with the row's uuid puts
+two companies in the right order half the time — so the mutant survived
+a fixture with two tied filings, and the sweep was reporting a coin
+toss. With five, an arbitrary order lands alphabetical once in a
+hundred and twenty. Most of a practice's clients have a 31 December
+year end, so most of this list IS ties: the tie-break is the ordering,
+not a detail of it.
+
+Two filings with different year ends and the same circulation date have
+the same deadline, which is how five of them get onto one day while the
+one-year-end-per-company constraint still holds.
