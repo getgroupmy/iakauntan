@@ -418,6 +418,17 @@ jobs:
       - name: Check no new blind error catches
         run: python3 scripts/check_blind_catches.py
 
+      # `0531`. STABLE is a promise that a function does not write, and
+      # PostgREST believes it: such a function runs in a READ ONLY
+      # transaction, so a write inside one fails with 25006 and takes
+      # the whole call with it. The SQL assertions cannot catch this on
+      # their own -- psql is not read-only -- so it is checked against
+      # the applied schema instead.
+      - name: Check no read that writes promises otherwise
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_stable_writers.py "$DB"
+
       # The client's queries checked against the schema they will run
       # against. An ambiguous embed passes `flutter analyze`, passes the
       # widget tests, passes the SQL tests, and then takes out a whole

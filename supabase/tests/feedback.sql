@@ -339,4 +339,62 @@ begin
       to_regprocedure('app.can_read_attachment(uuid, text, uuid)'))) > 0);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A read that writes must not promise Postgres that it does not
+-- ---------------------------------------------------------------------
+-- `0531`. `platform_feedback` was STABLE and wrote a security-audit row
+-- through `app.note_read`. STABLE is a promise that the function does
+-- not modify the database, and PostgREST believes it: a STABLE function
+-- is run in a READ ONLY transaction, so the audit insert was refused
+-- and the whole call failed with
+--
+--     cannot execute INSERT in a read-only transaction   (25006)
+--
+-- "What people told us" had never loaded.
+--
+-- EVERY ASSERTION ABOVE PASSED THROUGHOUT and would have gone on
+-- passing: psql is not read-only, so the insert succeeds here. The
+-- declaration is only load bearing at the PostgREST door.
+--
+-- The two halves below are what make each other worth having. That the
+-- function is VOLATILE is the fix; that it WRITES is why the fix is
+-- required rather than decorative. Wrapping the call in `set
+-- transaction read only` would not do instead -- that forbids the write
+-- whatever the declaration says, because volatility decides which
+-- transaction PostgREST opens, not what is allowed inside one already
+-- open.
+do $$
+declare
+  v_ops    uuid := pg_temp.another_user('ops-0531@iakauntan.test');
+  v_before integer;
+  v_after  integer;
+begin
+  insert into public.platform_admins (user_id, note)
+  values (v_ops, 'reads the reports')
+  on conflict (user_id) do nothing;
+  perform pg_temp.sign_in_as(v_ops);
+
+  perform pg_temp.check_eq(
+    'a function that records a read is declared VOLATILE',
+    (select case p.provolatile when 'v' then 'VOLATILE'
+                               when 's' then 'STABLE'
+                               else 'IMMUTABLE' end
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'platform_feedback'),
+    'VOLATILE');
+
+  select count(*)::integer into v_before from public.security_events
+   where kind = 'sensitive_read';
+  perform count(*) from public.platform_feedback(null, 50);
+  select count(*)::integer into v_after from public.security_events
+   where kind = 'sensitive_read';
+
+  -- The half that makes the declaration load bearing. `0136` records
+  -- that somebody read every company's feedback, and a write is a write
+  -- however small.
+  perform pg_temp.check_true(
+    'because reading every company''s reports is itself recorded',
+    v_after > v_before);
+end $$;
+
 rollback;

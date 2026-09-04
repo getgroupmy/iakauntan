@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788544119.1600766,
-    "ast_hash": "06ea33be24ef16c0bb535e952bfc99a9",
+    "mtime": 1788546869.5607042,
+    "ast_hash": "8efc2436022396087e9e5014d690a58c",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7085,8 +7085,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/feedback.sql": {
-    "mtime": 1788326343.0405362,
-    "ast_hash": "43a8ccaad9ac94644dbe58511546cad2",
+    "mtime": 1788546830.8969328,
+    "ast_hash": "c0bedf9230df7f004380aee8962d5bbd",
     "semantic_hash": ""
   },
   "supabase/tests/general_ledger.sql": {
@@ -8022,6 +8022,16 @@
   "supabase/tests/customer_portal_shapes.sql": {
     "mtime": 1788544887.7778592,
     "ast_hash": "e5afe7095e8e39f339d26078638468e2",
+    "semantic_hash": ""
+  },
+  "scripts/check_stable_writers.py": {
+    "mtime": 1788546771.7338955,
+    "ast_hash": "d0dd931490bd80d5f4418a133e151e02",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0531_a_read_that_writes_is_not_a_read.sql": {
+    "mtime": 1788546753.1273487,
+    "ast_hash": "4053723d0ad008eef09fd3d4fe648827",
     "semantic_hash": ""
   }
 }
