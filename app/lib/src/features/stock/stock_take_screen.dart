@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'new_warehouse_dialog.dart';
 
 /// Counting the shelf and telling the books about it.
 ///
@@ -227,17 +229,12 @@ class _Header extends StatelessWidget {
     final narrow = MediaQuery.sizeOf(context).width < 700;
 
     final fields = <Widget>[
-      DropdownButtonFormField<String>(
+      SearchablePicker<String>(
+        options: warehouseOptions(warehouses),
         value: warehouseId,
-        isExpanded: true,
-        decoration: const InputDecoration(labelText: 'Warehouse'),
-        items: [
-          for (final w in warehouses)
-            DropdownMenuItem(
-              value: w['id'] as String,
-              child: Text(w['name'] as String, overflow: TextOverflow.ellipsis),
-            ),
-        ],
+        label: 'Warehouse',
+        // No offer to add one: a count is of a shelf that exists, and
+        // a warehouse created here would hold nothing to count.
         onChanged: (v) => v == null ? null : onWarehouse(v),
       ),
       InkWell(

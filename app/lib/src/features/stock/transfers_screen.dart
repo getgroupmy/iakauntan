@@ -3,11 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../items/new_item_dialog.dart';
 import 'conversion_outputs.dart';
+import 'new_warehouse_dialog.dart';
 
 /// Where a transfer has got to, in the words a warehouse uses.
 ///
@@ -269,11 +272,27 @@ class _TransferSheetState extends ConsumerState<_TransferSheet> {
   final List<Map<String, dynamic>> _lines = [];
   final _notes = TextEditingController();
 
+  /// The list the two pickers search. Its own copy, because a warehouse
+  /// created FROM one of those pickers has to appear in the other one
+  /// without the sheet being closed and reopened.
+  late final List<Map<String, dynamic>> _warehouses = [...widget.warehouses];
+
   @override
   void initState() {
     super.initState();
     _from = widget.warehouses.first['id'] as String?;
     _to = widget.warehouses[1]['id'] as String?;
+  }
+
+  /// Add a warehouse from the box that wanted one.
+  Future<String?> _newWarehouse(String typed) async {
+    final created = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => NewWarehouseDialog(seedName: typed),
+    );
+    if (created == null || !mounted) return null;
+    setState(() => _warehouses.add(created));
+    return '${created['id']}';
   }
 
   @override
@@ -334,30 +353,22 @@ class _TransferSheetState extends ConsumerState<_TransferSheet> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: Space.md),
-            DropdownButtonFormField<String>(
+            SearchablePicker<String>(
+              options: warehouseOptions(_warehouses),
               value: _from,
-              decoration: const InputDecoration(labelText: 'Leaving'),
-              items: [
-                for (final w in widget.warehouses)
-                  DropdownMenuItem(
-                    value: w['id'] as String,
-                    child: Text('${w['name']}'),
-                  ),
-              ],
+              label: 'Leaving',
               onChanged: (v) => setState(() => _from = v),
+              onCreate: _newWarehouse,
+              createLabel: 'Add warehouse',
             ),
             const SizedBox(height: Space.md),
-            DropdownButtonFormField<String>(
+            SearchablePicker<String>(
+              options: warehouseOptions(_warehouses),
               value: _to,
-              decoration: const InputDecoration(labelText: 'Arriving'),
-              items: [
-                for (final w in widget.warehouses)
-                  DropdownMenuItem(
-                    value: w['id'] as String,
-                    child: Text('${w['name']}'),
-                  ),
-              ],
+              label: 'Arriving',
               onChanged: (v) => setState(() => _to = v),
+              onCreate: _newWarehouse,
+              createLabel: 'Add warehouse',
             ),
             const SizedBox(height: Space.md),
             for (final line in _lines)
@@ -500,6 +511,25 @@ class _StockLineDialogState extends ConsumerState<_StockLineDialog> {
   final _qty = TextEditingController();
   final _share = TextEditingController();
 
+  /// The list the picker searches. Its own copy, so an item created
+  /// from the box appears in it without the dialog being reopened.
+  late final List<Item> _items = [...widget.items];
+
+  /// Add an item from the box that wanted one.
+  Future<String?> _newItem(String typed) async {
+    final created = await showDialog<Item>(
+      context: context,
+      // Typed into the description box, so it seeds the description.
+      builder: (_) => NewItemDialog(seedName: typed),
+    );
+    if (created == null || !mounted) return null;
+    setState(() {
+      _items.add(created);
+      _uom = null;
+    });
+    return created.id;
+  }
+
   @override
   void dispose() {
     _qty.dispose();
@@ -519,33 +549,40 @@ class _StockLineDialogState extends ConsumerState<_StockLineDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            DropdownButtonFormField<String>(
+            SearchablePicker<String>(
+              options: itemPickerOptions(_items),
               value: _item,
-              decoration: const InputDecoration(labelText: 'What'),
-              items: [
-                for (final i in widget.items)
-                  DropdownMenuItem(value: i.id, child: Text(i.name)),
-              ],
+              label: 'What',
               onChanged: (v) => setState(() {
                 _item = v;
+                // The units on offer belong to the item, so a new item
+                // cannot keep the old one's unit.
                 _uom = null;
               }),
+              onCreate: _newItem,
+              createLabel: 'Add item',
             ),
             TextField(
               controller: _qty,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: 'How much'),
             ),
-            DropdownButtonFormField<String>(
-              value: _uom,
-              decoration: const InputDecoration(labelText: 'In what unit'),
-              items: [
+            SearchablePicker<String>(
+              options: [
                 for (final o in options.valueOrNull ?? const [])
-                  DropdownMenuItem(
+                  PickerOption<String>(
                     value: '${o['uom_code']}',
-                    child: Text('${o['uom_name']}'),
+                    label: '${o['uom_name']}',
+                    keywords: ['${o['uom_code']}'],
                   ),
               ],
+              value: _uom,
+              label: 'In what unit',
+              // Nothing to add here: the units an item can be counted
+              // in are its own conversions, set up on the item, not a
+              // list this dialog may extend.
+              enabled: _item != null,
+              hint: _item == null ? 'Pick an item first' : null,
               onChanged: (v) => setState(() => _uom = v),
             ),
             if (widget.wantsShare)
@@ -566,7 +603,7 @@ class _StockLineDialogState extends ConsumerState<_StockLineDialog> {
           onPressed: _item == null || _uom == null
               ? null
               : () {
-                  final name = widget.items
+                  final name = _items
                       .firstWhere((i) => i.id == _item)
                       .name;
                   Navigator.of(context).pop({
@@ -713,6 +750,23 @@ class _ConversionSheetState extends ConsumerState<_ConversionSheet> {
   String? _uom;
   final List<Map<String, dynamic>> _outputs = [];
 
+  /// Its own copy, so an item created from the input box is also on
+  /// offer to the output lines below it.
+  late final List<Item> _items = [...widget.items];
+
+  Future<String?> _newItem(String typed) async {
+    final created = await showDialog<Item>(
+      context: context,
+      builder: (_) => NewItemDialog(seedName: typed),
+    );
+    if (created == null || !mounted) return null;
+    setState(() {
+      _items.add(created);
+      _uom = null;
+    });
+    return created.id;
+  }
+
   @override
   void dispose() {
     _code.dispose();
@@ -724,7 +778,7 @@ class _ConversionSheetState extends ConsumerState<_ConversionSheet> {
   Future<void> _addOutput() async {
     final chosen = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => _StockLineDialog(items: widget.items, wantsShare: true),
+      builder: (_) => _StockLineDialog(items: _items, wantsShare: true),
     );
     if (chosen == null) return;
     setState(() => _outputs.add(chosen));
@@ -789,17 +843,16 @@ class _ConversionSheetState extends ConsumerState<_ConversionSheet> {
               decoration: const InputDecoration(labelText: 'Code'),
             ),
             const SizedBox(height: Space.md),
-            DropdownButtonFormField<String>(
+            SearchablePicker<String>(
+              options: itemPickerOptions(_items),
               value: _item,
-              decoration: const InputDecoration(labelText: 'What goes in'),
-              items: [
-                for (final i in widget.items)
-                  DropdownMenuItem(value: i.id, child: Text(i.name)),
-              ],
+              label: 'What goes in',
               onChanged: (v) => setState(() {
                 _item = v;
                 _uom = null;
               }),
+              onCreate: _newItem,
+              createLabel: 'Add item',
             ),
             Row(
               children: [
@@ -812,16 +865,18 @@ class _ConversionSheetState extends ConsumerState<_ConversionSheet> {
                 ),
                 const SizedBox(width: Space.md),
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _uom,
-                    decoration: const InputDecoration(labelText: 'Unit'),
-                    items: [
+                  child: SearchablePicker<String>(
+                    options: [
                       for (final o in options.valueOrNull ?? const [])
-                        DropdownMenuItem(
+                        PickerOption<String>(
                           value: '${o['uom_code']}',
-                          child: Text('${o['uom_name']}'),
+                          label: '${o['uom_name']}',
+                          keywords: ['${o['uom_code']}'],
                         ),
                     ],
+                    value: _uom,
+                    label: 'Unit',
+                    enabled: _item != null,
                     onChanged: (v) => setState(() => _uom = v),
                   ),
                 ),

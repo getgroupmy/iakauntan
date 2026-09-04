@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/searchable_picker.dart';
+
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
@@ -452,37 +454,39 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                   onChanged: (v) => setState(() => _salesTaxCodeId = v),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _uom,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Unit of measure'),
-                  items: [
+                // A hundred-odd UN/CEFACT codes. Somebody looking for
+                // "kilogram" should type it rather than hunt for KGM.
+                // Reference data, so no offer to add one.
+                SearchablePicker<String>(
+                  options: [
                     for (final u in uoms)
-                      DropdownMenuItem(
+                      PickerOption(
                         value: u['code'] as String,
-                        child: Text('${u['code']} — ${u['name']}'),
+                        label: '${u['code']} — ${u['name']}',
+                        keywords: ['${u['code']}', '${u['name']}'],
                       ),
                   ],
+                  value: _uom,
+                  label: 'Unit of measure',
                   onChanged: (v) => setState(() => _uom = v ?? 'C62'),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _classification,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'e-Invoice classification',
-                    helperText: 'LHDN requires this on every invoice line',
-                  ),
-                  items: [
+                // LHDN's classification list, which is long and which
+                // nobody remembers by number. Searchable on the
+                // DESCRIPTION as well, because "software" is what
+                // somebody knows and 022 is what the invoice needs.
+                SearchablePicker<String>(
+                  options: [
                     for (final c in classifications)
-                      DropdownMenuItem(
+                      PickerOption(
                         value: c['code'] as String,
-                        child: Text(
-                          '${c['code']} — ${c['description']}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        label: '${c['code']} — ${c['description']}',
+                        keywords: ['${c['code']}', '${c['description']}'],
                       ),
                   ],
+                  value: _classification,
+                  label: 'e-Invoice classification',
+                  helperText: 'LHDN requires this on every invoice line',
                   onChanged: (v) => setState(() => _classification = v ?? '022'),
                 ),
                 // Only for a company that runs a till. A question a

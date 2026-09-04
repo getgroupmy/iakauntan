@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../stock/new_warehouse_dialog.dart';
 
 /// Every movement of one item, in order, with a running balance.
 ///
@@ -122,26 +124,18 @@ class _StockCardDialogState extends ConsumerState<_StockCardDialog> {
             Row(
               children: [
                 Expanded(
-                  child: DropdownButtonFormField<String?>(
+                  child: SearchablePicker<String>(
                     key: const ValueKey('stock-card-warehouse'),
+                    options: warehouseOptions(warehouses),
                     value: _warehouseId,
-                    isExpanded: true,
-                    isDense: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Warehouse',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('Everywhere'),
-                      ),
-                      for (final w in warehouses)
-                        DropdownMenuItem<String?>(
-                          value: w['id'] as String,
-                          child: Text('${w['code']} · ${w['name']}'),
-                        ),
-                    ],
+                    label: 'Warehouse',
+                    // The whole company is the default answer, and the
+                    // way back to it.
+                    allowEmpty: true,
+                    emptyLabel: 'Everywhere',
+                    // No offer to add one: this is a report filter, and
+                    // a warehouse with no movements in it narrows the
+                    // card to nothing.
                     onChanged: (v) => setState(() => _warehouseId = v),
                   ),
                 ),

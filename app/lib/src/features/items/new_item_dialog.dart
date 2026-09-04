@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../data/models.dart';
 
 /// Create an item without leaving the line you were typing.
@@ -239,3 +240,20 @@ class _NewItemDialogState extends ConsumerState<NewItemDialog> {
     }
   }
 }
+
+
+/// The rows an item picker offers.
+///
+/// Findable by NUMBER as well as description, for the same reason the
+/// two boxes on a document line search each other's field: somebody
+/// reaching for an item knows one of the two, and which one depends on
+/// whether they are holding the part or the paperwork.
+List<PickerOption<String>> itemPickerOptions(List<Item> items) => [
+  for (final item in items)
+    PickerOption<String>(
+      value: item.id,
+      label: item.name.trim().isEmpty ? item.code : item.name,
+      sublabel: item.code.trim().isEmpty ? null : item.code,
+      keywords: [item.code],
+    ),
+];

@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788499265.2228258,
-    "ast_hash": "648c29afccd1099da98dee263b5ac165",
+    "mtime": 1788500866.4800458,
+    "ast_hash": "c1382ad776ad82eff2238fdcc952d669",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -240,8 +240,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/items/items_screen.dart": {
-    "mtime": 1788285599.923654,
-    "ast_hash": "f122ee1097f8b1692bf402730574f3de",
+    "mtime": 1788500715.017649,
+    "ast_hash": "b34d61f74a1f4944d4a2176024970bd9",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journals_screen.dart": {
@@ -1315,8 +1315,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/stock/stock_take_screen.dart": {
-    "mtime": 1786785756.622488,
-    "ast_hash": "218ef6864a331f6e0a5ae12fe6d15a5b",
+    "mtime": 1788501107.6453393,
+    "ast_hash": "c166c1a960b80af4834094812110443f",
     "semantic_hash": ""
   },
   "supabase/migrations/0087_stock_adjustments.sql": {
@@ -2230,8 +2230,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/manufacturing/manufacturing_screen.dart": {
-    "mtime": 1786693587.03113,
-    "ast_hash": "e1147189aeca79183f89bfb1d37d1c2b",
+    "mtime": 1788501147.816594,
+    "ast_hash": "54d2376d52c88a3a27616d6255c5cb67",
     "semantic_hash": ""
   },
   "app/lib/src/features/manufacturing/order_screen.dart": {
@@ -2555,8 +2555,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/items/stock_card_dialog.dart": {
-    "mtime": 1786849603.9056005,
-    "ast_hash": "a4a039b0623b921923a13ad399b274d3",
+    "mtime": 1788501076.2773964,
+    "ast_hash": "431a8c8ae64d5198d88ba133e59cacaa",
     "semantic_hash": ""
   },
   "app/test/group_ownership_test.dart": {
@@ -2570,8 +2570,8 @@
     "semantic_hash": ""
   },
   "app/test/stock_card_test.dart": {
-    "mtime": 1786849604.4976006,
-    "ast_hash": "8c45637fc40adc8bafee44a6ab8019bd",
+    "mtime": 1788501087.6277416,
+    "ast_hash": "cc5992fbc260c1a3550d012e61c9c708",
     "semantic_hash": ""
   },
   "supabase/migrations/0149_group_ownership_visible.sql": {
@@ -3920,8 +3920,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/stock/transfers_screen.dart": {
-    "mtime": 1788285599.939654,
-    "ast_hash": "b8b86246eb075847a201b54254035967",
+    "mtime": 1788501042.7981894,
+    "ast_hash": "ee8c45fcdd31fef16441ab986374f4ee",
     "semantic_hash": ""
   },
   "app/test/stock_transfers_test.dart": {
@@ -7835,8 +7835,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/items/new_item_dialog.dart": {
-    "mtime": 1788497518.259022,
-    "ast_hash": "ae2dd0c39ee0e214b34853a348582d5b",
+    "mtime": 1788500940.9991126,
+    "ast_hash": "07b63ad878fff82926a7bd9663621e81",
     "semantic_hash": ""
   },
   "app/lib/src/core/searchable_picker.dart": {
@@ -7852,6 +7852,16 @@
   "app/test/searchable_picker_test.dart": {
     "mtime": 1788498742.1069942,
     "ast_hash": "886f974f3c6bd8e0245b3e4c3c0d9269",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/stock/new_warehouse_dialog.dart": {
+    "mtime": 1788500913.5681872,
+    "ast_hash": "3f09709a8e47489c3f58f344bf809811",
+    "semantic_hash": ""
+  },
+  "app/test/warehouse_picker_test.dart": {
+    "mtime": 1788500997.4931805,
+    "ast_hash": "eb419e46337ec5b2d62c769857b2542b",
     "semantic_hash": ""
   }
 }

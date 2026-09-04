@@ -1835,22 +1835,33 @@ class Repo {
   /// 0059 because an adjustment needs somewhere to go, and that was the
   /// only way a warehouse had ever come into existence: a company with
   /// two shops could see "Main" and had no way to add the second.
-  Future<void> createWarehouse({
+  ///
+  /// Returns the row it wrote, because a warehouse is now also created
+  /// from the box that needed it — a transfer whose destination is not
+  /// on the list yet — and that caller has to select the thing it just
+  /// made. A caller that only wanted the side effect can ignore it.
+  Future<Map<String, dynamic>> createWarehouse({
     required String code,
     required String name,
     String? addressLine1,
     String? city,
     String? postcode,
     String? stateCode,
-  }) => client.from('warehouses').insert({
-    'org_id': orgId,
-    'code': code,
-    'name': name,
-    'address_line1': _orNull(addressLine1),
-    'city': _orNull(city),
-    'postcode': _orNull(postcode),
-    'state_code': _orNull(stateCode),
-  });
+  }) async => Map<String, dynamic>.from(
+    await client
+        .from('warehouses')
+        .insert({
+          'org_id': orgId,
+          'code': code,
+          'name': name,
+          'address_line1': _orNull(addressLine1),
+          'city': _orNull(city),
+          'postcode': _orNull(postcode),
+          'state_code': _orNull(stateCode),
+        })
+        .select()
+        .single(),
+  );
 
   Future<void> updateWarehouse(
     String id, {
