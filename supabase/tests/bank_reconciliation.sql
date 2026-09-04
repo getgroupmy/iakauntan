@@ -929,4 +929,204 @@ begin
       where reconciliation_id = v_rec));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- The fourteen a mutation sweep found
+--
+-- Thirty-five one-line mutants of import_bank_transactions against six
+-- test files. Every mutant of the RUNNING BALANCE died on the first
+-- run -- the chain walked forwards and backwards, the step undone going
+-- backwards, the hole refused, the count of links claimed, the closing
+-- figure taken from the last line of the latest day. Fourteen survived,
+-- and they are the front door and the duplicate key: the same split
+-- this programme has now seen on ten functions running.
+--
+-- The key is the one worth explaining. A line already here is matched
+-- on date, amount, description, reference and balance, and only the
+-- balance half was asserted, because the one probe for it re-pasted an
+-- identical statement -- under which dropping ANY single field still
+-- skips the line, since the others still match. Each field is asserted
+-- below with a pair that differs in exactly that field and nothing
+-- else, with no balance column at all so the balance half cannot stand
+-- in for the field under test. Drop the date and a standing order
+-- charged monthly is imported once and then never again; drop the
+-- reference and two identical transfers on one day collapse into one.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org   uuid := pg_temp.br_org('Sweep Statement Sdn Bhd');
+  v_owner uuid := (select user_id from public.org_members
+                    where org_id = v_org and role = 'owner' limit 1);
+  v_clerk uuid := pg_temp.another_user('reader@statement.test');
+  v_bank  uuid; v_rcp uuid; r jsonb; v_msg text; v_state text;
+begin
+  select bank_id, receipt_id into v_bank, v_rcp
+    from pg_temp.bank_with_receipt(v_org, 1000);
+
+  -- ==================================================================
+  -- 1. The front door
+  -- ==================================================================
+  begin
+    perform public.import_bank_transactions(gen_random_uuid(),
+      jsonb_build_array(jsonb_build_object(
+        'transaction_date','2026-05-01','description','X','amount',10)));
+    v_msg := null;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_true('a statement for an account we do not hold',
+    v_msg like 'Bank account % not found');
+
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_clerk, 'purchaser');
+  perform pg_temp.sign_in_as(v_clerk);
+  begin
+    perform public.import_bank_transactions(v_bank,
+      jsonb_build_array(jsonb_build_object(
+        'transaction_date','2026-05-01','description','X','amount',10)));
+    v_msg := null;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.sign_in_as(v_owner);
+  -- The WHOLE message, not merely that something was raised: the marker
+  -- above would satisfy a null check on its own.
+  perform pg_temp.check_eq('somebody who may not post may not import',
+    v_msg, 'Insufficient privileges');
+  perform pg_temp.check_eq('and nothing of theirs reached the account',
+    (select count(*) from public.bank_transactions
+      where bank_account_id = v_bank and transaction_date = date '2026-05-01'),
+    0);
+
+  -- A date and an amount are the two things a line cannot do without.
+  -- Asserted separately, because one guard covers both and either half
+  -- of it can be cut on its own.
+  begin
+    perform public.import_bank_transactions(v_bank,
+      jsonb_build_array(jsonb_build_object(
+        'transaction_date','2026-05-01','description','No amount')));
+    v_msg := null;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_true('a line with no amount is refused',
+    v_msg like 'Every line needs a date and an amount%');
+
+  begin
+    perform public.import_bank_transactions(v_bank,
+      jsonb_build_array(jsonb_build_object(
+        'description','No date','amount',10)));
+    v_msg := null;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.check_true('and a line with no date',
+    v_msg like 'Every line needs a date and an amount%');
+
+  -- ==================================================================
+  -- 2. What makes a line the same line, one field at a time
+  --
+  -- No running_balance on any of these. With one the balance half of
+  -- the key distinguishes the pair by itself, and the field under test
+  -- is never reached.
+  -- ==================================================================
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-06-01','description','TNG RELOAD',
+                       'reference','R1','amount',-30)));
+  perform pg_temp.check_eq('the first of them lands', (r->>'imported')::numeric, 1);
+
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-06-02','description','TNG RELOAD',
+                       'reference','R1','amount',-30)));
+  perform pg_temp.check_eq('the same charge on another day is another charge',
+    (r->>'imported')::numeric, 1);
+
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-06-01','description','TNG RELOAD',
+                       'reference','R1','amount',-31)));
+  perform pg_temp.check_eq('a different amount is a different line',
+    (r->>'imported')::numeric, 1);
+
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-06-01','description','TNG TOPUP',
+                       'reference','R1','amount',-30)));
+  perform pg_temp.check_eq('so is a different description',
+    (r->>'imported')::numeric, 1);
+
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-06-01','description','TNG RELOAD',
+                       'reference','R2','amount',-30)));
+  perform pg_temp.check_eq('and so is a different reference',
+    (r->>'imported')::numeric, 1);
+
+  perform pg_temp.check_eq('five lines, none of them each other',
+    (select count(*) from public.bank_transactions
+      where bank_account_id = v_bank
+        and transaction_date between date '2026-06-01' and date '2026-06-02'),
+    5);
+
+  -- And the control: with every field the same it IS the same line.
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-06-01','description','TNG RELOAD',
+                       'reference','R1','amount',-30)));
+  perform pg_temp.check_eq('while the same line again is the same line',
+    (r->>'skipped')::numeric, 1);
+
+  -- ==================================================================
+  -- 3. Which way the money went, and what the row carries
+  --
+  -- transaction_type is what the register colours and what a cash-flow
+  -- summary groups on. Reversed, every statement reads as its own
+  -- mirror image while every figure on it stays right -- which is why
+  -- nothing else in this file would notice.
+  -- ==================================================================
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-07-01','description','Money in',
+                       'amount',120.50),
+    jsonb_build_object('transaction_date','2026-07-01','description','Money out',
+                       'amount',-45),
+    -- A bank charge waived, or a reversal that nets to nothing. It is
+    -- not money leaving.
+    jsonb_build_object('transaction_date','2026-07-01','description','Nothing',
+                       'amount',0),
+    jsonb_build_object('transaction_date','2026-07-02','description','   ',
+                       'amount',5,'reference','   ')));
+
+  perform pg_temp.check_eq('money coming in is a deposit',
+    (select transaction_type from public.bank_transactions
+      where bank_account_id = v_bank and description = 'Money in'), 'deposit');
+  perform pg_temp.check_eq('and money going out a withdrawal',
+    (select transaction_type from public.bank_transactions
+      where bank_account_id = v_bank and description = 'Money out'), 'withdrawal');
+  perform pg_temp.check_eq('a line for nothing is not money leaving',
+    (select transaction_type from public.bank_transactions
+      where bank_account_id = v_bank and description = 'Nothing'), 'deposit');
+
+  -- A column of spaces is an empty column, not a description of spaces.
+  -- Stored as a blank it would defeat the duplicate key, which compares
+  -- coalesce(description, '') -- and it would print as a blank line in
+  -- the register rather than as one with nothing to say.
+  perform pg_temp.check_eq('a description of spaces is no description',
+    (select count(*) from public.bank_transactions
+      where bank_account_id = v_bank and transaction_date = date '2026-07-02'
+        and description is null and reference is null), 1);
+
+  -- Every row of one import carries that import's batch, which is what
+  -- lets a statement pasted into the wrong account be taken back out.
+  perform pg_temp.check_eq('every line of the import carries its batch',
+    (select count(*) from public.bank_transactions
+      where bank_account_id = v_bank
+        and import_batch_id = (r->>'batch_id')::uuid), 4);
+
+  -- The sen. `round(amount, 2)` is EQUIVALENT -- bank_transactions.amount
+  -- is numeric(18, 2) and rounds identically on the way in -- and is
+  -- recorded here as the sixth equivalent mutant of this programme
+  -- rather than removed: it is what makes the figure compared against
+  -- the running balance the same figure that is stored.
+  r := public.import_bank_transactions(v_bank, jsonb_build_array(
+    jsonb_build_object('transaction_date','2026-07-03','description','Interest',
+                       'amount',10.567)));
+  perform pg_temp.check_eq('a figure with more than sen on it is rounded',
+    (select amount from public.bank_transactions
+      where bank_account_id = v_bank and description = 'Interest'), 10.57);
+
+  raise notice 'ok   bank statements: the fourteen a sweep found';
+end $$;
+
+
 rollback;
