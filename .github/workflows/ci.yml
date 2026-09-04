@@ -118,6 +118,7 @@ jobs:
                    supabase/tests/control_accounts.sql \
                    supabase/tests/activity_reminders.sql \
                    supabase/tests/payroll_run.sql \
+                   supabase/tests/payroll_shapes.sql \
                    supabase/tests/payroll_voluntary_epf.sql \
                    supabase/tests/sst_summary.sql \
                    supabase/tests/payroll_periods.sql \

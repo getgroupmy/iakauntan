@@ -6008,3 +6008,103 @@ why.
 **An equivalent mutant is a finding.** Half of these were equivalent
 because of a rule somewhere else, and each one was worth the trip to go
 and assert that rule.
+
+### `calculate_payroll_run`: 61 of 91, then 90
+
+The largest function in the payroll module, and the widest hole this
+method has found. `post_payroll_run`, which merely files the numbers,
+was already at 27 of 27; the function that PRODUCES them killed 61 of
+91 one-line mutants.
+
+Almost every survivor was the same failure, and it is not a failure of
+assertions. `payroll_run.sql` pays three people and checks every figure
+on their payslips — it is a good file. But **nobody in it leaves**.
+Nobody works a rest day or a public holiday. Every allowance is a flat
+amount that is active for ever. Nobody is paid a bonus. So the branches
+that survived were not unasserted; they were unreached. A run that pays
+a leaver to the end of the month, charges holiday overtime at the rest
+day rate, keeps paying an allowance that ended in March, or deducts
+annual leave as if it were unpaid passes that file without a mark on
+it.
+
+`supabase/tests/payroll_shapes.sql` is the other shapes: a leaver, a
+person who left last year, somebody sixty years old to the day, a month
+of rest-day and holiday overtime, five leave requests of which two
+count and both only partly, four allowances of which one is payable,
+and a bonus. 57 assertions.
+
+Four of the survivors are worth naming, because each is a class rather
+than a case.
+
+**The company that has never opened the payroll settings screen.** The
+three overtime multipliers are read as `coalesce(v_set.ot_normal_multiplier,
+1.5)`. Every company in the suite HAD a settings row, and the column
+defaults carry the same 1.5, 2.0 and 3.0 — so the fallbacks were never
+reached and mutants changing all three to the wrong multiple lived. The
+company with no settings row is not a strange company. It is a new one.
+Its rest-day overtime would have been paid at time and a half.
+
+**Sixty years old to the day.** SOCSO's Act 800 and EPF's over-sixty
+rates begin AT sixty. `v_age >= 60` and `v_age > 60` differ for exactly
+one employee per birthday per company, and a suite that does not name
+one will never meet them.
+
+**A percentage of basic.** The amount is
+`coalesce(esc.amount, nullif(sc.default_amount, 0), basic * percent / 100)`.
+`default_amount` defaults to **zero, not null**, so the `nullif` is the
+only thing that lets a percentage through at all — and every allowance
+in the suite was a flat amount, so dropping it changed nothing. Without
+it, every percentage-based allowance in the product pays nothing.
+
+**The bonus's own EPF, which is only visible in December.** `calc_pcb`
+splits the month into ordinary pay and additional remuneration, and the
+bonus's EPF relief is its proportional share of the month's EPF. Two
+mutants attacked that share, and both are equivalent **because of the
+figures**: the year's EPF relief caps at RM4,000, and above the cap
+`least(v_epf_used + v_add_epf, 4000)` is 4,000 whatever the share is.
+`calc_pcb` projects the month's EPF over the months that REMAIN, so in
+any month but December the projection alone clears the cap. And on an
+ordinary salary the cap is reached at about RM3,000 a month, which is
+below where PCB starts at all — so the payslip that has both a live EPF
+split and a non-zero PCB has most of its pay OUTSIDE EPF wages. That is
+a commission structure: small basic, large non-EPF allowance, year-end
+payment split between something inside EPF and something outside it.
+The fixture is built on that shape deliberately, and says so.
+
+The two mutants about WHICH money is additional need the opposite
+month: in December the projection has one month left in it, so moving a
+ringgit between ordinary pay and additional remuneration leaves the
+year unchanged. They are killed in June. One PCB call, two mutants that
+need December and two that need June.
+
+### The levy's schedule, which had only ever been one
+
+Three of the four conditions in the HRDF rate lookup had nothing
+asserting them, for the same reason: the repository ships **exactly
+one** HRDF schedule with two categories in it, and every test used the
+same category of the same schedule. A superseded rate charged for ever,
+a rate gazetted for 2030 charged today, and the voluntary registrant
+charged the mandatory rate all passed.
+
+The fixture now puts a superseded schedule and a future one on file.
+The superseded one is left with **no end date**, which is how these
+tables are actually maintained — a new schedule is published and the
+old row is left alone — so `effective_to` is not what puts it out of
+reach. The ordering is, and that is the point.
+
+### The one equivalent mutant, and why the branch stays
+
+`v_basic := case when v_worked >= v_days then v_emp.basic_salary
+else round(v_emp.basic_salary * v_worked / v_days, 2) end`
+
+`v_from` is never before the period start and `v_to` never after its
+end, so `v_worked <= v_days` always and the guard is `= v_days`.
+`basic_salary` is `numeric(18,2)`, and `round(x * d / d, 2) = x` holds
+for every one of the 12,000 combinations of a two-decimal amount and a
+28-to-31-day month. Forcing the pro-rated arm is provably the same
+money.
+
+It is not the same payslip. The line's DESCRIPTION carries an identical
+`case`, and that one is killed — a full month must not say "Basic
+salary (31 of 31 days)". The two arms exist to agree with each other,
+which is a reason to keep the branch rather than to delete it.

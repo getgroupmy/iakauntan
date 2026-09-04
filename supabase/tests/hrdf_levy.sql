@@ -357,4 +357,123 @@ begin
   perform pg_temp.sign_out();
 end $$;
 
+-- =====================================================================
+-- Which HRDF schedule, and which rate in it
+-- =====================================================================
+--
+-- The lookup is four conditions and an ordering, and three of them had
+-- nothing asserting them because the repository ships exactly one HRDF
+-- schedule with exactly two categories in it and every test used the
+-- same one. A mutation sweep of `calculate_payroll_run` kept all three
+-- alive:
+--
+--   * `order by s.effective_from desc` reversed -- a rate the Minister
+--     replaced years ago, charged for ever
+--   * `s.effective_from <= pay_date` dropped -- a rate gazetted to start
+--     next year, charged this year
+--   * `r.category = v_set.hrdf_category` dropped -- the employer on the
+--     voluntary half rate charged the mandatory one, or the other way
+--     about
+--
+-- The fourth, `effective_to`, was already covered above.
+-- =====================================================================
+do $$
+declare
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_emp    uuid;
+  v_old    uuid;
+  v_new    uuid;
+  r        record;
+begin
+  perform pg_temp.allow_many_companies();
+  v_org := pg_temp.test_org('Jadual Levi Sdn Bhd');
+
+  -- An earlier block in this file ended every HRDF schedule, to prove
+  -- that a payslip computed from no table in force says so. This one
+  -- needs the shipped table back.
+  update public.statutory_schedules set effective_to = null
+   where body = 'hrdf' and effective_from = date '2021-03-01';
+
+  -- A rate that applied before the current one, and a rate gazetted to
+  -- take effect after this pay date. Both at figures nothing else in
+  -- the suite uses, so a payslip cannot land on one by accident.
+  --
+  -- The superseded one is left with NO end date, which is how these
+  -- tables are actually maintained: a new schedule is published and the
+  -- old row is left alone. `effective_to` is therefore not what puts it
+  -- out of reach -- the ordering is, and that is the point.
+  insert into public.statutory_schedules
+    (body, name, method, effective_from, is_verified)
+  values ('hrdf', 'PSMB levy, superseded', 'percentage', date '2015-01-01',
+          false)
+  returning id into v_old;
+  insert into public.statutory_rates
+    (schedule_id, category, employer_rate)
+  values (v_old, 'mandatory_10plus', 2.0000),
+         (v_old, 'optional_5to9', 1.5000);
+
+  insert into public.statutory_schedules
+    (body, name, method, effective_from, is_verified)
+  values ('hrdf', 'PSMB levy, from 2030', 'percentage', date '2030-01-01',
+          false)
+  returning id into v_new;
+  insert into public.statutory_rates
+    (schedule_id, category, employer_rate)
+  values (v_new, 'mandatory_10plus', 3.0000),
+         (v_new, 'optional_5to9', 2.5000);
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-09', date '2026-09-01', date '2026-09-30',
+          date '2026-09-30')
+  returning id into v_period;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'J1', 'Pekerja levi', date '2020-01-01', 4000,
+          date '1992-04-15', 'single', 'citizen')
+  returning id into v_emp;
+
+  insert into public.payroll_runs (org_id, period_id, run_no)
+  values (v_org, v_period, 'PAY-2026-09') returning id into v_run;
+
+  -- ------------------------------------------------------------------
+  -- The mandatory rate, with an older and a future schedule on file
+  -- ------------------------------------------------------------------
+  insert into public.payroll_settings (org_id, hrdf_category)
+  values (v_org, 'mandatory_10plus')
+  on conflict (org_id) do update set hrdf_category = excluded.hrdf_category;
+
+  perform public.calculate_payroll_run(v_run);
+  select * into r from public.payslips
+   where run_id = v_run and employee_id = v_emp;
+
+  -- 1% of RM4,000. The superseded table would give RM80 and the future
+  -- one RM120, so this single figure separates all three.
+  perform pg_temp.check_eq('the levy takes the schedule in force on the pay date',
+    r.hrdf, 40.00);
+
+  -- ------------------------------------------------------------------
+  -- The voluntary rate: the same tables, a different employer
+  -- ------------------------------------------------------------------
+  -- An employer with five to nine employees may register voluntarily
+  -- and pays half the rate. Nothing in the suite had ever asked for
+  -- this category, so `r.category = v_set.hrdf_category` was a filter
+  -- with one row on either side of it.
+  update public.payroll_settings set hrdf_category = 'optional_5to9'
+   where org_id = v_org;
+
+  perform public.calculate_payroll_run(v_run);
+  select * into r from public.payslips
+   where run_id = v_run and employee_id = v_emp;
+
+  perform pg_temp.check_eq('a voluntary registrant pays half of it',
+    r.hrdf, 20.00);
+
+  perform pg_temp.sign_out();
+end $$;
+
 rollback;

@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788511836.5736291,
-    "ast_hash": "452bdfe8c003e78e17e9930c1c644851",
+    "mtime": 1788514020.8159745,
+    "ast_hash": "cc7a4a1539080ae3df33d1a64a105a6a",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788318702.3968742,
-    "ast_hash": "fbe8045cc0a6e2b68e185243cef612eb",
+    "mtime": 1788514458.6186347,
+    "ast_hash": "4591b8c32c816c42b012010abd014709",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -6000,8 +6000,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/hrdf_levy.sql": {
-    "mtime": 1788285600.503654,
-    "ast_hash": "bb34e7b59e3a6a3cbcfad606eba02844",
+    "mtime": 1788514157.3076797,
+    "ast_hash": "5fbb767f0708e18c1d79aef742d8dad0",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/departure.dart": {
@@ -7947,6 +7947,11 @@
   "supabase/tests/statutory_bands.sql": {
     "mtime": 1788511823.0291622,
     "ast_hash": "51d932b9b075ecbf4be924c2c13ac416",
+    "semantic_hash": ""
+  },
+  "supabase/tests/payroll_shapes.sql": {
+    "mtime": 1788513957.984079,
+    "ast_hash": "e7617a109561e1342e57a534a8d4bc76",
     "semantic_hash": ""
   }
 }
