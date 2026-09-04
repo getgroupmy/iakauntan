@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/searchable_picker.dart';
 import '../../core/download.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart';
@@ -455,19 +456,22 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                 // with two numbers is how the receipt gets separated
                 // from half of what it paid for.
                 if (!_split.isOn) ...[
-                  DropdownButtonFormField<String>(
-                    value: _accountId,
-                    isExpanded: true,
-                    decoration:
-                        const InputDecoration(labelText: 'Expense account *'),
-                    items: [
+                  // The chart of accounts is the longest list in the
+                  // product and the one people know by NUMBER. Typing
+                  // "6100" should land on it; scrolling to it should
+                  // not be the only way.
+                  SearchablePicker<String>(
+                    options: [
                       for (final a in accounts)
-                        DropdownMenuItem(
+                        PickerOption(
                           value: a.id,
-                          child: Text('${a.code} — ${a.name}',
-                              overflow: TextOverflow.ellipsis),
+                          label: '${a.code} — ${a.name}',
+                          keywords: [a.code, a.name],
                         ),
                     ],
+                    value: _accountId,
+                    label: 'Expense account *',
+                    hint: 'Type a number or a name',
                     onChanged: (v) => setState(() => _accountId = v),
                     validator: (v) => v == null ? 'Choose an account' : null,
                   ),
@@ -592,21 +596,19 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                   ),
                 ]),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _bankAccountId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Paid from',
-                    helperText: 'Leave blank to use the default bank account',
-                  ),
-                  items: [
+                SearchablePicker<String>(
+                  options: [
                     for (final b in banks)
-                      DropdownMenuItem(
+                      PickerOption(
                         value: b['id'] as String,
-                        child: Text(b['name'] as String,
-                            overflow: TextOverflow.ellipsis),
+                        label: b['name'] as String,
                       ),
                   ],
+                  value: _bankAccountId,
+                  allowEmpty: true,
+                  emptyLabel: 'The default bank account',
+                  label: 'Paid from',
+                  helperText: 'Leave blank to use the default bank account',
                   onChanged: (v) => setState(() => _bankAccountId = v),
                 ),
                 const SizedBox(height: 12),
@@ -701,18 +703,17 @@ class _SplitEditor extends StatelessWidget {
               children: [
                 Expanded(
                   flex: 5,
-                  child: DropdownButtonFormField<String>(
-                    value: split.lines[i].accountId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Account'),
-                    items: [
+                  child: SearchablePicker<String>(
+                    options: [
                       for (final a in accounts)
-                        DropdownMenuItem(
+                        PickerOption(
                           value: a.id,
-                          child: Text('${a.code} — ${a.name}',
-                              overflow: TextOverflow.ellipsis),
+                          label: '${a.code} — ${a.name}',
+                          keywords: [a.code, a.name],
                         ),
                     ],
+                    value: split.lines[i].accountId,
+                    label: 'Account',
                     onChanged: (v) => onAccount(i, v),
                   ),
                 ),

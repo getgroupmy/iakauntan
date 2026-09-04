@@ -2023,22 +2023,19 @@ class _HeaderCard extends ConsumerWidget {
       if (kind.isSales &&
           (ref.watch(salespeopleProvider).valueOrNull?.isNotEmpty ?? false))
         (
-          child: DropdownButtonFormField<String?>(
-            value: salespersonId,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Salesperson'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('None')),
+          child: SearchablePicker<String>(
+            options: [
               for (final s in ref.watch(salespeopleProvider).value ?? const [])
-                DropdownMenuItem(
+                PickerOption(
                   value: s['id'] as String,
-                  child: Text(
-                    s['name']?.toString() ?? '',
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  label: s['name']?.toString() ?? '',
                 ),
             ],
-            onChanged: editable ? onSalespersonChanged : null,
+            value: salespersonId,
+            enabled: editable,
+            allowEmpty: true,
+            label: 'Salesperson',
+            onChanged: onSalespersonChanged,
           ),
           flex: 1,
         ),
@@ -2046,22 +2043,20 @@ class _HeaderCard extends ConsumerWidget {
       // invoice is a control that teaches people to ignore controls.
       if (ref.watch(projectsProvider).valueOrNull?.isNotEmpty ?? false)
         (
-          child: DropdownButtonFormField<String?>(
-            value: projectCode,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Project'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('None')),
+          child: SearchablePicker<String>(
+            options: [
               for (final p in ref.watch(projectsProvider).value ?? const [])
-                DropdownMenuItem(
+                PickerOption(
                   value: p['code'] as String,
-                  child: Text(
-                    '${p['code']} · ${p['name']}',
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  label: '${p['code']} · ${p['name']}',
+                  keywords: ['${p['code']}', '${p['name']}'],
                 ),
             ],
-            onChanged: editable ? onProjectChanged : null,
+            value: projectCode,
+            enabled: editable,
+            allowEmpty: true,
+            label: 'Project',
+            onChanged: onProjectChanged,
           ),
           flex: 1,
         ),
@@ -2072,22 +2067,20 @@ class _HeaderCard extends ConsumerWidget {
       // in it is how people learn to skip pickers.
       if (ref.watch(departmentsProvider).valueOrNull?.isNotEmpty ?? false)
         (
-          child: DropdownButtonFormField<String?>(
-            value: departmentCode,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Department'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('None')),
+          child: SearchablePicker<String>(
+            options: [
               for (final d in ref.watch(departmentsProvider).value ?? const [])
-                DropdownMenuItem(
+                PickerOption(
                   value: d['code'] as String,
-                  child: Text(
-                    '${d['code']} · ${d['name']}',
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  label: '${d['code']} · ${d['name']}',
+                  keywords: ['${d['code']}', '${d['name']}'],
                 ),
             ],
-            onChanged: editable ? onDepartmentChanged : null,
+            value: departmentCode,
+            enabled: editable,
+            allowEmpty: true,
+            label: 'Department',
+            onChanged: onDepartmentChanged,
           ),
           flex: 1,
         ),
@@ -2196,21 +2189,25 @@ class _CurrencyField extends ConsumerWidget {
 
     final names = {for (final c in available) c.code: c.name};
 
-    return DropdownButtonFormField<String>(
-      value: value,
-      isExpanded: true,
-      decoration: const InputDecoration(labelText: 'Currency'),
-      items: [
+    // Searchable, not because a company uses many currencies but
+    // because the LIST is long: somebody billing in Singapore dollars
+    // should type "sgd" rather than scroll past a hundred and eighty
+    // codes. No offer to add one — the currency list is reference data
+    // and not the user's to extend, which is exactly the case
+    // `onCreate: null` exists for.
+    return SearchablePicker<String>(
+      options: [
         for (final code in codes)
-          DropdownMenuItem(
+          PickerOption(
             value: code,
-            child: Text(
-              names[code] == null ? code : '$code — ${names[code]}',
-              overflow: TextOverflow.ellipsis,
-            ),
+            label: names[code] == null ? code : '$code — ${names[code]}',
+            keywords: [code, names[code] ?? ''],
           ),
       ],
-      onChanged: enabled ? (v) => v == null ? null : onChanged(v) : null,
+      value: value,
+      enabled: enabled,
+      label: 'Currency',
+      onChanged: (v) => v == null ? null : onChanged(v),
     );
   }
 }

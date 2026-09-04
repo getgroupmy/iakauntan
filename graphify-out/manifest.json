@@ -150,8 +150,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1788499637.2893677,
-    "ast_hash": "80a3efc7baf25928b8333c8f7fd5c9a5",
+    "mtime": 1788500054.4925296,
+    "ast_hash": "2a772fd9061bf7c9300639d6494189c6",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -180,8 +180,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/expenses/expenses_screen.dart": {
-    "mtime": 1788389735.590012,
-    "ast_hash": "1c0cb33a744cbe76885c1b3a107d42fe",
+    "mtime": 1788500329.059297,
+    "ast_hash": "e560eee2f8405152328796420895b608",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/claims_screen.dart": {
