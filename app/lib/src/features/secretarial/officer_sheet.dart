@@ -480,33 +480,29 @@ class _PrincipalField extends ConsumerWidget {
         const <Map<String, dynamic>>[];
     final ids = people.map((p) => p['officer_id'] as String).toSet();
 
-    return DropdownButtonFormField<String>(
+    return SearchablePicker<String>(
       key: const ValueKey('officer-alternate-for'),
-      // A principal who has since resigned is off the list, and showing
-      // their id as a selected value the dropdown cannot render would
-      // throw. Falling back to nothing selected says the truth: the
-      // place they stood in has gone.
-      value: ids.contains(value) ? value : null,
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: required_ ? 'Standing in for *' : 'Standing in for',
-        helperText: required_
-            ? 'An alternate votes in their principal\'s place and not as '
-                'well, so quorum depends on knowing whose.'
-            : 'Leave empty unless this is a deputy appointment.',
-      ),
-      items: [
-        const DropdownMenuItem(value: null, child: Text('Nobody')),
+      options: [
         for (final p in people)
-          DropdownMenuItem(
+          PickerOption<String>(
             value: p['officer_id'] as String,
-            child: Text(
-              '${p['full_name']} · ${officerRoleName(p['role'].toString())}',
-              overflow: TextOverflow.ellipsis,
-            ),
+            label: '${p['full_name']}',
+            sublabel: officerRoleName(p['role'].toString()),
           ),
       ],
-      onChanged: enabled ? onChanged : null,
+      // A principal who has since resigned is off the list. Falling
+      // back to nothing selected says the truth: the place they stood
+      // in has gone.
+      value: ids.contains(value) ? value : null,
+      label: required_ ? 'Standing in for *' : 'Standing in for',
+      helperText: required_
+          ? 'An alternate votes in their principal\'s place and not as '
+              'well, so quorum depends on knowing whose.'
+          : 'Leave empty unless this is a deputy appointment.',
+      allowEmpty: true,
+      emptyLabel: 'Nobody',
+      enabled: enabled,
+      onChanged: onChanged,
     );
   }
 }

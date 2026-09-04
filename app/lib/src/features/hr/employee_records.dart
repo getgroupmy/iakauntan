@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -615,20 +616,19 @@ class _ShiftDialogState extends ConsumerState<_ShiftDialog> {
             if (shifts.isEmpty)
               const Text('No shifts have been set up under HR setup yet.')
             else
-              DropdownButtonFormField<String>(
-                value: _shiftId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Shift'),
-                items: [
+              SearchablePicker<String>(
+                options: [
                   for (final s in shifts)
-                    DropdownMenuItem(
+                    PickerOption<String>(
                       value: s['id'] as String,
-                      child: Text(
-                        '${s['name']} · ${s['start_time']}–${s['end_time']}',
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      label: '${s['name']}',
+                      // The HOURS, because two shifts called "Morning"
+                      // at two sites are told apart by nothing else.
+                      sublabel: '${s['start_time']}–${s['end_time']}',
                     ),
                 ],
+                value: _shiftId,
+                label: 'Shift',
                 onChanged: (v) => setState(() => _shiftId = v),
               ),
             const SizedBox(height: Space.md),

@@ -348,20 +348,19 @@ class _JournalLineRowState extends State<_JournalLineRow> {
     // controls.
     final project = widget.projects.isEmpty
         ? null
-        : DropdownButtonFormField<String?>(
-            value: widget.line.projectCode,
-            isExpanded: true,
-            decoration:
-                const InputDecoration(isDense: true, labelText: 'Project'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('None')),
+        : SearchablePicker<String>(
+            options: [
               for (final p in widget.projects)
-                DropdownMenuItem(
+                PickerOption<String>(
                   value: p['code'] as String,
-                  child: Text('${p['code']} · ${p['name']}',
-                      overflow: TextOverflow.ellipsis),
+                  label: '${p['name']}',
+                  sublabel: '${p['code']}',
+                  keywords: ['${p['code']}'],
                 ),
             ],
+            value: widget.line.projectCode,
+            label: 'Project',
+            allowEmpty: true,
             onChanged: (v) {
               widget.line.projectCode = v;
               widget.onChanged();

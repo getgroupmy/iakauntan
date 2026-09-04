@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
@@ -415,20 +416,12 @@ class _ChequeDialogState extends ConsumerState<_ChequeDialog> {
                 decoration: const InputDecoration(labelText: 'How much'),
                 onChanged: (_) => setState(() {}),
               ),
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
+                options: bankPickerOptions(banks),
                 value: _bank,
-                decoration: InputDecoration(
-                  labelText: incoming
-                      ? 'Where it will be banked'
-                      : 'Which of ours it is drawn on',
-                ),
-                items: [
-                  for (final b in banks)
-                    DropdownMenuItem(
-                      value: '${b['id']}',
-                      child: Text('${b['name']}'),
-                    ),
-                ],
+                label: incoming
+                    ? 'Where it will be banked'
+                    : 'Which of ours it is drawn on',
                 onChanged: (v) => setState(() => _bank = v),
               ),
               ListTile(

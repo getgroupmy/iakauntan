@@ -406,17 +406,16 @@ class _NewClaimDialogState extends ConsumerState<_NewClaimDialog> {
               types.when(
                 loading: () => const LinearProgressIndicator(),
                 error: (e, _) => Text('$e'),
-                data: (list) => DropdownButtonFormField<String>(
-                  value: _typeId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Category'),
-                  items: [
+                data: (list) => SearchablePicker<String>(
+                  options: [
                     for (final t in list)
-                      DropdownMenuItem(
+                      PickerOption<String>(
                         value: t['id'] as String,
-                        child: Text(t['name']?.toString() ?? ''),
+                        label: t['name']?.toString() ?? '',
                       ),
                   ],
+                  value: _typeId,
+                  label: 'Category',
                   onChanged: (v) => setState(() => _typeId = v),
                 ),
               ),

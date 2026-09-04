@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
@@ -107,19 +108,16 @@ class _FirmPicker extends ConsumerWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(Space.md),
-        child: DropdownButtonFormField<String>(
-          value: current,
-          decoration: const InputDecoration(
-            labelText: 'Practice',
-            border: OutlineInputBorder(),
-          ),
-          items: [
+        child: SearchablePicker<String>(
+          options: [
             for (final f in firms)
-              DropdownMenuItem(
+              PickerOption<String>(
                 value: f['id'] as String,
-                child: Text('${f['name']}'),
+                label: '${f['name']}',
               ),
           ],
+          value: current,
+          label: 'Practice',
           onChanged: (v) =>
               ref.read(currentFirmIdProvider.notifier).state = v,
         ),
@@ -629,13 +627,16 @@ class _AppointDialogState extends ConsumerState<_AppointDialog> {
           data: (list) => Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              DropdownButtonFormField<String>(
-                value: _orgId,
-                decoration: const InputDecoration(labelText: 'Company'),
-                items: [
+              SearchablePicker<String>(
+                options: [
                   for (final o in list)
-                    DropdownMenuItem(value: o.id, child: Text(o.name)),
+                    PickerOption<String>(value: o.id, label: o.name),
                 ],
+                value: _orgId,
+                label: 'Company',
+                // A practice with three hundred clients is why this is
+                // a box and not a scroll.
+                hint: 'Type a company name',
                 onChanged: (v) => setState(() => _orgId = v),
               ),
               const SizedBox(height: 12),

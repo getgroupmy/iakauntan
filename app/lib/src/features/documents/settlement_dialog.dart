@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
@@ -346,18 +347,10 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
               const SizedBox(height: 12),
               Row(children: [
                 Expanded(
-                  child: DropdownButtonFormField<String>(
+                  child: SearchablePicker<String>(
+                    options: bankPickerOptions(banks),
                     value: _bankAccountId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Bank account'),
-                    items: [
-                      for (final b in banks)
-                        DropdownMenuItem(
-                          value: b['id'] as String,
-                          child: Text(b['name'] as String,
-                              overflow: TextOverflow.ellipsis),
-                        ),
-                    ],
+                    label: 'Bank account',
                     onChanged: (v) => setState(() => _bankAccountId = v),
                   ),
                 ),

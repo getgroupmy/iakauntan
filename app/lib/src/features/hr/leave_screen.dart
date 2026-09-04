@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -267,17 +268,18 @@ class _RequestLeaveDialogState extends ConsumerState<_RequestLeaveDialog> {
               types.when(
                 loading: () => const LinearProgressIndicator(),
                 error: (e, _) => Text('$e'),
-                data: (list) => DropdownButtonFormField<String>(
-                  value: _typeId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Leave type *'),
-                  items: [
+                data: (list) => SearchablePicker<String>(
+                  options: [
                     for (final t in list)
-                      DropdownMenuItem(
+                      PickerOption<String>(
                         value: t.id,
-                        child: Text(_labelFor(t, balances)),
+                        // The label carries the balance left, which is
+                        // the number somebody checks before choosing.
+                        label: _labelFor(t, balances),
                       ),
                   ],
+                  value: _typeId,
+                  label: 'Leave type *',
                   onChanged: (v) => setState(() {
                     _typeId = v;
                     if (!_allowsHalfDay(list)) _halfDay = false;

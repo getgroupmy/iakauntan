@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -678,17 +679,19 @@ class _MoveClientMoneyDialogState
                 ),
               )
             else
-              DropdownButtonFormField<Matter>(
-                value: _to,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'To matter'),
-                items: [
+              SearchablePicker<Matter>(
+                options: [
                   for (final m in destinations)
-                    DropdownMenuItem(
+                    PickerOption<Matter>(
                       value: m,
-                      child: Text('${m.matterNo} — ${m.name}'),
+                      label: m.name,
+                      sublabel: m.matterNo,
+                      keywords: [m.matterNo],
                     ),
                 ],
+                value: _to,
+                label: 'To matter',
+                hint: 'Type a matter number or a name',
                 onChanged: (v) => setState(() => _to = v),
               ),
             const SizedBox(height: 12),

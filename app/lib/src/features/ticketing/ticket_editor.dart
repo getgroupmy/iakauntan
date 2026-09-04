@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 
@@ -93,21 +94,19 @@ class _TicketEditorState extends ConsumerState<TicketEditor> {
               ),
               const SizedBox(height: 12),
               categories.maybeWhen(
-                data: (list) => DropdownButtonFormField<String>(
-                  value: _category,
-                  decoration: const InputDecoration(
-                    labelText: 'Category',
-                    border: OutlineInputBorder(),
-                    helperText:
-                        'Decides the team, the priority and the deadline',
-                  ),
-                  items: [
+                data: (list) => SearchablePicker<String>(
+                  options: [
                     for (final c in list)
-                      DropdownMenuItem(
+                      PickerOption<String>(
                         value: c['code'] as String,
-                        child: Text((c['name'] ?? '') as String),
+                        label: (c['name'] ?? '') as String,
+                        keywords: ['${c['code']}'],
                       ),
                   ],
+                  value: _category,
+                  label: 'Category',
+                  helperText:
+                      'Decides the team, the priority and the deadline',
                   onChanged: (v) => setState(() => _category = v),
                 ),
                 orElse: () => const SizedBox.shrink(),

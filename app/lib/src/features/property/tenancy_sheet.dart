@@ -251,19 +251,23 @@ class _TenancySheetState extends ConsumerState<_TenancySheet> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                DropdownButtonFormField<String>(
+                SearchablePicker<String>(
                   key: const ValueKey('tenancy-unit'),
-                  value: _unitId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Unit'),
-                  items: [
+                  options: [
                     for (final u in lettable)
-                      DropdownMenuItem(
+                      PickerOption<String>(
                         value: u['id'] as String,
-                        child: Text('${u['unit_no']}'),
+                        label: '${u['unit_no']}',
                       ),
                   ],
-                  onChanged: _saving ? null : (v) => setState(() => _unitId = v),
+                  value: _unitId,
+                  label: 'Unit',
+                  // A block of two hundred parcels is two hundred rows,
+                  // and the one somebody wants is the one on the lease
+                  // in front of them.
+                  hint: 'Type a unit number',
+                  enabled: !_saving,
+                  onChanged: (v) => setState(() => _unitId = v),
                   validator: (v) => v == null ? 'Required' : null,
                 ),
                 const SizedBox(height: Space.md),

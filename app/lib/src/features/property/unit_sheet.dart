@@ -339,23 +339,22 @@ class _UnitSheetState extends ConsumerState<_UnitSheet> {
                 ],
                 if (_type == 'accessory') ...[
                   const SizedBox(height: Space.md),
-                  DropdownButtonFormField<String>(
-                    value: _principalId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Principal parcel',
-                      helperText: 'An accessory parcel is charged through '
-                          'the parcel it belongs to.',
-                    ),
-                    items: [
+                  SearchablePicker<String>(
+                    options: [
                       for (final u in principals)
-                        DropdownMenuItem(
+                        PickerOption<String>(
                           value: u['id'] as String,
-                          child: Text('${u['unit_no']}'),
+                          label: '${u['unit_no']}',
                         ),
                     ],
-                    onChanged:
-                        _saving ? null : (v) => setState(() => _principalId = v),
+                    value: _principalId,
+                    label: 'Principal parcel',
+                    helperText: 'An accessory parcel is charged through '
+                        'the parcel it belongs to.',
+                    hint: 'Type a unit number',
+                    allowEmpty: true,
+                    enabled: !_saving,
+                    onChanged: (v) => setState(() => _principalId = v),
                   ),
                 ],
                 if (!common) ...[

@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -567,17 +568,16 @@ class _EditReservationDialogState
             orgs.when(
               loading: () => const LinearProgressIndicator(),
               error: (e, _) => Text('Could not load the companies: $e'),
-              data: (rows) => DropdownButtonFormField<String>(
-                value: _orgId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Company'),
-                items: [
+              data: (rows) => SearchablePicker<String>(
+                options: [
                   for (final o in rows)
-                    DropdownMenuItem(
-                      value: o.id,
-                      child: Text(o.name, overflow: TextOverflow.ellipsis),
-                    ),
+                    PickerOption<String>(value: o.id, label: o.name),
                 ],
+                value: _orgId,
+                label: 'Company',
+                // Every company on the platform. This is the list that
+                // grows without limit.
+                hint: 'Type a company name',
                 onChanged: (v) => setState(() => _orgId = v),
               ),
             ),
@@ -887,17 +887,14 @@ class _HoldNameDialogState extends ConsumerState<HoldNameDialog> {
               orgs.when(
                 loading: () => const LinearProgressIndicator(),
                 error: (e, _) => Text('Could not load the companies: $e'),
-                data: (rows) => DropdownButtonFormField<String?>(
-                  value: _orgId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Company'),
-                  items: [
+                data: (rows) => SearchablePicker<String>(
+                  options: [
                     for (final o in rows)
-                      DropdownMenuItem<String?>(
-                        value: o.id,
-                        child: Text(o.name, overflow: TextOverflow.ellipsis),
-                      ),
+                      PickerOption<String>(value: o.id, label: o.name),
                   ],
+                  value: _orgId,
+                  label: 'Company',
+                  hint: 'Type a company name',
                   onChanged: (v) => setState(() => _orgId = v),
                 ),
               ),

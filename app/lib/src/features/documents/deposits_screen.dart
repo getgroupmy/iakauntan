@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/picker_options.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
@@ -294,16 +295,10 @@ class _DepositDialogState extends ConsumerState<_DepositDialog> {
                 decoration: const InputDecoration(labelText: 'How much'),
                 onChanged: (_) => setState(() {}),
               ),
-              DropdownButtonFormField<String>(
+              SearchablePicker<String>(
+                options: bankPickerOptions(banks),
                 value: _bank,
-                decoration: const InputDecoration(labelText: 'In or out of'),
-                items: [
-                  for (final b in banks)
-                    DropdownMenuItem(
-                      value: '${b['id']}',
-                      child: Text('${b['name']}'),
-                    ),
-                ],
+                label: 'In or out of',
                 onChanged: (v) => setState(() => _bank = v),
               ),
               TextField(

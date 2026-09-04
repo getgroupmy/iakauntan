@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
@@ -466,18 +467,16 @@ class _ConvertDialogState extends ConsumerState<_ConvertDialog> {
                     : 'Starts in the first open stage of the pipeline'),
               ),
               if (_opportunity && pipelines.isNotEmpty) ...[
-                DropdownButtonFormField<String>(
-                  value: _pipelineId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Pipeline'),
-                  items: [
+                SearchablePicker<String>(
+                  options: [
                     for (final p in pipelines)
-                      DropdownMenuItem(
+                      PickerOption<String>(
                         value: p['id'] as String,
-                        child: Text(p['name']?.toString() ?? '',
-                            overflow: TextOverflow.ellipsis),
+                        label: p['name']?.toString() ?? '',
                       ),
                   ],
+                  value: _pipelineId,
+                  label: 'Pipeline',
                   onChanged: (v) => setState(() => _pipelineId = v),
                 ),
                 const SizedBox(height: Space.md),

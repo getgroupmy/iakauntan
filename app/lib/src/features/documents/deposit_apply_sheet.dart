@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -218,35 +219,32 @@ class _ApplySheetState extends ConsumerState<_ApplySheet> {
                       ?.copyWith(color: context.colors.warning),
                 )
               else
-                DropdownButtonFormField<String?>(
+                SearchablePicker<String>(
                   key: const ValueKey('apply-document'),
-                  value: _documentId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Against'),
-                  items: [
+                  options: [
                     for (final d in docs)
-                      DropdownMenuItem<String?>(
+                      PickerOption<String>(
                         value: d.id,
-                        child: Text(
-                          applicableLabel(d),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        label: applicableLabel(d),
+                        keywords: [d.docNo],
                       ),
                   ],
-                  onChanged: _saving
-                      ? null
-                      : (v) => setState(() {
-                            _documentId = v;
-                            // Whichever binds first: the deposit's
-                            // balance or what the document still owes.
-                            final d = _chosen(docs);
-                            if (d != null) {
-                              _amount.text = applicableAmount(
-                                widget.balance,
-                                d.balanceAmount,
-                              ).toStringAsFixed(2);
-                            }
-                          }),
+                  value: _documentId,
+                  label: 'Against',
+                  hint: 'Type a document number',
+                  enabled: !_saving,
+                  onChanged: (v) => setState(() {
+                    _documentId = v;
+                    // Whichever binds first: the deposit's balance or
+                    // what the document still owes.
+                    final d = _chosen(docs);
+                    if (d != null) {
+                      _amount.text = applicableAmount(
+                        widget.balance,
+                        d.balanceAmount,
+                      ).toStringAsFixed(2);
+                    }
+                  }),
                 ),
               if (chosen != null) ...[
                 const SizedBox(height: Space.md),
