@@ -901,6 +901,17 @@ extension DocKindX on DocKind {
       ? 'contacts!sales_documents_contact_id_fkey'
       : 'contacts!purchase_documents_contact_id_fkey';
 
+  /// The named embed for this kind's LINES.
+  ///
+  /// Same trap as [contactEmbed] and found the same way — in production,
+  /// on a screen. A line table reaches its document twice: by
+  /// `document_id`, and by the composite `(org_id, document_id)` key.
+  /// `${kind.lineTable}(*)` reads as an ordinary embed and is one
+  /// PostgREST refuses.
+  String get lineEmbed => isSales
+      ? 'sales_document_lines!sales_document_lines_document_id_fkey'
+      : 'purchase_document_lines!purchase_document_lines_document_id_fkey';
+
   /// Which contacts may be chosen on this kind of document.
   String get contactType => isSales ? 'customer' : 'supplier';
   String get contactLabel => isSales ? 'Customer' : 'Supplier';

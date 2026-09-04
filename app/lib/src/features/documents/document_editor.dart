@@ -11,7 +11,9 @@ import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../core/searchable_picker.dart';
 import '../../data/models.dart';
+import '../contacts/new_contact_dialog.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/repository.dart';
 import '../shared/attachments_card.dart';
@@ -1871,32 +1873,53 @@ class _HeaderCard extends ConsumerWidget {
         final selected = list.where((c) => c.id == contactId).firstOrNull;
         final warnMissingTin =
             requiresEinvoice && selected != null && !selected.readyForEinvoice;
-        return DropdownButtonFormField<String>(
-          value: selected?.id,
-          isExpanded: true,
-          decoration: InputDecoration(
-            labelText: '${kind.contactLabel} *',
-            helperText: warnMissingTin
-                ? 'No TIN on file — e-Invoice will be rejected'
-                : null,
-            helperStyle: TextStyle(color: context.colors.warning),
-          ),
-          items: [
+        // A box somebody types into, not a list they scroll. Four
+        // hundred customers in a dropdown is a scrollbar; the same four
+        // hundred behind a search are two keystrokes. Findable by CODE
+        // as well as by name, because whoever filed the document knows
+        // one and whoever is chasing it knows the other.
+        return SearchablePicker<String>(
+          options: [
             for (final c in list)
-              DropdownMenuItem(
+              PickerOption(
                 value: c.id,
-                child: Text(
-                  '${c.name} (${c.code})',
-                  overflow: TextOverflow.ellipsis,
-                ),
+                label: c.name,
+                sublabel: c.code,
+                keywords: [c.code],
               ),
           ],
-          onChanged: editable
-              ? (v) {
-                  final picked = list.where((c) => c.id == v).firstOrNull;
-                  if (picked != null) onContactChanged(picked);
-                }
+          value: selected?.id,
+          enabled: editable,
+          label: '${kind.contactLabel} *',
+          hint: 'Type a name or a code',
+          // Kept from the dropdown this replaced. A customer with no
+          // TIN is one LHDN will reject, and the moment to say so is
+          // when they are chosen rather than when the invoice is filed.
+          helperText: warnMissingTin
+              ? 'No TIN on file — e-Invoice will be rejected'
               : null,
+          helperStyle: TextStyle(color: context.colors.warning),
+          createLabel: 'Add ${kind.contactLabel.toLowerCase()}',
+          // Not on file is not a dead end. The document stays where it
+          // is and the new contact is chosen when it comes back.
+          onCreate: !editable
+              ? null
+              : (typed) async {
+                  final created = await showDialog<Contact>(
+                    context: context,
+                    builder: (_) => NewContactDialog(
+                      contactType: contactTypeFor(docType),
+                      seedName: typed,
+                    ),
+                  );
+                  if (created == null) return null;
+                  onContactChanged(created);
+                  return created.id;
+                },
+          onChanged: (v) {
+            final picked = list.where((c) => c.id == v).firstOrNull;
+            if (picked != null) onContactChanged(picked);
+          },
         );
       },
       loading: () => const LinearProgressIndicator(),

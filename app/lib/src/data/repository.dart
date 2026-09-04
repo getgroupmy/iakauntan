@@ -2471,7 +2471,7 @@ class Repo {
     final data = await client
         .from(kind.table)
         .select(
-          '*, ${kind.contactEmbed}(name, code), ${kind.lineTable}(*)',
+          '*, ${kind.contactEmbed}(name, code), ${kind.lineEmbed}(*)',
         )
         .eq('id', id)
         .single();
@@ -2783,8 +2783,8 @@ class Repo {
         await client
             .from('bills_of_materials')
             .select(
-              '*, items(code, name), '
-              'bom_lines(*, items(code, name)), '
+              '*, items!bills_of_materials_item_id_fkey(code, name), '
+              'bom_lines(*, items!bom_lines_item_id_fkey(code, name)), '
               'bom_operations(*, work_centres(code, name, cost_per_hour))',
             )
             .eq('id', id)
@@ -2932,9 +2932,11 @@ class Repo {
         await client
             .from('manufacturing_orders')
             .select(
-              '*, items(code, name), bills_of_materials(code, name), '
+              '*, items!manufacturing_orders_item_id_fkey(code, name), '
+              'bills_of_materials!manufacturing_orders_bom_id_fkey'
+              '(code, name), '
               'warehouses(code, name), '
-              'mo_components(*, items(code, name)), '
+              'mo_components(*, items!mo_components_item_id_fkey(code, name)), '
               'mo_operations(*, work_centres(code, name, cost_per_hour))',
             )
             .eq('id', id)
@@ -3781,7 +3783,8 @@ class Repo {
     final row = await client
         .from('expenses')
         .select(
-          '*, accounts(code, name), bank_accounts(name), '
+          '*, accounts!expenses_account_id_fkey(code, name), '
+          'bank_accounts!expenses_bank_account_id_fkey(name), '
           'contacts!expenses_contact_id_fkey(name)',
         )
         .eq('org_id', orgId)
@@ -3979,7 +3982,7 @@ class Repo {
         // points back at `opportunities`, so PostgREST can join these two
         // tables either way round and refuses to guess (PGRST201).
         .select(
-          '*, contacts(name), '
+          '*, contacts!opportunities_contact_id_fkey(name), '
           'sales_documents!opportunities_quotation_id_fkey(doc_no)',
         )
         .eq('org_id', orgId)
@@ -5269,7 +5272,8 @@ extension RepoHr on Repo {
         // the request rather than guessing. The JSON key stays
         // `departments`, so nothing downstream changes.
         .select(
-          '*, departments!employees_department_id_fkey(name), positions(title)',
+          '*, departments!employees_department_id_fkey(name), '
+          'positions!employees_position_id_fkey(title)',
         )
         .eq('org_id', orgId);
     if (status != null && status != 'all') {
@@ -5293,7 +5297,8 @@ extension RepoHr on Repo {
         // the request rather than guessing. The JSON key stays
         // `departments`, so nothing downstream changes.
         .select(
-          '*, departments!employees_department_id_fkey(name), positions(title)',
+          '*, departments!employees_department_id_fkey(name), '
+          'positions!employees_position_id_fkey(title)',
         )
         .eq('id', id)
         .maybeSingle();
@@ -5315,7 +5320,8 @@ extension RepoHr on Repo {
         // the request rather than guessing. The JSON key stays
         // `departments`, so nothing downstream changes.
         .select(
-          '*, departments!employees_department_id_fkey(name), positions(title)',
+          '*, departments!employees_department_id_fkey(name), '
+          'positions!employees_position_id_fkey(title)',
         )
         .eq('org_id', orgId)
         .eq('user_id', uid)
@@ -5531,7 +5537,7 @@ extension RepoHr on Repo {
     var q = client
         .from('leave_requests')
         .select(
-          '*, employees(full_name), '
+          '*, employees!leave_requests_employee_id_fkey(full_name), '
           'leave_types!leave_requests_leave_type_id_fkey(name)',
         )
         .eq('org_id', orgId);
@@ -5906,7 +5912,7 @@ extension RepoHr on Repo {
     var q = client
         .from('applicants')
         .select(
-          '*, job_requisitions(title), '
+          '*, job_requisitions!applicants_requisition_id_fkey(title), '
           // Who introduced them, by name. `referred_by` was a
           // reference nothing wrote before `0381`.
           'referrer:employees!applicants_referred_by_fkey(full_name)',
@@ -6614,7 +6620,8 @@ extension RepoHrSetup on Repo {
     var q = client
         .from('onboarding_checklists')
         .select(
-          '*, employees(full_name, employee_no), '
+          '*, employees!onboarding_checklists_employee_id_fkey'
+          '(full_name, employee_no), '
           'onboarding_tasks(id, is_done, is_mandatory)',
         )
         .eq('org_id', orgId);
@@ -6994,7 +7001,7 @@ extension RepoHrSetup on Repo {
         // so the embed has to name which. The constraint is per table,
         // hence the interpolation.
         .select(
-          '*, contacts(name, code), '
+          '*, contacts!${table}_contact_id_fkey(name, code), '
           'bank_accounts!${table}_bank_account_id_fkey(name)',
         )
         .eq('org_id', orgId)
@@ -7017,8 +7024,8 @@ extension RepoHrSetup on Repo {
     final head = await client
         .from(table)
         .select(
-          '*, contacts(name, code, email, address_line1, address_line2, '
-          'city, postcode, state_code), '
+          '*, contacts!${table}_contact_id_fkey(name, code, email, '
+          'address_line1, address_line2, city, postcode, state_code), '
           'bank_accounts!${table}_bank_account_id_fkey(name)',
         )
         .eq('id', id)

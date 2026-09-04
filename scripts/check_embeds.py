@@ -60,14 +60,26 @@ group by 1
 having count(*) > 1;
 """
 
+# Both of these are searched over the WHOLE FILE rather than line by
+# line. A `.select(` whose string sits on the NEXT line -- which is what
+# `dart format` does to a long one -- was invisible to a line-at-a-time
+# scanner, and that is how the second PGRST201 of the day reached a live
+# screen with this script reporting the app clean.
 FROM_RE = re.compile(r"\.from\(\s*'([a-z_]+)'")
 # `.from(` with anything that is not a quoted literal: a variable, a
 # getter, an interpolation. The table cannot be known here.
-DYNAMIC_FROM_RE = re.compile(r"\.from\(\s*(?!')\S")
-SELECT_RE = re.compile(r"\.select\(\s*'([^']*)'")
+DYNAMIC_FROM_RE = re.compile(r"\.from\(\s*(?!')\S", re.S)
+SELECT_RE = re.compile(r"\.select\(\s*'([^']*)'", re.S)
 # An embedded resource: an optional `alias:`, the name, an optional
 # `!constraint` disambiguator, then the opening bracket of its column list.
 EMBED_RE = re.compile(r"(?:^|,)\s*(?:\w+:)?([a-z_]+)\s*(!\w+)?\s*\(")
+# An embedded resource whose NAME is interpolated: `${kind.lineTable}(*)`.
+# The table cannot be read here, so it cannot be checked -- which is how
+# the second PGRST201 of the day reached a live screen. The convention
+# that makes it checkable is that the expression must name an EMBED
+# rather than a TABLE: `${kind.lineEmbed}` carries its own `!constraint`
+# and `${kind.lineTable}` does not.
+INTERPOLATED_EMBED_RE = re.compile(r"\$\{([^}]+)\}\s*\(")
 
 
 def ambiguous_pairs(database_url: str) -> set[frozenset[str]]:
@@ -90,18 +102,53 @@ def scan(root: pathlib.Path, pairs: set[frozenset[str]]) -> list[str]:
 
     problems = []
     for path in sorted(root.rglob("*.dart")):
-        table = None
-        for number, line in enumerate(path.read_text().splitlines(), 1):
-            found = FROM_RE.search(line)
-            if found:
-                table = found.group(1)
-            elif DYNAMIC_FROM_RE.search(line):
-                # Not a literal, so the previous table is not this one.
-                table = None
-            select = SELECT_RE.search(line)
-            if not select:
-                continue
-            for embedded, constraint in EMBED_RE.findall(select.group(1)):
+        text = path.read_text()
+
+        # Every `.from(...)` in the file, with the offset it starts at,
+        # so the table for a `.select(` is the nearest one BEFORE it --
+        # which is what the chain `client.from(x).select(y)` means, on
+        # one line or on five.
+        froms: list[tuple[int, str | None]] = []
+        for found in FROM_RE.finditer(text):
+            froms.append((found.start(), found.group(1)))
+        for found in DYNAMIC_FROM_RE.finditer(text):
+            froms.append((found.start(), None))
+        froms.sort()
+
+        def table_before(offset: int) -> str | None:
+            table = None
+            for at, name in froms:
+                if at > offset:
+                    break
+                table = name
+            return table
+
+        for select in SELECT_RE.finditer(text):
+            number = text.count("\n", 0, select.start()) + 1
+            table = table_before(select.start())
+            columns = select.group(1)
+
+            # An interpolated embed name, which no regex can resolve to
+            # a table. Held to the naming convention instead: an
+            # expression ending in `Embed` is one that carries its own
+            # `!constraint`; anything else is a bare table name and is
+            # exactly the mistake this catches.
+            for expression in INTERPOLATED_EMBED_RE.findall(columns):
+                if expression.strip().endswith('Embed'):
+                    continue
+                problems.append(
+                    f"{path}:{number}\n"
+                    f"    embeds '${{{expression}}}', a name this script "
+                    f"cannot resolve to a table.\n"
+                    f"    If the relationship is ambiguous PostgREST "
+                    f"answers PGRST201 and the screen fails, and nothing "
+                    f"here can tell whether it is.\n"
+                    f"    Put the whole embed -- name AND !constraint -- "
+                    f"on the expression, and name it `...Embed`.\n"
+                    f"    {columns[:90]}"
+                )
+
+            for embedded, constraint in EMBED_RE.findall(columns):
                 if constraint:
                     continue
                 if table is None:
@@ -110,28 +157,29 @@ def scan(root: pathlib.Path, pairs: set[frozenset[str]]) -> list[str]:
                     problems.append(
                         f"{path}:{number}\n"
                         f"    embeds '{embedded}' from a table this script "
-                        f"cannot read — the `.from()` takes a variable.\n"
-                        f"    '{embedded}' is joinable more than one way to "
-                        f"at least one table, so this may be PGRST201 at run "
-                        f"time on some of the tables it is called with.\n"
+                        f"cannot read -- the `.from()` takes a variable.\n"
+                        f"    '{embedded}' is joinable more than one way "
+                        f"to at least one table, so this may be PGRST201 "
+                        f"at run time on some of the tables it is called "
+                        f"with.\n"
                         f"    Name the constraint, and if the table varies "
-                        f"put the whole embed on the enum that varies with "
-                        f"it.\n"
-                        f"    {select.group(1)[:90]}"
+                        f"put the whole embed on the enum that varies "
+                        f"with it.\n"
+                        f"    {columns[:90]}"
                     )
                     continue
                 if frozenset((table, embedded)) not in pairs:
                     continue
                 problems.append(
                     f"{path}:{number}\n"
-                    f"    '{table}' embeds '{embedded}', which can be joined "
-                    f"more than one way.\n"
+                    f"    '{table}' embeds '{embedded}', which can be "
+                    f"joined more than one way.\n"
                     f"    PostgREST will refuse this with PGRST201 at run "
                     f"time and the screen will fail.\n"
-                    f"    Name the constraint — {embedded}!"
-                    f"{table}_<column>_fkey(...) — or drop the embed if "
+                    f"    Name the constraint -- {embedded}!"
+                    f"{table}_<column>_fkey(...) -- or drop the embed if "
                     f"nothing reads it.\n"
-                    f"    {select.group(1)[:90]}"
+                    f"    {columns[:90]}"
                 )
     return problems
 
