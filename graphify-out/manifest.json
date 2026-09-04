@@ -725,8 +725,8 @@
     "semantic_hash": "200dfde266fb67d41983b3a17fa1e187"
   },
   "supabase/tests/_helpers.sql": {
-    "mtime": 1788469983.5672784,
-    "ast_hash": "cb32e465b698cd5c2d6fd8bf0fee6477",
+    "mtime": 1788519344.6459522,
+    "ast_hash": "986529e9e1577f59b3b7ab18df1e4d09",
     "semantic_hash": ""
   },
   "supabase/tests/ledger.sql": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788518754.165465,
-    "ast_hash": "8e04a0126d5d4551ad1acb3b5e90c935",
+    "mtime": 1788519437.2159564,
+    "ast_hash": "97bc6e102f42292e1f5f51c8d024abc9",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788519086.3185287,
-    "ast_hash": "3089037557e6bef4c2f66e133609eef3",
+    "mtime": 1788519617.9545166,
+    "ast_hash": "b03b52e28b460c69f8206f3a38199248",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -7895,8 +7895,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/bank_accounts.sql": {
-    "mtime": 1788505665.3723967,
-    "ast_hash": "9942160b2d1ede93407001f539238884",
+    "mtime": 1788519405.443783,
+    "ast_hash": "129d4bd5599e421653ec4d2e4d490b00",
     "semantic_hash": ""
   },
   "app/lib/src/core/quick_add_dialog.dart": {
@@ -7977,6 +7977,11 @@
   "supabase/tests/withholding_shapes.sql": {
     "mtime": 1788518850.9570508,
     "ast_hash": "5fbf54a45181f0d84cce38f36d05e5eb",
+    "semantic_hash": ""
+  },
+  "scripts/check_blind_catches.py": {
+    "mtime": 1788519429.7231843,
+    "ast_hash": "004c40d5e704f0c5c15050d1bd2e99f6",
     "semantic_hash": ""
   }
 }

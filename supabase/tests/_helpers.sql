@@ -93,6 +93,63 @@ begin
 end;
 $$;
 
+-- What a refusal is allowed to say.
+--
+-- `pg_temp.check_refused(label, statement, like)` runs a statement,
+-- requires it to be refused, and requires the refusal to be the one
+-- meant. Written because a sweep of `create_withholding` found the
+-- opposite habit doing real damage:
+--
+--     begin
+--       perform public.create_withholding(v_draft, 'S109B_SPECIAL');
+--       raise exception 'FAIL: withheld against an unposted bill';
+--     exception when sqlstate '22023' then
+--       raise notice 'ok   the bill has to be posted first';
+--     end;
+--
+-- That assertion passes with the unposted-bill guard DELETED, because
+-- the next guard along raises the same `22023` for a different reason.
+-- `when others` is worse again: it catches a typo in the statement
+-- under test and reports it as a pass.
+--
+-- A guard is identified by what it SAYS. Where two guards on one path
+-- word themselves identically there is nothing to tell them apart,
+-- which is an argument for wording them differently rather than for
+-- asserting less.
+create or replace function pg_temp.check_refused(
+  p_label text, p_statement text, p_message_like text,
+  p_sqlstate text default null)
+returns void language plpgsql as $$
+declare
+  v_msg   text;
+  v_state text;
+begin
+  begin
+    execute p_statement;
+  exception when others then
+    get stacked diagnostics v_msg = message_text, v_state = returned_sqlstate;
+    -- Our own FAIL assertions are P0004; catching one here would turn a
+    -- failed inner assertion into a passed outer one.
+    if v_state = 'P0004' then
+      raise exception 'FAIL %: the statement failed an assertion of its own: %',
+        p_label, v_msg using errcode = 'P0004';
+    end if;
+    if v_msg not like p_message_like then
+      raise exception 'FAIL %: refused, but for the wrong reason: %',
+        p_label, v_msg using errcode = 'P0004';
+    end if;
+    if p_sqlstate is not null and v_state <> p_sqlstate then
+      raise exception 'FAIL %: refused with % rather than %',
+        p_label, v_state, p_sqlstate using errcode = 'P0004';
+    end if;
+    raise notice 'ok   %', p_label;
+    return;
+  end;
+  raise exception 'FAIL %: it was not refused at all', p_label
+    using errcode = 'P0004';
+end;
+$$;
+
 -- A user to hang the fixtures off. A freshly migrated stack has no one
 -- signed up yet, and the trigger that enrols an organization's creator as
 -- its owner needs a real row in auth.users, so make one if it is not

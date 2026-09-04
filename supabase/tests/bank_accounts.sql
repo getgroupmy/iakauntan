@@ -128,41 +128,34 @@ begin
   select id into v_ar from public.accounts
    where org_id = v_org and code = '1210';   -- Accounts Receivable
 
-  begin
-    perform public.upsert_bank_account(
-      p_name => 'Wrong', p_account_id => v_ar, p_org_id => v_org);
-    v_ok := true;
-  exception when others then
-    v_ok := false; v_txt := sqlerrm;
-  end;
-  perform pg_temp.check_true(
-    'money cannot be banked into the receivables control', not v_ok);
-  perform pg_temp.check_true('and it says why',
-    v_txt like '%not a bank or cash account%');
+  -- Each of these names the refusal it expects, rather than catching
+  -- anything at all. `upsert_bank_account` has six guards in a row: a
+  -- test that only asks WHETHER it refused passes when the guard it is
+  -- aimed at is deleted and a later one fires instead -- and passes
+  -- again when the call itself has a typo in it.
+  perform pg_temp.check_refused(
+    'money cannot be banked into the receivables control',
+    format($q$ select public.upsert_bank_account(
+                 p_name => 'Wrong', p_account_id => %L, p_org_id => %L) $q$,
+           v_ar, v_org),
+    '%not a bank or cash account%');
 
-  begin
-    perform public.upsert_bank_account(p_name => '   ', p_org_id => v_org);
-    v_ok := true;
-  exception when others then v_ok := false;
-  end;
-  perform pg_temp.check_true('a blank name is refused', not v_ok);
+  perform pg_temp.check_refused('a blank name is refused',
+    format($q$ select public.upsert_bank_account(
+                 p_name => '   ', p_org_id => %L) $q$, v_org),
+    '%needs a name%');
 
-  begin
-    perform public.upsert_bank_account(
-      p_name => 'Bad currency', p_currency => 'RINGGIT', p_org_id => v_org);
-    v_ok := true;
-  exception when others then v_ok := false;
-  end;
-  perform pg_temp.check_true('a currency that is not three letters is refused',
-    not v_ok);
+  perform pg_temp.check_refused(
+    'a currency that is not three letters is refused',
+    format($q$ select public.upsert_bank_account(
+                 p_name => 'Bad currency', p_currency => 'RINGGIT',
+                 p_org_id => %L) $q$, v_org),
+    '%three letters%');
 
-  begin
-    perform public.upsert_bank_account(p_name => 'Nowhere');
-    v_ok := true;
-  exception when others then v_ok := false;
-  end;
-  perform pg_temp.check_true('an account belonging to no company is refused',
-    not v_ok);
+  perform pg_temp.check_refused(
+    'an account belonging to no company is refused',
+    $q$ select public.upsert_bank_account(p_name => 'Nowhere') $q$,
+    '%Which company%');
 
   -- The control for all four: the same call with everything right still
   -- works, so the refusals above are not a function that refuses

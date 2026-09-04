@@ -6431,3 +6431,32 @@ The one surviving mutant is `round(v_gross * v_rate / 100.0, 2)` with
 the round deleted, and it is equivalent because `tax_amount` is
 `numeric(18, 2)` — the column rounds what the function did not. So the
 fixture asserts **the column's scale**. Fifth time.
+
+### And a ratchet for the blind spot
+
+The withholding sweep found the method's own weakness, so it is worth
+counting how far it goes. Across the suite there are **420** `when
+others` handlers. **298** of them look at the error — `sqlerrm`, `get
+stacked diagnostics`, a `check_` on the message. **97** assert nothing
+at all.
+
+Not all ninety-seven are wrong. Where only one thing can possibly raise,
+catching broadly costs nothing. But every one of them is a place where a
+future edit can break the thing under test and nothing will say so, and
+a blind handler also swallows a typo in the statement it is testing and
+reports it as a pass.
+
+Ninety-seven is too many to fix in one go and exactly the number that
+makes a new rule worthless — a check that fails a hundred times teaches
+people to ignore it, which is the lesson `check_narrow_rows.py` taught
+already. So `scripts/check_blind_catches.py` is a **ratchet**: the count
+may go down and must not go up. And `pg_temp.check_refused(label,
+statement, message_like)` is the thing to write instead — it requires
+the statement to be refused, requires the refusal to be the one meant,
+and refuses to count one of our own `P0004` assertion failures as a
+pass.
+
+Proved in place on `bank_accounts.sql`: `upsert_bank_account` has six
+guards in a row, four of its refusals were blind, and deleting the
+bank-or-cash guard now fails the file with *"it was not refused at
+all"*. Before the change it passed.
