@@ -2620,8 +2620,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/opening_stock.sql": {
-    "mtime": 1786793304.251757,
-    "ast_hash": "7ea301f4b55f139e8e3951723226bc2b",
+    "mtime": 1788483182.0770147,
+    "ast_hash": "1813738cacbc6863c1dedc6e1d55cec9",
     "semantic_hash": ""
   },
   "supabase/tests/opening_trial_balance.sql": {
