@@ -5904,3 +5904,107 @@ The lesson is narrower than "measure things", and worth keeping: **a
 count of zero proves nothing until you have seen the same query return
 something.** Printing one row of what the query *does* match would have
 ended it immediately.
+
+## The two sweeps that met in a payslip
+
+`app.calc_pcb` and `app.calc_statutory` are the whole of what a payslip
+deducts. Sweeping both, back to back, found one defect in the arithmetic
+and a large hole in what the suite was looking at.
+
+### `calc_pcb`: 19 of 41
+
+Three worked examples pinned the monthly deduction for three people —
+single on 5,000, married on 12,000 with two children, aged 62 on 4,500 —
+and **almost every branch between them was invisible**. A deduction that
+ignored a disability, a working spouse, a child's claimed share, a
+dependant's tax flag, or the PCB already deducted this year would have
+passed the suite unchanged.
+
+So would all three `greatest(..., 0)` floors, and those are not
+cosmetic: each is the difference between deducting nothing and paying
+money **out** through a payslip. The third is the least obvious — a
+bonus raises the year's income by its own amount and the year's relief
+by twelve times the EPF taken from it, so a small bonus with a large EPF
+deduction makes the year's tax go DOWN. Unfloored, the engine hands the
+difference back.
+
+Twenty-eight assertions later, 36 of 42 die. The six survivors are
+equivalent and each provably so:
+
+| survivor | why it cannot matter |
+|---|---|
+| `greatest(12 - month + 1, 1)` loses its floor | 12 down to 1 for months 1..12; the floor never binds |
+| chargeable income may go negative | `app.annual_tax` of a negative is already zero |
+| zakat may take the tax below zero | same, and the final floor catches the rest |
+| the EPF cap falls back to something absurd | the fallback is 4,000 and the seeded cap IS 4,000 |
+| the spouse relief falls to nothing | same shape; fallback equals the seeded value |
+| a non-resident missing a rate is charged nothing | every PCB schedule carries one |
+
+The last three are equivalent *because of the data*, which is why the
+same commit asserts the data: every PCB schedule carries a non-resident
+rate and four reliefs, and the two caps are the numbers the fallbacks
+assume.
+
+### The defect: RM14,000, not RM8,000
+
+Reaching for a figure to pin one survivor with is what showed the figure
+was wrong. The child relief `CASE` read:
+
+```sql
+when d.is_disabled and d.in_higher_education then 8000
+when d.is_disabled then 6000
+when d.in_higher_education then 8000
+else 2000
+```
+
+The first arm is indistinguishable from the third. Section 48 of the
+Income Tax Act 1967 gives an unmarried disabled child RM6,000 and an
+**additional** RM8,000 where that child is in full-time higher
+education — diploma and above in Malaysia, degree and above abroad. The
+two are cumulative: RM14,000. **The disability was read and then thrown
+away for exactly the children entitled to most.**
+
+Which way it is wrong decides who is out of pocket. Under-relieving
+OVER-deducts, so it is the employee's money, held by LHDN, for a year,
+because of a line in a `CASE`. 0530 fixes it; both arms are now pinned.
+
+### `calc_statutory`: 19 of 24, then 23
+
+One function serves EPF, SOCSO, EIS and HRDF. Four survivors, and the
+one worth repeating is **the RM20 step**.
+
+KWSP rounds the wage UP to the next twenty before applying the rate.
+Every wage the suite used was already a multiple of twenty, so rounding
+to the NEAREST step gave the same answer everywhere. RM5,001 is where
+they part: up lands on 5,020, nearest falls back to 5,000 — and 5,000 is
+in a different **employer** band. Not a rounding difference. Forty-seven
+ringgit of somebody's contribution.
+
+The other three were all about a flag rather than a figure: a date
+before any table exists, and an unverified schedule, both reported
+`is_verified` that nothing checked. `payslip_pdf.dart` prints its
+warning off that flag, and all five seeded tables are unverified — so a
+mutant hard-coding `true` took the warning off **every payslip in the
+product** and passed.
+
+### The survivor that needed a new file
+
+The last one — taking the lowest matching band rather than the highest —
+is equivalent only while no two bands cover one wage.
+`app.assert_statutory_bands` enforces that when a schedule is published
+through `platform_publish_statutory_schedule`, and it ran once over the
+seed at migration time. **Nothing re-checked it afterwards**, so the
+equivalence was an assumption rather than a fact.
+
+`supabase/tests/statutory_bands.sql` re-checks every shipped schedule,
+and requires every statutory body to have a table at all — otherwise
+"every schedule passes" is satisfied by a body losing its table
+entirely. It has no fixtures on purpose: `statutory_schedules.sql`
+deliberately builds a schedule WITH a hole in it, so a loop over every
+schedule cannot live in that file. The first draft put it there and
+failed on the fixture, which is the shortest possible demonstration of
+why.
+
+**An equivalent mutant is a finding.** Half of these were equivalent
+because of a rule somewhere else, and each one was worth the trip to go
+and assert that rule.
