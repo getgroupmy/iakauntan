@@ -7545,8 +7545,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/expense_split.sql": {
-    "mtime": 1788389464.0757976,
-    "ast_hash": "ab9a5f62f871bf137736b1ee603f75b5",
+    "mtime": 1788488420.4522684,
+    "ast_hash": "6e7dbdf4ce56af0b90df900bc086e0a6",
     "semantic_hash": ""
   },
   "app/lib/src/features/shell/notification_bell.dart": {
