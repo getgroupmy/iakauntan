@@ -4610,7 +4610,13 @@ class PlatformRepo {
         params: {'p_id': id, 'p_status': status, 'p_note': note},
       );
 
-  Future<void> updateSetting(String key, Map<String, dynamic> value) => client
+  /// `value` is `dynamic` rather than a map because `platform_settings`
+  /// stores jsonb, and not every setting is an object: `mail_domain` is
+  /// a bare JSON string, and `app.mail_domain()` reads it with
+  /// `#>> '{}'`, which only works on a scalar. Typing this as a map
+  /// meant the console could not save one back in the shape the
+  /// database needs.
+  Future<void> updateSetting(String key, dynamic value) => client
       .rpc('platform_update_setting', params: {'p_key': key, 'p_value': value});
 
   // ------------------------------------------------------------------

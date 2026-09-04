@@ -110,13 +110,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788506514.0587077,
-    "ast_hash": "2b5b6c4c3b4b1994b1df63a63c026355",
+    "mtime": 1788541396.0412905,
+    "ast_hash": "58778b7a963cba9b47fbc103e28189fe",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
-    "mtime": 1788326506.1046813,
-    "ast_hash": "baa70c5e646f79bb1c0dc37aac6c90f5",
+    "mtime": 1788541591.4035861,
+    "ast_hash": "524c0755dd4bd8abc3c75dc842de7dc0",
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
@@ -8012,6 +8012,11 @@
   "supabase/tests/pos_drawer_shapes.sql": {
     "mtime": 1788538895.4792051,
     "ast_hash": "b6e4d7576367c6890dcd420853c31ffb",
+    "semantic_hash": ""
+  },
+  "app/test/platform_settings_scalar_test.dart": {
+    "mtime": 1788541498.64686,
+    "ast_hash": "b4bbe4caafc794e388a8f10bf4665e07",
     "semantic_hash": ""
   }
 }

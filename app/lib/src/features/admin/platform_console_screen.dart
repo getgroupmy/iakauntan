@@ -624,17 +624,31 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
   late final TextEditingController _controller;
   bool _dirty = false;
 
+  /// `platform_settings.value` is jsonb and NOT every setting is an
+  /// object. `mail_domain` is stored as a bare JSON string, because
+  /// `app.mail_domain()` reads it with `#>> '{}'` — which only works on
+  /// a scalar. Casting this to a Map threw, and a throw in `build`
+  /// takes down the whole tab: in a release build Flutter paints the
+  /// grey `ErrorWidget` box and the seven settings that were fine
+  /// vanish along with the one that was not.
+  dynamic get _raw => widget.setting['value'];
+
+  bool get _isObject => _raw is Map;
+
   Map<String, dynamic> get _value =>
-      Map<String, dynamic>.from(widget.setting['value'] as Map? ?? {});
+      _isObject ? Map<String, dynamic>.from(_raw as Map) : <String, dynamic>{};
 
   /// Settings that are a single on/off get a switch; the rest are edited
   /// as raw JSON, which keeps the console honest about what is stored.
-  bool get _isToggle => _value.length <= 2 && _value.containsKey('enabled');
+  bool get _isToggle =>
+      _isObject && _value.length <= 2 && _value.containsKey('enabled');
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: _encode(_value));
+    _controller = TextEditingController(
+      text: _isObject ? _encode(_value) : '${_raw ?? ''}',
+    );
   }
 
   @override
@@ -646,7 +660,7 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
   static String _encode(Map<String, dynamic> v) =>
       v.entries.map((e) => '${e.key}: ${e.value}').join(', ');
 
-  Future<void> _save(Map<String, dynamic> value) async {
+  Future<void> _save(dynamic value) async {
     await runWithFeedback(
       context,
       action: () => ref
@@ -703,17 +717,27 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
                     child: TextField(
                       controller: _controller,
                       onChanged: (_) => setState(() => _dirty = true),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Value',
-                        helperText: 'key: value, comma separated',
+                        helperText: _isObject
+                            ? 'key: value, comma separated'
+                            : 'a single value, stored as it is typed',
                         isDense: true,
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   FilledButton(
+                    // A scalar setting goes back as a scalar. Parsed as
+                    // pairs it would become `{}`, and `app.mail_domain()`
+                    // would fall through to its hard-coded default with
+                    // nothing to say why.
                     onPressed: _dirty
-                        ? () => _save(_parse(_controller.text))
+                        ? () => _save(
+                            _isObject
+                                ? _parse(_controller.text)
+                                : _parseScalar(_controller.text),
+                          )
                         : null,
                     child: const Text('Save'),
                   ),
@@ -724,6 +748,15 @@ class _SettingCardState extends ConsumerState<_SettingCard> {
         ),
       ),
     );
+  }
+
+  /// A setting that is stored as one jsonb value rather than an object.
+  /// Kept typed for the same reason `_parse` is: a number typed back as
+  /// a string changes what the setting means to whatever reads it.
+  static dynamic _parseScalar(String raw) {
+    final v = raw.trim();
+    if (v == 'true' || v == 'false') return v == 'true';
+    return num.tryParse(v) ?? v;
   }
 
   /// Parses "key: value, key: value" back into JSON, keeping numbers and
