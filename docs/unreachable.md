@@ -6246,3 +6246,73 @@ not a detail of it.
 Two filings with different year ends and the same circulation date have
 the same deadline, which is how five of them get onto one day while the
 one-year-end-per-company constraint still holds.
+
+### The depreciation engine: 19 of 42, then 39
+
+`fixed_assets.sql` opens by saying that depreciation is the one charge
+in the ledger nobody enters by hand, so nobody checks it either. That
+is exactly right, and it is also what the sweep found: the ARITHMETIC
+was well covered — straight line, reducing balance, the closed form,
+idempotence — and the REGISTER SHAPES around it were not covered at
+all.
+
+Every asset in the suite had a residual value of nought, no asset had
+been deleted, none was bought after the date being run, none carried
+its own pair of accounts, and no chart was missing the two the run
+falls back to. So:
+
+- **`v_depreciable` versus `cost`.** RM50,000 with a RM5,000 residual
+  over 60 months is RM750 a month, not RM833.33. With every residual at
+  nought the two expressions are the same number, and a mutant swapping
+  them passed.
+- **A company that splits depreciation by class of asset** — which is
+  what an auditor asks for — has assets carrying their own expense and
+  accumulation accounts. A mutant ignoring them and posting everything
+  to 6400 and 1590 passed, and the note to the accounts could not have
+  been produced.
+- **A chart missing 6400.** `0500` made the chart editable. Without the
+  raise, `create_gl_entry_internal` is handed a null account id and
+  fails somewhere less helpful.
+- **An empty run.** With nothing to charge the run row is deleted; a
+  mutant leaving it behind writes a line in the audit trail claiming a
+  posting that never happened.
+
+**Land.** The mutant that needed the strangest fixture was
+`if v_charge <= 0 then continue` weakened to `< 0`: it writes a
+depreciation entry of nought. A run where EVERY asset is up to date is
+deleted whole and takes the zero rows with it, so the mutant hides — it
+is only visible in a run that posts something AND passes over
+something. The asset that is always passed over is land: carried at
+cost, residual equal to cost, on the register so the fixed asset note
+foots, and never depreciated.
+
+**A reducing-balance asset is not written off. It is rounded off.**
+The mutant marking an asset finished one cent early is unreachable on a
+straight line with any credible figures — it needs a monthly charge of
+one sen. On a reducing balance it is exactly where the asset ends,
+because the closed form never reaches the depreciable amount: RM30,000
+at twenty per cent a year is within one sen of finished after 864
+months and finished after 929. Seventy-seven years. Both dates are in
+the fixture, and the fiscal years they post into have to be opened
+first, which is period control doing its job.
+
+**A percentage typed as 2500.** The check constraint on `rate_percent`
+is only `> 0`, so twenty-five per cent typed as 2500 is a number the
+database accepts. At a monthly factor of `1 - 2500/1200` the closed
+form says the asset is worth minus RM10,833 after one month and MORE
+than it cost after two — a charge of minus RM1,736, which without the
+clamps would post a CREDIT to depreciation expense. Income, from a typo
+in a percentage field. Both clamps are now pinned, one at each month.
+
+#### The three equivalent mutants
+
+| Mutant | Why it cannot matter |
+|---|---|
+| `if p_as_at < p_asset.acquisition_date then return 0` removed | `app.months_held` already returns 0 for every date before the acquisition — verified over every acquisition day in an eleven-year range. The two guards **mask each other**, which is why the pair is now pinned by asking `months_held` directly rather than only through its caller. |
+| `v_depreciable <= 0` removed | `fixed_assets_residual_below_cost` makes `cost - residual_value` non-negative, so the guard is only reachable at equality, where the arithmetic returns 0 anyway. Equivalent **because of the constraint**, so the constraint is what the fixture asserts. |
+| `acquisition_date <= p_as_at` removed from the RUN | The charge for such an asset comes out at nought and `continue` fires. It is a performance filter, not a correctness one — and the same condition in the PREVIEW is not equivalent, because the preview returns the row rather than skipping it. Both are in the fixture; only one mutant survives. |
+
+The first of those is the interesting shape, and it is one this campaign
+has now seen twice: **two guards that each hide the other's mutant.**
+Neither is dead. The only way to tell is to test the smaller function on
+its own.
