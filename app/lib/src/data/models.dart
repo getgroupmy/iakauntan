@@ -889,6 +889,18 @@ extension DocKindX on DocKind {
   String get lineTable =>
       isSales ? 'sales_document_lines' : 'purchase_document_lines';
 
+  /// The named embed for this kind's customer or supplier.
+  ///
+  /// Both document tables reach `contacts` twice: by `contact_id`, and by
+  /// the composite `(org_id, contact_id)` key 0512 added to hold every
+  /// document to its own company's contacts. PostgREST will not guess
+  /// between two relationships — it answers PGRST201 and refuses the
+  /// whole request — so the constraint is named here rather than at each
+  /// call site, which is how one of them was missed.
+  String get contactEmbed => isSales
+      ? 'contacts!sales_documents_contact_id_fkey'
+      : 'contacts!purchase_documents_contact_id_fkey';
+
   /// Which contacts may be chosen on this kind of document.
   String get contactType => isSales ? 'customer' : 'supplier';
   String get contactLabel => isSales ? 'Customer' : 'Supplier';

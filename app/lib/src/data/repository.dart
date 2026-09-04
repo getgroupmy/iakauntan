@@ -2446,7 +2446,7 @@ class Repo {
   }) async {
     var query = client
         .from(kind.table)
-        .select('*, contacts(name, code)')
+        .select('*, ${kind.contactEmbed}(name, code)')
         .eq('org_id', orgId)
         .eq('doc_type', docType)
         .isFilter('deleted_at', null);
@@ -2470,7 +2470,9 @@ class Repo {
   Future<BusinessDocument> document(DocKind kind, String id) async {
     final data = await client
         .from(kind.table)
-        .select('*, contacts(name, code), ${kind.lineTable}(*)')
+        .select(
+          '*, ${kind.contactEmbed}(name, code), ${kind.lineTable}(*)',
+        )
         .eq('id', id)
         .single();
     return BusinessDocument.fromJson(data);
@@ -3687,7 +3689,7 @@ class Repo {
   }) async {
     final data = await client
         .from(kind.table)
-        .select('*, contacts(name, code)')
+        .select('*, ${kind.contactEmbed}(name, code)')
         .eq('org_id', orgId)
         .eq('contact_id', contactId)
         .eq('doc_type', kind.isSales ? 'invoice' : 'bill')

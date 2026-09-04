@@ -20,6 +20,18 @@ So: ask the database which pairs of tables are joinable more than one
 way, counting both directions the way PostgREST does, then read every
 .select() in the app and fail if any of them embeds across such a pair
 without naming the constraint.
+
+And the hole that let one through anyway: a `.from()` whose table is a
+VARIABLE. `client.from(kind.table).select('*, contacts(name, code)')`
+reads the same to a person and is invisible here, because the table name
+is not in the source to be matched — the scanner kept whatever literal
+table it had seen last and checked the embed against the wrong one. That
+is how the invoice list shipped broken while this script said the app
+was clean. A dynamic `.from()` is now tracked as UNKNOWN, and a bare
+embed under one is refused whenever the embedded table can be joined
+more than one way to anything at all: not knowing which table we are on
+is not a reason to allow it, it is a reason the constraint must be
+named.
 """
 
 from __future__ import annotations
@@ -49,6 +61,9 @@ having count(*) > 1;
 """
 
 FROM_RE = re.compile(r"\.from\(\s*'([a-z_]+)'")
+# `.from(` with anything that is not a quoted literal: a variable, a
+# getter, an interpolation. The table cannot be known here.
+DYNAMIC_FROM_RE = re.compile(r"\.from\(\s*(?!')\S")
 SELECT_RE = re.compile(r"\.select\(\s*'([^']*)'")
 # An embedded resource: an optional `alias:`, the name, an optional
 # `!constraint` disambiguator, then the opening bracket of its column list.
@@ -69,6 +84,10 @@ def ambiguous_pairs(database_url: str) -> set[frozenset[str]]:
 
 
 def scan(root: pathlib.Path, pairs: set[frozenset[str]]) -> list[str]:
+    # Every table that is joinable more than one way to SOMETHING. An
+    # embed of one of these under an unknown `.from()` cannot be cleared.
+    ambiguous_anywhere = {name for pair in pairs for name in pair}
+
     problems = []
     for path in sorted(root.rglob("*.dart")):
         table = None
@@ -76,11 +95,32 @@ def scan(root: pathlib.Path, pairs: set[frozenset[str]]) -> list[str]:
             found = FROM_RE.search(line)
             if found:
                 table = found.group(1)
+            elif DYNAMIC_FROM_RE.search(line):
+                # Not a literal, so the previous table is not this one.
+                table = None
             select = SELECT_RE.search(line)
-            if not (select and table):
+            if not select:
                 continue
             for embedded, constraint in EMBED_RE.findall(select.group(1)):
-                if constraint or frozenset((table, embedded)) not in pairs:
+                if constraint:
+                    continue
+                if table is None:
+                    if embedded not in ambiguous_anywhere:
+                        continue
+                    problems.append(
+                        f"{path}:{number}\n"
+                        f"    embeds '{embedded}' from a table this script "
+                        f"cannot read — the `.from()` takes a variable.\n"
+                        f"    '{embedded}' is joinable more than one way to "
+                        f"at least one table, so this may be PGRST201 at run "
+                        f"time on some of the tables it is called with.\n"
+                        f"    Name the constraint, and if the table varies "
+                        f"put the whole embed on the enum that varies with "
+                        f"it.\n"
+                        f"    {select.group(1)[:90]}"
+                    )
+                    continue
+                if frozenset((table, embedded)) not in pairs:
                     continue
                 problems.append(
                     f"{path}:{number}\n"
