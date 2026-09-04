@@ -20,6 +20,24 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
 
   <!--
+    WITHOUT THIS LINE THE WHOLE APP IS A DESKTOP ON A PHONE.
+
+    A mobile browser given no viewport lays the page out at about 980
+    CSS pixels and then scales it, so Flutter is told the window is 980
+    wide on a screen that is 390. Every `MediaQuery.sizeOf(context)`
+    check in the product — the ones that turn a row of buttons into a
+    menu, a table into cards, a sidebar into a drawer — reads a desktop
+    and renders a desktop, which is then squeezed and clipped. It was
+    reported as an item list with its subtitle running one letter per
+    line and its buttons cut off at the edge; it was every screen.
+
+    Flutter's own `index.html` template ships this tag. This file was
+    hand-written around the branding markers below and it was lost.
+  -->
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+  <!--
     No brand in this file.
 
     A theme colour, a description and a name used to be written here as

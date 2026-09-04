@@ -835,8 +835,8 @@
     "semantic_hash": ""
   },
   "app/web/index.html": {
-    "mtime": 1787826664.5294933,
-    "ast_hash": "d4c41a92ca45b252c2fe6c31236548b4",
+    "mtime": 1788509983.1969445,
+    "ast_hash": "328c22af7b0e606f0e743f4178c48873",
     "semantic_hash": ""
   },
   "app/android/app/src/main/res/mipmap-hdpi/ic_launcher.png": {
@@ -7922,6 +7922,11 @@
   "app/test/item_row_actions_test.dart": {
     "mtime": 1788509190.0547552,
     "ast_hash": "9377e8e984cca62c66c0162fc11d35cc",
+    "semantic_hash": ""
+  },
+  "app/test/web_index_test.dart": {
+    "mtime": 1788509964.5286193,
+    "ast_hash": "b073d839c34ef155af6696dbf56831be",
     "semantic_hash": ""
   }
 }
