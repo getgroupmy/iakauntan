@@ -306,4 +306,308 @@ begin
     (select entries from public.report_opening_balance_suspense(v_org)), 0);
 end $$;
 
+
+-- ---------------------------------------------------------------------
+-- The twenty a mutation sweep found
+-- ---------------------------------------------------------------------
+-- Thirty-four one-line mutants across `import_open_invoices` and the
+-- validator it shares with `import_open_bills`, run against nineteen
+-- test files. Twenty survived -- the largest count of anything swept in
+-- this programme, and the reason is the same as for
+-- import_opening_balances: a validator is all front door, and the front
+-- door is the least asserted part of any function here.
+--
+-- Twelve of the twenty are in `app.validate_open_items`, which is one
+-- long elsif chain, and eleven of its seventeen branches could be
+-- deleted with the suite still green. They are asserted below one at a
+-- time, and one at a time is not a style choice: the chain is checked
+-- IN ORDER, so a row that breaks two rules reports the first, and a
+-- fixture that is wrong in more than one way asserts the wrong branch.
+--
+-- The remaining eight are in the posting half, and three of those are
+-- about what an opening invoice IS. It is not a sale of this year, so
+-- its journal is filed under `opening_balance`; it was reported to LHDN
+-- by whoever raised it, so its e-Invoice status is `not_applicable`;
+-- and its other side is Opening Balance Equity rather than revenue,
+-- because recognising last year's income again this year would inflate
+-- the profit and loss by the whole receivable.
+do $$
+declare
+  v_boss uuid := pg_temp.another_user('boss-sapu@openitems.test');
+  v_org  uuid;
+  v_doc  uuid;
+  v_eq   uuid;
+  v_ar2  uuid;
+  v_ap2  uuid;
+  v_msg  text;
+begin
+  v_org := pg_temp.open_org('Open Items Sapu Sdn Bhd', v_boss);
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-1', 'Pelanggan', 'customer'),
+         (v_org, 'S-1', 'Pembekal', 'supplier');
+  v_eq := app.opening_balance_account(v_org);
+
+  -- ==================================================================
+  -- 1. The validator, one branch at a time
+  --
+  -- Each row below is wrong in EXACTLY ONE way. A row wrong in two ways
+  -- reports whichever branch comes first, and would assert that rule
+  -- rather than this one.
+  -- ==================================================================
+  perform pg_temp.check_true('a row with no document number',
+    (select message like 'No document number.%'
+       from public.import_open_invoices(v_org, jsonb_build_array(
+         jsonb_build_object('contact_code','C-1','doc_date','2026-01-05',
+                            'outstanding_amount','100')),
+         date '2026-08-01', false) where row_no = 1));
+
+  perform pg_temp.check_true('a row with no contact code',
+    (select message = 'No contact code.'
+       from public.import_open_invoices(v_org, jsonb_build_array(
+         jsonb_build_object('doc_no','A-1','doc_date','2026-01-05',
+                            'outstanding_amount','100')),
+         date '2026-08-01', false) where row_no = 1));
+
+  perform pg_temp.check_true('a row with no date',
+    (select message = 'No date. It is what the ageing is measured from.'
+       from public.import_open_invoices(v_org, jsonb_build_array(
+         jsonb_build_object('doc_no','A-2','contact_code','C-1',
+                            'outstanding_amount','100')),
+         date '2026-08-01', false) where row_no = 1));
+
+  perform pg_temp.check_true('a date that is not a date',
+    (select message = '"soon" is not a date. Use YYYY-MM-DD.'
+       from public.import_open_invoices(v_org, jsonb_build_array(
+         jsonb_build_object('doc_no','A-3','contact_code','C-1',
+                            'doc_date','soon','outstanding_amount','100')),
+         date '2026-08-01', false) where row_no = 1));
+
+  perform pg_temp.check_true('a due date that is not a date',
+    (select message = '"never" is not a date. Use YYYY-MM-DD.'
+       from public.import_open_invoices(v_org, jsonb_build_array(
+         jsonb_build_object('doc_no','A-4','contact_code','C-1',
+           'doc_date','2026-01-05','due_date','never',
+           'outstanding_amount','100')),
+         date '2026-08-01', false) where row_no = 1));
+
+  perform pg_temp.check_true('due before it was dated',
+    (select message = 'Due 2026-01-01, before it was dated (2026-01-05).'
+       from public.import_open_invoices(v_org, jsonb_build_array(
+         jsonb_build_object('doc_no','A-5','contact_code','C-1',
+           'doc_date','2026-01-05','due_date','2026-01-01',
+           'outstanding_amount','100')),
+         date '2026-08-01', false) where row_no = 1));
+
+  perform pg_temp.check_true('a row with no outstanding amount',
+    (select message like 'No outstanding amount.%'
+       from public.import_open_invoices(v_org, jsonb_build_array(
+         jsonb_build_object('doc_no','A-6','contact_code','C-1',
+                            'doc_date','2026-01-05')),
+         date '2026-08-01', false) where row_no = 1));
+
+  perform pg_temp.check_true('an amount that is not an amount',
+    (select message = '"plenty" is not an amount.'
+       from public.import_open_invoices(v_org, jsonb_build_array(
+         jsonb_build_object('doc_no','A-7','contact_code','C-1',
+           'doc_date','2026-01-05','outstanding_amount','plenty')),
+         date '2026-08-01', false) where row_no = 1));
+
+  perform pg_temp.check_true('a currency this system does not know',
+    (select message = '"XYZ" is not a currency this system knows.'
+       from public.import_open_invoices(v_org, jsonb_build_array(
+         jsonb_build_object('doc_no','A-8','contact_code','C-1',
+           'doc_date','2026-01-05','outstanding_amount','100',
+           'currency','XYZ','exchange_rate','4')),
+         date '2026-08-01', false) where row_no = 1));
+
+  perform pg_temp.check_true('a rate that is not a rate',
+    (select message = '"about four" is not an exchange rate.'
+       from public.import_open_invoices(v_org, jsonb_build_array(
+         jsonb_build_object('doc_no','A-9','contact_code','C-1',
+           'doc_date','2026-01-05','outstanding_amount','100',
+           'currency','USD','exchange_rate','about four')),
+         date '2026-08-01', false) where row_no = 1));
+
+  -- ==================================================================
+  -- 2. A number the ledger already has
+  --
+  -- Both halves, because the validator asks a different question for an
+  -- invoice than for a bill and only one of the two was ever reached.
+  -- An opening file re-run after a partial import would otherwise raise
+  -- a second invoice under a number the customer has already paid
+  -- against.
+  -- ==================================================================
+  perform public.import_open_invoices(v_org, jsonb_build_array(
+    jsonb_build_object('doc_no','INV-DUP','contact_code','C-1',
+      'doc_date','2026-01-05','outstanding_amount','100')),
+    date '2026-08-01', true);
+  perform public.import_open_bills(v_org, jsonb_build_array(
+    jsonb_build_object('doc_no','BILL-DUP','contact_code','S-1',
+      'doc_date','2026-01-05','outstanding_amount','100')),
+    date '2026-08-01', true);
+
+  perform pg_temp.check_true('an invoice number the ledger already has',
+    (select message = 'There is already an invoice INV-DUP here.'
+       from public.import_open_invoices(v_org, jsonb_build_array(
+         jsonb_build_object('doc_no','INV-DUP','contact_code','C-1',
+           'doc_date','2026-01-05','outstanding_amount','100')),
+         date '2026-08-01', false) where row_no = 1));
+  perform pg_temp.check_true('and a bill number it already has',
+    (select message = 'There is already a bill BILL-DUP here.'
+       from public.import_open_bills(v_org, jsonb_build_array(
+         jsonb_build_object('doc_no','BILL-DUP','contact_code','S-1',
+           'doc_date','2026-01-05','outstanding_amount','100')),
+         date '2026-08-01', false) where row_no = 1));
+
+  -- ==================================================================
+  -- 3. What an opening invoice is, and is not
+  --
+  -- Three properties, none of them arithmetic, all of which decide
+  -- whether the books read correctly a year later.
+  -- ==================================================================
+  select id into v_doc from public.sales_documents
+   where org_id = v_org and doc_no = 'INV-DUP';
+
+  perform pg_temp.check_eq('it arrives posted, not as a draft',
+    (select status::text from public.sales_documents where id = v_doc),
+    'posted');
+  perform pg_temp.check_true('and posted means the journal is on it',
+    (select gl_entry_id is not null and posted_at is not null
+       from public.sales_documents where id = v_doc));
+
+  -- Never sent to LHDN and never to be: it was reported, if at all, by
+  -- whoever raised it. `pending` would put last year's invoices in this
+  -- year's submission queue.
+  perform pg_temp.check_eq('it is not going to LHDN',
+    (select einvoice_status::text from public.sales_documents where id = v_doc),
+    'not_applicable');
+
+  -- Its other side is Opening Balance Equity. Revenue would recognise
+  -- last year's income again this year, inflating the profit and loss
+  -- by the whole receivable.
+  perform pg_temp.check_eq(
+    'the line behind it is against Opening Balance Equity',
+    (select l.account_id from public.sales_document_lines l
+      where l.document_id = v_doc), v_eq);
+
+  -- And the receivable line names the customer, or the aged receivable
+  -- has a balance belonging to nobody.
+  perform pg_temp.check_true('the receivable line names the customer',
+    (select gl.contact_id is not null from public.gl_lines gl
+       join public.accounts a on a.id = gl.account_id
+       join public.sales_documents d on d.gl_entry_id = gl.entry_id
+      where d.id = v_doc and a.code = '1210'));
+
+  -- ==================================================================
+  -- 4. A foreign invoice, converted where it should be
+  -- ==================================================================
+  perform public.import_open_invoices(v_org, jsonb_build_array(
+    jsonb_build_object('doc_no','INV-USD','contact_code','C-1',
+      'doc_date','2026-01-05','outstanding_amount','1000',
+      'currency','USD','exchange_rate','4.7')),
+    date '2026-08-01', true);
+  select id into v_doc from public.sales_documents
+   where org_id = v_org and doc_no = 'INV-USD';
+
+  perform pg_temp.check_eq('the document keeps the foreign amount',
+    (select total_amount from public.sales_documents where id = v_doc),
+    1000::numeric);
+  -- Written twice: once by the importer's own insert and again by
+  -- `recalc_sales_totals`, which fires on the line and recomputes
+  -- base_total_amount from total_amount and the rate. The importer's
+  -- value is therefore dead -- a sweep mutant that dropped the
+  -- conversion there changed nothing. The assertion stays because the
+  -- trigger's arithmetic is the one that survives, and it is the one a
+  -- reader of the document sees.
+  perform pg_temp.check_eq('and carries the ringgit beside it',
+    (select base_total_amount from public.sales_documents where id = v_doc),
+    4700::numeric);
+
+  -- ==================================================================
+  -- 5. The due date falls back to the document's own
+  --
+  -- A file with no due date column is the ordinary case, and a null due
+  -- date parks the debt in "not yet due" for ever: report_ar_aging
+  -- buckets on coalesce(due_date, doc_date), so it would age from
+  -- today rather than from January.
+  -- ==================================================================
+  perform pg_temp.check_true('with no due date, it is due the day it was raised',
+    (select due_date = date '2026-01-05'
+       from public.sales_documents where id = v_doc));
+
+  -- ==================================================================
+  -- 6. And a committed row says it was imported
+  -- ==================================================================
+  perform pg_temp.check_true('a committed row reports itself imported',
+    exists (select 1 from public.import_open_invoices(v_org,
+      jsonb_build_array(jsonb_build_object('doc_no','INV-LAST',
+        'contact_code','C-1','doc_date','2026-01-05',
+        'outstanding_amount','50')),
+      date '2026-08-01', true) where status = 'imported'));
+
+  -- ==================================================================
+  -- 7. A customer with its own receivable control account
+  --
+  -- THE FALLBACK IS NOT THE RULE. Both importers read the contact's own
+  -- control account and fall back to 1210 / 2110, and every other row
+  -- in this file uses a contact that has none -- so deleting the read
+  -- and keeping only the fallback passed the whole suite. A group that
+  -- keeps intercompany debt in its own account would have had last
+  -- year's balances land in the ordinary one, and the two would then
+  -- disagree with the aged listing for ever after.
+  --
+  -- Asserted on both sides, because the receivable half and the payable
+  -- half are separate lines of code.
+  -- ==================================================================
+  insert into public.accounts (org_id, code, name, account_type, account_subtype)
+  values (v_org, '1215', 'Receivable — related parties',
+          'asset', 'accounts_receivable') returning id into v_ar2;
+  insert into public.accounts (org_id, code, name, account_type, account_subtype)
+  values (v_org, '2115', 'Payable — related parties',
+          'liability', 'accounts_payable') returning id into v_ap2;
+
+  insert into public.contacts
+    (org_id, code, name, contact_type, receivable_account_id)
+  values (v_org, 'C-REL', 'Anak Syarikat', 'customer', v_ar2);
+  insert into public.contacts
+    (org_id, code, name, contact_type, payable_account_id)
+  values (v_org, 'S-REL', 'Induk', 'supplier', v_ap2);
+
+  perform public.import_open_invoices(v_org, jsonb_build_array(
+    jsonb_build_object('doc_no','INV-REL','contact_code','C-REL',
+      'doc_date','2026-01-05','outstanding_amount','300')),
+    date '2026-08-01', true);
+  perform pg_temp.check_eq(
+    'the opening invoice lands in the account the customer names',
+    (select sum(gl.debit) from public.gl_lines gl
+       join public.sales_documents d on d.gl_entry_id = gl.entry_id
+      where d.org_id = v_org and d.doc_no = 'INV-REL'
+        and gl.account_id = v_ar2), 300::numeric);
+  perform pg_temp.check_eq('and nothing of it in the ordinary one',
+    (select coalesce(sum(gl.debit), 0) from public.gl_lines gl
+       join public.accounts a on a.id = gl.account_id
+       join public.sales_documents d on d.gl_entry_id = gl.entry_id
+      where d.org_id = v_org and d.doc_no = 'INV-REL' and a.code = '1210'),
+    0::numeric);
+
+  perform public.import_open_bills(v_org, jsonb_build_array(
+    jsonb_build_object('doc_no','BILL-REL','contact_code','S-REL',
+      'doc_date','2026-01-05','outstanding_amount','400')),
+    date '2026-08-01', true);
+  perform pg_temp.check_eq(
+    'and the opening bill in the account the supplier names',
+    (select sum(gl.credit) from public.gl_lines gl
+       join public.purchase_documents d on d.gl_entry_id = gl.entry_id
+      where d.org_id = v_org and d.doc_no = 'BILL-REL'
+        and gl.account_id = v_ap2), 400::numeric);
+  perform pg_temp.check_eq('with nothing of it in the ordinary one',
+    (select coalesce(sum(gl.credit), 0) from public.gl_lines gl
+       join public.accounts a on a.id = gl.account_id
+       join public.purchase_documents d on d.gl_entry_id = gl.entry_id
+      where d.org_id = v_org and d.doc_no = 'BILL-REL' and a.code = '2110'),
+    0::numeric);
+
+  raise notice 'ok   open items: the twenty-one a sweep found';
+end $$;
+
 rollback;
