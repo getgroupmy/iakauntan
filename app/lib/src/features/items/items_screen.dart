@@ -134,56 +134,16 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                 subtitle: Text(
                   '${item.code} · ${Fmt.label(item.itemType)}'
                   '${item.trackInventory ? ' · ${Fmt.qty(item.quantityOnHand)} ${item.uomCode} on hand' : ''}',
+                  // Belt and braces beside the narrow layout below. A
+                  // subtitle with no line limit, given a column two
+                  // pixels wide, wraps ONE CHARACTER AT A TIME — which
+                  // is exactly what was reported. Capped, the worst a
+                  // future trailing can do is an ellipsis.
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12),
                 ),
-                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Money(item.unitPrice, bold: true),
-                  // Not gated on canWrite: the card changes nothing, and
-                  // the person who has to answer for what is on the shelf
-                  // is often not the person who may edit prices.
-                  if (item.trackInventory) ...[
-                    const SizedBox(width: Space.sm),
-                    TextButton(
-                      key: ValueKey('stock-card-${item.id}'),
-                      onPressed: () => showStockCard(context, item),
-                      child: const Text('Stock card'),
-                    ),
-                  ],
-                  if (canWrite) ...[
-                    const SizedBox(width: Space.sm),
-                    TextButton(
-                      onPressed: () => showItemPrices(context, item),
-                      child: const Text('Prices'),
-                    ),
-                  ],
-                  // Offered on things that sit on a shelf. A variant is
-                  // an item of its own — 0211's whole point — so this is
-                  // where "the same shirt in six sizes" becomes six
-                  // rows that stock and costing can actually see.
-                  //
-                  // Not hidden for an item that is already a variant of
-                  // something: the model does not carry the parent, and
-                  // the server refuses that case by name rather than
-                  // leaving somebody to guess why a button did nothing.
-                  if (canWrite && item.trackInventory) ...[
-                    const SizedBox(width: Space.sm),
-                    TextButton(
-                      key: ValueKey('variants-${item.id}'),
-                      onPressed: () => showItemVariants(context, item),
-                      child: const Text('Variants'),
-                    ),
-                    // How big a carton of this thing is. The reference
-                    // table leaves packaging units out on purpose, so
-                    // until a shop says, a quantity written in cartons
-                    // has nothing to convert by.
-                    const SizedBox(width: Space.sm),
-                    TextButton(
-                      key: ValueKey('packs-${item.id}'),
-                      onPressed: () => showItemPacks(context, item),
-                      child: const Text('Packs'),
-                    ),
-                  ],
-                ]),
+                trailing: _ItemActions(item: item, canWrite: canWrite),
               );
             },
           );
@@ -196,6 +156,118 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
     showDialog<void>(
       context: context,
       builder: (_) => _ItemDialog(item: item),
+    );
+  }
+}
+
+
+/// What a row offers to do with the item beside it.
+///
+/// Pure and separate from the widget so the SET can be asserted, and
+/// so the wide layout and the narrow one cannot drift apart — they are
+/// two renderings of one list, not two lists.
+///
+///   * The STOCK CARD is not gated on `canWrite`: it changes nothing,
+///     and the person who has to answer for what is on the shelf is
+///     often not the person who may edit prices.
+///   * VARIANTS and PACKS are offered on things that sit on a shelf. A
+///     variant is an item of its own — 0211's whole point — so that is
+///     where "the same shirt in six sizes" becomes six rows stock and
+///     costing can see. Neither is hidden for an item that is already
+///     a variant: the model does not carry the parent, and the server
+///     refuses that case by name rather than leaving somebody to guess
+///     why a button did nothing.
+///   * PACKS is how big a carton is. The reference table leaves
+///     packaging units out on purpose, so until a shop says, a quantity
+///     written in cartons has nothing to convert by.
+List<({String key, String label, void Function(BuildContext) open})>
+    itemRowActions(Item item, {required bool canWrite}) => [
+  if (item.trackInventory)
+    (
+      key: 'stock-card-${item.id}',
+      label: 'Stock card',
+      open: (c) => showStockCard(c, item),
+    ),
+  if (canWrite)
+    (
+      key: 'prices-${item.id}',
+      label: 'Prices',
+      open: (c) => showItemPrices(c, item),
+    ),
+  if (canWrite && item.trackInventory) ...[
+    (
+      key: 'variants-${item.id}',
+      label: 'Variants',
+      open: (c) => showItemVariants(c, item),
+    ),
+    (
+      key: 'packs-${item.id}',
+      label: 'Packs',
+      open: (c) => showItemPacks(c, item),
+    ),
+  ],
+];
+
+/// The price and the row's actions, for a caller that has its own
+/// `ListTile` — the items list, and the test that pins the layout.
+Widget itemRowTrailing(Item item, {required bool canWrite}) =>
+    _ItemActions(item: item, canWrite: canWrite);
+
+/// The price, and the ways into the item beside it.
+///
+/// ON A PHONE THEY COLLAPSE INTO ONE MENU, and that is the whole point
+/// of this widget. `ListTile` gives its `trailing` the width it asks
+/// for and leaves the title and subtitle whatever is left: four text
+/// buttons and a price want about 450 logical pixels, which on a 400
+/// pixel phone left the subtitle a column ONE CHARACTER WIDE. The item
+/// list was unreadable on the device most likely to be standing in
+/// front of the shelf.
+class _ItemActions extends StatelessWidget {
+  const _ItemActions({required this.item, required this.canWrite});
+
+  final Item item;
+  final bool canWrite;
+
+  /// Below this, the buttons become a menu. The same threshold the
+  /// stock take and the payroll screens use.
+  static const _narrow = 700.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = itemRowActions(item, canWrite: canWrite);
+    final narrow = MediaQuery.sizeOf(context).width < _narrow;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Money(item.unitPrice, bold: true),
+        if (actions.isEmpty)
+          const SizedBox.shrink()
+        else if (narrow)
+          PopupMenuButton<int>(
+            key: ValueKey('item-actions-${item.id}'),
+            tooltip: 'More',
+            icon: const Icon(Icons.more_vert, size: 20),
+            onSelected: (i) => actions[i].open(context),
+            itemBuilder: (_) => [
+              for (var i = 0; i < actions.length; i++)
+                PopupMenuItem<int>(
+                  value: i,
+                  key: ValueKey(actions[i].key),
+                  child: Text(actions[i].label),
+                ),
+            ],
+          )
+        else
+          for (final action in actions) ...[
+            const SizedBox(width: Space.sm),
+            TextButton(
+              key: ValueKey(action.key),
+              onPressed: () => action.open(context),
+              child: Text(action.label),
+            ),
+          ],
+      ],
     );
   }
 }
