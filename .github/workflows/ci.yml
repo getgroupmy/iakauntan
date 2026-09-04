@@ -206,6 +206,7 @@ jobs:
                    supabase/tests/attendance_close.sql \
                    supabase/tests/attendance_adjust.sql \
                    supabase/tests/pos_counting.sql \
+                   supabase/tests/pos_drawer_shapes.sql \
                    supabase/tests/inventory_forecast.sql \
                    supabase/tests/pos.sql \
                    supabase/tests/pos_retail.sql \

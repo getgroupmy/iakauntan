@@ -6766,3 +6766,66 @@ The consequence is a product decision nobody has stated: when one line
 of a company's share names a bank account and another leaves it blank,
 no refusal is raised, and the named account takes that company's whole
 share. The fixture pins it so it is a decision rather than a discovery.
+
+## The drawer at close of day
+
+`open_pos_shift`, `close_pos_shift`, `resume_pos_shift`,
+`app.pos_expected_cash` and `expire_loyalty_points`. A mutation sweep of
+56 one-line mutants killed **15** — the weakest coverage this campaign
+has found, on the arithmetic that decides whether a cashier is accused
+of being short.
+
+**The existing files prove the good path and never get it wrong.**
+`pos_counting.sql` and `pos.sql` between them do a float, a cash sale, a
+count, a close and the `counting` state in between, thoroughly. What
+neither does is produce a variance that is not nought — so which way
+round `declared - expected` reads was never pinned, and `abs()` was
+invisible. Nothing had ever set `variance_tolerance` at all, so the
+whole ladder above it was one branch nobody had walked.
+
+The shape that would have been silent is a SHORTFALL. A shortfall is a
+negative, and a bare `> tolerance` never fires on a negative however
+large: a till RM500 short closes itself while a till RM6 over needs a
+manager.
+
+#### Two things about writing these fixtures
+
+**A bare `viewer` role is not a restricted user here.**
+`app.module_access` returns `'write'` to any member with no
+`access_type_id` — which is right, and means a restriction has to be
+built as an ACCESS TYPE with the module set to `read`. Three permission
+assertions passed for the wrong reason before this was found.
+
+**`pg_temp.sign_out()` does not restore the owner.** It clears the JWT
+claim entirely, so `auth.uid()` is null and everything after it runs as
+nobody. `sign_in_as(pg_temp.test_user())` is what puts the owner back.
+
+#### The equivalent mutants
+
+Six survive the finished file.
+
+Two are rounding: `round(p_declared - v_expected, 2)` and
+`round(v_float + v_cash, 2)` each have a column with a scale under them.
+Third time this campaign has met that shape, after the withholding tax
+and the group payment, and the answer is the same — assert the scale.
+
+`and sa.status = 'completed'` in the expected-cash sum reads like it is
+keeping voided sales out of the drawer, and it cannot be: a paid bill
+cannot be voided at all (`void_pos_sale` refuses and says to raise a
+credit note), so the only sale that can reach `voided` is a PARKED one,
+which has no tenders. The rule is asserted from both ends.
+
+Three are in the loyalty expiry, and two share a reason worth naming.
+`coalesce(max(e.created_at), a.joined_on)` in the `HAVING` has a
+fallback that cannot change an answer: an account with NO entries is the
+only one that reaches it, and a balance is the sum of its entries — so
+it is nought, and `if v_balance <= 0 then continue` skips it two lines
+later. Every account the fallback uniquely admits has nothing to expire.
+Likewise a programme with no dormancy months returns early and would
+return nothing anyway, because `make_interval(months => null)` is null
+and `last_at < now() - null` is null, which no row satisfies.
+
+The sixth is `<` rather than `<=` on the dormancy boundary. It needs a
+card whose last activity is the same MICROSECOND as the cutoff — a
+coincidence rather than a case somebody can be in, and no fixture can
+produce it reliably.

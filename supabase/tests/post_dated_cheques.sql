@@ -996,8 +996,18 @@ begin
     (select count(*) from public.gl_lines gl
        join public.post_dated_cheques c on c.gl_entry_id = gl.entry_id
       where c.id = v_pdc and gl.contact_id = v_rel), 2);
+  -- `app.today()`, not `current_date`. `record_pdc` dates the entry
+  -- with Malaysia's day (`v_on := coalesce(p_received, app.today())`),
+  -- and this session's `current_date` is UTC. Between 16:00 and
+  -- midnight UTC those are DIFFERENT DAYS, so written the other way
+  -- this assertion fails for eight hours out of every twenty-four --
+  -- which is exactly what it did, at 00:41 in Kuala Lumpur.
+  --
+  -- `malaysian_clock.sql` exists for this and says so: the day a
+  -- Malaysian business is having is `app.today()`, and a test that
+  -- reaches for the server's own date is asking a different question.
   perform pg_temp.check_true('the journal is dated the day it was taken in',
-    (select e.entry_date = current_date from public.gl_entries e
+    (select e.entry_date = app.today() from public.gl_entries e
        join public.post_dated_cheques c on c.gl_entry_id = e.id
       where c.id = v_pdc));
   perform pg_temp.check_eq('and filed as a cheque',

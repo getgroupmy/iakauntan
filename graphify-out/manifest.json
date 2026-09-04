@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788533946.9352198,
-    "ast_hash": "5bb91bf9d5b563b7d811b23c944cdffd",
+    "mtime": 1788538060.012836,
+    "ast_hash": "1177562b466a71845295b7a11f1a56c7",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788534222.8501825,
-    "ast_hash": "ef48235f53e552484ff4223dcc742697",
+    "mtime": 1788539902.0660527,
+    "ast_hash": "8c852368ef5745fafeccf5a8b909210f",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -4120,8 +4120,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/post_dated_cheques.sql": {
-    "mtime": 1788487309.7168634,
-    "ast_hash": "1810deccd27479de41428891262fbcf1",
+    "mtime": 1788540145.831914,
+    "ast_hash": "01b883ecfb5798e803147a0be3167fd2",
     "semantic_hash": ""
   },
   "app/lib/src/features/reports/cash_forecast_screen.dart": {
@@ -8007,6 +8007,11 @@
   "supabase/tests/group_payment_shapes.sql": {
     "mtime": 1788534199.627745,
     "ast_hash": "b96fc65fb0e314f778fa881c5bf25cd9",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pos_drawer_shapes.sql": {
+    "mtime": 1788538895.4792051,
+    "ast_hash": "b6e4d7576367c6890dcd420853c31ffb",
     "semantic_hash": ""
   }
 }
