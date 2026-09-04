@@ -4345,8 +4345,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/einvoice_statutory.sql": {
-    "mtime": 1788285600.499654,
-    "ast_hash": "a496bcc80f1b85735eadfe0177c6e46b",
+    "mtime": 1788484910.957434,
+    "ast_hash": "17ccead9075acd87c98d4ba51124daeb",
     "semantic_hash": ""
   },
   "supabase/migrations/0288_a_quarter_is_three_months_of_rent.sql": {
