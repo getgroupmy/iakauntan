@@ -150,8 +150,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1788498852.4661357,
-    "ast_hash": "f9360d33ff22aa8c6d69fb0ab229ae42",
+    "mtime": 1788499637.2893677,
+    "ast_hash": "80a3efc7baf25928b8333c8f7fd5c9a5",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -7775,8 +7775,8 @@
     "semantic_hash": ""
   },
   "app/test/line_item_code_test.dart": {
-    "mtime": 1788497607.8888993,
-    "ast_hash": "b7c0f5f40ea3e3f3d806198795461611",
+    "mtime": 1788499656.6765742,
+    "ast_hash": "18f46bf4da5d0be99604e94797d74785",
     "semantic_hash": ""
   },
   "app/lib/src/features/dashboard/ticker.dart": {

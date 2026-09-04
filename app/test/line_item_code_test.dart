@@ -336,4 +336,49 @@ void main() {
 
     expect(find.textContaining('Create "'), findsNothing);
   });
+
+  // -------------------------------------------------------------------
+  // A line has to name an item before the document can be saved
+  //
+  // Asserted on the rule rather than the screen, because the screen the
+  // rule guards needs a signed-in repository and this does not. What
+  // matters is which lines are refused and which are let through.
+  // -------------------------------------------------------------------
+  group('lines with no item', () {
+    List<LineDraft> unnamed(List<LineDraft> lines) => lines
+        .where((l) => l.description.trim().isNotEmpty || l.itemId != null)
+        .where((l) => l.itemId == null)
+        .toList();
+
+    test('typed words with no item behind them are refused', () {
+      final line = LineDraft()..description = 'Audit fee for the year';
+      expect(unnamed([line]), hasLength(1));
+    });
+
+    test('a line bound to an item goes through', () {
+      final line = LineDraft()
+        ..itemId = 'i1'
+        ..description = 'Simen Portland';
+      expect(unnamed([line]), isEmpty);
+    });
+
+    test('a wholly empty line is not counted against the document', () {
+      // The editor keeps a blank line at the end for the next entry.
+      // Refusing to save because of it would make the document
+      // unsaveable and the message meaningless.
+      expect(unnamed([LineDraft()]), isEmpty);
+    });
+
+    test('every offending line is counted, not just the first', () {
+      final lines = [
+        LineDraft()
+          ..itemId = 'i1'
+          ..description = 'Simen',
+        LineDraft()..description = 'Audit fee',
+        LineDraft()..description = 'Disbursements',
+      ];
+      expect(unnamed(lines), hasLength(2));
+      expect(unnamed(lines).first.description, 'Audit fee');
+    });
+  });
 }

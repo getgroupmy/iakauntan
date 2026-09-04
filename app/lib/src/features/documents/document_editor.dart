@@ -460,6 +460,24 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       _toast('Add at least one line.');
       return null;
     }
+    // Every line has to name a real item. A line carrying only typed
+    // words is one the item list has never heard of: nothing can cost
+    // it, nothing counts it, and no report can group by it. Both boxes
+    // on the line offer to create the item from what was typed, so the
+    // way past this is one tap rather than a trip to another screen.
+    final unnamed = validLines.where((l) => l.itemId == null).toList();
+    if (unnamed.isNotEmpty) {
+      final first = unnamed.first.description.trim();
+      _toast(
+        unnamed.length == 1
+            ? 'Line "${first.isEmpty ? '(blank)' : first}" has no item. '
+                  'Pick one, or use "Create" in the box to add it.'
+            : '${unnamed.length} lines have no item, starting with '
+                  '"${first.isEmpty ? '(blank)' : first}". Pick one on '
+                  'each, or use "Create" to add it.',
+      );
+      return null;
+    }
     // Refused here rather than left to post at 1. A foreign document
     // saved without a rate converts at par, balances, and understates
     // the ledger by the whole currency movement without a single check
