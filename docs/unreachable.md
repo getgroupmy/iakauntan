@@ -6460,3 +6460,55 @@ Proved in place on `bank_accounts.sql`: `upsert_bank_account` has six
 guards in a row, four of its refusals were blind, and deleting the
 bank-or-cash guard now fails the file with *"it was not refused at
 all"*. Before the change it passed.
+
+### The foreign-currency engine: 21 of 41, then 36
+
+Five functions: the rate lookup, the gain and loss accounts, the
+realised difference on settlement, the revaluation, and its preview.
+`fx_revaluation.sql` and `multicurrency.sql` pin the arithmetic — a
+falling rate on a receivable is a loss, the run is idempotent, gains
+and losses are stated separately rather than netted. Twenty mutants
+lived anyway.
+
+The revaluation walks the whole sales and purchase ledger and its
+`where` clause has six conditions on each side. The fixtures hold **one
+open foreign invoice each**, so five of those conditions had nothing on
+the other side of them, and the entire PURCHASE half of the union had no
+case at all.
+
+**And one of those filters turned out to be load-bearing in a way
+nothing had noticed.** `d.currency <> v_base` looks like an optimisation:
+a ringgit document restated at a ringgit rate of one moves by nothing.
+Except that **nothing normalises the rate on a base-currency document**.
+An invoice in ringgit will happily carry an exchange rate of 4.50 —
+posting does not object, because for a base-currency document the rate
+is never read. Except here. Without the filter that invoice is
+"revalued" from 4.50 to 1.00 and RM3,500 of loss appears from nowhere.
+The fixture now proves the stray rate is storable, and then proves the
+filter catches it.
+
+**A rerun out of order.** Two mutants — the already-reversed filter, and
+the ordering of the standing-revaluation lookup — can only be told from
+the right code when the newest revaluation on file is one that has
+already been undone. That happens when a bookkeeper reruns a prior
+month: March, then February, then March again. Nothing in the suite had
+ever run them out of order.
+
+**A twin covered on one side.** `realised_fx_on_settlement` has the same
+loop twice, once for receipts and once for payments, and the fixtures
+settle one invoice with one receipt. Both `where a.<id> = p_settlement_id`
+filters were unasserted; two customers paying on the same day would
+have had each other's exchange difference booked against them.
+
+#### The five equivalent mutants
+
+| Mutant | Why it cannot matter |
+|---|---|
+| `if v_rate <= 0` deleted, and weakened to `< 0` | `exchange_rates_rate_check` is `rate > 0`; the table will not hold such a rate. The fixture asserts the constraint. |
+| `coalesce(d.exchange_rate, 1)` → `, 0)` | `exchange_rate` is NOT NULL with a default of 1 on all four document tables. The fixture asserts the nullability. |
+| the standing-revaluation ordering flipped | Only visible with two un-reversed revaluations at once, and each run reverses the one before it. The fixture asserts that invariant. |
+| `d.balance_amount <> 0` dropped | A settled document contributes `0 × rate - 0 × rate`, and the `having ... <> 0` removes the row. |
+
+Four of those are the same move for the sixth time: **a survivor that is
+equivalent because of a rule enforced elsewhere is answered by asserting
+that rule.**

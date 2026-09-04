@@ -223,6 +223,7 @@ jobs:
                    supabase/tests/demo_rebuild.sql \
                    supabase/tests/multicurrency.sql \
                    supabase/tests/transfer.sql \
+                   supabase/tests/fx_shapes.sql \
                    supabase/tests/fx_revaluation.sql \
                    supabase/tests/depreciation_shapes.sql \
                    supabase/tests/fixed_assets.sql \
