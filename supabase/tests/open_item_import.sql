@@ -339,6 +339,8 @@ declare
   v_eq   uuid;
   v_ar2  uuid;
   v_ap2  uuid;
+  v_bill uuid;
+  v_clerk uuid := pg_temp.another_user('clerk-sapu@openitems.test');
   v_msg  text;
 begin
   v_org := pg_temp.open_org('Open Items Sapu Sdn Bhd', v_boss);
@@ -346,6 +348,8 @@ begin
   values (v_org, 'C-1', 'Pelanggan', 'customer'),
          (v_org, 'S-1', 'Pembekal', 'supplier');
   v_eq := app.opening_balance_account(v_org);
+  insert into public.org_members (org_id, user_id, role)
+  values (v_org, v_clerk, 'purchaser');
 
   -- ==================================================================
   -- 1. The validator, one branch at a time
@@ -607,7 +611,151 @@ begin
       where d.org_id = v_org and d.doc_no = 'BILL-REL' and a.code = '2110'),
     0::numeric);
 
-  raise notice 'ok   open items: the twenty-one a sweep found';
+  -- ==================================================================
+  -- 8. And all of it again on the buying side
+  --
+  -- ASYMMETRY. Every assertion above is about an invoice, because the
+  -- sweep that prompted them was of import_open_invoices, and the two
+  -- functions are near-duplicates. Sweeping the bill half on its own
+  -- read fifteen survivors out of twenty-one -- the same list, minus
+  -- the four the shared validator already covers.
+  --
+  -- The three below with no invoice counterpart are the ones a reader
+  -- should look at first, because nothing on the selling side would
+  -- ever have caught them: the supplier's own document number, its
+  -- date, and a journal that goes the other way round.
+  -- ==================================================================
+  begin
+    perform public.import_open_bills(v_org, jsonb_build_array(
+      jsonb_build_object('doc_no','BILL-BAD','contact_code','S-NOBODY',
+        'doc_date','2026-01-05','outstanding_amount','100')),
+      date '2026-08-01', true);
+    raise exception 'a file with a bad row was committed';
+  exception when others then
+    get stacked diagnostics v_msg = message_text;
+    perform pg_temp.check_true('a bill file with a bad row writes nothing',
+      v_msg like 'Nothing was imported: 1 of 1 rows%');
+  end;
+  perform pg_temp.check_eq('and the bad row is not on file either',
+    (select count(*) from public.purchase_documents
+      where org_id = v_org and doc_no = 'BILL-BAD'), 0);
+
+  -- The run's own guard: permission and the period lock both live in
+  -- it, so without it anybody who can read the company can write its
+  -- opening payables.
+  perform pg_temp.sign_in_as(v_clerk);
+  begin
+    perform public.import_open_bills(v_org, jsonb_build_array(
+      jsonb_build_object('doc_no','BILL-X','contact_code','S-1',
+        'doc_date','2026-01-05','outstanding_amount','100')),
+      date '2026-08-01', true);
+    v_msg := null;
+  exception when others then get stacked diagnostics v_msg = message_text;
+  end;
+  perform pg_temp.sign_in_as(v_boss);
+  perform pg_temp.check_eq('somebody who may not post may not import bills',
+    v_msg, 'Insufficient privileges');
+
+  -- The bill itself.
+  perform public.import_open_bills(v_org, jsonb_build_array(
+    jsonb_build_object('doc_no','BILL-A','contact_code','S-1',
+      'doc_date','2026-01-05','outstanding_amount','700',
+      'currency','USD','exchange_rate','4.7')),
+    date '2026-08-01', true);
+  select id into v_bill from public.purchase_documents
+   where org_id = v_org and doc_no = 'BILL-A';
+
+  perform pg_temp.check_eq('an opening bill arrives posted',
+    (select status::text from public.purchase_documents where id = v_bill),
+    'posted');
+  perform pg_temp.check_true('with the journal on it and a time it was posted',
+    (select gl_entry_id is not null and posted_at is not null
+       from public.purchase_documents where id = v_bill));
+  perform pg_temp.check_eq('owing the whole of it',
+    (select balance_amount from public.purchase_documents where id = v_bill),
+    700::numeric);
+  perform pg_temp.check_eq('and paid none of it',
+    (select paid_amount from public.purchase_documents where id = v_bill),
+    0::numeric);
+  perform pg_temp.check_true('dated the day the supplier raised it',
+    (select doc_date = date '2026-01-05'
+       from public.purchase_documents where id = v_bill));
+  perform pg_temp.check_true('and due that day, having no due date of its own',
+    (select due_date = date '2026-01-05'
+       from public.purchase_documents where id = v_bill));
+
+  -- With no number of the supplier's own, ours stands in for it. Left
+  -- null, the bill cannot be found by the number printed on the paper
+  -- in the file, which is the only number the supplier will quote.
+  perform pg_temp.check_eq('the supplier''s number falls back to ours',
+    (select supplier_doc_no from public.purchase_documents where id = v_bill),
+    'BILL-A');
+  perform pg_temp.check_true('dated as the supplier dated it',
+    (select supplier_doc_date = date '2026-01-05'
+       from public.purchase_documents where id = v_bill));
+
+  -- And when the file does carry one, that is the one kept.
+  perform public.import_open_bills(v_org, jsonb_build_array(
+    jsonb_build_object('doc_no','BILL-B','contact_code','S-1',
+      'doc_date','2026-01-06','outstanding_amount','80',
+      'supplier_doc_no','ST-2026-9911')),
+    date '2026-08-01', true);
+  perform pg_temp.check_eq('but the supplier''s own number is kept when given',
+    (select supplier_doc_no from public.purchase_documents
+      where org_id = v_org and doc_no = 'BILL-B'), 'ST-2026-9911');
+
+  -- The ledger. The bill is the mirror of the invoice: equity DEBITED,
+  -- the payable CREDITED. The other way round it still balances, still
+  -- posts, and turns a company that owes seven hundred into one that is
+  -- owed it.
+  perform pg_temp.check_eq('the payable is credited, converted at the rate',
+    (select sum(gl.credit) from public.gl_lines gl
+       join public.accounts a on a.id = gl.account_id
+       join public.purchase_documents d on d.gl_entry_id = gl.entry_id
+      where d.id = v_bill and a.code = '2110'), 3290::numeric);
+  perform pg_temp.check_eq('and the equity side debited, not credited',
+    (select sum(gl.debit) from public.gl_lines gl
+       join public.purchase_documents d on d.gl_entry_id = gl.entry_id
+      where d.id = v_bill and gl.account_id = v_eq), 3290::numeric);
+  perform pg_temp.check_eq('the payable line names the supplier',
+    (select count(*) from public.gl_lines gl
+       join public.accounts a on a.id = gl.account_id
+       join public.purchase_documents d on d.gl_entry_id = gl.entry_id
+      where d.id = v_bill and a.code = '2110'
+        and gl.contact_id = d.contact_id), 1);
+  perform pg_temp.check_true('the journal is dated at the changeover',
+    (select e.entry_date = date '2026-08-01'
+       from public.gl_entries e
+       join public.purchase_documents d on d.gl_entry_id = e.id
+      where d.id = v_bill));
+
+  -- The line behind it, against equity rather than an expense: bringing
+  -- last year's purchases into this year's profit and loss would
+  -- understate the profit by the whole payable.
+  perform pg_temp.check_eq('the line behind it is against equity',
+    (select count(*) from public.purchase_document_lines
+      where document_id = v_bill and account_id = v_eq), 1);
+
+  -- Written twice, as on the selling side: recalc_purchase_totals fires
+  -- on the line and recomputes base_total_amount from total_amount and
+  -- the rate, so the importer's own value is dead. The seventh
+  -- equivalent mutant of this programme. The assertion stays because
+  -- the trigger's arithmetic is what a reader of the bill sees.
+  perform pg_temp.check_eq('the bill keeps the foreign amount',
+    (select total_amount from public.purchase_documents where id = v_bill),
+    700::numeric);
+  perform pg_temp.check_eq('with the ringgit beside it',
+    (select base_total_amount from public.purchase_documents where id = v_bill),
+    3290::numeric);
+
+  perform pg_temp.check_true('and a committed bill reports itself imported',
+    exists (select 1 from public.import_open_bills(v_org,
+      jsonb_build_array(jsonb_build_object('doc_no','BILL-LAST',
+        'contact_code','S-1','doc_date','2026-01-05',
+        'outstanding_amount','20')),
+      date '2026-08-01', true) where status = 'imported'));
+
+  raise notice 'ok   open items: the twenty-one and the fifteen a sweep found';
 end $$;
 
 rollback;

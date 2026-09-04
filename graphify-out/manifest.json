@@ -2615,8 +2615,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/open_item_import.sql": {
-    "mtime": 1788481006.5938542,
-    "ast_hash": "0710abc8a304a0af2b280d93b76aae63",
+    "mtime": 1788482173.187344,
+    "ast_hash": "31b76d15160256c1034d528fb28f31db",
     "semantic_hash": ""
   },
   "supabase/tests/opening_stock.sql": {
