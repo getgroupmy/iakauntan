@@ -2530,7 +2530,16 @@ class Repo {
   /// Creates or replaces a document and its lines. Lines are deleted and
   /// re-inserted so the header totals are recomputed by the database
   /// triggers rather than trusted from the client.
-  Future<String> saveDocument({
+  /// Saves a document, and returns its id AND the number it now carries.
+  ///
+  /// The number comes back because a NEW document is not numbered until
+  /// this call: `next_document_number` advances a counter, and a
+  /// document that draws its number when the editor OPENS burns one
+  /// every time somebody changes their mind. Gaps in a sales invoice
+  /// series are what an auditor asks about. The caller therefore does
+  /// not know what the document is called until it is saved, and this
+  /// is where it finds out.
+  Future<({String id, String docNo})> saveDocument({
     required DocKind kind,
     String? id,
     required String docType,
@@ -2538,13 +2547,19 @@ class Repo {
     required List<Map<String, dynamic>> lines,
   }) async {
     String documentId;
+    String documentNo = (header['doc_no'] as String?) ?? '';
 
     if (id == null) {
+      // Drawn HERE, one statement before the insert that uses it, and
+      // only when the caller has not already got one. A number drawn
+      // and then not used is a gap; the window for that is now a failed
+      // insert rather than an abandoned draft.
+      if (documentNo.isEmpty) documentNo = await nextDocumentNumber(docType);
       final payload = {
         ...header,
         'org_id': orgId,
         'doc_type': docType,
-        'doc_no': header['doc_no'] ?? await nextDocumentNumber(docType),
+        'doc_no': documentNo,
       };
       final row = await client
           .from(kind.table)
@@ -2552,6 +2567,7 @@ class Repo {
           .select()
           .single();
       documentId = row['id'] as String;
+      documentNo = row['doc_no'] as String? ?? documentNo;
     } else {
       documentId = id;
       await client.from(kind.table).update(header).eq('id', id);
@@ -2570,7 +2586,7 @@ class Repo {
       ]);
     }
 
-    return documentId;
+    return (id: documentId, docNo: documentNo);
   }
 
   // ------------------------------------------------------------------

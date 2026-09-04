@@ -68,7 +68,7 @@ Future<void> _scanInto(
   }
 
   try {
-    final id = await repo.saveDocument(
+    final saved = await repo.saveDocument(
       kind: meta.kind,
       docType: docType,
       header: {
@@ -78,6 +78,7 @@ Future<void> _scanInto(
       },
       lines: const [],
     );
+    final id = saved.id;
     await repo.refileAttachment(
       attachmentId: staged.attachmentId,
       table: meta.kind.table,

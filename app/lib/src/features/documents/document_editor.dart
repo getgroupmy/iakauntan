@@ -165,7 +165,17 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
 
     try {
       if (_isNew) {
-        _docNo = await repo.nextDocumentNumber(widget.docType);
+        // NOT numbered here. `next_document_number` advances a counter,
+        // so a number drawn when the editor opens is a number BURNT the
+        // moment somebody changes their mind and closes it -- and a gap
+        // in a sales invoice series is what an auditor asks about. It
+        // is drawn at the save, one statement before the insert that
+        // uses it. See `Repo.saveDocument`.
+        //
+        // Two people opening this screen at the same moment were never
+        // at risk of the SAME number: the counter is read `for update`,
+        // so the second waits for the first. The cost was only ever the
+        // gaps, and that is what this removes.
         _dueDate = DateTime.now().add(const Duration(days: 30));
         // A new quotation arrives with a date on it. The alternative is
         // that it arrives with none and never gets one, which is how a
@@ -467,12 +477,16 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
     setState(() => _saving = true);
     try {
       final repo = ref.read(repoProvider)!;
-      final id = await repo.saveDocument(
+      final saved = await repo.saveDocument(
         kind: _kind,
         id: widget.documentId,
         docType: widget.docType,
         header: {
-          'doc_no': _docNo,
+          // Null on a document that has never been saved, so the number
+          // is drawn at the insert. An empty string is not null, and
+          // `'' ?? x` is `''` -- which is how a document could have
+          // been written with no number at all.
+          'doc_no': _docNo.isEmpty ? null : _docNo,
           'doc_date': Fmt.iso(_docDate),
           'due_date': _dueDate == null ? null : Fmt.iso(_dueDate!),
           if (showsValidUntil(widget.docType))
@@ -502,14 +516,21 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
       // Only now, because until `saveDocument` returned the lines did
       // not exist under ids anything could point at. Matched by order,
       // which is the one property that survives delete-and-reinsert.
+      final id = saved.id;
+      // The number this document is now called. On a new one it did not
+      // exist until the line above, and the title bar has been saying
+      // "New invoice" until now.
+      _docNo = saved.docNo;
+
       final tracked = validLines.toList();
       if (tracked.any((l) => l.lots.isNotEmpty)) {
-        final saved = await repo.documentLineIds(kind: _kind, documentId: id);
-        for (var i = 0; i < tracked.length && i < saved.length; i++) {
+        final lineIds =
+            await repo.documentLineIds(kind: _kind, documentId: id);
+        for (var i = 0; i < tracked.length && i < lineIds.length; i++) {
           if (tracked[i].lots.isEmpty) continue;
           await repo.setLineLots(
             lineTable: _kind.lineTable,
-            lineId: saved[i]['id'] as String,
+            lineId: lineIds[i]['id'] as String,
             lots: tracked[i].lots,
           );
         }
@@ -2063,7 +2084,13 @@ class _HeaderCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SectionHeader('Document $docNo'),
+            // A document that has not been saved has no number yet,
+            // and saying so is better than "Document " with nothing
+            // after it. The number is drawn at the save; see
+            // `Repo.saveDocument`.
+            SectionHeader(
+              docNo.isEmpty ? 'Numbered when you save it' : 'Document $docNo',
+            ),
             if (narrow)
               Column(
                 children: [

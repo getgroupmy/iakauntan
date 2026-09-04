@@ -425,4 +425,48 @@ begin
     v_rows, (select count(*)::integer from app.numbered_series()));
 end $$;
 
+-- ---------------------------------------------------------------------
+-- A number is CONSUMED the moment it is drawn
+--
+-- This is why the editor no longer draws one when it opens.
+-- `app.next_document_number_internal` advances the counter and does not
+-- put anything back, so every call is a number spent whether or not a
+-- document ever carries it. An editor that numbered on OPEN burnt one
+-- each time somebody changed their mind, and a sales invoice series
+-- with gaps in it is what an auditor asks about.
+--
+-- The other half, asserted here because it is the thing people assume
+-- and it is not true: two people drawing at the same moment do NOT get
+-- the same number. The row is taken `for update`, so the second waits
+-- for the first. Duplicates were never the risk; the gaps were.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_org  uuid := pg_temp.test_org('Nombor Berturutan Sdn Bhd');
+  a text; b text; c text;
+  v_next bigint;
+begin
+  a := app.next_document_number_internal(v_org, 'invoice');
+  b := app.next_document_number_internal(v_org, 'invoice');
+  c := app.next_document_number_internal(v_org, 'invoice');
+
+  perform pg_temp.check_true('three draws are three different numbers',
+    a <> b and b <> c and a <> c);
+  perform pg_temp.check_true('and they run in order',
+    a < b and b < c);
+
+  select next_value into v_next from public.number_sequences
+   where org_id = v_org and doc_type = 'invoice';
+  perform pg_temp.check_eq(
+    'and the counter has moved by three, whether or not anything was saved',
+    v_next::numeric, 4);
+
+  -- The consequence, stated as an assertion so the reason for the
+  -- client change survives: nothing here can give a drawn number back.
+  perform pg_temp.check_eq('a drawn number is not returned to the series',
+    (select count(*)::numeric from pg_proc p
+       join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app' and p.proname like '%release%number%'), 0);
+end $$;
+
 rollback;
