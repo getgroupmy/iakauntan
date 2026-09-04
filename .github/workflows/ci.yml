@@ -335,6 +335,7 @@ jobs:
                    supabase/tests/aging_shapes.sql \
                    supabase/tests/aged_balances.sql \
                    supabase/tests/recurring_documents.sql \
+                   supabase/tests/recurring_shapes.sql \
                    supabase/tests/withholding_shapes.sql \
                    supabase/tests/withholding.sql \
                    supabase/tests/financial_statements.sql \

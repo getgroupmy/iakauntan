@@ -6625,3 +6625,82 @@ undoes it; weaken the outer `sum` to `max` and the inner grouping has
 already left one row. Neither is dead. The rule that makes both
 equivalent is that **one account code gets one adjustment**, and that is
 what the fixture now asserts.
+
+## The recurring engine — schedules, snapshots and what they raise
+
+Ten functions: `app.advance_schedule`, `app.snapshot_document`,
+`app.advance_recurring_document`, `app.raise_recurring_document`, the
+two nightly runners, their two per-organization twins,
+`public.create_recurring_document` and
+`public.update_recurring_template`. A mutation sweep of 105 one-line
+mutants killed 52.
+
+**The tests were built on one shape and it was the wrong one to stop
+at.** Both existing files bill a monthly ringgit retainer, and almost
+everything that survived was a case that is not that: a dollar retainer,
+a company that does not keep its books in ringgit, a viewer who may not
+post, a document with no lines on it, a standing journal rather than a
+standing invoice.
+
+**A mutant that hangs is not a mutant that passes.** `M15` replaces the
+`exit;` in `advance_recurring_document`'s failure handler with `null;`.
+The loop then retries the same failing schedule for ever — `v_n` is only
+incremented on success, so the `exit when v_n >= 60` runaway guard never
+fires — and the existing fixture *does* reach it, using a closed period
+as the failure. It simply hangs instead of failing, which in CI is a job
+that never returns rather than a red assertion. The sweep harness now
+sets `statement_timeout`, and the code comment that says this is exactly
+why the `exit` is there turns out to be load-bearing and correct.
+
+#### The equivalent mutants
+
+Three survive the finished file, and all three are equivalent because
+of a NOT NULL somewhere else. Three more were equivalent for the same
+kind of reason and are listed with them, because the branch is still
+there to read. Answering a survivor by asserting the rule it leans on
+is now the standard move, and this sweep used it six times:
+
+| Mutant | Why it is equivalent | The rule now asserted |
+|---|---|---|
+| `coalesce(o.status, 'active')` → `o.status` in the nightly sweep | `organizations.status` is NOT NULL with a default of `'active'` | the column cannot be given a null |
+| `greatest(coalesce(v_due - v_doc_date, 30), 0)` → drop the `greatest` | a negative gap needs a document due before it was raised, and `0385` put a trigger on both document tables refusing that | a document cannot fall due before it was raised |
+| the `else` arm of `app.advance_schedule` (unknown frequency → monthly) | both tables CHECK `frequency` against the same five words | no schedule can carry a frequency the calendar does not know |
+| `if p_from is null then return null`, and `next_run_date is not null` in the journal runner | `next_run_date` is NOT NULL on both tables | a schedule always has a next run date |
+| `coalesce(v_header ->> 'currency', 'MYR')` | `sales_documents.currency` and `purchase_documents.currency` are NOT NULL, and the snapshot names `currency` unconditionally | every document has a currency, and every snapshot carries one |
+| `coalesce(v_base, 'MYR')` | `organizations.base_currency` is NOT NULL | every company has a base currency |
+
+The fifth is different and worth naming, because it looks load-bearing
+and is not. `r.auto_email and r.kind = 'sales' and r.auto_post` — remove
+the `kind` test and a schedule for a BILL still cannot mail the
+supplier, because `app.queue_document_email` reads `sales_documents` by
+the id it is given and returns null when there is nothing there. A
+bill's id is never in that table. So the test is a belt over a brace,
+and what the fixture pins is the brace: the queue refuses a document
+that is not a sales document, quietly, rather than queueing a message
+about a bill.
+
+Two further survivors were already recorded by the previous sweep of
+this code and are not counted again: `is_active` and `next_run_date <=`
+are each checked in both the runner and the worker, so each hides the
+other's mutant.
+
+#### Three survivors that were the fixture's fault, not a gap
+
+Worth writing down because each looked like a finding and was not, and
+the shape recurs:
+
+* **`coalesce(p_auto_post, false)`.** The parameter's own SQL default is
+  already `false`, so a call that omits it never reaches the coalesce —
+  the assertion was testing the signature rather than the body. The
+  caller that does reach it sends an explicit null, which is what an
+  unset checkbox serialises to.
+* **Two arms of one function need two assertions.** The line-identity
+  check landed on the purchase snapshot only; the sales arm is a
+  separate query with its own `- 'id'` list and its mutant lived.
+* **The wrong twin.** `app.run_recurring_journals` and
+  `public.run_recurring_journals_for` are the same body written twice,
+  and every assertion drove the second. Five mutants in the first
+  survived a file that appeared to cover them thoroughly. This is the
+  third time this campaign has met a duplicated function where the
+  unattended copy is the one with no coverage — after the two aged
+  listings and the two document runners.
