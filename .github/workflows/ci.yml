@@ -155,6 +155,7 @@ jobs:
                    supabase/tests/leave_requests.sql \
                    supabase/tests/claim_caps.sql \
                    supabase/tests/leave_type_rules.sql \
+                   supabase/tests/leave_year_shapes.sql \
                    supabase/tests/hrdf_levy.sql \
                    supabase/tests/departures.sql \
                    supabase/tests/matter_closing.sql \

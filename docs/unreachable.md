@@ -7090,3 +7090,55 @@ and this year's is 31 December of last year, the last day of the
 twelve-month window and so always inside it. Neither depends on when CI
 runs. The filing type is not a real form, and the file says so: what is
 being asserted is the report's floor, not the Act.
+
+---
+
+## The leave year: entitlement, the roll, and what expires
+
+Seven functions decide what every employee is owed and what carries into
+next year. A sweep of 77 one-line mutants killed 46, and **almost the
+whole of two functions lived**.
+
+**`app.roll_leave_year` is the annual job that decides what everybody
+has**, and nine mutants survived on it, because nothing had ever called
+it with a previous year worth carrying. A resigned employee got next
+year's entitlement; a retired leave type got a fresh row; and the
+carry-forward could drop any one of its four terms — entitlement, last
+year's own carry, an adjustment, and what was taken — with the suite
+green. Leave liability is money, and a carry that quietly counts leave
+already taken is money the company does not know it owes. The fixture
+gives the four terms four different non-zero numbers (10, 3, 2, 4) and a
+cap wide enough not to hide them, so dropping any one gives 8, 9 or 15
+against the right answer of 11.
+
+**`app.leave_entitlement` reads the Act's bands**, and five lived: a type
+that does not scale looking its days up in the bands anyway, an employee
+hired after the year being asked about getting negative service, the
+LOWEST matching band winning instead of the highest, a scaling type with
+no bands returning null rather than its own days, and one leave type
+reading another's bands.
+
+**The bands themselves.** `apply_statutory_leave_bands` writes the First
+Schedule to the Employment Act 1955. The DAYS were asserted — 8, 12, 16
+for annual leave and 14, 18, 22 for sick. The YEARS the bands run
+between were not, and they are half the rule: s.60E(1) reads "less than
+two years", "two years or more but less than five", and "five years or
+more", so the top band has no ceiling. A ceiling on it is an employee of
+twenty years' service falling off the end of the schedule.
+
+**74 of 77 now die.** Three are equivalent.
+
+| Mutant | Why it is equivalent | The rule now asserted |
+|---|---|---|
+| `least(taken_days, carried_forward)` reduced to `taken_days` in the expiry sweep | a row is only selected when the carry EXCEEDS what has been taken, and on those rows the two expressions are the same number | a balance with more taken than carried is not swept at all, and its carry is untouched |
+| `coalesce(max_carry_forward, 0)` given any other fallback | the column is NOT NULL with a default of nought | both of those — and that a leave type nobody has set a limit on carries nothing, because silently rolling everything forward is how liability grows unnoticed |
+| `v_available is not null and ...` reduced to the comparison alone | `12 > null` is NULL and plpgsql treats a null condition as false, so the comparison already lets the request through | the behaviour that depends on it: a company that has not set an entitlement for a type and a year can still file leave on the day it starts |
+
+#### A fixture that proved nothing, and why
+
+The first version of the tenancy assertion — "the roll opens no balance
+for the company next door's employee" — stood the neighbouring company
+up AFTER calling the roll. It passed against the mutant with `org_id =
+p_org_id` deleted, because a roll that swept every employee on the
+platform still would not have found somebody who did not exist yet.
+Building the other company first is the whole assertion.
