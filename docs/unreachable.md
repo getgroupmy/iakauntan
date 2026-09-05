@@ -6945,3 +6945,81 @@ rather than for asserting less.
 |---|---|---|
 | dropping `round(..., 2)` from the group's sums | every figure it adds up has already been rounded to two places by `report_trial_balance`, and `gl_lines` holds sen in `numeric(18,2)` besides | that no figure arriving from `report_trial_balance` has a scale above 2 |
 | widening the totals update from `c.id = v_con` to every consolidation of the company | the two subqueries are correlated on `c.id`, so each row is rewritten with the figures it already had — a wasted update, not a wrong one | already recorded in that file's own header; the fixture keeps the two months' returns apart regardless |
+
+---
+
+## Selling an asset, and the note that says so
+
+`dispose_fixed_asset` is the only place in this system where an asset
+leaves the balance sheet, and `report_asset_movements` is the fixed
+asset note an auditor reads. A sweep of 71 one-line mutants over those
+two, `app.disposal_account` and `report_depreciation_history` killed 43.
+
+**One survivor was a crash**, and it is written up in migration `0532`.
+The fixture set out to prove that a retired 6510 is not silently reused
+for this year's loss on disposal, and the disposal did not post at all:
+`accounts_org_id_code_key` is a plain UNIQUE (org_id, code) and knows
+nothing about `deleted_at`, so a lookup that filters deleted rows can
+never find the account and the insert can never succeed. Five helpers
+had that shape. They revive the retired account now.
+
+How reachable it is, stated exactly: `retire_account` refuses every code
+in `app.posting_account_codes()`, and 6510, 4930, 3900, 4840 and the
+property codes are all in it — so the product's own button cannot get
+you there. `public.accounts` carries a plain `accounts_update` policy
+allowing `app.can_post(org_id)`, so anybody who may post the books can
+set `deleted_at` on the table directly through PostgREST, which is the
+same door the app is built on. An import or a restore is the other way
+in.
+
+The rest of what lived was of three kinds.
+
+**The account a disposal creates.** Every existing assertion checked
+which account the money landed in and none checked what kind of account
+it was. A loss on disposal filed as `revenue` under Sales would have
+passed the whole suite, and it does not show up as a wrong number — it
+shows up as a profit and loss where the loss on disposal has been added
+to turnover.
+
+**The accounts an asset carries its own.** `asset_account_id`,
+`accumulated_account_id` and `expense_account_id` were null on every
+asset in every fixture, so three `coalesce`s were doing nothing
+observable and a company filing its motor vehicles apart from its plant
+would have had the whole disposal posted to the wrong three accounts.
+Note the shape that hid one of them: the catch-up CREDITS the
+accumulated account and the disposal DEBITS it straight back, so its net
+on that journal is nought whichever account was used. The fixture asserts
+the two sides separately, and that the fallback account has no line at
+all.
+
+**Every boundary in the note.** Four dates, eight comparisons, and a
+fixture that bought on the first of a month and sold on the last of
+another — so nothing ever landed ON a boundary and `<` could not be told
+from `<=`. An asset sold on the last day of the year is the ordinary
+case, not a corner one.
+
+**69 of 71 now die.** Two are equivalent.
+
+| Mutant | Why it is equivalent | The rule now asserted |
+|---|---|---|
+| dropping the `greatest(..., 0)` floor from the disposal catch-up | `v_catchup` is only ever read as `> 0`, and a negative fails that test exactly as a floored nought does | that an asset already written down further than the formula says is charged nothing on the way out, and leaves no depreciation run behind it |
+| dropping `deleted_at is not null` from `app.revive_account` | every caller looks for a live account first and only reaches the revive when there is none, so there is no live row for the widened `where` to match | that a second disposal finds the account already on the chart, and that there is still only one of it |
+
+#### And a wart in the note, recorded rather than fixed
+
+`report_asset_movements` takes a disposal's accumulated depreciation
+from the figure FROZEN ON THE ASSET, and takes the opening and closing
+accumulated from `app.accumulated_charged_at`, which reads
+`depreciation_entries`. The two agree for an asset this system
+depreciated from new. They do not agree for an asset keyed in carrying a
+balance from a previous system: nothing ever charged that balance, so it
+is in `fixed_assets.accumulated_depreciation` and not in any entry, and
+the note's brought-forward accumulated is understated by it while its
+disposals column is not. The movement identity
+`accum_closing = accum_opening + charge - disposals_accum` does not hold
+for such an asset.
+
+Nothing in the app writes `accumulated_depreciation` today — there is no
+field for it on the asset editor — so this is reachable only by writing
+the column directly. It becomes a real problem the day an asset importer
+lands, which is the reason for writing it down now.
