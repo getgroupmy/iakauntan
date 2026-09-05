@@ -337,6 +337,8 @@ jobs:
                    supabase/tests/expenses.sql \
                    supabase/tests/hr_reference.sql \
                    supabase/tests/statutory_schedules.sql \
+                   supabase/tests/statutory_changeover.sql \
+                   supabase/tests/pcb_reliefs_and_defaults.sql \
                    supabase/tests/declared_reliefs.sql \
                    supabase/tests/contact_extras.sql \
                    supabase/tests/leads_and_onboarding.sql \

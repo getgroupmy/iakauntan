@@ -7649,3 +7649,46 @@ more than is outstanding. The guard prevents a division by zero on a
 path there is no way in. It stays because the alternative is a
 `division_by_zero` in the middle of somebody's month-end if a future
 change makes that path reachable.
+
+---
+
+## The payroll engine: three clamps that guard a door already shut
+
+A sweep of the statutory engine — `app.calc_statutory`, `app.calc_pcb`,
+`round_statutory`, `epf_category`, `statutory_schedule_on` and
+`pcb_schedule_for_year` — put 85 one-line mutants through the twelve
+files that exercise payroll. 82 die. The three that live are all the
+same shape: a clamp whose case is already refused further down.
+
+### `greatest(v_projected - v_relief, 0)` (P33)
+
+Reliefs larger than the year's projected income make the chargeable
+amount negative, and `app.annual_tax` opens with
+`if p_chargeable <= 0 then return 0`. The clamp and the guard reach the
+same answer, and the chargeable amount is not returned to anybody — it
+is only ever passed to `annual_tax`, twice.
+
+### `greatest(v_tax - v_zakat_year, 0)` (P36)
+
+Zakat larger than the year's tax makes `v_tax` negative, which makes
+`v_remaining` negative, which leaves this function through
+`greatest(app.round_statutory(v_remaining / v_n, 'nearest_5sen'), 0)`.
+The bonus arm does not read `v_tax` at all — it calls `annual_tax`
+directly — so nothing else can carry the sign out.
+
+### `if v_add > 0` around the additional remuneration (P40)
+
+With no bonus the arm computes
+`annual_tax(projected + 0 - (relief - least(epf, cap) + least(epf + 0, cap)))`
+minus `annual_tax(chargeable)`, and the two arguments are equal by
+construction, so `v_extra` is nought either way. The guard saves two
+calls to `annual_tax` rather than a wrong figure.
+
+All three stay: each says something true about what the function is
+allowed to produce, and a reader working out three-valued arithmetic
+from the callee is a reader who will get it wrong once.
+`pcb_reliefs_and_defaults.sql` asserts the rules they lean on instead —
+that nothing chargeable is nothing taxed, that less than nothing is not
+a refund, and that zakat past the tax leaves nothing to deduct — so
+removing the guard downstream is a failing build even though removing
+the clamp is not.
