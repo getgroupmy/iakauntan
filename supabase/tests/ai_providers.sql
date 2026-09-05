@@ -59,9 +59,18 @@ begin
   perform pg_temp.check_eq('and every provider speaks one of them',
     (select count(*) from public.ai_providers
       where wire not in ('anthropic', 'openai')), 0);
-  perform pg_temp.check_true('a provider with no address is switched off',
+  -- A provider is switched off, OR carries an address, OR says plainly
+  -- that the address belongs to the account (0541). Azure OpenAI is
+  -- reached at a deployment's own URL and Cloudflare's carries an
+  -- account id, so neither has an address the provider row could hold;
+  -- both are still callable, by a company that keys one in beside its
+  -- key. Puter fails all three arms and is still switched off.
+  perform pg_temp.check_true(
+    'a provider with no address is switched off, unless the address is '
+    'the account''s',
     not exists (select 1 from public.ai_providers
-                 where base_url is null and is_active));
+                 where base_url is null and is_active
+                   and not address_from_account));
   perform pg_temp.check_eq('every model belongs to a provider on file',
     (select count(*) from public.ai_models m
       where not exists (select 1 from public.ai_providers p

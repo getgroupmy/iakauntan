@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788602561.0223572,
-    "ast_hash": "584afa977a40304f3373fd70a1be0b64",
+    "mtime": 1788611222.0767398,
+    "ast_hash": "4ef72eccc958ace9e36e09aba6c0f098",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788602063.4886308,
-    "ast_hash": "b19ddde3a9b95cde2e200bbc703525a7",
+    "mtime": 1788603983.628587,
+    "ast_hash": "725dc304161069a707ae1eff59177437",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -8140,8 +8140,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/ai_providers.sql": {
-    "mtime": 1788593341.5728304,
-    "ast_hash": "c9b00aa692640f7d4cf7138729ceaf1c",
+    "mtime": 1788611151.0800352,
+    "ast_hash": "a608a433e3a7ed33f0ad4e196f37f2f1",
     "semantic_hash": ""
   },
   "supabase/migrations/0538_a_correction_that_leaves_the_header_not_adding_up.sql": {
@@ -8177,6 +8177,26 @@
   "supabase/tests/pos_tracked_item_sale.sql": {
     "mtime": 1788602889.8768425,
     "ast_hash": "177624d1d97a08967bace098e2257aeb",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0541_more_providers_and_a_model_you_can_name.sql": {
+    "mtime": 1788611213.581478,
+    "ast_hash": "178dd49abe59201ac51dfab6842ae146",
+    "semantic_hash": ""
+  },
+  "supabase/tests/ai_provider_catalogue.sql": {
+    "mtime": 1788611190.548422,
+    "ast_hash": "820103d4fe70aec52fed475cdd58d65a",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pcb_reliefs_and_defaults.sql": {
+    "mtime": 1788603968.080424,
+    "ast_hash": "80ae7a26bd041dfb1d139b6ea9d6d77e",
+    "semantic_hash": ""
+  },
+  "supabase/tests/statutory_changeover.sql": {
+    "mtime": 1788603501.016598,
+    "ast_hash": "a50961b85baad76e846c8cdec1461e96",
     "semantic_hash": ""
   }
 }
