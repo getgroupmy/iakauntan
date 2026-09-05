@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788597248.0160463,
-    "ast_hash": "df71f508520f07e0f3a1cda36a259077",
+    "mtime": 1788598823.967451,
+    "ast_hash": "2799ae7ba66d2033b1cbaf85294442cc",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788597449.4087365,
-    "ast_hash": "f65a6fa93ed7e47e157d68ca2179ef3b",
+    "mtime": 1788599014.4028022,
+    "ast_hash": "54462d432d120e9fc4b494134964aed2",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -8152,6 +8152,16 @@
   "supabase/tests/einvoice_payload_shapes.sql": {
     "mtime": 1788597239.485944,
     "ast_hash": "e018baca3f607dcc9cbd24f825792865",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0539_the_other_eight_that_post_to_a_retired_account.sql": {
+    "mtime": 1788598734.0445535,
+    "ast_hash": "165d2c0f86cff2393ede7292bdf4ab0a",
+    "semantic_hash": ""
+  },
+  "supabase/tests/account_revival.sql": {
+    "mtime": 1788598804.3947728,
+    "ast_hash": "4d1238df9c5ce42d5b37dfeccc1d0bec",
     "semantic_hash": ""
   }
 }

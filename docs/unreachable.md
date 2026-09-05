@@ -7521,3 +7521,52 @@ only read at insert.
 once per row of the table being filtered. The first version of two
 assertions here did exactly that and came back null. A function that
 writes belongs on the left of an assignment.
+
+## The other eight that post to a retired account
+
+0532 fixed five helpers that reach for an account by code and make it if
+the company has not got one, and recorded that eight more had the same
+shape. This is those eight, and **they fail differently from the five,
+and worse.**
+
+The five looked for an account `where deleted_at is null`, found none,
+and went on to INSERT — hitting `accounts_org_id_code_key` on the
+retired row and crashing the whole posting. Loud, traceable, and it
+stopped.
+
+The eight have no `deleted_at` filter at all. They FIND the retired
+account and return it, and the entry is posted to an account the chart
+no longer shows. Nothing raises. The trial balance still balances,
+because the entry really is there — it is on a row every screen filters
+out. A company that tidied its chart last year is the population at
+risk, and 2145 (Withholding Tax Payable), 2127 (Deferred Revenue) and
+1140 (Cheques on Hand) are exactly what a company that has not needed
+them yet would retire.
+
+**0539** gives all eight 0532's shape: look for a live account of the
+code, revive a retired one, insert only then. All thirteen helpers now
+read the same way.
+
+### Counting the class rather than the instances
+
+`supabase/tests/account_revival.sql` is 85 assertions, and the one that
+matters most is not any of the thirteen behavioural ones. It is this:
+
+```sql
+select count(*) from pg_proc p
+ where n.nspname = 'app'
+   and p.proname like '%\_account'
+   and p.prosrc like '%insert into public.accounts%'
+   and p.prosrc not like '%revive_account%'
+```
+
+which must be nought. A helper written next year that reaches for an
+account by code and does not revive is the fourteenth instance of this
+fault, and counting them is what makes that a failing build rather than
+something somebody notices in a year. The five were found by a sweep and
+the eight by reading the five; the fourteenth should be found by CI.
+
+The behavioural half was checked against the old code rather than
+assumed: restoring `withholding_account` to the shape it had fails the
+fixture with *"2145 is alive again rather than posted to while
+retired"*, and 0539 passes it.
