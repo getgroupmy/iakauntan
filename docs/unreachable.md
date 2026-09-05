@@ -7457,3 +7457,67 @@ there is refused by the guard's own sentence rather than by a
 `23503`. That is worth an assertion of its own — the guard says *An
 appraisal belongs to a cycle*, and a fixture asserting the sentence
 proves the guard fired rather than the key.
+
+## The e-Invoice payload: what LHDN is actually told
+
+`prepare_einvoice` takes a posted sales document and writes the snapshot
+submitted to MyInvois. Every column it fills is a claim made to a tax
+authority on the company's behalf. A sweep of 86 one-line mutants killed
+**63** — the second-best defence in the codebase, and `einvoice_statutory.sql`
+earns it.
+
+What that file has no room for is a document with anything IN it. Its
+fixture files one invoice, in ringgit, dated today, at a company whose
+address, SST number and MSIC code are all null, to a buyer whose email,
+phone and address are all null, with one line carrying no
+classification, no unit, no tax code and no discount, and it is never
+submitted twice. So every fallback had nothing to fall back FROM, and
+every pair of adjacent columns of the same type could be swapped without
+anybody noticing: the supplier's SST number and its MSIC code, the
+buyer's email and phone, its state and its country, the line's tax RATE
+and its tax AMOUNT.
+
+`supabase/tests/einvoice_payload_shapes.sql` is 60 assertions against a
+company filled in with no two fields alike, a buyer the same, a document
+in dollars dated forty days ago with both header charges and a header
+discount, and four lines arranged so that each link of every fallback
+chain is the one that decides: one naming everything itself and no item
+at all, one naming nothing whose item has a classification and a unit,
+one whose item has neither, and one with no item and no unit so the last
+link is reached. **84 of 88 now die.**
+
+**0538 came out of it.** The resubmission upsert refreshed the amount
+before tax, the amount after it, the tax, the rounding and the PAYABLE
+AMOUNT — and not `total_charges` or `total_discount`, the two figures
+that sit between them. So a shipping charge corrected between
+submissions produced a header that contradicts itself: the payable
+amount moved and the charge that moved it did not. That is exactly the
+fault 0410 fixed from the other end, whose note reads *"Shipping alone
+left the header not adding up: LHDN was told 113.00 for a bill of
+123.00, measured rather than reasoned about."* A first submission was
+always right; it is the second one that was wrong, and only for a
+document somebody changed between the two — which is every document that
+comes back rejected for a figure.
+
+The buyer and supplier columns are still not refreshed, and should not
+be: a snapshot is what was filed, and a customer who renamed itself last
+week did not rename itself on an invoice issued last month. The fixture
+gives each buyer its own document rather than swapping the contact
+underneath one, because swapping proves nothing about a chain that is
+only read at insert.
+
+### Equivalent mutants
+
+| Probe | What it changes | Why nothing can see it |
+|---|---|---|
+| `H5` | `coalesce(shipping,0) + coalesce(service,0)` → the bare sum | Both columns are `not null default 0` on `sales_documents`, so the sum is never null and the coalesce is defensive. The two NOT NULLs are asserted in its place. |
+| `L9` | `round(quantity * unit_price, 2)` → no round | `einvoice_lines.subtotal` is `numeric(18,2)`, so the column rounds on the way in whatever the expression says. The scale is asserted instead. |
+| `L21` | the `order by line_no` on the insert's select | Ordering the select feeding an insert orders nothing readable back: rows are a set, and `line_no` is stored so every reader sorts for itself. Asserted from the reader's end — four distinct line numbers reach the table. |
+| `C1` | `when new.validated_at is null then null` → never | Null plus seventy-two hours is null, so the arm cannot be wrong. It reads as intent rather than as arithmetic, and the arithmetic is asserted. |
+
+### A fixture note worth keeping
+
+`prepare_einvoice` WRITES, so calling it inside a `where` clause runs it
+once per row of the table being filtered. The first version of two
+assertions here did exactly that and came back null. A function that
+writes belongs on the left of an assignment.

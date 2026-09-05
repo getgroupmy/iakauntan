@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788593375.6891568,
-    "ast_hash": "749d3f35e748d1284725d27b26cd04b9",
+    "mtime": 1788597248.0160463,
+    "ast_hash": "df71f508520f07e0f3a1cda36a259077",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788592662.4528458,
-    "ast_hash": "fd61e3422433cdfce5f3e2952f9696a9",
+    "mtime": 1788597449.4087365,
+    "ast_hash": "f65a6fa93ed7e47e157d68ca2179ef3b",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -5720,8 +5720,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/_local_stack.sql": {
-    "mtime": 1788395961.3497903,
-    "ast_hash": "e7cb139922d96e641155dae628001a3c",
+    "mtime": 1788594821.4747336,
+    "ast_hash": "5eec4584a838e6cdb5adfa62d2b7b194",
     "semantic_hash": ""
   },
   "supabase/tests/run_locally.sh": {
@@ -8130,8 +8130,8 @@
     "semantic_hash": ""
   },
   "supabase/migrations/0536_a_key_you_can_type_and_a_model_you_can_choose.sql": {
-    "mtime": 1788593357.3138201,
-    "ast_hash": "2303439db621b90244f3378d2fd4b94d",
+    "mtime": 1788594802.2596745,
+    "ast_hash": "9c65d90b7267651a1c1757f878353a49",
     "semantic_hash": ""
   },
   "supabase/migrations/0537_the_providers_we_know_how_to_call.sql": {
@@ -8142,6 +8142,16 @@
   "supabase/tests/ai_providers.sql": {
     "mtime": 1788593341.5728304,
     "ast_hash": "c9b00aa692640f7d4cf7138729ceaf1c",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0538_a_correction_that_leaves_the_header_not_adding_up.sql": {
+    "mtime": 1788596772.9711916,
+    "ast_hash": "f5408e8108d98dd0f22181847ee5566b",
+    "semantic_hash": ""
+  },
+  "supabase/tests/einvoice_payload_shapes.sql": {
+    "mtime": 1788597239.485944,
+    "ast_hash": "e018baca3f607dcc9cbd24f825792865",
     "semantic_hash": ""
   }
 }
