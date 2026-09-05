@@ -7331,3 +7331,73 @@ file backdates the first run by an hour to stand in for it.
 |---|---|
 | the forecast parameters', the stock read's and the price lookup's `org_id` filters | equivalent — each is joined on an item id besides, and an item belongs to one company; the three foreign keys are asserted instead |
 | `app.measured_lead_time` ignored in favour of the settings default | **still alive.** Reaching it needs two complete order → bill → receipt chains so the median has two observations to work from. Worth building; not built here. |
+
+## The public menu: the door a phone orders through with no account
+
+`app.pos_menu_link`, `public.public_pos_menu`,
+`public.public_pos_menu_modifiers` and `public.place_public_pos_order`
+are the only POS functions granted to `anon`. A token typed into a phone
+is the whole credential. A sweep of 71 one-line mutants killed **21** —
+the worst opening result of this campaign, on the surface with the
+widest reach.
+
+`pos_public_menu.sql` is not the problem. It proves the assertion the
+endpoint exists to make — a price arriving from a browser is ignored —
+and it proves that an expired link, a retired one and a used single-use
+one are all refused. What stands behind it is ONE company, ONE outlet,
+ONE till, TWO items and ONE question, so every filter that separates one
+shop from the next had nothing to exclude.
+
+`supabase/tests/pos_public_menu_shapes.sql` is 47 assertions against a
+second company next door with its own outlet, till and menu; four tills
+the order must not land on, each excluded by a different condition and
+all coded to sort before the right one; three items that are not on the
+menu; a question the shop stopped asking, an answer it stopped
+offering, and a question with no answers yet; and a table with somebody
+else's bill on it. **66 of 71 now die.**
+
+Two migrations came out of it.
+
+**0534** holds `pos_menu_links.token` to `not null`. The lookup is
+`where token = coalesce(p_token, '')`, and the `coalesce` is what stops
+a caller who sends no token from being treated as a caller whose token
+is null. It cannot be told apart from `token is not distinct from
+p_token` today, because no row has a null token — but the column
+permitted one and its unique index is no help, since a unique index
+permits as many nulls as you like. A row in that state, by any route,
+would be a shop's till reachable by an anonymous caller who sends
+nothing.
+
+**0535** is a masking pair, the tenth of this campaign, and the first
+where the two guards are on the same path in the same function.
+`place_public_pos_order` refuses an empty order twice — once for an
+empty array, once if the loop added no line — and both said *There is
+nothing in this order.* So the first could be deleted and no assertion
+noticed, because the second raised the same words. The second is
+unreachable as the loop stands, so its wording is one nobody should
+read; naming it for what it would mean leaves the customer's sentence to
+the first and gives a fixture two refusals it can tell apart. This is
+exactly the case `pg_temp.check_refused`'s own note argues about: where
+two guards word themselves identically the answer is to word them
+differently, not to assert less.
+
+### Equivalent mutants
+
+| Probe | What it changes | Why nothing can see it |
+|---|---|---|
+| `L7` | `token = coalesce(p_token,'')` → `token is not distinct from p_token` | No row has a null token: the column defaults to eighteen random bytes and `upsert_pos_menu_link` never names it. **0534** now holds the column to that, and the fixture asserts the column is `not null`. |
+| `N1` | `public_pos_menu_modifiers` drops `img.org_id = v_org` | `item_modifier_groups_item_same_org` holds the row to its own item's company, so `img.item_id = p_item` has already named the company. The constraint is asserted in its place. |
+| `P15` | the channel case's `when 'delivery' then 'delivery'` → `'takeaway'` | Two lines later `set_pos_delivery` sets `order_channel = 'delivery'` itself when it is anything else, so the case arm is overwritten before anybody can read it. The rule — that a delivery is booked as one — is asserted, from the writer that actually decides it. |
+| `P36` | the second empty-basket guard never fires | Unreachable behind the first: a non-empty array either adds a line or raises, so `v_n` cannot be nought. **0535** words it so that if it ever does fire it says something of its own. |
+| `P48` | `select o.org_id into v_org ... where o.id = v_link.outlet_id` → `where o.id is not null` | A `select ... into` from a query returning several rows takes an arbitrary one, and no fixture can pin which. On this database it happens to take the shop under test, so the mutant is invisible; on another it would take a different company and every order would be refused. The boundary it guards is asserted from the other side: `P26`, another shop's item on this bill, dies. |
+
+### The two refusals on the sold-out path, which is why P31 dies
+
+`place_public_pos_order` checks `app.pos_item_off` itself and so does
+`app.add_pos_sale_line_internal` two calls later. The outer raise says
+the reason alone — `Habis` — and the inner one says the dish's name and
+then the reason — `Nasi lemak: Habis`. That difference is the only thing
+that makes the outer check assertable at all: a fixture catching
+`check_violation` cannot tell which of them fired, and one asserting the
+exact sentence can. Where the SSM sweep found guards worth wording
+apart, this one found a pair already worded apart and used it.

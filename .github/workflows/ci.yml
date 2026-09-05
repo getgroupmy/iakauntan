@@ -219,6 +219,7 @@ jobs:
                    supabase/tests/pos_receipt.sql \
                    supabase/tests/pos_service_charge.sql \
                    supabase/tests/pos_public_menu.sql \
+                   supabase/tests/pos_public_menu_shapes.sql \
                    supabase/tests/pos_reports.sql \
                    supabase/tests/pos_recipes.sql \
                    supabase/tests/pos_weighed.sql \

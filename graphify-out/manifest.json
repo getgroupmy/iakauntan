@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788590280.0200949,
-    "ast_hash": "2f6973199ea1d790be9e1418e5aa50d9",
+    "mtime": 1788591709.4678311,
+    "ast_hash": "b1e787d4c25a6f7a890b838388b057e7",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788590633.1088922,
-    "ast_hash": "57e9b849f2039020fe2c3a397fc7b769",
+    "mtime": 1788591914.732863,
+    "ast_hash": "e4a7347560df8b9a8052ddae4e2ac3c0",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -8082,6 +8082,21 @@
   "supabase/tests/forecast_order_shapes.sql": {
     "mtime": 1788590149.893306,
     "ast_hash": "79c41583844294583b8d9e8e1aa00289",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0534_a_menu_link_is_reached_by_a_token.sql": {
+    "mtime": 1788591428.6748734,
+    "ast_hash": "9e7c748c31795a3a610a9180b328af20",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0535_two_refusals_that_said_the_same_thing.sql": {
+    "mtime": 1788591647.239377,
+    "ast_hash": "97cabd53458c9cd3249bfe65bb60dfa7",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pos_public_menu_shapes.sql": {
+    "mtime": 1788591630.2751226,
+    "ast_hash": "09918de89db4c7e78bf6bcc9e5c4e10f",
     "semantic_hash": ""
   }
 }
