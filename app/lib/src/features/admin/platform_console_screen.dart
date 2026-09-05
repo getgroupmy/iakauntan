@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'ai_providers_admin.dart';
 import 'branding_admin.dart';
 import 'credit_admin.dart';
 import 'landing_cms.dart';
@@ -43,7 +44,7 @@ typedef ConsoleSection = ({
   Widget page,
 });
 
-/// The console's ten sections, in the order the menu offers them.
+/// The console's sections, in the order the menu offers them.
 ///
 /// Grouped in runs rather than sorted into groups, so the order stays
 /// the same whether or not the platform has asked for a grouped menu.
@@ -83,6 +84,15 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/readers',
     primary: false,
     page: OcrCatalogAdminTab(),
+  ),
+  (
+    group: 'Service',
+    label: 'AI providers',
+    icon: Icons.smart_toy_outlined,
+    selectedIcon: Icons.smart_toy,
+    path: '/admin/ai',
+    primary: false,
+    page: AiProvidersAdminTab(),
   ),
   (
     group: 'Service',

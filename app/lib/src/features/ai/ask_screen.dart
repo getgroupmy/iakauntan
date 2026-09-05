@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'assistant_settings_sheet.dart';
 
 /// Ask about your books.
 ///
@@ -150,6 +151,19 @@ class _AskScreenState extends ConsumerState<AskScreen> {
       appBar: AppBar(
         title: const Text('Ask about your books'),
         actions: [
+          IconButton(
+            key: const ValueKey('ask-settings'),
+            tooltip: 'Which model answers',
+            onPressed: _asking
+                ? null
+                : () => showModalBottomSheet<void>(
+                    context: context,
+                    showDragHandle: true,
+                    isScrollControlled: true,
+                    builder: (_) => const AssistantSettingsSheet(),
+                  ),
+            icon: const Icon(Icons.smart_toy_outlined),
+          ),
           IconButton(
             key: const ValueKey('ask-earlier'),
             tooltip: 'Asked before',

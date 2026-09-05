@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788495538.2914321,
-    "ast_hash": "9219020ee9ca54d7081c4c2537dd0925",
+    "mtime": 1788593438.1727364,
+    "ast_hash": "9bb86b251f3d02c6ff386eafedbd7679",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -115,8 +115,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
-    "mtime": 1788541591.4035861,
-    "ast_hash": "524c0755dd4bd8abc3c75dc842de7dc0",
+    "mtime": 1788593534.5400953,
+    "ast_hash": "4474825677144551699ed1deba3c8725",
     "semantic_hash": ""
   },
   "app/lib/src/features/auth/sign_in_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788592469.6555738,
-    "ast_hash": "9d622c545662915e75d5c86996948dbf",
+    "mtime": 1788593375.6891568,
+    "ast_hash": "749d3f35e748d1284725d27b26cd04b9",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -7225,8 +7225,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/ai/ask_screen.dart": {
-    "mtime": 1788343598.1893764,
-    "ast_hash": "7d309066853b0977660d9e3f4ac56ea5",
+    "mtime": 1788593616.4285266,
+    "ast_hash": "114f74872ebbf18bd6e441408401ca8c",
     "semantic_hash": ""
   },
   "app/test/ask_screen_test.dart": {
@@ -7235,8 +7235,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/ask/index.ts": {
-    "mtime": 1788346082.4087713,
-    "ast_hash": "a8d2bab4d8d3bb5545a5d3330c8f5384",
+    "mtime": 1788593224.9202936,
+    "ast_hash": "e4b4f89971db427ac939c849e3070cc4",
     "semantic_hash": ""
   },
   "supabase/migrations/0474_nobody_else_may_speak_in_the_assistants_voice.sql": {
@@ -8102,6 +8102,46 @@
   "supabase/tests/appraisal_guard_shapes.sql": {
     "mtime": 1788592418.9952135,
     "ast_hash": "aa084014e3931e40645d63f85459c99f",
+    "semantic_hash": ""
+  },
+  "app/lib/src/data/ai_repository.dart": {
+    "mtime": 1788593423.0369947,
+    "ast_hash": "fa545444e44abb282a7f5bdd4bb45f21",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/admin/ai_providers_admin.dart": {
+    "mtime": 1788593526.9568262,
+    "ast_hash": "54bde67e1574aa20fa59b5b31c5790b2",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/ai/assistant_settings_sheet.dart": {
+    "mtime": 1788593633.2288067,
+    "ast_hash": "0746196c7a3d7f1e2540d2ddd66080a4",
+    "semantic_hash": ""
+  },
+  "supabase/functions/ask/wire.ts": {
+    "mtime": 1788593224.903103,
+    "ast_hash": "5c0db0af514cf71022e730464b7a9127",
+    "semantic_hash": ""
+  },
+  "supabase/functions/ask/wire_test.ts": {
+    "mtime": 1788593255.5048323,
+    "ast_hash": "ec984a0688852cf5f23997533632ff70",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0536_a_key_you_can_type_and_a_model_you_can_choose.sql": {
+    "mtime": 1788593357.3138201,
+    "ast_hash": "2303439db621b90244f3378d2fd4b94d",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0537_the_providers_we_know_how_to_call.sql": {
+    "mtime": 1788593039.3432274,
+    "ast_hash": "2c1488bc2b1cce383927011a7bd9e46d",
+    "semantic_hash": ""
+  },
+  "supabase/tests/ai_providers.sql": {
+    "mtime": 1788593341.5728304,
+    "ast_hash": "c9b00aa692640f7d4cf7138729ceaf1c",
     "semantic_hash": ""
   }
 }

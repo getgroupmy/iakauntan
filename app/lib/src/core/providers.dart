@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../data/ai_repository.dart';
 import '../data/corp_models.dart';
 import '../data/corp_repository.dart';
 import '../data/firms_repository.dart';
@@ -2687,6 +2688,38 @@ final ocrProviderCatalogProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
       (ref) => requireRepo(ref).ocrProviderCatalog(),
     );
+
+/// Every AI provider, with whether a key is on file. Platform staff
+/// only — the function behind it refuses anybody else, and it has no
+/// column that could carry a key. 0536.
+final aiProviderCatalogueProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).aiProviderCatalogue(),
+    );
+
+/// The provider catalogue as a company sees it: names and addresses,
+/// nothing private. 0536.
+final aiProvidersProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).aiProviders(),
+    );
+
+/// Every model on offer. A table rather than a constant, so a model
+/// that shipped on Tuesday is a row somebody added. 0536.
+final aiModelsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+      (ref) => requireRepo(ref).aiModels(),
+    );
+
+/// Whether this company's assistant is on, what it will call, and
+/// whether that call can be made. 0536.
+final aiStatusProvider = FutureProvider.autoDispose<Map<String, dynamic>>((
+  ref,
+) async {
+  final org = ref.watch(currentOrgIdProvider);
+  if (org == null) return <String, dynamic>{};
+  return requireRepo(ref).aiStatus(org);
+});
 
 /// Every run at an outlet that has not landed yet. 0259.
 final posDeliveryBoardProvider = FutureProvider.autoDispose

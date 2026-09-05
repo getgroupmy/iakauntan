@@ -320,6 +320,7 @@ jobs:
                    supabase/tests/opening_balance_credit.sql \
                    supabase/tests/cash_is_not_credit.sql \
                    supabase/tests/ai_assistant.sql \
+                   supabase/tests/ai_providers.sql \
                    supabase/tests/contact_types.sql \
                    supabase/tests/credit_hold_is_visible.sql \
                    supabase/tests/contact_records.sql \
@@ -757,6 +758,15 @@ jobs:
       # was no file".
       - run: deno check supabase/functions/_shared/mail_files_test.ts
       - run: deno test supabase/functions/_shared/mail_files_test.ts
+
+      # The two wire shapes the assistant speaks. 0536 made the provider
+      # a row, and the difference between the Anthropic Messages shape
+      # and the OpenAI chat-completions one is small enough to get wrong
+      # quietly. No permission flags and no remote imports: it asserts
+      # pure functions, and jsr.io is unreachable from some of the
+      # machines this gets worked on.
+      - run: deno check supabase/functions/ask/wire_test.ts
+      - run: deno test supabase/functions/ask/wire_test.ts
 
       # The workspace proxy, which is a Cloudflare worker rather than an
       # edge function but runs here because it shares the toolchain and

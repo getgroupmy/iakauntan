@@ -11,8 +11,8 @@
  * ---------------------------------------------------------------------
  * What this function is not allowed to decide
  *
- * Four things, all of them decided in the database under the *caller's*
- * own token, and none of them overridable from here:
+ * Five things, all of them decided in the database and none of them
+ * overridable from here:
  *
  *   * whether the caller belongs to the company at all;
  *   * whether the company holds the `ai` module;
@@ -21,12 +21,15 @@
  *     bills for the attempt and charging afterwards would let a company
  *     at nil ask for ever;
  *   * what the assistant may read. Every tool call goes back through
- *     `public.ai_run_tool` on the caller's client, so RLS applies as
- *     the person asking. This function never holds the service key.
+ *     `public.ai_run_tool` on the *caller's* client, so RLS applies as
+ *     the person asking;
+ *   * which model answers, at whose expense, and with which key.
+ *     `public.ai_call_config` decides that from `org_ai_settings` and
+ *     the platform default, and 0536 is the argument for why.
  *
- * That last one is the whole design. A clerk who cannot open the
- * general ledger cannot ask the assistant to read it out, and a tool
- * name the catalogue does not list is refused rather than run.
+ * The fourth is the whole design. A clerk who cannot open the general
+ * ledger cannot ask the assistant to read it out, and a tool name the
+ * catalogue does not list is refused rather than run.
  *
  * `ai_run_tool` *raises* when the caller may not read something, rather
  * than returning an empty list — 0470's note on that is worth
@@ -37,26 +40,60 @@
  * says what actually happened.
  *
  * ---------------------------------------------------------------------
- * Why raw HTTP rather than the Anthropic SDK
+ * The one thing the service role is held for
  *
- * The same reason `ocr/index.ts` gives at length, and the same wire
- * version pinned the same way: every provider in this directory is
- * called with `fetch`, an unpinned `npm:` specifier would let a library
- * release change what a deployed function does without a commit, and
- * `supabase/functions/_local_check` type-checks this directory offline
- * with `--no-remote` against a stub for supabase-js alone.
+ * An earlier version of this file said it never held the service key,
+ * and that was true while the provider key came out of the environment.
+ * It now holds one, for a single call: `public.ai_call_config`, whose
+ * EXECUTE is granted to the service role and to nobody else, and which
+ * returns the address, the model and the key for one company.
  *
- * Secrets, none of which are in the repository or the database:
- *   AI_ANTHROPIC_API_KEY   the key this function calls Claude with.
- *                          `OCR_KEY_CLAUDE` is read as a fallback so a
- *                          deployment that already has one key does not
- *                          need two.
+ * Nothing else uses it. Every tool the assistant runs still goes
+ * through the caller's client, so what the assistant may READ is still
+ * decided by the caller's own row policies. Fetching a credential and
+ * reading a ledger are different jobs and this function is trusted with
+ * the smaller one.
+ *
+ * ---------------------------------------------------------------------
+ * Two wire shapes, and why that is all
+ *
+ * `ai_providers.wire` is either `anthropic` or `openai`.
+ *
+ * Anthropic's Messages API is its own thing: `system` is a top-level
+ * field, the assistant turn comes back as content blocks that have to
+ * be echoed whole, tool results go back as `tool_result` blocks in a
+ * user turn, and the key goes in `x-api-key`.
+ *
+ * Everything else in the catalogue speaks the OpenAI chat-completions
+ * shape: `system` is a role inside `messages`, tools are wrapped in a
+ * `function` object, a tool call comes back on `message.tool_calls`
+ * with its arguments as a JSON *string*, each result goes back as its
+ * own `tool` message, and the key is a bearer token. OpenRouter,
+ * DeepSeek, Qwen on DashScope, Cerebras, NVIDIA NIM and Gemini's
+ * compatibility endpoint are all that shape, which is why one adapter
+ * reaches all six.
+ *
+ * ---------------------------------------------------------------------
+ * Why raw HTTP rather than a vendor SDK
+ *
+ * The same reason `ocr/index.ts` gives at length: every provider in this
+ * directory is called with `fetch`, an unpinned `npm:` specifier would
+ * let a library release change what a deployed function does without a
+ * commit, and `supabase/functions/_local_check` type-checks this
+ * directory offline with `--no-remote` against a stub for supabase-js
+ * alone. It matters more now than it did with one provider, not less.
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { fail, json, logFailure, serveFunction } from "../_shared/cors.ts";
+import {
+  anthropicTools,
+  chatUrl,
+  openAiTools,
+  parseArgs,
+  type ToolSpec,
+} from "./wire.ts";
 
 const ANTHROPIC_VERSION = "2023-06-01";
-const MODEL = "claude-opus-5";
 
 /**
  * How many times the model may go round asking for another report.
@@ -74,17 +111,6 @@ const MAX_ROUNDS = 8;
 /** Long enough for a question that reads three reports. */
 const MAX_TOKENS = 4096;
 
-interface ToolSpec {
-  name: string;
-  description: string;
-  arguments: {
-    name: string;
-    type: string;
-    required?: boolean;
-    description?: string;
-  }[];
-}
-
 interface ContentBlock {
   type: string;
   text?: string;
@@ -99,33 +125,39 @@ interface AnthropicMessage {
   content: string | ContentBlock[];
 }
 
-/**
- * The catalogue, in the shape the Messages API wants.
- *
- * Every argument is a string on the wire and cast to its declared type
- * inside `ai_run_tool`; describing them as strings here rather than as
- * numbers or dates is deliberate, because the cast that matters is the
- * one the database makes and a second opinion about the type would only
- * be a second place for it to be wrong.
- */
-function toolsFor(specs: ToolSpec[]): unknown[] {
-  return specs.map((t) => {
-    const properties: Record<string, unknown> = {};
-    const required: string[] = [];
-    for (const a of t.arguments ?? []) {
-      properties[a.name] = {
-        type: "string",
-        description: a.description ??
-          `${a.name} (${a.type}), passed through as written`,
-      };
-      if (a.required) required.push(a.name);
-    }
-    return {
-      name: t.name,
-      description: t.description,
-      input_schema: { type: "object", properties, required },
-    };
-  });
+interface OpenAiToolCall {
+  id?: string;
+  type?: string;
+  function?: { name?: string; arguments?: string };
+}
+
+interface OpenAiMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | null;
+  tool_calls?: OpenAiToolCall[];
+  tool_call_id?: string;
+}
+
+/** What `public.ai_call_config` hands back. */
+interface CallConfig {
+  provider_code: string;
+  wire: string;
+  base_url: string;
+  model_id: string;
+  api_key: string;
+  key_source: string;
+}
+
+/** A turn of the conversation as it is stored, before any wire shape. */
+interface Turn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/** One tool the model asked for, and what came back. */
+interface ToolOutcome {
+  ok: boolean;
+  content: string;
 }
 
 /** What the model is told about the job, once. */
@@ -151,16 +183,263 @@ function systemPrompt(today: string): string {
   ].join("\n");
 }
 
+/**
+ * A provider that would not answer.
+ *
+ * 429 and 529 are the two a person can do something about (wait); the
+ * rest are ours. The provider is named in the log line and not in the
+ * sentence, because "OpenRouter returned 502" is our problem to read
+ * and "the assistant could not be reached" is what the person asking
+ * needs to know.
+ */
+function providerFailure(
+  provider: string,
+  status: number,
+  hadDetail: boolean,
+): Response {
+  const ref = logFailure(
+    new Error(`${provider} ${status}`),
+    "ask",
+    { provider, status, had_detail: hadDetail },
+  );
+  const retryable = status === 429 || status === 529 || status === 503;
+  return fail(
+    retryable
+      ? "The assistant is busy just now. Try again in a moment."
+      : `The assistant could not be reached (reference ${ref}).`,
+    retryable ? 503 : 502,
+  );
+}
+
+/** Runs one tool on the caller's client. A refusal is content. */
+async function runTool(
+  caller: SupabaseClient,
+  orgId: string,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<ToolOutcome> {
+  const ran = await caller.rpc("ai_run_tool", {
+    p_org_id: orgId,
+    p_tool: name,
+    p_args: args,
+  });
+  return ran.error
+    ? { ok: false, content: ran.error.message }
+    : { ok: true, content: JSON.stringify(ran.data ?? null) };
+}
+
+interface Loop {
+  answer: string;
+  used: { tool: string; arguments: Record<string, unknown> }[];
+  failure?: Response;
+}
+
+/** The Messages API, with its content blocks echoed back whole. */
+async function askAnthropic(
+  cfg: CallConfig,
+  specs: ToolSpec[],
+  turns: Turn[],
+  today: string,
+  caller: SupabaseClient,
+  orgId: string,
+): Promise<Loop> {
+  const tools = anthropicTools(specs);
+  const messages: AnthropicMessage[] = turns.map((t) => ({
+    role: t.role,
+    content: t.content,
+  }));
+  const used: { tool: string; arguments: Record<string, unknown> }[] = [];
+  let answer = "";
+
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const last = round === MAX_ROUNDS - 1;
+    const res = await fetch(cfg.base_url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": cfg.api_key,
+        "anthropic-version": ANTHROPIC_VERSION,
+      },
+      body: JSON.stringify({
+        model: cfg.model_id,
+        max_tokens: MAX_TOKENS,
+        system: systemPrompt(today),
+        // Adaptive: the model decides how much thinking a question is
+        // worth. "What is my cash balance" is one call; "why is my
+        // gross margin down" is three reports and an argument about
+        // what changed between them.
+        thinking: { type: "adaptive" },
+        // On the last round the model is told to answer with what it
+        // holds rather than reach for another report.
+        //
+        // `tool_choice: none` rather than dropping `tools`, which is
+        // what this did first and was wrong: by the last round the
+        // conversation already carries `tool_use` and `tool_result`
+        // blocks, and a request containing those with no `tools`
+        // defined is rejected. So the one round that exists to salvage
+        // an answer would have been the one that failed outright —
+        // and only on the long questions, which is exactly when it
+        // matters.
+        tools,
+        ...(last ? { tool_choice: { type: "none" } } : {}),
+        messages,
+      }),
+    });
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      return {
+        answer,
+        used,
+        failure: providerFailure(cfg.provider_code, res.status, detail.length > 0),
+      };
+    }
+
+    const reply = await res.json() as {
+      content?: ContentBlock[];
+      stop_reason?: string;
+    };
+    const blocks = reply.content ?? [];
+
+    // Kept whole, including any thinking blocks: the API requires the
+    // assistant turn to be echoed back exactly as it came, and trimming
+    // it to the text is how a tool-use loop starts failing on the
+    // second round.
+    messages.push({ role: "assistant", content: blocks });
+
+    const text = blocks
+      .filter((b) => b.type === "text" && typeof b.text === "string")
+      .map((b) => b.text as string)
+      .join("\n")
+      .trim();
+    if (text) answer = text;
+
+    const calls = blocks.filter((b) => b.type === "tool_use");
+    if (reply.stop_reason !== "tool_use" || calls.length === 0) break;
+
+    const results: ContentBlock[] = [];
+    for (const call of calls) {
+      const name = call.name ?? "";
+      const args = parseArgs(call.input);
+      used.push({ tool: name, arguments: args });
+      const out = await runTool(caller, orgId, name, args);
+      results.push({
+        type: "tool_result",
+        tool_use_id: call.id,
+        // A refusal is content, not an exception. Handed back with
+        // `is_error` so the model treats it as "you may not read this"
+        // rather than as data.
+        is_error: !out.ok,
+        content: out.content,
+      });
+    }
+    messages.push({ role: "user", content: results });
+  }
+
+  return { answer, used };
+}
+
+/**
+ * Chat completions, which is every other provider in the catalogue.
+ *
+ * The system prompt is a message rather than a field, each tool result
+ * is its own `tool` message rather than a block inside a user turn, and
+ * the assistant turn is echoed back as the object that arrived so that
+ * a provider carrying extra fields on it does not lose them.
+ */
+async function askOpenAi(
+  cfg: CallConfig,
+  specs: ToolSpec[],
+  turns: Turn[],
+  today: string,
+  caller: SupabaseClient,
+  orgId: string,
+): Promise<Loop> {
+  const tools = openAiTools(specs);
+  const messages: OpenAiMessage[] = [
+    { role: "system", content: systemPrompt(today) },
+    ...turns.map((t) => ({ role: t.role, content: t.content } as OpenAiMessage)),
+  ];
+  const used: { tool: string; arguments: Record<string, unknown> }[] = [];
+  let answer = "";
+
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const last = round === MAX_ROUNDS - 1;
+    const res = await fetch(chatUrl(cfg.base_url), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${cfg.api_key}`,
+      },
+      body: JSON.stringify({
+        model: cfg.model_id,
+        max_tokens: MAX_TOKENS,
+        tools,
+        // Same reasoning as the Anthropic branch: the conversation by
+        // now carries tool calls and their results, and a request
+        // carrying those with no tools declared is rejected by several
+        // of these providers.
+        tool_choice: last ? "none" : "auto",
+        messages,
+      }),
+    });
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      return {
+        answer,
+        used,
+        failure: providerFailure(cfg.provider_code, res.status, detail.length > 0),
+      };
+    }
+
+    const reply = await res.json() as {
+      choices?: {
+        message?: OpenAiMessage;
+        finish_reason?: string;
+      }[];
+    };
+    const choice = reply.choices?.[0];
+    const message = choice?.message;
+    if (!message) break;
+
+    messages.push(message);
+    const text = typeof message.content === "string"
+      ? message.content.trim()
+      : "";
+    if (text) answer = text;
+
+    const calls = message.tool_calls ?? [];
+    if (calls.length === 0) break;
+
+    for (const call of calls) {
+      const name = call.function?.name ?? "";
+      const args = parseArgs(call.function?.arguments);
+      used.push({ tool: name, arguments: args });
+      const out = await runTool(caller, orgId, name, args);
+      // There is no `is_error` on this shape, so a refusal has to say
+      // in words that it is one — otherwise a model reads "not
+      // permitted" as a report that came back empty, which is the whole
+      // thing 0470 exists to stop.
+      messages.push({
+        role: "tool",
+        tool_call_id: call.id ?? "",
+        content: out.ok ? out.content : `REFUSED: ${out.content}`,
+      });
+    }
+  }
+
+  return { answer, used };
+}
+
 serveFunction("ask", async (req) => {
   if (req.method !== "POST") return fail("POST a question", 405);
 
   const url = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  const apiKey = Deno.env.get("AI_ANTHROPIC_API_KEY") ??
-    Deno.env.get("OCR_KEY_CLAUDE");
-  if (!url || !anonKey) return fail("This function is not configured", 500);
-  if (!apiKey) {
-    return fail("The assistant has no key configured on this deployment", 503);
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !anonKey || !serviceKey) {
+    return fail("This function is not configured", 500);
   }
 
   const body = await req.json().catch(() => ({}));
@@ -195,6 +474,24 @@ serveFunction("ask", async (req) => {
   if (asked.error) return fail(asked.error.message, 403);
   const conversationId = asked.data as unknown as string;
 
+  // The one service-role call in this function, for the one thing the
+  // caller must not be able to read: which provider, at which address,
+  // with whose key.
+  const admin = createClient(url, serviceKey, {
+    auth: { persistSession: false },
+  });
+  const conf = await admin.rpc("ai_call_config", { p_org_id: orgId });
+  if (conf.error) return fail(conf.error.message, 503);
+  const cfg = (Array.isArray(conf.data) ? conf.data[0] : conf.data) as
+    | CallConfig
+    | undefined;
+  if (!cfg?.api_key || !cfg?.base_url || !cfg?.model_id) {
+    return fail(
+      "The assistant has no provider set up on this deployment yet.",
+      503,
+    );
+  }
+
   const [cat, convo] = await Promise.all([
     caller.rpc("ai_tool_catalogue", { p_org_id: orgId }),
     caller.rpc("ai_conversation", { p_id: conversationId }),
@@ -210,143 +507,39 @@ serveFunction("ask", async (req) => {
   // replayed: they are yesterday's figures, and a model shown them
   // would quote a balance that has since moved. What is kept is what
   // was asked and what was said.
-  const messages: AnthropicMessage[] = [];
+  const turns: Turn[] = [];
   for (const m of stored) {
     if (m.role !== "user" && m.role !== "assistant") continue;
     const content = typeof m.content === "string" ? m.content : "";
     if (!content) continue;
-    messages.push({ role: m.role === "user" ? "user" : "assistant", content });
+    turns.push({ role: m.role === "user" ? "user" : "assistant", content });
   }
 
   // `ai_ask` has already stored this question, so it is in `stored`
   // above — unless this is a brand new conversation read back before
   // the insert was visible, which the belt-and-braces below covers.
   if (
-    messages.length === 0 ||
-    messages[messages.length - 1].content !== question.trim()
+    turns.length === 0 ||
+    turns[turns.length - 1].content !== question.trim()
   ) {
-    messages.push({ role: "user", content: question.trim() });
+    turns.push({ role: "user", content: question.trim() });
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const tools = toolsFor(specs);
-  const used: { tool: string; arguments: Record<string, unknown> }[] = [];
-  let answer = "";
+  const loop = cfg.wire === "anthropic"
+    ? await askAnthropic(cfg, specs, turns, today, caller, orgId)
+    : await askOpenAi(cfg, specs, turns, today, caller, orgId);
+  if (loop.failure) return loop.failure;
 
-  for (let round = 0; round < MAX_ROUNDS; round++) {
-    const last = round === MAX_ROUNDS - 1;
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": ANTHROPIC_VERSION,
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: MAX_TOKENS,
-        system: systemPrompt(today),
-        // Adaptive: the model decides how much thinking a question is
-        // worth. "What is my cash balance" is one call; "why is my
-        // gross margin down" is three reports and an argument about
-        // what changed between them.
-        thinking: { type: "adaptive" },
-        // On the last round the model is told to answer with what it
-        // holds rather than reach for another report.
-        //
-        // `tool_choice: none` rather than dropping `tools`, which is
-        // what this did first and was wrong: by the last round the
-        // conversation already carries `tool_use` and `tool_result`
-        // blocks, and a request containing those with no `tools`
-        // defined is rejected. So the one round that exists to salvage
-        // an answer would have been the one that failed outright —
-        // and only on the long questions, which is exactly when it
-        // matters.
-        tools,
-        ...(last ? { tool_choice: { type: "none" } } : {}),
-        messages,
-      }),
-    });
-
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      const ref = logFailure(
-        new Error(`Anthropic ${res.status}`),
-        "ask",
-        { status: res.status, had_detail: detail.length > 0 },
-      );
-      // 429 and 529 are the two a person can do something about
-      // (wait); the rest are ours.
-      const retryable = res.status === 429 || res.status === 529;
-      return fail(
-        retryable
-          ? "The assistant is busy just now. Try again in a moment."
-          : `The assistant could not be reached (reference ${ref}).`,
-        retryable ? 503 : 502,
-      );
-    }
-
-    const reply = await res.json() as {
-      content?: ContentBlock[];
-      stop_reason?: string;
-    };
-    const blocks = reply.content ?? [];
-
-    // Kept whole, including any thinking blocks: the API requires the
-    // assistant turn to be echoed back exactly as it came, and trimming
-    // it to the text is how a tool-use loop starts failing on the
-    // second round.
-    messages.push({ role: "assistant", content: blocks });
-
-    const text = blocks
-      .filter((b) => b.type === "text" && typeof b.text === "string")
-      .map((b) => b.text as string)
-      .join("\n")
-      .trim();
-    if (text) answer = text;
-
-    const calls = blocks.filter((b) => b.type === "tool_use");
-    if (reply.stop_reason !== "tool_use" || calls.length === 0) break;
-
-    const results: ContentBlock[] = [];
-    for (const call of calls) {
-      const name = call.name ?? "";
-      const args = (call.input ?? {}) as Record<string, unknown>;
-      used.push({ tool: name, arguments: args });
-
-      // On the caller's client. This is the line that makes the
-      // assistant see exactly what the person asking may see.
-      const ran = await caller.rpc("ai_run_tool", {
-        p_org_id: orgId,
-        p_tool: name,
-        p_args: args,
-      });
-
-      results.push({
-        type: "tool_result",
-        tool_use_id: call.id,
-        // A refusal is content, not an exception. Handed back with
-        // `is_error` so the model treats it as "you may not read this"
-        // rather than as data.
-        is_error: Boolean(ran.error),
-        content: ran.error
-          ? ran.error.message
-          : JSON.stringify(ran.data ?? null),
-      });
-    }
-    messages.push({ role: "user", content: results });
-  }
-
-  if (!answer) {
-    answer = "I could not get to an answer for that one. Try asking for " +
+  const answer = loop.answer ||
+    "I could not get to an answer for that one. Try asking for " +
       "a particular report, or a narrower period.";
-  }
 
   // Stored under the caller's token, in the conversation they own.
   const said = await caller.rpc("ai_answer", {
     p_conversation: conversationId,
     p_content: answer,
-    p_tool_calls: used,
+    p_tool_calls: loop.used,
   });
   if (said.error) {
     // The answer exists and was paid for; failing to file it should not
@@ -355,7 +548,7 @@ serveFunction("ask", async (req) => {
   }
 
   return json(
-    { conversation_id: conversationId, answer, tool_calls: used },
+    { conversation_id: conversationId, answer, tool_calls: loop.used },
     200,
     req,
   );
