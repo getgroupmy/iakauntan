@@ -51,7 +51,7 @@ begin
   insert into public.org_modules (org_id, module_code, is_enabled)
   select v, m, true from unnest(array['forecasting','purchases','inventory']) m
   on conflict (org_id, module_code) do update set is_enabled = true;
-  perform public.create_fiscal_year(v, date_trunc('year', current_date)::date);
+  perform public.create_fiscal_year(v, date_trunc('year', app.today())::date);
   return v;
 end $$;
 
@@ -72,7 +72,7 @@ declare
   v_plain uuid; v_service uuid; v_off uuid; v_gone uuid; v_skip uuid;
   v_thin uuid; v_season uuid; v_lead uuid;
   v_run uuid; v_run2 uuid; v_l public.forecast_lines;
-  v_d date := current_date;
+  v_d date := app.today();
 begin
   insert into public.warehouses (org_id, code, name, is_default)
   values (v_org, 'MAIN', 'Main', true) returning id into v_main;
@@ -268,7 +268,7 @@ declare
   v_org uuid := pg_temp.fc_org('Kedudukan Sdn Bhd');
   v_main uuid; v_branch uuid; v_sup uuid; v_item uuid; v_po uuid;
   v_run uuid; v_l public.forecast_lines;
-  v_d date := current_date;
+  v_d date := app.today();
 begin
   insert into public.warehouses (org_id, code, name, is_default)
   values (v_org, 'MAIN', 'Main', true) returning id into v_main;
@@ -348,7 +348,7 @@ declare
   v_main uuid; v_sup uuid;
   v_out uuid; v_dead uuid; v_deep uuid; v_capped uuid; v_fine uuid;
   v_run uuid;
-  v_d date := current_date;
+  v_d date := app.today();
 begin
   insert into public.warehouses (org_id, code, name, is_default)
   values (v_org, 'MAIN', 'Main', true) returning id into v_main;
@@ -470,7 +470,7 @@ declare
   v_local uuid; v_foreign uuid; v_norate uuid; v_term uuid;
   v_item uuid; v_slow uuid; v_taxed uuid; v_imported uuid;
   v_tax uuid; v_deadtax uuid;
-  v_run uuid; v_doc uuid; v_d date := current_date;
+  v_run uuid; v_doc uuid; v_d date := app.today();
   v_price numeric; v_n integer;
 begin
   insert into public.warehouses (org_id, code, name, is_default)
@@ -701,7 +701,7 @@ declare
   v_careful uuid; v_plain uuid;
   v_capped uuid;
   v_run uuid; v_run2 uuid; v_considered integer;
-  v_d date := current_date;
+  v_d date := app.today();
 begin
   insert into public.warehouses (org_id, code, name, is_default)
   values (v_org, 'MAIN', 'Main', true) returning id into v_main;
@@ -848,7 +848,7 @@ declare
   v_b uuid;
   v_main uuid; v_sup uuid; v_sgd uuid; v_item uuid; v_far uuid;
   v_run uuid; v_n integer; v_note text;
-  v_d date := current_date;
+  v_d date := app.today();
 begin
   perform pg_temp.allow_many_companies();
   v_b := pg_temp.fc_org('Pesanan B Sdn Bhd');
@@ -997,7 +997,7 @@ declare
   v_a uuid; v_b uuid; v_c uuid; v_probe uuid;
   v_run uuid; v_ss numeric; v_rop numeric; v_mean numeric; v_review numeric;
   v_periods integer;
-  v_asof date := (date_trunc('week', current_date) - interval '1 day')::date;
+  v_asof date := (date_trunc('week', app.today()) - interval '1 day')::date;
 begin
   insert into public.warehouses (org_id, code, name, is_default)
   values (v_org, 'MAIN', 'Main', true) returning id into v_main;
@@ -1118,7 +1118,7 @@ declare
   v_org uuid := pg_temp.fc_org('Larian Terkini Sdn Bhd');
   v_main uuid; v_sup uuid; v_item uuid; v_ordered uuid; v_po uuid;
   v_run uuid; v_qty numeric; v_price numeric;
-  v_d date := current_date;
+  v_d date := app.today();
 begin
   insert into public.warehouses (org_id, code, name, is_default)
   values (v_org, 'MAIN', 'Main', true) returning id into v_main;

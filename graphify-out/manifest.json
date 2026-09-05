@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788616932.7308877,
-    "ast_hash": "d82cc96bbb6d765d28f7eb4176d17e0b",
+    "mtime": 1788629511.9666145,
+    "ast_hash": "d76306a3c79da3570883a12b82b5203e",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -8080,8 +8080,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/forecast_order_shapes.sql": {
-    "mtime": 1788590149.893306,
-    "ast_hash": "79c41583844294583b8d9e8e1aa00289",
+    "mtime": 1788629348.499241,
+    "ast_hash": "6772172de0824f384640d22938c9132c",
     "semantic_hash": ""
   },
   "supabase/migrations/0534_a_menu_link_is_reached_by_a_token.sql": {
@@ -8237,6 +8237,26 @@
   "supabase/tests/custom_fields_required.sql": {
     "mtime": 1788615680.1123195,
     "ast_hash": "2ae7d69eacdc47cb352bd34f5bd2332f",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0544_a_zero_contribution_is_not_a_checked_one.sql": {
+    "mtime": 1788628910.9210238,
+    "ast_hash": "e6cab197cc5ef8d93a244c9b4540f378",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0545_the_forecast_asked_utc_what_day_it_was.sql": {
+    "mtime": 1788629451.6979938,
+    "ast_hash": "792ce01da742a5d0ce363de8d40fe6dc",
+    "semantic_hash": ""
+  },
+  "supabase/tests/payroll_engine_sweep.sql": {
+    "mtime": 1788628935.4970698,
+    "ast_hash": "539c88922d8cb627945607671cc76097",
+    "semantic_hash": ""
+  },
+  "supabase/tests/utc_is_not_today.sql": {
+    "mtime": 1788629502.4177346,
+    "ast_hash": "50ba6f953c93559be70e7860e2c953c4",
     "semantic_hash": ""
   }
 }

@@ -143,6 +143,8 @@ jobs:
                    supabase/tests/control_accounts.sql \
                    supabase/tests/activity_reminders.sql \
                    supabase/tests/payroll_run.sql \
+                   supabase/tests/payroll_engine_sweep.sql \
+                   supabase/tests/utc_is_not_today.sql \
                    supabase/tests/payroll_shapes.sql \
                    supabase/tests/payroll_voluntary_epf.sql \
                    supabase/tests/sst_shapes.sql \
