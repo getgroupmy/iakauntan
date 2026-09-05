@@ -352,6 +352,7 @@ jobs:
                    supabase/tests/exchange_rate_feed.sql \
                    supabase/tests/salespeople.sql \
                    supabase/tests/serial_and_batch.sql \
+                   supabase/tests/lot_allocation_shapes.sql \
                    supabase/tests/lots_across_the_new_sources.sql \
                    supabase/tests/credit_note_return.sql \
                    supabase/tests/multi_uom_documents.sql \

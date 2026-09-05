@@ -7192,3 +7192,71 @@ version of the tenancy test set the neighbouring company's balance to a
 figure nothing could arrive at and then had that company import its own
 books — which moved it legitimately. The company whose figure must not
 move is one that has imported nothing at all.
+
+---
+
+## Which batch left, and which batch came back
+
+`app.materialise_movement_lots` decides which batch or serial number
+every movement of a tracked item is against, and `app.pick_lots_fefo`
+decides which one goes out when nobody has said. Between them they are
+the whole of batch traceability: a recall, an expiry date on a shelf,
+and the cost a sale is charged at all read off what those two wrote.
+
+A sweep of 44 one-line mutants killed 20 — **the worst result of this
+campaign, on stock that people eat.**
+
+**One survivor was a live defect**, written up in migration `0533`: the
+credit-note loop ordered by `m.created_at desc, sml.lot_id`, and
+`sml.lot_id` is a random uuid. Across two sales `created_at` decides;
+WITHIN one sale it ties, because a line that spans two batches writes
+both against one movement. Which batch a return went back to was
+therefore decided by `gen_random_uuid()`. A sale of five that empties a
+three-unit batch and starts a ten-unit one is the ordinary case, and
+half the time the return reopened the batch that had been emptied and
+closed — a closed batch with stock in it again is a batch somebody will
+pick from, on a date already counted as gone. The order now mirrors
+`pick_lots_fefo` exactly, in reverse.
+
+The rest of what lived was of four kinds: the picker's own order and
+scope (it had never been called directly, and the fixtures hold one
+batch in one warehouse, so earliest-expiry-first could not be told from
+latest, an undated batch had never been picked against a dated one, and
+the warehouse filter had nothing to exclude); what a batch already on
+file keeps (three `coalesce`s against the incoming null, and no fixture
+had ever named the same batch twice); whose batches a return goes back
+to; and what a conversion's output inherits.
+
+**38 of 44 now die.** Six are equivalent.
+
+| Mutant | Why it is equivalent | The rule now asserted |
+|---|---|---|
+| `v_track is null` dropped from the untracked guard | `items.tracking` is NOT NULL and defaults to `'none'` | both, read off the catalogue |
+| the source-table half of each of the three `document_line_lots` arms | the three columns are foreign keys to three different tables, so a line id from one is never a line id from another and an arm reading the wrong column finds nothing | that all three foreign keys exist |
+| `m.quantity < 0` on the transfer-arrival lookup | a transfer line is received once, so the only arrival is the row being written, whose own lots do not exist yet | that a transfer line arrives once |
+| `+ excluded.quantity` reduced to `= excluded.quantity` on the return's conflict | the recipe depletion writes one movement per item per sale, so each batch appears once in the loop and the conflict never fires | that a sale takes each ingredient out on one movement |
+
+#### Testing a random tie-break
+
+The defect above cannot be caught deterministically by a fixture that
+offers the loop two batches to choose between: a coin comes up right
+half the time, and the test is then flaky rather than failing. What
+works is raising the number of batches. The fixture holds **six**, one
+unit each a month apart; a sale takes five and two come back, so a
+random order has to guess the right two in the right order — one time
+in twenty. The same six batches do a second job: the OTHER ingredient
+on the sale expires between the two the return is owed, so a loop that
+read every ingredient rather than this one reaches the wrong batch on
+its second unit rather than never getting that far.
+
+#### A gap found on the way, and not fixed here
+
+A counter sale of a batch-tracked item cannot be completed at all. The
+POS invoice writes a `sales_documents` delivery, that source is
+deliberately kept out of the FEFO list, and nothing names lots on the
+line — so `complete_pos_sale` raises. A recipe whose COMPONENT is
+tracked works, because that movement carries `pos_sales`. So a pharmacy
+or a mini-market with dated stock cannot ring a sale through the till.
+The narrow fix is for the POS to name lots on the invoice line it
+creates, which leaves the general refusal intact; it is a design
+decision rather than a sweep fix.
