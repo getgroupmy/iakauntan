@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788616216.4523854,
-    "ast_hash": "c4760e65e4db192051ee516a9bb76b2a",
+    "mtime": 1788645789.5418637,
+    "ast_hash": "b43fe4ed75ce6414adbc6c75c62f1399",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788629511.9666145,
-    "ast_hash": "d76306a3c79da3570883a12b82b5203e",
+    "mtime": 1788645922.197922,
+    "ast_hash": "fab09631b6418bb71b9b88cb5ee9f648",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -3175,8 +3175,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/pos/till_screen.dart": {
-    "mtime": 1788285599.931654,
-    "ast_hash": "f0f1943302edf64ebf9179142133435b",
+    "mtime": 1788645861.925277,
+    "ast_hash": "1250472f335b1cd7d177ee20ef4c236d",
     "semantic_hash": ""
   },
   "app/test/diary_screen_test.dart": {
@@ -8175,8 +8175,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_tracked_item_sale.sql": {
-    "mtime": 1788602889.8768425,
-    "ast_hash": "177624d1d97a08967bace098e2257aeb",
+    "mtime": 1788645601.1817493,
+    "ast_hash": "2dab17141b1ab6cb3ff15d1d8eec72d8",
     "semantic_hash": ""
   },
   "supabase/migrations/0541_more_providers_and_a_model_you_can_name.sql": {
@@ -8257,6 +8257,26 @@
   "supabase/tests/utc_is_not_today.sql": {
     "mtime": 1788629502.4177346,
     "ast_hash": "50ba6f953c93559be70e7860e2c953c4",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/pos/serial_sheet.dart": {
+    "mtime": 1788645827.7109528,
+    "ast_hash": "0b6721fca85607f59ee1bd8f4438a705",
+    "semantic_hash": ""
+  },
+  "app/test/serial_sheet_test.dart": {
+    "mtime": 1788645908.5116282,
+    "ast_hash": "36bf1ffc4944e2ecf1c7d16732d58a6e",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0546_scan_a_serial_number_at_the_till.sql": {
+    "mtime": 1788645730.3037043,
+    "ast_hash": "d0bcc610d57e12c9083cba641135bdbb",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pos_serial_sale.sql": {
+    "mtime": 1788645747.4354284,
+    "ast_hash": "89f452c2fc0318f52c7239dbb38421d1",
     "semantic_hash": ""
   }
 }

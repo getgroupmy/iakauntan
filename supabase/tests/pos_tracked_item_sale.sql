@@ -25,12 +25,15 @@
 -- completes, so the invoice says which batch left exactly as a typed
 -- one would.
 --
--- A SERIAL NUMBER IS NOT A BATCH, and 0540 keeps refusing it. A batch
--- names a production run, and which carton of the run somebody carried
--- out is not a fact a counter knows. A serial names one machine, and
--- picking one would print on this customer's warranty the number of the
--- machine the next customer walks out with. That wants a scan field at
--- the till, so the refusal stays -- reworded to say what is missing.
+-- A SERIAL NUMBER IS NOT A BATCH, and neither 0540 nor 0546 picks one.
+-- A batch names a production run, and which carton of the run somebody
+-- carried out is not a fact a counter knows. A serial names one
+-- machine, and picking one would print on this customer's warranty the
+-- number of the machine the next customer walks out with. 0540 said
+-- that wanted a scan field at the till; `0546` built it, and the rule
+-- here is unchanged -- an unscanned serial is still refused, now
+-- because nothing was scanned rather than because nothing could be.
+-- The scanning itself is `pos_serial_sale.sql`.
 --
 -- This file sells a batch-tracked item straight over the counter, with
 -- two batches on hand and the older one not big enough, and asks which
@@ -297,15 +300,22 @@ begin
   -- customer. A batch names a production run and picking one of those
   -- is a true statement; a serial names ONE MACHINE, and picking one
   -- would print on this customer's warranty the number of a machine the
-  -- next customer walks out with. So it is still refused — but in words
-  -- that say what is missing, not in the storekeeping invariant's.
+  -- next customer walks out with.
+  --
+  -- So it is STILL NOT PICKED, and that is what this asserts. `0546`
+  -- gave the till a scan field and changed what the refusal says --
+  -- from "there is nowhere to scan one" to "nothing has been scanned"
+  -- -- but the rule underneath is the one 0540 wrote and it has not
+  -- moved: nothing guesses which machine left.
+  --
+  -- What happens when somebody DOES scan is `pos_serial_sale.sql`.
   v_sale := public.open_pos_sale(v_reg);
   perform public.add_pos_sale_line(v_sale, v_phone, 1, 250.00);
   perform pg_temp.check_refused('a serialised item is not picked for the customer',
     format($q$select public.complete_pos_sale(%L, %L::jsonb)$q$,
            v_sale, jsonb_build_array(
              jsonb_build_object('type', v_cash, 'amount', 250.00))),
-    '%a till has nowhere to scan one%', '23514');
+    '%1 on the bill and 0 scanned%', '23514');
   perform pg_temp.check_true('and both machines are still on the shelf',
     (select count(*) from public.v_lot_balances b
       join public.stock_lots l on l.id = b.lot_id

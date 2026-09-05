@@ -8789,14 +8789,42 @@ extension RepoPos on Repo {
     return rows.isEmpty ? null : rows.first;
   }
 
+  /// The bill's lines, with what the item is tracked by.
+  ///
+  /// The embed is there for one column. `0546` lets a serial be scanned
+  /// at the till, and the till has to know which lines want scanning
+  /// BEFORE the cashier presses Take payment — a serial affordance
+  /// offered on every line is noise on the ninety-nine that do not have
+  /// one, and offered on none is a sale that refuses at the tender
+  /// sheet with a queue behind it. One foreign key from
+  /// `pos_sale_lines` to `items`, so PostgREST resolves it unaided.
   Future<List<Map<String, dynamic>>> posSaleLines(String saleId) async =>
       Repo.rows(
         await client
             .from('pos_sale_lines')
-            .select()
+            .select('*, items(tracking)')
             .eq('sale_id', saleId)
             .order('line_no'),
       );
+
+  /// One serial onto one line, checked while the customer is still at
+  /// the counter. Returns everything scanned onto the line so far.
+  Future<List<String>> posScanSerial(String lineId, String serial) async =>
+      ((await callRpc('pos_scan_serial',
+                  params: {'p_line': lineId, 'p_serial': serial})
+              as List?) ??
+          const [])
+          .map((e) => '$e')
+          .toList(growable: false);
+
+  /// And taking a mis-scan back off.
+  Future<List<String>> posUnscanSerial(String lineId, String serial) async =>
+      ((await callRpc('pos_unscan_serial',
+                  params: {'p_line': lineId, 'p_serial': serial})
+              as List?) ??
+          const [])
+          .map((e) => '$e')
+          .toList(growable: false);
 
   /// Baskets set aside. A till with a queue behind it parks one sale to
   /// serve the next, and the parked ones have to be findable or the

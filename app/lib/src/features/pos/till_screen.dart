@@ -17,6 +17,7 @@ import 'take_it_off.dart';
 import 'discount_sheet.dart';
 import 'receipt_view.dart';
 import 'modifier_sheet.dart';
+import 'serial_sheet.dart';
 import 'offline_controller.dart';
 import 'offline_till.dart';
 import 'split_sheet.dart';
@@ -1165,6 +1166,45 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       ..invalidate(posSaleLinesProvider(saleId));
   }
 
+  /// Whether this line is for something that leaves the shop by serial
+  /// number. Read off the embed rather than fetched: the decision is
+  /// made while a sheet is being built, and a round trip there is a
+  /// sheet that opens with the answer missing.
+  static bool _serialTracked(Map<String, dynamic> line) =>
+      (line['items'] as Map?)?['tracking'] == 'serial';
+
+  static List<String> _serialsOn(Map<String, dynamic> line) =>
+      ((line['serial_refs'] as List?) ?? const [])
+          .map((e) => '$e')
+          .toList(growable: false);
+
+  /// The scan field `0540` said a till needed.
+  ///
+  /// Every scan goes to the server as it happens, which is the whole
+  /// design: a list kept locally and sent at payment is a list that
+  /// refuses six scans deep, in front of a queue. The lines are
+  /// refreshed on the way out because scanning sets the quantity, and
+  /// the quantity is on the bill.
+  Future<void> _scanSerials(String id, Map<String, dynamic> line) async {
+    final repo = ref.read(repoProvider);
+    final lineId = line['id'] as String?;
+    if (repo == null || lineId == null) return;
+    await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => SerialSheet(
+        description: '${line['description']}',
+        serials: _serialsOn(line),
+        onScan: (s) => repo.posScanSerial(lineId, s),
+        onRemove: (s) => repo.posUnscanSerial(lineId, s),
+      ),
+    );
+    if (!mounted) return;
+    ref
+      ..invalidate(posSaleLinesProvider(id))
+      ..invalidate(posSaleProvider(id));
+  }
+
   Future<void> _lineAction(Map<String, dynamic> line) async {
     final id = _saleId;
     final lineId = line['id'] as String?;
@@ -1211,6 +1251,22 @@ class _TillScreenState extends ConsumerState<TillScreen> {
                   title: const Text('Take a modifier off'),
                   onTap: () => Navigator.of(ctx).pop('modifier'),
                 ),
+              // FIRST, AND ONLY WHERE THERE IS ONE TO SCAN. A serial
+              // is not an adjustment to the line -- it is what the
+              // line is for, and a bill that reaches the tender sheet
+              // unscanned is refused there with a queue behind it.
+              // `posSaleLines` embeds the item's tracking for exactly
+              // this decision.
+              if (_serialTracked(line))
+                ListTile(
+                  key: const ValueKey('line-serials'),
+                  leading: const Icon(Icons.qr_code_scanner),
+                  title: const Text('Serial numbers'),
+                  subtitle: Text(_serialsOn(line).isEmpty
+                      ? 'None scanned yet'
+                      : '${_serialsOn(line).length} scanned'),
+                  onTap: () => Navigator.of(ctx).pop('serials'),
+                ),
               ListTile(
                 leading: const Icon(Icons.percent),
                 title: const Text('Take money off'),
@@ -1232,6 +1288,10 @@ class _TillScreenState extends ConsumerState<TillScreen> {
       }
       if (go == 'modifier') {
         await _removeModifier(id, lineId);
+        return;
+      }
+      if (go == 'serials') {
+        await _scanSerials(id, line);
         return;
       }
       if (go == 'discount') {
@@ -3146,6 +3206,13 @@ class _BasketLines extends StatelessWidget {
               if (posNum(l['discount_amount']) > 0)
                 'less ${Fmt.money(posNum(l['discount_amount']))}'
                     '${l['discount_reason'] == null ? '' : ' · ${l['discount_reason']}'}',
+              // WHICH MACHINES. On the row, because the answer to "is
+              // this one scanned?" has to be readable without opening
+              // anything -- a cashier holding two identical boxes is
+              // asking exactly that, and a bill that looks finished
+              // and is not is how a queue forms at the tender sheet.
+              if (((l['serial_refs'] as List?) ?? const []).isNotEmpty)
+                (l['serial_refs'] as List).join(', '),
             ].join('\n'),
           ),
           trailing: Text(Fmt.money(posNum(l['line_total']))),
