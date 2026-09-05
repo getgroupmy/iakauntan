@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../custom_fields/custom_fields_section.dart';
 import '../items/new_item_dialog.dart';
 import 'line_draft.dart';
 import '../stock/lot_dialog.dart';
@@ -21,6 +22,7 @@ class LineEditorCard extends ConsumerWidget {
     required this.onChanged,
     required this.onAdd,
     required this.onRemove,
+    required this.sales,
     this.receiving = false,
     this.defers = false,
     this.priceFor,
@@ -29,6 +31,11 @@ class LineEditorCard extends ConsumerWidget {
   final List<LineDraft> lines;
   final bool editable;
   final String currency;
+
+  /// Which side of the trade this document is on. Only used to pick
+  /// which set of a company's own line fields to draw: a field defined
+  /// on a sales line is not a field on a bill.
+  final bool sales;
 
   /// The price this customer pays for this item at this quantity, or
   /// null to keep the item's list price. Null on purchase documents,
@@ -112,6 +119,21 @@ class LineEditorCard extends ConsumerWidget {
                   receiving: receiving,
                   onChanged: onChanged,
                 ),
+              // A field this company added to a LINE rather than to the
+              // document. It draws nothing where none are defined, and
+              // most companies will define none — a line-level field is
+              // filled in once per line, which is a real thing to ask
+              // of somebody and is why the setup screen says so.
+              CustomFieldsSection(
+                entity: sales ? 'sales_document_line' : 'purchase_document_line',
+                heading: 'Your own fields on this line',
+                values: lines[i].customFields,
+                enabled: editable,
+                onChanged: (v) {
+                  lines[i].customFields = v;
+                  onChanged();
+                },
+              ),
               // Offered where it could plausibly be wanted — a line
               // whose item is not stock, which is what a service is —
               // and always where one is already set, so a period stays

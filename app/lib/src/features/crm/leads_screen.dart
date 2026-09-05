@@ -8,6 +8,7 @@ import '../../core/row_actions.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../custom_fields/custom_fields_section.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import 'deal_outcome.dart';
@@ -280,6 +281,8 @@ class _LeadDialogState extends ConsumerState<_LeadDialog> {
   late String _status = widget.lead?['status']?.toString() ?? 'new';
   bool _saving = false;
 
+  Map<String, dynamic> _customFields = const {};
+
   static const _fields = <(String, String)>[
     ('company_name', 'Company'),
     ('first_name', 'First name'),
@@ -297,6 +300,9 @@ class _LeadDialogState extends ConsumerState<_LeadDialog> {
   @override
   void initState() {
     super.initState();
+    _customFields = Map<String, dynamic>.from(
+      (widget.lead?['custom_fields'] as Map?) ?? const {},
+    );
     for (final (key, _) in _fields) {
       _c[key] = TextEditingController(text: widget.lead?[key]?.toString() ?? '');
     }
@@ -364,6 +370,11 @@ class _LeadDialogState extends ConsumerState<_LeadDialog> {
                 ],
                 onChanged: (v) => setState(() => _status = v ?? 'new'),
               ),
+              CustomFieldsSection(
+                entity: 'lead',
+                values: _customFields,
+                onChanged: (v) => setState(() => _customFields = v),
+              ),
             ],
           ),
         ),
@@ -405,6 +416,7 @@ class _LeadDialogState extends ConsumerState<_LeadDialog> {
         key: key == 'estimated_value'
             ? (double.tryParse(_c[key]!.text.trim()) ?? 0)
             : (_c[key]!.text.trim().isEmpty ? null : _c[key]!.text.trim()),
+      'custom_fields': _customFields,
     };
 
     final ok = await runWithFeedback(

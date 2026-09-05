@@ -13,6 +13,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../core/searchable_picker.dart';
 import '../../data/models.dart';
+import '../custom_fields/custom_fields_section.dart';
 import '../contacts/new_contact_dialog.dart';
 import '../../data/ocr_repository.dart';
 import '../../data/repository.dart';
@@ -122,6 +123,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
   /// department earned nothing.
   String? _departmentCode;
   String? _salespersonId;
+  Map<String, dynamic> _customFields = const {};
   String _status = 'draft';
 
   /// How much of this document has already gone forward. Shown because a
@@ -216,6 +218,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
             .map((l) => l.departmentCode)
             .firstWhere((c) => c != null, orElse: () => null);
         _salespersonId = doc.salespersonId;
+        _customFields = doc.customFields;
         _reference.text = doc.reference ?? '';
         _supplierDocNo.text = doc.supplierDocNo ?? '';
         _notes.text = doc.notes ?? '';
@@ -525,6 +528,7 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
           // Sales only. The column is on `sales_documents` alone,
           // and a bill has no salesperson by definition.
           if (_kind.isSales) 'salesperson_id': _salespersonId,
+          'custom_fields': _customFields,
         },
         lines: validLines.map((l) {
           l.projectCode = _projectCode;
@@ -1371,11 +1375,26 @@ class _DocumentEditorState extends ConsumerState<DocumentEditor> {
                         },
                         onTextChanged: _markDirty,
                       ),
+                      // The boxes this company added to a document of
+                      // its own. Above the lines, because a header
+                      // field is about the whole paper.
+                      CustomFieldsSection(
+                        entity: _kind.isSales
+                            ? 'sales_document'
+                            : 'purchase_document',
+                        values: _customFields,
+                        enabled: editable,
+                        onChanged: (v) {
+                          setState(() => _customFields = v);
+                          _markDirty();
+                        },
+                      ),
                       const SizedBox(height: 16),
                       LineEditorCard(
                         lines: _lines,
                         editable: editable,
                         currency: _currency,
+                        sales: _kind.isSales,
                         receiving: !_kind.isSales,
                         // Sales, and not a credit note. A bill is not
                         // revenue, so 0309 has nothing to defer on the

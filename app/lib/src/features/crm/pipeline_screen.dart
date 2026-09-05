@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
+import '../custom_fields/custom_fields_section.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../contacts/new_contact_dialog.dart';
@@ -403,6 +404,7 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
   String? _contactId;
   String? _stageId;
   DateTime? _closeDate;
+  Map<String, dynamic> _customFields = const {};
   bool _saving = false;
 
   @override
@@ -432,6 +434,7 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
         'amount': double.tryParse(_amount.text) ?? 0,
         'probability': stage.probability,
         'expected_close_date': _closeDate == null ? null : Fmt.iso(_closeDate!),
+        'custom_fields': _customFields,
       }),
       successMessage: 'Deal created',
     );
@@ -539,6 +542,11 @@ class _OpportunityDialogState extends ConsumerState<_OpportunityDialog> {
                   ),
                   child: Text(Fmt.date(_closeDate)),
                 ),
+              ),
+              CustomFieldsSection(
+                entity: 'opportunity',
+                values: _customFields,
+                onChanged: (v) => setState(() => _customFields = v),
               ),
             ],
           ),

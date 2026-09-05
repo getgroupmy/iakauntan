@@ -676,6 +676,7 @@ class Item {
     this.purchaseTaxCodeId,
     this.categoryId,
     this.barcode,
+    this.customFields = const {},
   });
 
   final String id;
@@ -702,6 +703,10 @@ class Item {
   final String? categoryId;
   final String? barcode;
 
+  /// The fields this company added for itself. 0542 gives them
+  /// definitions and a guard; what arrives here has been held to them.
+  final Map<String, dynamic> customFields;
+
   bool get isLowStock =>
       trackInventory && reorderLevel > 0 && quantityOnHand <= reorderLevel;
 
@@ -725,6 +730,8 @@ class Item {
     purchaseTaxCodeId: j['purchase_tax_code_id'] as String?,
     categoryId: j['category_id'] as String?,
     barcode: j['barcode'] as String?,
+    customFields:
+        Map<String, dynamic>.from((j['custom_fields'] as Map?) ?? const {}),
   );
 
   Map<String, dynamic> toJson() => {
@@ -744,6 +751,7 @@ class Item {
     'purchase_tax_code_id': purchaseTaxCodeId,
     'category_id': categoryId,
     'barcode': barcode,
+    'custom_fields': customFields,
   };
 }
 
@@ -968,6 +976,7 @@ class BusinessDocument {
     this.paymentTermId,
     this.salespersonId,
     this.lines = const [],
+    this.customFields = const {},
   });
 
   final String id;
@@ -1036,12 +1045,17 @@ class BusinessDocument {
       dueDate!.isBefore(DateTime.now()) &&
       status != 'void';
 
+  /// The fields this company added to a document.
+  final Map<String, dynamic> customFields;
+
   factory BusinessDocument.fromJson(Map<String, dynamic> j) {
     final contact = j['contacts'];
     // The embedded line list is named after whichever table it came from.
     final rawLines =
         (j['sales_document_lines'] ?? j['purchase_document_lines']) as List?;
     return BusinessDocument(
+      customFields:
+          Map<String, dynamic>.from((j['custom_fields'] as Map?) ?? const {}),
       id: j['id'] as String,
       docType: j['doc_type']?.toString() ?? 'invoice',
       docNo: j['doc_no']?.toString() ?? '',
@@ -1108,6 +1122,7 @@ class DocumentLine {
     this.departmentCode,
     this.serviceStart,
     this.serviceEnd,
+    this.customFields = const {},
   });
 
   final String? id;
@@ -1153,7 +1168,12 @@ class DocumentLine {
   /// one without the other — so either answers the question.
   bool get isDeferred => serviceStart != null;
 
+  /// The fields this company added to a document line.
+  final Map<String, dynamic> customFields;
+
   factory DocumentLine.fromJson(Map<String, dynamic> j) => DocumentLine(
+    customFields:
+        Map<String, dynamic>.from((j['custom_fields'] as Map?) ?? const {}),
     id: j['id'] as String?,
     lineNo: Fmt.toInt(j['line_no']),
     itemId: j['item_id'] as String?,
@@ -2055,6 +2075,7 @@ class Employee {
     this.residencyStatus = 'citizen',
     this.dateOfBirth,
     this.userId,
+    this.customFields = const {},
   });
 
   final String id;
@@ -2116,10 +2137,15 @@ class Employee {
   /// no pay data — used to hide salary rather than show a false zero.
   bool get isDirectoryOnly => basicSalary == 0 && nric == null;
 
+  /// The fields this company added for itself.
+  final Map<String, dynamic> customFields;
+
   factory Employee.fromJson(Map<String, dynamic> j) {
     final dept = j['departments'];
     final pos = j['positions'];
     return Employee(
+      customFields:
+          Map<String, dynamic>.from((j['custom_fields'] as Map?) ?? const {}),
       id: j['id'] as String,
       employeeNo: j['employee_no']?.toString() ?? '',
       fullName: j['full_name']?.toString() ?? '',

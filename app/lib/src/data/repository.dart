@@ -5057,6 +5057,7 @@ extension RepoExtras on Repo {
     num? agreedFee,
     num hourlyRate = 0,
     String? conflictNote,
+    Map<String, dynamic> customFields = const {},
   }) async {
     final id = await callRpc(
       'open_matter',
@@ -5074,6 +5075,18 @@ extension RepoExtras on Repo {
         'p_conflict_note': conflictNote,
       },
     );
+    // The RPC's argument list is fixed and a field this firm invented
+    // is not in it, so the fields go on a moment later under the
+    // table's own UPDATE policy. `0543` is what makes the gap safe: a
+    // row created carrying no custom fields passes, and this update is
+    // then held to the whole set exactly as an insert would be.
+    if (customFields.isNotEmpty) {
+      await client
+          .from('matters')
+          .update({'custom_fields': customFields})
+          .eq('id', id.toString())
+          .eq('org_id', orgId);
+    }
     return id.toString();
   }
 
@@ -8136,6 +8149,7 @@ extension RepoTicketing on Repo {
     String? type,
     String channel = 'web',
     String? requesterContactId,
+    Map<String, dynamic> customFields = const {},
   }) async {
     final id = await callRpc(
       'create_ticket',
@@ -8152,6 +8166,14 @@ extension RepoTicketing on Repo {
           'p_requester_contact_id': requesterContactId,
       },
     );
+    // Same gap as `openMatter`, closed the same way.
+    if (customFields.isNotEmpty) {
+      await client
+          .from('tickets')
+          .update({'custom_fields': customFields})
+          .eq('id', id as String)
+          .eq('org_id', orgId);
+    }
     return id as String;
   }
 

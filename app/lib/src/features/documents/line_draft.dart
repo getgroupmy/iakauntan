@@ -22,9 +22,13 @@ class LineDraft {
     this.serviceStart,
     this.serviceEnd,
     this.lots = const [],
+    this.customFields = const {},
   });
 
   String? itemId;
+
+  /// The fields this company added to a document line.
+  Map<String, dynamic> customFields;
   String description;
   double quantity;
   double unitPrice;
@@ -94,6 +98,7 @@ class LineDraft {
     'source_line_id': sourceLineId,
     'project_code': projectCode,
     'department_code': departmentCode,
+    'custom_fields': customFields,
     // Only when set, and only then. `saveDocument` inserts this map
     // straight into `sales_document_lines` or `purchase_document_lines`,
     // and the purchase table has no such columns — sending the keys as
@@ -107,6 +112,7 @@ class LineDraft {
   };
 
   factory LineDraft.fromLine(DocumentLine l) => LineDraft(
+    customFields: l.customFields,
     itemId: l.itemId,
     description: l.description,
     quantity: l.quantity,

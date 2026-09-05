@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../custom_fields/custom_fields_section.dart';
 import '../../data/repository.dart';
 import 'departure.dart';
 import 'departure_dialog.dart';
@@ -44,6 +45,7 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
   bool _epf = true, _socso = true, _eis = true, _pcb = true, _hrdf = true;
   bool _saving = false;
   bool _loaded = false;
+  Map<String, dynamic> _customFields = const {};
 
   /// The day they last worked, when they have left.
   ///
@@ -69,6 +71,7 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
   void _hydrate(Employee e) {
     if (_loaded) return;
     _loaded = true;
+    _customFields = e.customFields;
     _ctl('full_name').text = e.fullName;
     _ctl('email').text = e.email ?? '';
     _ctl('phone').text = e.phone ?? '';
@@ -371,6 +374,11 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
                       TaxYearSection(employeeId: widget.employeeId!),
                       EmployeeRecords(employeeId: widget.employeeId!),
                     ],
+                    CustomFieldsSection(
+                      entity: 'employee',
+                      values: _customFields,
+                      onChanged: (v) => setState(() => _customFields = v),
+                    ),
                     const SizedBox(height: Space.xxl),
                   ],
                 ),
@@ -520,6 +528,7 @@ class _EmployeeEditorState extends ConsumerState<EmployeeEditor> {
         voluntaryEmployee: _ctl('epf_voluntary_employee_rate').text,
         voluntaryEmployer: _ctl('epf_voluntary_employer_rate').text,
       ),
+      'custom_fields': _customFields,
     };
 
     final ok = await runWithFeedback(

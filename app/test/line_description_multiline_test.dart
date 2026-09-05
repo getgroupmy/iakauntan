@@ -35,6 +35,7 @@ void main() {
           home: Scaffold(
             body: SingleChildScrollView(
               child: LineEditorCard(
+                sales: true,
                 lines: [line],
                 editable: true,
                 currency: 'MYR',

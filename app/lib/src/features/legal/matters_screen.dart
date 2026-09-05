@@ -10,6 +10,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import '../contacts/new_contact_dialog.dart';
+import '../custom_fields/custom_fields_section.dart';
 import 'matter_conflicts.dart';
 import 'over_agreed_fee_dialog.dart';
 
@@ -211,6 +212,7 @@ class _MatterDialogState extends ConsumerState<_MatterDialog> {
   String? _clientId;
   String _matterType = 'conveyancing';
   bool _saving = false;
+  Map<String, dynamic> _customFields = const {};
 
   /// What the firm already has that touches these parties. Asked of
   /// the database as the client and the other side are chosen, because
@@ -305,6 +307,7 @@ class _MatterDialogState extends ConsumerState<_MatterDialog> {
             conflictNote: _conflictNote.text.trim().isEmpty
                 ? null
                 : _conflictNote.text.trim(),
+            customFields: _customFields,
           ),
       successMessage: 'Matter opened',
     );
@@ -444,6 +447,16 @@ class _MatterDialogState extends ConsumerState<_MatterDialog> {
                     ),
                   ),
                 ]),
+                // What this firm asks of every file that the eight
+                // matter types above do not cover — a land office
+                // reference, a referring firm, a costs draftsman.
+                // Draws nothing until somebody defines one.
+                CustomFieldsSection(
+                  entity: 'matter',
+                  values: _customFields,
+                  enabled: !_saving,
+                  onChanged: (v) => setState(() => _customFields = v),
+                ),
               ],
             ),
           ),

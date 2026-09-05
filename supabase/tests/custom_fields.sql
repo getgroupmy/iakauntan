@@ -350,10 +350,25 @@ begin
     (select name from public.contacts where id = v_old),
     'Pelanggan Lama Sdn Bhd');
 
-  -- But what is written next has to carry it.
-  perform pg_temp.check_refused('a new record without what is required',
-    format($q$insert into public.contacts (org_id, code, name, contact_type)
-             values (%L, 'C-NEW', 'Pelanggan Baru', 'customer')$q$, v_org),
+  -- NOR DOES IT LOCK THE GENERATORS. `0543`: a row carrying no custom
+  -- fields at all passes. Forty-one functions in this schema create one
+  -- of these eleven records from a fixed argument list nobody can add a
+  -- company's own field to, and a requirement that stopped them would
+  -- stop the application rather than the person who left a box empty.
+  insert into public.contacts (org_id, code, name, contact_type)
+  values (v_org, 'C-QUIET', 'Pelanggan Senyap', 'customer');
+  perform pg_temp.check_eq('a record carrying no fields at all is written',
+    (select count(*) from public.contacts
+      where org_id = v_org and code = 'C-QUIET'), 1);
+
+  -- But a form sends the whole set, so the moment ANY field is supplied
+  -- the required ones are asked for. That is the line: filling one box
+  -- in is what says a person is at the keyboard.
+  perform pg_temp.check_refused('a new record that fills one field in is asked for both',
+    format($q$insert into public.contacts
+             (org_id, code, name, contact_type, custom_fields)
+             values (%L, 'C-NEW', 'Pelanggan Baru', 'customer',
+                     '{"note":"anything"}'::jsonb)$q$, v_org),
     'Cost centre has to be filled in.%', '23514');
   perform pg_temp.check_refused('and touching the fields still asks for it',
     format($q$update public.contacts set custom_fields =
@@ -386,10 +401,14 @@ begin
     'Cost centre is written in words.%', '22023');
 
   -- And archiving lifts the requirement, which is what archiving is for.
-  insert into public.contacts (org_id, code, name, contact_type)
-  values (v_org, 'C-THIRD', 'Pelanggan Ketiga', 'customer');
+  -- Written carrying a field, so it is the archiving being tested and
+  -- not the quiet row above: this insert would have been refused a
+  -- moment ago.
+  insert into public.contacts (org_id, code, name, contact_type, custom_fields)
+  values (v_org, 'C-THIRD', 'Pelanggan Ketiga', 'customer',
+          '{"note":"anything"}'::jsonb);
   perform pg_temp.check_eq('a field put away is no longer demanded',
-    (select count(*) from public.contacts where org_id = v_org), 3);
+    (select count(*) from public.contacts where org_id = v_org), 4);
 
   perform pg_temp.check_refused('a field nobody defined cannot be put away',
     format($q$select public.set_custom_field_active(

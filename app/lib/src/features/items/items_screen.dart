@@ -10,6 +10,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../custom_fields/custom_fields_section.dart';
 import '../../data/repository.dart';
 import 'item_categories.dart';
 import 'item_categories_dialog.dart';
@@ -246,6 +247,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
   late String _classification;
   String? _salesTaxCodeId;
   String? _categoryId;
+  Map<String, dynamic> _customFields = const {};
   bool _trackInventory = true;
   String _tracking = 'none';
   bool _saving = false;
@@ -270,6 +272,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
     _classification = i?.classificationCode ?? '022';
     _salesTaxCodeId = i?.salesTaxCodeId;
     _categoryId = i?.categoryId;
+    _customFields = i?.customFields ?? const {};
     _trackInventory = i?.trackInventory ?? true;
     _tracking = i?.tracking ?? 'none';
     if (i == null) _suggestCode();
@@ -334,6 +337,7 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
             tracking: _trackInventory ? _tracking : 'none',
             salesTaxCodeId: _salesTaxCodeId,
             categoryId: _categoryId,
+            customFields: _customFields,
           ),
           id: widget.item?.id,
         );
@@ -534,6 +538,11 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                     onChanged: (v) => setState(() => _modifierGroups = v),
                   ),
                 ],
+                CustomFieldsSection(
+                  entity: 'item',
+                  values: _customFields,
+                  onChanged: (v) => setState(() => _customFields = v),
+                ),
                 if (_itemType == 'stock') ...[
                   const SizedBox(height: 12),
                   SwitchListTile(

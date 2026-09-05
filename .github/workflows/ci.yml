@@ -324,6 +324,7 @@ jobs:
                    supabase/tests/ai_providers.sql \
                    supabase/tests/ai_provider_catalogue.sql \
                    supabase/tests/custom_fields.sql \
+                   supabase/tests/custom_fields_required.sql \
                    supabase/tests/contact_types.sql \
                    supabase/tests/credit_hold_is_visible.sql \
                    supabase/tests/contact_records.sql \

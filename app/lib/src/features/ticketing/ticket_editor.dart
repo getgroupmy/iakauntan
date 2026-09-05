@@ -9,6 +9,7 @@ import '../../core/searchable_picker.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../custom_fields/custom_fields_section.dart';
 
 /// Raising one.
 ///
@@ -31,6 +32,7 @@ class _TicketEditorState extends ConsumerState<TicketEditor> {
   String? _category;
   String? _priority;
   bool _busy = false;
+  Map<String, dynamic> _customFields = const {};
 
   @override
   void dispose() {
@@ -50,6 +52,7 @@ class _TicketEditorState extends ConsumerState<TicketEditor> {
         description: _description.text.trim(),
         categoryCode: _category,
         priority: _priority,
+        customFields: _customFields,
       );
       ref.invalidate(ticketsProvider);
       router.go('/tickets/$id');
@@ -152,6 +155,16 @@ class _TicketEditorState extends ConsumerState<TicketEditor> {
                   DropdownMenuItem(value: 'p4', child: Text('P4 — low')),
                 ],
                 onChanged: (v) => setState(() => _priority = v),
+              ),
+              // What this desk asks of every ticket that the category
+              // and priority above do not cover — an asset tag, a site,
+              // a contract number. Draws nothing until one is defined,
+              // which is what keeps the short form short.
+              CustomFieldsSection(
+                entity: 'ticket',
+                values: _customFields,
+                enabled: !_busy,
+                onChanged: (v) => setState(() => _customFields = v),
               ),
               const SizedBox(height: 24),
               FilledButton(

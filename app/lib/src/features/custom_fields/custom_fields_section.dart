@@ -68,6 +68,19 @@ class CustomFieldsSection extends ConsumerWidget {
       } else {
         next[key] = value;
       }
+      // A REQUIRED FIELD ALWAYS TRAVELS, null where the box is empty.
+      //
+      // 0543 lets a row carrying no custom fields through, because
+      // forty-one functions in the schema raise one of these records
+      // and none of them can answer for a person. That is the right
+      // rule, and it means a save that sent `{}` would not be asked.
+      // Sending `{"cost_centre": null}` instead puts the question in
+      // front of the database, which is where it is answered — the
+      // form's own star and validator are a kindness on top, not the
+      // authority.
+      for (final d in live) {
+        if (d.isRequired && !next.containsKey(d.key)) next[d.key] = null;
+      }
       onChanged(next);
     }
 

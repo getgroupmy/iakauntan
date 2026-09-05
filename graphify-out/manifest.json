@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788614411.0258389,
-    "ast_hash": "b9229f9b6561ce2328e1514527a4a7e8",
+    "mtime": 1788615949.499021,
+    "ast_hash": "e2730c4f11cef7275b1dade633cb646f",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
-    "mtime": 1788541396.0412905,
-    "ast_hash": "58778b7a963cba9b47fbc103e28189fe",
+    "mtime": 1788616216.4523854,
+    "ast_hash": "c4760e65e4db192051ee516a9bb76b2a",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/platform_console_screen.dart": {
@@ -135,8 +135,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/crm/pipeline_screen.dart": {
-    "mtime": 1788501554.3454244,
-    "ast_hash": "de670ef33f7d985eacfc3844e2e4ad88",
+    "mtime": 1788615826.447951,
+    "ast_hash": "a6735b86f17b0e6718d05bccd270e974",
     "semantic_hash": ""
   },
   "app/lib/src/features/dashboard/dashboard_screen.dart": {
@@ -150,8 +150,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_editor.dart": {
-    "mtime": 1788500054.4925296,
-    "ast_hash": "2a772fd9061bf7c9300639d6494189c6",
+    "mtime": 1788616170.4202502,
+    "ast_hash": "5230200abf85cc066defb808d3379dfd",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/document_list_screen.dart": {
@@ -160,13 +160,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/line_draft.dart": {
-    "mtime": 1787822945.4905899,
-    "ast_hash": "0e9c6ae084616632b43259290407d6e4",
+    "mtime": 1788615912.8922,
+    "ast_hash": "e63f48745e27aac8d20bdc179a18956a",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/line_editor.dart": {
-    "mtime": 1788497562.6693878,
-    "ast_hash": "ce329cca38f2fb6089dc90f1fa2c48db",
+    "mtime": 1788616165.9097471,
+    "ast_hash": "ed5063bb32aaf27b5d4ce5c26c2f1a27",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/settlement_dialog.dart": {
@@ -190,8 +190,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/employee_editor.dart": {
-    "mtime": 1788285599.9196541,
-    "ast_hash": "88b6d9dea8c31b9343bc500cfc290f3f",
+    "mtime": 1788615799.4797726,
+    "ast_hash": "c7f0168c90865ba71f54d418a4a9e195",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/hr_setup_screen.dart": {
@@ -240,8 +240,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/items/items_screen.dart": {
-    "mtime": 1788511209.9591455,
-    "ast_hash": "924728f41d2bfe8bb230825883fdb32c",
+    "mtime": 1788615756.3182817,
+    "ast_hash": "514a3fb303880c774c7f0609b81bcbab",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journals_screen.dart": {
@@ -255,8 +255,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/legal/matters_screen.dart": {
-    "mtime": 1788501605.926254,
-    "ast_hash": "1e47cc5482e37e1670a8ab263b345f30",
+    "mtime": 1788616233.371912,
+    "ast_hash": "dd7e75ae5dbcd53bd8111f7b76b8eb22",
     "semantic_hash": ""
   },
   "app/lib/src/features/onboarding/create_org_screen.dart": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788612403.6082275,
-    "ast_hash": "b289cfef3b4ce22aba0f66c1fd614afe",
+    "mtime": 1788616932.7308877,
+    "ast_hash": "d82cc96bbb6d765d28f7eb4176d17e0b",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1425,8 +1425,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/crm/leads_screen.dart": {
-    "mtime": 1788510804.2723744,
-    "ast_hash": "fd29f4b38916bb2438bef0d4d40069ae",
+    "mtime": 1788615841.7909608,
+    "ast_hash": "5d761ddb109d69dfabcbd6e646ab39e2",
     "semantic_hash": ""
   },
   "app/lib/src/features/hr/appraisal_goals_dialog.dart": {
@@ -3050,8 +3050,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/ticketing/ticket_editor.dart": {
-    "mtime": 1788506677.5300658,
-    "ast_hash": "f4af3f65307d52c7c6e4bbe09ae27ea3",
+    "mtime": 1788616245.9890058,
+    "ast_hash": "c9c4e8e9c96f5f047fa2bd4b970502e6",
     "semantic_hash": ""
   },
   "app/lib/src/features/ticketing/ticket_screen.dart": {
@@ -7030,8 +7030,8 @@
     "semantic_hash": ""
   },
   "app/test/line_description_multiline_test.dart": {
-    "mtime": 1788327865.6568003,
-    "ast_hash": "8f83a6ee8a98389e974d4a1e476cf407",
+    "mtime": 1788616280.9768624,
+    "ast_hash": "576015526b24d2509b2f4144c5f1e901",
     "semantic_hash": ""
   },
   "app/test/ocr_continuation_test.dart": {
@@ -7775,8 +7775,8 @@
     "semantic_hash": ""
   },
   "app/test/line_item_code_test.dart": {
-    "mtime": 1788499656.6765742,
-    "ast_hash": "18f46bf4da5d0be99604e94797d74785",
+    "mtime": 1788616280.9770825,
+    "ast_hash": "1013b383dba384f569933e84f9353d22",
     "semantic_hash": ""
   },
   "app/lib/src/features/dashboard/ticker.dart": {
@@ -8205,18 +8205,18 @@
     "semantic_hash": ""
   },
   "supabase/tests/custom_fields.sql": {
-    "mtime": 1788612380.4644325,
-    "ast_hash": "4cd700ef28d81734763b039f50d7110d",
+    "mtime": 1788616747.8681605,
+    "ast_hash": "68e3dcc010e35d41c715dc98d1f59c0b",
     "semantic_hash": ""
   },
   "app/lib/src/data/custom_fields_repository.dart": {
-    "mtime": 1788614269.5412896,
-    "ast_hash": "af23474e309084e0ddc017cc0048e26b",
+    "mtime": 1788616203.478668,
+    "ast_hash": "e79066469d49221ebd2523965527c389",
     "semantic_hash": ""
   },
   "app/lib/src/features/custom_fields/custom_fields_section.dart": {
-    "mtime": 1788614325.5498328,
-    "ast_hash": "f5c138efb4c419c09b23c767daf0b71b",
+    "mtime": 1788615710.844242,
+    "ast_hash": "d643ecc5a129fa05aff4004bd0529337",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/custom_fields_card.dart": {
@@ -8227,6 +8227,16 @@
   "app/test/custom_fields_section_test.dart": {
     "mtime": 1788614744.5349479,
     "ast_hash": "14b9c5d23ad7b9a7a8c656bfad5adc69",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0543_required_is_asked_of_a_person.sql": {
+    "mtime": 1788615646.3431737,
+    "ast_hash": "2b37675093c5932be4f74b56bf6b4978",
+    "semantic_hash": ""
+  },
+  "supabase/tests/custom_fields_required.sql": {
+    "mtime": 1788615680.1123195,
+    "ast_hash": "2ae7d69eacdc47cb352bd34f5bd2332f",
     "semantic_hash": ""
   }
 }

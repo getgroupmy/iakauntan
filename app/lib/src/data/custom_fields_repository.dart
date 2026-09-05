@@ -203,6 +203,30 @@ extension RepoCustomFields on Repo {
     },
   );
 
+  /// Write a company's own fields onto a row that was created by an
+  /// RPC with nowhere to put them — `open_matter` and `create_ticket`
+  /// both take a fixed argument list and neither will grow one for a
+  /// field this company invented. Safe because `0543` lets a row
+  /// carrying no custom fields through: the RPC creates the row, and
+  /// this fills it in a moment later under the table's own UPDATE
+  /// policy, where the guard checks the whole set against the
+  /// definitions exactly as it would on an insert.
+  ///
+  /// Does nothing when there is nothing to write, so a company that has
+  /// defined no fields pays for no round trip.
+  Future<void> writeCustomFields(
+    String table,
+    String id,
+    Map<String, dynamic> values,
+  ) async {
+    if (values.isEmpty) return;
+    await client
+        .from(table)
+        .update({'custom_fields': values})
+        .eq('id', id)
+        .eq('org_id', orgId);
+  }
+
   /// What a lookup field may be filled in with. Read through the same
   /// function the guard's rule is written beside, so that the picker
   /// cannot offer a record the database will refuse.
