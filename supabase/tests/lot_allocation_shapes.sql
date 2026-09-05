@@ -337,10 +337,11 @@ end $$;
 -- 4. Where a return goes back to
 -- =====================================================================
 --
--- The ingredient goes out through a RECIPE, because that is the only
--- way a batch-tracked item reaches the counter: a POS sale of the
--- tracked item itself is refused, and see the note at the foot of this
--- file for why that is a gap rather than a rule.
+-- The ingredient goes out through a RECIPE, which is one of the two
+-- ways a batch-tracked item reaches the counter. The other is selling
+-- the tracked thing ITSELF, which was refused outright until 0540 and
+-- is now an earliest-expiry-first pick written onto the counter
+-- invoice; `supabase/tests/pos_tracked_item_sale.sql` is that half.
 do $$
 declare
   v_org uuid := pg_temp.test_org('Pulang Batch Sdn Bhd');

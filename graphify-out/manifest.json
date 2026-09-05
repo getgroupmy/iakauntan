@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788602042.8190534,
-    "ast_hash": "08dc2d1c1f71d40c258bf54bcfcccf18",
+    "mtime": 1788602561.0223572,
+    "ast_hash": "584afa977a40304f3373fd70a1be0b64",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -8075,8 +8075,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/lot_allocation_shapes.sql": {
-    "mtime": 1788588632.201465,
-    "ast_hash": "68fe98a50e248d0c48311f3fda66298f",
+    "mtime": 1788602561.0088415,
+    "ast_hash": "6c613a32c1bcb0370cdd7e4d20fbb476",
     "semantic_hash": ""
   },
   "supabase/tests/forecast_order_shapes.sql": {
@@ -8167,6 +8167,16 @@
   "supabase/tests/transfer_shapes.sql": {
     "mtime": 1788602076.496938,
     "ast_hash": "26845948a9336dddb904c1e7052f06fc",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0540_a_counter_sale_of_dated_stock.sql": {
+    "mtime": 1788602723.0207603,
+    "ast_hash": "71da43331c22ea1bbdbd2b6eb35f88a8",
+    "semantic_hash": ""
+  },
+  "supabase/tests/pos_tracked_item_sale.sql": {
+    "mtime": 1788602889.8768425,
+    "ast_hash": "177624d1d97a08967bace098e2257aeb",
     "semantic_hash": ""
   }
 }
