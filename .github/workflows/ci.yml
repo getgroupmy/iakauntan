@@ -210,6 +210,7 @@ jobs:
                    supabase/tests/pos_counting.sql \
                    supabase/tests/pos_drawer_shapes.sql \
                    supabase/tests/inventory_forecast.sql \
+                   supabase/tests/forecast_order_shapes.sql \
                    supabase/tests/pos.sql \
                    supabase/tests/pos_retail.sql \
                    supabase/tests/pos_loyalty.sql \

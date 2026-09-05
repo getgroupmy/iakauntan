@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788588701.5089364,
-    "ast_hash": "37880d3b234d1e917b0ddab59d203e18",
+    "mtime": 1788590280.0200949,
+    "ast_hash": "2f6973199ea1d790be9e1418e5aa50d9",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788588917.1849315,
-    "ast_hash": "7db46d9f30ab9c7d0de8faaf63648212",
+    "mtime": 1788590633.1088922,
+    "ast_hash": "57e9b849f2039020fe2c3a397fc7b769",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -8077,6 +8077,11 @@
   "supabase/tests/lot_allocation_shapes.sql": {
     "mtime": 1788588632.201465,
     "ast_hash": "68fe98a50e248d0c48311f3fda66298f",
+    "semantic_hash": ""
+  },
+  "supabase/tests/forecast_order_shapes.sql": {
+    "mtime": 1788590149.893306,
+    "ast_hash": "79c41583844294583b8d9e8e1aa00289",
     "semantic_hash": ""
   }
 }

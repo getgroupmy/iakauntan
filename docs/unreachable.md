@@ -7260,3 +7260,74 @@ or a mini-market with dated stock cannot ring a sale through the till.
 The narrow fix is for the POS to name lots on the invoice line it
 creates, which leaves the general refusal intact; it is a design
 decision rather than a sweep fix.
+
+---
+
+## The inventory forecast, and the orders it drafts
+
+`run_inventory_forecast` decides what every stocked item needs, and
+`create_po_from_suggestions` turns that into documents sent to
+suppliers. A sweep of 64 one-line mutants killed **10** — the worst
+result of this campaign.
+
+The reason is that the two orchestrators had never been tested as
+orchestrators. `inventory_forecast.sql` checks the ARITHMETIC against
+worked examples — safety stock scaling with the root of lead time, empty
+periods counting as zero — and that a suggestion becomes a draft order
+and does not become two. Behind it sits one company, one location, one
+currency, five items all stock-tracked and active, and no purchase
+history at all. So none of the following was observable:
+
+- **Which items are looked at.** A service, a discontinued line and a
+  deleted one were all forecast; an item the buyer had excluded was
+  forecast anyway. Every parameter an item can carry of its own —
+  method, window, alpha, service level, lead time — could be ignored in
+  favour of the company default.
+- **What the position is.** `available = on hand − reserved + on order`,
+  with reserved and on-order nought throughout, so both signs could be
+  flipped; so could the warehouse filter on the stock read.
+- **Where the ladder's lines are.** Three of its comparisons are `<=`
+  where `<` reads the same on every item not sitting exactly on the
+  line, and nothing ever sat on one.
+- **What the order says.** Neither permission check, the run it reads,
+  the date it is expected, the currency, the payment terms, the
+  warehouse on the line, and above all THE PRICE — read from the last
+  purchase, from this supplier by preference, in this currency, not
+  voided, not deleted. Five conditions with no history to get wrong.
+
+`supabase/tests/forecast_order_shapes.sql` is 70 assertions. **60 of 64
+now die.**
+
+#### Standing an item exactly on a line
+
+Three mutants need an item whose available position equals its safety
+stock, its reorder point, or one review period above it. Those figures
+are computed, so the fixture runs once to find out where the lines are,
+sets the shelf to exactly each of them, and runs again.
+
+That only works if the figures are exact. `mean_daily_demand` is stored
+rounded to six places, and a partial first or last bucket makes the mean
+a recurring decimal — so the computed threshold misses the real one by a
+few parts in a million and lands on the wrong side. **The window has to
+be whole buckets**: the run is asked for a Sunday, `history_days` is 69
+rather than 70 (seventy days before a Sunday is another Sunday, which
+leaves a one-day bucket on the front), and demand is five whole weeks of
+one a day against five of nothing — a bucket mean of 3.5, a daily mean
+of exactly 0.5, and a spread that is not nought.
+
+#### Two runs in one transaction have no order
+
+`create_po_from_suggestions` takes the latest forecast with
+`order by r.run_at desc limit 1`, and `run_at` defaults to `now()` —
+the TRANSACTION's clock. Two runs inside one test file share a
+timestamp and the "latest" is then arbitrary, which is how the first
+version of that assertion failed. In the product they are two requests
+minutes apart, so this is a fixture problem rather than a defect; the
+file backdates the first run by an hour to stand in for it.
+
+#### What is left
+
+| Mutant | Status |
+|---|---|
+| the forecast parameters', the stock read's and the price lookup's `org_id` filters | equivalent — each is joined on an item id besides, and an item belongs to one company; the three foreign keys are asserted instead |
+| `app.measured_lead_time` ignored in favour of the settings default | **still alive.** Reaching it needs two complete order → bill → receipt chains so the median has two observations to work from. Worth building; not built here. |
