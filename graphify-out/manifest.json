@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788611222.0767398,
-    "ast_hash": "4ef72eccc958ace9e36e09aba6c0f098",
+    "mtime": 1788612403.6082275,
+    "ast_hash": "b289cfef3b4ce22aba0f66c1fd614afe",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -8000,8 +8000,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/recurring_shapes.sql": {
-    "mtime": 1788530745.3910177,
-    "ast_hash": "517afaab138017b5b42def2d82ed10ac",
+    "mtime": 1788612640.8765693,
+    "ast_hash": "7bdeb9a31a68b7408f6fdd5691c18184",
     "semantic_hash": ""
   },
   "supabase/tests/group_payment_shapes.sql": {
@@ -8197,6 +8197,16 @@
   "supabase/tests/statutory_changeover.sql": {
     "mtime": 1788603501.016598,
     "ast_hash": "a50961b85baad76e846c8cdec1461e96",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0542_a_field_a_company_names_for_itself.sql": {
+    "mtime": 1788612657.6793804,
+    "ast_hash": "f2c9a71c333f5b68b12481a6aa4f1275",
+    "semantic_hash": ""
+  },
+  "supabase/tests/custom_fields.sql": {
+    "mtime": 1788612380.4644325,
+    "ast_hash": "4cd700ef28d81734763b039f50d7110d",
     "semantic_hash": ""
   }
 }

@@ -456,6 +456,12 @@ begin
     v_doc.total_amount, 900);
 
   -- --- the buying side ------------------------------------------------
+  -- 0542: a custom field is defined before it is filled in, the same as
+  -- a company would. The guard refuses a key with no definition behind
+  -- it, because a key nobody named is a typo that sits in the row for
+  -- ever. What this block is about is unchanged: whether the standing
+  -- order carries the cost centre across to the bill it raises.
+  perform public.upsert_custom_field(v_org, 'purchase_document', 'Cost centre');
   insert into public.purchase_documents
     (org_id, doc_type, doc_no, doc_date, due_date, contact_id, currency,
      exchange_rate, status, requires_self_billed, custom_fields)
