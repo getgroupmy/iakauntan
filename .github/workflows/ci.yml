@@ -392,6 +392,7 @@ jobs:
                    supabase/tests/group_trial_balance_shapes.sql \
                    supabase/tests/open_item_import.sql \
                    supabase/tests/opening_trial_balance.sql \
+                   supabase/tests/opening_import_shapes.sql \
                    supabase/tests/opening_stock.sql \
                    supabase/tests/migration_progress.sql \
                    supabase/tests/todos.sql \

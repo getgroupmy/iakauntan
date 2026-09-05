@@ -7142,3 +7142,53 @@ up AFTER calling the roll. It passed against the mutant with `org_id =
 p_org_id` deleted, because a roll that swept every employee on the
 platform still would not have found somebody who did not exist yet.
 Building the other company first is the whole assertion.
+
+---
+
+## Bringing a company's books across
+
+`import_opening_balances` and `import_opening_stock` are how every new
+customer's ledger arrives, and an opening balance that is wrong poisons
+everything posted after it. A sweep of 74 one-line mutants killed 57,
+and what lived was of two kinds.
+
+**Which row the lookup finds.** Both functions match a code from the
+file against the chart or the item list with `lower(x) = lower(y)`, and
+every fixture types the code exactly as it stands on file — so the
+lowering was doing nothing observable, on both sides of the comparison
+and on the duplicate check as well. A migration file is exported from
+somebody else's system: it is the one place in the product where the
+codes were NOT typed by the person who made them, and the case is
+whatever that system used. Nor was the lookup's tenancy tested. With
+`org_id` deleted, a file could name an account, an item or a warehouse
+belonging to another company on the platform and be told it was fine.
+
+**And what counts as already done.** An opening balance is brought in
+once, and the guard that says so is four conditions long: the right
+source, the right source table, posted rather than drafted, and not
+already reversed. Only the last was asserted, because `0525` was written
+for it. A draft opening balance blocking the real one is a migration
+nobody can finish, and a journal filed against the same record from a
+different source is not an opening trial balance at all.
+
+**73 of 74 now die.** One is equivalent: `import_opening_stock` asks
+whether an item has already moved with `m.org_id = p_org_id and
+m.item_id = v_item_id`, and dropping the first condition changes no
+answer, because `stock_movements_item_same_org` holds a movement's item
+to the movement's own company. The constraint is asserted in its place.
+
+#### Two assertions that passed for the wrong reason
+
+Worth recording, because both looked right and neither was.
+
+The duplicate-code check lowers the code on the way INTO the list of
+what has been seen as well as on the way out of it. A file spelling the
+code `fx-1` and then `FX-1` is caught either way — lowering one end is
+enough. It is `FX-1` and then `fx-1` that separates them, so the ORDER
+of the two rows is the whole assertion.
+
+The bank-balance resync is scoped `b.org_id = p_org_id`, and the first
+version of the tenancy test set the neighbouring company's balance to a
+figure nothing could arrive at and then had that company import its own
+books — which moved it legitimately. The company whose figure must not
+move is one that has imported nothing at all.
