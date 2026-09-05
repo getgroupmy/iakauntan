@@ -71,8 +71,14 @@ grant usage on schema public to anon, authenticated, service_role;
 -- sweep in 0498 look like it was closing more than it was.
 alter default privileges for role postgres in schema public
   grant select on tables to anon;
-alter default privileges for role postgres in schema public
-  grant select, insert, update, delete on tables to authenticated;
+-- NOT `authenticated`, and 0536 is why the line that used to be here is
+-- gone. A hosted project gives `authenticated` NO default on a new
+-- table: the grant is written out in the migration beside the policy,
+-- every time, and `table_grants.sql` fails the build when it is not.
+-- Granting it here by default made this machine more generous than CI,
+-- so three tables with read policies and no grants passed every local
+-- run and were caught by CI instead -- which is the wrong way round,
+-- and is the same trap the note above records 0496 falling into.
 alter default privileges for role postgres in schema public
   grant all on tables to service_role;
 alter default privileges for role postgres in schema public

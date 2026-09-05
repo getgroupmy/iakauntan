@@ -67,6 +67,11 @@ comment on table public.ai_providers is
 -- company does for itself, and the list has nothing private in it.
 create policy ai_providers_read on public.ai_providers
   for select to authenticated using (true);
+-- The grant behind the policy. A policy without one is a policy nobody
+-- can reach, and `table_grants.sql` fails the build for it. Reading is
+-- all anybody does to this table from the app: every write goes through
+-- a SECURITY DEFINER function that re-checks who is asking.
+grant select on public.ai_providers to authenticated;
 
 -- ---------------------------------------------------------------------
 -- What each of them will answer to
@@ -104,6 +109,7 @@ comment on table public.ai_models is
 
 create policy ai_models_read on public.ai_models
   for select to authenticated using (true);
+grant select on public.ai_models to authenticated;
 
 create index on public.ai_models (provider_code) where is_active;
 
@@ -170,6 +176,7 @@ comment on table public.org_ai_settings is
 create policy org_ai_settings_read on public.org_ai_settings
   for select to authenticated
   using (app.is_org_member(org_id) or app.is_platform_admin());
+grant select on public.org_ai_settings to authenticated;
 
 -- ---------------------------------------------------------------------
 -- The platform's own choice
