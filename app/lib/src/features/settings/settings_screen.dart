@@ -18,6 +18,7 @@ import 'addresses_card.dart';
 import 'claim_approval_card.dart';
 import 'branches_card.dart';
 import 'chart_of_accounts_card.dart';
+import 'custom_fields_card.dart';
 import 'document_numbering_card.dart';
 import 'chat_card.dart';
 import 'company_card.dart';
@@ -146,6 +147,8 @@ class SettingsScreen extends ConsumerWidget {
                     ExportCard(canAdmin: isAdmin),
                     const SizedBox(height: 16),
                     const ChartOfAccountsCard(),
+                    const SizedBox(height: 16),
+                    const CustomFieldsCard(),
                     const SizedBox(height: 16),
                     _TaxCodesCard(),
                     const SizedBox(height: 16),

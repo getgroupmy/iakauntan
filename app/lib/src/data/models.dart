@@ -185,6 +185,7 @@ class Contact {
     this.payableAccountId,
     this.paymentTermId,
     this.priceLevelId,
+    this.customFields = const {},
     this.isActive = true,
     this.entityType = 'sdn_bhd',
   });
@@ -246,6 +247,11 @@ class Contact {
   /// Which price list this customer buys on. Null falls back to the
   /// organization's default level, and then to the item's list price.
   final String? priceLevelId;
+
+  /// The fields this company added for itself, keyed as
+  /// `custom_fields_def.key`. 0542 gives them definitions and a guard;
+  /// what arrives here has already been held to them.
+  final Map<String, dynamic> customFields;
   final bool isActive;
   final String entityType;
 
@@ -284,6 +290,8 @@ class Contact {
     payableAccountId: j['payable_account_id'] as String?,
     paymentTermId: j['payment_term_id'] as String?,
     priceLevelId: j['price_level_id'] as String?,
+    customFields:
+        Map<String, dynamic>.from((j['custom_fields'] as Map?) ?? const {}),
     isActive: j['is_active'] != false,
     entityType: j['entity_type']?.toString() ?? 'sdn_bhd',
   );
@@ -319,6 +327,7 @@ class Contact {
     payableAccountId: payableAccountId,
     paymentTermId: paymentTermId,
     priceLevelId: priceLevelId,
+    customFields: customFields,
     isActive: isActive,
     entityType: entityType,
   );
@@ -348,6 +357,7 @@ class Contact {
     'receivable_account_id': receivableAccountId,
     'payable_account_id': payableAccountId,
     'price_level_id': priceLevelId,
+    'custom_fields': customFields,
     'is_active': isActive,
     'entity_type': entityType,
   };

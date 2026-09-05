@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788593438.1727364,
-    "ast_hash": "9bb86b251f3d02c6ff386eafedbd7679",
+    "mtime": 1788614280.3841372,
+    "ast_hash": "48f87ce08c7991208c930a6619af5e20",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -105,8 +105,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/models.dart": {
-    "mtime": 1788506514.0594296,
-    "ast_hash": "b462de766e3d8e42f1ae41cc26ce1549",
+    "mtime": 1788614411.0258389,
+    "ast_hash": "b9229f9b6561ce2328e1514527a4a7e8",
     "semantic_hash": ""
   },
   "app/lib/src/data/repository.dart": {
@@ -125,8 +125,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contact_editor.dart": {
-    "mtime": 1788386198.9809585,
-    "ast_hash": "f3ec50069faebfdc64011a342c77ccc8",
+    "mtime": 1788614425.369534,
+    "ast_hash": "6e945808d6e7f4c1d67913d8c0e9630c",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/contacts_screen.dart": {
@@ -290,8 +290,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/settings_screen.dart": {
-    "mtime": 1788495872.707964,
-    "ast_hash": "a311623a06fcfa8f40a8cae2cb92861d",
+    "mtime": 1788614386.5044382,
+    "ast_hash": "62e64d18da2c3759c9d019216fead22b",
     "semantic_hash": ""
   },
   "app/lib/src/features/shared/attachments_card.dart": {
@@ -8207,6 +8207,26 @@
   "supabase/tests/custom_fields.sql": {
     "mtime": 1788612380.4644325,
     "ast_hash": "4cd700ef28d81734763b039f50d7110d",
+    "semantic_hash": ""
+  },
+  "app/lib/src/data/custom_fields_repository.dart": {
+    "mtime": 1788614269.5412896,
+    "ast_hash": "af23474e309084e0ddc017cc0048e26b",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/custom_fields/custom_fields_section.dart": {
+    "mtime": 1788614325.5498328,
+    "ast_hash": "f5c138efb4c419c09b23c767daf0b71b",
+    "semantic_hash": ""
+  },
+  "app/lib/src/features/settings/custom_fields_card.dart": {
+    "mtime": 1788614375.5003493,
+    "ast_hash": "59bcd0015dd760ec09846eb287f18c4b",
+    "semantic_hash": ""
+  },
+  "app/test/custom_fields_section_test.dart": {
+    "mtime": 1788614744.5349479,
+    "ast_hash": "14b9c5d23ad7b9a7a8c656bfad5adc69",
     "semantic_hash": ""
   }
 }

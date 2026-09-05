@@ -11,6 +11,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import '../custom_fields/custom_fields_section.dart';
 import '../../data/ocr_repository.dart';
 import 'scanned_address.dart';
 import 'control_account.dart';
@@ -51,6 +52,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
 
   String _contactType = 'customer';
   String? _priceLevelId;
+  Map<String, dynamic> _customFields = const {};
   bool _creditHold = false;
   String? _receivableAccountId;
   String? _payableAccountId;
@@ -255,6 +257,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
         _payableAccountId = contact.payableAccountId;
         _contactType = contact.contactType;
         _priceLevelId = contact.priceLevelId;
+        _customFields = contact.customFields;
         _entityType = contact.entityType;
         _idType = contact.idType ?? 'BRN';
         _stateCode = contact.stateCode;
@@ -378,6 +381,7 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
     receivableAccountId: _receivableAccountId,
     payableAccountId: _payableAccountId,
     priceLevelId: _priceLevelId,
+    customFields: _customFields,
   );
 
   static String? _nullIfEmpty(String v) => v.trim().isEmpty ? null : v.trim();
@@ -847,6 +851,15 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                           ],
                           onChanged: (v) => setState(() => _priceLevelId = v),
                         ),
+                      // The boxes this company added for itself. It
+                      // renders nothing at all where none are defined,
+                      // which is most companies.
+                      CustomFieldsSection(
+                        entity: 'contact',
+                        values: _customFields,
+                        onChanged: (v) =>
+                            setState(() => _customFields = v),
+                      ),
                       // Only where there is a group to point at. A
                       // company that stands alone has no sister to link
                       // to, and an empty dropdown would be an invitation

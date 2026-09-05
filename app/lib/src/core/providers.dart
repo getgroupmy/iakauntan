@@ -7,6 +7,7 @@ import '../data/corp_models.dart';
 import '../data/corp_repository.dart';
 import '../data/firms_repository.dart';
 import '../data/models.dart';
+import '../data/custom_fields_repository.dart';
 import '../data/ocr_repository.dart';
 import '../data/repository.dart';
 import 'env.dart';
@@ -494,6 +495,32 @@ final recurringDocumentsProvider =
 
 final priceLevelsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).priceLevels();
+});
+
+/// Where a custom field may be attached, and what a lookup may point
+/// at. A platform catalogue that changes only by migration, so it is
+/// read once and kept.
+final customFieldEntitiesProvider =
+    FutureProvider<List<CustomFieldEntity>>((ref) {
+  return requireRepo(ref).customFieldEntities();
+});
+
+/// This company's custom fields for one kind of record, archived ones
+/// included — the setup screen shows both and a form filters.
+final customFieldsProvider = FutureProvider.autoDispose
+    .family<List<CustomFieldDef>, String>((ref, entity) {
+  return requireRepo(ref).customFields(entity);
+});
+
+/// What a lookup field may be filled in with. Read through the same
+/// function the guard's rule is written beside, so the picker cannot
+/// offer a record the database will refuse.
+final customFieldLookupProvider = FutureProvider.autoDispose
+    .family<List<LookupOption>, ({String target, String search})>((ref, args) {
+  return requireRepo(ref).customFieldLookupOptions(
+    args.target,
+    search: args.search.isEmpty ? null : args.search,
+  );
 });
 
 /// Every project with its budget and what has been spent against it.
