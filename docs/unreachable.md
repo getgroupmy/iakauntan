@@ -7570,3 +7570,82 @@ The behavioural half was checked against the old code rather than
 assumed: restoring `withholding_account` to the shape it had fails the
 fixture with *"2145 is alive again rather than posted to while
 retired"*, and 0539 passes it.
+
+---
+
+## `transfer_document`: six mutants that change nothing
+
+A sweep of `public.transfer_document` (98 one-line mutants) left 92
+killed by `supabase/tests/transfer_shapes.sql` and the five files that
+were already exercising it. The six that remain alive are alive because
+the line they change cannot be observed from outside, and each is
+recorded here rather than chased with more fixture.
+
+### The two null-guards after a `select ... into` (P5, P6)
+
+```sql
+select p2.id into v_person
+  from public.contact_persons p1 ... limit 1;
+if not found then v_person := null; end if;
+```
+
+PL/pgSQL assigns NULL to every `INTO` target when the query returns no
+rows, so the guard is already true when it runs. Deleting both lines
+passes every assertion, and would go on passing them. They are a
+statement of intent — *the prospect's own row is never carried onto the
+customer's document* — written where a reader of the next `select` will
+see it, and worth keeping for that. `pos_public_menu_shapes.sql` has the
+same shape for the same reason.
+
+### `valid_until is not null` (E5)
+
+```sql
+and v_sales.valid_until is not null
+and v_sales.valid_until < app.today() then
+```
+
+`null < date` is null, and `if null then` is false, so an offer with no
+end date does not expire whether or not the first line is there. It is
+the second line's precondition written out, and dropping it would leave
+a reader working out three-valued logic to answer *does a quotation with
+no expiry ever expire.* The assertion **"an offer with no end date does
+not expire"** pins the behaviour; the line pins the reason.
+
+### `coalesce` around `transfer_counter` (T1)
+
+`app.transfer_counter` either raises on a transition that is in neither
+cycle or returns one of four counter names — its final `case` has an
+`else`, so it has no null path. Wrapping the call in
+`coalesce(..., 'quantity_invoiced')` is therefore unobservable. The
+refusals are asserted directly (**"a quotation is not a purchase
+order"**, **"nor a delivery note a quotation"**).
+
+### `greatest(v_left, 0)` (Q4)
+
+```sql
+v_want := case when p_lines is null then greatest(v_left, 0)
+               else coalesce(r.asked, 0) end;
+if v_want <= 0 then continue; end if;
+```
+
+`greatest` matters only where `v_left` is negative — a line taken
+forward for more than its own quantity, which the *"Line % has %
+outstanding"* refusal exists to prevent. On a negative `v_left` the two
+readings are `v_want = 0` and `v_want = v_left`, and the very next line
+sends both to `continue`. The clamp is a second lock on a door the
+refusal above already holds shut.
+
+### The zero-quantity divisor (L6)
+
+```sql
+case when r.quantity = 0 then 0
+     else round(r.discount_amount * v_want / r.quantity, 2) end
+```
+
+A source line of quantity nought never reaches this insert: `v_left` is
+nought, so a whole transfer skips it at `if v_want <= 0 then continue`,
+and a named list asking for any quantity of it is refused for asking for
+more than is outstanding. The guard prevents a division by zero on a
+path there is no way in. It stays because the alternative is a
+`division_by_zero` in the middle of somebody's month-end if a future
+change makes that path reachable.

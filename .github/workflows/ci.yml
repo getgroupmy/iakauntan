@@ -375,6 +375,7 @@ jobs:
                    supabase/tests/einvoice_totals_reconcile.sql \
                    supabase/tests/recurring_template_carries_the_document.sql \
                    supabase/tests/transfer_carries_the_price_agreed.sql \
+                   supabase/tests/transfer_shapes.sql \
                    supabase/tests/sst_return_declares_what_was_charged.sql \
                    supabase/tests/stock_value_returns_to_zero.sql \
                    supabase/tests/malaysian_clock.sql \
