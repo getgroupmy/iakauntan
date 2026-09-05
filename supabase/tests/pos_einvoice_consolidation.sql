@@ -108,6 +108,9 @@ declare
   v_ps     date;
   v_pe     date;
   v_msg    text;
+  v_con        uuid;
+  v_again      uuid;
+  v_theirs_con uuid;
 begin
   perform pg_temp.allow_many_companies();
   v_org := pg_temp.test_org('Kedai Konsolidasi Sdn Bhd',
@@ -291,8 +294,9 @@ begin
   -- ------------------------------------------------------------------
   -- Asked for on the fifteenth, which is what a shop does. The period
   -- is the month the date falls in, not the fortnight after it.
-  select r.period_start, r.period_end, r.document_count, r.total_amount, r.added
-    into v_ps, v_pe, v_n, v_a, v_b
+  select r.consolidation_id, r.period_start, r.period_end,
+         r.document_count, r.total_amount, r.added
+    into v_con, v_ps, v_pe, v_n, v_a, v_b
     from public.consolidate_pos_einvoices(v_org, v_start + 14) r;
   perform pg_temp.check_true('the period starts on the first of the month',
     v_ps = v_start);
@@ -324,6 +328,95 @@ begin
   perform pg_temp.check_eq('which still has its own month to file',
     (select count(*)::integer from public.pos_einvoice_outstanding(v_them) o
       where o.period_start = v_start), 1);
+
+  -- ------------------------------------------------------------------
+  -- One consolidation, and only ever its own
+  -- ------------------------------------------------------------------
+  -- A mutation sweep found five conditions here that could be deleted
+  -- with the suite still green, and all five are the same shape: this
+  -- fixture ran ONE consolidation, so there was no second one for the
+  -- function to reach into by mistake. Every `where` that says "this
+  -- one" was untested for want of another.
+  --
+  -- The shop next door has a month of its own, and this shop has last
+  -- month's empty return sitting beside this month's. That is enough.
+  select r.consolidation_id, r.document_count, r.total_amount, r.added
+    into v_theirs_con, v_n, v_a, v_b
+    from public.consolidate_pos_einvoices(v_them, v_start + 14) r;
+  perform pg_temp.check_true(
+    'the shop next door gets a consolidation of its own rather than '
+    'being handed ours -- one month, one company, one submission',
+    v_theirs_con is distinct from v_con);
+  perform pg_temp.check_eq('and it belongs to them',
+    (select c.org_id from public.einvoice_consolidations c
+      where c.id = v_theirs_con), v_them);
+  perform pg_temp.check_eq('holding their one sale', v_n, 1);
+  perform pg_temp.check_eq('for their seventy ringgit', v_a, 70.00);
+
+  -- Now run ours again, with theirs alive beside it. The figures on a
+  -- consolidation are recomputed from its items on every run, and this
+  -- is what says WHOSE items.
+  select r.consolidation_id, r.document_count, r.total_amount, r.added
+    into v_again, v_n, v_a, v_b
+    from public.consolidate_pos_einvoices(v_org, v_start + 14) r;
+  perform pg_temp.check_eq('running the month again is the same submission',
+    v_again, v_con);
+  perform pg_temp.check_eq('with nothing new to add', v_b::integer, 0);
+  perform pg_temp.check_eq(
+    'and it still names two sales, not every sale on the platform',
+    v_n, 2);
+  perform pg_temp.check_eq('for thirty ringgit, not a hundred', v_a, 30.00);
+
+  -- And last month's empty return, which belongs to this same company,
+  -- still says so. This one does NOT kill the mutant that widens the
+  -- totals update to every row of the company -- see the note at the top
+  -- of the file, the subqueries are correlated and each row is rewritten
+  -- with the figures it already had. It is here because a shop files one
+  -- consolidation a month and the two must stay apart.
+  select c.document_count, c.total_amount into v_n, v_a
+    from public.einvoice_consolidations c
+   where c.org_id = v_org and c.period_start = (v_start - interval '1 month')::date;
+  perform pg_temp.check_eq(
+    'last month''s return still names nothing -- a company files one '
+    'consolidation a month, and running one must not restate another',
+    v_n, 0);
+  perform pg_temp.check_eq('and still totals nought', v_a, 0);
+
+  -- ------------------------------------------------------------------
+  -- A return that has been drawn up, and one that has been sent
+  -- ------------------------------------------------------------------
+  -- `submitted` is refused -- that is asserted in `pos.sql`. What was
+  -- never asserted is the other half: `generated` means the document
+  -- has been drawn up but not sent, and a sale that arrives late is
+  -- still allowed into it. Refusing at `generated` would send a shop to
+  -- LHDN with an individual e-Invoice for a teh tarik.
+  update public.einvoice_consolidations set status = 'generated'
+   where id = v_con;
+  select r.consolidation_id, r.document_count
+    into v_again, v_n
+    from public.consolidate_pos_einvoices(v_org, v_start + 14) r;
+  perform pg_temp.check_eq(
+    'a consolidation that has been drawn up but not sent is added to, '
+    'not refused', v_again, v_con);
+  perform pg_temp.check_eq('and still names its two sales', v_n, 2);
+
+  -- ------------------------------------------------------------------
+  -- The count is derived, not kept
+  -- ------------------------------------------------------------------
+  -- The function's own comment says why: "a counter is wrong the moment
+  -- a row is removed". Take a sale out of the return and run it again.
+  -- The sale is unclaimed once more, so it is absorbed once more --
+  -- one added, and still two named. A count that added what it absorbed
+  -- to what it thought it held would say three.
+  delete from public.einvoice_consolidation_items i
+   where i.consolidation_id = v_con and i.sales_document_id = v_spaces;
+  select r.document_count, r.total_amount, r.added into v_n, v_a, v_b
+    from public.consolidate_pos_einvoices(v_org, v_start + 14) r;
+  perform pg_temp.check_eq('a sale put back is one sale added', v_b::integer, 1);
+  perform pg_temp.check_eq(
+    'and the return names two, which is what it holds -- not three, '
+    'which is what it held plus what it just took in', v_n, 2);
+  perform pg_temp.check_eq('for the same thirty ringgit', v_a, 30.00);
 
   -- ------------------------------------------------------------------
   -- Who may file it, and who may look

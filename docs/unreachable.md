@@ -6888,3 +6888,60 @@ waiting. Backdating each in turn is what separates them: one is
 `coalesce`d and must not move, the other is assigned and must. The same
 trick pins the expiry boundary — a second either side cannot tell `<`
 from `<=`, but `expires_at = now()` can.
+
+---
+
+## The group trial balance, and the consolidated e-Invoice run
+
+`report_group_trial_balance` is the number a group's directors read, and
+`consolidate_pos_einvoices` is the return a shop files with LHDN. A
+sweep of 40 one-line mutants across the two killed 19.
+
+What lived was **the arithmetic**, and for one reason: the fixture
+behind the group report posted a single entry in a single company. With
+one row per code there is nothing to add up, so `sum` and `max` return
+the same number, `count(*)` and `count(distinct code)` return the same
+number, `min(name)` and `max(name)` return the same name, and grouping
+by code is indistinguishable from grouping by code and name. **A report
+that showed the largest subsidiary's turnover in place of the group's
+would have passed every assertion in this repository.** Nor was the
+period ever varied: `p_from` and `p_to` were passed through untouched,
+so a report that ignored both and totalled everything up to today read
+exactly the same.
+
+The consolidation had the mirror-image gap. One company, one
+consolidation, one run — so every `where` clause that says *this one*
+was untested for want of a second one to confuse it with.
+
+`supabase/tests/group_trial_balance_shapes.sql` builds two companies
+whose figures deliberately differ (700 against 300, openings of 100
+against 400, one account code carrying two different names), an account
+whose only content is a balance brought forward, a pair of openings that
+cancel across the companies, money that moved before the period and
+money that moved after it. `pos_einvoice_consolidation.sql` gains the
+shop next door's own return, this shop's empty return for last month, a
+consolidation that has been drawn up but not sent, and a sale taken out
+of the return and put back.
+
+**38 of 40 now die.** Both survivors are equivalent.
+
+#### A mutually-masking pair — the eighth this campaign
+
+`report_group_trial_balance` opens with `app.is_org_member(p_org_id)`.
+Deleting it opens nothing: `app.group_orgs` carries the same check, so
+the group comes back empty and the report refuses one line later with
+*this company is not in a group*. Two guards, each hiding the other's
+absence — and only the WORDING tells them apart. A person who belongs to
+another company in the same group is told to go and fix a group
+membership that is perfectly correct.
+
+So the assertion is on the message, through `pg_temp.check_refused`,
+which is the argument for wording two guards on one path differently
+rather than for asserting less.
+
+#### The two equivalents
+
+| Mutant | Why it is equivalent | The rule now asserted |
+|---|---|---|
+| dropping `round(..., 2)` from the group's sums | every figure it adds up has already been rounded to two places by `report_trial_balance`, and `gl_lines` holds sen in `numeric(18,2)` besides | that no figure arriving from `report_trial_balance` has a scale above 2 |
+| widening the totals update from `c.id = v_con` to every consolidation of the company | the two subqueries are correlated on `c.id`, so each row is rewritten with the figures it already had — a wasted update, not a wrong one | already recorded in that file's own header; the fixture keeps the two months' returns apart regardless |

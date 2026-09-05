@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788546869.5607042,
-    "ast_hash": "8efc2436022396087e9e5014d690a58c",
+    "mtime": 1788582363.7812872,
+    "ast_hash": "5721ac2b307517dc50ab8149ba4c72c3",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": ""
   },
   "docs/unreachable.md": {
-    "mtime": 1788544917.933938,
-    "ast_hash": "670eeb6f067ec9c8844033ad4c2ecb4d",
+    "mtime": 1788582382.921081,
+    "ast_hash": "0bdeeeaf5d506f8cd7191f8cc2e2650f",
     "semantic_hash": ""
   },
   "app/lib/src/features/ledger/journal_editor.dart": {
@@ -7620,8 +7620,8 @@
     "semantic_hash": ""
   },
   "supabase/tests/pos_einvoice_consolidation.sql": {
-    "mtime": 1788414265.245215,
-    "ast_hash": "51332c1a2ab1d91bd88d0bda39f43371",
+    "mtime": 1788582197.1800702,
+    "ast_hash": "9aa04afae19b219a0ad485b9778a2f9a",
     "semantic_hash": ""
   },
   "supabase/migrations/0502_a_period_belongs_to_one_company.sql": {
@@ -8037,6 +8037,11 @@
   "app/test/dashboard_views_test.dart": {
     "mtime": 1788580832.1394446,
     "ast_hash": "cac85e2eabac352c0922a0c6444c13be",
+    "semantic_hash": ""
+  },
+  "supabase/tests/group_trial_balance_shapes.sql": {
+    "mtime": 1788582060.3401814,
+    "ast_hash": "ab22bb589b74a4b089d0d2b466c0ae64",
     "semantic_hash": ""
   }
 }
