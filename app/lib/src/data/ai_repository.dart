@@ -18,11 +18,23 @@ import 'repository.dart';
 /// So a console that has lost the key cannot be shown it. That is the
 /// intended answer — the fix is to paste a new one, which is also what
 /// the provider's own console would tell you.
-extension RepoAiProviders on Repo {
+/// ## And it hangs off the platform, not off a company
+///
+/// Every call below names a provider or a model and NOTHING ELSE — not
+/// one of them takes an `orgId`, because the catalogue is the
+/// platform's. It was nevertheless written `on Repo`, which is the
+/// tenant repository and exists only to carry an org id, and the
+/// consequence was that the console's AI providers screen was
+/// unreachable by exactly the person it is for: an operator who belongs
+/// to no company, which `isPlatformAdminProvider` says is the intended
+/// arrangement, got "Your company has not finished loading" and no way
+/// past it. `RepoAiSettings` below is the half that really is one
+/// company's, and it takes the org id as an argument.
+extension PlatformAiProviders on PlatformRepo {
   /// Every provider, with whether a key is on file and when it was set.
   /// Platform staff only; the function refuses anybody else.
   Future<List<Map<String, dynamic>>> aiProviderCatalogue() async =>
-      Repo.rows(await callRpc('platform_ai_providers'));
+      Repo.rows(await client.rpc('platform_ai_providers'));
 
   /// The models on offer, whoever is asking. A catalogue with nothing
   /// private in it, so it is a plain table read rather than an RPC.
@@ -54,7 +66,7 @@ extension RepoAiProviders on Repo {
     String provider,
     String apiKey, {
     String? baseUrl,
-  }) async => await callRpc(
+  }) async => await client.rpc(
     'set_platform_ai_key',
     params: {
       'p_provider': provider,
@@ -64,10 +76,10 @@ extension RepoAiProviders on Repo {
   );
 
   Future<void> clearPlatformAiKey(String provider) async =>
-      await callRpc('clear_platform_ai_key', params: {'p_provider': provider});
+      await client.rpc('clear_platform_ai_key', params: {'p_provider': provider});
 
   Future<void> setPlatformAiDefault(String provider, String model) async =>
-      await callRpc(
+      await client.rpc(
         'set_platform_ai_default',
         params: {'p_provider': provider, 'p_model': model},
       );
@@ -89,7 +101,7 @@ extension RepoAiProviders on Repo {
     bool needsKey = true,
     bool isActive = true,
     int sortOrder = 100,
-  }) async => await callRpc(
+  }) async => await client.rpc(
     'upsert_ai_provider',
     params: {
       'p_code': code,
@@ -119,7 +131,7 @@ extension RepoAiProviders on Repo {
     String? notes,
     bool isActive = true,
     int sortOrder = 100,
-  }) async => await callRpc(
+  }) async => await client.rpc(
     'upsert_ai_model',
     params: {
       'p_provider': provider,

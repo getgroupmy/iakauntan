@@ -256,7 +256,7 @@ class _ProviderCard extends ConsumerWidget {
     if (!sure || !context.mounted) return;
     await runWithFeedback(
       context,
-      action: () => ref.read(repoProvider)!.clearPlatformAiKey(_code),
+      action: () => ref.read(platformRepoProvider).clearPlatformAiKey(_code),
       successMessage: 'Key removed',
     );
     ref.invalidate(aiProviderCatalogueProvider);
@@ -336,7 +336,7 @@ Future<void> _keyIn(
   await runWithFeedback(
     context,
     action: () => ref
-        .read(repoProvider)!
+        .read(platformRepoProvider)
         .setPlatformAiKey(
           '${provider['code']}',
           key.text,
@@ -422,7 +422,7 @@ Future<void> _makeDefault(
   if (saved != true || picked == null || !context.mounted) return;
   await runWithFeedback(
     context,
-    action: () => ref.read(repoProvider)!.setPlatformAiDefault(code, picked!),
+    action: () => ref.read(platformRepoProvider).setPlatformAiDefault(code, picked!),
     successMessage: 'Default saved',
   );
   ref.invalidate(aiProviderCatalogueProvider);
@@ -506,7 +506,7 @@ Future<void> _addModel(
   await runWithFeedback(
     context,
     action: () => ref
-        .read(repoProvider)!
+        .read(platformRepoProvider)
         .upsertAiModel(
           provider,
           id.text.trim(),
@@ -657,7 +657,7 @@ Future<void> _editProvider(
   await runWithFeedback(
     context,
     action: () => ref
-        .read(repoProvider)!
+        .read(platformRepoProvider)
         .upsertAiProvider(
           code.text.trim(),
           name: name.text.trim(),

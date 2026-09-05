@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/providers.dart": {
-    "mtime": 1788614280.3841372,
-    "ast_hash": "48f87ce08c7991208c930a6619af5e20",
+    "mtime": 1788627725.7036767,
+    "ast_hash": "97508ba8f2aa52a939e66a7f8f331e4d",
     "semantic_hash": ""
   },
   "app/lib/src/core/router.dart": {
@@ -1730,8 +1730,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/ocr_repository.dart": {
-    "mtime": 1788327795.6564193,
-    "ast_hash": "e9cba3762c211c4d7e198a767c27afd2",
+    "mtime": 1788627605.9751513,
+    "ast_hash": "ca4b5cb675c0dcfef9bf714f87755c94",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/credit_admin.dart": {
@@ -3620,8 +3620,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/ocr_catalog_admin.dart": {
-    "mtime": 1787233468.7129095,
-    "ast_hash": "a3cb345a91b5581eb1e652b6a7913aec",
+    "mtime": 1788627619.7667289,
+    "ast_hash": "c8227ddc2332dba26d3fb981a2d1f730",
     "semantic_hash": ""
   },
   "supabase/migrations/0242_the_support_address_follows_the_domain.sql": {
@@ -4475,8 +4475,8 @@
     "semantic_hash": ""
   },
   "app/test/platform_console_wiring_test.dart": {
-    "mtime": 1787822945.5065897,
-    "ast_hash": "476eb7c197041c1b084cf19b5eb87449",
+    "mtime": 1788627705.7391021,
+    "ast_hash": "03391f0ed65f31c32c0d460d3c4a09ab",
     "semantic_hash": ""
   },
   "app/test/platform_live_test.dart": {
@@ -8105,13 +8105,13 @@
     "semantic_hash": ""
   },
   "app/lib/src/data/ai_repository.dart": {
-    "mtime": 1788593423.0369947,
-    "ast_hash": "fa545444e44abb282a7f5bdd4bb45f21",
+    "mtime": 1788627605.9747481,
+    "ast_hash": "90371ccba2c1b2e64b18c9cc12e1d18b",
     "semantic_hash": ""
   },
   "app/lib/src/features/admin/ai_providers_admin.dart": {
-    "mtime": 1788593526.9568262,
-    "ast_hash": "54bde67e1574aa20fa59b5b31c5790b2",
+    "mtime": 1788627619.7664745,
+    "ast_hash": "c95a41d9bb7bed8ad1f674712563f155",
     "semantic_hash": ""
   },
   "app/lib/src/features/ai/assistant_settings_sheet.dart": {

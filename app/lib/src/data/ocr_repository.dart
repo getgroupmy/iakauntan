@@ -587,7 +587,11 @@ class OcrException implements Exception {
 /// the tenant settings screen, which is why a company can pick a reader
 /// the app has never heard of. It is only the editing that had no way
 /// in.
-extension RepoOcrCatalog on Repo {
+/// Hangs off the platform and not off a company, for the same reason
+/// the AI catalogue does: a reader is the platform's, neither call
+/// takes an org id, and written `on Repo` this screen refused the
+/// operator it exists for with "Your company has not finished loading".
+extension PlatformOcrCatalog on PlatformRepo {
   /// Every reader, active or not. The platform view rather than the
   /// tenant one: a retired reader still matters to whoever retired it.
   Future<List<Map<String, dynamic>>> ocrProviderCatalog() async => Repo.rows(
@@ -616,7 +620,7 @@ extension RepoOcrCatalog on Repo {
     double? price,
     bool? isActive,
     String? blurb,
-  }) async => await callRpc(
+  }) async => await client.rpc(
     'platform_set_ocr_provider',
     params: {
       'p_code': code,

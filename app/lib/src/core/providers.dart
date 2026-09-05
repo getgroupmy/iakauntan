@@ -2713,7 +2713,7 @@ final posVoidedBillsProvider = FutureProvider.autoDispose
 /// Every OCR reader the platform offers, active or retired.
 final ocrProviderCatalogProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
-      (ref) => requireRepo(ref).ocrProviderCatalog(),
+      (ref) => ref.watch(platformRepoProvider).ocrProviderCatalog(),
     );
 
 /// Every AI provider, with whether a key is on file. Platform staff
@@ -2721,21 +2721,21 @@ final ocrProviderCatalogProvider =
 /// column that could carry a key. 0536.
 final aiProviderCatalogueProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
-      (ref) => requireRepo(ref).aiProviderCatalogue(),
+      (ref) => ref.watch(platformRepoProvider).aiProviderCatalogue(),
     );
 
 /// The provider catalogue as a company sees it: names and addresses,
 /// nothing private. 0536.
 final aiProvidersProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
-      (ref) => requireRepo(ref).aiProviders(),
+      (ref) => ref.watch(platformRepoProvider).aiProviders(),
     );
 
 /// Every model on offer. A table rather than a constant, so a model
 /// that shipped on Tuesday is a row somebody added. 0536.
 final aiModelsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>(
-      (ref) => requireRepo(ref).aiModels(),
+      (ref) => ref.watch(platformRepoProvider).aiModels(),
     );
 
 /// Whether this company's assistant is on, what it will call, and
