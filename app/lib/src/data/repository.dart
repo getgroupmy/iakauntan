@@ -8796,13 +8796,20 @@ extension RepoPos on Repo {
   /// BEFORE the cashier presses Take payment — a serial affordance
   /// offered on every line is noise on the ninety-nine that do not have
   /// one, and offered on none is a sale that refuses at the tender
-  /// sheet with a queue behind it. One foreign key from
-  /// `pos_sale_lines` to `items`, so PostgREST resolves it unaided.
+  /// sheet with a queue behind it.
+  ///
+  /// NAMED, because there are two ways to join. `0520` added
+  /// `pos_sale_lines_item_same_org` — a composite key on (org_id,
+  /// item_id) that holds a line to its own company's items — alongside
+  /// the plain `item_id` one, and PostgREST refuses an unqualified
+  /// embed across two candidates with PGRST201. Caught by
+  /// `scripts/check_embeds.py` in CI, which is where this belongs: the
+  /// ambiguity is a fact about the schema and not about this line.
   Future<List<Map<String, dynamic>>> posSaleLines(String saleId) async =>
       Repo.rows(
         await client
             .from('pos_sale_lines')
-            .select('*, items(tracking)')
+            .select('*, items!pos_sale_lines_item_id_fkey(tracking)')
             .eq('sale_id', saleId)
             .order('line_no'),
       );

@@ -285,9 +285,60 @@ main() {
             | grep -E '^psql.*([Ee][Rr][Rr][Oo][Rr]):' | head -3 || true)
     if [ -n "$out" ]; then echo "FAIL  $f"; echo "$out"; failed=1; fi
   done
-  if [ $failed -eq 0 ]; then
-    echo "all SQL assertions passed ($(echo "$files" | wc -w) files)"
+  if [ $failed -ne 0 ]; then return $failed; fi
+  echo "all SQL assertions passed ($(echo "$files" | wc -w) files)"
+
+  # Only on a full run. Given explicit files, the caller is iterating on
+  # one assertion and does not want five whole-repository scans.
+  if [ $# -eq 0 ]; then
+    schema_checks || failed=1
   fi
+  return $failed
+}
+
+# ---------------------------------------------------------------------
+# The checks that need the client AND the schema in the same room
+# ---------------------------------------------------------------------
+#
+# Five of these run in CI and none of them ran here, which is a gap the
+# four gates could not see: every one of them lives inside a Dart string
+# literal, so `flutter analyze` cannot read it, the widget tests have no
+# database, and the SQL assertions do not know what the client asks for.
+#
+# It cost a red run. `posSaleLines` grew an `items(tracking)` embed for
+# `0546`, the comment beside it said "one foreign key, so PostgREST
+# resolves it unaided", and that was simply wrong -- `0520` added a
+# composite same-org key alongside the plain one, and PostgREST refuses
+# two candidates with PGRST201. `check_embeds.py` says so in one line
+# and takes two seconds, and it said so in CI eight minutes after a push
+# that had passed all four gates.
+#
+# The cluster is already up and already migrated by the time this runs,
+# so the whole set costs seconds. There is no reason for CI to be the
+# first place they are asked.
+schema_checks() {
+  local url="postgresql://postgres@localhost/postgres?host=$PGSOCK&port=$PGPORT"
+  local failed=0 out
+  for script in check_stable_writers check_embeds check_query_columns \
+                check_idempotent_calls; do
+    if [ ! -f "$ROOT/scripts/$script.py" ]; then continue; fi
+    if ! out=$(python3 "$ROOT/scripts/$script.py" "$url" 2>&1); then
+      echo "FAIL  scripts/$script.py"
+      echo "$out" | head -12
+      failed=1
+    fi
+  done
+  # These two read the repository rather than the database, so they need
+  # no url -- and they are just as invisible to the four gates.
+  for script in check_narrow_rows check_blind_catches check_edge_authorization; do
+    if [ ! -f "$ROOT/scripts/$script.py" ]; then continue; fi
+    if ! out=$(python3 "$ROOT/scripts/$script.py" 2>&1); then
+      echo "FAIL  scripts/$script.py"
+      echo "$out" | head -12
+      failed=1
+    fi
+  done
+  if [ $failed -eq 0 ]; then echo "schema and client agree"; fi
   return $failed
 }
 
