@@ -7401,3 +7401,59 @@ that makes the outer check assertable at all: a fixture catching
 `check_violation` cannot tell which of them fired, and one asserting the
 exact sentence can. Where the SSM sweep found guards worth wording
 apart, this one found a pair already worded apart and used it.
+
+## The appraisal guards: whose half of the appraisal is whose
+
+`app.appraisal_change_guard`, `app.appraisal_goal_change_guard`,
+`app.appraisal_part` and `app.appraisal_part_of` decide who may write
+which column of a performance review. A sweep of 75 one-line mutants
+killed **49** — the best opening result of this campaign, and it says
+what it ought to about `appraisals.sql`, which asserts column by column
+that the subject cannot write the manager's half.
+
+What that file has no room for is anybody standing OUTSIDE the two
+halves. Its cast is a manager, the person who reports to them, and the
+owner — who is HR by virtue of owning the place. So the bottom of
+`appraisal_part_of`, where somebody who is neither party and not HR gets
+nothing at all, had never been reached: `return 'hr'` for everybody
+passed every assertion in the file. The same gap covered the scale's
+floor and ceiling on three of the five rating columns, the six-part rule
+that an appraisal opens EMPTY, reopening a half and rewriting it in one
+statement, and the two thirds of a goal's manager half that are not the
+rating — the comment, and what actually happened.
+
+`supabase/tests/appraisal_guard_shapes.sql` is 32 assertions with two
+people the existing file has no room for: **Zul**, a member of the
+company with a login and an employee record who is nobody in this
+appraisal, and **Hana**, who runs HR and has an appraisal of her own.
+**74 of 75 now die.**
+
+### A probe that was not the rule
+
+The first version of `C2` swapped the subject and reviewer lines at the
+top of `appraisal_part_of`, on the theory that it tested the ordering
+the function's own comment states — *somebody who is both HR and the
+person being appraised is the person being appraised*. It does not: that
+swap is invisible unless one person is both the subject and the NAMED
+reviewer of the same appraisal, which the function's next comment
+explains the product avoids. The mutant that tests the stated rule moves
+the `can_manage_hr` check ABOVE the subject check, and that one was
+already being killed by `appraisals.sql`. Worth recording because the
+survivor list looked for a moment like a hole in the rule the comment is
+proudest of, and it was a hole in the probe.
+
+### Equivalent mutants
+
+| Probe | What it changes | Why nothing can see it |
+|---|---|---|
+| `D1` | `appraisal_part` drops `if v_a.id is null then return null` | The early return cannot be observed, because every branch of `appraisal_part_of` falls through for a row of nulls anyway: nobody is an employee of no company, and nobody runs HR at one. The rule is asserted directly — `appraisal_part_of(null, null, null)` is nobody's. |
+
+### The guards refuse before the foreign keys do
+
+Both `if ... is null then raise` checks at the tops of these guards look
+like belt-and-braces over a foreign key, and they are not: a row trigger
+runs before the constraint, so an appraisal naming a cycle that is not
+there is refused by the guard's own sentence rather than by a
+`23503`. That is worth an assertion of its own — the guard says *An
+appraisal belongs to a cycle*, and a fixture asserting the sentence
+proves the guard fired rather than the key.
