@@ -7023,3 +7023,70 @@ Nothing in the app writes `accumulated_depreciation` today — there is no
 field for it on the asset editor — so this is reachable only by writing
 the column directly. It becomes a real problem the day an asset importer
 lands, which is the reason for writing it down now.
+
+---
+
+## The statutory calendar: what SSM is owed, and when
+
+Seven functions carry the Companies Act's dates — `app.corp_fye`,
+`corp_open_filing`, `corp_mark_lodged`, `corp_upcoming_filings`,
+`fs_deadlines`, `app.fs_lodge_by` and `report_fs_deadlines`. A sweep of
+69 one-line mutants killed 50. What lived was of three kinds.
+
+**The financial year end itself.** `app.corp_fye` is four nested date
+functions turning "our year ends on the 31st of February" into a date
+that exists, and nothing had ever called it directly. Every test reaches
+it through `corp_upcoming_filings` with a year end of 31 December —
+the one date on which `least(day, days-in-month)` and `greatest(...)`
+agree, and on which a missing day and a day of 31 are the same day. A
+company whose year ends in February is what tells them apart.
+
+**What a refusal says.** Four guards on `corp_open_filing` and five on
+`corp_mark_lodged` are each followed by another that raises for a
+different reason, so deleting the first one still refused and the
+assertion still passed. A filing that does not exist was refused with
+"not permitted" — which sends a secretary to ask for permission she
+already has. Every refusal in the new file is asserted on its message.
+
+**What happens to a filing that is already done.** Opening a filing
+twice is ordinary; the same event gets noticed again. The second call
+must not put a lodged return back into preparation, and marking one
+filing lodged must not mark the practice's others. Neither was asserted,
+because the fixture held one filing.
+
+**66 of 69 now die.** Three are equivalent.
+
+#### A ninth masking pair — this one a subsumption
+
+`corp_upcoming_filings` keeps `d.trigger_date >= e.incorporated_on`
+inside `year_ends`, and `c.trigger_date > (select incorporated_on)` in
+the outer `where`. The second is strictly the stronger of the two, so
+deleting the first changes no answer at all — unlike the mutual pairs
+earlier in this campaign, where each hid the other. What separates them
+is a company whose year end falls exactly ON the day it was
+incorporated, and only the outer guard decides that one. The fixture
+builds it: a company incorporated on 30 June with a 30 June year end did
+not trade for a year that lasted no days.
+
+#### And two dead arms, named so a reader need not work them out
+
+| Mutant | Why it is equivalent | The rule now asserted |
+|---|---|---|
+| `trigger_kind in ('fye', 'agm')` narrowed to `('fye')` | no filing type in the catalogue has kind `'agm'` — the annual general meeting is filed under `'fye'`, because it is the year end that triggers it | that no filing type is triggered by an AGM, and that several are triggered by the year end |
+| `coalesce(v_public, false)` in `fs_deadlines` | `organizations.entity_type` is NOT NULL and `fs_filings.org_id` is a foreign key to it, so the lookup always finds a row and always answers true or false | both of those, read off the catalogue |
+
+#### A note on building a date test that holds every day of the year
+
+The 365-day floor on year-end filings cannot be reached with the Act's
+own 180 and 210 days: the generator offers only last year's year end and
+this year's, and last year's deadline lands inside the window on most
+days of the year. Anchoring the fixture on "today minus something"
+produces a test that passes in September and fails in February.
+
+What works is a company whose year ends on **1 January** and a filing
+type due **one day before** its own year end. Last year's deadline is
+then 31 December of the year before that — always more than a year ago —
+and this year's is 31 December of last year, the last day of the
+twelve-month window and so always inside it. Neither depends on when CI
+runs. The filing type is not a real form, and the file says so: what is
+being asserted is the report's floor, not the Act.
