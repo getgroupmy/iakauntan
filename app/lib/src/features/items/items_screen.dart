@@ -12,6 +12,7 @@ import '../../core/widgets.dart';
 import '../../data/models.dart';
 import '../custom_fields/custom_fields_section.dart';
 import '../../data/repository.dart';
+import '../settings/tax_code_dialog.dart';
 import 'item_categories.dart';
 import 'item_categories_dialog.dart';
 import 'item_prices_dialog.dart';
@@ -360,7 +361,6 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final taxCodes = ref.watch(taxCodesProvider).value ?? const <TaxCode>[];
     final modules = ref.watch(enabledModulesProvider).value ?? const <String>{};
     final uoms = ref.watch(_uomProvider).value ?? const [];
     final classifications =
@@ -479,17 +479,11 @@ class _ItemDialogState extends ConsumerState<_ItemDialog> {
                   },
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
+                TaxCodePicker(
                   value: _salesTaxCodeId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Sales tax code'),
-                  items: [
-                    for (final t in taxCodes)
-                      DropdownMenuItem(
-                        value: t.id,
-                        child: Text('${t.code} — ${t.name}'),
-                      ),
-                  ],
+                  label: 'Sales tax code',
+                  allowEmpty: true,
+                  emptyLabel: 'The company default',
                   onChanged: (v) => setState(() => _salesTaxCodeId = v),
                 ),
                 const SizedBox(height: 12),

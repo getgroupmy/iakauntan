@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -196,25 +197,27 @@ class _MappingDialogState extends ConsumerState<_MappingDialog> {
                     style: Theme.of(ctx).textTheme.bodySmall,
                   ),
                   const SizedBox(height: Space.md),
-                  DropdownButtonFormField<String?>(
+                  // Typed into rather than scrolled: the MBRS taxonomy
+                  // is long, and somebody looking for "Trade
+                  // receivables" should type it rather than read the
+                  // whole of it. Reference data, so no offer to add
+                  // one — an element SSM does not publish is an
+                  // element SSM will not accept.
+                  SearchablePicker<String>(
                     key: const ValueKey('fs-element'),
-                    value: value,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Reports as'),
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('The default for its subtype'),
-                      ),
+                    options: [
                       for (final e in elements)
-                        DropdownMenuItem<String?>(
-                          value: e['code'] as String?,
-                          child: Text(
-                            '${e['label'] ?? e['code']}',
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                        PickerOption<String>(
+                          value: '${e['code']}',
+                          label: '${e['label'] ?? e['code']}',
+                          sublabel: '${e['code']}',
+                          keywords: ['${e['code']}'],
                         ),
                     ],
+                    value: value,
+                    label: 'Reports as',
+                    allowEmpty: true,
+                    emptyLabel: 'The default for its subtype',
                     onChanged: (v) => setLocal(() => value = v),
                   ),
                 ],

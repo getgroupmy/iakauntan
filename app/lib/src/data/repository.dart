@@ -937,22 +937,33 @@ class Repo {
   /// `is_default` is set through [setDefaultTaxCode] rather than here,
   /// because making one default means unmaking another and that is one
   /// operation, not two.
-  Future<void> createTaxCode({
+  ///
+  /// Returns the new row's id. A picker that offered "add a tax code"
+  /// has to select what was just added, and it cannot find it by name:
+  /// two codes may share one.
+  Future<String> createTaxCode({
     required String code,
     required String name,
     required double rate,
     String taxTypeCode = '06',
     bool isExempt = false,
     String? exemptionReason,
-  }) => client.from('tax_codes').insert({
-    'org_id': orgId,
-    'code': code,
-    'name': name,
-    'rate': rate,
-    'tax_type_code': taxTypeCode,
-    'is_exempt': isExempt,
-    'exemption_reason': exemptionReason,
-  });
+  }) async {
+    final row = await client
+        .from('tax_codes')
+        .insert({
+          'org_id': orgId,
+          'code': code,
+          'name': name,
+          'rate': rate,
+          'tax_type_code': taxTypeCode,
+          'is_exempt': isExempt,
+          'exemption_reason': exemptionReason,
+        })
+        .select('id')
+        .single();
+    return row['id'] as String;
+  }
 
   Future<void> updateTaxCode(
     String id, {

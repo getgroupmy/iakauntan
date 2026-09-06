@@ -8,6 +8,8 @@ import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/pdf_kit.dart' show LetterheadMode;
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -826,30 +828,54 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                       // Only for customers: a price level is what we
                       // charge, not what a supplier charges us.
                       if (_contactType != 'supplier')
-                        DropdownButtonFormField<String?>(
-                          value: _priceLevelId,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Price level',
-                            helperText: 'What this customer is quoted',
-                          ),
-                          items: [
-                            const DropdownMenuItem(
-                              value: null,
-                              child: Text('Standard'),
-                            ),
-                            for (final l
-                                in ref.watch(priceLevelsProvider).value ??
-                                    const [])
-                              DropdownMenuItem(
-                                value: l['id'] as String,
-                                child: Text(
-                                  l['name'] as String,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                        Builder(
+                          builder: (context) {
+                            final levels =
+                                ref.watch(priceLevelsProvider).value ??
+                                const <Map<String, dynamic>>[];
+                            return SearchablePicker<String>(
+                              options: [
+                                for (final l in levels)
+                                  PickerOption<String>(
+                                    value: l['id'] as String,
+                                    label: l['name'] as String,
+                                    keywords: [
+                                      if (l['code'] != null) '${l['code']}',
+                                    ],
+                                  ),
+                              ],
+                              value: levels.any((l) => l['id'] == _priceLevelId)
+                                  ? _priceLevelId
+                                  : null,
+                              label: 'Price level',
+                              helperText: 'What this customer is quoted',
+                              allowEmpty: true,
+                              emptyLabel: 'Standard',
+                              createLabel: 'Add price level',
+                              onCreate: (typed) => quickAdd(
+                                context,
+                                title: 'New price level',
+                                blurb: 'Not on the list yet. Prices for it '
+                                    'are set on each item.',
+                                nameHint: 'Wholesale',
+                                codeLabel: 'Code',
+                                seed: typed,
+                                save: ({required name, code}) async {
+                                  final id = await ref
+                                      .read(repoProvider)!
+                                      .createQuickRow(
+                                        QuickAddList.priceLevel,
+                                        name: name,
+                                        code: code,
+                                      );
+                                  ref.invalidate(priceLevelsProvider);
+                                  return id;
+                                },
                               ),
-                          ],
-                          onChanged: (v) => setState(() => _priceLevelId = v),
+                              onChanged: (v) =>
+                                  setState(() => _priceLevelId = v),
+                            );
+                          },
                         ),
                       // The boxes this company added for itself. It
                       // renders nothing at all where none are defined,
@@ -873,38 +899,41 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
                       if ((ref.watch(groupCompaniesProvider).value ?? const [])
                           .where((o) => o['is_current'] != true)
                           .isNotEmpty)
-                        DropdownButtonFormField<String?>(
-                          value: _linkedOrgId,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Company in this group',
-                            helperText:
-                                'Links trading with a sister company so it '
-                                'can be eliminated on consolidation',
-                          ),
-                          items: [
-                            const DropdownMenuItem(
-                              value: null,
-                              child: Text('Not a group company'),
-                            ),
+                        Builder(
+                          builder: (context) {
                             // `my_group_companies` includes the company
                             // you are standing in, flagged is_current.
                             // A contact of this company standing for
                             // this company is not a thing, so it is not
                             // offered.
-                            for (final o
-                                in (ref.watch(groupCompaniesProvider).value ??
-                                        const [])
-                                    .where((o) => o['is_current'] != true))
-                              DropdownMenuItem(
-                                value: o['org_id'] as String?,
-                                child: Text(
-                                  '${o['name']}',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                          ],
-                          onChanged: (v) => setState(() => _linkedOrgId = v),
+                            final sisters =
+                                (ref.watch(groupCompaniesProvider).value ??
+                                        const <Map<String, dynamic>>[])
+                                    .where((o) => o['is_current'] != true)
+                                    .toList();
+                            return SearchablePicker<String>(
+                              options: [
+                                for (final o in sisters)
+                                  PickerOption<String>(
+                                    value: '${o['org_id']}',
+                                    label: '${o['name']}',
+                                  ),
+                              ],
+                              value: sisters.any(
+                                (o) => '${o['org_id']}' == _linkedOrgId,
+                              )
+                                  ? _linkedOrgId
+                                  : null,
+                              label: 'Company in this group',
+                              helperText:
+                                  'Links trading with a sister company so it '
+                                  'can be eliminated on consolidation',
+                              allowEmpty: true,
+                              emptyLabel: 'Not a group company',
+                              onChanged: (v) =>
+                                  setState(() => _linkedOrgId = v),
+                            );
+                          },
                         ),
                       // Only on a saved contact: a person or an address
                       // needs a contact_id to hang off, and there isn't
@@ -946,21 +975,27 @@ class _ContactEditorState extends ConsumerState<ContactEditor> {
     final current = receivable ? _receivableAccountId : _payableAccountId;
     return Padding(
       padding: const EdgeInsets.only(top: 14),
-      child: DropdownButtonFormField<String?>(
-        value: choices.any((a) => a.id == current) ? current : null,
-        isExpanded: true,
-        decoration: InputDecoration(
-          labelText: receivable ? 'Receivable account' : 'Payable account',
-          helperText: 'Leave it alone unless this one is kept apart',
-        ),
-        items: [
-          const DropdownMenuItem(
-            value: null,
-            child: Text(kDefaultControlAccount),
-          ),
+      child: SearchablePicker<String>(
+        options: [
           for (final a in choices)
-            DropdownMenuItem(value: a.id, child: Text('${a.code} — ${a.name}')),
+            PickerOption<String>(
+              value: a.id,
+              label: '${a.code} — ${a.name}',
+              // The number is what an accountant knows the account by,
+              // and it is already in the label; the name is there for
+              // everybody else. Both are searched either way.
+              keywords: [a.code, a.name],
+            ),
         ],
+        value: choices.any((a) => a.id == current) ? current : null,
+        label: receivable ? 'Receivable account' : 'Payable account',
+        helperText: 'Leave it alone unless this one is kept apart',
+        allowEmpty: true,
+        emptyLabel: kDefaultControlAccount,
+        // No offer to add one. A control account is not something to
+        // conjure mid-contact: it has a number in a numbered chart, a
+        // type, and a place in the statements, and the Chart of
+        // accounts screen is where all three are decided.
         onChanged: (v) => setState(
           () => receivable ? _receivableAccountId = v : _payableAccountId = v,
         ),

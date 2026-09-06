@@ -20,6 +20,7 @@ import '../shared/doc_scanner.dart';
 import '../shared/receipt_capture.dart';
 import '../shared/scan_intake.dart';
 import '../shared/scan_result_dialog.dart';
+import '../settings/tax_code_dialog.dart';
 
 /// Photograph a receipt, then finish what the paper could not say.
 ///
@@ -414,7 +415,6 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
         .where((a) => a.accountType == 'expense' && !a.isGroup)
         .toList();
     final banks = ref.watch(bankAccountsProvider).value ?? const [];
-    final taxCodes = ref.watch(taxCodesProvider).value ?? const <TaxCode>[];
     final modes = ref.watch(paymentModesProvider).value ?? const [];
 
     final ocr = ref.watch(ocrStatusProvider).valueOrNull ?? OcrSettings.off;
@@ -544,21 +544,10 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: DropdownButtonFormField<String>(
+                    child: TaxCodePicker(
                       value: _taxCodeId,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Tax'),
-                      items: [
-                        for (final t in taxCodes)
-                          DropdownMenuItem(
-                            value: t.id,
-                            child: Text(
-                              t.rate == 0
-                                  ? t.code
-                                  : '${t.code} (${Fmt.percent(t.rate)})',
-                            ),
-                          ),
-                      ],
+                      label: 'Tax',
+                      allowEmpty: true,
                       onChanged: (v) => setState(() => _taxCodeId = v),
                     ),
                   ),

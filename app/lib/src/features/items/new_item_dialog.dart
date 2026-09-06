@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
 import '../../data/models.dart';
+import '../settings/tax_code_dialog.dart';
 
 /// Create an item without leaving the line you were typing.
 ///
@@ -67,7 +68,6 @@ class _NewItemDialogState extends ConsumerState<NewItemDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final taxCodes = ref.watch(taxCodesProvider).valueOrNull ?? const <TaxCode>[];
 
     return AlertDialog(
       title: const Text('New item'),
@@ -158,20 +158,10 @@ class _NewItemDialogState extends ConsumerState<NewItemDialog> {
                 },
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String?>(
+              TaxCodePicker(
                 value: _taxCodeId,
-                decoration: const InputDecoration(labelText: 'Sales tax'),
-                items: [
-                  const DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('None'),
-                  ),
-                  for (final code in taxCodes)
-                    DropdownMenuItem<String?>(
-                      value: code.id,
-                      child: Text('${code.code} — ${code.name}'),
-                    ),
-                ],
+                label: 'Sales tax',
+                allowEmpty: true,
                 onChanged: (v) => setState(() => _taxCodeId = v),
               ),
               if (_error != null) ...[

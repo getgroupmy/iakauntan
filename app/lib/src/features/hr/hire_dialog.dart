@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/quick_add_dialog.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -167,6 +169,25 @@ class _HireDialogState extends ConsumerState<_HireDialog> {
                     (d['id'] as String, d['name']?.toString() ?? ''),
                 ],
                 enabled: !_saving,
+                createLabel: 'Add department',
+                onCreate: (typed) => quickAdd(
+                  context,
+                  title: 'New department',
+                  blurb: 'Not on the list yet. The head of it and the '
+                      'cost centre are set on the Departments screen.',
+                  nameHint: 'Finance',
+                  codeLabel: 'Code',
+                  seed: typed,
+                  save: ({required name, code}) async {
+                    final id = await ref.read(repoProvider)!.createQuickRow(
+                          QuickAddList.department,
+                          name: name,
+                          code: code,
+                        );
+                    ref.invalidate(departmentsProvider);
+                    return id;
+                  },
+                ),
                 onChanged: (v) => setState(() => _departmentId = v),
               ),
               const SizedBox(height: Space.md),
@@ -276,6 +297,14 @@ class _HireDialogState extends ConsumerState<_HireDialog> {
   }
 }
 
+/// One of the three lists a hire is filed under.
+///
+/// All three grow with the company — a department, a position, and
+/// every colleague who could be somebody's manager — so all three are
+/// typed into rather than scrolled. [onCreate] is passed only where the
+/// list is one two questions can extend: a department is a name and a
+/// code, a position is a job description, and a colleague is a person
+/// who has to be hired before they can manage anyone.
 class _Pick extends StatelessWidget {
   const _Pick({
     required this.label,
@@ -283,6 +312,8 @@ class _Pick extends StatelessWidget {
     required this.options,
     required this.enabled,
     required this.onChanged,
+    this.onCreate,
+    this.createLabel = 'Add',
   });
 
   final String label;
@@ -290,20 +321,24 @@ class _Pick extends StatelessWidget {
   final List<(String, String)> options;
   final bool enabled;
   final ValueChanged<String?> onChanged;
+  final Future<String?> Function(String typed)? onCreate;
+  final String createLabel;
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      value: value,
-      isExpanded: true,
-      decoration: InputDecoration(labelText: label),
-      items: [
-        const DropdownMenuItem(value: null, child: Text('—')),
+    return SearchablePicker<String>(
+      options: [
         for (final (id, name) in options)
-          DropdownMenuItem(
-              value: id, child: Text(name, overflow: TextOverflow.ellipsis)),
+          PickerOption<String>(value: id, label: name),
       ],
-      onChanged: enabled ? onChanged : null,
+      value: options.any((o) => o.$1 == value) ? value : null,
+      label: label,
+      enabled: enabled,
+      allowEmpty: true,
+      emptyLabel: 'Not said',
+      onCreate: onCreate,
+      createLabel: createLabel,
+      onChanged: onChanged,
     );
   }
 }

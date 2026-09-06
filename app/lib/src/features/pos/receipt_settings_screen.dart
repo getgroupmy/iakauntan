@@ -5,6 +5,7 @@ import '../../core/providers.dart';
 import '../../core/widgets.dart';
 import '../../data/repository.dart';
 import 'receipt_view.dart';
+import '../settings/tax_code_dialog.dart';
 
 /// What goes on the paper, chosen by the shop.
 ///
@@ -417,7 +418,6 @@ class _ServiceCharge extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final codes = ref.watch(taxCodesProvider).valueOrNull ?? const [];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -440,23 +440,10 @@ class _ServiceCharge extends ConsumerWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: DropdownButtonFormField<String?>(
-                value: codes.any((c) => c.id == taxCodeId) ? taxCodeId : null,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Tax on the charge',
-                ),
-                items: [
-                  const DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('None'),
-                  ),
-                  for (final c in codes)
-                    DropdownMenuItem<String?>(
-                      value: c.id,
-                      child: Text('${c.code} — ${c.name}'),
-                    ),
-                ],
+              child: TaxCodePicker(
+                value: taxCodeId,
+                label: 'Tax on the charge',
+                allowEmpty: true,
                 onChanged: onTaxCode,
               ),
             ),

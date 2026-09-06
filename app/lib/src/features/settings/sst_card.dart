@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -252,27 +253,27 @@ class _SstDialogState extends ConsumerState<_SstDialog> {
                   ),
                 ),
                 const SizedBox(height: Space.md),
-                DropdownButtonFormField<String>(
+                SearchablePicker<String>(
                   key: const ValueKey('sst-code'),
-                  isExpanded: true,
-                  value: _code,
-                  decoration: const InputDecoration(
-                    labelText: 'New lines default to',
-                    // Said here because it is the decision this dialog
-                    // exists for, and getting it wrong is a wrong number
-                    // on every invoice from here on.
-                    helperText:
-                        'Service tax and sales tax are separate '
-                        'registrations — pick the one you registered for',
-                  ),
-                  items: [
+                  options: [
                     for (final c in codes)
-                      DropdownMenuItem(
+                      PickerOption<String>(
                         value: c.code,
-                        child: Text('${c.code} · ${c.name}'),
+                        label: c.code,
+                        sublabel: c.name,
+                        keywords: [c.name, Fmt.percent(c.rate)],
                       ),
                   ],
-                  onChanged: _saving ? null : (v) => setState(() => _code = v),
+                  value: codes.any((c) => c.code == _code) ? _code : null,
+                  label: 'New lines default to',
+                  // Said here because it is the decision this dialog
+                  // exists for, and getting it wrong is a wrong number
+                  // on every invoice from here on.
+                  helperText:
+                      'Service tax and sales tax are separate '
+                      'registrations — pick the one you registered for',
+                  enabled: !_saving,
+                  onChanged: (v) => setState(() => _code = v),
                 ),
               ] else
                 Padding(

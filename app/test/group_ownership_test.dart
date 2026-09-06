@@ -64,8 +64,9 @@ void main() {
   /// is not the claim. `DropdownButton` builds all of its items into the
   /// tree whether the menu is open or shut, so this asks the precise
   /// question — is this company offered as a possible owner.
-  Finder menuItem(String label) =>
-      find.widgetWithText(DropdownMenuItem<String?>, label);
+  // The owner is chosen from a `SearchablePicker`, whose rows are
+  // `ListTile`s in an overlay rather than menu items.
+  Finder menuItem(String label) => find.widgetWithText(ListTile, label);
 
   final unrecorded = [
     company('a', 'Kabeer Holdings Sdn Bhd', current: true),
