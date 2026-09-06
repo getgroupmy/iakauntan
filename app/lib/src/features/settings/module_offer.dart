@@ -27,9 +27,44 @@ String moduleOfferLine({required bool canAdmin}) => canAdmin
 /// The chip: what it is, and what it costs. A module with no price is
 /// shown by name alone rather than as "RM 0.00/mo", which reads like a
 /// mistake.
-String moduleChipLabel(ModuleSurface m) => m.monthlyPrice > 0
-    ? '${m.name} · ${Fmt.money(m.monthlyPrice)}/mo'
-    : m.name;
+///
+/// A promotion (0548) is priced on the chip rather than announced
+/// there: "free for 30 days" is what somebody is deciding about, and a
+/// chip is not wide enough to also carry the promotion's name and the
+/// price it replaced. Those are in [modulePromoNote], under the list,
+/// and in the confirmation.
+String moduleChipLabel(ModuleSurface m) {
+  if (m.promoKind == 'trial' && (m.promoDays ?? 0) > 0) {
+    return '${m.name} · free for ${m.promoDays} days';
+  }
+  if (m.promotion != null && m.isFreeNow) return '${m.name} · free';
+  return m.price > 0 ? '${m.name} · ${Fmt.money(m.price)}/mo' : m.name;
+}
+
+/// The sentence under a chip whose price is not the price list's.
+///
+/// Null when there is no promotion, which is the caller's cue to draw
+/// nothing rather than an empty line. A discount nobody can see the
+/// old price beside is not a discount; it is just a number.
+String? modulePromoNote(ModuleSurface m) {
+  final name = m.promotion;
+  if (name == null) return null;
+  final until = m.promoUntil == null ? '' : ', until ${Fmt.date(m.promoUntil)}';
+  if (m.promoKind == 'trial' && (m.promoDays ?? 0) > 0) {
+    return m.monthlyPrice > 0
+        ? '$name: the first ${m.promoDays} days are free, then '
+              '${Fmt.money(m.monthlyPrice)} a month.'
+        : '$name: free for the first ${m.promoDays} days.';
+  }
+  if (m.isFreeNow) {
+    return m.monthlyPrice > 0
+        ? '$name: nothing to pay$until, instead of '
+              '${Fmt.money(m.monthlyPrice)} a month.'
+        : '$name: nothing to pay$until.';
+  }
+  return '$name: ${Fmt.money(m.price)} a month$until, instead of '
+      '${Fmt.money(m.monthlyPrice)}.';
+}
 
 String addModuleTitle(ModuleSurface m) => 'Add ${m.name}?';
 
@@ -37,11 +72,31 @@ String addModuleTitle(ModuleSurface m) => 'Add ${m.name}?';
 /// is on the way in rather than on the invoice afterwards — and so is
 /// the fact that it can be taken off again, because a charge somebody
 /// believes is permanent is a charge they will not risk.
-String addModulePrompt(ModuleSurface m) => m.monthlyPrice > 0
-    ? 'It is on straight away, and ${Fmt.money(m.monthlyPrice)} a month '
-          'is added to this company from today. You can take it off '
-          'again here whenever you like.'
-    : 'It is on straight away, and you can take it off again here.';
+///
+/// A trial says both numbers. "Free for 30 days" on its own is the
+/// half of the sentence that sells; the half that stops a complaint on
+/// day thirty-one is what happens after it.
+String addModulePrompt(ModuleSurface m) {
+  const off = 'You can take it off again here whenever you like.';
+  if (m.promoKind == 'trial' && (m.promoDays ?? 0) > 0 && m.monthlyPrice > 0) {
+    return 'It is on straight away. The first ${m.promoDays} days are free '
+        '(${m.promotion}), and ${Fmt.money(m.monthlyPrice)} a month is '
+        'added to this company after that. $off';
+  }
+  if (m.promotion != null && m.isFreeNow) {
+    return 'It is on straight away and costs nothing'
+        '${m.promoUntil == null ? '' : ' until ${Fmt.date(m.promoUntil)}'} '
+        '(${m.promotion}). $off';
+  }
+  if (m.price > 0) {
+    final instead = m.promotion == null
+        ? ''
+        : ' — ${m.promotion}, instead of ${Fmt.money(m.monthlyPrice)}';
+    return 'It is on straight away, and ${Fmt.money(m.price)} a month '
+        'is added to this company from today$instead. $off';
+  }
+  return 'It is on straight away, and you can take it off again here.';
+}
 
 /// The confirmation for taking a paid add-on off again.
 ///
@@ -53,8 +108,13 @@ String addModulePrompt(ModuleSurface m) => m.monthlyPrice > 0
 /// with it.
 String removeModuleTitle(ModuleSurface m) => 'Remove ${m.name}?';
 
-String removeModulePrompt(ModuleSurface m) => m.monthlyPrice > 0
-    ? 'The screens go, and ${Fmt.money(m.monthlyPrice)} a month stops '
+///
+/// The price named is what they are actually paying, not what the
+/// price list says: telling somebody on a free trial that "RM 39.00 a
+/// month stops being charged" is telling them they are saving money
+/// they were never spending.
+String removeModulePrompt(ModuleSurface m) => m.price > 0
+    ? 'The screens go, and ${Fmt.money(m.price)} a month stops '
           'being charged from today— this month is billed for the days '
           'it was on. Nothing already recorded is deleted, and you can '
           'add it again here.'

@@ -298,6 +298,7 @@ jobs:
                    supabase/tests/demo_shop_and_factory.sql \
                    supabase/tests/module_self_service.sql \
                    supabase/tests/module_subscription.sql \
+                   supabase/tests/module_promotions.sql \
                    supabase/tests/customer_portal.sql \
                    supabase/tests/customer_portal_shapes.sql \
                    supabase/tests/document_history.sql \

@@ -317,13 +317,25 @@ begin
   --
   -- MUTANT: `coalesce(p_within_days, 60)` -> 7, and the window dropped
   -- entirely.
+  -- The six months come off FIRST, and the days after.
+  --
+  -- Written the other way round -- today, plus the days, minus thirty,
+  -- minus six months -- two fixtures a day apart can land on the same
+  -- year end, because subtracting six months from the 29th, 30th or
+  -- 31st of a month clamps to the end of a shorter one. On 7 September
+  -- 2026 the twenty-day fixture (28 August) and the twenty-one-day one
+  -- (29 August) both became 28 February, and `fs_filings` has a unique
+  -- key on (org_id, fy_end): the file died on a duplicate key, on that
+  -- day only, with nothing wrong in the code it tests. Taking the
+  -- months off today first leaves only exact day arithmetic between
+  -- the fixtures, which cannot collide.
   v_soon := pg_temp.fd_filing(v_org,
-    (app.today() + interval '20 days' - interval '30 days'
-                 - interval '6 months')::date);
+    (app.today() - interval '6 months' - interval '30 days'
+                 + interval '20 days')::date);
   -- Due in a hundred and twenty days: outside both.
   v_far := pg_temp.fd_filing(v_org,
-    (app.today() + interval '120 days' - interval '30 days'
-                 - interval '6 months')::date);
+    (app.today() - interval '6 months' - interval '30 days'
+                 + interval '120 days')::date);
 
   perform pg_temp.check_eq('a filing due in twenty days is on the list',
     (select count(*) from public.report_fs_deadlines(v_org) f
@@ -345,8 +357,8 @@ begin
 
   -- MUTANT: `f.status <> 'lodged'` -> true.
   v_done := pg_temp.fd_filing(v_org,
-    (app.today() + interval '21 days' - interval '30 days'
-                 - interval '6 months')::date);
+    (app.today() - interval '6 months' - interval '30 days'
+                 + interval '21 days')::date);
   update public.fs_filings set status = 'lodged',
     lodged_on = app.today() where id = v_done;
   perform pg_temp.check_eq('a filing already lodged is off the list',
@@ -358,8 +370,8 @@ begin
   -- report.
   v_other := pg_temp.fd_org('Firma Lain Sdn Bhd');
   perform pg_temp.fd_filing(v_other,
-    (app.today() + interval '20 days' - interval '30 days'
-                 - interval '6 months')::date);
+    (app.today() - interval '6 months' - interval '30 days'
+                 + interval '20 days')::date);
   perform pg_temp.check_eq('and another company''s filings are not on it',
     (select count(*) from public.report_fs_deadlines(v_org) f
       join public.fs_filings x on x.id = f.filing_id
@@ -383,11 +395,11 @@ begin
   -- something that is not the displayed name at all. The list is a work
   -- queue; the nearest deadline is the one that matters.
   v_zulu := pg_temp.fd_filing(v_org,
-    (app.today() + interval '5 days' - interval '30 days'
-                 - interval '6 months')::date);
+    (app.today() - interval '6 months' - interval '30 days'
+                 + interval '5 days')::date);
   v_alfa := pg_temp.fd_filing(v_org,
-    (app.today() + interval '50 days' - interval '30 days'
-                 - interval '6 months')::date);
+    (app.today() - interval '6 months' - interval '30 days'
+                 + interval '50 days')::date);
   insert into public.corp_entities (org_id, name, entity_type, incorporated_on)
   values (v_org, 'Zulu Sdn Bhd', 'sdn_bhd', date '2015-01-01')
   returning id into v_own;

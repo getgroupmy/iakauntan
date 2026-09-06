@@ -1184,6 +1184,25 @@ class _ModulesCard extends ConsumerWidget {
                             ),
                         ],
                       ),
+                      // What the promotions on offer actually are. The
+                      // chip carries the price; a price nobody can see
+                      // the old one beside is just a number, and one
+                      // with no end date on it is a promise this
+                      // product would then have to keep.
+                      for (final m in rest)
+                        if (modulePromoNote(m) != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            key: ValueKey('promo-note-${m.code}'),
+                            modulePromoNote(m)!,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.primary,
+                                ),
+                          ),
+                        ],
                     ],
                     if (held.any((m) => m.code == 'legal')) ...[
                       const SizedBox(height: 16),

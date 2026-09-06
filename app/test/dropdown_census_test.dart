@@ -27,6 +27,13 @@ const dropdownCensus = <String, int>{
   'features/admin/landing_cms.dart': 2,
   'features/admin/payment_gateways_admin.dart': 1,
   'features/admin/reservations_admin.dart': 2,
+  // The four shapes a promotion can take (0548): a trial period, a
+  // giveaway, a percentage off, a fixed price. The set is the check
+  // constraint on `module_promotions.kind` -- it cannot grow without a
+  // migration, and a migration that added a fifth would have to come
+  // here anyway. The module and the company beside it are pickers:
+  // both of those lists grow.
+  'features/admin/promotions_admin.dart': 1,
   'features/admin/statutory_rates_admin.dart': 3,
   'features/approvals/rule_editor.dart': 4,
   'features/banking/new_bank_account_dialog.dart': 1,

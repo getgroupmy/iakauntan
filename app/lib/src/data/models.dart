@@ -1718,16 +1718,49 @@ class ModuleSurface {
     required this.hidden,
     required this.visible,
     this.description,
+    this.promoPrice,
+    this.promotion,
+    this.promoKind,
+    this.promoDays,
+    this.promoUntil,
   });
 
   final String code;
   final String name;
   final String? description;
   final bool isCore;
+
+  /// What the price list says. Not necessarily what this company pays.
   final double monthlyPrice;
   final bool entitled;
   final bool hidden;
   final bool visible;
+
+  /// What this company would pay for it today, which is the list price
+  /// unless a promotion (0548) says otherwise. Null only for a surface
+  /// built by hand in a test.
+  final double? promoPrice;
+
+  /// The promotion's name, or null when the price is the list price.
+  /// Set together with [promoPrice] by the server, so `promotion !=
+  /// null` is the one test for "this is not the ordinary price".
+  final String? promotion;
+
+  /// `trial`, `free`, `percent_off` or `fixed_price`.
+  final String? promoKind;
+
+  /// How long a trial runs, in days. Null for every other kind.
+  final int? promoDays;
+
+  /// The day the promotion stops, when it has an end.
+  final DateTime? promoUntil;
+
+  /// What this company pays a month, promotion and all.
+  double get price => promotion == null ? monthlyPrice : (promoPrice ?? 0);
+
+  /// True when holding it costs nothing today -- either because it was
+  /// never priced, or because a promotion has taken the price off.
+  bool get isFreeNow => price <= 0;
 
   factory ModuleSurface.fromMap(Map<String, dynamic> j) => ModuleSurface(
     code: j['module_code'] as String,
@@ -1738,6 +1771,13 @@ class ModuleSurface {
     entitled: j['entitled'] == true,
     hidden: j['hidden'] == true,
     visible: j['visible'] == true,
+    promoPrice: j['promo_price'] == null
+        ? null
+        : Fmt.toDouble(j['promo_price']),
+    promotion: j['promotion'] as String?,
+    promoKind: j['promo_kind'] as String?,
+    promoDays: (j['promo_days'] as num?)?.toInt(),
+    promoUntil: DateTime.tryParse('${j['promo_until'] ?? ''}'),
   );
 }
 
@@ -1749,6 +1789,8 @@ class ModuleCharge {
     required this.days,
     required this.daysInMonth,
     required this.amount,
+    this.listAmount,
+    this.promotion,
   });
 
   factory ModuleCharge.fromMap(Map<String, dynamic> m) => ModuleCharge(
@@ -1757,6 +1799,8 @@ class ModuleCharge {
     days: (m['days'] as num?)?.toInt() ?? 0,
     daysInMonth: (m['days_in_month'] as num?)?.toInt() ?? 0,
     amount: (m['amount'] as num?)?.toDouble() ?? 0,
+    listAmount: (m['list_amount'] as num?)?.toDouble(),
+    promotion: m['promotion'] as String?,
   );
 
   final String code;
@@ -1764,6 +1808,13 @@ class ModuleCharge {
   final int days;
   final int daysInMonth;
   final double amount;
+
+  /// What the same days would have come to at the price list, and the
+  /// name of the promotion that made them come to less (0548). A line
+  /// cheaper than the published price with nothing saying why is a
+  /// support ticket.
+  final double? listAmount;
+  final String? promotion;
 
   /// True for a module that was not on for the whole month — the only
   /// case where the days are worth showing. "31/31 days" beside a full
@@ -1777,6 +1828,7 @@ class SubscriptionMonth {
     required this.month,
     required this.lines,
     required this.subtotal,
+    this.saved = 0,
   });
 
   factory SubscriptionMonth.fromMap(Map<String, dynamic> m) =>
@@ -1787,11 +1839,16 @@ class SubscriptionMonth {
             ModuleCharge.fromMap(Map<String, dynamic>.from(l as Map)),
         ],
         subtotal: (m['subtotal'] as num?)?.toDouble() ?? 0,
+        saved: (m['saved'] as num?)?.toDouble() ?? 0,
       );
 
   final DateTime? month;
   final List<ModuleCharge> lines;
   final double subtotal;
+
+  /// What the promotions came to this month: the price list less what
+  /// is actually being charged (0548).
+  final double saved;
 }
 
 class PlatformOrg {

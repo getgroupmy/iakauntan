@@ -33,6 +33,10 @@ void main() {
       // 0341. The five pages around the product — the wording on the
       // two auth screens, and Terms, Privacy and Contact.
       'site_pages',
+      // 0548. A promotion is a price. Ending one has to reach the
+      // settings card that is still offering it, and the running total
+      // that is still discounting it.
+      'module_promotions',
     });
   });
 

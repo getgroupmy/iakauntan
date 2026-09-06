@@ -14,6 +14,7 @@ import 'landing_cms.dart';
 import 'modules_admin.dart';
 import 'ocr_catalog_admin.dart';
 import 'payment_gateways_admin.dart';
+import 'promotions_admin.dart';
 import 'feedback_admin.dart';
 import 'platform_trail_admin.dart';
 import 'reservations_admin.dart';
@@ -223,6 +224,15 @@ const platformConsoleSections = <ConsoleSection>[
     path: '/admin/modules',
     primary: false,
     page: ModulesAdminTab(),
+  ),
+  (
+    group: 'Billing',
+    label: 'Promotions',
+    icon: Icons.local_offer_outlined,
+    selectedIcon: Icons.local_offer,
+    path: '/admin/promotions',
+    primary: false,
+    page: PromotionsAdminTab(),
   ),
   (
     group: 'Billing',

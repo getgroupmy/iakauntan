@@ -106,6 +106,16 @@ final Map<String, List<ProviderOrFamily>> _watchers = {
     landingContentProvider,
   ],
   'landing_logos': [landingLogosAdminProvider, landingContentProvider],
+  // 0548. A promotion is a price, so it has to reach three places: the
+  // console's own list, the settings card that offers the module to a
+  // company, and the running total of what this month has cost —
+  // ending a promotion changes all three, and a screen still offering
+  // a price nobody is charging is worse than one that never refreshes.
+  'module_promotions': [
+    platformPromotionsAdminProvider,
+    moduleSurfaceProvider,
+    moduleChargesProvider,
+  ],
 };
 
 /// The platform tables listened to.

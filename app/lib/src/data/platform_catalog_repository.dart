@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/format.dart';
 import '../core/providers.dart';
 import 'repository.dart';
 
@@ -63,6 +64,57 @@ class PlatformCatalog {
       if (isActive != null) 'p_is_active': isActive,
     },
   );
+
+  /// Every promotion, active or not, with the module and company it
+  /// names resolved.
+  ///
+  /// Through the RPC rather than the table: the read policy shows a
+  /// tenant its own promotions and the ones open to everybody, which is
+  /// the wrong list for a console -- an operator has to see what every
+  /// customer was given, including the promotions that have ended.
+  Future<List<Map<String, dynamic>>> promotions() async =>
+      Repo.rows(await client.rpc('platform_promotions'));
+
+  /// Create one ([id] null) or change one.
+  ///
+  /// Every argument but [id] is optional and omitted when null, which
+  /// is what lets the dialog send only what somebody actually changed.
+  Future<String?> savePromotion({
+    String? id,
+    String? name,
+    String? moduleCode,
+    String? orgId,
+    String? kind,
+    int? trialDays,
+    double? percentOff,
+    double? fixedPrice,
+    DateTime? startsOn,
+    DateTime? endsOn,
+    bool? isActive,
+    String? notes,
+  }) async => await client.rpc(
+    'platform_save_promotion',
+    params: {
+      if (id != null) 'p_id': id,
+      if (name != null) 'p_name': name,
+      if (moduleCode != null) 'p_module_code': moduleCode,
+      if (orgId != null) 'p_org_id': orgId,
+      if (kind != null) 'p_kind': kind,
+      if (trialDays != null) 'p_trial_days': trialDays,
+      if (percentOff != null) 'p_percent_off': percentOff,
+      if (fixedPrice != null) 'p_fixed_price': fixedPrice,
+      if (startsOn != null) 'p_starts_on': Fmt.iso(startsOn),
+      if (endsOn != null) 'p_ends_on': Fmt.iso(endsOn),
+      if (isActive != null) 'p_is_active': isActive,
+      if (notes != null) 'p_notes': notes,
+    },
+  ) as String?;
+
+  /// Stop one, today, for everybody at once. There is no delete: a
+  /// promotion that has priced an invoice is part of why that invoice
+  /// says what it says.
+  Future<void> endPromotion(String id) =>
+      client.rpc('platform_end_promotion', params: {'p_id': id});
 
   /// Every gateway including the ones being set up, which the read
   /// policy withholds from a tenant.
@@ -157,6 +209,12 @@ final platformCatalogProvider = Provider<PlatformCatalog>(
 final platformModulesAdminProvider =
     FutureProvider<List<Map<String, dynamic>>>(
   (ref) => ref.watch(platformCatalogProvider).modules(),
+);
+
+/// Every promotion, for the console's list.
+final platformPromotionsAdminProvider =
+    FutureProvider<List<Map<String, dynamic>>>(
+  (ref) => ref.watch(platformCatalogProvider).promotions(),
 );
 
 final platformGatewaysAdminProvider =
