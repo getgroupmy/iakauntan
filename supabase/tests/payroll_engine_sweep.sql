@@ -638,4 +638,558 @@ begin
     v_act4, v_800);
 end $$;
 
+
+-- =====================================================================
+-- A second sweep, of the same function, from the other end
+--
+-- Sections 1 to 8 came from asking what `calculate_payroll_run` records
+-- and where it posts. Sections 9 to 15 came from asking a mutation
+-- sweep: sixty-eight one-line mutants over the function, of which
+-- thirty-seven survived the suite as it then stood. The survivors were
+-- the EDGES -- the two age boundaries at sixty, the eligibility flags,
+-- every date comparison deciding whether somebody is in this period,
+-- the guards that stop a zero line printing, and the sen in a part
+-- month. Re-armed with the sections below in the list, sixteen of them
+-- die.
+--
+-- Twenty-one still stand. Six are equivalent -- `v_worked >= v_days`
+-- changed to `>` gives the same AMOUNT when the whole month is worked
+-- (only the description differs, which section 14 catches), and the
+-- five `<wage> > 0` guards before `calc_statutory` save a call rather
+-- than decide an outcome. The rest are named here so the next pass has
+-- a map: a rate table effective ON the pay date (71, 72); leave
+-- starting on the last day of the month (139); a component ending on
+-- the first (190); overtime hours and the hourly rate to the sen (123,
+-- 200); the unpaid-leave day count (161, 213, 143); the EPF share of a
+-- bonus (238); and a zero-amount statutory row written rather than
+-- skipped (328).
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- 9. Sixty, on both sides
+--
+-- Two different rules turn at the same age and neither had a fixture
+-- standing on it.
+--
+--   SOCSO   act4 is injury and invalidity; act800 is injury only, for
+--           an employee aged sixty and over. `>= 60` -> `> 60` puts a
+--           sixty-year-old back on the invalidity scheme and takes a
+--           contribution off both sides that PERKESO does not want.
+--   EIS     stops at sixty. `< 60` -> `<= 60` keeps deducting from
+--           somebody who can no longer claim.
+--
+-- Age is taken at the PAY DATE, so the fixture is built around it: born
+-- on 31 January 1966, paid on 31 January 2026, and sixty that morning.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_me     uuid := pg_temp.test_user();
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_sixty  uuid;
+  v_under  uuid;
+  r        record;
+begin
+  v_org := pg_temp.test_org('Payroll Sweep Sdn Bhd');
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-01', date '2026-01-01', date '2026-01-31',
+          date '2026-01-31')
+  returning id into v_period;
+
+  -- Sixty on the pay date, to the day.
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'S60', 'Sixty on the day', date '2010-01-01', 3000,
+          date '1966-01-31', 'single', 'citizen')
+  returning id into v_sixty;
+
+  -- One day short of sixty, so the pair brackets the boundary.
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'S59', 'Sixty tomorrow', date '2010-01-01', 3000,
+          date '1966-02-01', 'single', 'citizen')
+  returning id into v_under;
+
+  v_run := public.create_payroll_run(v_org, v_period);
+  perform public.calculate_payroll_run(v_run);
+
+  perform pg_temp.check_eq('sixty today is sixty',
+    app.age_at(date '1966-01-31', date '2026-01-31')::numeric, 60);
+  perform pg_temp.check_eq('and sixty tomorrow is fifty-nine',
+    app.age_at(date '1966-02-01', date '2026-01-31')::numeric, 59);
+
+  -- SOCSO: the older one is on act800, which is the employer's side
+  -- only. Kills `v_age >= 60` -> `> 60`.
+  select socso_employee, socso_employer into r
+    from public.payslips where run_id = v_run and employee_no = 'S60';
+  perform pg_temp.check_eq(
+    'at sixty the employee stops paying SOCSO', r.socso_employee, 0);
+  perform pg_temp.check_true(
+    'and the employer still does', r.socso_employer > 0);
+
+  select socso_employee into r
+    from public.payslips where run_id = v_run and employee_no = 'S59';
+  perform pg_temp.check_true(
+    'one day younger and both sides pay', r.socso_employee > 0);
+
+  -- EIS: off at sixty, on the day before. Kills `v_age < 60` -> `<= 60`.
+  select eis_employee, eis_employer into r
+    from public.payslips where run_id = v_run and employee_no = 'S60';
+  perform pg_temp.check_eq('EIS stops at sixty', r.eis_employee, 0);
+  perform pg_temp.check_eq('on both sides', r.eis_employer, 0);
+
+  select eis_employee into r
+    from public.payslips where run_id = v_run and employee_no = 'S59';
+  perform pg_temp.check_true(
+    'and is still deducted the day before', r.eis_employee > 0);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 10. The eligibility flags mean what they say
+--
+-- Three guards read `<flag> and <wage> > 0`. Turned into `or`, an
+-- employee explicitly marked exempt gets the contribution anyway --
+-- and nothing failed, because every employee in every other fixture is
+-- eligible for all three. A pensionable re-hire, a foreign worker
+-- outside EIS and a director outside SOCSO are all real, and all three
+-- are one boolean away from being charged.
+--
+-- Kills `epf_eligible and` -> `or`, `socso_eligible and` -> `or`,
+-- `eis_eligible and` -> `or`.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_me     uuid := pg_temp.test_user();
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_none   uuid;
+  r        record;
+begin
+  v_org := pg_temp.test_org('Payroll Exempt Sdn Bhd');
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-02', date '2026-02-01', date '2026-02-28',
+          date '2026-02-28')
+  returning id into v_period;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status,
+     epf_eligible, socso_eligible, eis_eligible)
+  values (v_org, 'X1', 'Exempt from all three', date '2015-01-01', 4000,
+          date '1985-06-01', 'single', 'citizen', false, false, false)
+  returning id into v_none;
+
+  v_run := public.create_payroll_run(v_org, v_period);
+  perform public.calculate_payroll_run(v_run);
+
+  select epf_employee, epf_employer, socso_employee, socso_employer,
+         eis_employee, eis_employer, gross_pay
+    into r
+    from public.payslips where run_id = v_run and employee_no = 'X1';
+
+  -- The wage is there -- that is the point. The guard is the flag, not
+  -- the money, so a fixture paying nothing would prove nothing.
+  perform pg_temp.check_eq('there is a wage to contribute on',
+                           r.gross_pay, 4000);
+  perform pg_temp.check_eq('and no EPF is taken', r.epf_employee, 0);
+  perform pg_temp.check_eq('on either side', r.epf_employer, 0);
+  perform pg_temp.check_eq('nor SOCSO', r.socso_employee, 0);
+  perform pg_temp.check_eq('on either side either', r.socso_employer, 0);
+  perform pg_temp.check_eq('nor EIS', r.eis_employee, 0);
+  perform pg_temp.check_eq('on either side of that', r.eis_employer, 0);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 11. One day either way
+--
+-- Every date comparison deciding whether something falls IN the period
+-- is inclusive, and every one of them survived being made exclusive.
+-- The five below are the ones that change somebody's pay:
+--
+--   hired on the last day of the month     -> one day's pay, not none
+--   left on the first day of the month     -> one day's pay, not none
+--   unpaid leave ending on the first day   -> deducted, not ignored
+--   a component starting on the last day   -> paid, not skipped
+--   a claim dated the last day             -> reimbursed, not held
+--
+-- Kills `e.hire_date <=` -> `<`, `e.last_working_date >=` -> `>`,
+-- `lr.end_date >=` -> `>`, `esc.effective_from <=` -> `<`,
+-- `c.claim_date <=` -> `<`.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_me     uuid := pg_temp.test_user();
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_new    uuid;
+  v_gone   uuid;
+  v_leaver uuid;
+  v_comp   uuid;
+  v_claim  uuid;
+  v_slip   uuid;
+  v_n      integer;
+  v_amt    numeric;
+  r        record;
+begin
+  v_org := pg_temp.test_org('Payroll Edges Sdn Bhd');
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-03', date '2026-03-01', date '2026-03-31',
+          date '2026-03-31')
+  returning id into v_period;
+
+  -- Hired on the last day of the period: one day of thirty-one.
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'N1', 'Started on the last day', date '2026-03-31', 3100,
+          date '1990-01-01', 'single', 'citizen')
+  returning id into v_new;
+
+  -- Left on the first day of the period: likewise one day.
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     last_working_date, date_of_birth, marital_status, residency_status)
+  values (v_org, 'L1', 'Left on the first day', date '2020-01-01', 3100,
+          date '2026-03-01', date '1990-01-01', 'single', 'citizen')
+  returning id into v_gone;
+
+  -- And somebody who left the day BEFORE the period opened, who must
+  -- not be on the run at all.
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     last_working_date, date_of_birth, marital_status, residency_status)
+  values (v_org, 'L0', 'Left in February', date '2020-01-01', 3100,
+          date '2026-02-28', date '1990-01-01', 'single', 'citizen');
+
+  v_run := public.create_payroll_run(v_org, v_period);
+  perform public.calculate_payroll_run(v_run);
+
+  select count(*) into v_n from public.payslips where run_id = v_run;
+  perform pg_temp.check_eq('two of the three are on the run',
+                           v_n::numeric, 2);
+  perform pg_temp.check_eq('and the one who left in February is not',
+    (select count(*) from public.payslips
+      where run_id = v_run and employee_no = 'L0')::numeric, 0);
+
+  -- 3100 over 31 days is exactly 100 a day, so one day is a number a
+  -- person can check.
+  select basic_salary into v_amt
+    from public.payslips where run_id = v_run and employee_no = 'N1';
+  perform pg_temp.check_eq('a day worked is a day paid', v_amt, 100);
+  select basic_salary into v_amt
+    from public.payslips where run_id = v_run and employee_no = 'L1';
+  perform pg_temp.check_eq('at both ends of the month', v_amt, 100);
+
+  -- The description carries the arithmetic, and it is what somebody
+  -- queries when the number looks wrong. Kills the `v_worked >= v_days`
+  -- that chooses between the two wordings.
+  select description into r
+    from public.payslip_lines pl
+    join public.payslips p on p.id = pl.payslip_id
+   where p.run_id = v_run and p.employee_no = 'N1' and pl.code = 'BASIC';
+  perform pg_temp.check_eq('and the line says how much of the month',
+                           r.description, 'Basic salary (1 of 31 days)');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 12. A line only where there is something on it, and to the sen
+--
+-- Two guards stop a zero row being printed -- no overtime, no claim --
+-- and both survived being relaxed to `>= 0`, because every payslip in
+-- every other fixture either has overtime or is never counted. A
+-- payslip carrying "Overtime 0.00" is not wrong arithmetic; it is a
+-- document going to an employee with a line on it that did not happen.
+--
+-- And the roundings. `round(x, 2)` -> `round(x, 0)` survived six times
+-- over, because the fixtures pay round numbers. A prorated month and an
+-- unpaid day are exactly where the sen appear.
+--
+-- Kills `if v_ot_amt > 0` -> `>= 0`, `if v_claims > 0` -> `>= 0`,
+-- and the roundings on prorated basic and on the unpaid deduction.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_me     uuid := pg_temp.test_user();
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_plain  uuid;
+  v_part   uuid;
+  v_type   uuid;
+  v_n      integer;
+  v_amt    numeric;
+begin
+  v_org := pg_temp.test_org('Payroll Sen Sdn Bhd');
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-04', date '2026-04-01', date '2026-04-30',
+          date '2026-04-30')
+  returning id into v_period;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'P0', 'No overtime and no claim', date '2020-01-01', 3000,
+          date '1990-01-01', 'single', 'citizen')
+  returning id into v_plain;
+
+  -- Hired on the 8th: 23 days of 30, and 4000 * 23 / 30 is
+  -- 3066.6666..., which rounds to 3066.67 and to 3067 if the scale is
+  -- lost.
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     working_days_per_month, date_of_birth, marital_status,
+     residency_status)
+  values (v_org, 'P1', 'Part of a month, in sen', date '2026-04-08', 4000,
+          30, date '1990-01-01', 'single', 'citizen')
+  returning id into v_part;
+
+  v_run := public.create_payroll_run(v_org, v_period);
+  perform public.calculate_payroll_run(v_run);
+
+  -- No overtime line and no claim line on a payslip that has neither.
+  select count(*) into v_n
+    from public.payslip_lines pl
+    join public.payslips p on p.id = pl.payslip_id
+   where p.run_id = v_run and p.employee_no = 'P0' and pl.code = 'OT';
+  perform pg_temp.check_eq('no overtime, no overtime line', v_n::numeric, 0);
+
+  select count(*) into v_n
+    from public.payslip_lines pl
+    join public.payslips p on p.id = pl.payslip_id
+   where p.run_id = v_run and p.employee_no = 'P0' and pl.code = 'CLAIMS';
+  perform pg_temp.check_eq('no claim, no claim line', v_n::numeric, 0);
+
+  -- And the sen survive the proration.
+  select basic_salary into v_amt
+    from public.payslips where run_id = v_run and employee_no = 'P1';
+  perform pg_temp.check_eq('a part month is paid to the sen',
+                           v_amt, 3066.67);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 13. Unpaid leave that touches the month by a day, and to the sen
+--
+-- Unpaid leave is prorated across the period it overlaps, so a request
+-- running from the last week of one month into the first of the next
+-- has to be split. Three mutants lived here:
+--
+--   `lr.end_date >= period_start` -> `>`   leave ending on the first of
+--                                          the month vanishes entirely
+--   `lr.start_date <= period_end` -> `<`   leave starting on the last
+--                                          day likewise
+--   `round(..., 2)` -> `round(..., 0)`     the split lands on a
+--                                          fraction of a day, and the
+--                                          deduction is in sen
+--
+-- Six days of leave from 27 March to 1 April: five days fall in March
+-- and one in April. Against a 26-day month at 3900 that is 150 a day,
+-- so April's share is a day and March's five -- and the proration puts
+-- sen into the day count, which is where the rounding shows.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_me     uuid := pg_temp.test_user();
+  v_org    uuid;
+  v_mar    uuid;
+  v_apr    uuid;
+  v_run    uuid;
+  v_emp    uuid;
+  v_type   uuid;
+  v_days   numeric;
+  v_amt    numeric;
+  v_n      integer;
+begin
+  v_org := pg_temp.test_org('Payroll Unpaid Sdn Bhd');
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-03', date '2026-03-01', date '2026-03-31',
+          date '2026-03-31')
+  returning id into v_mar;
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-04', date '2026-04-01', date '2026-04-30',
+          date '2026-04-30')
+  returning id into v_apr;
+
+  insert into public.leave_types (org_id, code, name, is_paid)
+  values (v_org, 'UNPAID', 'Unpaid leave', false)
+  returning id into v_type;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     working_days_per_month, date_of_birth, marital_status,
+     residency_status)
+  values (v_org, 'U1', 'Away over the month end', date '2020-01-01', 3900,
+          26, date '1990-01-01', 'single', 'citizen')
+  returning id into v_emp;
+
+  insert into public.leave_requests
+    (org_id, request_no, employee_id, leave_type_id, start_date, end_date,
+     total_days, status)
+  values (v_org, 'LV-0001', v_emp, v_type, date '2026-03-27',
+          date '2026-04-01', 6, 'approved');
+
+  -- April: one day of the six, which is the day the `>=` decides.
+  v_run := public.create_payroll_run(v_org, v_apr);
+  perform public.calculate_payroll_run(v_run);
+  select unpaid_leave_days, unpaid_leave_amount into v_days, v_amt
+    from public.payslips where run_id = v_run and employee_no = 'U1';
+  perform pg_temp.check_eq('a day of leave in the new month counts',
+                           v_days, 1);
+  perform pg_temp.check_eq('and comes off the pay', v_amt, 150);
+
+  -- March: the other five.
+  v_run := public.create_payroll_run(v_org, v_mar);
+  perform public.calculate_payroll_run(v_run);
+  select unpaid_leave_days, unpaid_leave_amount into v_days, v_amt
+    from public.payslips where run_id = v_run and employee_no = 'U1';
+  perform pg_temp.check_eq('and the five before it stay in the old one',
+                           v_days, 5);
+  perform pg_temp.check_eq('at the same rate a day', v_amt, 750);
+
+  -- The deduction is a line, negative, and it carries the day count.
+  select count(*) into v_n
+    from public.payslip_lines pl
+    join public.payslips p on p.id = pl.payslip_id
+   where p.run_id = v_run and p.employee_no = 'U1' and pl.code = 'UNPAID';
+  perform pg_temp.check_eq('the deduction is on the payslip',
+                           v_n::numeric, 1);
+  select amount into v_amt
+    from public.payslip_lines pl
+    join public.payslips p on p.id = pl.payslip_id
+   where p.run_id = v_run and p.employee_no = 'U1' and pl.code = 'UNPAID';
+  perform pg_temp.check_eq('and it comes off, not on', v_amt, -750);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 14. A full month says so
+--
+-- The BASIC line reads either "Basic salary" or "Basic salary (n of m
+-- days)", and the choice is `v_worked >= v_days`. Section 3 asserted
+-- the prorated wording; the mutant `>` survives that, because one day
+-- of thirty-one is short of the month either way. What it does not
+-- survive is somebody who worked the WHOLE month: `>=` says plain
+-- "Basic salary" and `>` says "(30 of 30 days)", which is a payslip
+-- telling an employee their full month was a part month.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_me     uuid := pg_temp.test_user();
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_desc   text;
+begin
+  v_org := pg_temp.test_org('Payroll Whole Month Sdn Bhd');
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-06', date '2026-06-01', date '2026-06-30',
+          date '2026-06-30')
+  returning id into v_period;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'F1', 'Here all month', date '2019-01-01', 3000,
+          date '1990-01-01', 'single', 'citizen');
+
+  v_run := public.create_payroll_run(v_org, v_period);
+  perform public.calculate_payroll_run(v_run);
+
+  select pl.description into v_desc
+    from public.payslip_lines pl
+    join public.payslips p on p.id = pl.payslip_id
+   where p.run_id = v_run and p.employee_no = 'F1' and pl.code = 'BASIC';
+  perform pg_temp.check_eq('a whole month is not a part month',
+                           v_desc, 'Basic salary');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 15. A component and a claim that arrive on the last day
+--
+-- Two more inclusive comparisons, both of which decide whether money
+-- reaches this month's payslip or waits for next:
+--
+--   `esc.effective_from <= period_end` -> `<`  an allowance starting on
+--                                              the last day is skipped
+--   `c.claim_date <= period_end`       -> `<`  a claim dated the last
+--                                              day is held over
+--
+-- A month-end starter and a month-end receipt are both ordinary, and
+-- both are one character from being paid a month late.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_me     uuid := pg_temp.test_user();
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_emp    uuid;
+  v_comp   uuid;
+  v_amt    numeric;
+begin
+  v_org := pg_temp.test_org('Payroll Last Day Sdn Bhd');
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-07', date '2026-07-01', date '2026-07-31',
+          date '2026-07-31')
+  returning id into v_period;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'D1', 'Paid on the last day', date '2020-01-01', 3000,
+          date '1990-01-01', 'single', 'citizen')
+  returning id into v_emp;
+
+  insert into public.salary_components
+    (org_id, code, name, kind, default_amount, is_taxable, is_epf_liable,
+     is_socso_liable, is_eis_liable, is_hrdf_liable)
+  values (v_org, 'PHONE', 'Phone allowance', 'earning', 120,
+          true, true, true, true, true)
+  returning id into v_comp;
+
+  -- Effective from the last day of the period, and not a day earlier.
+  insert into public.employee_salary_components
+    (org_id, employee_id, component_id, amount, effective_from)
+  values (v_org, v_emp, v_comp, 120, date '2026-07-31');
+
+  insert into public.expense_claims
+    (org_id, claim_no, employee_id, claim_date, status, approved_amount,
+     pay_with_payroll)
+  values (v_org, 'CL-0001', v_emp, date '2026-07-31', 'approved', 88, true);
+
+  v_run := public.create_payroll_run(v_org, v_period);
+  perform public.calculate_payroll_run(v_run);
+
+  select amount into v_amt
+    from public.payslip_lines pl
+    join public.payslips p on p.id = pl.payslip_id
+   where p.run_id = v_run and p.employee_no = 'D1' and pl.code = 'PHONE';
+  perform pg_temp.check_eq(
+    'an allowance starting on the last day is paid this month',
+    v_amt, 120);
+
+  select claims_amount into v_amt
+    from public.payslips where run_id = v_run and employee_no = 'D1';
+  perform pg_temp.check_eq(
+    'and a claim dated the last day is reimbursed with it', v_amt, 88);
+end $$;
+
 rollback;
