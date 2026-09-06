@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1788645922.197922,
-    "ast_hash": "fab09631b6418bb71b9b88cb5ee9f648",
+    "mtime": 1788667866.783608,
+    "ast_hash": "3aa91515cbb3bddbbed1d178046df9a8",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1920,8 +1920,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/live_updates.dart": {
-    "mtime": 1787822945.4825897,
-    "ast_hash": "4fa03be82f7957918340723c07ebd08c",
+    "mtime": 1788667855.0014951,
+    "ast_hash": "59794dfbf641fdc751becf8ad31fe2d0",
     "semantic_hash": ""
   },
   "app/lib/src/features/settings/claim_approval_card.dart": {
@@ -1950,8 +1950,8 @@
     "semantic_hash": ""
   },
   "app/test/live_updates_test.dart": {
-    "mtime": 1787200555.905267,
-    "ast_hash": "188f82622a232add34d405e69fe9d7f3",
+    "mtime": 1788667834.5786464,
+    "ast_hash": "5c224983d0b7f05d15e757812c3a7188",
     "semantic_hash": ""
   },
   "app/test/refresh_after_change_test.dart": {
@@ -8287,6 +8287,16 @@
   "app/test/dropdown_census_test.dart": {
     "mtime": 1788661968.4129627,
     "ast_hash": "adca2f6c1da5b33a29d23ba3ecc6dcf8",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/0547_every_change_reaches_every_screen.sql": {
+    "mtime": 1788668075.0049276,
+    "ast_hash": "e7952604af901617b826bf953818d100",
+    "semantic_hash": ""
+  },
+  "supabase/tests/live_change_feed.sql": {
+    "mtime": 1788667568.0312908,
+    "ast_hash": "d4853cba5f0d710d5a01538ef521189a",
     "semantic_hash": ""
   }
 }

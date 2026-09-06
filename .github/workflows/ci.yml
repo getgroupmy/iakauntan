@@ -415,6 +415,7 @@ jobs:
                    supabase/tests/todos.sql \
                    supabase/tests/user_preferences.sql \
                    supabase/tests/bank_accounts.sql \
+                   supabase/tests/live_change_feed.sql \
                    supabase/tests/quick_add_lists.sql \
                    supabase/tests/statutory_bands.sql; do
             echo "== $f"
