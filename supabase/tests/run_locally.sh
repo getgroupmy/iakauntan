@@ -53,7 +53,16 @@ PGBIN="${IAK_PGBIN:-/usr/lib/postgresql/16/bin}"
 PSQL="psql -h $PGSOCK -p $PGPORT -U postgres"
 
 start_cluster() {
-  if $PSQL -tAc 'select 1' >/dev/null 2>&1; then return; fi
+  # A cluster that is ALREADY up still has to be checked. This returned
+  # here without calling `check_cluster`, which meant the three
+  # diagnostics below it could only ever fire on the run that created
+  # the cluster -- and never on the warm container, which is every run
+  # after the first. The failure that exposed it: a `$PGDATA` built
+  # before `max_locks_per_transaction` was raised came up cleanly, and
+  # `bootstrap` then died inside a `>/dev/null 2>&1` with exit 3 and no
+  # output at all. The message explaining exactly that was already
+  # written, ten lines further down, and unreachable.
+  if $PSQL -tAc 'select 1' >/dev/null 2>&1; then check_cluster; return; fi
   if [ ! -s "$PGDATA/PG_VERSION" ]; then
     rm -rf "$PGDATA"; mkdir -p "$PGDATA"; chown -R postgres:postgres "$PGDATA"
     su postgres -c "$PGBIN/initdb -D $PGDATA -A trust -U postgres" >/dev/null

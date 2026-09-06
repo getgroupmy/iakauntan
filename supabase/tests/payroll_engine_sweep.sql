@@ -652,17 +652,10 @@ end $$;
 -- month. Re-armed with the sections below in the list, sixteen of them
 -- die.
 --
--- Twenty-one still stand. Six are equivalent -- `v_worked >= v_days`
--- changed to `>` gives the same AMOUNT when the whole month is worked
--- (only the description differs, which section 14 catches), and the
--- five `<wage> > 0` guards before `calc_statutory` save a call rather
--- than decide an outcome. The rest are named here so the next pass has
--- a map: a rate table effective ON the pay date (71, 72); leave
--- starting on the last day of the month (139); a component ending on
--- the first (190); overtime hours and the hourly rate to the sen (123,
--- 200); the unpaid-leave day count (161, 213, 143); the EPF share of a
--- bonus (238); and a zero-amount statutory row written rather than
--- skipped (328).
+-- Sections 16 and 17 finish the job. Swept again against the whole
+-- file: sixty-three mutants, SIXTY-TWO DEAD. The one left standing is
+-- equivalent and is shown to be so in section 16's header -- it is not
+-- a gap anybody can close, because there is no difference to observe.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
@@ -1190,6 +1183,332 @@ begin
     from public.payslips where run_id = v_run and employee_no = 'D1';
   perform pg_temp.check_eq(
     'and a claim dated the last day is reimbursed with it', v_amt, 88);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 16. The last eleven, and the nine of them that were real
+--
+-- Re-swept against the whole of this file: sixty-three mutants, fifty-
+-- two dead, eleven alive. Nine of the eleven are here and one is in
+-- section 17. They are the same shape as the rest: a boundary date, a
+-- rounding, and a divisor nobody had set to zero.
+--
+-- The sixty-third is EQUIVALENT, and provably so rather than
+-- apparently: `v_worked >= v_days` -> `>` in the line that picks the
+-- basic AMOUNT. When the whole month is worked the else branch is
+-- `round(basic * days / days, 2)`, which is `round(basic, 2)`, and
+-- `employees.basic_salary` is `numeric(18,2)` -- so the rounding
+-- cannot move it. There is no fixture that separates the two, because
+-- there is nothing to separate. The half that DOES differ is the
+-- wording, and section 14 kills that.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_me     uuid := pg_temp.test_user();
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_sched  uuid;
+  v_emp    uuid;
+  v_amt    numeric;
+  v_days   numeric;
+  v_rate   numeric;
+  v_qty    numeric;
+begin
+  v_org := pg_temp.test_org('Payroll Last Eleven Sdn Bhd');
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-09', date '2026-09-01', date '2026-09-30',
+          date '2026-09-30')
+  returning id into v_period;
+
+  insert into public.payroll_settings (org_id, hrdf_category)
+  values (v_org, 'mandatory_10plus')
+  on conflict (org_id) do update set hrdf_category = excluded.hrdf_category;
+
+  -- ------------------------------------------------------------------
+  -- (a) A levy table that opens ON the pay date, and one that closes on
+  -- it. `effective_from <= pay_date` and `effective_to >= pay_date` are
+  -- both inclusive, and a rate gazetted to start on the last day of the
+  -- month is exactly the case a `<` gets wrong -- the levy comes out
+  -- nought and the employer under-declares to HRD Corp.
+  --
+  -- The seeded table runs from 2021 with no end, so it is closed on the
+  -- day before and a new one opened on the pay date itself. Ordered by
+  -- `effective_from desc`, the new one wins, and it charges 2% where
+  -- the old charged 1% -- so the levy says which table answered.
+  -- ------------------------------------------------------------------
+  update public.statutory_schedules
+     set effective_to = date '2026-09-29'
+   where body = 'hrdf' and effective_to is null;
+
+  insert into public.statutory_schedules
+    (body, name, method, effective_from, effective_to, source, is_verified)
+  values ('hrdf', 'HRD Corp levy, from the pay date', 'percentage',
+          date '2026-09-30', null, 'test fixture', true)
+  returning id into v_sched;
+  insert into public.statutory_rates
+    (schedule_id, category, employer_rate)
+  values (v_sched, 'mandatory_10plus', 2.0000);
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'H1', 'On the new levy table', date '2020-01-01', 5000,
+          date '1990-01-01', 'single', 'citizen');
+
+  v_run := public.create_payroll_run(v_org, v_period);
+  perform public.calculate_payroll_run(v_run);
+
+  select hrdf into v_amt
+    from public.payslips where run_id = v_run and employee_no = 'H1';
+  perform pg_temp.check_eq(
+    'a levy table opening on the pay date is the one in force',
+    v_amt, 100);
+
+  -- And the one that closed on the day before is not. Closed ON the pay
+  -- date instead, it would be -- which is the other half of the pair.
+  update public.statutory_schedules
+     set effective_from = date '2026-10-01'
+   where id = v_sched;
+  update public.statutory_schedules
+     set effective_to = date '2026-09-30'
+   where body = 'hrdf' and id <> v_sched;
+
+  v_run := public.create_payroll_run(v_org, v_period);
+  perform public.calculate_payroll_run(v_run);
+  select hrdf into v_amt
+    from public.payslips where run_id = v_run and employee_no = 'H1';
+  perform pg_temp.check_eq(
+    'and one closing on it is still in force that day', v_amt, 50);
+end $$;
+
+do $$
+declare
+  v_me     uuid := pg_temp.test_user();
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_emp    uuid;
+  v_type   uuid;
+  v_comp   uuid;
+  v_amt    numeric;
+  v_days   numeric;
+  v_rate   numeric;
+begin
+  v_org := pg_temp.test_org('Payroll Edges Two Sdn Bhd');
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-10', date '2026-10-01', date '2026-10-31',
+          date '2026-10-31')
+  returning id into v_period;
+
+  insert into public.leave_types (org_id, code, name, is_paid)
+  values (v_org, 'UNPAID', 'Unpaid leave', false)
+  returning id into v_type;
+
+  -- ------------------------------------------------------------------
+  -- (b) and (d). Leave starting on the LAST day of the month -- section
+  -- 13 covered leave ending on the first, which is the other end of the
+  -- same pair -- and a split that does not land on a whole day.
+  --
+  -- Seven days from 31 October to 6 November. One of the seven falls in
+  -- October, so the deduction is 7 * 1/7 = 1 day exactly; to put sen
+  -- into it the request is FIVE days over those seven dates, which is
+  -- 5 * 1/7 = 0.714285..., and rounds to 0.71. Against 22 working days
+  -- at 3300 that is 150 a day, so the money is 0.714285... * 150 =
+  -- 107.14 -- and 107 if the scale is lost.
+  -- ------------------------------------------------------------------
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     working_days_per_month, date_of_birth, marital_status,
+     residency_status)
+  values (v_org, 'E1', 'Away from the last day', date '2020-01-01', 3300,
+          22, date '1990-01-01', 'single', 'citizen')
+  returning id into v_emp;
+
+  insert into public.leave_requests
+    (org_id, request_no, employee_id, leave_type_id, start_date, end_date,
+     total_days, status)
+  values (v_org, 'LV-9001', v_emp, v_type, date '2026-10-31',
+          date '2026-11-06', 5, 'approved');
+
+  -- ------------------------------------------------------------------
+  -- (c) A component whose last day is the FIRST day of the period. The
+  -- allowance stopped on the 1st, so the month it stopped in is the
+  -- month it is still paid for; `>=` made `>` drops it a month early.
+  -- ------------------------------------------------------------------
+  insert into public.salary_components
+    (org_id, code, name, kind, default_amount, is_taxable, is_epf_liable,
+     is_socso_liable, is_eis_liable, is_hrdf_liable)
+  values (v_org, 'TRAVEL', 'Travel allowance', 'earning', 250,
+          true, true, true, true, true)
+  returning id into v_comp;
+  insert into public.employee_salary_components
+    (org_id, employee_id, component_id, amount, effective_from,
+     effective_to)
+  values (v_org, v_emp, v_comp, 250, date '2024-01-01',
+          date '2026-10-01');
+
+  v_run := public.create_payroll_run(v_org, v_period);
+  perform public.calculate_payroll_run(v_run);
+
+  select unpaid_leave_days, unpaid_leave_amount into v_days, v_amt
+    from public.payslips where run_id = v_run and employee_no = 'E1';
+  perform pg_temp.check_eq('leave starting on the last day is deducted',
+                           v_days, 0.71);
+  perform pg_temp.check_eq('and the deduction carries its sen',
+                           v_amt, 107.14);
+
+  -- The line shows the same day count, to the same scale.
+  select quantity, amount into v_days, v_amt
+    from public.payslip_lines pl
+    join public.payslips p on p.id = pl.payslip_id
+   where p.run_id = v_run and p.employee_no = 'E1' and pl.code = 'UNPAID';
+  perform pg_temp.check_eq('the line agrees with the payslip', v_days, 0.71);
+  perform pg_temp.check_eq('and comes off, to the sen', v_amt, -107.14);
+
+  select amount into v_amt
+    from public.payslip_lines pl
+    join public.payslips p on p.id = pl.payslip_id
+   where p.run_id = v_run and p.employee_no = 'E1' and pl.code = 'TRAVEL';
+  perform pg_temp.check_eq(
+    'an allowance ending on the first day is paid that month', v_amt, 250);
+end $$;
+
+do $$
+declare
+  v_me     uuid := pg_temp.test_user();
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+  v_paid   uuid;
+  v_nodays uuid;
+  v_rate   numeric;
+  v_amt    numeric;
+begin
+  v_org := pg_temp.test_org('Payroll Hourly Sdn Bhd');
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-11', date '2026-11-01', date '2026-11-30',
+          date '2026-11-30')
+  returning id into v_period;
+
+  -- ------------------------------------------------------------------
+  -- (e) The overtime rate, to four places. 3000 over 22 days of 7.5
+  -- hours is 18.181818... an hour, and the payslip carries four places
+  -- because two would lose a sen on a long month of overtime. Rounded
+  -- to nought it reads 18, which is a rate no arithmetic on the payslip
+  -- produces.
+  -- ------------------------------------------------------------------
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     working_days_per_month, working_hours_per_day,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'R1', 'An hourly rate with a tail', date '2020-01-01',
+          3000, 22, 7.5, date '1990-01-01', 'single', 'citizen')
+  returning id into v_paid;
+
+  insert into public.attendance_records
+    (org_id, employee_id, work_date, ot_normal_minutes)
+  values (v_org, v_paid, date '2026-11-10', 120);
+
+  -- ------------------------------------------------------------------
+  -- (f) And nobody's month is zero days. `working_days_per_month > 0`
+  -- guards a division, and set to zero the guard is the only thing
+  -- between the run and a division by zero -- which is not a wrong
+  -- number on a payslip, it is a payroll that will not close. The
+  -- column defaults to 26, so this is somebody who cleared the field.
+  -- ------------------------------------------------------------------
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     working_days_per_month, date_of_birth, marital_status,
+     residency_status)
+  values (v_org, 'Z1', 'No days a month recorded', date '2020-01-01',
+          2400, 0, date '1990-01-01', 'single', 'citizen')
+  returning id into v_nodays;
+
+  insert into public.attendance_records
+    (org_id, employee_id, work_date, ot_normal_minutes)
+  values (v_org, v_nodays, date '2026-11-11', 90);
+
+  v_run := public.create_payroll_run(v_org, v_period);
+  perform public.calculate_payroll_run(v_run);
+
+  select rate into v_rate
+    from public.payslip_lines pl
+    join public.payslips p on p.id = pl.payslip_id
+   where p.run_id = v_run and p.employee_no = 'R1' and pl.code = 'OT';
+  perform pg_temp.check_eq('the overtime rate keeps four places',
+                           v_rate, 18.1818);
+
+  -- 2 hours at 1.5 times 18.181818... is 54.5454..., which is 54.55.
+  select amount into v_amt
+    from public.payslip_lines pl
+    join public.payslips p on p.id = pl.payslip_id
+   where p.run_id = v_run and p.employee_no = 'R1' and pl.code = 'OT';
+  perform pg_temp.check_eq('and the overtime itself is to the sen',
+                           v_amt, 54.55);
+
+  select basic_salary into v_amt
+    from public.payslips where run_id = v_run and employee_no = 'Z1';
+  perform pg_temp.check_eq('no days a month is still a month''s pay',
+                           v_amt, 2400);
+  select count(*) into v_rate
+    from public.payslip_lines pl
+    join public.payslips p on p.id = pl.payslip_id
+   where p.run_id = v_run and p.employee_no = 'Z1' and pl.code = 'OT';
+  perform pg_temp.check_eq(
+    'and their overtime is nothing rather than an error', v_rate, 0);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 17. What a posted run says when somebody recalculates it
+--
+-- The last mutant but one, and the smallest: the word "and" inside the
+-- refusal. `payroll_run.sql` asserts that a posted run REFUSES to be
+-- recalculated; nothing asserts what it says while refusing, so the
+-- sentence could be reworded into nonsense and the suite would pass.
+--
+-- It is worth a line because it is the sentence somebody reads at the
+-- moment they are told they cannot do the thing they came to do, and
+-- because it names the status -- "This run is posted", not "This run
+-- cannot be recalculated" -- which is the difference between an answer
+-- and a wall.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_me     uuid := pg_temp.test_user();
+  v_org    uuid;
+  v_period uuid;
+  v_run    uuid;
+begin
+  v_org := pg_temp.test_org('Payroll Refusal Sdn Bhd');
+
+  insert into public.pay_periods
+    (org_id, code, period_start, period_end, pay_date)
+  values (v_org, '2026-12', date '2026-12-01', date '2026-12-31',
+          date '2026-12-31')
+  returning id into v_period;
+
+  insert into public.employees
+    (org_id, employee_no, full_name, hire_date, basic_salary,
+     date_of_birth, marital_status, residency_status)
+  values (v_org, 'Q1', 'On a run that is done', date '2020-01-01', 3000,
+          date '1990-01-01', 'single', 'citizen');
+
+  v_run := public.create_payroll_run(v_org, v_period);
+  perform public.calculate_payroll_run(v_run);
+  update public.payroll_runs set status = 'posted' where id = v_run;
+
+  perform pg_temp.check_refused(
+    'a posted run says what it is, not merely that it refuses',
+    format('select public.calculate_payroll_run(%L)', v_run),
+    '%This run is posted and can no longer be recalculated%',
+    '22023');
 end $$;
 
 rollback;
