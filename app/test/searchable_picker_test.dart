@@ -384,4 +384,103 @@ void main() {
       expect(find.text('None'), findsNothing);
     });
   });
+
+  /// A cell in a row of a table rather than a field on a form.
+  ///
+  /// The tax code and the unit on a line of an invoice get about a
+  /// fifth of the row each and no vertical room for a floating label.
+  /// Dense form is the same control at the height a table row can
+  /// afford — which is the thing worth asserting, because a picker
+  /// that quietly grew a row would have been rejected as a regression
+  /// on the busiest screen in the product.
+  group('dense, for a cell in a row', () {
+    late ThemeData theme;
+
+    Future<void> pumpDense(WidgetTester tester, {required bool dense}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                theme = Theme.of(context);
+                return Center(
+                  child: SizedBox(
+                    width: 200,
+                    child: SearchablePicker<String>(
+                      options: contacts,
+                      value: null,
+                      onChanged: (_) {},
+                      label: 'Tax',
+                      dense: dense,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    TextField fieldOf(WidgetTester tester) =>
+        tester.widget<TextField>(find.byType(TextField));
+
+    testWidgets('asks for the compact box and the small type',
+        (tester) async {
+      await pumpDense(tester, dense: true);
+      final field = fieldOf(tester);
+      // Both, and separately: `isDense` alone still leaves the row
+      // carrying body text a table row has no height for.
+      expect(field.decoration!.isDense, isTrue);
+      expect(field.style, theme.textTheme.bodySmall);
+    });
+
+    testWidgets('and a form field asks for neither', (tester) async {
+      await pumpDense(tester, dense: false);
+      final field = fieldOf(tester);
+      expect(field.decoration!.isDense, isFalse);
+      expect(field.style, isNull);
+      expect(field.decoration!.labelText, 'Tax');
+    });
+
+    testWidgets('says what it is for in the box, since there is no label',
+        (tester) async {
+      await pumpDense(tester, dense: true);
+      // The floating label has nowhere to float to, so the label
+      // becomes the hint. Without this the cell is a blank box.
+      expect(fieldOf(tester).decoration!.labelText, isNull);
+      expect(find.text('Tax'), findsOneWidget);
+    });
+
+    testWidgets('and still opens, narrows and chooses', (tester) async {
+      String? chosen;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 200,
+                child: SearchablePicker<String>(
+                  options: contacts,
+                  value: null,
+                  onChanged: (v) => chosen = v,
+                  label: 'Tax',
+                  dense: true,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(TextFormField));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField), 'kilang');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Kilang Lestari Sdn Bhd'));
+      await tester.pumpAndSettle();
+
+      expect(chosen, 'c3');
+    });
+  });
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
 import '../../core/providers.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
@@ -1123,31 +1124,27 @@ class _UomField extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        DropdownButtonFormField<String>(
+        SearchablePicker<String>(
+          options: [
+            for (final o in options)
+              PickerOption<String>(
+                value: '${o['uom_code']}',
+                label: '${o['uom_name']}',
+                keywords: ['${o['uom_code']}'],
+              ),
+          ],
           value: options.any((o) => '${o['uom_code']}' == current)
               ? current
               : null,
-          isDense: true,
-          decoration: const InputDecoration(isDense: true),
-          style: Theme.of(context).textTheme.bodySmall,
-          items: [
-            for (final o in options)
-              DropdownMenuItem(
-                value: '${o['uom_code']}',
-                child: Text(
-                  '${o['uom_name']}',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-          ],
-          onChanged: !editable
-              ? null
-              : (v) {
-                  if (v == null || v == current) return;
-                  final to = uomFactor(options, v);
-                  line.uomCode = v;
-                  onUnitChanged(factor, to);
-                },
+          label: 'Unit',
+          dense: true,
+          enabled: editable,
+          onChanged: (v) {
+            if (v == null || v == current) return;
+            final to = uomFactor(options, v);
+            line.uomCode = v;
+            onUnitChanged(factor, to);
+          },
         ),
         if (hint != null)
           Padding(
@@ -1204,30 +1201,34 @@ class _TaxField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      value:
-          taxCodes.any((t) => t.id == line.taxCodeId) ? line.taxCodeId : null,
-      isExpanded: true,
-      decoration: const InputDecoration(isDense: true, hintText: 'Tax'),
-      items: [
+    // The busiest tax code box in the product, and the narrowest. A
+    // company that has added a rate for every service line it bills
+    // has more codes than the cell is tall, so it is typed into like
+    // every other one — dense, so the row keeps its height.
+    return SearchablePicker<String>(
+      options: [
         for (final t in taxCodes)
-          DropdownMenuItem(
+          PickerOption<String>(
             value: t.id,
-            child: Text(
-              t.rate == 0 ? t.code : '${t.code} (${Fmt.percent(t.rate)})',
-              overflow: TextOverflow.ellipsis,
-            ),
+            label: t.rate == 0 ? t.code : '${t.code} (${Fmt.percent(t.rate)})',
+            sublabel: t.name,
+            keywords: [t.name],
           ),
       ],
-      onChanged: editable
-          ? (v) {
-              final tax = taxCodes.where((t) => t.id == v).firstOrNull;
-              line
-                ..taxCodeId = v
-                ..taxRate = tax?.rate ?? 0;
-              onChanged();
-            }
-          : null,
+      value:
+          taxCodes.any((t) => t.id == line.taxCodeId) ? line.taxCodeId : null,
+      label: 'Tax',
+      dense: true,
+      enabled: editable,
+      allowEmpty: true,
+      emptyLabel: 'No tax',
+      onChanged: (v) {
+        final tax = taxCodes.where((t) => t.id == v).firstOrNull;
+        line
+          ..taxCodeId = v
+          ..taxRate = tax?.rate ?? 0;
+        onChanged();
+      },
     );
   }
 }

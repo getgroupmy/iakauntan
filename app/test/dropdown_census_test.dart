@@ -35,7 +35,6 @@ const dropdownCensus = <String, int>{
   'features/contacts/contact_extras.dart': 1,
   'features/crm/leads_screen.dart': 1,
   'features/crm/pipeline_screen.dart': 1,
-  'features/documents/line_editor.dart': 2,
   'features/documents/repeat_dialog.dart': 1,
   'features/documents/settlement_dialog.dart': 1,
   'features/documents/share_dialog.dart': 1,

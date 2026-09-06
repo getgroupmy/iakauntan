@@ -165,8 +165,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/line_editor.dart": {
-    "mtime": 1788616165.9097471,
-    "ast_hash": "ed5063bb32aaf27b5d4ce5c26c2f1a27",
+    "mtime": 1788661963.4761133,
+    "ast_hash": "8cd83a9d69a39b607321f260ae54e250",
     "semantic_hash": ""
   },
   "app/lib/src/features/documents/settlement_dialog.dart": {
@@ -7840,8 +7840,8 @@
     "semantic_hash": ""
   },
   "app/lib/src/core/searchable_picker.dart": {
-    "mtime": 1788508452.190772,
-    "ast_hash": "6d5575e13c33bdda3befda0328e0124c",
+    "mtime": 1788662386.217396,
+    "ast_hash": "5bb1fbb716ba793a0ccdce00c2ea63d5",
     "semantic_hash": ""
   },
   "app/lib/src/features/contacts/new_contact_dialog.dart": {
@@ -7850,8 +7850,8 @@
     "semantic_hash": ""
   },
   "app/test/searchable_picker_test.dart": {
-    "mtime": 1788508746.8557549,
-    "ast_hash": "3bb24203b802f2df6b4211b824ff71c9",
+    "mtime": 1788662348.0667443,
+    "ast_hash": "1201be11912be59e918bcb31c2f1ed25",
     "semantic_hash": ""
   },
   "app/lib/src/features/stock/new_warehouse_dialog.dart": {
@@ -8285,8 +8285,8 @@
     "semantic_hash": ""
   },
   "app/test/dropdown_census_test.dart": {
-    "mtime": 1788661397.8763885,
-    "ast_hash": "b80c5fdc3bca1205f3f17c7a7e6021fb",
+    "mtime": 1788661968.4129627,
+    "ast_hash": "adca2f6c1da5b33a29d23ba3ecc6dcf8",
     "semantic_hash": ""
   }
 }

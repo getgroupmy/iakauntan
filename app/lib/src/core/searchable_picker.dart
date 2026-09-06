@@ -93,6 +93,7 @@ class SearchablePicker<T> extends StatefulWidget {
     this.helperText,
     this.helperStyle,
     this.enabled = true,
+    this.dense = false,
     this.allowEmpty = false,
     this.emptyLabel = 'None',
     this.onCreate,
@@ -113,6 +114,15 @@ class SearchablePicker<T> extends StatefulWidget {
   final TextStyle? helperStyle;
 
   final bool enabled;
+
+  /// A cell in a row of a table rather than a field on a form.
+  ///
+  /// A line on an invoice gives the tax code about a fifth of the row
+  /// and no vertical room for a floating label, so in dense form the
+  /// label becomes the hint, the text is the small size the rest of the
+  /// row uses, and the overlay opens tight under the box. The
+  /// behaviour is identical; only the height changes.
+  final bool dense;
 
   /// Whether "none" is an answer. A project is optional; a customer on
   /// an invoice is not.
@@ -245,7 +255,7 @@ class _SearchablePickerState<T> extends State<SearchablePicker<T>> {
       child: CompositedTransformFollower(
         link: _layerLink,
         showWhenUnlinked: false,
-        offset: const Offset(0, 56),
+        offset: Offset(0, widget.dense ? 42 : 56),
         child: TapRegion(
           groupId: _tapGroup,
           child: Material(
@@ -347,13 +357,25 @@ class _SearchablePickerState<T> extends State<SearchablePicker<T>> {
                 controller: _controller,
                 focusNode: _focus,
                 enabled: widget.enabled,
+                style: widget.dense
+                    ? Theme.of(context).textTheme.bodySmall
+                    : null,
                 decoration: InputDecoration(
-                  labelText: widget.label,
-                  hintText: widget.hint,
+                  isDense: widget.dense,
+                  labelText: widget.dense ? null : widget.label,
+                  hintText: widget.dense
+                      ? (widget.hint ?? widget.label)
+                      : widget.hint,
                   helperText: widget.helperText,
                   helperStyle: widget.helperStyle,
                   errorText: state.errorText,
-                  suffixIcon: const Icon(Icons.arrow_drop_down),
+                  suffixIcon: Icon(
+                    Icons.arrow_drop_down,
+                    size: widget.dense ? 18 : null,
+                  ),
+                  suffixIconConstraints: widget.dense
+                      ? const BoxConstraints(minWidth: 20, minHeight: 20)
+                      : null,
                 ),
                 onChanged: (v) {
                   _query = v;
