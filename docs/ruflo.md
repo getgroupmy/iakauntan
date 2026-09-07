@@ -79,6 +79,53 @@ Two things to know before relying on it:
   and the memory step is a no-op here. Read the findings; do not treat
   the run itself as free.
 
+### The first audit, and what it was worth
+
+Run on 7 September 2026 against the whole repository, at standard depth.
+All four steps, and what each returned:
+
+| Step | Result |
+|---|---|
+| `security scan --depth standard --output json` | banner and a spinner. No findings, no JSON, exit 0. The first attempt hung past seven minutes; it completes once the npm package is cached. |
+| `security cve --list` | "No known vulnerabilities in dependency tree. Source: `npm audit --json`." |
+| `security threats --model stride` | 16 findings — 2 CRITICAL, 8 HIGH, 6 MEDIUM |
+| `security secrets` | no secrets detected |
+
+**Every one of the 16 findings is a false positive**, and the two clean
+results are worth less than they look:
+
+- The two CRITICALs are `.env.example` and `server/sfu/.env.example`,
+  flagged as "`.env` file tracked in git". They are the template files,
+  every slot empty or `replace_me`, with a header that says so. The
+  rule matched the filename, not the contents.
+- Seven findings are under `app/build/web/`, which `app/.gitignore`
+  ignores and git does not track. They exist only in a working tree
+  that has been built, and they are duplicates of the seven below.
+- The other seven are `new Function()`, `__proto__` and "non-localhost
+  HTTP URL" inside `app/web/pdfjs/pdf.js` and `app/web/tesseract/*` —
+  vendored Mozilla pdf.js and tesseract.js, minified. The HTTP URLs are
+  `http://www.w3.org/2000/svg` and the Apache licence URL: XML
+  namespaces and a licence, not network calls.
+- **`cve --list` runs `npm audit`, and this repository has no
+  `package.json`.** It reported a clean dependency tree by auditing
+  nothing. The actual dependency trees here are Dart (`app/pubspec.yaml`)
+  and Deno (the edge functions' imports), and it read neither.
+- Both scans stop at **500 files**, and the repository tracks 1,849 —
+  651 Dart, 833 SQL, 39 edge-function TypeScript. "No secrets
+  detected" covers whichever 500 the walk reached first, which in this
+  case was heavily `app/build` and `app/web`. It is not an all-clear.
+
+So the gap this was installed to close — nothing in CI watches the Dart
+or Deno dependency trees — **is still open**, and this plugin does not
+close it. What would: `dart pub outdated` and a Deno import audit in
+CI, neither of which needs Ruflo.
+
+The plugin costs ~228 tokens a session and stays installed; the
+`security-auditor` agent and the two skills may still be useful as
+review prompts. But `/audit` on this repository is 16 false positives
+and two hollow all-clears, and it should not be run before a release in
+the belief that a green result means anything.
+
 `ruflo-core`'s tools arrive namespaced —
 `mcp__plugin_ruflo-core_ruflo__memory_store` and so on — not as the bare
 `memory_store` / `swarm_init` names the CLI track's scaffolding writes
