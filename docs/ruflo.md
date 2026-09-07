@@ -45,6 +45,40 @@ this repository:
 | `ruflo-migrations@ruflo` | schema-change review; read the caveat below before believing it about *this* repository's migrations |
 | `ruflo-swarm@ruflo` | several agents on one task, if you want that |
 
+### What is installed here, and what is not
+
+`ruflo-security-audit@ruflo` is installed at project scope and enabled.
+It is four markdown components — three skills (`security-scan`,
+`dependency-check`, `audit`) and one agent (`security-auditor`) — with
+**no hooks and no MCP server**, at about 228 tokens added to every
+session. That is the whole of its footprint, and it is why this is the
+one plugin worth having here.
+
+Two things to know before relying on it:
+
+- **`.claude/settings.json` is gitignored** (see `.gitignore`, beside
+  the same note about `graphify claude install --project`). The
+  enablement therefore lives on the machine that ran the install, not
+  in the repository. On a new clone, or a fresh Claude Code session in
+  a throwaway container, run the two lines again:
+
+  ```bash
+  claude plugin marketplace add ruvnet/ruflo
+  claude plugin install ruflo-security-audit@ruflo --scope project
+  ```
+
+  The install merges into the existing `hooks` block rather than
+  replacing it — the two `graphify hook-guard` entries survive, which
+  was the thing worth checking.
+
+- **`/audit` is a prompt, not a scanner.** It instructs the agent to
+  run `npx @claude-flow/cli@latest security scan`, `security cve
+  --list` and `security threats --model stride`, and then to file the
+  findings in a Ruflo memory namespace that only exists on the CLI
+  track. So the first `/audit` fetches and runs an unpinned npm CLI,
+  and the memory step is a no-op here. Read the findings; do not treat
+  the run itself as free.
+
 `ruflo-core`'s tools arrive namespaced —
 `mcp__plugin_ruflo-core_ruflo__memory_store` and so on — not as the bare
 `memory_store` / `swarm_init` names the CLI track's scaffolding writes
