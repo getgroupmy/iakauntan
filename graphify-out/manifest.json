@@ -805,8 +805,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1788364738.4095578,
-    "ast_hash": "1a937ed5ae5f1e6403de41893a201133",
+    "mtime": 1788770205.1009936,
+    "ast_hash": "f9115741d1c3ab6729d2cfa71cd93366",
     "semantic_hash": ""
   },
   "app/README.md": {
@@ -8317,6 +8317,11 @@
   "supabase/tests/module_promotions.sql": {
     "mtime": 1788710517.3143044,
     "ast_hash": "4e3fcf3e210c12d29cfc1085a379b712",
+    "semantic_hash": ""
+  },
+  "docs/ruflo.md": {
+    "mtime": 1788770205.085521,
+    "ast_hash": "3ff39c6c1019001493dc2adaab812480",
     "semantic_hash": ""
   }
 }

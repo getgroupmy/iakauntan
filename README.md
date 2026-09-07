@@ -986,6 +986,14 @@ separate switches, and records the reconciliation of the hosted
 project's migration history that had to happen before any of this could
 be turned on.
 
+[docs/ruflo.md](docs/ruflo.md) is a separate question about the same
+machinery: what it would take to add [Ruflo](https://github.com/ruvnet/ruflo),
+the agent harness, to the way this repository is worked on -- the two
+install paths, which one writes over `CLAUDE.md`, and the three things
+about this project (it deploys on green, its migrations are
+append-only, it already has a knowledge graph) that decide which of
+them is safe here. Nothing depends on it and nothing installs it.
+
 That second job had been failing, unnoticed, since the suite grew a
 second fixture organization. `app.seed_chart_of_accounts` creates a temp
 table `on commit drop`, which only drops at COMMIT — and the whole suite
