@@ -447,9 +447,17 @@ class _ClientMoneyDialogState extends ConsumerState<_ClientMoneyDialog> {
                     DropdownMenuItem(
                         value: 'payment',
                         child: Text('Paid out on client’s behalf')),
-                    DropdownMenuItem(
-                        value: 'transfer_to_office',
-                        child: Text('Transfer to office (settle a bill)')),
+                    // 0549 took the transfer off this dropdown. It
+                    // wrote one leg -- the client ledger went down and
+                    // the office account was never debited, so the
+                    // money left the books and the bill it was raised
+                    // for stayed outstanding and was chased. A
+                    // transfer belongs where the invoice is: Receive
+                    // payment, "From client money already held", which
+                    // moves both legs and names the bill on the client
+                    // ledger. The database refuses a transfer with no
+                    // invoice on it now, so this option would only
+                    // produce an error.
                     DropdownMenuItem(
                         value: 'refund', child: Text('Refund to client')),
                   ],

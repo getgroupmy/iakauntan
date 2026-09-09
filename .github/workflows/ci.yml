@@ -153,6 +153,7 @@ jobs:
                    supabase/tests/payslip_access.sql \
                    supabase/tests/strata_preview.sql \
                    supabase/tests/client_account.sql \
+                   supabase/tests/client_money_crossing.sql \
                    supabase/tests/matter_billing.sql \
                    supabase/tests/leave_requests.sql \
                    supabase/tests/claim_caps.sql \

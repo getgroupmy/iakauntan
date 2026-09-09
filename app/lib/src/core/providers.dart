@@ -1376,6 +1376,24 @@ final mattersProvider = FutureProvider.autoDispose
       return requireRepo(ref).matters(status: args.status, search: args.search);
     });
 
+/// The matters open for one client, for the receipt and payment screens
+/// to offer when a firm holds the legal module (0549).
+///
+/// Open ones only: money is not received on account for a matter that
+/// closed, and a picker offering fifty closed matters is a picker
+/// nobody uses.
+final clientMattersProvider = FutureProvider.autoDispose
+    .family<List<Matter>, String>((ref, contactId) async {
+      final all = await requireRepo(ref).matters(status: 'open');
+      return [for (final m in all) if (m.clientId == contactId) m];
+    });
+
+/// What one matter holds in the client account, now.
+final matterClientBalanceProvider = FutureProvider.autoDispose
+    .family<double, String>((ref, matterId) {
+      return requireRepo(ref).matterClientBalance(matterId);
+    });
+
 /// Fixed-fee matters that have gone past what was agreed.
 final mattersOverAgreedFeeProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {

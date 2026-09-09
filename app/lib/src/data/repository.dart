@@ -5024,6 +5024,108 @@ extension RepoExtras on Repo {
     return Repo._rows(data).map(Matter.fromJson).toList();
   }
 
+  /// Money received from a client to hold on account for a matter.
+  ///
+  /// 0549. Client money and office money are two streams and the
+  /// difference is the whole of the Solicitors' Accounts Rules: this
+  /// reaches the client account and 2300, and it raises no sales
+  /// document, because money held for a client is not income.
+  Future<String> receiveClientMoney({
+    required String matterId,
+    required double amount,
+    DateTime? date,
+    String? description,
+    String? reference,
+    String? paymentModeCode,
+  }) async {
+    final id = await callRpc(
+      'receive_client_money',
+      params: {
+        'p_matter': matterId,
+        'p_amount': amount,
+        if (date != null) 'p_date': Fmt.iso(date),
+        if (description != null) 'p_description': description,
+        if (reference != null) 'p_reference': reference,
+        if (paymentModeCode != null) 'p_payment_mode': paymentModeCode,
+      },
+    );
+    return id.toString();
+  }
+
+  /// A disbursement paid out of a matter's client money — stamp duty,
+  /// a search fee — or the refund of what is left when it closes.
+  ///
+  /// The server refuses to overdraw the matter, which is the rule that
+  /// stops one client's money funding another's.
+  Future<String> payFromClientAccount({
+    required String matterId,
+    required double amount,
+    String? payee,
+    DateTime? date,
+    String? description,
+    String? reference,
+    String? paymentModeCode,
+    bool refund = false,
+  }) async {
+    final id = await callRpc(
+      'pay_from_client_account',
+      params: {
+        'p_matter': matterId,
+        'p_amount': amount,
+        if (payee != null) 'p_payee': payee,
+        if (date != null) 'p_date': Fmt.iso(date),
+        if (description != null) 'p_description': description,
+        if (reference != null) 'p_reference': reference,
+        if (paymentModeCode != null) 'p_payment_mode': paymentModeCode,
+        'p_refund': refund,
+      },
+    );
+    return id.toString();
+  }
+
+  /// Settles a rendered bill out of the client money already held for
+  /// its matter — the transfer to office.
+  ///
+  /// Both legs at once and only from here: the money leaves the client
+  /// account AND arrives in the office one, which is what makes it a
+  /// transfer rather than a disappearance. Before 0549 the movement
+  /// existed and did only the first half.
+  Future<String> settleFromClientAccount({
+    required String matterId,
+    required String invoiceId,
+    required double amount,
+    DateTime? date,
+    String? officeBankAccountId,
+    String? reference,
+  }) async {
+    final id = await callRpc(
+      'settle_from_client_account',
+      params: {
+        'p_matter': matterId,
+        'p_invoice': invoiceId,
+        'p_amount': amount,
+        if (date != null) 'p_date': Fmt.iso(date),
+        if (officeBankAccountId != null) 'p_office_bank': officeBankAccountId,
+        if (reference != null) 'p_reference': reference,
+      },
+    );
+    return id.toString();
+  }
+
+  /// What a matter holds in the client account right now.
+  ///
+  /// Asked of the server rather than summed in the client, because it
+  /// is the same number the server refuses against and two answers to
+  /// one question is how a form comes to promise what the database will
+  /// not do.
+  Future<double> matterClientBalance(String matterId) async {
+    final value = await callRpc(
+      'matter_client_balance',
+      params: {'p_matter': matterId},
+    );
+    return Fmt.toDouble(value);
+  }
+
   Future<List<MatterSummary>> matterSummary() async {
     final data = await callRpc(
       'report_matter_summary',

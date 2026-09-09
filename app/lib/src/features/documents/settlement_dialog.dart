@@ -8,8 +8,12 @@ import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+// For the client-money methods on Repo, which live in an extension and
+// are only visible where the library defining it is imported (0549).
+import '../../data/repository.dart';
 import '../banking/new_bank_account_dialog.dart';
 import '../contacts/new_contact_dialog.dart';
+import 'client_money_copy.dart';
 import 'fx.dart';
 import 'settlement_discount.dart';
 
@@ -59,6 +63,35 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
   DateTime _date = DateTime.now();
   bool _saving = false;
 
+  // ---- client money (0549), only when the firm holds `legal` --------
+  //
+  // A solicitor's receipt is one of three things and a solicitor's
+  // payment is one of two, and the difference is which account the
+  // money is in rather than anything on the form. Defaulting to the
+  // office is what every other business does and what a firm does for
+  // its own fees; the other choices are opt-in per receipt.
+  ReceiptDestination _destination = ReceiptDestination.office;
+  PaymentSource _source = PaymentSource.office;  // ignore: prefer_final_fields
+  String? _matterId;
+  final _clientAmount = TextEditingController();
+  final _payee = TextEditingController();
+
+  /// True when this receipt or payment is client money and the ordinary
+  /// allocation path does not apply.
+  bool get _isClientMoney =>
+      _matterId != null &&
+      (_isReceipt
+          ? _destination != ReceiptDestination.office
+          : _source != PaymentSource.office);
+
+  /// The two modes that take a typed amount rather than a set of ticked
+  /// documents: money held for later, and money paid out for a client.
+  bool get _isFreeAmount =>
+      _matterId != null &&
+      (_isReceipt
+          ? _destination == ReceiptDestination.onAccount
+          : _source == PaymentSource.clientAccount);
+
   /// Amount being applied to each open document.
   final Map<String, double> _allocations = {};
 
@@ -98,6 +131,8 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
     _reference.dispose();
     _charges.dispose();
     _rate.dispose();
+    _clientAmount.dispose();
+    _payee.dispose();
     super.dispose();
   }
 
@@ -147,6 +182,17 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
     required double exchangeRate,
   }) async {
     if (_contactId == null) return;
+
+    // Client money takes a different door (0549). Three of them, and
+    // none writes an ordinary receipt: money held for a matter is not
+    // income, money paid out for a client is not the firm's expense,
+    // and the crossing between the two is the only movement that
+    // touches both accounts.
+    if (_isClientMoney) {
+      await _saveClientMoney();
+      return;
+    }
+
     if (_allocated <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Allocate the payment to at least one document.'),
@@ -190,6 +236,219 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
       refreshLedgerData(ref);
       Navigator.pop(context);
     }
+  }
+
+  /// The three client-money paths, each one RPC.
+  ///
+  /// Not folded into `_save`: that one raises a receipt and allocates
+  /// it, and every line of it is wrong for money that is not the
+  /// firm's. Keeping them apart is the same separation the accounts
+  /// themselves are kept under.
+  Future<void> _saveClientMoney() async {
+    final matter = _matterId;
+    if (matter == null) return;
+    final repo = ref.read(repoProvider)!;
+    final amount = double.tryParse(_clientAmount.text.trim()) ?? 0;
+
+    if (_isFreeAmount && amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Type the amount.'),
+      ));
+      return;
+    }
+    if (!_isFreeAmount && _allocated <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Tick the bill this money settles.'),
+      ));
+      return;
+    }
+
+    setState(() => _saving = true);
+    final ok = await runWithFeedback(
+      context,
+      pendingMessage: 'Posting…',
+      successMessage: _isReceipt
+          ? receiptDone(_destination)
+          : paymentDone(_source),
+      action: () async {
+        if (!_isReceipt) {
+          await repo.payFromClientAccount(
+            matterId: matter,
+            amount: amount,
+            payee: _payee.text.trim().isEmpty ? null : _payee.text.trim(),
+            date: _date,
+            reference: _reference.text.trim().isEmpty
+                ? null
+                : _reference.text.trim(),
+            paymentModeCode: _paymentMode,
+          );
+          return;
+        }
+        if (_destination == ReceiptDestination.onAccount) {
+          await repo.receiveClientMoney(
+            matterId: matter,
+            amount: amount,
+            date: _date,
+            reference: _reference.text.trim().isEmpty
+                ? null
+                : _reference.text.trim(),
+            paymentModeCode: _paymentMode,
+          );
+          return;
+        }
+        // One transfer per bill, because each one is its own crossing
+        // and the client ledger names the invoice it settled. A single
+        // transfer covering three bills would be one line saying
+        // nothing about which.
+        for (final e in _allocations.entries) {
+          if (e.value <= 0) continue;
+          await repo.settleFromClientAccount(
+            matterId: matter,
+            invoiceId: e.key,
+            amount: e.value,
+            date: _date,
+            officeBankAccountId: _bankAccountId,
+            reference: _reference.text.trim().isEmpty
+                ? null
+                : _reference.text.trim(),
+          );
+        }
+      },
+    );
+
+    if (mounted) setState(() => _saving = false);
+    if (ok && mounted) {
+      refreshLedgerData(ref);
+      ref.invalidate(matterClientBalanceProvider(matter));
+      Navigator.pop(context);
+    }
+  }
+
+  /// The client-account choices, drawn only for a firm that holds the
+  /// legal module and only for a client with an open matter.
+  ///
+  /// A picker with nothing in it is worse than no picker: it invites
+  /// the question "why can I not choose one" at the moment somebody is
+  /// trying to bank a cheque. So a client with no open matter sees
+  /// nothing at all and the dialog behaves as it always has.
+  Widget _clientMoneySection() {
+    final matters =
+        ref.watch(clientMattersProvider(_contactId!)).valueOrNull ??
+        const <Matter>[];
+    if (matters.isEmpty) return const SizedBox.shrink();
+
+    final held = _matterId == null
+        ? null
+        : ref.watch(matterClientBalanceProvider(_matterId!)).valueOrNull;
+    final typed = double.tryParse(_clientAmount.text.trim()) ?? 0;
+    final warning = held == null
+        ? null
+        : overdrawWarning(held: held, amount: typed);
+
+    return Card(
+      margin: const EdgeInsets.only(top: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(Space.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Client account',
+                style: Theme.of(context).textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(height: Space.sm),
+            SearchablePicker<String>(
+              key: const ValueKey('settlement-matter'),
+              options: [
+                for (final m in matters)
+                  PickerOption<String>(
+                    value: m.id,
+                    label: '${m.matterNo} · ${m.name}',
+                    sublabel: m.matterType,
+                  ),
+              ],
+              value: _matterId,
+              label: 'Matter',
+              hint: 'Type a matter number or name',
+              allowEmpty: true,
+              emptyLabel: 'Not client money',
+              onChanged: (v) => setState(() {
+                _matterId = v;
+                if (v == null) {
+                  _destination = ReceiptDestination.office;
+                  _source = PaymentSource.office;
+                }
+              }),
+            ),
+            if (_matterId != null) ...[
+              const SizedBox(height: Space.xs),
+              Text(
+                held == null
+                    ? 'Reading the matter’s balance…'
+                    : matterBalanceLine(held),
+                key: const ValueKey('matter-balance-line'),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: Space.sm),
+              if (_isReceipt)
+                for (final d in ReceiptDestination.values)
+                  RadioListTile<ReceiptDestination>(
+                    key: ValueKey('destination-${d.name}'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: d,
+                    groupValue: _destination,
+                    title: Text(receiptDestinationLabel(d)),
+                    subtitle: Text(receiptDestinationHint(d),
+                        style: Theme.of(context).textTheme.bodySmall),
+                    onChanged: (v) =>
+                        setState(() => _destination = v ?? _destination),
+                  )
+              else
+                for (final s in PaymentSource.values)
+                  RadioListTile<PaymentSource>(
+                    key: ValueKey('source-${s.name}'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: s,
+                    groupValue: _source,
+                    title: Text(paymentSourceLabel(s)),
+                    subtitle: Text(paymentSourceHint(s),
+                        style: Theme.of(context).textTheme.bodySmall),
+                    onChanged: (v) => setState(() => _source = v ?? _source),
+                  ),
+              if (_isFreeAmount) ...[
+                const SizedBox(height: Space.sm),
+                TextField(
+                  key: const ValueKey('client-amount'),
+                  controller: _clientAmount,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Amount',
+                    prefixText: 'RM ',
+                    errorText: warning,
+                  ),
+                ),
+                if (!_isReceipt) ...[
+                  const SizedBox(height: Space.sm),
+                  TextField(
+                    key: const ValueKey('client-payee'),
+                    controller: _payee,
+                    decoration: const InputDecoration(
+                      labelText: 'Paid to',
+                      helperText: 'Who received it — the stamp office, the '
+                          'land office, the client themselves.',
+                    ),
+                  ),
+                ],
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -275,8 +534,15 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
                   _offers.clear();
                 }),
               ),
+              // 0549. A firm holding the legal module receives money in
+              // one of three places and pays it out of one of two, and
+              // which one is not a detail of the receipt -- it is the
+              // difference between the firm's money and somebody
+              // else's. Absent entirely for every other business.
+              if (_contactId != null && moduleEnabled(ref, 'legal'))
+                _clientMoneySection(),
               const SizedBox(height: 14),
-              if (_contactId != null) _OpenDocuments(
+              if (_contactId != null && !_isFreeAmount) _OpenDocuments(
                 kind: widget.kind,
                 contactId: _contactId!,
                 allocations: _allocations,
@@ -478,7 +744,19 @@ class _SettlementDialogState extends ConsumerState<_SettlementDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: _saving || _allocated <= 0 || blocked
+          // Money on account and a disbursement settle nothing, so
+          // `_allocated` is zero for both and the ordinary guard would
+          // disable the button on the two paths that need it. They
+          // carry a typed amount instead, and `_saveClientMoney`
+          // refuses an empty one.
+          //
+          // `blocked` is the foreign-currency guard: it has nothing to
+          // say about a client-account movement, which is in the
+          // firm's own currency and settles nothing raised in another.
+          onPressed: _saving ||
+                  (_isFreeAmount
+                      ? (double.tryParse(_clientAmount.text.trim()) ?? 0) <= 0
+                      : _allocated <= 0 || blocked)
               ? null
               : () => _save(
                     currency: currency.code,
