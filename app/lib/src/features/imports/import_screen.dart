@@ -159,6 +159,26 @@ enum ImportKind {
   openingStock,
 }
 
+/// What each importer is called on the button that selects it.
+///
+/// An exhaustive switch on purpose: adding a kind to the enum without
+/// naming it here is a compile error, which is the only way a list like
+/// this stays in step with what it lists.
+///
+/// The order is `ImportKind.values`' own, and that order is the order
+/// the job is done in: the master files first because the documents
+/// name their rows, and the chart before the opening balances because
+/// those name account numbers.
+String importKindLabel(ImportKind kind) => switch (kind) {
+  ImportKind.contacts => 'Contacts',
+  ImportKind.items => 'Items',
+  ImportKind.accounts => 'Chart of accounts',
+  ImportKind.openInvoices => 'Open invoices',
+  ImportKind.openBills => 'Open bills',
+  ImportKind.openingBalances => 'Opening balances',
+  ImportKind.openingStock => 'Opening stock',
+};
+
 /// Whether this kind writes to the ledger.
 ///
 /// A top-level function rather than a getter on the state, because it is
@@ -395,30 +415,25 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
             padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.sm),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
+              // Built from `ImportKind.values`, not typed out.
+              //
+              // It was typed out, and 0550 added a seventh kind --
+              // the chart of accounts -- with its aliases, its
+              // required columns, its RPC and its section heading all
+              // wired up, and no button. Everything behind it worked
+              // and none of it was reachable. A hand-kept list beside
+              // an enum drifts the first time somebody adds to one and
+              // not the other; this cannot, and the label switch is
+              // exhaustive, so a new kind fails to compile until it
+              // has a name.
               child: SegmentedButton<ImportKind>(
                 showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(
-                    value: ImportKind.contacts,
-                    label: Text('Contacts'),
-                  ),
-                  ButtonSegment(value: ImportKind.items, label: Text('Items')),
-                  ButtonSegment(
-                    value: ImportKind.openInvoices,
-                    label: Text('Open invoices'),
-                  ),
-                  ButtonSegment(
-                    value: ImportKind.openBills,
-                    label: Text('Open bills'),
-                  ),
-                  ButtonSegment(
-                    value: ImportKind.openingBalances,
-                    label: Text('Opening balances'),
-                  ),
-                  ButtonSegment(
-                    value: ImportKind.openingStock,
-                    label: Text('Opening stock'),
-                  ),
+                segments: [
+                  for (final kind in ImportKind.values)
+                    ButtonSegment(
+                      value: kind,
+                      label: Text(importKindLabel(kind)),
+                    ),
                 ],
                 selected: {_kind},
                 onSelectionChanged: (s) => setState(() {
