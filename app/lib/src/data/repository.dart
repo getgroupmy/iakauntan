@@ -5161,7 +5161,12 @@ extension RepoExtras on Repo {
   }) async {
     final data = await client
         .from('client_account_transactions')
-        .select('*, matters!inner(matter_no, name, client_id, '
+        // The constraint is named because 0521 gave every org-scoped
+        // table a second, composite key alongside the plain one, so
+        // `matters` is joinable two ways from here and PostgREST
+        // refuses an unqualified embed with PGRST201.
+        .select('*, matters!client_account_transactions_matter_id_fkey!inner'
+            '(matter_no, name, client_id, '
             'contacts!matters_client_id_fkey(name))')
         .eq('org_id', orgId)
         .inFilter('transaction_type', types)
@@ -8903,7 +8908,12 @@ extension RepoPos on Repo {
   ) async => Repo.rows(
     await client
         .from('pos_sale_line_modifiers')
-        .select('*, pos_sale_lines!inner(sale_id)')
+        // Named for the same reason (0521's composite key). This read
+        // has been ambiguous since that migration and nothing said so:
+        // `check_embeds.py` treated the `!inner` join modifier as a
+        // constraint name and skipped the check entirely.
+        .select('*, pos_sale_lines!pos_sale_line_modifiers_line_id_fkey!inner'
+            '(sale_id)')
         .eq('pos_sale_lines.sale_id', saleId),
   );
 

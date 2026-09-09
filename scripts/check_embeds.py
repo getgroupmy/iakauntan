@@ -60,6 +60,26 @@ group by 1
 having count(*) > 1;
 """
 
+# Every foreign key by name, and the two tables it joins.
+#
+# Naming a constraint is not the same as naming the RIGHT one, and that
+# is the second half this script used to miss entirely. `profiles!
+# payslip_access_requests_requested_by_fkey` named a constraint that
+# existed -- and pointed at `auth.users`. PostgREST can only embed
+# `profiles` through a constraint whose target IS `profiles`, so the
+# screen answered PGRST200 on every database built from these
+# migrations, while the hosted project had been quietly given a second
+# constraint of that name pointing the right way. The script waved it
+# through because a name was present.
+CONSTRAINTS_SQL = """
+select c.conname,
+       c.conrelid::regclass::text,
+       c.confrelid::regclass::text
+  from pg_constraint c
+  join pg_namespace n on n.oid = c.connamespace
+ where c.contype = 'f' and n.nspname = 'public';
+"""
+
 # Both of these are searched over the WHOLE FILE rather than line by
 # line. A `.select(` whose string sits on the NEXT line -- which is what
 # `dart format` does to a long one -- was invisible to a line-at-a-time
@@ -72,7 +92,7 @@ DYNAMIC_FROM_RE = re.compile(r"\.from\(\s*(?!')\S", re.S)
 SELECT_RE = re.compile(r"\.select\(\s*'([^']*)'", re.S)
 # An embedded resource: an optional `alias:`, the name, an optional
 # `!constraint` disambiguator, then the opening bracket of its column list.
-EMBED_RE = re.compile(r"(?:^|,)\s*(?:\w+:)?([a-z_]+)\s*(!\w+)?\s*\(")
+EMBED_RE = re.compile(r"(?:^|,)\s*(?:\w+:)?([a-z_]+)\s*((?:!\w+)*)\s*\(")
 # An embedded resource whose NAME is interpolated: `${kind.lineTable}(*)`.
 # The table cannot be read here, so it cannot be checked -- which is how
 # the second PGRST201 of the day reached a live screen. The convention
@@ -95,7 +115,39 @@ def ambiguous_pairs(database_url: str) -> set[frozenset[str]]:
     return pairs
 
 
-def scan(root: pathlib.Path, pairs: set[frozenset[str]]) -> list[str]:
+def constraints(db_url: str) -> dict[str, set[tuple[str, str]]]:
+    """Constraint name -> the (source, target) pairs it joins.
+
+    A name can repeat across tables, so this is a set rather than one
+    pair: `..._org_id_fkey` exists on nearly every table.
+    """
+    raw = subprocess.run(
+        ["psql", db_url, "-t", "-A", "-c", CONSTRAINTS_SQL],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    out: dict[str, set[tuple[str, str]]] = {}
+    for line in raw.splitlines():
+        parts = line.strip().split("|")
+        if len(parts) != 3:
+            continue
+        name, src, tgt = parts
+        out.setdefault(name, set()).add((strip_schema(src), strip_schema(tgt)))
+    return out
+
+
+def strip_schema(name: str) -> str:
+    """`public.contacts` and `contacts` are the same table; `auth.users`
+    is not `users`, and keeping its schema is what makes the difference
+    visible in the message."""
+    return name[len("public."):] if name.startswith("public.") else name
+
+
+
+def scan(
+    root: pathlib.Path,
+    pairs: set[frozenset[str]],
+    fks: dict[str, set[tuple[str, str]]],
+) -> list[str]:
     # Every table that is joinable more than one way to SOMETHING. An
     # embed of one of these under an unknown `.from()` cannot be cleared.
     ambiguous_anywhere = {name for pair in pairs for name in pair}
@@ -149,7 +201,46 @@ def scan(root: pathlib.Path, pairs: set[frozenset[str]]) -> list[str]:
                 )
 
             for embedded, constraint in EMBED_RE.findall(columns):
-                if constraint:
+                # `!inner` and `!left` are PostgREST's join-type
+                # modifiers, not constraint names, and they can sit
+                # beside one: `contacts!contacts_org_fkey!inner`. Only
+                # what is left after taking them out is a constraint.
+                hints = [h for h in constraint.split("!") if h]
+                named = [h for h in hints if h not in ("inner", "left")]
+                if named:
+                    # Named -- but named WHAT. A constraint that exists
+                    # and points somewhere else cannot carry this embed,
+                    # and PostgREST answers PGRST200 rather than
+                    # guessing. This is the half that let
+                    # `profiles!payslip_access_requests_requested_by_fkey`
+                    # through for as long as it took a schema dump of
+                    # the deployed project to notice.
+                    name = named[0]
+                    joins = fks.get(name)
+                    if joins is None:
+                        problems.append(
+                            f"{path}:{number}\n"
+                            f"    embeds '{embedded}!{name}' and there is "
+                            f"no constraint of that name in `public`.\n"
+                            f"    PostgREST answers PGRST200 and the whole "
+                            f"request fails.\n"
+                            f"    {columns[:90]}"
+                        )
+                        continue
+                    reaches = {tgt for src, tgt in joins} | {
+                        src for src, tgt in joins
+                    }
+                    if embedded not in reaches:
+                        went = ", ".join(
+                            sorted(f"{src} -> {tgt}" for src, tgt in joins))
+                        problems.append(
+                            f"{path}:{number}\n"
+                            f"    embeds '{embedded}!{name}', and that "
+                            f"constraint joins {went}.\n"
+                            f"    It cannot reach '{embedded}', so "
+                            f"PostgREST answers PGRST200.\n"
+                            f"    {columns[:90]}"
+                        )
                     continue
                 if table is None:
                     if embedded not in ambiguous_anywhere:
@@ -190,16 +281,18 @@ def main() -> int:
         return 2
 
     pairs = ambiguous_pairs(sys.argv[1])
-    problems = scan(pathlib.Path("app/lib"), pairs)
+    fks = constraints(sys.argv[1])
+    problems = scan(pathlib.Path("app/lib"), pairs, fks)
 
     if problems:
-        print(f"{len(problems)} ambiguous PostgREST embed(s):\n")
+        print(f"{len(problems)} PostgREST embed problem(s):\n")
         for problem in problems:
             print(problem + "\n")
         return 1
 
-    print(f"No ambiguous embeds. ({len(pairs)} pairs of tables are joinable "
-          f"more than one way.)")
+    print(f"Every embed resolves. ({len(pairs)} pairs of tables are "
+          f"joinable more than one way; {len(fks)} named constraints "
+          f"checked.)")
     return 0
 
 
