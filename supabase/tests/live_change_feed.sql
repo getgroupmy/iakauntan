@@ -27,11 +27,27 @@ begin;
 \i supabase/tests/_helpers.sql
 
 -- ---------------------------------------------------------------------
--- 1. Every org-scoped table is on the feed
+-- 1. Every org-scoped table is on the feed, but two
 -- ---------------------------------------------------------------------
+-- The two are read-receipts, and they are the exception that the blanket
+-- rule could not survive.
+--
+-- `security_events` and `payslip_access_log` are written BY reads:
+-- `audit_trail` calls `note_read` calls `record_security_event`, and
+-- `audit_list_payslips` / `audit_view_payslip` write the access log. Put
+-- them on the feed and a screen showing either one refreshes, reads,
+-- writes a receipt for the read, and is told to refresh again -- an
+-- endless reload, which is what happened in production.
+--
+-- So the rule is not "every org-scoped table" but "every org-scoped
+-- table whose writes are changes". A glance is not a change. The list
+-- below is the exception in full, and it is a list rather than a
+-- pattern so that adding to it takes a decision.
 do $$
 declare
   v_missing text[];
+  v_receipts text[] := array['security_events', 'payslip_access_log'];
+  v_wrongly_on text[];
 begin
   select coalesce(array_agg(c.relname order by c.relname), '{}')
     into v_missing
@@ -40,6 +56,7 @@ begin
    where n.nspname = 'public'
      and c.relkind = 'r'
      and c.relname <> 'live_changes'
+     and not (c.relname = any (v_receipts))
      and exists (
        select 1 from information_schema.columns col
         where col.table_schema = 'public'
@@ -56,6 +73,25 @@ begin
   perform pg_temp.check_eq(
     'every table with an org_id appends to the feed',
     array_to_string(v_missing, ', '),
+    ''
+  );
+
+  -- And the exception holds in the other direction. A future migration
+  -- that re-runs 0547's attach block over everything with an org_id
+  -- would put these two back and restore the reload loop, which is
+  -- exactly what one nearly did.
+  select coalesce(array_agg(r order by r), '{}') into v_wrongly_on
+    from unnest(v_receipts) r
+   where exists (
+     select 1 from pg_trigger t
+      where t.tgrelid = ('public.' || r)::regclass
+        and not t.tgisinternal
+        and t.tgname like 'live_change_%'
+   );
+
+  perform pg_temp.check_eq(
+    'and a read-receipt table wakes nobody',
+    array_to_string(v_wrongly_on, ', '),
     ''
   );
 end $$;
@@ -91,6 +127,10 @@ begin
    where n.nspname = 'public'
      and c.relkind = 'r'
      and c.relname <> 'live_changes'
+     -- The same two read-receipt tables the block above excuses, for
+     -- the same reason: they are written by reads, and a screen that
+     -- refreshed on them would read again and never stop.
+     and c.relname not in ('security_events', 'payslip_access_log')
      and exists (
        select 1 from information_schema.columns col
         where col.table_schema = 'public'
