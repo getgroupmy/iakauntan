@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../core/export_log.dart';
 import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/models.dart';
+import 'chart_export.dart';
 
 /// The company's own chart of accounts.
 ///
@@ -48,13 +52,37 @@ class ChartOfAccountsCard extends ConsumerWidget {
             SectionHeader(
               'Chart of accounts',
               subtitle: 'Malaysian SME template, MPERS aligned',
-              action: canEdit
-                  ? TextButton.icon(
+              // Three doors, in the order somebody uses them: take the
+              // chart away, bring one in, add one account. Export is
+              // offered to anybody who can see the chart -- it is the
+              // same list already on the screen, and refusing to let
+              // somebody save what they are looking at is not a
+              // control. The other two need the permission the server
+              // asks for.
+              action: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton.icon(
+                    key: const ValueKey('chart-export'),
+                    onPressed: () => _export(context, ref, accounts.valueOrNull),
+                    icon: const Icon(Icons.download_outlined, size: 18),
+                    label: const Text('Export'),
+                  ),
+                  if (canEdit) ...[
+                    TextButton.icon(
+                      key: const ValueKey('chart-import'),
+                      onPressed: () => context.go('/import'),
+                      icon: const Icon(Icons.upload_file_outlined, size: 18),
+                      label: const Text('Import'),
+                    ),
+                    TextButton.icon(
                       onPressed: () => edit(),
                       icon: const Icon(Icons.add, size: 18),
                       label: const Text('Add'),
-                    )
-                  : null,
+                    ),
+                  ],
+                ],
+              ),
             ),
             AsyncView(
               value: accounts,
@@ -91,6 +119,41 @@ class ChartOfAccountsCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Saves the chart as CSV, or leaves it on the clipboard.
+///
+/// Nothing downloads on a phone, so the clipboard is the fallback
+/// rather than a message saying the export happened when it did not —
+/// the same arrangement `reports_screen.dart` uses.
+Future<void> _export(
+  BuildContext context,
+  WidgetRef ref,
+  List<Account>? accounts,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  if (accounts == null || accounts.isEmpty) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('The chart has not loaded yet.')),
+    );
+    return;
+  }
+  final csv = chartOfAccountsCsv(accounts);
+  final saved = await exportTextFile(
+    ref,
+    chartExportFilename(
+      ref.read(currentOrgProvider).valueOrNull?.name,
+      DateTime.now(),
+    ),
+    'text/csv',
+    csv,
+    what: 'Chart of accounts',
+    detail: '${accounts.length} accounts, as CSV',
+  );
+  if (!saved) await Clipboard.setData(ClipboardData(text: csv));
+  messenger.showSnackBar(
+    SnackBar(content: Text(saved ? 'Downloaded' : 'Copied to the clipboard')),
+  );
 }
 
 class _TypeGroup extends ConsumerWidget {

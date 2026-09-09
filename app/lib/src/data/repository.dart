@@ -1383,6 +1383,23 @@ class Repo {
     return _rows(data);
   }
 
+  /// A chart of accounts from a file (0550).
+  ///
+  /// Its own method rather than a third flag on [importRows], because
+  /// it asks for a different permission: a chart decides what every
+  /// future posting lands on, so the server wants `can_post` where the
+  /// contact list wants `can_write`.
+  Future<List<Map<String, dynamic>>> importAccounts({
+    required List<Map<String, String>> rows,
+    required bool commit,
+  }) async {
+    final data = await callRpc(
+      'import_accounts',
+      params: {'p_org_id': orgId, 'p_rows': rows, 'p_commit': commit},
+    );
+    return _rows(data);
+  }
+
   /// The open invoices and bills a company arrives with.
   ///
   /// `asAt` is the changeover — the day the ledger takes these balances

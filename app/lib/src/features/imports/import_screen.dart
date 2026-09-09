@@ -1,3 +1,4 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,6 +7,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'import_file.dart';
 
 /// Bringing a company's books across from whatever was in use before.
 ///
@@ -53,6 +55,19 @@ const _contactAliases = <String, List<String>>{
   'currency': ['ccy'],
   'credit_limit': ['limit'],
   'notes': ['remarks'],
+};
+
+/// A chart from another system calls these a dozen things. `type` and
+/// `subtype` are what most exports call them; `class` and `category`
+/// are what the Malaysian SME packages tend to use.
+const _accountAliases = <String, List<String>>{
+  'code': ['account code', 'account no', 'gl code', 'no', 'id'],
+  'name': ['account name', 'description', 'title'],
+  'account_type': ['type', 'class', 'category'],
+  'account_subtype': ['subtype', 'sub type', 'sub-category', 'group type'],
+  'parent_code': ['parent', 'parent account', 'header', 'heading'],
+  'description': ['notes', 'remarks'],
+  'is_group': ['group', 'is header', 'header account'],
 };
 
 const _itemAliases = <String, List<String>>{
@@ -137,6 +152,7 @@ const openingStockColumns = <String, List<String>>{
 enum ImportKind {
   contacts,
   items,
+  accounts,
   openInvoices,
   openBills,
   openingBalances,
@@ -153,6 +169,12 @@ enum ImportKind {
 /// that asked for write access throughout would offer an enabled button
 /// to an accounts clerk and collect a refusal.
 bool importNeedsPosting(ImportKind kind) =>
+    // 0550. A chart is master data like the other two, and it is the
+    // one piece of master data that decides what every future posting
+    // lands on -- so `import_accounts` asks for `can_post` and this has
+    // to ask for the same thing, or the screen offers an enabled button
+    // to somebody the database will refuse.
+    kind == ImportKind.accounts ||
     kind == ImportKind.openInvoices ||
     kind == ImportKind.openBills ||
     kind == ImportKind.openingBalances ||
@@ -226,6 +248,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   Map<String, List<String>> get _aliases => switch (_kind) {
     ImportKind.contacts => _contactAliases,
     ImportKind.items => _itemAliases,
+    ImportKind.accounts => _accountAliases,
     ImportKind.openInvoices => openInvoiceColumns,
     ImportKind.openBills => openBillColumns,
     ImportKind.openingBalances => openingBalanceColumns,
@@ -240,6 +263,11 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     // names the item by.
     ImportKind.contacts => const ['name'],
     ImportKind.items => const ['code', 'name'],
+    // The subtype and not the type: the subtype decides which line of
+    // which statement the account lands on, and the type follows from
+    // it (0550). A file naming only the type would leave every account
+    // needing a decision this screen cannot make.
+    ImportKind.accounts => const ['code', 'name', 'account_subtype'],
     ImportKind.openInvoices || ImportKind.openBills => const [
       'doc_no',
       'contact_code',
@@ -267,6 +295,10 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       final rows = switch (_kind) {
         ImportKind.contacts || ImportKind.items => await repo.importRows(
           contacts: _kind == ImportKind.contacts,
+          rows: table.rows,
+          commit: commit,
+        ),
+        ImportKind.accounts => await repo.importAccounts(
           rows: table.rows,
           commit: commit,
         ),
@@ -308,9 +340,36 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
     if (mounted) setState(() => _busy = false);
   }
 
+  /// Reads an uploaded file into the box.
+  ///
+  /// Into the box rather than straight into a preview, because the box
+  /// is what the person can then correct: a file with one bad heading
+  /// is fixed in place in ten seconds, and a screen that swallowed the
+  /// file and reported a verdict about it would send them back to the
+  /// spreadsheet.
+  Future<void> _upload() async {
+    final file = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'CSV', extensions: importFileExtensions),
+      ],
+    );
+    if (file == null) return;
+
+    final read = readImportFile(await file.readAsBytes(), name: file.name);
+    if (!mounted) return;
+    setState(() {
+      _failure = read.problem;
+      _verdict = null;
+      _table = null;
+      if (read.text != null) _text.text = read.text!;
+    });
+    if (read.text != null) await _run(commit: false);
+  }
+
   String _noun() => switch (_kind) {
     ImportKind.contacts => 'contacts',
     ImportKind.items => 'items',
+    ImportKind.accounts => 'accounts',
     ImportKind.openInvoices => 'open invoices',
     ImportKind.openBills => 'open bills',
     ImportKind.openingBalances => 'opening balances',
@@ -391,6 +450,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                         switch (_kind) {
                           ImportKind.contacts => 'Customers and suppliers',
                           ImportKind.items => 'Items',
+                          ImportKind.accounts => 'The chart of accounts',
                           ImportKind.openInvoices => 'Invoices still unpaid',
                           ImportKind.openBills => 'Bills still unpaid',
                           ImportKind.openingBalances =>
@@ -398,8 +458,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                           ImportKind.openingStock => 'Stock on hand',
                         },
                         subtitle:
-                            'Paste the file with its header row. '
-                            'Nothing is written until every row is good.',
+                            'Upload the file, or paste it with its header '
+                            'row. Nothing is written until every row is '
+                            'good.',
                       ),
                       if (_openItems) ...[
                         const SizedBox(height: Space.sm),
@@ -458,6 +519,22 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                       const SizedBox(height: Space.sm),
                       _Columns(aliases: _aliases, required: _required),
                       const SizedBox(height: Space.md),
+                      Row(children: [
+                        OutlinedButton.icon(
+                          key: const ValueKey('import-upload'),
+                          onPressed: _busy ? null : _upload,
+                          icon: const Icon(Icons.upload_file, size: 18),
+                          label: const Text('Upload a file'),
+                        ),
+                        const SizedBox(width: Space.md),
+                        Expanded(
+                          child: Text(
+                            'CSV, saved as UTF-8. Or paste it below.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ]),
+                      const SizedBox(height: Space.sm),
                       TextField(
                         controller: _text,
                         maxLines: 10,
@@ -477,6 +554,12 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                             ImportKind.items =>
                               'code,name,unit_price,uom_code\n'
                                   'ITEM-1,Widget,12.50,C62',
+                            ImportKind.accounts =>
+                              'code,name,account_subtype,parent_code,'
+                                  'is_group\n'
+                                  '8000,Motor vehicle expenses,'
+                                  'operating_expense,,true\n'
+                                  '8010,Fuel,operating_expense,8000,',
                             ImportKind.openInvoices =>
                               'doc_no,contact_code,doc_date,due_date,'
                                   'outstanding_amount\n'

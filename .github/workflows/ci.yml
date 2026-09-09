@@ -363,6 +363,7 @@ jobs:
                    supabase/tests/void_an_invoice.sql \
                    supabase/tests/bank_transfers.sql \
                    supabase/tests/csv_import.sql \
+                   supabase/tests/chart_import.sql \
                    supabase/tests/exchange_rate_feed.sql \
                    supabase/tests/salespeople.sql \
                    supabase/tests/serial_and_batch.sql \
