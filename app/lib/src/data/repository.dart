@@ -5143,6 +5143,54 @@ extension RepoExtras on Repo {
     return Fmt.toDouble(value);
   }
 
+  /// Every movement of client money the firm has made, newest first.
+  ///
+  /// Across matters rather than within one: `clientTransactions` above
+  /// answers "what happened on this matter", which is the question the
+  /// matter screen asks. This answers "what has been received" and
+  /// "what has been paid out", which is what somebody sitting down to
+  /// bank a cheque or settle a disbursement is looking at.
+  ///
+  /// The matter is embedded rather than joined afterwards, because a
+  /// client-money line without a matter on it is a line nobody can act
+  /// on -- it is the matter, not the amount, that says whose money it
+  /// is.
+  Future<List<Map<String, dynamic>>> clientAccountLedger({
+    required List<String> types,
+    int limit = 200,
+  }) async {
+    final data = await client
+        .from('client_account_transactions')
+        .select('*, matters!inner(matter_no, name, client_id, '
+            'contacts!matters_client_id_fkey(name))')
+        .eq('org_id', orgId)
+        .inFilter('transaction_type', types)
+        .order('transaction_date', ascending: false)
+        .order('transaction_no', ascending: false)
+        .limit(limit);
+    return Repo._rows(data);
+  }
+
+  /// What every open matter holds, for the picker on those two screens.
+  ///
+  /// One call rather than `matter_client_balance` per matter: a firm
+  /// with forty open matters would otherwise make forty round trips to
+  /// draw one dropdown.
+  Future<Map<String, double>> matterClientBalances() async {
+    final data = await client
+        .from('client_account_transactions')
+        .select('matter_id, amount, status')
+        .eq('org_id', orgId)
+        .neq('status', 'void');
+    final held = <String, double>{};
+    for (final row in Repo._rows(data)) {
+      final id = row['matter_id']?.toString();
+      if (id == null) continue;
+      held[id] = (held[id] ?? 0) + Fmt.toDouble(row['amount']);
+    }
+    return held;
+  }
+
   Future<List<MatterSummary>> matterSummary() async {
     final data = await callRpc(
       'report_matter_summary',

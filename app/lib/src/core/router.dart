@@ -41,6 +41,7 @@ import '../features/einvoice/einvoice_screen.dart';
 import '../features/expenses/expenses_screen.dart';
 import '../features/items/items_screen.dart';
 import '../features/legal/matter_detail_screen.dart';
+import '../features/legal/client_money_screen.dart';
 import '../features/legal/matters_screen.dart';
 import '../features/manufacturing/manufacturing_screen.dart';
 import '../features/approvals/approvals_screen.dart';
@@ -667,6 +668,17 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
           GoRoute(path: '/items', builder: (_, __) => const ItemsScreen()),
+          // Client money in and out are their own destinations, above
+          // the matter route's `:id` child -- `/legal/receipts` would
+          // otherwise be read as a matter with that id.
+          GoRoute(
+            path: '/legal/receipts',
+            builder: (_, __) => const ClientMoneyScreen(inbound: true),
+          ),
+          GoRoute(
+            path: '/legal/payouts',
+            builder: (_, __) => const ClientMoneyScreen(inbound: false),
+          ),
           GoRoute(
             path: '/legal',
             builder: (_, __) => const MattersScreen(),

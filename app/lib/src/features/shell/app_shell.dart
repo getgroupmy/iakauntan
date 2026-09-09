@@ -250,6 +250,25 @@ final _destinations = <_Dest>[
     '/legal',
     module: 'legal',
   ),
+  // Client money, in and out. 0549 built both movements and the only
+  // door onto either was the matter screen -- one matter at a time,
+  // which is where you go when you already know which matter you want.
+  // Somebody banking the morning's cheques does not: they have a
+  // cheque and a client, and the matter is what they are looking up.
+  _Dest(
+    'Receive payment',
+    Icons.south_west_outlined,
+    Icons.south_west,
+    '/legal/receipts',
+    module: 'legal',
+  ),
+  _Dest(
+    'Payout',
+    Icons.north_east_outlined,
+    Icons.north_east,
+    '/legal/payouts',
+    module: 'legal',
+  ),
   // Four doors onto one screen, under the CONTACTS heading the module
   // already gives them. All Contacts stays what it was — the same page,
   // opening on the same tab — and the three below it open it on theirs.

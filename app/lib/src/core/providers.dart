@@ -1394,6 +1394,31 @@ final matterClientBalanceProvider = FutureProvider.autoDispose
       return requireRepo(ref).matterClientBalance(matterId);
     });
 
+/// Client money coming in, and client money going out (0549).
+///
+/// Two providers rather than one family on a bool, because the two
+/// screens show different things and a family keyed on a flag reads as
+/// though they were the same list filtered.
+final clientReceiptsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref).clientAccountLedger(types: const ['receipt']);
+    });
+
+/// Payments out and refunds together: both are money leaving a matter,
+/// and a firm closing one wants to see the disbursements and the
+/// balance returned on the same page.
+final clientPayoutsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+      return requireRepo(ref)
+          .clientAccountLedger(types: const ['payment', 'refund']);
+    });
+
+/// What each matter holds, for the pickers on both screens.
+final matterClientBalancesProvider =
+    FutureProvider.autoDispose<Map<String, double>>((ref) {
+      return requireRepo(ref).matterClientBalances();
+    });
+
 /// Fixed-fee matters that have gone past what was agreed.
 final mattersOverAgreedFeeProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
