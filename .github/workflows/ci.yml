@@ -255,6 +255,7 @@ jobs:
                    supabase/tests/ledger_append_only.sql \
                    supabase/tests/demo_teardown.sql \
                    supabase/tests/demo_rebuild.sql \
+                   supabase/tests/demo_modules.sql \
                    supabase/tests/multicurrency.sql \
                    supabase/tests/transfer.sql \
                    supabase/tests/fx_shapes.sql \
