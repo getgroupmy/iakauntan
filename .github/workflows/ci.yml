@@ -823,6 +823,51 @@ jobs:
           deno check "${entries[@]}"
 
   # -------------------------------------------------------------------
+  # -------------------------------------------------------------------
+  # What we depend on
+  #
+  # Nothing watched either dependency tree until this job. The ruflo
+  # security plugin was installed to close that gap and did not -- its
+  # CVE step runs `npm audit`, and this repository has no package.json,
+  # so it reported a clean tree by auditing nothing (docs/ruflo.md).
+  #
+  # Two trees, two halves:
+  #
+  #   * the PINS half is arithmetic on files in this repository -- every
+  #     edge-function import is on a frozen census, carries a version,
+  #     and uses jsr:/npm:/node: rather than fetching code from a host
+  #     at deploy time; every direct Dart dependency is resolved in the
+  #     committed lockfile. No network, cannot flake.
+  #   * the ADVISORIES half asks OSV about every resolved version. When
+  #     OSV cannot be reached it FAILS. "The advisory database was
+  #     unreachable" and "there are no advisories" are different
+  #     sentences, and a check whose green means the first while
+  #     reading as the second is worse than no check at all.
+  #
+  # Deliberately NOT in `migrate`'s `needs:` yet. The advisory path
+  # cannot be exercised from the environment this was written in --
+  # api.osv.dev is refused by that network -- so its first real run is
+  # here. Gating a deploy on a code path nobody has seen succeed is how
+  # a security check becomes the thing that gets switched off. Once this
+  # job has been green on its own, adding it to `needs:` is one line.
+  # -------------------------------------------------------------------
+  dependencies:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # The script's own assertions first. Its parsers are the kind of
+      # code that fails silently and reads as good news: an import
+      # scanner that matches nothing reports a clean tree, and so does a
+      # lockfile reader that parses nothing.
+      - name: The audit's own assertions
+        run: python3 scripts/dependency_audit_test.py
+
+      - name: Pins, and every published advisory against them
+        run: python3 scripts/dependency_audit.py
+
   # The call server
   #
   # `server/sfu` is the media server behind in-app calling, and unlike

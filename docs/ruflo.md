@@ -116,9 +116,11 @@ results are worth less than they look:
   case was heavily `app/build` and `app/web`. It is not an all-clear.
 
 So the gap this was installed to close — nothing in CI watches the Dart
-or Deno dependency trees — **is still open**, and this plugin does not
-close it. What would: `dart pub outdated` and a Deno import audit in
-CI, neither of which needs Ruflo.
+or Deno dependency trees — was **still open** after installing it. It is
+closed now by `scripts/dependency_audit.py` and the `dependencies` job
+in CI, which read `app/pubspec.lock` and every edge-function import and
+ask OSV about both. That took about two hundred lines and no Ruflo. See
+`docs/security.md`.
 
 The plugin costs ~228 tokens a session and stays installed; the
 `security-auditor` agent and the two skills may still be useful as

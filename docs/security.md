@@ -494,6 +494,52 @@ its own, and that the daily run does not purge anything itself.
 Before 0235 neither log had any retention at all: `audit_logs` had been
 growing without bound since 0055.
 
+## What we depend on, and who has published a vulnerability in it
+
+Nothing in CI looked at either dependency tree until the `dependencies`
+job. That gap survived a security plugin installed specifically to
+close it: its CVE step runs `npm audit`, and this repository has no
+`package.json`, so it reported a clean tree by auditing nothing
+(`docs/ruflo.md` has the whole triage).
+
+There are two trees and they are in different ecosystems. Dart is
+`app/pubspec.lock` — `pubspec.yaml` holds carets, the lock holds the
+number that ships. Deno has neither a lockfile nor a manifest: what the
+edge functions depend on is written inline in every `import`, which is
+why `scripts/dependency_audit.py` carries a census of them.
+
+`scripts/dependency_audit.py` runs in two halves, and only one needs
+the network:
+
+- **Pins.** Every edge-function import is on the census, carries a
+  version, and uses `jsr:`, `npm:` or `node:`. `https:` is refused:
+  code fetched from an arbitrary host at deploy time is neither
+  reviewable nor pinnable, and refusing it is cheaper than detecting
+  it. On the Dart side, every direct dependency is resolved in the
+  committed lockfile.
+- **Advisories.** OSV is asked about every resolved version. **When OSV
+  cannot be reached, the job fails.** "The advisory database was
+  unreachable" and "there are no advisories" are different sentences,
+  and a check whose green means the first while reading as the second
+  is worse than no check.
+
+Two things it says out loud rather than counting as clean: a Dart
+package that does not come from pub.dev, and `jsr:@std/*`, which is
+published to JSR only and which no OSV ecosystem covers.
+
+What it does **not** yet do is force a pin. Both edge-function imports
+are major ranges — `jsr:@supabase/supabase-js@2` resolves to whatever
+2.x jsr serves on the day a function is deployed, so a minor release
+changes what runs in production with no commit here, and
+`_local_check` stubs that package precisely because it cannot see it.
+The census freezes the set so it cannot grow or float further; tightening
+those two to exact versions is a change to sixteen files that has to be
+type-checked against the real package, and it is its own commit.
+
+`scripts/dependency_audit.py --offline` runs the pins half alone, and
+says in as many words that it checked nothing about published
+vulnerabilities.
+
 ## What is deliberately not recorded
 
 Clicks. The ask was "every login, click and activity", and click
