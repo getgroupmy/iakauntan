@@ -7,6 +7,7 @@ import '../../core/format.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import 'file_shape.dart';
 import 'import_file.dart';
 
 /// Bringing a company's books across from whatever was in use before.
@@ -33,7 +34,7 @@ class ImportScreen extends ConsumerStatefulWidget {
 /// A file exported from another system has its own names for things, so
 /// the common ones are listed rather than making somebody rename
 /// columns before they can start.
-const _contactAliases = <String, List<String>>{
+const contactColumns = <String, List<String>>{
   'code': ['customer code', 'supplier code', 'account code', 'no', 'id'],
   'name': ['customer name', 'supplier name', 'company', 'company name'],
   'contact_type': ['type', 'kind'],
@@ -60,7 +61,7 @@ const _contactAliases = <String, List<String>>{
 /// A chart from another system calls these a dozen things. `type` and
 /// `subtype` are what most exports call them; `class` and `category`
 /// are what the Malaysian SME packages tend to use.
-const _accountAliases = <String, List<String>>{
+const accountColumns = <String, List<String>>{
   'code': ['account code', 'account no', 'gl code', 'no', 'id'],
   'name': ['account name', 'description', 'title'],
   'account_type': ['type', 'class', 'category'],
@@ -70,7 +71,7 @@ const _accountAliases = <String, List<String>>{
   'is_group': ['group', 'is header', 'header account'],
 };
 
-const _itemAliases = <String, List<String>>{
+const itemColumns = <String, List<String>>{
   'code': ['item code', 'product code', 'sku', 'no', 'id'],
   'name': ['item name', 'product name', 'description short'],
   'description': ['long description', 'details'],
@@ -253,6 +254,14 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   List<Map<String, dynamic>>? _verdict;
   String? _failure;
 
+  /// What the file in the box looks like, and to whom (0552).
+  ///
+  /// Null until something has been parsed. Held rather than recomputed
+  /// in `build` because the parse is what produces the headings, and a
+  /// screen that re-derived this on every frame would be answering a
+  /// question about a file it had not read.
+  FileShape? _shape;
+
   /// The day the ledger takes the opening balances on. Today by default,
   /// which is what somebody sitting down to migrate usually means.
   DateTime _asAt = DateTime.now();
@@ -266,9 +275,9 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
   bool get _openItems => importNeedsPosting(_kind);
 
   Map<String, List<String>> get _aliases => switch (_kind) {
-    ImportKind.contacts => _contactAliases,
-    ImportKind.items => _itemAliases,
-    ImportKind.accounts => _accountAliases,
+    ImportKind.contacts => contactColumns,
+    ImportKind.items => itemColumns,
+    ImportKind.accounts => accountColumns,
     ImportKind.openInvoices => openInvoiceColumns,
     ImportKind.openBills => openBillColumns,
     ImportKind.openingBalances => openingBalanceColumns,
@@ -302,12 +311,21 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
 
   Future<void> _run({required bool commit}) async {
     final table = parseCsvTable(_text.text, headerMapper(_aliases));
+    final shape = identifyFile(selected: _kind, headers: table.header);
     setState(() {
       _table = table;
+      _shape = shape;
       _verdict = null;
       _failure = null;
     });
     if (table.isEmpty) return;
+
+    // A file that belongs to another importer does not get as far as
+    // the database. It would be accepted there: the parse has already
+    // dropped the columns that prove where it belongs, so the server
+    // is handed two good columns and cannot know about the five it
+    // never saw. This is the last point at which anything can tell.
+    if (fileShapeBlocks(shape)) return;
 
     setState(() => _busy = true);
     final repo = ref.read(repoProvider)!;
@@ -381,6 +399,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       _failure = read.problem;
       _verdict = null;
       _table = null;
+      _shape = null;
       if (read.text != null) _text.text = read.text!;
     });
     if (read.text != null) await _run(commit: false);
@@ -439,6 +458,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                 onSelectionChanged: (s) => setState(() {
                   _kind = s.first;
                   _table = null;
+                  _shape = null;
                   _verdict = null;
                   _failure = null;
                 }),
@@ -615,7 +635,17 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                                 _busy ||
                                     !allowed ||
                                     _verdict == null ||
-                                    _errorCount > 0
+                                    _errorCount > 0 ||
+                                    // Belt and braces. `_run` already
+                                    // returns before the database when
+                                    // the file belongs elsewhere, so
+                                    // there is no verdict to enable
+                                    // this -- but a button that can be
+                                    // pressed on a file the screen has
+                                    // just called wrong is a button
+                                    // somebody will press.
+                                    (_shape != null &&
+                                        fileShapeBlocks(_shape!))
                                 ? null
                                 : () => _run(commit: true),
                             icon: const Icon(Icons.upload, size: 18),
@@ -634,6 +664,77 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                   ),
                 ),
               ),
+              // 0552. The file belongs to another importer. Shown
+              // before anything about rows, because "this is the wrong
+              // list" makes every message under it beside the point.
+              if (_shape != null && fileShapeWarning(_shape!) != null) ...[
+                const SizedBox(height: Space.lg),
+                Card(
+                  key: const ValueKey('wrong-importer'),
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  child: Padding(
+                    padding: const EdgeInsets.all(Space.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.swap_horiz,
+                                size: 18,
+                                color: Theme.of(context).colorScheme.error),
+                            const SizedBox(width: Space.sm),
+                            Text(
+                              fileShapeBlocks(_shape!)
+                                  ? 'This file is for another importer'
+                                  : 'This file may be for another importer',
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: Space.sm),
+                        Text(fileShapeWarning(_shape!)!),
+                        const SizedBox(height: Space.md),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: FilledButton.icon(
+                            key: const ValueKey('switch-importer'),
+                            onPressed: () => setState(() {
+                              _kind = _shape!.looksLike!;
+                              _table = null;
+                              _shape = null;
+                              _verdict = null;
+                              _failure = null;
+                            }),
+                            icon: const Icon(Icons.arrow_forward, size: 18),
+                            label: Text(
+                              'Import it as '
+                              '${importKindLabel(_shape!.looksLike!)
+                                  .toLowerCase()}',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              // Not a warning, and deliberately not phrased as one. A
+              // chart exported from this product carries `is_active`
+              // and `current_balance`, which the importer does not
+              // read. The difference this makes is between a column
+              // being ignored and a column being ignored silently.
+              if (table != null &&
+                  _shape != null &&
+                  !fileShapeBlocks(_shape!) &&
+                  ignoredColumnsNote(_kind, table.header) != null) ...[
+                const SizedBox(height: Space.md),
+                Text(
+                  ignoredColumnsNote(_kind, table.header)!,
+                  key: const ValueKey('ignored-columns'),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
               if (table != null && table.problems.isNotEmpty) ...[
                 const SizedBox(height: Space.lg),
                 _Panel(
