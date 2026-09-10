@@ -269,6 +269,18 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   /// Whether this is one person rather than a business.
   bool get _personal => _use == UseKind.personal;
 
+  /// Whose books these are.
+  ///
+  /// `/onboarding` is first-run and these are the reader's own.
+  /// `/companies/new` is another set of books on the same sign-in —
+  /// which is what an accounting practice with `multi_company` does all
+  /// day, for clients who are companies AND for clients who are one
+  /// person — so the words there are about somebody else. `returnTo` is
+  /// the marker because it is exactly what distinguishes the two
+  /// routes.
+  SetupAudience get _audience =>
+      widget.returnTo == null ? SetupAudience.own : SetupAudience.other;
+
   /// The answer to the first question, and where it leads.
   ///
   /// A person setting up for themselves is not asked what kind of
@@ -324,6 +336,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
       case SetupStep.use:
         return _UseStep(
           countryName: _countryName,
+          audience: _audience,
           chosen: _use,
           onCountry: _openCountries,
           onChosen: _chooseUse,
@@ -357,7 +370,8 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(setupTitle(_use ?? UseKind.business)),
+        title: Text(setupTitle(_use ?? UseKind.business,
+            audience: _audience)),
         actions: [
           TextButton.icon(
             onPressed: () async {
@@ -405,7 +419,8 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                           size: 20,
                         ),
                         title: const Text(useFieldLabel),
-                        subtitle: Text(useAnswer(_use ?? UseKind.business)),
+                        subtitle: Text(
+                            useAnswer(_use ?? UseKind.business, _audience)),
                         trailing: TextButton(
                           key: const ValueKey('org-use-change'),
                           onPressed:
@@ -459,6 +474,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                             setupPromise(
                               malaysian: _malaysian,
                               use: _use ?? UseKind.business,
+                              audience: _audience,
                             ),
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
@@ -478,6 +494,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                     labelText: nameLabel(
                       _use ?? UseKind.business,
                       malaysian: _malaysian,
+                      audience: _audience,
                     ),
                     hintText: _personal
                         ? 'e.g. Nurul Aisyah binti Rahman'
@@ -561,6 +578,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                       ),
                       helperText: identificationHelp(
                         _use ?? UseKind.business,
+                        audience: _audience,
                       ),
                       helperMaxLines: 2,
                     ),
@@ -713,7 +731,8 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Create company'),
+                      : Text(createButtonLabel(_use ?? UseKind.business,
+                          audience: _audience)),
                 ),
                 const SizedBox(height: 40),
               ],
@@ -763,6 +782,7 @@ class _Row2 extends StatelessWidget {
 class _UseStep extends ConsumerWidget {
   const _UseStep({
     required this.countryName,
+    required this.audience,
     required this.chosen,
     required this.onCountry,
     required this.onChosen,
@@ -770,6 +790,10 @@ class _UseStep extends ConsumerWidget {
   });
 
   final String countryName;
+
+  /// Whose books these are, which decides whether the personal answer
+  /// is "Myself" or "An individual".
+  final SetupAudience audience;
 
   /// What was answered last time, if this is a second visit. Marked
   /// rather than merely remembered: somebody who comes back to check
@@ -786,7 +810,7 @@ class _UseStep extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(useQuestion),
+        title: Text(useQuestion(audience)),
         leading: onBack == null
             ? null
             : BackButton(
@@ -834,8 +858,8 @@ class _UseStep extends ConsumerWidget {
               _UseCard(
                 tileKey: const ValueKey('use-personal'),
                 icon: Icons.person_outline,
-                title: personalTitle,
-                blurb: personalBlurb,
+                title: personalTitle(audience),
+                blurb: personalBlurb(audience),
                 current: chosen == UseKind.personal,
                 onTap: () => onChosen(UseKind.personal),
               ),

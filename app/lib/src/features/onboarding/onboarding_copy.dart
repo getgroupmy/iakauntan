@@ -29,36 +29,71 @@ enum UseKind {
   business,
 }
 
+/// Whose books these are.
+///
+/// The same screen serves two people. On first run somebody is setting
+/// themselves up, and the words are theirs — "your MyKad", "Open my
+/// books". At `/companies/new` they are opening ANOTHER set of books on
+/// the same sign-in, which an accounting practice with the
+/// `multi_company` module does all day: the client is a person or a
+/// company, and either way it is not the person reading the screen. A
+/// form that says "your MyKad" to a bookkeeper typing in a client's
+/// number is a form asking the wrong person for a number.
+enum SetupAudience {
+  /// The person filling the form in.
+  own,
+
+  /// Somebody else, whose books are being opened on this sign-in.
+  other,
+}
+
 /// The question at the top of the first step.
-const useQuestion = 'What is this for?';
+String useQuestion(SetupAudience audience) => audience == SetupAudience.own
+    ? 'What is this for?'
+    : 'Who are these books for?';
 
 /// Personal, said in a way somebody recognises themselves in.
-const personalTitle = 'Myself';
-const personalBlurb =
-    'Invoicing under your own name — freelance work, rent from a '
-    'property you own, tuition, commissions. Invoices carry your name '
-    'and your MyKad or passport number.';
+String personalTitle(SetupAudience audience) =>
+    audience == SetupAudience.own ? 'Myself' : 'An individual';
 
-/// Business, likewise.
+String personalBlurb(SetupAudience audience) => audience == SetupAudience.own
+    ? 'Invoicing under your own name — freelance work, rent from a '
+        'property you own, tuition, commissions. Invoices carry your '
+        'name and your MyKad or passport number.'
+    : 'Somebody invoicing under their own name — a freelancer, a '
+        'landlord, a tuition teacher, with no business registration. '
+        'Invoices carry their name and their MyKad or passport number.';
+
+/// Business, likewise. The same either way: a registered company is a
+/// registered company whoever is typing.
 const businessTitle = 'A business';
 const businessBlurb =
     'A registered company, enterprise, partnership or society. '
     'Invoices carry the registered name and the SSM number.';
 
 /// The heading over the form once the questions are answered.
-String setupTitle(UseKind use) =>
-    use == UseKind.personal ? 'Set up your details' : 'Set up your company';
+String setupTitle(UseKind use, {SetupAudience audience = SetupAudience.own}) {
+  if (audience == SetupAudience.other) {
+    return use == UseKind.personal ? 'Set up these books' : 'Add a company';
+  }
+  return use == UseKind.personal ? 'Set up your details' : 'Set up your company';
+}
 
 /// What the name box is called.
 ///
 /// LHDN matches the name on an e-Invoice against the name on the
 /// identification it was filed under, so "as on MyKad" is not a
 /// nicety — a shortened name and a full one are a rejected submission.
-String nameLabel(UseKind use, {required bool malaysian}) {
+String nameLabel(
+  UseKind use, {
+  required bool malaysian,
+  SetupAudience audience = SetupAudience.own,
+}) {
   if (use == UseKind.business) return 'Company name *';
+  final whose = audience == SetupAudience.own ? 'your' : 'their';
   return malaysian
-      ? 'Full name, as on your MyKad *'
-      : 'Full name, as on your passport *';
+      ? 'Full name, as on $whose MyKad *'
+      : 'Full name, as on $whose passport *';
 }
 
 /// What the identification box is called.
@@ -79,10 +114,16 @@ String identificationHint(UseKind use, {required bool malaysian}) {
 }
 
 /// What the identification is for, said once where it is asked.
-String identificationHelp(UseKind use) => use == UseKind.business
-    ? 'Goes on your invoices and to LHDN'
-    : 'Goes on your invoices and to LHDN, in place of a business '
-        'registration number';
+String identificationHelp(
+  UseKind use, {
+  SetupAudience audience = SetupAudience.own,
+}) {
+  final whose = audience == SetupAudience.own ? 'your' : 'their';
+  return use == UseKind.business
+      ? 'Goes on $whose invoices and to LHDN'
+      : 'Goes on $whose invoices and to LHDN, in place of a business '
+          'registration number';
+}
 
 /// The entity type a personal setup files under.
 ///
@@ -93,15 +134,37 @@ const personalEntityType = 'individual';
 
 /// What the setup promises to build, which is not the same everywhere
 /// and not the same for one person as for a company.
-String setupPromise({required bool malaysian, required UseKind use}) {
+String setupPromise({
+  required bool malaysian,
+  required UseKind use,
+  SetupAudience audience = SetupAudience.own,
+}) {
   final chart = malaysian
       ? 'a Malaysian chart of accounts, SST tax codes'
       : 'a chart of accounts';
+  final own = audience == SetupAudience.own;
   return use == UseKind.personal
-      ? 'We will create $chart and a fiscal calendar, so you can invoice '
-          'and be paid under your own name.'
+      ? 'We will create $chart and a fiscal calendar, so '
+          '${own ? 'you' : 'they'} can invoice and be paid under '
+          '${own ? 'your' : 'their'} own name.'
       : 'We will create $chart, a fiscal calendar and a sales pipeline '
-          'for you.';
+          '${own ? 'for you' : 'for them'}.';
+}
+
+/// What the button at the bottom of the form does.
+///
+/// A person setting up for themselves is not creating a company, and a
+/// button that says so is the form telling them they are in the wrong
+/// place at the last moment. What they are doing is opening a set of
+/// books in their own name, which is also what the row in
+/// `organizations` is: the table is how this product holds a tenant,
+/// and a tenant can be one person.
+String createButtonLabel(
+  UseKind use, {
+  SetupAudience audience = SetupAudience.own,
+}) {
+  if (use == UseKind.business) return 'Create company';
+  return audience == SetupAudience.own ? 'Open my books' : 'Open these books';
 }
 
 /// The question on the second step.
@@ -235,8 +298,8 @@ const businessTypeFieldLabel = 'Business type';
 const modulesFieldLabel = 'Add-ons';
 
 /// Which answer was given to the first question.
-String useAnswer(UseKind use) =>
-    use == UseKind.personal ? personalTitle : businessTitle;
+String useAnswer(UseKind use, [SetupAudience audience = SetupAudience.own]) =>
+    use == UseKind.personal ? personalTitle(audience) : businessTitle;
 
 /// What the add-ons line says.
 ///

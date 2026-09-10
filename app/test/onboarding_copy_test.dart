@@ -20,9 +20,26 @@ void main() {
     });
 
     test('and both answers say what they mean', () {
-      expect(personalBlurb.toLowerCase(), contains('your own name'));
-      expect(personalBlurb, contains('MyKad'));
+      expect(
+        personalBlurb(SetupAudience.own).toLowerCase(),
+        contains('your own name'),
+      );
+      expect(personalBlurb(SetupAudience.own), contains('MyKad'));
       expect(businessBlurb.toLowerCase(), contains('ssm'));
+    });
+
+    test('and are about the right person', () {
+      // The same screen serves an accounting practice opening books for
+      // a client. "Myself" and "your MyKad" are the wrong words in
+      // front of a bookkeeper typing in somebody else's number.
+      expect(personalTitle(SetupAudience.own), 'Myself');
+      expect(personalTitle(SetupAudience.other), 'An individual');
+      expect(
+        personalBlurb(SetupAudience.other).toLowerCase(),
+        contains('their own name'),
+      );
+      expect(useQuestion(SetupAudience.other).toLowerCase(),
+          contains('these books'));
     });
   });
 
@@ -39,6 +56,30 @@ void main() {
       expect(
         nameLabel(UseKind.personal, malaysian: false),
         contains('passport'),
+      );
+    });
+
+    test('and says whose name it wants', () {
+      expect(
+        nameLabel(UseKind.personal, malaysian: true),
+        contains('your MyKad'),
+      );
+      expect(
+        nameLabel(
+          UseKind.personal,
+          malaysian: true,
+          audience: SetupAudience.other,
+        ),
+        contains('their MyKad'),
+      );
+      // A company's name is its own whoever is typing.
+      expect(
+        nameLabel(
+          UseKind.business,
+          malaysian: true,
+          audience: SetupAudience.other,
+        ),
+        'Company name *',
       );
     });
   });
@@ -114,6 +155,47 @@ void main() {
     test('the heading follows too', () {
       expect(setupTitle(UseKind.business), 'Set up your company');
       expect(setupTitle(UseKind.personal), isNot(contains('company')));
+    });
+
+    test('and so does the button that ends it', () {
+      // Reported: a person who had answered "Myself" all the way
+      // through was asked at the last moment to Create company, which
+      // is the form saying they are in the wrong place.
+      expect(createButtonLabel(UseKind.business), 'Create company');
+      expect(createButtonLabel(UseKind.personal), 'Open my books');
+      expect(
+        createButtonLabel(UseKind.personal).toLowerCase(),
+        isNot(contains('company')),
+      );
+      // And a practice opening books for a client is not opening its
+      // own.
+      expect(
+        createButtonLabel(UseKind.personal, audience: SetupAudience.other),
+        'Open these books',
+      );
+    });
+
+    test('a practice is told whose books it is opening', () {
+      expect(
+        setupTitle(UseKind.personal, audience: SetupAudience.other),
+        'Set up these books',
+      );
+      expect(
+        setupTitle(UseKind.business, audience: SetupAudience.other),
+        'Add a company',
+      );
+      expect(
+        setupPromise(
+          malaysian: true,
+          use: UseKind.personal,
+          audience: SetupAudience.other,
+        ),
+        contains('their own name'),
+      );
+      expect(
+        identificationHelp(UseKind.personal, audience: SetupAudience.other),
+        contains('their invoices'),
+      );
     });
   });
 
@@ -252,7 +334,12 @@ void main() {
   group('the lines that say what was answered', () {
     test('name the answer rather than the code', () {
       expect(useAnswer(UseKind.business), businessTitle);
-      expect(useAnswer(UseKind.personal), personalTitle);
+      expect(useAnswer(UseKind.personal), personalTitle(SetupAudience.own));
+      // And the summary line agrees with the card that was tapped.
+      expect(
+        useAnswer(UseKind.personal, SetupAudience.other),
+        personalTitle(SetupAudience.other),
+      );
     });
 
     test('and say what having chosen nothing means', () {
