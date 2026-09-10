@@ -687,7 +687,7 @@ class Repo {
       query = query.or('name.ilike.%$q%,code.ilike.%$q%,email.ilike.%$q%');
     }
 
-    final data = await query.order('name').limit(200);
+    final data = await query.order('name', ascending: true).limit(200);
     return _rows(data).map(Contact.fromJson).toList();
   }
 
@@ -896,7 +896,7 @@ class Repo {
       query = query.or('name.ilike.%$q%,code.ilike.%$q%,barcode.ilike.%$q%');
     }
 
-    final data = await query.order('code').limit(300);
+    final data = await query.order('code', ascending: true).limit(300);
     final items = _rows(data).map(Item.fromJson).toList();
     return onlyLowStock ? items.where((i) => i.isLowStock).toList() : items;
   }
@@ -923,7 +923,7 @@ class Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('code');
+        .order('code', ascending: true);
     return _rows(data).map(TaxCode.fromJson).toList();
   }
 
@@ -1125,7 +1125,7 @@ class Repo {
         .eq('org_id', orgId)
         .isFilter('deleted_at', null);
     if (postableOnly) query = query.eq('is_group', false);
-    final data = await query.order('code');
+    final data = await query.order('code', ascending: true);
     return _rows(data).map(Account.fromJson).toList();
   }
 
@@ -1135,7 +1135,7 @@ class Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('days');
+        .order('days', ascending: true);
     return _rows(data);
   }
 
@@ -1144,7 +1144,7 @@ class Repo {
         .from('ref_classification_codes')
         .select()
         .eq('is_active', true)
-        .order('code');
+        .order('code', ascending: true);
     return _rows(data);
   }
 
@@ -1153,12 +1153,12 @@ class Repo {
         .from('ref_uom_codes')
         .select()
         .eq('is_active', true)
-        .order('code');
+        .order('code', ascending: true);
     return _rows(data);
   }
 
   Future<List<Map<String, dynamic>>> states() async {
-    final data = await client.from('ref_states').select().order('code');
+    final data = await client.from('ref_states').select().order('code', ascending: true);
     return _rows(data);
   }
 
@@ -1174,7 +1174,7 @@ class Repo {
         .from('ref_exemption_reasons')
         .select('code, description')
         .eq('is_active', true)
-        .order('code'),
+        .order('code', ascending: true),
   );
 
   /// The MSIC 2008 business activity codes SSM registers a company
@@ -1191,7 +1191,7 @@ class Repo {
         .from('ref_msic_codes')
         .select('code, description, category')
         .eq('is_active', true)
-        .order('code'),
+        .order('code', ascending: true),
   );
 
   // ------------------------------------------------------------------
@@ -1202,7 +1202,7 @@ class Repo {
         .from('ref_currencies')
         .select()
         .eq('is_active', true)
-        .order('code');
+        .order('code', ascending: true);
     return _rows(data).map(Currency.fromJson).toList();
   }
 
@@ -1240,7 +1240,7 @@ class Repo {
         .from('recurring_journals')
         .select()
         .eq('org_id', orgId)
-        .order('name'),
+        .order('name', ascending: true),
   );
 
   Future<void> saveRecurringJournal({
@@ -1296,7 +1296,7 @@ class Repo {
         .select()
         .eq('org_id', orgId)
         .order('is_active', ascending: false)
-        .order('next_run_date'),
+        .order('next_run_date', ascending: true),
   );
 
   /// Copies a posted invoice or bill into a schedule. The document is
@@ -1577,7 +1577,7 @@ class Repo {
         .from('ref_withholding_types')
         .select()
         .eq('is_active', true)
-        .order('sort_order'),
+        .order('sort_order', ascending: true),
   );
 
   /// The CP37 listing: what was deducted, on which form, and by when it
@@ -1662,7 +1662,7 @@ class Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('code'),
+        .order('code', ascending: true),
   );
 
   Future<List<Map<String, dynamic>>> projects() async => _rows(
@@ -1671,7 +1671,7 @@ class Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('code'),
+        .order('code', ascending: true),
   );
 
   /// Create or amend a project.
@@ -1740,7 +1740,7 @@ class Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('code'),
+        .order('code', ascending: true),
   );
 
   // ------------------------------------------------------------------
@@ -1758,7 +1758,7 @@ class Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('code'),
+        .order('code', ascending: true),
   );
 
   Future<void> createBranch({
@@ -2064,7 +2064,7 @@ class Repo {
         .eq('org_id', orgId)
         .eq('bank_account_id', bankAccountId);
     if (onlyOpen) q = q.isFilter('reconciliation_id', null);
-    return _rows(await q.order('transaction_date'));
+    return _rows(await q.order('transaction_date', ascending: true));
   }
 
   /// Imports statement lines, skipping any already on the account.
@@ -2197,7 +2197,7 @@ class Repo {
         .eq('org_id', orgId)
         .isFilter('deleted_at', null);
     if (!includeDisposed) q = q.neq('status', 'disposed');
-    final data = await q.order('asset_no');
+    final data = await q.order('asset_no', ascending: true);
     return _rows(data).map(FixedAsset.fromJson).toList();
   }
 
@@ -2697,7 +2697,7 @@ class Repo {
         .from(kind.lineTable)
         .select('id, line_no')
         .eq('document_id', documentId)
-        .order('line_no'),
+        .order('line_no', ascending: true),
   );
 
   /// Every lot allocation on a document, keyed by line id.
@@ -2712,7 +2712,7 @@ class Repo {
           .from('document_line_lots')
           .select()
           .inFilter(column, lineIds)
-          .order('lot_ref'),
+          .order('lot_ref', ascending: true),
     );
     final out = <String, List<Map<String, dynamic>>>{};
     for (final r in rows) {
@@ -2826,7 +2826,7 @@ class Repo {
         .select('*, items!bills_of_materials_item_id_fkey(code, name)')
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('code'),
+        .order('code', ascending: true),
   );
 
   Future<Map<String, dynamic>> billOfMaterials(String id) async =>
@@ -2926,7 +2926,7 @@ class Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('code'),
+        .order('code', ascending: true),
   );
 
   /// Returns the row's id, so a work centre made from the box that
@@ -3588,7 +3588,7 @@ class Repo {
   }) async {
     var q = client.from('salespeople').select().eq('org_id', orgId);
     if (activeOnly) q = q.eq('is_active', true);
-    return _rows(await q.order('name'));
+    return _rows(await q.order('name', ascending: true));
   }
 
   Future<void> saveSalesperson(Map<String, dynamic> row) async {
@@ -3771,7 +3771,7 @@ class Repo {
         .eq('doc_type', kind.isSales ? 'invoice' : 'bill')
         .gt('balance_amount', 0)
         .isFilter('deleted_at', null)
-        .order('doc_date');
+        .order('doc_date', ascending: true);
     return _rows(data).map(BusinessDocument.fromJson).toList();
   }
 
@@ -3815,7 +3815,7 @@ class Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('name');
+        .order('name', ascending: true);
     return _rows(data);
   }
 
@@ -3838,7 +3838,7 @@ class Repo {
         .from('ref_payment_modes')
         .select()
         .eq('is_active', true)
-        .order('code');
+        .order('code', ascending: true);
     return _rows(data);
   }
 
@@ -4063,7 +4063,7 @@ class Repo {
         .from('pipeline_stages')
         .select()
         .eq('org_id', orgId)
-        .order('sort_order');
+        .order('sort_order', ascending: true);
     return _rows(data).map(PipelineStage.fromJson).toList();
   }
 
@@ -4221,7 +4221,7 @@ class Repo {
         .select('*, contacts!activities_contact_id_fkey(name), opportunities!activities_opportunity_id_fkey(name)')
         .eq('org_id', orgId);
     if (onlyPending) query = query.eq('status', 'pending');
-    final data = await query.order('due_date').limit(100);
+    final data = await query.order('due_date', ascending: true).limit(100);
     return _rows(data);
   }
 
@@ -4604,7 +4604,7 @@ class PlatformRepo {
         .from('platform_modules')
         .select()
         .eq('is_active', true)
-        .order('sort_order');
+        .order('sort_order', ascending: true);
     return Repo._rows(data).map(ModuleInfo.fromJson).toList();
   }
 
@@ -4619,7 +4619,7 @@ class PlatformRepo {
   );
 
   Future<List<Map<String, dynamic>>> settings() async {
-    final data = await client.from('platform_settings').select().order('key');
+    final data = await client.from('platform_settings').select().order('key', ascending: true);
     return Repo._rows(data);
   }
 
@@ -4705,7 +4705,7 @@ class PlatformRepo {
     await client
         .from('statutory_schedules')
         .select('*, statutory_rates(*)')
-        .order('body')
+        .order('body', ascending: true)
         .order('effective_from', ascending: false),
   );
 
@@ -4894,7 +4894,7 @@ extension RepoExtras on Repo {
         .select('*, access_type_modules(module_code, access)')
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('name'),
+        .order('name', ascending: true),
   ).map(AccessType.fromJson).toList();
 
   Future<String> createAccessType(String name, {String? description}) async {
@@ -4980,8 +4980,8 @@ extension RepoExtras on Repo {
     await client
         .from('access_permissions')
         .select()
-        .order('module_code')
-        .order('sort_order'),
+        .order('module_code', ascending: true)
+        .order('sort_order', ascending: true),
   );
 
   /// Invites somebody, and hands back the raw invitation token once.
@@ -5312,8 +5312,8 @@ extension RepoExtras on Repo {
         .select()
         .eq('org_id', orgId)
         .eq('matter_id', matterId)
-        .order('transaction_date')
-        .order('created_at');
+        .order('transaction_date', ascending: true)
+        .order('created_at', ascending: true);
     return Repo._rows(data).map(ClientTransaction.fromJson).toList();
   }
 
@@ -5550,7 +5550,7 @@ extension RepoHr on Repo {
       q = q.or('full_name.ilike.$s,employee_no.ilike.$s');
     }
     return Repo._rows(
-      await q.order('employee_no'),
+      await q.order('employee_no', ascending: true),
     ).map(Employee.fromJson).toList();
   }
 
@@ -5684,7 +5684,7 @@ extension RepoHr on Repo {
         .select()
         .eq('employee_id', employeeId)
         .eq('tax_year', taxYear)
-        .order('relief_code'),
+        .order('relief_code', ascending: true),
   ).map(DeclaredRelief.fromJson).toList();
 
   /// The reliefs an employee may declare — everything the company cannot
@@ -5721,11 +5721,11 @@ extension RepoHr on Repo {
       client.from('employee_tax_reliefs').delete().eq('id', id);
 
   Future<List<Map<String, dynamic>>> departments() async => Repo._rows(
-    await client.from('departments').select().eq('org_id', orgId).order('name'),
+    await client.from('departments').select().eq('org_id', orgId).order('name', ascending: true),
   );
 
   Future<List<Map<String, dynamic>>> positions() async => Repo._rows(
-    await client.from('positions').select().eq('org_id', orgId).order('title'),
+    await client.from('positions').select().eq('org_id', orgId).order('title', ascending: true),
   );
 
   // ------------------------------------------------------------------
@@ -5784,7 +5784,7 @@ extension RepoHr on Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('sort_order'),
+        .order('sort_order', ascending: true),
   ).map(LeaveType.fromJson).toList();
 
   Future<List<LeaveBalance>> leaveBalances(String employeeId, int year) async =>
@@ -5936,7 +5936,7 @@ extension RepoHr on Repo {
               '(full_name)',
             )
             .eq('claim_id', claimId)
-            .order('step_no'),
+            .order('step_no', ascending: true),
       );
 
   Future<void> decideClaim(
@@ -5982,7 +5982,7 @@ extension RepoHr on Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('sort_order'),
+        .order('sort_order', ascending: true),
   );
 
   /// [payWithPayroll] decides which of two settlement routes the claim
@@ -6055,7 +6055,7 @@ extension RepoHr on Repo {
     if (runId != null) q = q.eq('run_id', runId);
     if (employeeId != null) q = q.eq('employee_id', employeeId);
     return Repo._rows(
-      await q.order('employee_no'),
+      await q.order('employee_no', ascending: true),
     ).map(Payslip.fromJson).toList();
   }
 
@@ -6591,7 +6591,7 @@ extension RepoHrSetup on Repo {
     String table, {
     String orderBy = 'name',
   }) async => Repo._rows(
-    await client.from(table).select().eq('org_id', orgId).order(orderBy),
+    await client.from(table).select().eq('org_id', orgId).order(orderBy, ascending: true),
   );
 
   Future<void> deleteSetupRow(String table, String id) =>
@@ -6612,7 +6612,7 @@ extension RepoHrSetup on Repo {
             .eq('org_id', orgId)
             .gte('holiday_date', '$year-01-01')
             .lte('holiday_date', '$year-12-31')
-            .order('holiday_date'),
+            .order('holiday_date', ascending: true),
       );
 
   /// Fills in the four federal holidays that fall on a fixed date. The
@@ -6637,7 +6637,7 @@ extension RepoHrSetup on Repo {
             .from('leave_entitlement_bands')
             .select()
             .eq('leave_type_id', leaveTypeId)
-            .order('service_years_from'),
+            .order('service_years_from', ascending: true),
       );
 
   Future<void> saveLeaveBand(Map<String, dynamic> values, {String? id}) async {
@@ -6680,7 +6680,7 @@ extension RepoHrSetup on Repo {
         // PostgREST refuses an unqualified embed with PGRST201.
         .select('*, price_levels!item_prices_price_level_id_fkey(code, name)')
             .eq('item_id', itemId)
-            .order('min_quantity'),
+            .order('min_quantity', ascending: true),
       );
 
   Future<void> saveItemPrice(Map<String, dynamic> values, {String? id}) async {
@@ -6710,7 +6710,7 @@ extension RepoHrSetup on Repo {
             .select()
             .eq('contact_id', contactId)
             .order('is_primary', ascending: false)
-            .order('name'),
+            .order('name', ascending: true),
       );
 
   Future<void> saveContactPerson(
@@ -6731,7 +6731,7 @@ extension RepoHrSetup on Repo {
             .select()
             .eq('contact_id', contactId)
             .order('is_default', ascending: false)
-            .order('label'),
+            .order('label', ascending: true),
       );
 
   Future<void> saveContactAddress(
@@ -6827,7 +6827,7 @@ extension RepoHrSetup on Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('sort_order'),
+        .order('sort_order', ascending: true),
   );
 
   // ------------------------------------------------------------------
@@ -6839,7 +6839,7 @@ extension RepoHrSetup on Repo {
             .from('interviews')
             .select('*, employees:interviewer_id(full_name)')
             .eq('applicant_id', applicantId)
-            .order('round_no'),
+            .order('round_no', ascending: true),
       );
 
   Future<void> saveInterview(Map<String, dynamic> values, {String? id}) async {
@@ -6860,7 +6860,7 @@ extension RepoHrSetup on Repo {
         .from('onboarding_template_items')
         .select()
         .eq('template_id', templateId)
-        .order('sort_order'),
+        .order('sort_order', ascending: true),
   );
 
   Future<void> saveTemplateItem(
@@ -6902,7 +6902,7 @@ extension RepoHrSetup on Repo {
         .from('onboarding_tasks')
         .select('*, employees:owner_employee_id(full_name)')
         .eq('checklist_id', checklistId)
-        .order('sort_order'),
+        .order('sort_order', ascending: true),
   );
 
   /// Materialises the template's items as dated tasks. Copied rather
@@ -6948,7 +6948,7 @@ extension RepoHrSetup on Repo {
         .from(table)
         .select(select)
         .eq('employee_id', employeeId)
-        .order(orderBy),
+        .order(orderBy, ascending: true),
   );
 
   Future<void> saveEmployeeRow(
@@ -7310,7 +7310,7 @@ extension RepoHrSetup on Repo {
                       '(doc_no, doc_type, doc_date, total_amount)',
           )
           .eq(isSales ? 'receipt_id' : 'payment_id', id)
-          .order('created_at'),
+          .order('created_at', ascending: true),
     );
 
     return {
@@ -7366,7 +7366,7 @@ extension RepoHrSetup on Repo {
             .from('appraisal_goals')
             .select()
             .eq('appraisal_id', appraisalId)
-            .order('sort_order'),
+            .order('sort_order', ascending: true),
       );
 
   Future<void> saveAppraisalGoal(
@@ -7408,7 +7408,7 @@ extension RepoProperty on Repo {
         .eq('org_id', orgId)
         .eq('is_active', true);
     if (tenure != null) q = q.eq('tenure', tenure);
-    return Repo._rows(await q.order('name'));
+    return Repo._rows(await q.order('name', ascending: true));
   }
 
   Future<Map<String, dynamic>> propertySite(String id) async =>
@@ -7449,7 +7449,7 @@ extension RepoProperty on Repo {
             .eq('site_id', siteId)
             .eq('org_id', orgId)
             .eq('is_active', true)
-            .order('unit_no'),
+            .order('unit_no', ascending: true),
       );
 
   Future<void> savePropertyUnit(
@@ -7584,7 +7584,7 @@ extension RepoProperty on Repo {
         .eq('org_id', orgId);
     if (siteId != null) q = q.eq('property_units.site_id', siteId);
     if (activeOnly) q = q.eq('status', 'active');
-    return Repo._rows(await q.order('tenancy_no'));
+    return Repo._rows(await q.order('tenancy_no', ascending: true));
   }
 
   Future<void> saveTenancy(Map<String, dynamic> values, {String? id}) async {
@@ -7932,8 +7932,8 @@ extension RepoApprovals on Repo {
         .from('approval_rules')
         .select()
         .eq('org_id', orgId)
-        .order('entity_kind')
-        .order('step_no'),
+        .order('entity_kind', ascending: true)
+        .order('step_no', ascending: true),
   );
 
   Future<void> saveApprovalRule({
@@ -8113,7 +8113,7 @@ extension RepoFinancialStatements on Repo {
         .from('mbrs_elements')
         .select()
         .eq('is_active', true)
-        .order('sort_order'),
+        .order('sort_order', ascending: true),
   );
 
   /// The deviations from the default mapping, and only those. An empty
@@ -8206,7 +8206,7 @@ extension RepoTicketing on Repo {
             .select()
             .eq('ticket_id', ticketId)
             .eq('org_id', orgId)
-            .order('created_at'),
+            .order('created_at', ascending: true),
       );
 
   Future<List<Map<String, dynamic>>> ticketEvents(String ticketId) async =>
@@ -8216,7 +8216,7 @@ extension RepoTicketing on Repo {
             .select()
             .eq('ticket_id', ticketId)
             .eq('org_id', orgId)
-            .order('created_at'),
+            .order('created_at', ascending: true),
       );
 
   Future<List<Map<String, dynamic>>> ticketTeams() async => Repo._rows(
@@ -8225,7 +8225,7 @@ extension RepoTicketing on Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('name'),
+        .order('name', ascending: true),
   );
 
   /// Every team including the retired ones, which the list above hides.
@@ -8238,7 +8238,7 @@ extension RepoTicketing on Repo {
         .from('ticket_teams')
         .select()
         .eq('org_id', orgId)
-        .order('name'),
+        .order('name', ascending: true),
   );
 
   /// Returns the row's id, so a team made from the box that wanted one
@@ -8312,7 +8312,7 @@ extension RepoTicketing on Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('name'),
+        .order('name', ascending: true),
   );
 
   Future<List<Map<String, dynamic>>> cannedResponses() async => Repo._rows(
@@ -8321,7 +8321,7 @@ extension RepoTicketing on Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('title'),
+        .order('title', ascending: true),
   );
 
   Future<String> createTicket({
@@ -8513,7 +8513,7 @@ extension RepoForecasting on Repo {
             .select()
             .eq('org_id', orgId)
             .eq('run_id', runId)
-            .order('state'),
+            .order('state', ascending: true),
       );
 
   Future<Map<String, dynamic>?> itemForecastParams(
@@ -8606,7 +8606,7 @@ extension RepoPos on Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('code'),
+        .order('code', ascending: true),
   );
 
   /// The tills this company has, with the outlet each stands in.
@@ -8619,7 +8619,7 @@ extension RepoPos on Repo {
         .select('*, pos_outlets!pos_registers_outlet_id_fkey(id, name, code, business_type)')
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('code'),
+        .order('code', ascending: true),
   );
 
   /// The shift a register is in the middle of, or null if the drawer has
@@ -8690,7 +8690,7 @@ extension RepoPos on Repo {
         .select()
         .eq('org_id', orgId)
         .eq('is_active', true)
-        .order('code'),
+        .order('code', ascending: true),
   );
 
   /// Takes an unsent line off a parked bill. Refuses once the kitchen
@@ -8999,7 +8999,7 @@ extension RepoPos on Repo {
             .from('pos_sale_lines')
             .select('*, items!pos_sale_lines_item_id_fkey(tracking)')
             .eq('sale_id', saleId)
-            .order('line_no'),
+            .order('line_no', ascending: true),
       );
 
   /// One serial onto one line, checked while the customer is still at
@@ -9041,7 +9041,7 @@ extension RepoPos on Repo {
         .select('*, pos_tables!pos_sales_table_id_fkey(code, name)')
             .eq('register_id', registerId)
             .eq('status', 'parked')
-            .order('opened_at'),
+            .order('opened_at', ascending: true),
       );
 
   /// Every bill still open in the shop, whichever till holds it.
@@ -9182,8 +9182,8 @@ extension RepoPos on Repo {
         .select()
         .eq('outlet_id', outletId)
         .eq('is_active', true)
-        .order('sort_order')
-        .order('code'),
+        .order('sort_order', ascending: true)
+        .order('code', ascending: true),
   );
 
   /// The kinds of order this shop takes. Not a free-for-all: a stall
@@ -9196,7 +9196,7 @@ extension RepoPos on Repo {
             .from('pos_outlet_channels')
             .select()
             .eq('outlet_id', outletId)
-            .order('sort_order'),
+            .order('sort_order', ascending: true),
       );
 
   /// Turns one on or off, and picks which one a sale gets when nobody
@@ -9394,7 +9394,7 @@ extension RepoPos on Repo {
         .from('item_categories')
         .select('id, code, name, parent_id')
         .eq('org_id', orgId)
-        .order('name'),
+        .order('name', ascending: true),
   );
 
   /// The short lists a company keeps: a project, a department, a price
@@ -9470,7 +9470,7 @@ extension RepoPos on Repo {
         .select()
         .eq('outlet_id', outletId)
         .eq('is_active', true)
-        .order('name'),
+        .order('name', ascending: true),
   );
 
   /// Somebody who does the work, and who can be booked.
@@ -9519,8 +9519,8 @@ extension RepoPos on Repo {
         .from('pos_provider_hours')
         .select()
         .eq('provider_id', providerId)
-        .order('weekday')
-        .order('starts_at'),
+        .order('weekday', ascending: true)
+        .order('starts_at', ascending: true),
   );
 
   /// Writes the week whole.
@@ -9794,7 +9794,7 @@ extension RepoMemberships on Repo {
         .from('pos_memberships')
         .select('id, code, name, period, sessions_included, is_active')
         .eq('org_id', orgId)
-        .order('name'),
+        .order('name', ascending: true),
   );
 
   /// Who is on what.
@@ -9993,7 +9993,7 @@ extension RepoItemVariants on Repo {
             .eq('org_id', orgId)
             .eq('parent_item_id', parentId)
             .isFilter('deleted_at', null)
-            .order('code'),
+            .order('code', ascending: true),
       );
 
   /// Generates the combinations of the axes given.
@@ -11192,7 +11192,7 @@ extension RepoFoodCourt on Repo {
         .select('id, code, name, stall_id')
         .eq('org_id', orgId)
         .isFilter('deleted_at', null)
-        .order('code'),
+        .order('code', ascending: true),
   );
 
   Future<void> setItemStall(String itemId, String? stallId) async =>
@@ -11351,7 +11351,7 @@ extension RepoLandedCost on Repo {
         // PostgREST refuses an unqualified embed with PGRST201.
         .select('*, accounts!landed_cost_charges_account_id_fkey(code, name)')
             .eq('run_id', runId)
-            .order('line_no'),
+            .order('line_no', ascending: true),
       );
 
   /// Saves a draft. [bills] is a list of posted bill ids; each entry of

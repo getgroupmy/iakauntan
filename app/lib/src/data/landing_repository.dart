@@ -45,39 +45,39 @@ class LandingAdmin {
         .from('landing_sections')
         .select('id, sort_order, icon, title, body, is_active, kind')
         .eq('kind', kind)
-        .order('sort_order')
-        .order('title'),
+        .order('sort_order', ascending: true)
+        .order('title', ascending: true),
   );
 
   Future<List<Map<String, dynamic>>> landingStats() async => Repo.rows(
     await client
         .from('landing_stats')
         .select('id, sort_order, value, label, icon, is_active')
-        .order('sort_order')
-        .order('label'),
+        .order('sort_order', ascending: true)
+        .order('label', ascending: true),
   );
 
   Future<List<Map<String, dynamic>>> landingTestimonials() async => Repo.rows(
     await client
         .from('landing_testimonials')
         .select('id, sort_order, quote, author, company, avatar_url, is_active')
-        .order('sort_order'),
+        .order('sort_order', ascending: true),
   );
 
   Future<List<Map<String, dynamic>>> landingLogos() async => Repo.rows(
     await client
         .from('landing_logos')
         .select('id, sort_order, name, logo_url, is_active')
-        .order('sort_order')
-        .order('name'),
+        .order('sort_order', ascending: true)
+        .order('name', ascending: true),
   );
 
   Future<List<Map<String, dynamic>>> landingAppLinks() async => Repo.rows(
     await client
         .from('landing_app_links')
         .select('id, store_code, label, url, badge_url, sort_order, is_active')
-        .order('sort_order')
-        .order('store_code'),
+        .order('sort_order', ascending: true)
+        .order('store_code', ascending: true),
   );
 
   /// The page as it will look once published, draft and all.

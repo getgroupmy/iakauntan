@@ -446,6 +446,18 @@ jobs:
       - name: Check no new blind error catches
         run: python3 scripts/check_blind_catches.py
 
+      # `.order('name')` in postgrest-dart is name DESC: `ascending`
+      # defaults to FALSE. Reported as a country picker opening on Viet
+      # Nam and the United States, and it was every alphabetical list in
+      # the application — plus `sort_order`, a column whose only purpose
+      # is that somebody chose the order, reversed in twenty-four
+      # places. Nothing fails and nothing logs; a list is simply in an
+      # order, and the wrong one reads as an odd one. The analyzer
+      # cannot see an omitted optional argument, so the rule is
+      # mechanical: every ordering says which way it goes.
+      - name: Check every ordering says which direction it means
+        run: python3 scripts/check_order_direction.py
+
       # `0531`. STABLE is a promise that a function does not write, and
       # PostgREST believes it: such a function runs in a READ ONLY
       # transaction, so a write inside one fails with 25006 and takes

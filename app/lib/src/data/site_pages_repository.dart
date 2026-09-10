@@ -71,7 +71,7 @@ class SitePagesRepository {
       await client
           .from('site_pages')
           .select('slug, title, body, is_published')
-          .order('slug'),
+          .order('slug', ascending: true),
     );
     return {
       for (final row in rows) row['slug'] as String: SitePage.fromRow(row),

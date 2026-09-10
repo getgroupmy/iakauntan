@@ -13,7 +13,7 @@ extension RepoCorp on Repo {
   Future<List<CorpEntity>> corpEntities({bool includeClosed = false}) async {
     var q = client.from('corp_entities').select().eq('org_id', orgId);
     if (!includeClosed) q = q.isFilter('disengaged_on', null);
-    return Repo.rows(await q.order('name')).map(CorpEntity.fromJson).toList();
+    return Repo.rows(await q.order('name', ascending: true)).map(CorpEntity.fromJson).toList();
   }
 
   Future<CorpEntity?> corpEntity(String id) async {
@@ -163,7 +163,7 @@ extension RepoCorp on Repo {
           .from('corp_persons')
           .select()
           .eq('org_id', orgId)
-          .order('full_name'))
+          .order('full_name', ascending: true))
       .map(CorpPerson.fromJson)
       .toList();
 
@@ -210,7 +210,7 @@ extension RepoCorp on Repo {
           .from('corp_share_classes')
           .select()
           .eq('entity_id', entityId)
-          .order('code'));
+          .order('code', ascending: true));
 
   /// A class of shares. Every movement points at one, so a company
   /// with none cannot allot anything -- which is why this is here and
@@ -342,7 +342,7 @@ extension RepoCorp on Repo {
           .from('corp_templates')
           .select('code, name, category, org_id')
           .eq('is_active', true)
-          .order('category'))
+          .order('category', ascending: true))
       .map(CorpTemplate.fromJson)
       .toList();
 

@@ -40,8 +40,8 @@ class PlatformCatalog {
           'code, name, description, monthly_price, is_core, sort_order, '
           'is_active, nav_group',
         )
-        .order('sort_order')
-        .order('code'),
+        .order('sort_order', ascending: true)
+        .order('code', ascending: true),
   );
 
   Future<void> saveModule(
@@ -254,7 +254,7 @@ final moduleLabelsProvider =
         .watch(supabaseProvider)
         .from('platform_modules')
         .select('code, name, nav_group')
-        .order('sort_order'),
+        .order('sort_order', ascending: true),
   );
   return {
     for (final r in rows)

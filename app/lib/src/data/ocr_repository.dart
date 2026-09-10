@@ -601,7 +601,7 @@ extension PlatformOcrCatalog on PlatformRepo {
           'code, name, kind, endpoint, model, price, takes_key, '
           'runs_on_device, blurb, is_active',
         )
-        .order('code'),
+        .order('code', ascending: true),
   );
 
   /// Adds a reader or edits one.

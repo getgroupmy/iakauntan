@@ -100,7 +100,10 @@ final countriesProvider =
       .from('ref_countries')
       .select('code, name, alpha2')
       .eq('is_active', true)
-      .order('name');
+      // `ascending` is FALSE by default in postgrest-dart, so an
+      // `order` with no direction is Z to A. The picker was drawing
+      // Viet Nam, the United States and the United Kingdom at the top.
+      .order('name', ascending: true);
   return (data as List)
       .map((e) => Map<String, dynamic>.from(e as Map))
       .toList();
@@ -119,7 +122,7 @@ final refStatesProvider =
       .watch(supabaseProvider)
       .from('ref_states')
       .select('code, name')
-      .order('code');
+      .order('code', ascending: true);
   return (data as List)
       .map((e) => Map<String, dynamic>.from(e as Map))
       .toList();

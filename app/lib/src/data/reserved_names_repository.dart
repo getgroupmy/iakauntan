@@ -113,7 +113,7 @@ class ReservedNames {
             .from('org_mailboxes')
             .select('id, local_part, status, requested_at, decided_at, note')
             .eq('org_id', orgId)
-            .order('requested_at'),
+            .order('requested_at', ascending: true),
       );
 
   Future<void> requestSubdomain(String orgId, String name) => client
@@ -230,7 +230,7 @@ class ReservedNames {
         await client
             .from('reserved_names')
             .select('name, scope, reason')
-            .order('name'),
+            .order('name', ascending: true),
       );
 }
 

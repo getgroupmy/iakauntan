@@ -127,7 +127,7 @@ extension RepoCustomFields on Repo {
               'entity, table_name, label, can_carry, can_target, '
               'is_line_level, label_column, sort_order',
             )
-            .order('sort_order'),
+            .order('sort_order', ascending: true),
       ).map(CustomFieldEntity.fromJson).toList();
 
   /// This company's fields for one kind of record, archived ones last.
@@ -144,8 +144,8 @@ extension RepoCustomFields on Repo {
         .eq('org_id', orgId)
         .eq('entity', entity)
         .order('is_active', ascending: false)
-        .order('sort_order')
-        .order('label'),
+        .order('sort_order', ascending: true)
+        .order('label', ascending: true),
   ).map(CustomFieldDef.fromJson).toList();
 
   /// Name a field, or change one. Pass `key` to edit an existing field:

@@ -82,7 +82,11 @@ export async function submit(ctx: Ctx) {
       .from("einvoice_lines")
       .select("*")
       .eq("einvoice_id", doc.id)
-      .order("line_no");
+      // Said out loud because the two clients disagree: supabase-js
+      // defaults `ascending` to true and postgrest-dart to false. The
+      // lines of a document go on the invoice in the order they were
+      // written, and LHDN is sent what the customer was sent.
+      .order("line_no", { ascending: true });
 
     const ubl = buildUblDocument(doc, (lines ?? []) as EinvoiceLineRow[]);
     const raw = JSON.stringify(ubl);

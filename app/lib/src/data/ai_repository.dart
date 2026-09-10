@@ -46,7 +46,7 @@ extension PlatformAiProviders on PlatformRepo {
           'context_tokens, notes, is_active, sort_order',
         );
     if (provider != null) q = q.eq('provider_code', provider);
-    return Repo.rows(await q.order('sort_order').order('name'));
+    return Repo.rows(await q.order('sort_order', ascending: true).order('name', ascending: true));
   }
 
   /// Every provider on offer, for a company choosing one. The catalogue
@@ -58,8 +58,8 @@ extension PlatformAiProviders on PlatformRepo {
           'code, name, wire, base_url, docs_url, key_hint, needs_key, '
           'is_active, sort_order',
         )
-        .order('sort_order')
-        .order('name'),
+        .order('sort_order', ascending: true)
+        .order('name', ascending: true),
   );
 
   Future<void> setPlatformAiKey(

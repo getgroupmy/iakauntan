@@ -8,6 +8,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/places_repository.dart';
 import '../settings/msic_picker.dart';
+import 'home_country.dart';
 
 /// First-run setup. One call to create_organization() stands up the whole
 /// tenant: chart of accounts, SST codes, fiscal calendar and pipeline.
@@ -41,21 +42,31 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   final _phone = TextEditingController();
   final _email = TextEditingController();
 
-  /// The country, asked before anything else.
+  /// The country, answered in advance.
   ///
-  /// Null means the question has not been answered yet, and the form is
-  /// not drawn until it has. That is the whole reason it is a separate
-  /// step rather than one more field: the answer changes what the rest
-  /// of the form is asking about, and a company in Singapore filling in
-  /// an SSM number before being asked where it is has already been
-  /// asked the wrong question.
+  /// This used to be a question with no answer offered, standing in
+  /// front of the form against a list of two hundred. It is a Malaysian
+  /// product, so it starts on Malaysia and the question moves onto the
+  /// form, where whoever it is wrong for can change it. What it governs
+  /// has not changed: a company in Singapore filling in an SSM number
+  /// is still being asked the wrong question, so the form still follows
+  /// the answer.
   ///
   /// Three letters, which is what `organizations.country_code` stores.
   /// [_alpha2] is the same country in the two-letter form Google Places
   /// wants, carried separately rather than derived — `ref_countries`
   /// holds both and a mapping written here would be a second list.
-  String? _country;
-  String? _alpha2;
+  String _country = homeCountryCode;
+  String _alpha2 = homeCountryAlpha2;
+
+  /// What to call it on the line that says what it is.
+  String _countryName = homeCountryName;
+
+  /// Whether the picker is open.
+  ///
+  /// The full-screen list is still the way to change it: two hundred
+  /// countries is not a dropdown, and the search box is the point.
+  bool _choosingCountry = false;
 
   String _entityType = 'sdn_bhd';
   String? _stateCode;
@@ -159,9 +170,11 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
     name,
   );
 
-  void _chooseCountry(String code, String alpha2) => setState(() {
+  void _chooseCountry(String code, String alpha2, String name) => setState(() {
     _country = code;
     _alpha2 = alpha2;
+    _countryName = name;
+    _choosingCountry = false;
     // A state chosen for one country means nothing in another, and the
     // list itself is Malaysian. Cleared rather than carried.
     _stateCode = null;
@@ -178,10 +191,13 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   Widget build(BuildContext context) {
     final statesAsync = ref.watch(refStatesProvider);
 
-    // First question first. Everything below reads the answer — which
-    // fields to draw, which country the address box suggests in — so
-    // there is nothing sensible to show before it.
-    if (_country == null) return _CountryStep(onChosen: _chooseCountry);
+    // Only when somebody asked for it. The answer is already there.
+    if (_choosingCountry) {
+      return _CountryStep(
+        onChosen: _chooseCountry,
+        onCancel: () => setState(() => _choosingCountry = false),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -205,6 +221,28 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // The question that used to stand in front of this
+                // form, answered. It is first because everything below
+                // follows it, and it is a line rather than a step
+                // because for almost everybody the answer is already
+                // right.
+                Card(
+                  child: ListTile(
+                    key: const ValueKey('org-country'),
+                    leading: const Icon(Icons.public, size: 20),
+                    title: const Text(countryFieldLabel),
+                    subtitle: Text('$_countryName\n$countryChangeHint'),
+                    isThreeLine: true,
+                    trailing: TextButton(
+                      key: const ValueKey('org-country-change'),
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() => _choosingCountry = true),
+                      child: const Text(countryChangeLabel),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(Space.lg),
@@ -215,8 +253,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'We will create a Malaysian chart of accounts, SST tax '
-                            'codes, a fiscal calendar and a sales pipeline for you.',
+                            setupPromise(malaysian: _malaysian),
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
@@ -479,15 +516,20 @@ class _Row2 extends StatelessWidget {
 /// it; asking first is the difference between a form that adapts and
 /// one that apologises.
 ///
-/// Malaysia is offered as a shortcut and is not preselected. A default
-/// on this question is a country most people would not have chosen and
-/// would not notice choosing.
+/// Reached from the country line on the form, which already says
+/// Malaysia. Malaysia is first in the list here too, because the
+/// commonest reason to open this screen and then change nothing is
+/// having opened it to check.
 class _CountryStep extends ConsumerStatefulWidget {
-  const _CountryStep({required this.onChosen});
+  const _CountryStep({required this.onChosen, required this.onCancel});
 
-  /// Called with the three-letter code the column stores and the
-  /// two-letter one Google Places wants.
-  final void Function(String code, String alpha2) onChosen;
+  /// Called with the three-letter code the column stores, the
+  /// two-letter one Google Places wants, and the name to show.
+  final void Function(String code, String alpha2, String name) onChosen;
+
+  /// Leaving without changing anything, which is a thing somebody who
+  /// opened this to look at it has to be able to do.
+  final VoidCallback onCancel;
 
   @override
   ConsumerState<_CountryStep> createState() => _CountryStepState();
@@ -503,6 +545,10 @@ class _CountryStepState extends ConsumerState<_CountryStep> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Where is your company?'),
+        leading: BackButton(
+          key: const ValueKey('country-back'),
+          onPressed: widget.onCancel,
+        ),
         actions: [
           TextButton.icon(
             onPressed: () => ref.read(supabaseProvider).auth.signOut(),
@@ -538,14 +584,16 @@ class _CountryStepState extends ConsumerState<_CountryStep> {
                 onRetry: () => ref.invalidate(countriesProvider),
                 builder: (rows) {
                   final wanted = _query.toLowerCase();
-                  final shown = [
+                  // Filter first, then pin: a search that excludes
+                  // Malaysia should not have it put back at the top.
+                  final shown = countriesWithHomeFirst([
                     for (final c in rows)
                       if (wanted.isEmpty ||
                           '${c['name']}'.toLowerCase().contains(wanted) ||
                           '${c['alpha2']}'.toLowerCase() == wanted ||
                           '${c['code']}'.toLowerCase() == wanted)
                         c,
-                  ];
+                  ]);
                   if (shown.isEmpty) {
                     return const EmptyState(
                       icon: Icons.public_off,
@@ -567,6 +615,7 @@ class _CountryStepState extends ConsumerState<_CountryStep> {
                             onTap: () => widget.onChosen(
                               '${c['code']}',
                               '${c['alpha2']}',
+                              '${c['name']}',
                             ),
                           ),
                       ],
