@@ -44,6 +44,28 @@ Then **Authentication → Emails → Templates** for the wording, and check
 **Authentication → URL Configuration** so the confirmation link lands
 on `iakauntan.com` rather than localhost.
 
+### When the sign-in page says the mail server refused it
+
+The confirmation button on the sign-in page (`Send the confirmation
+link again`) reports a mail failure in its own words rather than
+GoTrue's, because GoTrue answers a refused SMTP login with
+`unexpected_failure`, which says nothing about which setting is wrong.
+The name of the fault is in the project's auth logs:
+
+```
+"auth_event":{"action":"user_confirmation_requested"},
+"error":"535 \"Authentication credentials invalid\"",
+"error_code":"unexpected_failure","path":"/resend","status":500
+```
+
+`535` is the mail server rejecting the login, not Supabase rejecting
+the address. With the table above, it is almost always one of two
+things: the username is an email address rather than the literal word
+`resend`, or the password is something other than the `RESEND_API_KEY`
+value. Nothing about the person's address or the app's code changes
+this, and pressing the button again will not either — which is why the
+banner says so.
+
 ### Why this is not only about branding
 
 Supabase's built-in auth SMTP is **for testing** and is rate limited to

@@ -99,4 +99,109 @@ void main() {
       expect(resendConfirmationLabel.toLowerCase(), contains('confirmation'));
     });
   });
+
+  group('when the mail server is the fault', () {
+    test('the body GoTrue actually sent is recognised', () {
+      // Verbatim from the auth log, 2026-09-10T13:01:49Z: /resend
+      // answered 500 after the mail server said 535 "Authentication
+      // credentials invalid".
+      expect(
+        looksMailFailure(
+          code: 'unexpected_failure',
+          message: 'Error sending confirmation email',
+        ),
+        isTrue,
+      );
+    });
+
+    test('and so is the whole body, when that is all that arrives', () {
+      expect(
+        looksMailFailure(
+          message: '{"code":"unexpected_failure",'
+              '"message":"Error sending confirmation email"}',
+        ),
+        isTrue,
+      );
+    });
+
+    test('an ordinary refusal is not a mail failure', () {
+      // The distinction that matters: these tell somebody to look at
+      // their address, and the mail sentence tells them not to.
+      expect(
+        looksMailFailure(
+          code: 'invalid_credentials',
+          message: 'Invalid login credentials',
+        ),
+        isFalse,
+      );
+      expect(looksMailFailure(message: 'User not found'), isFalse);
+      expect(looksMailFailure(), isFalse);
+      expect(
+        looksMailFailure(code: 'unexpected_failure', message: 'Database error'),
+        isFalse,
+      );
+    });
+
+    test('what it says does not send anybody to check their address', () {
+      expect(resendConfirmationMailBroken.toLowerCase(),
+          isNot(contains('check the address')));
+      expect(resendConfirmationMailBroken, contains('mail server'));
+      // The one thing that is true and useful: pressing it again is
+      // not the fix.
+      expect(resendConfirmationMailBroken.toLowerCase(),
+          contains('trying again will not'));
+    });
+  });
+
+  group('the detail put in front of somebody', () {
+    test('a JSON body is reduced to its sentence', () {
+      // What the screen showed before this: the whole line, braces and
+      // all, to somebody who had pressed one button.
+      expect(
+        resendFailureDetail('{"code":"unexpected_failure",'
+            '"message":"Error sending confirmation email"}'),
+        'Error sending confirmation email',
+      );
+    });
+
+    test('and so is an exception that carries one', () {
+      expect(
+        resendFailureDetail(
+          'AuthApiException(message: Error sending confirmation email, '
+          'statusCode: 500, code: unexpected_failure)',
+        ),
+        'Error sending confirmation email',
+      );
+    });
+
+    test('older field names are read too', () {
+      expect(resendFailureDetail('{"msg":"Signups not allowed"}'),
+          'Signups not allowed');
+      expect(
+        resendFailureDetail('{"error_description":"Invalid email"}'),
+        'Invalid email',
+      );
+    });
+
+    test('a plain sentence is left exactly as it is', () {
+      expect(resendFailureDetail('Invalid email address'),
+          'Invalid email address');
+    });
+
+    test('anything still unreadable is dropped, not shown', () {
+      // The assertion that would fail if the sanitising were removed:
+      // no brace, and no class name, ever reaches the banner.
+      for (final raw in const [
+        '{"code":"unexpected_failure"}',
+        '{}',
+        'ClientException with SocketException: Failed host lookup',
+        '',
+      ]) {
+        final shown = resendConfirmationFailed(resendFailureDetail(raw));
+        expect(shown, isNot(contains('{')), reason: raw);
+        expect(shown, isNot(contains('Exception')), reason: raw);
+        expect(shown, contains(resendConfirmationOpaque), reason: raw);
+      }
+    });
+  });
 }

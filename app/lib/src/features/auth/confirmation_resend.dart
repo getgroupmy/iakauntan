@@ -14,6 +14,8 @@
 /// `build` method is a sentence nobody can assert.
 library;
 
+import 'dart:convert';
+
 /// Whether an authentication failure is "your address is not confirmed
 /// yet".
 ///
@@ -74,3 +76,94 @@ const resendConfirmationTooSoon =
 /// not exist rather than a fault anybody can act on.
 String resendConfirmationFailed(String detail) =>
     'That could not be sent: $detail';
+
+/// What it says when the send failed at the mail server.
+///
+/// The failure this was written for: the project had just been moved
+/// off Supabase's built-in auth SMTP onto a custom one, and the
+/// credentials were wrong, so GoTrue's `/resend` answered
+/// `unexpected_failure` and the mail server answered `535
+/// "Authentication credentials invalid"`. Nothing about the address
+/// was wrong and pressing the button again would not help, so saying
+/// "check the address" — which is the right advice for every other
+/// failure here — sends somebody to look at the one thing that is
+/// fine.
+const resendConfirmationMailBroken =
+    'The confirmation email could not be sent. The mail server refused '
+    'it, which is a setting on our side rather than anything about your '
+    'address — trying again will not change it. Tell us and we will fix '
+    'the mail account.';
+
+/// Whether the failure was the mail server rather than the address.
+///
+/// GoTrue reports a refused SMTP login as `unexpected_failure` with
+/// "Error sending confirmation email", which is the same code it uses
+/// for anything else it did not expect. The sentence is what
+/// distinguishes a mail failure from the rest, so both are read.
+bool looksMailFailure({String? code, String? message}) {
+  final text = (message ?? '').toLowerCase();
+  if (text.contains('error sending') || text.contains('sending email')) {
+    return true;
+  }
+  return code != null &&
+      code.toLowerCase() == 'unexpected_failure' &&
+      text.contains('email');
+}
+
+/// What the banner says when the reason is not worth showing.
+///
+/// Used when the detail that arrived is a JSON body or an exception's
+/// `toString` — text that names the fault to a developer and nothing
+/// at all to the person reading it.
+const resendConfirmationOpaque = 'the mail server refused it';
+
+/// The readable half of whatever the failure arrived as.
+///
+/// A 500 from GoTrue reaches the app as a body — `{"code":
+/// "unexpected_failure","message":"Error sending confirmation email"}`
+/// — and depending on the client version the exception's message is
+/// either the `message` field or the whole of that. The first put a
+/// line of JSON in front of somebody who had done nothing but press a
+/// button, so the field is pulled out and everything that is still
+/// punctuation is thrown away.
+String resendFailureDetail(String raw) {
+  final text = raw.trim();
+
+  final open = text.indexOf('{');
+  final close = text.lastIndexOf('}');
+  if (open >= 0 && close > open) {
+    final field = _jsonMessage(text.substring(open, close + 1));
+    if (field != null && field.isNotEmpty) return field;
+  }
+
+  // `AuthApiException(message: Error sending confirmation email,
+  // statusCode: 500, code: unexpected_failure)`.
+  final named = RegExp(r'message:\s*(.+?)(?:,\s*\w+:|\)\s*$)', dotAll: true)
+      .firstMatch(text);
+  if (named != null) {
+    final field = named.group(1)!.trim();
+    if (field.isNotEmpty && !field.contains('{')) return field;
+  }
+
+  if (text.isEmpty || text.contains('{') || text.contains('Exception')) {
+    return resendConfirmationOpaque;
+  }
+  return text;
+}
+
+/// The message field of a JSON error body, under any of the names
+/// GoTrue has used for it.
+String? _jsonMessage(String body) {
+  Object? decoded;
+  try {
+    decoded = jsonDecode(body);
+  } on FormatException {
+    return null;
+  }
+  if (decoded is! Map) return null;
+  for (final key in const ['message', 'msg', 'error_description', 'error']) {
+    final value = decoded[key];
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+  }
+  return null;
+}

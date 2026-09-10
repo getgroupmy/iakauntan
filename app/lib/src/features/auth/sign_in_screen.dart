@@ -437,11 +437,16 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   String? _error;
   String? _notice;
 
-  /// The failure's code, kept beside its message.
+  /// Whether the address this form holds is one that signed in
+  /// correctly and was turned away for not being confirmed.
   ///
-  /// `email_not_confirmed` is the one this screen acts on: it is the
-  /// only refusal with something the person can do about it from here.
-  String? _errorCode;
+  /// A latch rather than a reading of the banner, because the offer
+  /// has to outlive its own failure. A resend that comes back "the
+  /// mail server refused it" replaces the refusal in the banner, and
+  /// if the button read the banner it would take itself away at the
+  /// moment it is most needed — leaving the dead end this was written
+  /// to end.
+  bool _unconfirmed = false;
 
   @override
   void dispose() {
@@ -479,8 +484,8 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     setState(() {
       _busy = true;
       _error = null;
-      _errorCode = null;
       _notice = null;
+      _unconfirmed = false;
     });
     try {
       final allowed = await ref.read(supabaseProvider).rpc(
@@ -580,8 +585,8 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     setState(() {
       _busy = true;
       _error = null;
-      _errorCode = null;
       _notice = null;
+      _unconfirmed = false;
     });
 
     final auth = ref.read(supabaseProvider).auth;
@@ -632,7 +637,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           // Kept beside the message because the code is the stable
           // half: older GoTrue sends only the sentence, newer ones
           // send both, and the offer below has to work against either.
-          _errorCode = e.code;
+          _unconfirmed = looksUnconfirmed(code: e.code, message: e.message);
         });
       }
     } catch (e) {
@@ -656,7 +661,6 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     setState(() {
       _busy = true;
       _error = null;
-      _errorCode = null;
       _notice = null;
     });
     try {
@@ -677,14 +681,24 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       setState(() {
         if (looksRateLimited(code: e.code, message: e.message)) {
           _notice = resendConfirmationTooSoon;
+        } else if (looksMailFailure(code: e.code, message: e.message)) {
+          // Not the address: the mail server turned away the login
+          // GoTrue makes to it (`docs/email-setup.md`), and the only
+          // thing anybody reading the banner can do about that is
+          // tell somebody who can change the setting.
+          _error = resendConfirmationMailBroken;
         } else {
-          _error = resendConfirmationFailed(e.message);
-          _errorCode = e.code;
+          _error = resendConfirmationFailed(resendFailureDetail(e.message));
         }
       });
     } catch (e) {
       if (mounted) {
-        setState(() => _error = resendConfirmationFailed('$e'));
+        // Whatever this is, it is not a sentence: a JSON body or a
+        // `toString` naming a class. `resendFailureDetail` keeps the
+        // part somebody can read and drops the rest.
+        setState(() => _error = resendConfirmationFailed(
+              resendFailureDetail('$e'),
+            ));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1112,7 +1126,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   // attempt answered "Email not confirmed" and the only
                   // way on was to register again with the same address,
                   // which the form does not allow.
-                  if (looksUnconfirmed(code: _errorCode, message: _error))
+                  if (_unconfirmed)
                     Align(
                       alignment: Alignment.centerLeft,
                       child: TextButton.icon(
