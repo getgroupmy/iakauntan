@@ -128,5 +128,66 @@ void main() {
       expect(sent, contains('kabeer2@hotmail.com'));
       expect(sent, contains('spam'));
     });
+
+    test('and tells somebody with a typo what to do about it', () {
+      // The ask: if there is no such user, say to check the address.
+      final sent = resetSent('kabeer2@hotmail.com');
+      expect(sent.toLowerCase(), contains('check the address'));
+      expect(sent.toLowerCase(), contains('typo'));
+    });
+
+    test('without claiming a link went somewhere it did not', () {
+      // GoTrue answers the same whether or not the address is
+      // registered, so "sent to you" is a sentence that is not true
+      // half the time — and two different answers would let anybody
+      // find out who has an account here by typing addresses.
+      final sent = resetSent('stranger@example.com');
+      expect(sent.toLowerCase(), contains('if there is an account'));
+    });
+  });
+
+  group('an address that cannot be one', () {
+    test('is named on the spot', () {
+      // The half of "no such account" that can be answered honestly
+      // with nothing but the text in the box.
+      expect(looksLikeAnAddress('kabeer2@hotmail.com'), isTrue);
+      expect(looksLikeAnAddress('kabeer2@hotmail'), isFalse);
+      expect(looksLikeAnAddress('kabeer2hotmail.com'), isFalse);
+      expect(looksLikeAnAddress('@hotmail.com'), isFalse);
+      expect(looksLikeAnAddress('a@b@c.com'), isFalse);
+      expect(looksLikeAnAddress('kabeer 2@hotmail.com'), isFalse);
+      expect(looksLikeAnAddress(''), isFalse);
+    });
+
+    test('and told to check it', () {
+      expect(resetBadAddress.toLowerCase(), contains('typo'));
+      expect(resetBadAddress.toLowerCase(), contains('email address'));
+    });
+  });
+
+  group('an account the server says does not exist', () {
+    test('is recognised, by code and by sentence', () {
+      expect(looksUnknownAddress(code: 'user_not_found'), isTrue);
+      expect(looksUnknownAddress(message: 'User not found'), isTrue);
+    });
+
+    test('and a rate limit is not one', () {
+      // Telling somebody their address does not exist when the truth is
+      // that they pressed the button twice sends them hunting for a
+      // typo in an address that is fine.
+      expect(
+        looksUnknownAddress(
+            code: 'over_email_send_rate_limit',
+            message: 'For security purposes, you can only request this '
+                'after 5 seconds.'),
+        isFalse,
+      );
+      expect(looksUnknownAddress(), isFalse);
+    });
+
+    test('and it says what to do next', () {
+      expect(resetNoAccount.toLowerCase(), contains('no account'));
+      expect(resetNoAccount.toLowerCase(), contains('typo'));
+    });
   });
 }

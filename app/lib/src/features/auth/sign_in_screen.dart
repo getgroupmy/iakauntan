@@ -1002,6 +1002,18 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           'Use the buttons below to sign in.');
       return;
     }
+    // The half of "no such account" that can be answered honestly with
+    // nothing but the text in the box. A missing @ or a domain with no
+    // dot is a typo we can name on the spot, and naming it beats
+    // sending a link nowhere and leaving somebody waiting for it.
+    if (!looksLikeAnAddress(email)) {
+      setState(() {
+        _notice = null;
+        _error = resetBadAddress;
+      });
+      return;
+    }
+
     // Held here rather than only at the server. The project's security
     // interval is seconds, and a reset link that can be asked for every
     // few seconds is a way to fill somebody's inbox using nothing but
@@ -1038,7 +1050,14 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() {
-        if (looksTooSoon(code: e.code, message: e.message)) {
+        if (looksUnknownAddress(code: e.code, message: e.message)) {
+          // Only where the SERVER said it. Current GoTrue answers the
+          // same for an address it knows and one it does not, on
+          // purpose — two different answers here would let anybody
+          // find out who has an account by typing addresses — so this
+          // repeats what was already said rather than asking.
+          _error = resetNoAccount;
+        } else if (looksTooSoon(code: e.code, message: e.message)) {
           // Waiting is not a failure, so it is a notice rather than an
           // error — and the wait shown is ours where the server names a
           // shorter one, because the next request would be refused by

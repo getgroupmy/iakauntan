@@ -97,5 +97,60 @@ String tooSoonMessage(Duration left) =>
     'resent after ${waitFor(left)}. Please try again later.';
 
 /// What it says when the link has gone.
-String resetSent(String email) => 'Password reset link sent to $email. '
-    'It can take a minute, and it may be in the spam folder.';
+///
+/// "If there is an account" rather than "sent", because GoTrue answers
+/// the same way whether or not the address is registered, and a
+/// sentence claiming a link was sent to an address that has no account
+/// is a sentence that is not true half the time. Saying it this way is
+/// also what keeps the form from being a way to test addresses: two
+/// answers, one for a real account and one for a stranger's guess,
+/// would let anybody find out who has an account here by typing.
+///
+/// And it says what to do when nothing arrives, which is the thing
+/// somebody with a typo in their address actually needs to hear.
+String resetSent(String email) =>
+    'If there is an account for $email, a reset link is on its way. It '
+    'can take a minute and may be in the spam folder — if nothing '
+    'arrives, check the address for a typo and try again.';
+
+/// Whether what somebody typed is an email address at all.
+///
+/// Not a validator of who exists — this is the half we can answer
+/// honestly with nothing but the text in the box. `kabeer2@hotmail`
+/// and `kabeer2hotmail.com` are typos we can name on the spot, and
+/// naming them beats sending a link nowhere and waiting.
+bool looksLikeAnAddress(String email) {
+  final at = email.indexOf('@');
+  if (at <= 0 || at != email.lastIndexOf('@')) return false;
+  final domain = email.substring(at + 1);
+  return domain.contains('.') &&
+      !domain.startsWith('.') &&
+      !domain.endsWith('.') &&
+      !email.contains(' ');
+}
+
+/// What it says about an address that cannot be one.
+const resetBadAddress =
+    'That does not look like an email address. Check it for a typo and '
+    'try again.';
+
+/// Whether the server itself said there is no such account.
+///
+/// Current GoTrue does not: it answers the same for an address it knows
+/// and one it does not, on purpose. Older builds and some
+/// configurations DO answer `user_not_found`, and where the server has
+/// already said it there is nothing left to protect — repeating it is
+/// not an oracle this app created.
+bool looksUnknownAddress({String? code, String? message}) {
+  final c = (code ?? '').toLowerCase();
+  if (c == 'user_not_found') return true;
+  final text = (message ?? '').toLowerCase();
+  return text.contains('user not found') ||
+      text.contains('no user found') ||
+      text.contains('user with this email not found');
+}
+
+/// What it says when the server has said there is no such account.
+const resetNoAccount =
+    'We have no account for that address. Check it for a typo, or '
+    'create an account.';
