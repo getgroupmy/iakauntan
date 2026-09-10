@@ -15,6 +15,7 @@ import '../../core/theme.dart';
 import '../landing/landing_content.dart';
 import 'confirmation_resend.dart';
 import 'phone_number.dart';
+import 'reset_cooldown.dart';
 import 'demo_accounts.dart';
 
 /// The password, asked in a box of its own.
@@ -443,6 +444,14 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// what goes on a letter.
   String? _salutation;
 
+  /// When a password reset was last asked for on this screen.
+  ///
+  /// Null until one is. Kept in the screen rather than anywhere durable
+  /// because it guards a courtesy, not a secret: somebody who reloads
+  /// the page gets one more attempt, and the server's own limit is
+  /// still behind it.
+  DateTime? _lastResetAt;
+
   late bool _isSignUp = widget.startOnRegister;
 
   bool _busy = false;
@@ -665,7 +674,8 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      // The readable half, never the class name and the status code.
+      if (mounted) setState(() => _error = resendFailureDetail('$e'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -971,7 +981,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           ? 'The demo accounts are not available on this deployment.'
           : e.message);
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _error = resendFailureDetail('$e'));
     } finally {
       if (mounted) setState(() => _demoBusy = null);
     }
@@ -992,7 +1002,24 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           'Use the buttons below to sign in.');
       return;
     }
-    setState(() => _busy = true);
+    // Held here rather than only at the server. The project's security
+    // interval is seconds, and a reset link that can be asked for every
+    // few seconds is a way to fill somebody's inbox using nothing but
+    // their address.
+    final left = remainingWait(_lastResetAt, DateTime.now());
+    if (left > Duration.zero) {
+      setState(() {
+        _error = null;
+        _notice = tooSoonMessage(left);
+      });
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
     try {
       await ref.read(supabaseProvider).auth.resetPasswordForEmail(
             email,
@@ -1003,10 +1030,36 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
             redirectTo: kIsWeb ? '${Uri.base.origin}/#/reset-password' : null,
           );
       if (mounted) {
-        setState(() => _notice = 'Password reset link sent to $email.');
+        setState(() {
+          _lastResetAt = DateTime.now();
+          _notice = resetSent(email);
+        });
       }
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        if (looksTooSoon(code: e.code, message: e.message)) {
+          // Waiting is not a failure, so it is a notice rather than an
+          // error — and the wait shown is ours where the server names a
+          // shorter one, because the next request would be refused by
+          // this screen anyway.
+          final stated = statedWait(e.message) ?? resetCooldown;
+          final wait = stated < resetCooldown ? resetCooldown : stated;
+          _lastResetAt = DateTime.now().subtract(resetCooldown - wait);
+          _notice = tooSoonMessage(wait);
+        } else {
+          _error = resendConfirmationFailed(resendFailureDetail(e.message));
+        }
+      });
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      // Never the raw exception. `AuthApiException(message: ...,
+      // statusCode: 429, code: ...)` in front of somebody who pressed
+      // one button tells them the name of a Dart class and buries the
+      // one fact they needed.
+      if (mounted) {
+        setState(() =>
+            _error = resendConfirmationFailed(resendFailureDetail('$e')));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
