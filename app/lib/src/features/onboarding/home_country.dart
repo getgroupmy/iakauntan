@@ -43,18 +43,6 @@ const countryChangeHint =
     'The rest of the form follows this — the tax numbers a company is '
     'asked for are not the same everywhere.';
 
-/// What the setup promises to build, which is not the same everywhere.
-///
-/// The chart of accounts and the tax codes a company gets are Malaysian
-/// ones, and saying so to a company in Singapore promised it something
-/// it did not want. Elsewhere the sentence says what is actually
-/// created and leaves the country out of it.
-String setupPromise({required bool malaysian}) => malaysian
-    ? 'We will create a Malaysian chart of accounts, SST tax codes, a '
-        'fiscal calendar and a sales pipeline for you.'
-    : 'We will create a chart of accounts, a fiscal calendar and a '
-        'sales pipeline for you.';
-
 /// The country list with Malaysia first.
 ///
 /// The rest keep the order they came in, which is alphabetical. Pinning

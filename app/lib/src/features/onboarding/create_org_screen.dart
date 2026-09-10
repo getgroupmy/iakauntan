@@ -6,9 +6,31 @@ import '../../core/address_field.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/business_types_repository.dart';
 import '../../data/places_repository.dart';
 import '../settings/msic_picker.dart';
 import 'home_country.dart';
+import 'onboarding_copy.dart';
+
+/// Which question is in front of somebody.
+enum _Step {
+  /// Personal or a business, and the country it is in.
+  use,
+
+  /// What kind of business, out of `business_types`.
+  businessType,
+
+  /// The modules, ticked. Reached from "Something else", and from the
+  /// Change beside what a business type offered.
+  modules,
+
+  /// The form itself.
+  form,
+
+  /// The country list, which is a full screen of its own because two
+  /// hundred countries is not a dropdown.
+  country,
+}
 
 /// First-run setup. One call to create_organization() stands up the whole
 /// tenant: chart of accounts, SST codes, fiscal calendar and pipeline.
@@ -62,11 +84,33 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   /// What to call it on the line that says what it is.
   String _countryName = homeCountryName;
 
-  /// Whether the picker is open.
+  /// Where to go back to when the country list is closed.
   ///
-  /// The full-screen list is still the way to change it: two hundred
-  /// countries is not a dropdown, and the search box is the point.
-  bool _choosingCountry = false;
+  /// It is reachable from the first step and from the form, and landing
+  /// on the wrong one of those is landing in the middle of somebody's
+  /// half-answered setup.
+  _Step _cameFrom = _Step.use;
+
+  /// Which of the three steps before the form is showing, if any.
+  ///
+  /// A step rather than a route because all of it is one answer being
+  /// assembled: somebody who backs out of the module list has not left
+  /// setup, they have changed their mind about a business type, and a
+  /// router would have to carry the half-made answer between pages to
+  /// say so.
+  _Step _step = _Step.use;
+
+  /// What this is being set up for. Null until the first step is
+  /// answered, which is why the form is not drawn before then.
+  UseKind? _use;
+
+  /// The business type chosen, and the modules that go with it.
+  ///
+  /// `_ticked` starts as the type's own list and is whatever the person
+  /// leaves it as: what is shown is what is sent, and what is sent is
+  /// what is charged.
+  String? _businessType;
+  final Set<String> _ticked = {};
 
   String _entityType = 'sdn_bhd';
   String? _stateCode;
@@ -124,7 +168,12 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
         'create_organization',
         params: {
           'p_name': _name.text.trim(),
-          'p_entity_type': _entityType,
+          // Personal use has no entity type to choose: the person IS
+          // the entity, and `0553`'s trigger reads this value to file
+          // them under NRIC or passport rather than under a business
+          // registration number MyInvois would reject.
+          'p_entity_type':
+              _personal ? personalEntityType : _entityType,
           'p_registration_no': _emptyToNull(_registrationNo.text),
           'p_tin': _emptyToNull(_tin.text),
           'p_msic_code': _msicCode,
@@ -144,6 +193,20 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
           'p_country_code': _country,
         },
       );
+
+      // What the company said it is, and the modules it was shown.
+      // After the company exists, because both are recorded against it
+      // — and inside the same try, so a failure here is a failure of
+      // setup rather than a company that quietly has none of what it
+      // asked for.
+      if (orgId is String) {
+        await applyBusinessType(
+          ref,
+          orgId: orgId,
+          businessType: _businessType,
+          modules: _ticked.toList(),
+        );
+      }
 
       // Refresh the org list so the router lets us out of onboarding.
       ref.invalidate(organizationsProvider);
@@ -170,11 +233,16 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
     name,
   );
 
+  void _openCountries() => setState(() {
+    _cameFrom = _step;
+    _step = _Step.country;
+  });
+
   void _chooseCountry(String code, String alpha2, String name) => setState(() {
     _country = code;
     _alpha2 = alpha2;
     _countryName = name;
-    _choosingCountry = false;
+    _step = _cameFrom;
     // A state chosen for one country means nothing in another, and the
     // list itself is Malaysian. Cleared rather than carried.
     _stateCode = null;
@@ -187,21 +255,77 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   static String? _emptyToNull(String value) =>
       value.trim().isEmpty ? null : value.trim();
 
+  /// Whether this is one person rather than a business.
+  bool get _personal => _use == UseKind.personal;
+
+  /// The answer to the first question, and where it leads.
+  ///
+  /// A person setting up for themselves is not asked what kind of
+  /// business they are, because they are not one. They are asked what
+  /// else they need, which is the same module list with nothing
+  /// preselected.
+  void _chooseUse(UseKind use) => setState(() {
+    _use = use;
+    _ticked.clear();
+    _businessType = null;
+    _step = use == UseKind.personal ? _Step.modules : _Step.businessType;
+  });
+
+  /// A business type, and the modules it brings with it.
+  void _chooseBusinessType(String code, List<String> modules) => setState(() {
+    _businessType = code;
+    _ticked
+      ..clear()
+      ..addAll(modules);
+    // "Something else" carries nothing, so it goes to the list rather
+    // than to the form: the whole point of that answer is that the
+    // choosing has not happened yet.
+    _step = code == otherBusinessType ? _Step.modules : _Step.form;
+  });
+
   @override
   Widget build(BuildContext context) {
     final statesAsync = ref.watch(refStatesProvider);
 
-    // Only when somebody asked for it. The answer is already there.
-    if (_choosingCountry) {
-      return _CountryStep(
-        onChosen: _chooseCountry,
-        onCancel: () => setState(() => _choosingCountry = false),
-      );
+    switch (_step) {
+      case _Step.country:
+        return _CountryStep(
+          onChosen: _chooseCountry,
+          onCancel: () => setState(() => _step = _cameFrom),
+        );
+      case _Step.use:
+        return _UseStep(
+          countryName: _countryName,
+          onCountry: _openCountries,
+          onChosen: _chooseUse,
+        );
+      case _Step.businessType:
+        return _BusinessTypeStep(
+          onChosen: _chooseBusinessType,
+          onBack: () => setState(() => _step = _Step.use),
+        );
+      case _Step.modules:
+        return _ModulesStep(
+          ticked: _ticked,
+          onToggle: (code, on) => setState(() {
+            if (on) {
+              _ticked.add(code);
+            } else {
+              _ticked.remove(code);
+            }
+          }),
+          onDone: () => setState(() => _step = _Step.form),
+          onBack: () => setState(() {
+            _step = _personal ? _Step.use : _Step.businessType;
+          }),
+        );
+      case _Step.form:
+        break;
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Set up your company'),
+        title: Text(setupTitle(_use ?? UseKind.business)),
         actions: [
           TextButton.icon(
             onPressed: () async {
@@ -235,9 +359,7 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                     isThreeLine: true,
                     trailing: TextButton(
                       key: const ValueKey('org-country-change'),
-                      onPressed: _busy
-                          ? null
-                          : () => setState(() => _choosingCountry = true),
+                      onPressed: _busy ? null : _openCountries,
                       child: const Text(countryChangeLabel),
                     ),
                   ),
@@ -253,7 +375,10 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            setupPromise(malaysian: _malaysian),
+                            setupPromise(
+                              malaysian: _malaysian,
+                              use: _use ?? UseKind.business,
+                            ),
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
@@ -263,28 +388,45 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                const SectionHeader('Company details'),
+                SectionHeader(_personal ? 'Your details' : 'Company details'),
                 TextFormField(
+                  key: const ValueKey('org-name'),
                   controller: _name,
                   textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Company name *',
-                    hintText: 'e.g. Sinar Teknologi Sdn Bhd',
+                  decoration: InputDecoration(
+                    labelText: nameLabel(
+                      _use ?? UseKind.business,
+                      malaysian: _malaysian,
+                    ),
+                    hintText: _personal
+                        ? 'e.g. Nurul Aisyah binti Rahman'
+                        : 'e.g. Sinar Teknologi Sdn Bhd',
                   ),
-                  validator: (v) =>
-                      (v ?? '').trim().isEmpty ? 'Enter the company name' : null,
+                  validator: (v) => (v ?? '').trim().isEmpty
+                      ? (_personal
+                          ? 'Enter your full name'
+                          : 'Enter the company name')
+                      : null,
                 ),
                 const SizedBox(height: 14),
-                DropdownButtonFormField<String>(
-                  value: _entityType,
-                  decoration: const InputDecoration(labelText: 'Entity type'),
-                  items: [
-                    for (final e in _entityTypes.entries)
-                      DropdownMenuItem(value: e.key, child: Text(e.value)),
-                  ],
-                  onChanged: (v) => setState(() => _entityType = v ?? 'sdn_bhd'),
-                ),
-                const SizedBox(height: 14),
+                // A person has no entity type to choose. They are filed
+                // as `individual`, which is what makes LHDN see a
+                // person, and a dropdown offering Sdn Bhd to somebody
+                // invoicing under their own name is a dropdown with one
+                // right answer hidden in it.
+                if (!_personal) ...[
+                  DropdownButtonFormField<String>(
+                    value: _entityType,
+                    decoration: const InputDecoration(labelText: 'Entity type'),
+                    items: [
+                      for (final e in _entityTypes.entries)
+                        DropdownMenuItem(value: e.key, child: Text(e.value)),
+                    ],
+                    onChanged: (v) =>
+                        setState(() => _entityType = v ?? 'sdn_bhd'),
+                  ),
+                  const SizedBox(height: 14),
+                ],
                 // `_msicCode` was declared here and sent to
                 // `create_organization`, and nothing ever set it — so
                 // every company created through this form was
@@ -298,7 +440,9 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                     return ListTile(
                       key: const ValueKey('org-msic'),
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('What the business does'),
+                      title: Text(_personal
+                          ? 'What you do'
+                          : 'What the business does'),
                       subtitle: Text(msicSummary(all, _msicCode)),
                       trailing: const Icon(Icons.search, size: 18),
                       onTap: _busy
@@ -318,10 +462,26 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
                 const SizedBox(height: 14),
                 _Row2(
                   left: TextFormField(
+                    key: const ValueKey('org-registration'),
                     controller: _registrationNo,
-                    decoration: const InputDecoration(
-                      labelText: 'SSM registration no.',
-                      hintText: '202301234567',
+                    decoration: InputDecoration(
+                      // The same column either way, and a different
+                      // number in it. A box labelled "SSM registration
+                      // no." in front of somebody who has never had one
+                      // is a box left empty, and an empty
+                      // identification is a rejected e-Invoice.
+                      labelText: identificationLabel(
+                        _use ?? UseKind.business,
+                        malaysian: _malaysian,
+                      ),
+                      hintText: identificationHint(
+                        _use ?? UseKind.business,
+                        malaysian: _malaysian,
+                      ),
+                      helperText: identificationHelp(
+                        _use ?? UseKind.business,
+                      ),
+                      helperMaxLines: 2,
                     ),
                   ),
                   right: TextFormField(
@@ -507,7 +667,324 @@ class _Row2 extends StatelessWidget {
   }
 }
 
-/// The first question: which country the company is in.
+/// The first question: who this is for.
+///
+/// Before anything else, because it decides which of two products the
+/// rest of setup is. A person invoicing under their own name is asked
+/// for a full name and a MyKad number and is never shown a list of
+/// business types; a company is asked what kind of business it is and
+/// offered what that needs.
+///
+/// The country sits on this step rather than in front of it. It is
+/// answered already — Malaysia — and everything after it follows the
+/// answer, so it belongs where somebody can see it and change it
+/// without being stopped by it.
+class _UseStep extends ConsumerWidget {
+  const _UseStep({
+    required this.countryName,
+    required this.onCountry,
+    required this.onChosen,
+  });
+
+  final String countryName;
+  final VoidCallback onCountry;
+  final void Function(UseKind) onChosen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(useQuestion),
+        actions: [
+          TextButton.icon(
+            onPressed: () => ref.read(supabaseProvider).auth.signOut(),
+            icon: const Icon(Icons.logout, size: 18),
+            label: const Text('Sign out'),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: PageBody(
+          maxWidth: 560,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Card(
+                child: ListTile(
+                  key: const ValueKey('use-country'),
+                  leading: const Icon(Icons.public, size: 20),
+                  title: const Text(countryFieldLabel),
+                  subtitle: Text(countryName),
+                  trailing: TextButton(
+                    key: const ValueKey('use-country-change'),
+                    onPressed: onCountry,
+                    child: const Text(countryChangeLabel),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _UseCard(
+                tileKey: const ValueKey('use-business'),
+                icon: Icons.storefront,
+                title: businessTitle,
+                blurb: businessBlurb,
+                onTap: () => onChosen(UseKind.business),
+              ),
+              const SizedBox(height: 12),
+              _UseCard(
+                tileKey: const ValueKey('use-personal'),
+                icon: Icons.person_outline,
+                title: personalTitle,
+                blurb: personalBlurb,
+                onTap: () => onChosen(UseKind.personal),
+              ),
+              const SizedBox(height: 40),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One of the two answers, big enough to read before choosing.
+class _UseCard extends StatelessWidget {
+  const _UseCard({
+    required this.tileKey,
+    required this.icon,
+    required this.title,
+    required this.blurb,
+    required this.onTap,
+  });
+
+  final Key tileKey;
+  final IconData icon;
+  final String title;
+  final String blurb;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: InkWell(
+      key: tileKey,
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.all(Space.lg),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 22, color: context.colors.success),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 6),
+                  Text(blurb, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 20),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// The second question: what kind of business.
+///
+/// Forty trades, grouped by sector, each saying what it switches on.
+/// Named rather than counted — "adds 3 modules" tells nobody whether
+/// the answer is right for them, and being able to tell is the whole
+/// point of asking.
+class _BusinessTypeStep extends ConsumerWidget {
+  const _BusinessTypeStep({required this.onChosen, required this.onBack});
+
+  final void Function(String code, List<String> modules) onChosen;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final types = ref.watch(businessTypesProvider);
+    final modules = ref.watch(onboardingModulesProvider).valueOrNull ??
+        const <Map<String, dynamic>>[];
+    final names = {
+      for (final m in modules) '${m['code']}': '${m['name']}',
+    };
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(businessTypeQuestion),
+        leading: BackButton(
+          key: const ValueKey('business-type-back'),
+          onPressed: onBack,
+        ),
+      ),
+      body: SingleChildScrollView(
+        child: PageBody(
+          maxWidth: 560,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                businessTypeBlurb,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              AsyncView<List<Map<String, dynamic>>>(
+                value: types,
+                onRetry: () => ref.invalidate(businessTypesProvider),
+                builder: (rows) {
+                  final groups = bySector(rows);
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final entry in groups.entries) ...[
+                        SectionHeader(entry.key),
+                        Card(
+                          child: Column(
+                            children: [
+                              for (final t in entry.value)
+                                ListTile(
+                                  key: ValueKey('business-type-${t['code']}'),
+                                  title: Text('${t['name']}'),
+                                  subtitle: Text(modulesAdded([
+                                    for (final c
+                                        in (t['module_codes'] as List? ??
+                                            const []))
+                                      names['$c'] ?? '$c',
+                                  ])),
+                                  trailing:
+                                      const Icon(Icons.chevron_right, size: 18),
+                                  onTap: () => onChosen(
+                                    '${t['code']}',
+                                    [
+                                      for (final c
+                                          in (t['module_codes'] as List? ??
+                                              const []))
+                                        '$c',
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      const SizedBox(height: 32),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The module list, ticked.
+///
+/// Reached three ways: from "Something else", from personal use, and
+/// from the Change beside what a business type offered. Nothing here is
+/// required, and the screen says so — the books, contacts and invoicing
+/// are on for everybody, and this is the part that costs money.
+class _ModulesStep extends ConsumerWidget {
+  const _ModulesStep({
+    required this.ticked,
+    required this.onToggle,
+    required this.onDone,
+    required this.onBack,
+  });
+
+  final Set<String> ticked;
+  final void Function(String code, bool on) onToggle;
+  final VoidCallback onDone;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final modules = ref.watch(onboardingModulesProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(modulesQuestion),
+        leading: BackButton(
+          key: const ValueKey('modules-back'),
+          onPressed: onBack,
+        ),
+      ),
+      body: SingleChildScrollView(
+        child: PageBody(
+          maxWidth: 560,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(modulesBlurb, style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 16),
+              AsyncView<List<Map<String, dynamic>>>(
+                value: modules,
+                onRetry: () => ref.invalidate(onboardingModulesProvider),
+                builder: (rows) {
+                  // What the ticks come to, before anything is agreed
+                  // to rather than on the first bill.
+                  final total = rows.fold<num>(
+                    0,
+                    (sum, m) => ticked.contains('${m['code']}')
+                        ? sum + ((m['monthly_price'] as num?) ?? 0)
+                        : sum,
+                  );
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Card(
+                        child: Column(
+                          children: [
+                            for (final m in rows)
+                              CheckboxListTile(
+                                key: ValueKey('module-${m['code']}'),
+                                value: ticked.contains('${m['code']}'),
+                                onChanged: (v) =>
+                                    onToggle('${m['code']}', v ?? false),
+                                title: Text('${m['name']}'),
+                                subtitle: Text(
+                                  monthlyPrice(m['monthly_price'] as num?),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        monthlyTotal(total),
+                        key: const ValueKey('modules-total'),
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        key: const ValueKey('modules-done'),
+                        onPressed: onDone,
+                        child: const Text('Continue'),
+                      ),
+                      const SizedBox(height: 40),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Which country the company is in.
 ///
 /// Its own screen rather than a field at the top of the form, because
 /// the answer changes what the form asks. A company in Singapore

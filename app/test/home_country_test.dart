@@ -36,24 +36,6 @@ void main() {
     });
   });
 
-  group('what the setup promises', () {
-    test('names the Malaysian instruments at home', () {
-      final promise = setupPromise(malaysian: true);
-      expect(promise, contains('Malaysian'));
-      expect(promise, contains('SST'));
-    });
-
-    test('and promises neither of them anywhere else', () {
-      // The assertion that would fail if the sentence were left as one
-      // string: a company in Singapore being told it is getting SST tax
-      // codes has been promised something it did not want.
-      final promise = setupPromise(malaysian: false);
-      expect(promise, isNot(contains('Malaysian')));
-      expect(promise, isNot(contains('SST')));
-      expect(promise, contains('chart of accounts'));
-    });
-  });
-
   group('the list behind the line', () {
     final rows = [
       {'code': 'AUS', 'name': 'Australia', 'alpha2': 'AU'},
