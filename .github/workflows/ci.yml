@@ -1095,6 +1095,23 @@ jobs:
       # gating would buy nothing — and it would hand the parser above the
       # power to switch this off by going quiet. What the pending list is
       # used for here is saying out loud what is about to happen.
+      #
+      # `--include-all` because this repository numbers its migrations
+      # `0001`, `0002`, ... and the two highest versions on the hosted
+      # project are timestamps: `20260909090115` and `20260909090607`,
+      # written in the dashboard and adopted as files by `3329034`.
+      # Every migration this repository will ever write sorts BELOW
+      # those, and without the flag `db push` refuses anything that
+      # would be inserted before the remote's last version — which is
+      # not an occasional out-of-order push here, it is every push from
+      # now on. `0552` is the one that found it.
+      #
+      # What the flag gives up is the guard against a stale migration
+      # written against an older schema arriving late. This suite
+      # already has a stronger one: `supabase/tests/run_locally.sh` and
+      # the assertions job apply every migration in filename order to an
+      # empty database on every run, so a file that does not work in its
+      # own position never reaches this job.
       - name: Apply
         if: steps.creds.outputs.ready == 'true' && env.AUTOPUSH == 'true'
         # The pending list comes in through the environment rather than
@@ -1112,7 +1129,7 @@ jobs:
           if [ -n "$PENDING" ]; then
             echo "::notice::Applying to the hosted project: $PENDING"
           fi
-          scripts/ci/retry.sh supabase db push --linked
+          scripts/ci/retry.sh supabase db push --linked --include-all
           {
             echo
             if [ -n "$PENDING" ]; then

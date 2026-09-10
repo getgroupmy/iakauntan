@@ -108,6 +108,31 @@ loudly, because a green run that applied nothing looks exactly like a
 green run that applied everything. That is the same reasoning the
 Vercel and edge-function jobs already use.
 
+## Why the push says `--include-all`
+
+Two versions on the hosted project are timestamps rather than numbers:
+`20260909090115` and `20260909090607`, written in the dashboard and
+adopted as files afterwards. They are the highest versions the project
+has, and they always will be — this repository numbers its migrations
+`0001`, `0002`, … , and every number it will ever write sorts below a
+2026 timestamp.
+
+`supabase db push` refuses to apply a migration that would be inserted
+before the remote's last version, which after those two means every
+migration from here on. `0552` is the one that found it. So the push
+carries `--include-all`.
+
+What that flag gives up is the guard against a migration written
+against an older schema arriving late. The guard that replaces it is
+stronger and was already there: `supabase/tests/run_locally.sh` and the
+`database` job apply every migration in filename order to an empty
+database on every run, so a file that does not work in its own position
+never reaches the hosted project.
+
+If a future migration must run *after* one of those two — none does
+today, both being trigger drops on read-receipt tables — give it a
+timestamp version above `20260909090607` rather than a number.
+
 ## The drift check
 
 Applying the pending ones is not the same as the hosted project matching
