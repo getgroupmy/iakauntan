@@ -11,6 +11,7 @@ import '../../data/reserved_names_repository.dart';
 import '../../data/site_pages_repository.dart';
 import '../../core/theme.dart';
 import '../landing/landing_content.dart';
+import 'confirmation_resend.dart';
 import 'demo_accounts.dart';
 
 /// The password, asked in a box of its own.
@@ -436,6 +437,12 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   String? _error;
   String? _notice;
 
+  /// The failure's code, kept beside its message.
+  ///
+  /// `email_not_confirmed` is the one this screen acts on: it is the
+  /// only refusal with something the person can do about it from here.
+  String? _errorCode;
+
   @override
   void dispose() {
     _email.dispose();
@@ -472,6 +479,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _errorCode = null;
       _notice = null;
     });
     try {
@@ -572,6 +580,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _errorCode = null;
       _notice = null;
     });
 
@@ -617,9 +626,66 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       }
     } on AuthException catch (e) {
       await _noteRefusal(e);
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          // Kept beside the message because the code is the stable
+          // half: older GoTrue sends only the sentence, newer ones
+          // send both, and the offer below has to work against either.
+          _errorCode = e.code;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Sends the confirmation link again.
+  ///
+  /// Offered only where it is the answer: an address that exists and
+  /// has not been confirmed. Everything else about a failed sign-in --
+  /// wrong password, no such account -- is a different problem, and a
+  /// button that emailed somebody in those cases would be a way to
+  /// find out whether an address is registered.
+  Future<void> _resendConfirmation() async {
+    final email = _email.text.trim();
+    if (email.isEmpty) return;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+      _errorCode = null;
+      _notice = null;
+    });
+    try {
+      await ref.read(supabaseProvider).auth.resend(
+        type: OtpType.signup,
+        email: email,
+        // Back to this page, where the sign-in form is. Web only: on
+        // mobile the deep link is configured in the project rather
+        // than sent per request, and passing an http URL there would
+        // send somebody to a browser instead of the app.
+        emailRedirectTo: kIsWeb ? '${Uri.base.origin}/#/signin' : null,
+      );
+      if (mounted) {
+        setState(() => _notice = resendConfirmationSent(email));
+      }
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        if (looksRateLimited(code: e.code, message: e.message)) {
+          _notice = resendConfirmationTooSoon;
+        } else {
+          _error = resendConfirmationFailed(e.message);
+          _errorCode = e.code;
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = resendConfirmationFailed('$e'));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1041,6 +1107,22 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                 if (_error != null) ...[
                   const SizedBox(height: 12),
                   _Banner(message: _error!, color: context.colors.danger),
+                  // The one refusal with something to do about it. An
+                  // unconfirmed address used to be a dead end: every
+                  // attempt answered "Email not confirmed" and the only
+                  // way on was to register again with the same address,
+                  // which the form does not allow.
+                  if (looksUnconfirmed(code: _errorCode, message: _error))
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        key: const ValueKey('resend-confirmation'),
+                        onPressed: _busy ? null : _resendConfirmation,
+                        icon: const Icon(Icons.mark_email_unread_outlined,
+                            size: 18),
+                        label: const Text(resendConfirmationLabel),
+                      ),
+                    ),
                 ],
                 if (_notice != null) ...[
                   const SizedBox(height: 12),
