@@ -5,6 +5,54 @@ things need doing by a person, and none of them can be done from this
 repository because two of them are secrets and the third is a DNS
 record.
 
+## Two kinds of mail, and only one of them is this repository's
+
+This trips people up the first time they see a confirmation email
+arrive from `noreply@mail.app.supabase.io` with an "Opt out of these
+emails" footer on it, and go looking for the bug in here. There isn't
+one. There are two mail paths and they share nothing:
+
+| | **Application mail** | **Auth mail** |
+| --- | --- | --- |
+| Examples | invoices, share links, overdue chasers, the sales digest, the platform's own bills | confirm your email, password reset, magic link, email change |
+| Written by | the database, into `email_outbox` | GoTrue, inside Supabase, the moment `auth.signUp` is called |
+| Sent by | `supabase/functions/send-email`, through Resend | Supabase's own SMTP |
+| Sender | `MAIL_FROM` — `billing@iakauntan.com` | whatever Supabase Auth is configured with |
+| Configured | here, by the steps below | in the dashboard, NOT from this repository |
+
+`sign_in_screen.dart` calls `auth.signUp(...)`, and everything after
+that happens inside Supabase. The row never reaches `email_outbox`, the
+edge function never sees it, and `MAIL_FROM` has nothing to do with it.
+No amount of work in this repository changes that sender.
+
+### Making auth mail come from iakauntan.com
+
+**Authentication → Emails → SMTP Settings → Enable Custom SMTP**, in
+the dashboard. Resend is already set up for the application mail, so
+point it at the same place:
+
+| Field | Value |
+| --- | --- |
+| Host | `smtp.resend.com` |
+| Port | `465` |
+| Username | `resend` |
+| Password | the same `RESEND_API_KEY` |
+| Sender email | `no-reply@iakauntan.com` — any address on the domain already verified in Resend |
+| Sender name | iAkauntan |
+
+Then **Authentication → Emails → Templates** for the wording, and check
+**Authentication → URL Configuration** so the confirmation link lands
+on `iakauntan.com` rather than localhost.
+
+### Why this is not only about branding
+
+Supabase's built-in auth SMTP is **for testing** and is rate limited to
+a handful of messages an hour across the whole project. It is not a
+sender that quietly looks unbranded in production; it is a sender that
+quietly stops. The first symptom is somebody signing up and never
+receiving the confirmation, with nothing in this repository to show for
+it — `email_outbox` will be empty, because the message was never ours.
+
 ## What is already in place
 
 - `email_settings` — per organization: on/off, from name, reply-to, and
