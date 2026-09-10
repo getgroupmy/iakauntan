@@ -163,3 +163,86 @@ Map<String, List<Map<String, dynamic>>> bySector(
   }
   return out;
 }
+
+/// Which question is in front of somebody.
+///
+/// Public, and the transitions below are functions rather than lines
+/// inside a `setState`, because "going back does not lose what you
+/// already said" is a rule with a right answer and a wrong one — and
+/// the wrong one is invisible until somebody has answered four
+/// questions and is asked all four again.
+enum SetupStep {
+  /// Myself or a business, and the country.
+  use,
+
+  /// What kind of business, out of `business_types`.
+  businessType,
+
+  /// The modules, ticked.
+  modules,
+
+  /// The form itself.
+  form,
+
+  /// The country list, which is a screen of its own because two hundred
+  /// countries is not a dropdown.
+  country,
+}
+
+/// Where answering the first question leads.
+///
+/// A person goes straight to the modules: there is no business type to
+/// choose, because they are not a business. A business goes to the type
+/// list — unless it has already chosen one, in which case answering the
+/// same question the same way must not make it answer the next one
+/// again.
+SetupStep stepAfterUse(UseKind use, {String? businessType}) {
+  if (use == UseKind.personal) return SetupStep.modules;
+  return businessType == null ? SetupStep.businessType : SetupStep.form;
+}
+
+/// Where choosing a business type leads.
+///
+/// "Something else" carries no modules, so it goes to the list rather
+/// than to the form — every other answer has already made that choice.
+/// Re-picking "Something else" goes back to the list too: somebody who
+/// chooses it a second time is asking to change what they ticked.
+SetupStep stepAfterBusinessType(String code) =>
+    code == otherBusinessType ? SetupStep.modules : SetupStep.form;
+
+/// Whether changing the answer to the first question throws away the
+/// business type.
+///
+/// It does when the answer becomes "myself", because a person has no
+/// business type and leaving a stale one would file them as a
+/// restaurant. It does not otherwise — and re-picking the same answer
+/// changes nothing at all, which is the difference between a back
+/// button and starting again.
+bool clearsBusinessType(UseKind use) => use == UseKind.personal;
+
+/// Whether choosing a business type replaces the ticks.
+///
+/// Only when it is a different type. The ticks are what somebody was
+/// shown and may have moved, so re-confirming the same answer must
+/// leave them where they were put.
+bool replacesTicks({required String? current, required String chosen}) =>
+    current != chosen;
+
+/// The lines at the top of the form saying what was answered on the way
+/// here, each with a way back to the question.
+const useFieldLabel = 'What this is for';
+const businessTypeFieldLabel = 'Business type';
+const modulesFieldLabel = 'Add-ons';
+
+/// Which answer was given to the first question.
+String useAnswer(UseKind use) =>
+    use == UseKind.personal ? personalTitle : businessTitle;
+
+/// What the add-ons line says.
+///
+/// Counted here rather than named, because by this point the names have
+/// been read on the screen that offered them and what somebody wants
+/// from a summary line is whether it is the number they expected.
+String modulesSummary(int chosen) => chosen == 0
+    ? 'None — the books, contacts and invoicing are always on'
+    : '$chosen chosen';

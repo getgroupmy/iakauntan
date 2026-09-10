@@ -12,26 +12,6 @@ import '../settings/msic_picker.dart';
 import 'home_country.dart';
 import 'onboarding_copy.dart';
 
-/// Which question is in front of somebody.
-enum _Step {
-  /// Personal or a business, and the country it is in.
-  use,
-
-  /// What kind of business, out of `business_types`.
-  businessType,
-
-  /// The modules, ticked. Reached from "Something else", and from the
-  /// Change beside what a business type offered.
-  modules,
-
-  /// The form itself.
-  form,
-
-  /// The country list, which is a full screen of its own because two
-  /// hundred countries is not a dropdown.
-  country,
-}
-
 /// First-run setup. One call to create_organization() stands up the whole
 /// tenant: chart of accounts, SST codes, fiscal calendar and pipeline.
 class CreateOrgScreen extends ConsumerStatefulWidget {
@@ -84,13 +64,6 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   /// What to call it on the line that says what it is.
   String _countryName = homeCountryName;
 
-  /// Where to go back to when the country list is closed.
-  ///
-  /// It is reachable from the first step and from the form, and landing
-  /// on the wrong one of those is landing in the middle of somebody's
-  /// half-answered setup.
-  _Step _cameFrom = _Step.use;
-
   /// Which of the three steps before the form is showing, if any.
   ///
   /// A step rather than a route because all of it is one answer being
@@ -98,7 +71,17 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   /// setup, they have changed their mind about a business type, and a
   /// router would have to carry the half-made answer between pages to
   /// say so.
-  _Step _step = _Step.use;
+  SetupStep _step = SetupStep.use;
+
+  /// The steps walked through to get here, newest last.
+  ///
+  /// A stack rather than a single "came from", because these screens
+  /// are reachable from more than one place and from each other: the
+  /// module list is opened from a business type, from personal use and
+  /// from the form, and back has to mean the one it was actually opened
+  /// from. A single remembered step gets that right until somebody goes
+  /// two deep, and then sends them round in a circle.
+  final List<SetupStep> _trail = [];
 
   /// What this is being set up for. Null until the first step is
   /// answered, which is why the form is not drawn before then.
@@ -110,6 +93,13 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   /// leaves it as: what is shown is what is sent, and what is sent is
   /// what is charged.
   String? _businessType;
+
+  /// What to call it on the line that says what was chosen. The row's
+  /// own name rather than the code, and carried rather than looked up
+  /// again, so the summary reads the same whether or not the catalogue
+  /// is still in the cache.
+  String? _businessTypeName;
+
   final Set<String> _ticked = {};
 
   String _entityType = 'sdn_bhd';
@@ -233,16 +223,37 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
     name,
   );
 
-  void _openCountries() => setState(() {
-    _cameFrom = _step;
-    _step = _Step.country;
+  /// Go to a step, remembering where from.
+  ///
+  /// Every move goes through here, so a back button always lands where
+  /// somebody came from rather than where the flow would have gone
+  /// next. Opening the module list from the form and pressing back is
+  /// the case that made this necessary: it used to land on the business
+  /// type list, a question already answered, as though the form had
+  /// been abandoned.
+  void _goTo(SetupStep target) => setState(() {
+    _trail.add(_step);
+    _step = target;
   });
+
+  /// Back to whatever opened the step showing now.
+  ///
+  /// Nothing is thrown away on the way back. That is the whole point:
+  /// every answer already given is still given, and the form's fields
+  /// are still typed, because none of this is a route being popped.
+  void _goBack() => setState(() {
+    if (_trail.isNotEmpty) _step = _trail.removeLast();
+  });
+
+  void _openCountries() => _goTo(SetupStep.country);
 
   void _chooseCountry(String code, String alpha2, String name) => setState(() {
     _country = code;
     _alpha2 = alpha2;
     _countryName = name;
-    _step = _cameFrom;
+    if (_trail.isNotEmpty) _step = _trail.removeLast();
+    // Nothing else is thrown away. The country changes what the form
+    // ASKS, not what somebody has already answered about themselves.
     // A state chosen for one country means nothing in another, and the
     // list itself is Malaysian. Cleared rather than carried.
     _stateCode = null;
@@ -262,49 +273,72 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
   ///
   /// A person setting up for themselves is not asked what kind of
   /// business they are, because they are not one. They are asked what
-  /// else they need, which is the same module list with nothing
-  /// preselected.
-  void _chooseUse(UseKind use) => setState(() {
-    _use = use;
-    _ticked.clear();
-    _businessType = null;
-    _step = use == UseKind.personal ? _Step.modules : _Step.businessType;
-  });
+  /// else they need, which is the same module list.
+  ///
+  /// Coming back and giving the same answer again changes nothing at
+  /// all, and coming back to change it keeps everything the new answer
+  /// can still be true of. Somebody who chose "a business", picked
+  /// restaurant, reached the form and then went back to look at the
+  /// first question has not asked to start again.
+  void _chooseUse(UseKind use) {
+    setState(() {
+      _use = use;
+      // A person has no business type, and leaving a stale one would
+      // file them as a restaurant. The ticks stay either way: they are
+      // things somebody said they wanted, and that does not stop being
+      // true because they are doing it under their own name.
+      if (clearsBusinessType(use)) {
+        _businessType = null;
+        _businessTypeName = null;
+      }
+    });
+    _goTo(stepAfterUse(use, businessType: _businessType));
+  }
 
   /// A business type, and the modules it brings with it.
-  void _chooseBusinessType(String code, List<String> modules) => setState(() {
-    _businessType = code;
-    _ticked
-      ..clear()
-      ..addAll(modules);
-    // "Something else" carries nothing, so it goes to the list rather
-    // than to the form: the whole point of that answer is that the
-    // choosing has not happened yet.
-    _step = code == otherBusinessType ? _Step.modules : _Step.form;
-  });
+  ///
+  /// The ticks are replaced only when the type actually changes. A law
+  /// firm that unticked timesheets, went back to check the list, and
+  /// tapped "Law firm" again would otherwise find timesheets ticked
+  /// once more.
+  void _chooseBusinessType(String code, String name, List<String> modules) {
+    setState(() {
+      if (replacesTicks(current: _businessType, chosen: code)) {
+        _ticked
+          ..clear()
+          ..addAll(modules);
+      }
+      _businessType = code;
+      _businessTypeName = name;
+    });
+    _goTo(stepAfterBusinessType(code));
+  }
 
   @override
   Widget build(BuildContext context) {
     final statesAsync = ref.watch(refStatesProvider);
 
     switch (_step) {
-      case _Step.country:
-        return _CountryStep(
-          onChosen: _chooseCountry,
-          onCancel: () => setState(() => _step = _cameFrom),
-        );
-      case _Step.use:
+      case SetupStep.country:
+        return _CountryStep(onChosen: _chooseCountry, onCancel: _goBack);
+      case SetupStep.use:
         return _UseStep(
           countryName: _countryName,
+          chosen: _use,
           onCountry: _openCountries,
           onChosen: _chooseUse,
+          // Only once there is somewhere to go back TO. On the first
+          // screen of setup there is not.
+          onBack: _trail.isEmpty ? null : _goBack,
         );
-      case _Step.businessType:
+      case SetupStep.businessType:
         return _BusinessTypeStep(
+          chosen: _businessType,
           onChosen: _chooseBusinessType,
-          onBack: () => setState(() => _step = _Step.use),
+          onUse: () => _goTo(SetupStep.use),
+          onBack: _goBack,
         );
-      case _Step.modules:
+      case SetupStep.modules:
         return _ModulesStep(
           ticked: _ticked,
           onToggle: (code, on) => setState(() {
@@ -314,12 +348,10 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
               _ticked.remove(code);
             }
           }),
-          onDone: () => setState(() => _step = _Step.form),
-          onBack: () => setState(() {
-            _step = _personal ? _Step.use : _Step.businessType;
-          }),
+          onDone: () => _goTo(SetupStep.form),
+          onBack: _goBack,
         );
-      case _Step.form:
+      case SetupStep.form:
         break;
     }
 
@@ -345,23 +377,72 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // The question that used to stand in front of this
-                // form, answered. It is first because everything below
-                // follows it, and it is a line rather than a step
-                // because for almost everybody the answer is already
-                // right.
+                // What was answered on the way here, and a way back to
+                // each of them. Somebody who realises at the address
+                // box that they picked the wrong trade should not have
+                // to abandon a half-filled form to fix it — and coming
+                // back from one of these lands here again with
+                // everything still typed.
                 Card(
-                  child: ListTile(
-                    key: const ValueKey('org-country'),
-                    leading: const Icon(Icons.public, size: 20),
-                    title: const Text(countryFieldLabel),
-                    subtitle: Text('$_countryName\n$countryChangeHint'),
-                    isThreeLine: true,
-                    trailing: TextButton(
-                      key: const ValueKey('org-country-change'),
-                      onPressed: _busy ? null : _openCountries,
-                      child: const Text(countryChangeLabel),
-                    ),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        key: const ValueKey('org-country'),
+                        leading: const Icon(Icons.public, size: 20),
+                        title: const Text(countryFieldLabel),
+                        subtitle: Text('$_countryName\n$countryChangeHint'),
+                        isThreeLine: true,
+                        trailing: TextButton(
+                          key: const ValueKey('org-country-change'),
+                          onPressed: _busy ? null : _openCountries,
+                          child: const Text(countryChangeLabel),
+                        ),
+                      ),
+                      ListTile(
+                        key: const ValueKey('org-use'),
+                        leading: Icon(
+                          _personal ? Icons.person_outline : Icons.storefront,
+                          size: 20,
+                        ),
+                        title: const Text(useFieldLabel),
+                        subtitle: Text(useAnswer(_use ?? UseKind.business)),
+                        trailing: TextButton(
+                          key: const ValueKey('org-use-change'),
+                          onPressed:
+                              _busy ? null : () => _goTo(SetupStep.use),
+                          child: const Text(countryChangeLabel),
+                        ),
+                      ),
+                      // A person has no business type, so there is no
+                      // line for one.
+                      if (!_personal)
+                        ListTile(
+                          key: const ValueKey('org-business-type'),
+                          leading: const Icon(Icons.category_outlined,
+                              size: 20),
+                          title: const Text(businessTypeFieldLabel),
+                          subtitle: Text(_businessTypeName ?? '—'),
+                          trailing: TextButton(
+                            key: const ValueKey('org-business-type-change'),
+                            onPressed: _busy
+                                ? null
+                                : () => _goTo(SetupStep.businessType),
+                            child: const Text(countryChangeLabel),
+                          ),
+                        ),
+                      ListTile(
+                        key: const ValueKey('org-modules'),
+                        leading: const Icon(Icons.widgets_outlined, size: 20),
+                        title: const Text(modulesFieldLabel),
+                        subtitle: Text(modulesSummary(_ticked.length)),
+                        trailing: TextButton(
+                          key: const ValueKey('org-modules-change'),
+                          onPressed:
+                              _busy ? null : () => _goTo(SetupStep.modules),
+                          child: const Text(countryChangeLabel),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -682,19 +763,36 @@ class _Row2 extends StatelessWidget {
 class _UseStep extends ConsumerWidget {
   const _UseStep({
     required this.countryName,
+    required this.chosen,
     required this.onCountry,
     required this.onChosen,
+    required this.onBack,
   });
 
   final String countryName;
+
+  /// What was answered last time, if this is a second visit. Marked
+  /// rather than merely remembered: somebody who comes back to check
+  /// what they said should be able to see it and leave it alone.
+  final UseKind? chosen;
+
   final VoidCallback onCountry;
   final void Function(UseKind) onChosen;
+
+  /// Null on the first screen of setup, where there is nowhere back to.
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(useQuestion),
+        leading: onBack == null
+            ? null
+            : BackButton(
+                key: const ValueKey('use-back'),
+                onPressed: onBack,
+              ),
         actions: [
           TextButton.icon(
             onPressed: () => ref.read(supabaseProvider).auth.signOut(),
@@ -729,6 +827,7 @@ class _UseStep extends ConsumerWidget {
                 icon: Icons.storefront,
                 title: businessTitle,
                 blurb: businessBlurb,
+                current: chosen == UseKind.business,
                 onTap: () => onChosen(UseKind.business),
               ),
               const SizedBox(height: 12),
@@ -737,6 +836,7 @@ class _UseStep extends ConsumerWidget {
                 icon: Icons.person_outline,
                 title: personalTitle,
                 blurb: personalBlurb,
+                current: chosen == UseKind.personal,
                 onTap: () => onChosen(UseKind.personal),
               ),
               const SizedBox(height: 40),
@@ -755,6 +855,7 @@ class _UseCard extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.blurb,
+    required this.current,
     required this.onTap,
   });
 
@@ -762,6 +863,10 @@ class _UseCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String blurb;
+
+  /// Whether this is the answer already given.
+  final bool current;
+
   final VoidCallback onTap;
 
   @override
@@ -787,7 +892,11 @@ class _UseCard extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, size: 20),
+            Icon(
+              current ? Icons.check_circle : Icons.chevron_right,
+              size: 20,
+              color: current ? context.colors.success : null,
+            ),
           ],
         ),
       ),
@@ -802,9 +911,24 @@ class _UseCard extends StatelessWidget {
 /// the answer is right for them, and being able to tell is the whole
 /// point of asking.
 class _BusinessTypeStep extends ConsumerWidget {
-  const _BusinessTypeStep({required this.onChosen, required this.onBack});
+  const _BusinessTypeStep({
+    required this.chosen,
+    required this.onChosen,
+    required this.onUse,
+    required this.onBack,
+  });
 
-  final void Function(String code, List<String> modules) onChosen;
+  /// The type already chosen, marked in the list.
+  final String? chosen;
+
+  final void Function(String code, String name, List<String> modules) onChosen;
+
+  /// Back to the first question. Somebody who opens this list and
+  /// realises they are not a business at all should be able to say so
+  /// from here, rather than having to pick a trade they are not in
+  /// order to reach a screen that lets them.
+  final VoidCallback onUse;
+
   final VoidCallback onBack;
 
   @override
@@ -834,7 +958,21 @@ class _BusinessTypeStep extends ConsumerWidget {
                 businessTypeBlurb,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+              Card(
+                child: ListTile(
+                  key: const ValueKey('business-type-use'),
+                  leading: const Icon(Icons.person_outline, size: 20),
+                  title: const Text(useFieldLabel),
+                  subtitle: const Text(businessTitle),
+                  trailing: TextButton(
+                    key: const ValueKey('business-type-use-change'),
+                    onPressed: onUse,
+                    child: const Text(countryChangeLabel),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
               AsyncView<List<Map<String, dynamic>>>(
                 value: types,
                 onRetry: () => ref.invalidate(businessTypesProvider),
@@ -858,10 +996,18 @@ class _BusinessTypeStep extends ConsumerWidget {
                                             const []))
                                       names['$c'] ?? '$c',
                                   ])),
-                                  trailing:
-                                      const Icon(Icons.chevron_right, size: 18),
+                                  trailing: Icon(
+                                    chosen == '${t['code']}'
+                                        ? Icons.check_circle
+                                        : Icons.chevron_right,
+                                    size: 18,
+                                    color: chosen == '${t['code']}'
+                                        ? context.colors.success
+                                        : null,
+                                  ),
                                   onTap: () => onChosen(
                                     '${t['code']}',
+                                    '${t['name']}',
                                     [
                                       for (final c
                                           in (t['module_codes'] as List? ??

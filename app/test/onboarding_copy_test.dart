@@ -196,4 +196,75 @@ void main() {
       expect(bySector(const []), isEmpty);
     });
   });
+
+  group('going back does not start again', () {
+    test('a person goes straight to the modules', () {
+      // There is no business type to choose, because they are not one.
+      expect(stepAfterUse(UseKind.personal), SetupStep.modules);
+      expect(
+        stepAfterUse(UseKind.personal, businessType: 'restaurant'),
+        SetupStep.modules,
+      );
+    });
+
+    test('a business with nothing chosen yet goes to the type list', () {
+      expect(stepAfterUse(UseKind.business), SetupStep.businessType);
+    });
+
+    test('and one that has already chosen goes on to the form', () {
+      // The assertion this whole group exists for: somebody who went
+      // back to look at the first question, and answered it the same
+      // way, must not be asked the second one again.
+      expect(
+        stepAfterUse(UseKind.business, businessType: 'law_firm'),
+        SetupStep.form,
+      );
+    });
+
+    test('"Something else" goes to the list, everything else to the form', () {
+      expect(stepAfterBusinessType(otherBusinessType), SetupStep.modules);
+      expect(stepAfterBusinessType('restaurant'), SetupStep.form);
+    });
+
+    test('becoming a person drops the business type', () {
+      // Leaving a stale one would file somebody invoicing under their
+      // own name as a restaurant.
+      expect(clearsBusinessType(UseKind.personal), isTrue);
+      expect(clearsBusinessType(UseKind.business), isFalse);
+    });
+
+    test('and the ticks are replaced only by a different trade', () {
+      // A law firm that unticked timesheets, went back to check the
+      // list and tapped "Law firm" again would otherwise find
+      // timesheets ticked once more.
+      expect(
+        replacesTicks(current: 'law_firm', chosen: 'law_firm'),
+        isFalse,
+      );
+      expect(
+        replacesTicks(current: 'law_firm', chosen: 'restaurant'),
+        isTrue,
+      );
+      expect(replacesTicks(current: null, chosen: 'restaurant'), isTrue);
+    });
+  });
+
+  group('the lines that say what was answered', () {
+    test('name the answer rather than the code', () {
+      expect(useAnswer(UseKind.business), businessTitle);
+      expect(useAnswer(UseKind.personal), personalTitle);
+    });
+
+    test('and say what having chosen nothing means', () {
+      expect(modulesSummary(0).toLowerCase(), contains('always on'));
+      expect(modulesSummary(0), isNot(contains('0')));
+      expect(modulesSummary(3), '3 chosen');
+    });
+
+    test('each has a label somebody can match to the step it opens', () {
+      expect(useFieldLabel, useFieldLabel.trim());
+      expect(businessTypeFieldLabel.toLowerCase(), contains('business'));
+      expect(modulesFieldLabel, isNotEmpty);
+    });
+  });
 }
