@@ -258,6 +258,7 @@ jobs:
                    supabase/tests/demo_modules.sql \
                    supabase/tests/demo_rebuild_schedule.sql \
                    supabase/tests/business_types.sql \
+                   supabase/tests/signup_details.sql \
                    supabase/tests/multicurrency.sql \
                    supabase/tests/transfer.sql \
                    supabase/tests/fx_shapes.sql \

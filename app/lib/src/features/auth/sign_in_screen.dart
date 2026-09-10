@@ -8,10 +8,13 @@ import '../../core/platform_live.dart';
 import '../../core/page_waiting.dart';
 import '../../core/providers.dart';
 import '../../data/reserved_names_repository.dart';
+import '../../data/signup_reference_repository.dart';
 import '../../data/site_pages_repository.dart';
+import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../landing/landing_content.dart';
 import 'confirmation_resend.dart';
+import 'phone_number.dart';
 import 'demo_accounts.dart';
 
 /// The password, asked in a box of its own.
@@ -429,6 +432,17 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   final _password = TextEditingController();
   final _fullName = TextEditingController();
 
+  /// The mobile number, in the two halves people type: a dialling code
+  /// chosen from a list, and the number itself. Kept apart because the
+  /// zero in front of a Malaysian mobile is a trunk prefix and has to
+  /// come off before either is stored (`0554`).
+  final _phone = TextEditingController();
+  String _dialCode = homeDialCode;
+
+  /// How to address them. The words rather than a code, because that is
+  /// what goes on a letter.
+  String? _salutation;
+
   late bool _isSignUp = widget.startOnRegister;
 
   bool _busy = false;
@@ -453,6 +467,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     _email.dispose();
     _password.dispose();
     _fullName.dispose();
+    _phone.dispose();
     super.dispose();
   }
 
@@ -595,7 +610,16 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
         final res = await auth.signUp(
           email: _email.text.trim(),
           password: _password.text,
-          data: {'full_name': _fullName.text.trim()},
+          // The number goes as two halves and the database puts them
+          // together — `app.phone_e164`, called by `handle_new_user` —
+          // so the trunk-prefix zero is dropped by the same rule
+          // whoever is registering somebody.
+          data: {
+            'full_name': _fullName.text.trim(),
+            'salutation': _salutation ?? '',
+            'phone_dial': _dialCode,
+            'phone_national': _phone.text.trim(),
+          },
         );
         // With email confirmation enabled there is no session yet.
         if (res.session == null && mounted) {
@@ -1051,6 +1075,46 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   const SizedBox(height: 28),
                 ],
                 if (_isSignUp) ...[
+                  // Every one of these is required. A registration that
+                  // takes a title and a number when it feels like it is
+                  // a profile that is half empty and a letter nobody
+                  // can address.
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final titles = ref
+                              .watch(signupReferenceProvider)
+                              .valueOrNull
+                              ?.salutations ??
+                          const <Map<String, dynamic>>[];
+                      // A picker rather than a dropdown: there are more
+                      // than a hundred of these, and somebody looking
+                      // for Datuk Seri Panglima should be able to type
+                      // it. The group is a keyword as well as a second
+                      // line, so "royal" or "religious" finds a row
+                      // whose title alone would not.
+                      return SearchablePicker<String>(
+                        key: const ValueKey('signup-salutation'),
+                        label: '$salutationFieldLabel *',
+                        value: _salutation,
+                        options: [
+                          for (final t in titles)
+                            PickerOption(
+                              value: '${t['name']}',
+                              label: '${t['name']}',
+                              sublabel: salutationSublabel(t),
+                              keywords: [
+                                '${t['grouping'] ?? ''}',
+                                '${t['note'] ?? ''}',
+                                '${t['code'] ?? ''}',
+                              ],
+                            ),
+                        ],
+                        onChanged: (v) => setState(() => _salutation = v),
+                        validator: (_) => salutationError(_salutation),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 14),
                   TextFormField(
                     controller: _fullName,
                     textInputAction: TextInputAction.next,
@@ -1061,6 +1125,66 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                     validator: (v) => (v ?? '').trim().isEmpty
                         ? 'Enter your name'
                         : null,
+                  ),
+                  const SizedBox(height: 14),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final codes = withDialCodes(ref
+                              .watch(signupReferenceProvider)
+                              .valueOrNull
+                              ?.dialCodes ??
+                          const <Map<String, dynamic>>[]);
+                      // Two hundred countries is not a dropdown, for
+                      // the same reason the country step is a screen of
+                      // its own. Findable by the code, the country and
+                      // its two letters, because all three are things
+                      // people type.
+                      return SearchablePicker<String>(
+                        key: const ValueKey('signup-dial-code'),
+                        label: dialCodeFieldLabel,
+                        value: codes.any((c) =>
+                                phoneDigits('${c['dial_code']}') == _dialCode)
+                            ? _dialCode
+                            : null,
+                        options: [
+                          for (final c in codes)
+                            PickerOption(
+                              value: phoneDigits('${c['dial_code']}'),
+                              label: dialCodeLabel(c),
+                              keywords: [
+                                '${c['name']}',
+                                '${c['alpha2']}',
+                                '${c['code']}',
+                              ],
+                            ),
+                        ],
+                        onChanged: (v) =>
+                            setState(() => _dialCode = v ?? homeDialCode),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    key: const ValueKey('signup-phone'),
+                    controller: _phone,
+                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.next,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      labelText: '$phoneFieldLabel *',
+                      prefixIcon: const Icon(Icons.phone_outlined),
+                      // Said out loud rather than done quietly: the
+                      // zero is being taken off what they typed, and a
+                      // form that does that in silence gets accused of
+                      // losing a digit.
+                      helperText: phoneNote(
+                        dialCode: _dialCode,
+                        number: _phone.text,
+                      ),
+                      helperMaxLines: 2,
+                    ),
+                    validator: (v) =>
+                        phoneError(dialCode: _dialCode, number: v ?? ''),
                   ),
                   const SizedBox(height: 14),
                 ],

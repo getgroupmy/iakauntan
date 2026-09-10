@@ -774,6 +774,20 @@ begin
            -- those, including the ones that are about what it does not
            -- say.
            'may_sign_in_here',
+           -- 0554. The registration form is the one screen in this
+           -- product with no session behind it, and it now offers two
+           -- lists: the dialling codes, so a mobile number can be
+           -- stored as something dialable, and the salutations, so
+           -- somebody can be addressed properly.
+           --
+           -- Neither table is granted to anon; this function is the
+           -- whole of what a stranger can see of them, and what it
+           -- returns is two lists of public facts -- country names,
+           -- dialling codes, honorifics. There is nothing in it about
+           -- any person, company or account, and no argument to probe
+           -- it with. `supabase/tests/signup_details.sql` asserts that
+           -- the tables stay shut and that this answers as anon.
+           'signup_reference',
            -- 0262, and the three of them are one feature: a token on a
            -- sticker, the menu behind it, and an order placed from it.
            --
@@ -895,8 +909,14 @@ begin
                           -- And a door that has stopped asking the
                           -- email first is found by a shift standing at
                           -- a till typing a password nobody will take.
-                          'may_sign_in_here')),
-    15);
+                          'may_sign_in_here',
+                          -- And a registration form whose two
+                          -- dropdowns have silently stopped filling is
+                          -- found by somebody trying to sign up, who
+                          -- cannot, because both of them are now
+                          -- required.
+                          'signup_reference')),
+    16);
 
   perform pg_temp.check_true('and the link tables stay shut to anon',
     not exists (
