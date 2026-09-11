@@ -8,21 +8,40 @@ import '../../core/widgets.dart';
 import '../../core/safe_link.dart';
 import '../../data/reserved_names_repository.dart';
 import 'attachments.dart';
+import 'compose.dart';
+import 'compose_dialog.dart';
 
-/// Mail that arrived at this company's addresses on the platform's
-/// domain.
+/// Mail at this company's addresses on the platform's domain.
 ///
-/// A list and a reader, and nothing else. This is not a mail client:
-/// there is no reply, no compose and no folders, because the thing
-/// somebody actually needs from an address like `hello@iakauntan.com`
-/// is to see what came in and act on it somewhere else in the app.
-/// Replying to a customer is what the invoice's own send button is for.
-class InboxScreen extends ConsumerWidget {
+/// It was a list and a reader and nothing else, and said so: "this is
+/// not a mail client... replying to a customer is what the invoice's
+/// own send button is for". That held while the addresses were `sales@`
+/// and `support@`. `0559` made an address a person's, and an address
+/// with somebody's own name on it that cannot answer anybody is worse
+/// than no address — the customer writes to `aisyah@`, Aisyah reads it
+/// here and replies from Gmail, and the company's record of the
+/// conversation is now half in one place and half in another.
+///
+/// So it answers. Still not a mail client: no folders, no HTML, no
+/// forwarding, no search. A list, a reader, and a reply.
+class InboxScreen extends ConsumerStatefulWidget {
   const InboxScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final mail = ref.watch(inboxProvider);
+  ConsumerState<InboxScreen> createState() => _InboxScreenState();
+}
+
+class _InboxScreenState extends ConsumerState<InboxScreen> {
+  /// Null is everything that arrived, at every address. Choosing one
+  /// shows that address's conversation instead — both directions,
+  /// because what was said back is half of it.
+  String? _mailboxId;
+
+  @override
+  Widget build(BuildContext context) {
+    final boxes = ref.watch(myMailboxesProvider).valueOrNull ?? const [];
+    final domain = ref.watch(mailDomainProvider).valueOrNull ?? 'iakauntan.com';
+    final chosen = _mailboxId;
 
     return Scaffold(
       appBar: AppBar(
@@ -31,63 +50,225 @@ class InboxScreen extends ConsumerWidget {
           IconButton(
             tooltip: 'Check again',
             icon: const Icon(Icons.refresh),
-            onPressed: () => ref.invalidate(inboxProvider),
+            onPressed: _refresh,
           ),
         ],
       ),
-      body: AsyncView(
-        value: mail,
-        onRetry: () => ref.invalidate(inboxProvider),
-        builder: (rows) {
-          if (rows.isEmpty) {
-            return const EmptyState(
-              icon: Icons.mark_email_unread_outlined,
-              title: 'Nothing has arrived yet',
-              message: 'Mail sent to your addresses on our domain lands '
-                  'here. Ask for an address in Settings.',
-            );
-          }
-          return ListView.separated(
-            itemCount: rows.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (context, i) => _Row(row: rows[i]),
-          );
-        },
+      floatingActionButton: boxes.isEmpty
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () async {
+                await showCompose(context, ref, mailboxId: chosen);
+                _refresh();
+              },
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Write'),
+            ),
+      body: Column(
+        children: [
+          if (boxes.length > 1 || chosen != null)
+            _Addresses(
+              boxes: boxes,
+              domain: domain,
+              chosen: chosen,
+              onChanged: (v) => setState(() => _mailboxId = v),
+            ),
+          Expanded(
+            child: chosen == null
+                ? _Arrived(onReplied: _refresh)
+                : _Conversation(mailboxId: chosen, onReplied: _refresh),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _refresh() {
+    ref.invalidate(inboxProvider);
+    final chosen = _mailboxId;
+    if (chosen != null) ref.invalidate(mailboxThreadProvider(chosen));
+  }
+}
+
+/// Which address is being looked at.
+///
+/// A row of chips rather than a dropdown: there are two or three of
+/// them, they are the whole of the navigation this screen has, and one
+/// of them is usually the person's own.
+class _Addresses extends StatelessWidget {
+  const _Addresses({
+    required this.boxes,
+    required this.domain,
+    required this.chosen,
+    required this.onChanged,
+  });
+
+  final List<Map<String, dynamic>> boxes;
+  final String domain;
+  final String? chosen;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(
+        horizontal: Space.md,
+        vertical: Space.sm,
+      ),
+      child: Row(
+        children: [
+          ChoiceChip(
+            label: const Text('Everything that arrived'),
+            selected: chosen == null,
+            onSelected: (_) => onChanged(null),
+          ),
+          for (final b in boxes) ...[
+            const SizedBox(width: Space.sm),
+            ChoiceChip(
+              label: Text(mailboxAddress(b, domain)),
+              selected: chosen == '${b['id']}',
+              onSelected: (_) => onChanged('${b['id']}'),
+            ),
+          ],
+        ],
       ),
     );
   }
 }
 
+/// Everything that came in, at every address this company has.
+class _Arrived extends ConsumerWidget {
+  const _Arrived({required this.onReplied});
+
+  final VoidCallback onReplied;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return AsyncView(
+      value: ref.watch(inboxProvider),
+      onRetry: () => ref.invalidate(inboxProvider),
+      builder: (rows) {
+        if (rows.isEmpty) {
+          return const EmptyState(
+            icon: Icons.mark_email_unread_outlined,
+            title: 'Nothing has arrived yet',
+            message: 'Mail sent to your addresses on our domain lands '
+                'here. Ask for an address in Settings.',
+          );
+        }
+        return ListView.separated(
+          itemCount: rows.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (context, i) =>
+              _Row(row: rows[i], onReplied: onReplied),
+        );
+      },
+    );
+  }
+}
+
+/// One address, both directions, newest first.
+class _Conversation extends ConsumerWidget {
+  const _Conversation({required this.mailboxId, required this.onReplied});
+
+  final String mailboxId;
+  final VoidCallback onReplied;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final thread = ref.watch(mailboxThreadProvider(mailboxId));
+    return AsyncView(
+      value: thread,
+      onRetry: () => ref.invalidate(mailboxThreadProvider(mailboxId)),
+      builder: (rows) {
+        if (rows.isEmpty) {
+          return const EmptyState(
+            icon: Icons.mail_outline,
+            title: 'Nothing here yet',
+            message: 'Nothing has arrived at this address and nothing '
+                'has been sent from it.',
+          );
+        }
+        return ListView.separated(
+          itemCount: rows.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (context, i) => _Row(
+            row: rows[i],
+            mailboxId: mailboxId,
+            onReplied: onReplied,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// One line, whichever list it is in.
+///
+/// The two lists carry different column names for the same two facts —
+/// `received_at` against `at`, a row that arrived against one that
+/// left — so the reading is done here once rather than in each of them.
 class _Row extends ConsumerWidget {
-  const _Row({required this.row});
+  const _Row({required this.row, required this.onReplied, this.mailboxId});
 
   final Map<String, dynamic> row;
+  final String? mailboxId;
+  final VoidCallback onReplied;
+
+  bool get _outgoing => isOutgoing(row);
+
+  DateTime? get _when =>
+      DateTime.tryParse('${row['at'] ?? row['received_at']}');
+
+  String get _subject => (row['subject'] as String?)?.isNotEmpty == true
+      ? '${row['subject']}'
+      : '(no subject)';
+
+  String get _body => '${row['body_text'] ?? ''}';
+
+  /// When it was read, for something that arrived.
+  ///
+  /// Two names for one fact: the everything-list selects the column
+  /// itself, and `mailbox_thread` calls it `handled_at` because the
+  /// same column in the other direction is when the message left.
+  Object? get _readAt => row['read_at'] ?? row['handled_at'];
+
+  /// Whose name goes on the line. For something that arrived it is who
+  /// sent it; for something that left it is who it went to, because
+  /// "from aisyah@" on every one of her own sent messages says nothing.
+  String get _who {
+    if (_outgoing) return '${row['to_email']}';
+    return (row['from_name'] as String?)?.isNotEmpty == true
+        ? '${row['from_name']}'
+        : '${row['from_email']}';
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final unread = row['read_at'] == null;
-    final sender = (row['from_name'] as String?)?.isNotEmpty == true
-        ? '${row['from_name']}'
-        : '${row['from_email']}';
+    final unread = !_outgoing && _readAt == null;
+    final note = deliveryNote(row);
 
     return ListTile(
       leading: CircleAvatar(
         backgroundColor:
             unread ? scheme.primaryContainer : scheme.surfaceContainerHighest,
-        child: Text(
-          Fmt.initials(sender),
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: unread ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
-          ),
-        ),
+        child: _outgoing
+            ? Icon(Icons.north_east, size: 16, color: scheme.onSurfaceVariant)
+            : Text(
+                Fmt.initials(_who),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: unread
+                      ? scheme.onPrimaryContainer
+                      : scheme.onSurfaceVariant,
+                ),
+              ),
       ),
       title: Text(
-        (row['subject'] as String?)?.isNotEmpty == true
-            ? '${row['subject']}'
-            : '(no subject)',
+        _subject,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
@@ -95,13 +276,17 @@ class _Row extends ConsumerWidget {
         ),
       ),
       subtitle: Text(
-        '$sender → ${row['to_email']}',
+        _outgoing ? 'To $_who${note == null ? '' : ' · $note'}' : _who,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(color: scheme.onSurfaceVariant),
+        style: TextStyle(
+          color: row['status'] == 'failed'
+              ? scheme.error
+              : scheme.onSurfaceVariant,
+        ),
       ),
       trailing: Text(
-        Fmt.date(DateTime.tryParse('${row['received_at']}')),
+        Fmt.date(_when),
         style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
       ),
       onTap: () => _open(context, ref),
@@ -112,31 +297,30 @@ class _Row extends ConsumerWidget {
     // Marked read on opening rather than by a button, because opening it
     // is what reading it is. Failing to mark it is not worth telling
     // anybody about — the message is on the screen either way.
-    if (row['read_at'] == null) {
-      final orgId = ref.read(currentOrgIdProvider);
-      if (orgId != null) {
-        try {
-          await ref
-              .read(supabaseProvider)
-              .from('inbound_emails')
-              .update({'read_at': DateTime.now().toUtc().toIso8601String()})
-              .eq('id', '${row['id']}');
-          ref.invalidate(inboxProvider);
-        } catch (_) {
-          // Deliberately silent.
-        }
+    if (!_outgoing && _readAt == null) {
+      try {
+        await ref
+            .read(supabaseProvider)
+            .from('inbound_emails')
+            .update({'read_at': DateTime.now().toUtc().toIso8601String()})
+            .eq('id', '${row['id']}');
+        onReplied();
+      } catch (_) {
+        // Deliberately silent.
       }
     }
     if (!context.mounted) return;
 
+    // A reply needs the mailbox it arrived at. The thread list is one
+    // mailbox so it already knows; the everything-list carries it on
+    // the row.
+    final replyFrom = mailboxId ?? '${row['mailbox_id'] ?? ''}';
+    final canReply = !_outgoing && replyFrom.isNotEmpty;
+
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(
-          (row['subject'] as String?)?.isNotEmpty == true
-              ? '${row['subject']}'
-              : '(no subject)',
-        ),
+        title: Text(_subject),
         content: SizedBox(
           width: 560,
           child: SingleChildScrollView(
@@ -155,16 +339,37 @@ class _Row extends ConsumerWidget {
                 // stranger's HTML is how a mail client becomes an attack
                 // surface, and this one has no reason to be one.
                 SelectableText(
-                  (row['body_text'] as String?)?.trim().isNotEmpty == true
-                      ? '${row['body_text']}'
+                  _body.trim().isNotEmpty
+                      ? _body
                       : 'This message had no plain-text part.',
                 ),
-                _Attachments(emailId: '${row['id']}'),
+                if (!_outgoing) _Attachments(emailId: '${row['id']}'),
               ],
             ),
           ),
         ),
         actions: [
+          if (canReply)
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await showCompose(
+                  context,
+                  ref,
+                  mailboxId: replyFrom,
+                  to: '${row['from_email']}',
+                  subject: replySubject(row['subject'] as String?),
+                  body: quotedReply(
+                    from: _who,
+                    body: _body,
+                    at: _when,
+                  ),
+                  inReplyTo: '${row['id']}',
+                );
+                onReplied();
+              },
+              child: const Text('Reply'),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Close'),

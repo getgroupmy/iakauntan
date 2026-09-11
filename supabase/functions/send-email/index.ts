@@ -16,9 +16,12 @@
  * Those two callers are not the same and are not treated the same. The
  * scheduler drains every organization. Anybody else drains only their
  * own, because the rows to send are chosen under *their* token and
- * `email_outbox` carries `app.is_org_member(org_id)` — so one company's
- * staff cannot push another company's mail out early, which is what this
- * function used to allow anyone holding the publishable key to do.
+ * `email_outbox`'s read policy decides what they can see — so one
+ * company's staff cannot push another company's mail out early, which is
+ * what this function used to allow anyone holding the publishable key to
+ * do. Since `0560` that policy is narrower still: a message sent from
+ * somebody's personal address is drained by the scheduler or by them,
+ * and by nobody else in the company.
  *
  * What marks a caller as the scheduler is in `_shared/scheduler.ts`.
  *
@@ -46,6 +49,11 @@ interface OutboxRow {
   attempts: number;
   attachment_path: string | null;
   attachment_name: string | null;
+  /** The reserved address this leaves from, or null for MAIL_FROM. */
+  from_email: string | null;
+  /** Threading. Two headers, because they are two headers. */
+  in_reply_to: string | null;
+  thread_refs: string | null;
 }
 
 /** Resend takes attachments as base64 in the JSON body. */
@@ -98,6 +106,38 @@ async function loadAttachment(
   };
 }
 
+/**
+ * Who the message is from.
+ *
+ * `0328` added `from_email` so a company could send from its own
+ * reserved address and this function went on ignoring it, which meant
+ * the column was checked by a trigger, stored, and then thrown away at
+ * the last moment — every message went out as MAIL_FROM. A reply from
+ * `aisyah@` that arrives as `billing@` is not a reply.
+ *
+ * The fallback is still MAIL_FROM, which is what every row without a
+ * mailbox carries: an invoice going to a customer comes from the
+ * platform's verified sender, as it always has.
+ */
+function sender(row: OutboxRow, fallback: string): string {
+  const address = row.from_email ?? fallback;
+  return row.from_name ? `${row.from_name} <${address}>` : address;
+}
+
+/**
+ * The headers that make a reply land under the message it answers.
+ *
+ * Returns undefined rather than an empty object when there is nothing
+ * to thread: Resend takes `headers` as an object and an empty one is a
+ * key sent for no reason.
+ */
+function headers(row: OutboxRow): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  if (row.in_reply_to) out["In-Reply-To"] = row.in_reply_to;
+  if (row.thread_refs) out["References"] = row.thread_refs;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 serveFunction("send-email.failed", async (req: Request) => {
   if (req.method !== "POST") return fail("Use POST", 405);
 
@@ -147,8 +187,8 @@ serveFunction("send-email.failed", async (req: Request) => {
   // organization — note that this is the function's own copy of that key,
   // not one the caller had to present. Anyone else reads under their own
   // token, so the
-  // `app.is_org_member(org_id)` policy on `email_outbox` decides what
-  // they can push out — and a caller presenting nothing but the
+  // read policy on `email_outbox` decides what they can push out — and a
+  // caller presenting nothing but the
   // publishable key is `anon`, matches no organization, and drains
   // nothing at all. That last case is why no explicit 403 is needed.
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -164,7 +204,7 @@ serveFunction("send-email.failed", async (req: Request) => {
   let query = reader
     .from("email_outbox")
     .select("id, to_email, subject, body, reply_to, from_name, attempts, " +
-      "attachment_path, attachment_name")
+      "attachment_path, attachment_name, from_email, in_reply_to, thread_refs")
     .eq("status", "queued")
     .lt("attempts", MAX_ATTEMPTS)
     .order("queued_at", { ascending: true })
@@ -188,6 +228,7 @@ serveFunction("send-email.failed", async (req: Request) => {
   for (const row of rows) {
     try {
       const attachment = await loadAttachment(db, row);
+      const thread = headers(row);
       const response = await fetch(RESEND_ENDPOINT, {
         method: "POST",
         headers: {
@@ -198,11 +239,12 @@ serveFunction("send-email.failed", async (req: Request) => {
           "Idempotency-Key": row.id,
         },
         body: JSON.stringify({
-          from: row.from_name ? `${row.from_name} <${from}>` : from,
+          from: sender(row, from),
           to: [row.to_email],
           subject: row.subject,
           text: row.body,
           ...(row.reply_to ? { reply_to: row.reply_to } : {}),
+          ...(thread ? { headers: thread } : {}),
           ...(attachment ? { attachments: [attachment] } : {}),
         }),
       });

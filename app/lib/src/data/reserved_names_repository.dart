@@ -338,13 +338,76 @@ final inboxProvider =
     await ref
         .watch(supabaseProvider)
         .from('inbound_emails')
-        .select('id, from_email, from_name, to_email, subject, body_text, '
-            'received_at, read_at')
+        .select('id, mailbox_id, from_email, from_name, to_email, subject, '
+            'body_text, received_at, read_at')
         .eq('org_id', orgId)
         .order('received_at', ascending: false)
         .limit(200),
   );
 });
+
+/// The addresses the person signed in may write from.
+///
+/// Asked of the database rather than filtered here. `my_mailboxes` puts
+/// the same question to `app.may_read_mailbox` that `send_from_mailbox`
+/// does, so a picker cannot offer an address that sending will refuse —
+/// which is what a client-side filter drifts into the moment the rule
+/// changes on one side only.
+final myMailboxesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final orgId = ref.watch(currentOrgIdProvider);
+  if (orgId == null) return const [];
+  return Repo.rows(
+    await ref
+        .watch(supabaseProvider)
+        .rpc('my_mailboxes', params: {'p_org_id': orgId}),
+  );
+});
+
+/// The domain the addresses end in.
+///
+/// `0328` made it a setting so a deployment under another name would
+/// not need a migration edited; reading it here is the app keeping that
+/// promise instead of writing the literal a fourth time.
+final mailDomainProvider = FutureProvider<String>((ref) async {
+  final value = await ref.watch(supabaseProvider).rpc('mail_domain');
+  return value is String && value.isNotEmpty ? value : 'iakauntan.com';
+});
+
+/// One mailbox, both directions, newest first.
+///
+/// Received and sent in one list because that is what a conversation
+/// is. The union is in SQL: two queries and a merge written again on
+/// every screen that wanted one is how two screens come to disagree
+/// about the order of a thread.
+final mailboxThreadProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, mailboxId) async {
+  return Repo.rows(
+    await ref
+        .watch(supabaseProvider)
+        .rpc('mailbox_thread', params: {'p_mailbox_id': mailboxId}),
+  );
+});
+
+/// Queue a message from one of the company's addresses.
+///
+/// Queued, not sent: `send-email` drains the outbox on a schedule, and
+/// nothing a client can reach has ever held the provider key.
+Future<void> sendFromMailbox(
+  SupabaseClient client, {
+  required String mailboxId,
+  required String to,
+  required String subject,
+  required String body,
+  String? inReplyTo,
+}) =>
+    client.rpc('send_from_mailbox', params: {
+      'p_mailbox_id': mailboxId,
+      'p_to': to,
+      'p_subject': subject,
+      'p_body': body,
+      'p_in_reply_to': inReplyTo,
+    });
 
 /// What came attached to one message.
 ///

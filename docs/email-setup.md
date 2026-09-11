@@ -87,6 +87,9 @@ it — `email_outbox` will be empty, because the message was never ours.
   link in it.
 - `app.queue_overdue_reminders(...)` — runs from the nightly job, once
   per invoice per configured day offset.
+- `public.send_from_mailbox(...)` — queues something a person wrote from
+  one of the company's own addresses, optionally threaded onto the
+  message it answers. `0560`.
 - `supabase/functions/send-email` — the only thing that can send, and
   the only thing that holds the key.
 
@@ -168,11 +171,24 @@ sent.
 
 ### Which domain, and why it is one decision not two
 
-`MAIL_FROM` is a single value on the function, so **every organization's
-mail leaves from the same address**. What varies per organization is the
-display name and the reply-to, both from `email_settings` — so a customer
-of Sinar Teknologi sees `Sinar Teknologi Sdn Bhd <billing@…>` and their
-reply reaches Sinar Teknologi, not this platform.
+`MAIL_FROM` is a single value on the function, and it is what **every
+document's mail leaves from** — an invoice, a reminder, a receipt. What
+varies per organization is the display name and the reply-to, both from
+`email_settings` — so a customer of Sinar Teknologi sees
+`Sinar Teknologi Sdn Bhd <billing@…>` and their reply reaches Sinar
+Teknologi, not this platform.
+
+One kind of message does not leave from `MAIL_FROM`: something a person
+wrote from one of the company's reserved addresses. `0328` added
+`email_outbox.from_email` for that and `0560` made the worker honour it,
+so a reply from `aisyah@iakauntan.com` arrives from `aisyah@iakauntan.com`
+and not from the platform's billing address. **That only works if the
+reserved addresses live at a domain Resend has verified.** The domain is
+the `mail_domain` platform setting, and Resend refuses a From address at
+a domain it does not hold — which surfaces as `failed` rows in the
+outbox with the provider's own words in `last_error`, not as silence.
+So: verify the domain in `mail_domain` too, or set `mail_domain` to the
+one already verified.
 
 That makes the sending domain shared infrastructure. One tenant's bounce
 rate is every tenant's reputation, which decides the choice:
