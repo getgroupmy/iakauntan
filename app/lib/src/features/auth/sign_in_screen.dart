@@ -13,6 +13,7 @@ import '../../data/site_pages_repository.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../landing/landing_content.dart';
+import 'captcha.dart';
 import 'confirmation_resend.dart';
 import 'password_rules.dart';
 import 'phone_number.dart';
@@ -452,6 +453,13 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// Where the person registering is. Malaysia and Kuala Lumpur to
   /// begin with, and the dialling code follows the country rather than
   /// being asked for twice.
+  /// The Turnstile token, when a captcha is configured.
+  ///
+  /// Null means "not passed yet", and null again when Turnstile says it
+  /// has expired — its tokens last about five minutes, and sending an
+  /// expired one is a refusal with nothing on the screen to explain it.
+  String? _captchaToken;
+
   String _country = homeCountryCodeForSignup;
   String? _stateCode = homeStateCode;
   final _stateText = TextEditingController();
@@ -624,8 +632,20 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     return failure;
   }
 
+  /// Whether the security check still has to be passed.
+  ///
+  /// Asked before anything is sent, because GoTrue's refusal for a
+  /// missing token names the token rather than the box on the screen,
+  /// and somebody reading that has no idea what to do next.
+  bool get _captchaPending =>
+      captchaOn(_brand?.turnstileSiteKey) && _captchaToken == null;
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_captchaPending) {
+      setState(() => _error = captchaNotDone);
+      return;
+    }
 
     setState(() {
       _busy = true;
@@ -640,6 +660,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
         final res = await auth.signUp(
           email: _email.text.trim(),
           password: _password.text,
+          captchaToken: _captchaToken,
           // The number goes as two halves and the database puts them
           // together — `app.phone_e164`, called by `handle_new_user` —
           // so the trunk-prefix zero is dropped by the same rule
@@ -679,6 +700,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           signIn: () => auth.signInWithPassword(
             email: _email.text.trim(),
             password: _password.text,
+            captchaToken: _captchaToken,
           ),
           // Two ways a correct password is still the wrong way in, and
           // the second is only worth asking once the first has passed:
@@ -720,6 +742,10 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   Future<void> _resendConfirmation() async {
     final email = _email.text.trim();
     if (email.isEmpty) return;
+    if (_captchaPending) {
+      setState(() => _error = captchaNotDone);
+      return;
+    }
 
     setState(() {
       _busy = true;
@@ -735,6 +761,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
         // than sent per request, and passing an http URL there would
         // send somebody to a browser instead of the app.
         emailRedirectTo: kIsWeb ? '${Uri.base.origin}/#/signin' : null,
+        captchaToken: _captchaToken,
       );
       if (mounted) {
         setState(() => _notice = resendConfirmationSent(email));
@@ -1031,6 +1058,11 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
           'Use the buttons below to sign in.');
       return;
     }
+    if (_captchaPending) {
+      setState(() => _error = captchaNotDone);
+      return;
+    }
+
     // The half of "no such account" that can be answered honestly with
     // nothing but the text in the box. A missing @ or a domain with no
     // dot is a typo we can name on the spot, and naming it beats
@@ -1069,6 +1101,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
             // people back to that preview instead of production. The
             // origin has to be in Supabase's redirect allow list.
             redirectTo: kIsWeb ? '${Uri.base.origin}/#/reset-password' : null,
+            captchaToken: _captchaToken,
           );
       if (mounted) {
         setState(() {
@@ -1417,6 +1450,14 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                     ),
                   ),
                 ],
+                // The security check, when one is configured. Empty
+                // site key means no widget and no token, which is what
+                // every one of these forms did before `0556`.
+                CaptchaField(
+                  key: const ValueKey('auth-captcha'),
+                  siteKey: _brand?.turnstileSiteKey,
+                  onToken: (t) => setState(() => _captchaToken = t),
+                ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
                   _Banner(message: _error!, color: context.colors.danger),

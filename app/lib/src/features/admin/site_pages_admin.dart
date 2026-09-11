@@ -360,6 +360,11 @@ class _SigninPanelCard extends ConsumerStatefulWidget {
 class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
   final _headline = TextEditingController();
 
+  /// Cloudflare Turnstile's site key (`0556`). One box rather than a
+  /// switch, because there is nothing to switch on until there is a key
+  /// to draw the widget with.
+  final _siteKey = TextEditingController();
+
   /// `signin` or `login`, in front of every column this card touches.
   String get _p => widget.login ? 'login' : 'signin';
 
@@ -373,6 +378,7 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
   @override
   void dispose() {
     _headline.dispose();
+    _siteKey.dispose();
     super.dispose();
   }
 
@@ -382,6 +388,7 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
     if (!_loaded && row != null) {
       _loaded = true;
       _headline.text = '${row['${_p}_headline'] ?? ''}';
+      _siteKey.text = '${row['turnstile_site_key'] ?? ''}';
     }
     bool on(String key) => row?[key] == true;
 
@@ -482,6 +489,36 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
                     'is always drawn.',
                 onChanged: (v) => _save({'signin_show_register': v}),
               ),
+            const Divider(height: Space.lg),
+            // The captcha. A box rather than a switch: there is nothing
+            // to switch on until there is a key to draw the widget
+            // with, and an empty box is the off position.
+            TextField(
+              key: const ValueKey('turnstile-site-key'),
+              controller: _siteKey,
+              enabled: !_busy,
+              decoration: const InputDecoration(
+                labelText: 'Cloudflare Turnstile site key',
+                hintText: '0x4AAAAAAA…',
+                helperText: 'Empty means no security check. The site key '
+                    'is public; the SECRET goes in Supabase under '
+                    'Authentication → Attack Protection, and the order '
+                    'is: key here first, then the switch there. See '
+                    'docs/captcha.md.',
+                helperMaxLines: 4,
+              ),
+            ),
+            const SizedBox(height: Space.sm),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.icon(
+                onPressed: _busy
+                    ? null
+                    : () => _save({'turnstile_site_key': _siteKey.text}),
+                icon: const Icon(Icons.save_outlined, size: 18),
+                label: const Text('Save site key'),
+              ),
+            ),
           ],
         ),
       ),

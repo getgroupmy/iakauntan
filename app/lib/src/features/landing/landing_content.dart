@@ -362,6 +362,7 @@ class LandingContent {
     this.signinShowHeadline = false,
     this.signinShowHeading = false,
     this.signinShowRegister = false,
+    this.turnstileSiteKey,
     this.signinPoints = const [],
     this.signinEmailLabel,
     this.signinPasswordLabel,
@@ -608,6 +609,14 @@ class LandingContent {
   /// Whether "New to X? Create an account" is offered under the button.
   final bool signinShowRegister;
 
+  /// Cloudflare Turnstile's site key, or null where no captcha is
+  /// configured (`0556`).
+  ///
+  /// Public by design: it identifies the widget to the browser and
+  /// proves nothing on its own. The secret that verifies a token lives
+  /// in the Supabase dashboard, which is also what does the verifying.
+  final String? turnstileSiteKey;
+
   /// The bullets beside the form, each already filtered on its own
   /// switch by the database. An empty list means nothing to draw, which
   /// is what a platform that has turned all three off has asked for.
@@ -783,6 +792,7 @@ LandingContent parseLandingContent(Object? raw) {
       signinShowHeadline: brandBool('signin_show_headline'),
       signinShowHeading: brandBool('signin_show_heading'),
       signinShowRegister: brandBool('signin_show_register'),
+      turnstileSiteKey: brandStr('turnstile_site_key'),
       signinPoints: blocks('signin_points'),
       signinEmailLabel: brandStr('signin_email_label'),
       signinPasswordLabel: brandStr('signin_password_label'),
@@ -999,6 +1009,7 @@ LandingContent parseLandingContent(Object? raw) {
     signinShowHeadline: brandBool('signin_show_headline'),
     signinShowHeading: brandBool('signin_show_heading'),
     signinShowRegister: brandBool('signin_show_register'),
+    turnstileSiteKey: brandStr('turnstile_site_key'),
     signinPoints: blocks('signin_points'),
     signinEmailLabel: brandStr('signin_email_label'),
     signinPasswordLabel: brandStr('signin_password_label'),
