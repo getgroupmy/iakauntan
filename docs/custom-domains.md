@@ -285,6 +285,34 @@ RLS. The confinement is which screens draw, not which rows are legible.
 Making one staff-only would be a rule in the router after sign-in, not a
 setting on the name.
 
+#### `mail`, and a name the platform could not use
+
+`reserved_names` holds `mail` with the reason *the mail service*, so no
+company can take it. Until `0562` nothing could **use** it either: every
+path that set a name went through one check, the platform's own
+included, so pointing `mail` at the mail service came back *"That name
+is reserved: the mail service."* The list was holding the name against
+the use it was held for.
+
+`0562` splits that check. The **shape** — three to sixty-three
+characters, letters digits and hyphens, no punycode prefix — applies to
+everybody. The **blocklist** applies where the name is about to be a
+company's. So the platform can hold `mail`; a company still cannot get
+it, either by asking or by being handed it afterwards, and that second
+path is closed in the same migration that opens the first.
+
+`mail` is pointed at the `mailbox` module by the migration, as **Admin
+use**, with no screen named — so it confines to every screen that module
+grows rather than freezing on today's one. Nothing to do here unless you
+want it elsewhere, in which case release it in the console. A deployment
+that already held `mail` is left alone.
+
+Two things still have to be true for it to open: the wildcard record
+from step 5 covers it (it does, like every other label), and the
+signing-in account's company must hold the `mailbox` module —
+`workspace_module_refusal` turns away one that does not, with a sentence
+rather than a screen.
+
 ### 7b. A name that is nobody's
 
 Every label under the wildcard resolves, so `nosuchcompany.iakauntan.com`
