@@ -30,7 +30,12 @@ import 'ways_to_pay.dart';
 import 'warehouses_card.dart';
 import 'credit_ledger_dialog.dart';
 import 'export_card.dart';
+import '../../core/searchable_picker.dart';
+import '../../data/signup_reference_repository.dart';
+import '../auth/phone_number.dart';
+import '../auth/reset_cooldown.dart' show looksLikeAnAddress;
 import 'collect_payments_card.dart';
+import 'contact_changes.dart';
 import 'einvoice_credentials.dart';
 import 'landing_settings.dart';
 import 'tax_code_dialog.dart';
@@ -2013,6 +2018,33 @@ class _AboutCard extends ConsumerWidget {
                 icon: const Icon(Icons.password_outlined, size: 18),
                 label: const Text('Change password'),
               ),
+            // Both behind the same password. These two are how an
+            // account is recovered -- the address a reset link goes to
+            // and the number somebody is rung on -- so somebody who
+            // walks past an unattended screen and changes either owns
+            // the account a minute later.
+            if (!ref.watch(isDemoAccountProvider)) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                key: const ValueKey('change-email'),
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => const _ChangeEmailDialog(),
+                ),
+                icon: const Icon(Icons.alternate_email, size: 18),
+                label: const Text(changeEmailLabel),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                key: const ValueKey('change-mobile'),
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => const _ChangeMobileDialog(),
+                ),
+                icon: const Icon(Icons.phone_outlined, size: 18),
+                label: const Text(changeMobileLabel),
+              ),
+            ],
             const SizedBox(height: 8),
             // Somebody who already had an account when they were
             // invited has no other way in. `app.handle_new_user` claims
@@ -2160,6 +2192,324 @@ class _CloseAccount extends ConsumerWidget {
 /// borrowed laptop or a stolen session is enough to lock the owner out of
 /// their own books. The current password is checked by signing in with
 /// it, which is the only way to verify it from a client.
+
+/// Changing the address a password reset goes to, behind the password.
+///
+/// The address does not move when this returns: GoTrue sends a
+/// confirmation to the NEW address and waits for the link to be
+/// followed. That is the protection that matters — somebody who
+/// changes an address they cannot read has changed nothing — and the
+/// password re-entry is the one that stops the change being made at
+/// all by whoever found the screen unlocked.
+class _ChangeEmailDialog extends ConsumerStatefulWidget {
+  const _ChangeEmailDialog();
+
+  @override
+  ConsumerState<_ChangeEmailDialog> createState() =>
+      _ChangeEmailDialogState();
+}
+
+class _ChangeEmailDialogState extends ConsumerState<_ChangeEmailDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    final auth = ref.read(supabaseProvider).auth;
+    final current = auth.currentUser?.email;
+    if (current == null) {
+      setState(() => _error = 'No signed-in account.');
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      // GoTrue verifies the password, by being asked to sign in with
+      // it. A check written here would be a check the client could
+      // skip.
+      await auth.signInWithPassword(
+        email: current,
+        password: _password.text,
+      );
+      await auth.updateUser(UserAttributes(email: _email.text.trim()));
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(emailChangeSent(_email.text.trim()))),
+      );
+    } on AuthException catch (e) {
+      if (mounted) {
+        setState(() => _error = looksWrongPassword(
+              code: e.code,
+              message: e.message,
+            )
+            ? wrongPassword
+            : e.message);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text(changeEmailTitle),
+      content: SizedBox(
+        width: 380,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                key: const ValueKey('new-email'),
+                controller: _email,
+                autofocus: true,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'New email address',
+                ),
+                validator: (v) => looksLikeAnAddress((v ?? '').trim())
+                    ? null
+                    : 'Enter a valid email address',
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                key: const ValueKey('email-password'),
+                controller: _password,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: currentPasswordLabel,
+                  helperText: whyPasswordAgain,
+                  helperMaxLines: 3,
+                ),
+                validator: currentPasswordError,
+                onFieldSubmitted: (_) => _submit(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: TextStyle(color: context.colors.danger),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: _busy
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Send the confirmation'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Changing the number somebody is rung on, behind the same password.
+///
+/// The number goes through `update_my_phone`, which applies the same
+/// E.164 rule registration uses: the trunk-prefix zero comes off in the
+/// database rather than here, so it comes off whichever door a number
+/// arrives through.
+class _ChangeMobileDialog extends ConsumerStatefulWidget {
+  const _ChangeMobileDialog();
+
+  @override
+  ConsumerState<_ChangeMobileDialog> createState() =>
+      _ChangeMobileDialogState();
+}
+
+class _ChangeMobileDialogState extends ConsumerState<_ChangeMobileDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _phone = TextEditingController();
+  final _password = TextEditingController();
+  String _dialCode = homeDialCode;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _phone.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    final client = ref.read(supabaseProvider);
+    final current = client.auth.currentUser?.email;
+    if (current == null) {
+      setState(() => _error = 'No signed-in account.');
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await client.auth.signInWithPassword(
+        email: current,
+        password: _password.text,
+      );
+      final saved = await client.rpc('update_my_phone', params: {
+        'p_dial': _dialCode,
+        'p_national': _phone.text.trim(),
+      });
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            saved is String ? mobileChanged(saved) : mobileRemoved,
+          ),
+        ),
+      );
+    } on AuthException catch (e) {
+      if (mounted) {
+        setState(() => _error = looksWrongPassword(
+              code: e.code,
+              message: e.message,
+            )
+            ? wrongPassword
+            : e.message);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final codes = withDialCodes(
+        ref.watch(signupReferenceProvider).valueOrNull?.dialCodes ??
+            const <Map<String, dynamic>>[]);
+
+    return AlertDialog(
+      title: const Text(changeMobileTitle),
+      content: SizedBox(
+        width: 380,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SearchablePicker<String>(
+                key: const ValueKey('mobile-country'),
+                label: countryFieldLabel,
+                value: codes.any((c) => dialOf(c) == _dialCode)
+                    ? codes.firstWhere((c) => dialOf(c) == _dialCode)['code']
+                        as String?
+                    : null,
+                options: [
+                  for (final c in codes)
+                    PickerOption(
+                      value: '${c['code']}',
+                      label: countryPickerLabel(c),
+                      sublabel: countryPickerSublabel(c),
+                      keywords: ['${c['alpha2']}', '+${dialOf(c)}'],
+                    ),
+                ],
+                onChanged: (v) =>
+                    setState(() => _dialCode = dialFor(codes, v)),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                key: const ValueKey('new-mobile'),
+                controller: _phone,
+                keyboardType: TextInputType.phone,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: phoneFieldLabel,
+                  prefixText: '+$_dialCode ',
+                  helperText: phoneNote(
+                    dialCode: _dialCode,
+                    number: _phone.text,
+                  ),
+                  helperMaxLines: 2,
+                ),
+                // Not required: an empty box takes the number off,
+                // which is a thing somebody is allowed to want.
+                validator: (v) => phoneError(
+                  dialCode: _dialCode,
+                  number: v ?? '',
+                  required: false,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                key: const ValueKey('mobile-password'),
+                controller: _password,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: currentPasswordLabel,
+                  helperText: whyPasswordAgainMobile,
+                  helperMaxLines: 3,
+                ),
+                validator: currentPasswordError,
+                onFieldSubmitted: (_) => _submit(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: TextStyle(color: context.colors.danger),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: _busy
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
 class _ChangePasswordDialog extends ConsumerStatefulWidget {
   const _ChangePasswordDialog();
 

@@ -197,6 +197,65 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- Changing the number afterwards (0557)
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_user uuid;
+begin
+  perform pg_temp.sign_in_as(pg_temp.test_user());
+  v_user := auth.uid();
+
+  perform pg_temp.check_eq('the same rule when it is changed later',
+    public.update_my_phone('60', '012-345 6789'), '+60123456789');
+  perform pg_temp.check_eq('and that is what the profile holds',
+    (select phone from public.profiles where id = v_user), '+60123456789');
+
+  -- The assertion that would fail if the RPC wrote what it was handed:
+  -- a client deciding for itself what goes in the column is how the
+  -- trunk-prefix zero comes back.
+  perform pg_temp.check_true('with no zero in front of it',
+    (select phone from public.profiles where id = v_user) not like '+600%');
+
+  -- Taking it off is an answer, not a failure.
+  perform pg_temp.check_true('an empty box removes the number',
+    public.update_my_phone('60', '') is null);
+  perform pg_temp.check_true('and the profile says so',
+    (select phone from public.profiles where id = v_user) is null);
+
+  -- But a typo is not. Storing nothing while the screen says "saved"
+  -- is the silent half of the fault 0554 was written about.
+  perform pg_temp.check_refused(
+    'a number that cannot be dialled is refused rather than dropped',
+    'select public.update_my_phone(''60'', ''1234567890123456'')',
+    '%not a number we can dial%', '22023');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And only for yourself
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_other uuid;
+  v_mine  uuid;
+begin
+  v_mine := auth.uid();
+  v_other := pg_temp.another_user('someone.else@iakauntan.test');
+
+  perform pg_temp.sign_in_as(v_other);
+  perform public.update_my_phone('60', '199999999');
+
+  -- The function takes no "whose", which is the whole guard: there is
+  -- no argument to point at a colleague.
+  perform pg_temp.check_eq('somebody else''s number is their own',
+    (select phone from public.profiles where id = v_other), '+60199999999');
+  perform pg_temp.check_true('and mine is untouched',
+    (select phone from public.profiles where id = v_mine) is null);
+
+  perform pg_temp.sign_in_as(v_mine);
+end $$;
+
+-- ---------------------------------------------------------------------
 -- The tables themselves stay shut
 -- ---------------------------------------------------------------------
 do $$
