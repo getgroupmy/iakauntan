@@ -244,8 +244,19 @@ begin
    where schemaname = 'public' and tablename = 'inbound_emails'
      and cmd = 'SELECT';
 
+  -- `0559` moved the rule into `app.may_read_mailbox`, because three
+  -- policies were asking the same question -- the message, its
+  -- attachments, and marking it read -- and three copies of a rule
+  -- about who may read somebody's mail is three places for them to
+  -- drift apart. So the policy names the function and the function
+  -- carries what this block has always asserted.
+  perform pg_temp.check_true('the policy asks one question',
+    v_read like '%may_read_mailbox%');
+
+  v_read := pg_get_functiondef('app.may_read_mailbox(uuid)'::regprocedure);
+
   -- Membership, not seniority: everybody at the company sees the
-  -- company's mail, and the policy says so rather than the screen.
+  -- company's mail, and the rule says so rather than the screen.
   perform pg_temp.check_true('reading mail asks whether you work there',
     v_read like '%is_org_member%');
 
@@ -256,8 +267,8 @@ begin
     v_read like '%has_module%');
 
   -- Platform staff can see that an address exists. They have no
-  -- business reading what arrives at it, and the policy does not
-  -- mention them.
+  -- business reading what arrives at it, and the rule does not mention
+  -- them.
   perform pg_temp.check_true('platform staff are not named in it',
     v_read not like '%is_platform_admin%');
 
