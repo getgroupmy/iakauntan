@@ -16,7 +16,8 @@ import '../core/providers.dart';
 /// moments.
 final signupReferenceProvider =
     FutureProvider<({List<Map<String, dynamic>> dialCodes,
-                    List<Map<String, dynamic>> salutations})>((ref) async {
+                    List<Map<String, dynamic>> salutations,
+                    List<Map<String, dynamic>> states})>((ref) async {
   final data = await ref.read(supabaseProvider).rpc('signup_reference');
   final map = (data as Map?) ?? const {};
   List<Map<String, dynamic>> rows(Object? value) => [
@@ -26,5 +27,6 @@ final signupReferenceProvider =
   return (
     dialCodes: rows(map['dial_codes']),
     salutations: rows(map['salutations']),
+    states: rows(map['states']),
   );
 });

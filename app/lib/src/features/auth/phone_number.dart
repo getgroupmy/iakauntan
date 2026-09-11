@@ -114,8 +114,52 @@ const phoneFieldLabel = 'Mobile number';
 /// be the one already there.
 const homeDialCode = '60';
 
-/// The label on the dialling code beside it.
-const dialCodeFieldLabel = 'Code';
+/// The label on the country box.
+///
+/// One question rather than two. A dialling code IS a country -- +60 is
+/// Malaysia and nothing else -- so asking for both invites a profile
+/// that says Singapore and carries a Malaysian number. The country is
+/// asked, and the number's prefix follows it.
+const countryFieldLabel = 'Country';
+
+/// The label on the state box, and the one outside Malaysia where the
+/// list does not apply.
+const stateFieldLabel = 'State';
+const stateElsewhereLabel = 'State or province';
+
+/// Where the form starts: Malaysia, and its capital.
+///
+/// `14` is Wilayah Persekutuan Kuala Lumpur in `ref_states`, seeded in
+/// `0011`.
+const homeCountryCodeForSignup = 'MYS';
+const homeStateCode = '14';
+
+/// The dialling code of a country, from the row that carries both.
+///
+/// Empty for a country with no code, which is why [withDialCodes]
+/// exists: a country that cannot be dialled cannot be picked here.
+String dialOf(Map<String, dynamic> country) =>
+    phoneDigits('${country['dial_code'] ?? ''}');
+
+/// The dialling code of the country with this three-letter code.
+///
+/// Falls back to Malaysia's rather than to nothing: a prefix of `+`
+/// with no digits after it is a number that cannot be dialled, and the
+/// form has to draw something while the list is still loading.
+String dialFor(List<Map<String, dynamic>> countries, String? code) {
+  for (final c in countries) {
+    if (c['code'] == code) {
+      final dial = dialOf(c);
+      if (dial.isNotEmpty) return dial;
+    }
+  }
+  return homeDialCode;
+}
+
+/// How a country reads in the picker, with its code under it.
+String countryPickerLabel(Map<String, dynamic> country) => '${country['name']}';
+String countryPickerSublabel(Map<String, dynamic> country) =>
+    '+${dialOf(country)}';
 
 /// How a dialling code reads in the list: `+60 Malaysia`.
 ///

@@ -123,6 +123,38 @@ void main() {
       expect(dialCodeLabel(countries.first), '+60 Malaysia');
     });
 
+    test('the country picker carries its dialling code under it', () {
+      // One question rather than two: a dialling code IS a country, and
+      // asking for both invites a profile that says Singapore and
+      // carries a Malaysian number.
+      expect(countryPickerLabel(countries.first), 'Malaysia');
+      expect(countryPickerSublabel(countries.first), '+60');
+      expect(dialOf(countries.first), '60');
+    });
+
+    test('and the code is read off the country that was chosen', () {
+      expect(dialFor(countries, 'SGP'), '65');
+      expect(dialFor(countries, 'MYS'), '60');
+    });
+
+    test('falling back to home rather than to nothing', () {
+      // A prefix of `+` with no digits after it is a number that cannot
+      // be dialled, and the form has to draw something while the list
+      // is still loading.
+      expect(dialFor(countries, 'XXX'), homeDialCode);
+      expect(dialFor(const [], 'MYS'), homeDialCode);
+      expect(dialFor(countries, null), homeDialCode);
+    });
+
+    test('and the form starts on Malaysia and its capital', () {
+      expect(homeCountryCodeForSignup, 'MYS');
+      // 14 is Wilayah Persekutuan Kuala Lumpur in `ref_states`.
+      expect(homeStateCode, '14');
+      expect(countryFieldLabel, 'Country');
+      expect(stateFieldLabel, 'State');
+      expect(stateElsewhereLabel.toLowerCase(), contains('province'));
+    });
+
     test('and the second line says which kind of title it is', () {
       expect(
         salutationSublabel(

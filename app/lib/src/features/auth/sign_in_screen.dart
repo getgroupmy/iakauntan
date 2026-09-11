@@ -14,6 +14,7 @@ import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../landing/landing_content.dart';
 import 'confirmation_resend.dart';
+import 'password_rules.dart';
 import 'phone_number.dart';
 import 'reset_cooldown.dart';
 import 'demo_accounts.dart';
@@ -438,6 +439,24 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// zero in front of a Malaysian mobile is a trunk prefix and has to
   /// come off before either is stored (`0554`).
   final _phone = TextEditingController();
+
+  /// The password typed a second time, when one is being chosen.
+  ///
+  /// A password box shows nothing back, so a typo in it is a password
+  /// nobody knows — including the person who set it, who finds out at
+  /// the next sign-in and has to reset the account they registered
+  /// minutes ago.
+  final _confirmPassword = TextEditingController();
+  bool _obscureConfirm = true;
+
+  /// Where the person registering is. Malaysia and Kuala Lumpur to
+  /// begin with, and the dialling code follows the country rather than
+  /// being asked for twice.
+  String _country = homeCountryCodeForSignup;
+  String? _stateCode = homeStateCode;
+  final _stateText = TextEditingController();
+
+  bool get _malaysian => _country == homeCountryCodeForSignup;
   String _dialCode = homeDialCode;
 
   /// How to address them. The words rather than a code, because that is
@@ -477,6 +496,8 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     _password.dispose();
     _fullName.dispose();
     _phone.dispose();
+    _confirmPassword.dispose();
+    _stateText.dispose();
     super.dispose();
   }
 
@@ -628,6 +649,14 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
             'salutation': _salutation ?? '',
             'phone_dial': _dialCode,
             'phone_national': _phone.text.trim(),
+            'country_code': _country,
+            // A `ref_states` code inside Malaysia and whatever was
+            // typed outside it, which is what `create_organization`
+            // already does with the same column and for the same
+            // reason: storing a Malaysian code for a Thai province
+            // would be the dishonest half of the two.
+            'state_code':
+                _malaysian ? (_stateCode ?? '') : _stateText.text.trim(),
           },
         );
         // With email confirmation enabled there is no session yet.
@@ -1201,37 +1230,87 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   const SizedBox(height: 14),
                   Consumer(
                     builder: (context, ref, _) {
-                      final codes = withDialCodes(ref
-                              .watch(signupReferenceProvider)
-                              .valueOrNull
-                              ?.dialCodes ??
-                          const <Map<String, dynamic>>[]);
-                      // Two hundred countries is not a dropdown, for
-                      // the same reason the country step is a screen of
-                      // its own. Findable by the code, the country and
-                      // its two letters, because all three are things
-                      // people type.
+                      final reference =
+                          ref.watch(signupReferenceProvider).valueOrNull;
+                      final codes = withDialCodes(
+                          reference?.dialCodes ?? const <Map<String, dynamic>>[]);
+                      // One question. The dialling code is not asked
+                      // for: it is read off the country, so the two
+                      // cannot disagree.
                       return SearchablePicker<String>(
-                        key: const ValueKey('signup-dial-code'),
-                        label: dialCodeFieldLabel,
-                        value: codes.any((c) =>
-                                phoneDigits('${c['dial_code']}') == _dialCode)
-                            ? _dialCode
+                        key: const ValueKey('signup-country'),
+                        label: countryFieldLabel,
+                        value: codes.any((c) => c['code'] == _country)
+                            ? _country
                             : null,
                         options: [
                           for (final c in codes)
                             PickerOption(
-                              value: phoneDigits('${c['dial_code']}'),
-                              label: dialCodeLabel(c),
+                              value: '${c['code']}',
+                              label: countryPickerLabel(c),
+                              sublabel: countryPickerSublabel(c),
                               keywords: [
-                                '${c['name']}',
                                 '${c['alpha2']}',
-                                '${c['code']}',
+                                '+${dialOf(c)}',
+                                dialOf(c),
                               ],
                             ),
                         ],
-                        onChanged: (v) =>
-                            setState(() => _dialCode = v ?? homeDialCode),
+                        onChanged: (v) => setState(() {
+                          _country = v ?? homeCountryCodeForSignup;
+                          _dialCode = dialFor(codes, _country);
+                          // A state chosen for one country means
+                          // nothing in another, and the list itself is
+                          // Malaysian.
+                          _stateCode = _malaysian ? homeStateCode : null;
+                          if (!_malaysian) _stateText.clear();
+                        }),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final states = ref
+                              .watch(signupReferenceProvider)
+                              .valueOrNull
+                              ?.states ??
+                          const <Map<String, dynamic>>[];
+                      // The thirteen states and three federal
+                      // territories are Malaysia's. Offering that list
+                      // to somebody in Thailand would be offering a
+                      // wrong answer, so elsewhere the box is a box.
+                      if (!_malaysian) {
+                        return TextFormField(
+                          key: const ValueKey('signup-state-text'),
+                          controller: _stateText,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(
+                            labelText: '$stateElsewhereLabel *',
+                            prefixIcon: Icon(Icons.map_outlined),
+                          ),
+                          validator: (v) => (v ?? '').trim().isEmpty
+                              ? 'Enter your state or province'
+                              : null,
+                        );
+                      }
+                      return SearchablePicker<String>(
+                        key: const ValueKey('signup-state'),
+                        label: '$stateFieldLabel *',
+                        value: states.any((st) => st['code'] == _stateCode)
+                            ? _stateCode
+                            : null,
+                        options: [
+                          for (final st in states)
+                            PickerOption(
+                              value: '${st['code']}',
+                              label: '${st['name']}',
+                            ),
+                        ],
+                        onChanged: (v) => setState(() => _stateCode = v),
+                        validator: (_) => _stateCode == null
+                            ? 'Choose your state'
+                            : null,
                       );
                     },
                   ),
@@ -1245,6 +1324,10 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                     decoration: InputDecoration(
                       labelText: '$phoneFieldLabel *',
                       prefixIcon: const Icon(Icons.phone_outlined),
+                      // What the country answered, shown where the
+                      // number is typed rather than in a box of its
+                      // own.
+                      prefixText: '+$_dialCode ',
                       // Said out loud rather than done quietly: the
                       // zero is being taken off what they typed, and a
                       // form that does that in silence gets accused of
@@ -1295,14 +1378,34 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                       onPressed: () => setState(() => _obscure = !_obscure),
                     ),
                   ),
-                  validator: (v) {
-                    if ((v ?? '').isEmpty) return 'Enter your password';
-                    if (_isSignUp && v!.length < 8) {
-                      return 'Use at least 8 characters';
-                    }
-                    return null;
-                  },
+                  validator: (v) => passwordError(v, isNew: _isSignUp),
                 ),
+                if (_isSignUp) ...[
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    key: const ValueKey('signup-confirm-password'),
+                    controller: _confirmPassword,
+                    obscureText: _obscureConfirm,
+                    decoration: InputDecoration(
+                      labelText: confirmPasswordLabel,
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscureConfirm
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                        ),
+                        onPressed: () =>
+                            setState(() => _obscureConfirm = !_obscureConfirm),
+                      ),
+                    ),
+                    onFieldSubmitted: (_) => _submit(),
+                    validator: (v) => confirmPasswordError(
+                      password: _password.text,
+                      confirm: v,
+                    ),
+                  ),
+                ],
                 if (!_isSignUp)
                   Align(
                     alignment: Alignment.centerRight,
@@ -1386,6 +1489,11 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                               _isSignUp = !_isSignUp;
                               _error = null;
                               _notice = null;
+                              // Leaving it behind would refuse a
+                              // sign-in that has nothing to confirm,
+                              // and would confirm a password nobody
+                              // typed on the way back.
+                              _confirmPassword.clear();
                             }),
                     child: Text(
                       _isSignUp

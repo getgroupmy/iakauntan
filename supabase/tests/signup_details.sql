@@ -90,7 +90,9 @@ begin
     'full_name', 'Nurul Aisyah binti Rahman',
     'salutation', 'Datin Seri',
     'phone_dial', '60',
-    'phone_national', '012-345 6789'));
+    'phone_national', '012-345 6789',
+    'country_code', 'MYS',
+    'state_code', '14'));
 
   select * into v_row from public.profiles where id = v_user;
 
@@ -100,6 +102,17 @@ begin
     v_row.salutation, 'Datin Seri');
   perform pg_temp.check_eq('and the number arrives dialable',
     v_row.phone, '+60123456789');
+
+  -- `0555`. Where the PERSON is, which is not the same question as
+  -- where the books are: somebody can keep a Singaporean company's
+  -- books from Kuala Lumpur.
+  perform pg_temp.check_eq('the country arrives',
+    v_row.country_code, 'MYS');
+  perform pg_temp.check_eq('and the state, as a ref_states code',
+    v_row.state_code, '14');
+  perform pg_temp.check_eq('which is the one the form starts on',
+    (select name from public.ref_states where code = v_row.state_code),
+    'Wilayah Persekutuan Kuala Lumpur');
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -121,7 +134,8 @@ begin
   perform pg_temp.check_eq('the name still arrives',
     v_row.full_name, 'Wong Mei Ling');
   perform pg_temp.check_true('and the rest is empty rather than wrong',
-    v_row.salutation is null and v_row.phone is null);
+    v_row.salutation is null and v_row.phone is null
+      and v_row.country_code is null and v_row.state_code is null);
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -149,6 +163,13 @@ begin
   perform pg_temp.check_eq('and every salutation',
     jsonb_array_length(v_ref -> 'salutations'),
     (select count(*)::integer from public.salutations where is_active));
+  perform pg_temp.check_eq('and every Malaysian state',
+    jsonb_array_length(v_ref -> 'states'),
+    (select count(*)::integer from public.ref_states));
+  perform pg_temp.check_true('with the one the form starts on among them',
+    exists (select 1 from jsonb_array_elements(v_ref -> 'states') st
+             where st ->> 'code' = '14'
+               and st ->> 'name' like '%Kuala Lumpur%'));
 
   -- And that those are lists rather than a handful.
   perform pg_temp.check_true('both are lists worth drawing',
