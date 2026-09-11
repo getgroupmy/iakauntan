@@ -7,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/business_types_repository.dart';
+import '../../data/my_profile_repository.dart';
 import '../../data/places_repository.dart';
 import '../settings/msic_picker.dart';
 import 'home_country.dart';
@@ -85,7 +86,19 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
 
   /// What this is being set up for. Null until the first step is
   /// answered, which is why the form is not drawn before then.
+  ///
+  /// Filled from the profile where registration already asked (`0558`),
+  /// so somebody who has just said "a business" is not asked again one
+  /// screen later. Still changeable from the summary card on the form:
+  /// an accountant who registered for themselves may well be opening a
+  /// company's books.
   UseKind? _use;
+
+  /// Whether the answer has been taken off the profile yet.
+  ///
+  /// Once only. A rebuild after somebody has changed their mind must
+  /// not put the registration's answer back.
+  bool _tookProfileAnswer = false;
 
   /// The business type chosen, and the modules that go with it.
   ///
@@ -326,9 +339,57 @@ class _CreateOrgScreenState extends ConsumerState<CreateOrgScreen> {
     _goTo(stepAfterBusinessType(code));
   }
 
+  /// Start from what registration was told, where it was told
+  /// anything.
+  ///
+  /// An account made before the question existed, or by an invitation,
+  /// has no answer on its profile and is asked here exactly as
+  /// everybody was before.
+  void _takeProfileAnswer() {
+    if (_tookProfileAnswer || _use != null) return;
+    final profile = ref.watch(myProfileProvider).valueOrNull;
+    if (profile == null) return;
+    _tookProfileAnswer = true;
+
+    final said = useKindFrom(profile['use_kind'] as String?);
+    if (said == null) return;
+
+    // Where the PERSON said they are, as the company's starting
+    // country. A better guess than Malaysia for somebody who told us
+    // they are in Singapore, and still changeable on the form.
+    //
+    // Only when the reference list can name it, so the code and the
+    // words on the country line move together — a line reading
+    // "Malaysia" over a form asking Singaporean questions would be
+    // worse than not adopting it at all.
+    final theirCountry = '${profile['country_code'] ?? ''}'.trim();
+    Map<String, dynamic>? theirRow;
+    for (final c in ref.read(countriesProvider).valueOrNull ?? const []) {
+      if (c['code'] == theirCountry) theirRow = c;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _use = said;
+        if (theirRow != null) {
+          _country = theirCountry;
+          _alpha2 = '${theirRow['alpha2']}';
+          _countryName = '${theirRow['name']}';
+          if (!_malaysian) {
+            _stateCode = null;
+            _sstRegistered = false;
+          }
+        }
+        _step = stepAfterUse(said, businessType: _businessType);
+      });
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final statesAsync = ref.watch(refStatesProvider);
+    _takeProfileAnswer();
 
     switch (_step) {
       case SetupStep.country:

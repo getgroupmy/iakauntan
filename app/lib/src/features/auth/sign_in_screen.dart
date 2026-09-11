@@ -13,6 +13,7 @@ import '../../data/site_pages_repository.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../landing/landing_content.dart';
+import '../onboarding/onboarding_copy.dart';
 import 'captcha.dart';
 import 'confirmation_resend.dart';
 import 'password_rules.dart';
@@ -453,6 +454,11 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// Where the person registering is. Malaysia and Kuala Lumpur to
   /// begin with, and the dialling code follows the country rather than
   /// being asked for twice.
+  /// What they are here for, asked once here so setup does not ask it
+  /// one screen later. Business to begin with, which is the commonest
+  /// answer and the one the product is named for.
+  UseKind _use = UseKind.business;
+
   /// The Turnstile token, when a captcha is configured.
   ///
   /// Null means "not passed yet", and null again when Turnstile says it
@@ -670,6 +676,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
             'salutation': _salutation ?? '',
             'phone_dial': _dialCode,
             'phone_national': _phone.text.trim(),
+            'use_kind': storedUseKind(_use),
             'country_code': _country,
             // A `ref_states` code inside Malaysia and whatever was
             // typed outside it, which is what `create_organization`
@@ -1213,6 +1220,37 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   // takes a title and a number when it feels like it is
                   // a profile that is half empty and a letter nobody
                   // can address.
+                  // Asked here rather than on the first screen of
+                  // setup. Registration already collects five things;
+                  // handing somebody to a screen whose first act is to
+                  // ask a sixth is a question in the wrong place.
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      useQuestion(SetupAudience.own),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SegmentedButton<UseKind>(
+                    key: const ValueKey('signup-use'),
+                    segments: [
+                      ButtonSegment(
+                        value: UseKind.business,
+                        label: Text(businessTitle),
+                        icon: const Icon(Icons.storefront, size: 18),
+                      ),
+                      ButtonSegment(
+                        value: UseKind.personal,
+                        label: Text(personalTitle(SetupAudience.own)),
+                        icon: const Icon(Icons.person_outline, size: 18),
+                      ),
+                    ],
+                    selected: {_use},
+                    onSelectionChanged: (v) =>
+                        setState(() => _use = v.first),
+                  ),
+                  const SizedBox(height: 14),
                   Consumer(
                     builder: (context, ref, _) {
                       final titles = ref

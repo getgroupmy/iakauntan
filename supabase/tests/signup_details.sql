@@ -92,7 +92,8 @@ begin
     'phone_dial', '60',
     'phone_national', '012-345 6789',
     'country_code', 'MYS',
-    'state_code', '14'));
+    'state_code', '14',
+    'use_kind', 'personal'));
 
   select * into v_row from public.profiles where id = v_user;
 
@@ -113,6 +114,11 @@ begin
   perform pg_temp.check_eq('which is the one the form starts on',
     (select name from public.ref_states where code = v_row.state_code),
     'Wilayah Persekutuan Kuala Lumpur');
+
+  -- `0558`. What they said they were here for, so setup does not ask
+  -- again one screen later.
+  perform pg_temp.check_eq('and what they said they are here for',
+    v_row.use_kind, 'personal');
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -135,7 +141,8 @@ begin
     v_row.full_name, 'Wong Mei Ling');
   perform pg_temp.check_true('and the rest is empty rather than wrong',
     v_row.salutation is null and v_row.phone is null
-      and v_row.country_code is null and v_row.state_code is null);
+      and v_row.country_code is null and v_row.state_code is null
+      and v_row.use_kind is null);
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -194,6 +201,28 @@ begin
   perform pg_temp.check_true('with the rest of the world too',
     exists (select 1 from jsonb_array_elements(v_ref -> 'salutations') s
              where s ->> 'name' = 'Señora'));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- A word nobody recognises is no answer, not a failed registration
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_user uuid;
+begin
+  v_user := gen_random_uuid();
+  -- A sign-up that fails because a client sent an unknown word is a
+  -- worse outcome than a question asked twice, so the trigger drops it
+  -- rather than letting the constraint take the registration with it.
+  insert into auth.users (id, email, raw_user_meta_data)
+  values (v_user, 'oddly@iakauntan.test',
+          jsonb_build_object('full_name', 'Odd Case',
+                             'use_kind', 'somethingelse'));
+
+  perform pg_temp.check_true('the account is still created',
+    exists (select 1 from public.profiles where id = v_user));
+  perform pg_temp.check_true('with no answer rather than a wrong one',
+    (select use_kind from public.profiles where id = v_user) is null);
 end $$;
 
 -- ---------------------------------------------------------------------

@@ -47,6 +47,27 @@ enum SetupAudience {
   other,
 }
 
+/// The answer somebody gave at registration, as `profiles.use_kind`
+/// holds it.
+///
+/// Null for an account that registered before the question existed, and
+/// for one created by an invitation. Those people are asked at setup,
+/// exactly as everybody was before `0558`.
+UseKind? useKindFrom(String? stored) {
+  switch (stored) {
+    case 'personal':
+      return UseKind.personal;
+    case 'business':
+      return UseKind.business;
+    default:
+      return null;
+  }
+}
+
+/// The same value on its way out, for the registration metadata.
+String storedUseKind(UseKind use) =>
+    use == UseKind.personal ? 'personal' : 'business';
+
 /// The question at the top of the first step.
 String useQuestion(SetupAudience audience) => audience == SetupAudience.own
     ? 'What is this for?'

@@ -279,6 +279,37 @@ void main() {
     });
   });
 
+  group('what registration already said', () {
+    test('is read back as the same answer', () {
+      // Asked once, on the registration form, so setup does not ask it
+      // one screen later.
+      expect(useKindFrom('personal'), UseKind.personal);
+      expect(useKindFrom('business'), UseKind.business);
+      expect(storedUseKind(UseKind.personal), 'personal');
+      expect(storedUseKind(UseKind.business), 'business');
+    });
+
+    test('and an account that was never asked is asked', () {
+      // Every account made before the question existed, and every one
+      // made by an invitation. Null is not an answer, and setup still
+      // asks those people exactly as it asked everybody before.
+      expect(useKindFrom(null), isNull);
+      expect(useKindFrom(''), isNull);
+      expect(useKindFrom('somethingelse'), isNull);
+    });
+
+    test('and the answer decides which question comes next', () {
+      expect(
+        stepAfterUse(useKindFrom('business')!, businessType: null),
+        SetupStep.businessType,
+      );
+      expect(
+        stepAfterUse(useKindFrom('personal')!),
+        SetupStep.modules,
+      );
+    });
+  });
+
   group('going back does not start again', () {
     test('a person goes straight to the modules', () {
       // There is no business type to choose, because they are not one.
