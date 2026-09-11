@@ -37,6 +37,22 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   /// because what was said back is half of it.
   String? _mailboxId;
 
+  /// What was searched for, once it was submitted.
+  ///
+  /// Submitted rather than typed. Every keystroke is a query against a
+  /// full-text index over every body in the company, and the letter
+  /// somebody is halfway through typing is not a search anybody asked
+  /// for.
+  String _query = '';
+
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final boxes = ref.watch(myMailboxesProvider).valueOrNull ?? const [];
@@ -66,6 +82,34 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
             ),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              Space.md,
+              Space.md,
+              Space.md,
+              0,
+            ),
+            child: TextField(
+              controller: _search,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                isDense: true,
+                prefixIcon: const Icon(Icons.search, size: 20),
+                hintText: 'Search this mail',
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        tooltip: 'Clear',
+                        onPressed: () {
+                          _search.clear();
+                          setState(() => _query = '');
+                        },
+                      ),
+              ),
+              onSubmitted: (v) => setState(() => _query = v.trim()),
+            ),
+          ),
           if (boxes.length > 1 || chosen != null)
             _Addresses(
               boxes: boxes,
@@ -74,9 +118,15 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
               onChanged: (v) => setState(() => _mailboxId = v),
             ),
           Expanded(
-            child: chosen == null
-                ? _Arrived(onReplied: _refresh)
-                : _Conversation(mailboxId: chosen, onReplied: _refresh),
+            child: switch ((_query.isEmpty, chosen)) {
+              (false, final m) => _Found(
+                  search: (mailboxId: m, query: _query),
+                  onReplied: _refresh,
+                ),
+              (true, null) => _Arrived(onReplied: _refresh),
+              (true, final m) =>
+                _Conversation(mailboxId: m!, onReplied: _refresh),
+            },
           ),
         ],
       ),
@@ -87,6 +137,11 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
     ref.invalidate(inboxProvider);
     final chosen = _mailboxId;
     if (chosen != null) ref.invalidate(mailboxThreadProvider(chosen));
+    if (_query.isNotEmpty) {
+      ref.invalidate(
+        mailSearchProvider((mailboxId: chosen, query: _query)),
+      );
+    }
   }
 }
 
@@ -196,6 +251,47 @@ class _Conversation extends ConsumerWidget {
           itemBuilder: (context, i) => _Row(
             row: rows[i],
             mailboxId: mailboxId,
+            onReplied: onReplied,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// What a search found.
+///
+/// The same rows as the two lists above, drawn by the same widget. What
+/// is NOT here is any filtering: `search_mail` runs as whoever is
+/// searching, so a colleague's message never reaches this screen to be
+/// hidden by it.
+class _Found extends ConsumerWidget {
+  const _Found({required this.search, required this.onReplied});
+
+  final MailSearch search;
+  final VoidCallback onReplied;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return AsyncView(
+      value: ref.watch(mailSearchProvider(search)),
+      onRetry: () => ref.invalidate(mailSearchProvider(search)),
+      builder: (rows) {
+        if (rows.isEmpty) {
+          return EmptyState(
+            icon: Icons.search_off,
+            title: 'Nothing matched',
+            message: 'No message here says "${search.query}".',
+          );
+        }
+        return ListView.separated(
+          itemCount: rows.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (context, i) => _Row(
+            row: rows[i],
+            // A result carries its own mailbox, which is what a reply
+            // has to leave from — the search spans all of them.
+            mailboxId: rows[i]['mailbox_id'] as String?,
             onReplied: onReplied,
           ),
         );

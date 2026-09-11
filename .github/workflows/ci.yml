@@ -261,6 +261,7 @@ jobs:
                    supabase/tests/signup_details.sql \
                    supabase/tests/personal_mailbox.sql \
                    supabase/tests/mailbox_reply.sql \
+                   supabase/tests/mailbox_search.sql \
                    supabase/tests/multicurrency.sql \
                    supabase/tests/transfer.sql \
                    supabase/tests/fx_shapes.sql \

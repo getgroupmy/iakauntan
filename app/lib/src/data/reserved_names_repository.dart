@@ -389,6 +389,32 @@ final mailboxThreadProvider = FutureProvider.autoDispose
   );
 });
 
+/// What was asked for, and where.
+///
+/// A record rather than two arguments because a Riverpod family takes
+/// one key, and records compare by value — so the same search in the
+/// same mailbox is the same provider and is not re-run.
+typedef MailSearch = ({String? mailboxId, String query});
+
+/// Mail matching a search, both directions, newest first.
+///
+/// Empty gives nothing back without asking the database, which is the
+/// same answer `search_mail` gives and saves the round trip: a screen
+/// that answers an empty box with the whole mailbox dumps it the moment
+/// somebody clears the field.
+final mailSearchProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, MailSearch>((ref, search) async {
+  final orgId = ref.watch(currentOrgIdProvider);
+  if (orgId == null || search.query.trim().isEmpty) return const [];
+  return Repo.rows(
+    await ref.watch(supabaseProvider).rpc('search_mail', params: {
+      'p_org_id': orgId,
+      'p_query': search.query.trim(),
+      'p_mailbox_id': search.mailboxId,
+    }),
+  );
+});
+
 /// Queue a message from one of the company's addresses.
 ///
 /// Queued, not sent: `send-email` drains the outbox on a schedule, and
