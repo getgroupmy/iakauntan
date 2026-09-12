@@ -245,3 +245,6 @@ Nothing below can be done from a commit.
    is done.
 4. **Rotate anything that was ever committed.** See the warning in
    `README.md`.
+5. **Take one live payment through a tenant's own acquirer.** Everything
+   either side of the HTTP is asserted and no ringgit has ever been
+   through it. `docs/first-payment.md` is the runbook.

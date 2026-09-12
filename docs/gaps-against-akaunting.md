@@ -162,7 +162,9 @@ settlement outcomes, the receipt and the ledger. The call itself is
 `createBillplzBill`, the helper `billplz-checkout` has been using
 against real bills, with the tenant's key instead of the platform's.
 Section closed as far as code goes; a first live ringgit is still a
-thing somebody has to do.
+thing somebody has to do — and `docs/first-payment.md` is now the
+runbook for doing it, so that whoever does is not discovering the shape
+of the thing at the same time as whatever is wrong with it.
 
 ## 4. The reports, including the two statutory ones
 
