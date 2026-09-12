@@ -381,6 +381,23 @@ final bankAccountsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
   return requireRepo(ref).bankAccounts();
 });
 
+/// The feed on one bank account, or null where there is none.
+///
+/// `0567`. Never the credential: `bank_feed_status` answers with
+/// `has_api_key` and never the key, for the reason the acquirer status
+/// does — a screen that could redisplay a secret is a screen that could
+/// leak it.
+final bankFeedProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, bankAccountId) {
+  return requireRepo(ref).bankFeedStatus(bankAccountId);
+});
+
+/// Every pull against this company's feeds, newest first.
+final bankFeedRunsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, bankAccountId) {
+  return requireRepo(ref).bankFeedRuns(bankAccountId);
+});
+
 final bankTransfersProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
       return requireRepo(ref).bankTransfers();

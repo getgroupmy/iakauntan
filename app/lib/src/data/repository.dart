@@ -11811,6 +11811,8 @@ extension RepoTenantPayments on Repo {
     await callRpc('org_payment_gateway_status', params: {'p_org_id': orgId}),
   );
 
+
+
   /// Saves an acquirer's credentials.
   ///
   /// A null key leaves the stored one alone, which is what makes
@@ -11861,4 +11863,62 @@ extension RepoTenantPayments on Repo {
     'clear_org_payment_gateway',
     params: {'p_org_id': orgId, 'p_gateway': gateway, 'p_mode': mode},
   );
+}
+
+/// Bank feeds.
+///
+/// `0567`. The same shape as the acquirer credentials in
+/// `RepoTenantPayments` and for the same reason: a bank feed credential
+/// reads somebody's bank statements, so it is held in a table nothing
+/// can select from and read back only as "is one set".
+///
+/// Its own extension rather than sitting in that one, because a feed is
+/// money arriving from the bank's own records and an acquirer is money
+/// arriving from a customer. They share a shape, not a subject.
+extension RepoBankFeeds on Repo {
+  /// What a screen may know about the feed on one account, or null
+  /// where there is no feed.
+  Future<Map<String, dynamic>?> bankFeedStatus(String bankAccountId) async {
+    final row = await callRpc(
+      'bank_feed_status',
+      params: {'p_bank_account_id': bankAccountId},
+    );
+    return row == null ? null : Map<String, dynamic>.from(row as Map);
+  }
+
+  // `connect_bank_feed` deliberately has NO wrapper here yet.
+  //
+  // `0567` built it and asserted it, and no bank is connectable until
+  // somebody writes a connector — so a form to call it would be a form
+  // that cannot be submitted, and a wrapper for a call nobody can make
+  // is exactly the dead declaration this repository spent `d9a28b8`
+  // removing seven of. It goes in on the day the first connector does,
+  // beside the form that uses it. The SQL is ready and waiting.
+
+  /// Stop pulling, or start again. Keeps the credential either way.
+  Future<void> setBankFeedPaused(String bankAccountId, bool paused) =>
+      callRpc('set_bank_feed_paused', params: {
+        'p_bank_account_id': bankAccountId,
+        'p_paused': paused,
+      });
+
+  /// Remove the credential. The row and its runs stay, because what was
+  /// imported and when is the company's record of where its statements
+  /// came from.
+  Future<void> disconnectBankFeed(String bankAccountId) =>
+      callRpc('disconnect_bank_feed', params: {
+        'p_bank_account_id': bankAccountId,
+      });
+
+  /// Every pull, newest first. A feed that has stopped is otherwise
+  /// silent until somebody fails to reconcile.
+  Future<List<Map<String, dynamic>>> bankFeedRuns(String bankAccountId) async =>
+      Repo.rows(
+        await client
+            .from('bank_feed_runs')
+            .select('id, started_at, finished_at, ok, imported, skipped, error')
+            .eq('org_id', orgId)
+            .order('started_at', ascending: false)
+            .limit(20),
+      );
 }

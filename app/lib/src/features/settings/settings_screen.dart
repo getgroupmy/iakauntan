@@ -34,6 +34,7 @@ import '../../core/searchable_picker.dart';
 import '../../data/signup_reference_repository.dart';
 import '../auth/phone_number.dart';
 import '../auth/reset_cooldown.dart' show looksLikeAnAddress;
+import 'bank_feeds_card.dart';
 import 'collect_payments_card.dart';
 import 'contact_changes.dart';
 import 'einvoice_credentials.dart';
@@ -814,6 +815,12 @@ class _BillingSection extends StatelessWidget {
         const _WaysToPay(),
         const SizedBox(height: Space.lg),
         const CollectPaymentsCard(),
+        const SizedBox(height: Space.lg),
+        // Beside the acquirer credentials on purpose: both are a third
+        // party holding a key that reaches this company's money, both
+        // are held so nothing can read the key back, and somebody
+        // setting one up is usually setting up the other.
+        const BankFeedsCard(),
       ],
     );
   }
