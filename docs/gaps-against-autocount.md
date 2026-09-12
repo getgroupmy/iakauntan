@@ -134,7 +134,42 @@ No table, no column, no function — verified by querying for them:
 
 | Missing | Who it stops |
 | --- | --- |
-| **Bank feed** | AutoCount Cloud syncs Maybank SME and UOB Business directly. This has CSV import into bank reconciliation, which is a different promise |
+| **Bank feed — one connector** | See below. `0567` built everything around it; what is missing is the code that talks to a bank |
+
+#### The bank feed, after `0567`
+
+The table above said "no table, no column, no function". That is no
+longer true, and what is left is narrower than it was.
+
+`import_bank_transactions` was already feed-ready and nobody wrote it
+that way on purpose: it refuses a line whose running balance does not
+follow the one before it, and it skips a line already stored — keyed on
+date, amount, description, reference **and** balance, with the balance
+in the key so two identical withdrawals on one day both import while
+the same line pasted twice does not. That is exactly the property a
+feed needs and a CSV upload does not: a person chooses a range and
+uploads it once, a feed re-delivers overlapping windows forever, and an
+import without that key doubles every transaction in the overlap —
+silently, and found at reconciliation.
+
+`0567` adds what goes around it. `bank_feeds` holds the connection and
+its credential, guarded the way `0107` and `0412` guard an LHDN private
+key and an acquirer secret: RLS on with no policies, every privilege
+revoked, written through a definer function behind `can_admin`, read
+back only as "is one set". `bank_feed_runs` records every pull, because
+the failure mode of a feed is silence rather than a wrong figure — a
+token expires, the pulls stop, and the gap is found at month end.
+
+**What is deliberately not written is a connector.** There is no
+Maybank or UOB API access in the environment this was built in, no
+credentials and no sandbox. A connector written against a guessed
+response shape would be worse than none: it would look finished, and
+the first thing anybody knew would be a statement imported wrongly.
+
+So the remaining work is one edge function per bank: read `bank_feeds`,
+fetch, hand the rows to `import_bank_transactions`, and call
+`record_bank_feed_run` either way. Everything it needs is in place and
+asserted in `supabase/tests/bank_feed.sql`.
 
 ### Where the comparison stops being useful
 
