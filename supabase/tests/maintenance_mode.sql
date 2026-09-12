@@ -120,6 +120,78 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- And every other door, which `0564` left open
+--
+-- `0564` said gating `can_write` and `can_admin` gated the writes,
+-- because "every policy that guards a write already asks one of them".
+-- It does not. `can_write_module` alone guards 162 policies and asks
+-- neither -- so with the shutter down a till kept selling, a journal
+-- could be posted, a payroll run could be approved and an employee
+-- record could be changed, while invoices and settings stopped.
+--
+-- Asserted as a rule over the schema rather than as a list, so a
+-- guard added later fails this file until somebody decides which it
+-- is: a write, and gated, or a read, and named below.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  f       record;
+  v_open  text;
+begin
+  select * into f from fixture;
+
+  update public.platform_settings
+     set value = jsonb_build_object('enabled', true, 'message', '')
+   where key = 'maintenance_mode';
+  perform pg_temp.sign_in_as(f.owner);
+
+  perform pg_temp.check_true('the ledger is shut', not app.can_post(f.org));
+  perform pg_temp.check_true('and every module''s write permission',
+    not app.can_write_module(f.org, 'pos'));
+  perform pg_temp.check_true('and payroll',
+    not app.can_run_payroll(f.org));
+  perform pg_temp.check_true('and personnel records',
+    not app.can_manage_hr(f.org));
+  perform pg_temp.check_true('and the till''s void',
+    not app.can_void_pos(f.org));
+  perform pg_temp.check_true('and its discount',
+    not app.can_discount_pos(f.org));
+  perform pg_temp.check_true('and standing up another company',
+    not app.can_add_company());
+
+  -- Reads are untouched, which is `0564`'s own rule and the reason
+  -- this is a list of exceptions rather than "gate everything".
+  perform pg_temp.check_true('but the ledger is still readable',
+    app.can_read_ledger(f.org));
+
+  -- THE ASSERTION THIS BLOCK EXISTS FOR, and it is the one that would
+  -- have caught `0564`. Every `app.can_*` guard either asks
+  -- `in_maintenance` or is named here as a read. A ninth guard added
+  -- next year fails this line rather than silently staying open.
+  select string_agg(p.proname, ', ' order by p.proname) into v_open
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'app'
+     and p.proname like 'can\_%'
+     and pg_get_functiondef(p.oid) not like '%in_maintenance%'
+     and p.proname not in (
+       -- Reads. Somebody looking at an invoice when the shutter comes
+       -- down goes on looking at it.
+       'can_read_ledger', 'can_read_module', 'can_read_attachment',
+       -- `0460`'s bug-report path is deliberately open: maintenance is
+       -- when people file them, and the rest of this function already
+       -- routes through `can_write`.
+       'can_attach_to');
+
+  perform pg_temp.check_eq(
+    'and no other write guard stays open with the shutter down',
+    coalesce(v_open, ''), '');
+
+  update public.platform_settings
+     set value = jsonb_build_object('enabled', false, 'message', '')
+   where key = 'maintenance_mode';
+end $$;
+
+-- ---------------------------------------------------------------------
 -- And the switch can always be reached
 -- ---------------------------------------------------------------------
 do $$
@@ -221,6 +293,25 @@ begin
     has_function_privilege('authenticated', 'app.can_admin(uuid)', 'execute'));
   perform pg_temp.check_true('and anon cannot',
     not has_function_privilege('anon', 'app.can_write(uuid)', 'execute'));
+
+  -- `0568` restated eight more, four of which had no grant of their
+  -- own either. Same trap, same assertion.
+  perform pg_temp.check_true('and the eight 0568 restated are reachable too',
+    has_function_privilege('authenticated', 'app.can_post(uuid)', 'execute')
+    and has_function_privilege('authenticated',
+      'app.can_write_module(uuid,text)', 'execute')
+    and has_function_privilege('authenticated',
+      'app.can_run_payroll(uuid)', 'execute')
+    and has_function_privilege('authenticated',
+      'app.can_manage_hr(uuid)', 'execute')
+    and has_function_privilege('authenticated',
+      'app.can_void_pos(uuid)', 'execute')
+    and has_function_privilege('authenticated',
+      'app.can_discount_pos(uuid)', 'execute')
+    and has_function_privilege('authenticated',
+      'app.can_add_company()', 'execute')
+    and has_function_privilege('authenticated',
+      'app.can_manage_firm(uuid)', 'execute'));
 end $$;
 
 rollback;
