@@ -32,6 +32,13 @@ graphify-out/cost.json
 graphify-out/20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
 # Holds the absolute path of the machine the graph was built on.
 graphify-out/.graphify_root
+# The interpreter the build ran under: another absolute path, another machine.
+graphify-out/.graphify_python
+# Build intermediates. The pipeline deletes most of these at the end and leaves
+# these three behind, which is how they came to be offered for commit.
+graphify-out/.graphify_incremental.json
+graphify-out/.graphify_uncached.txt
+graphify-out/.graphify_chunk_*.json
 graphify-out/memory/
 graphify-out/reflections/
 # 2.3 MB of generated markup that changes wholesale on every rebuild. Rebuild

@@ -60,3 +60,9 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- **Install the SQL grammar first: `pip install "graphifyy[sql]"`.** Without it
+  `tree_sitter_sql` is missing and every one of the ~800 migrations contributes
+  **nothing** to the graph — silently, as one warning line at the end of a long
+  extraction. On a project whose own first rule is that the database is the
+  application, a graph built without it is a graph of the front end. It is worth
+  5,476 nodes: 25,212 without, 30,688 with.
