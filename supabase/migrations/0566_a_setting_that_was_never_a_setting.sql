@@ -1,0 +1,47 @@
+-- =====================================================================
+-- iAkauntan :: 0566 a setting that was never a setting
+--
+-- `0018` seeded `einvoice_defaults` as `{"environment": "sandbox",
+-- "version": "1.0"}`, described as "Defaults applied to newly created
+-- tenants". Nothing has ever read it, and this is the third such row
+-- found in four days -- `0563` wired `signup_enabled`, `0564` wired
+-- `maintenance_mode`, and this one is the one that must NOT be wired.
+--
+-- ---------------------------------------------------------------------
+-- Because both halves of it are already decided, better, elsewhere
+--
+-- `environment`. `organizations.einvoice_environment` has carried
+-- `default 'sandbox'` since `0001`. A new tenant already starts in the
+-- sandbox; the setting says the same thing a second time and nothing
+-- reads it. Two places to write one fact is how the two come to
+-- disagree, and the one nothing reads is the one that will be wrong.
+--
+-- `version`. This is the half that matters, and wiring it would be a
+-- defect rather than a feature. `0396` found that
+-- `organizations.settings ->> 'einvoice_version'` was stamped onto
+-- submissions unchecked, and closed it with a constraint and a trigger
+-- reading one predicate: what this build can actually produce is `1.0`,
+-- because version 1.1 needs an XAdES signature from a Malaysian
+-- certificate authority and the signing step is not implemented.
+--
+-- A platform setting called `version` that appeared to let an operator
+-- choose is exactly what `0396` was written against, in its own words:
+-- a control that appears to have been applied is worse than one that is
+-- absent. A document claiming to be the signed version and carrying no
+-- signature is a filing with a false statement of what it is.
+--
+-- ---------------------------------------------------------------------
+-- So it is deleted rather than implemented
+--
+-- A row in a settings table is a promise that something reads it.
+-- Leaving one that nothing reads is leaving a lever bolted to the wall
+-- and connected to nothing -- and the next operator to pull it will be
+-- doing so during an incident, which is the worst time to discover
+-- that it does nothing.
+--
+-- Nothing is lost. `einvoice_credentials.environment` is where a
+-- company's real environment is set, per company, and the column
+-- default is where a new one starts.
+-- =====================================================================
+
+delete from public.platform_settings where key = 'einvoice_defaults';

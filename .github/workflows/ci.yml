@@ -477,6 +477,19 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_stable_writers.py "$DB"
 
+      # Three rows in `platform_settings` said what they did and did
+      # nothing: `nav_grouping` worked for exactly one person on the
+      # platform, `signup_enabled` could be switched off while strangers
+      # went on registering, and `maintenance_mode` promised a banner
+      # and blocked writes and did neither. All three were seeded in the
+      # same migration and all three were found by reading the table
+      # rather than by anybody hitting them. A settings row is a promise
+      # that something reads it.
+      - name: Check every platform setting is read by something
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_settings_are_read.py "$DB"
+
       # The client's queries checked against the schema they will run
       # against. An ambiguous embed passes `flutter analyze`, passes the
       # widget tests, passes the SQL tests, and then takes out a whole
