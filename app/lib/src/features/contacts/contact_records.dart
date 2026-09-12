@@ -57,6 +57,40 @@ class _RecordsSheet extends ConsumerWidget {
 
   final String contactId;
 
+  /// Take one record back out of the company.
+  ///
+  /// `0482` is careful about which direction is dangerous, and so is
+  /// this wording: linking two companies that are not one is the fault
+  /// that produces a statement carrying somebody else's invoices, and
+  /// this is the only way to undo it. The record itself is untouched —
+  /// it leaves the family and keeps everything else.
+  Future<void> _unlink(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic> record,
+  ) async {
+    final go = await confirm(
+      context,
+      title: 'Is ${record['code']} a different company?',
+      message: 'It stops being part of this one. Nothing on the record '
+          'itself changes, and the other records stay as they are.',
+      confirmLabel: 'Separate them',
+    );
+    if (!go || !context.mounted) return;
+    final ok = await runWithFeedback(
+      context,
+      doing: 'separate the records',
+      successMessage: 'Separated.',
+      action: () =>
+          ref.read(repoProvider)!.unlinkContactRecord('${record['id']}'),
+    );
+    if (ok) {
+      ref.invalidate(contactRecordsProvider(contactId));
+      ref.invalidate(contactsProvider);
+      ref.invalidate(contactDuplicatesProvider);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final records = ref.watch(contactRecordsProvider(contactId));
@@ -108,7 +142,27 @@ class _RecordsSheet extends ConsumerWidget {
                       ),
                       title: Text('${r['code']}'),
                       subtitle: Text(contactRoleLabel('${r['contact_type']}')),
-                      trailing: const Icon(Icons.chevron_right, size: 18),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // `0482` built `unlink_contact_record` as "the
+                          // way back, for the record linked on a number
+                          // that turned out to be a typing mistake", and
+                          // nothing has ever called it. A group stops
+                          // being reported once it is linked, so a wrong
+                          // link had nowhere at all to be undone — and
+                          // a wrongly linked record is one company's
+                          // statement carrying another's invoices.
+                          IconButton(
+                            key: ValueKey('unlink-${r['id']}'),
+                            tooltip: 'Not the same company',
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.link_off, size: 18),
+                            onPressed: () => _unlink(context, ref, r),
+                          ),
+                          const Icon(Icons.chevron_right, size: 18),
+                        ],
+                      ),
                       onTap: () {
                         Navigator.pop(context);
                         context.go('/contacts/${r['id']}');

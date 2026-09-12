@@ -7692,3 +7692,38 @@ that nothing chargeable is nothing taxed, that less than nothing is not
 a refund, and that zakat past the tax leaves nothing to deduct — so
 removing the guard downstream is a failing build even though removing
 the clamp is not.
+
+## The pass at `0566`, and the eight names that stay reported
+
+Both sweeps run again. The provider sweep came back **empty** — 452
+providers across 21 files, every one referenced. The method sweep
+reported fourteen, and the triage matters more than the number:
+
+| name | what it turned out to be |
+|---|---|
+| `writeCustomFields` | reached now. `openMatter` and `createTicket` each wrote their own inline copy of it, so the shared method had no caller and the rule had two. Both point at it. |
+| `reopenOpportunity` | a gap. A deal closed by mistake — or one the customer came back on — could only be recreated from nothing. Button on the pipeline card. |
+| `unlinkContactRecord` | a gap, and the one with teeth. `0482` built it as "the way back, for the record linked on a number that turned out to be a typing mistake", and a group **stops being reported once it is linked**, so a wrong link had nowhere at all to be undone. On each row of the records sheet. |
+| `openRequisition`, `closeRequisition` | a gap. `openBlockedBecause` had been sitting in `requisition_editor.dart` since the editor was written, deciding nothing, because nothing could open one. |
+| `clearOrgPaymentGateway` | a gap. Unticking Active means "do not offer this to customers" and leaves the key on file; nothing could remove one, so a leaked key could not be rotated away. |
+| `setExpenseSplit` | **deleted.** Not a gap: an expense is captured and posted in one step, and `set_expense_split` refuses an expense already in the ledger — so there is no moment at which this could ever have been called. A method for a state the product does not have. |
+
+The eight still reported are the known false-positive class, and are
+listed here so the next pass does not re-triage them:
+
+`callRpc`, `callRpcOnce`, `keyFor`, `succeeded`, `notifyPush` are
+internal helpers with hundreds of calls inside their own file, which
+`unreferenced` excludes by design. `landingPreview` and `navGrouping`
+are called by providers declared in the same repository file, the
+`creditLedger` shape this document already warns about. `writeCustomFields`
+joined them at this pass for the same reason — its two callers are in
+`repository.dart`, which declares it.
+
+**The lesson this pass adds.** Four of the seven gaps were not missing
+code anywhere: the RPC existed, the repository method existed, and in
+two cases the *decision function* existed too — `openBlockedBecause`
+written and consulted by nothing, `unlink_contact_record` documented in
+its own migration as the way back. What was missing was a button. A
+sweep that only counts database functions cannot see that, and neither
+can one that only counts providers; the repository method is where the
+two halves fail to meet.

@@ -256,6 +256,38 @@ class _DealCard extends ConsumerWidget {
   final Opportunity deal;
   final bool draggable;
 
+  /// Put a closed deal back on the board.
+  ///
+  /// `reopen_opportunity` has existed as long as the pipeline and
+  /// nothing has ever called it, so a deal closed by mistake — or one
+  /// the customer came back on a month later, which is the ordinary
+  /// case — could only be recreated from nothing, losing its history
+  /// and its quotation with it.
+  ///
+  /// No stage is named. The RPC takes one and defaults to the first,
+  /// which is the honest place for a deal that has just come back:
+  /// whoever reopened it knows where it really is and can drag it.
+  Future<void> _reopen(BuildContext context, WidgetRef ref) async {
+    final go = await confirm(
+      context,
+      title: 'Reopen ${deal.name}?',
+      message: 'It goes back on the board at the first stage, with its '
+          'history and anything linked to it intact. Drag it to where '
+          'it actually is.',
+      confirmLabel: 'Reopen it',
+    );
+    if (!go || !context.mounted) return;
+    final ok = await runWithFeedback(
+      context,
+      action: () => ref.read(repoProvider)!.reopenOpportunity(deal.id),
+      successMessage: 'Back on the board.',
+    );
+    if (ok) {
+      ref.invalidate(opportunitiesProvider);
+      ref.invalidate(pipelineQuoteMismatchProvider);
+    }
+  }
+
   Future<void> _quote(BuildContext context, WidgetRef ref) async {
     final go = await confirm(
       context,
@@ -313,6 +345,20 @@ class _DealCard extends ConsumerWidget {
                   constraints: const BoxConstraints(),
                   icon: const Icon(Icons.request_quote_outlined, size: 16),
                   onPressed: () => _quote(context, ref),
+                ),
+              // `reopen_opportunity` has existed since the pipeline did
+              // and nothing ever called it, so a deal marked lost by
+              // mistake — or one the customer came back on, which is
+              // the ordinary case — stayed lost. Only on a closed one:
+              // reopening an open deal is not a thing.
+              if (draggable && deal.status != 'open')
+                IconButton(
+                  tooltip: 'Reopen this deal',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: const Icon(Icons.restart_alt, size: 16),
+                  onPressed: () => _reopen(context, ref),
                 ),
             ],
           ),

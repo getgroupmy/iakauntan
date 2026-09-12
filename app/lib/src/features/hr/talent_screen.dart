@@ -61,6 +61,47 @@ class TalentScreen extends ConsumerWidget {
 class _RequisitionsTab extends ConsumerWidget {
   const _RequisitionsTab();
 
+  /// Put a drafted vacancy out.
+  ///
+  /// The rule about who may be opened is `openBlockedBecause`, which
+  /// `requisition_editor.dart` has carried since the editor was
+  /// written and which nothing consulted, because nothing could open
+  /// one. Read here rather than restated: the hiring manager rule has
+  /// teeth, and applications to a vacancy nobody owns go into a queue
+  /// nobody is reading.
+  Future<void> _open(BuildContext context, WidgetRef ref, dynamic r) async {
+    final ok = await runWithFeedback(
+      context,
+      doing: 'open the vacancy',
+      successMessage: 'Open. It takes applications now.',
+      action: () => ref.read(repoProvider)!.openRequisition(r.id),
+    );
+    if (ok) ref.invalidate(requisitionsProvider);
+  }
+
+  /// Stop one.
+  ///
+  /// Cancelled rather than deleted: a vacancy that was advertised and
+  /// withdrawn is a thing that happened, and the applications against
+  /// it are somebody's record of having applied.
+  Future<void> _cancel(BuildContext context, WidgetRef ref, dynamic r) async {
+    final go = await confirm(
+      context,
+      title: 'Cancel ${r.title}?',
+      message: 'It stops taking applications. Everything already '
+          'applied against it stays where it is.',
+      confirmLabel: 'Cancel it',
+    );
+    if (!go || !context.mounted) return;
+    final ok = await runWithFeedback(
+      context,
+      doing: 'cancel the vacancy',
+      successMessage: 'Cancelled.',
+      action: () => ref.read(repoProvider)!.closeRequisition(r.id),
+    );
+    if (ok) ref.invalidate(requisitionsProvider);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reqs = ref.watch(requisitionsProvider);
@@ -113,11 +154,41 @@ class _RequisitionsTab extends ConsumerWidget {
                     ].whereType<String>().join(' · '),
                     style: const TextStyle(fontSize: 12),
                   ),
-                  trailing: r.salaryMin == null
-                      ? null
-                      : Text(
-                          '${Fmt.money(r.salaryMin!)} – ${Fmt.money(r.salaryMax ?? r.salaryMin!)}',
-                          style: Theme.of(context).textTheme.bodySmall),
+                  // `open_requisition` and `close_requisition` have
+                  // existed since the table did and nothing called
+                  // either, so a vacancy could be drafted and never
+                  // opened: `openBlockedBecause` was written, sitting in
+                  // the editor, deciding nothing. A draft nobody can
+                  // open takes no applications at all.
+                  trailing: RowActions(
+                    menuKey: 'requisition-actions-${r.id}',
+                    leading: r.salaryMin == null
+                        ? null
+                        : Text(
+                            '${Fmt.money(r.salaryMin!)} – ${Fmt.money(r.salaryMax ?? r.salaryMin!)}',
+                            style: Theme.of(context).textTheme.bodySmall),
+                    actions: [
+                      if (openBlockedBecause(r.raw) == null)
+                        RowAction(
+                          actionKey: 'open-${r.id}',
+                          label: 'Open it',
+                          icon: Icons.campaign_outlined,
+                          onTap: () => _open(context, ref, r),
+                        ),
+                      // Cancelled and filled are where a requisition
+                      // stops, so neither is offered on one already
+                      // there.
+                      if (r.status == 'draft' ||
+                          r.status == 'open' ||
+                          r.status == 'on_hold')
+                        RowAction(
+                          actionKey: 'cancel-${r.id}',
+                          label: 'Cancel it',
+                          icon: Icons.block_outlined,
+                          onTap: () => _cancel(context, ref, r),
+                        ),
+                    ],
+                  ),
                   onTap: () async {
                     if (await showRequisitionEditor(context,
                         requisition: r.raw)) {

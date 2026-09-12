@@ -5,6 +5,9 @@ import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/format.dart';
+// For `writeCustomFields`, which both `openMatter` and `createTicket`
+// need and which each of them used to write out again inline.
+import 'custom_fields_repository.dart';
 import '../features/documents/transfer.dart';
 import 'models.dart';
 
@@ -3984,15 +3987,6 @@ class Repo {
     return (n as num?)?.toInt() ?? 0;
   }
 
-  /// Replace an expense's split. An empty list takes the split off and
-  /// leaves the expense on its own account, which is where it started.
-  Future<int> setExpenseSplit(
-      String expenseId, List<Map<String, dynamic>> lines) async {
-    final n = await callRpc('set_expense_split',
-        params: {'p_expense_id': expenseId, 'p_lines': lines});
-    return (n as num?)?.toInt() ?? 0;
-  }
-
   /// What one expense was divided into, with each account named.
   Future<List<Map<String, dynamic>>> expenseSplit(String expenseId) async =>
       Repo._rows(
@@ -5263,13 +5257,11 @@ extension RepoExtras on Repo {
     // table's own UPDATE policy. `0543` is what makes the gap safe: a
     // row created carrying no custom fields passes, and this update is
     // then held to the whole set exactly as an insert would be.
-    if (customFields.isNotEmpty) {
-      await client
-          .from('matters')
-          .update({'custom_fields': customFields})
-          .eq('id', id.toString())
-          .eq('org_id', orgId);
-    }
+    //
+    // Through `writeCustomFields`, which exists for exactly this and
+    // whose own comment names both callers — and which nothing called,
+    // because this and `createTicket` each wrote their own copy of it.
+    await writeCustomFields('matters', id.toString(), customFields);
     return id.toString();
   }
 
@@ -8349,15 +8341,9 @@ extension RepoTicketing on Repo {
           'p_requester_contact_id': requesterContactId,
       },
     );
-    // Same gap as `openMatter`, closed the same way.
-    if (customFields.isNotEmpty) {
-      await client
-          .from('tickets')
-          .update({'custom_fields': customFields})
-          .eq('id', id as String)
-          .eq('org_id', orgId);
-    }
-    return id as String;
+    // Same gap as `openMatter`, closed by the same method.
+    await writeCustomFields('tickets', id as String, customFields);
+    return id;
   }
 
   Future<void> transitionTicket(String id, String to, {String? note}) async {

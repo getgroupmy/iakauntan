@@ -64,6 +64,42 @@ class _CollectPaymentsCardState extends ConsumerState<CollectPaymentsCard> {
     _active = row?['is_active'] == true;
   }
 
+  /// Take the stored credentials off this company's file.
+  ///
+  /// Not the same act as unticking Active, which is why both exist.
+  /// Inactive means "do not offer this to customers" and the key is
+  /// still on file; this means the key is gone. A company leaving
+  /// Billplz, or one whose key has leaked, needs the second.
+  Future<void> _clear(Map<String, dynamic> row) async {
+    final go = await confirm(
+      context,
+      title: 'Remove the ${_mode == 'production' ? 'live' : 'sandbox'} keys?',
+      message: 'The stored key and signature are deleted, and no '
+          'customer can pay online through this account until new ones '
+          'are entered. Invoices and receipts already raised are '
+          'untouched.',
+      confirmLabel: 'Remove them',
+    );
+    if (!go || !mounted) return;
+
+    setState(() => _saving = true);
+    await runWithFeedback(
+      context,
+      doing: 'remove the keys',
+      successMessage: 'Removed.',
+      action: () => ref
+          .read(repoProvider)!
+          .clearOrgPaymentGateway(gateway: _gateway, mode: _mode),
+    );
+    if (mounted) {
+      setState(() {
+        _saving = false;
+        _loadedFor = null;
+      });
+    }
+    ref.invalidate(orgPaymentGatewaysProvider);
+  }
+
   Future<void> _save() async {
     final repo = ref.read(repoProvider);
     if (repo == null) return;
@@ -214,12 +250,26 @@ class _CollectPaymentsCardState extends ConsumerState<CollectPaymentsCard> {
                   ),
                 ),
                 const SizedBox(height: Space.md),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: FilledButton(
-                    onPressed: _saving ? null : _save,
-                    child: const Text('Save'),
-                  ),
+                Row(
+                  children: [
+                    FilledButton(
+                      onPressed: _saving ? null : _save,
+                      child: const Text('Save'),
+                    ),
+                    // `clear_org_payment_gateway` has existed as long as
+                    // the setter and nothing called it, so a company
+                    // that wanted to stop taking payments could untick
+                    // Active and no more: the key stayed on file. A
+                    // credential nobody can remove is a credential
+                    // nobody can rotate after it leaks.
+                    if (row != null) ...[
+                      const SizedBox(width: Space.md),
+                      TextButton(
+                        onPressed: _saving ? null : () => _clear(row),
+                        child: const Text('Remove these keys'),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             );
