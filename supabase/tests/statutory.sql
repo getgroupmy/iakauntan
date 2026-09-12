@@ -788,6 +788,13 @@ begin
            -- it with. `supabase/tests/signup_details.sql` asserts that
            -- the tables stay shut and that this answers as anon.
            'signup_reference',
+           -- 0564. The maintenance banner. What it exposes is that the
+           -- platform is about to be worked on, which is the one fact a
+           -- maintenance notice exists to publish -- and the person who
+           -- most needs it is the one at the sign-in page wondering why
+           -- their password stopped working. Nothing about any person,
+           -- company or account, and no argument to probe it with.
+           'maintenance_notice',
            -- 0262, and the three of them are one feature: a token on a
            -- sticker, the menu behind it, and an order placed from it.
            --
@@ -915,8 +922,13 @@ begin
                           -- found by somebody trying to sign up, who
                           -- cannot, because both of them are now
                           -- required.
-                          'signup_reference')),
-    16);
+                          'signup_reference',
+                          -- And a platform that has quietly stopped
+                          -- saying it is closed is found by somebody
+                          -- whose password appears to have stopped
+                          -- working.
+                          'maintenance_notice')),
+    17);
 
   perform pg_temp.check_true('and the link tables stay shut to anon',
     not exists (

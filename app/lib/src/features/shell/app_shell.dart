@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/format.dart';
 import '../../core/live_updates.dart';
+import '../../core/maintenance.dart';
 import '../../core/platform_live.dart';
 import '../../core/page_waiting.dart';
 import '../../core/providers.dart';
@@ -941,14 +942,42 @@ class AppShell extends ConsumerWidget {
     // list is empty. Either one puts selectedIndex out of range, which
     // throws while building — and a release build renders a thrown build
     // as a blank page, with no clue as to why.
-    if (dests.length < 2) return _bareLayout(context, dests);
+    if (dests.length < 2) {
+      return _underTheNotice(ref, _bareLayout(context, dests));
+    }
 
     final wide = MediaQuery.sizeOf(context).width >= railBreakpoint;
-    return _reachableByCall(
+    return _underTheNotice(
       ref,
-      wide
-          ? _wideLayout(context, ref, dests)
-          : _narrowLayout(context, ref, dests),
+      _reachableByCall(
+        ref,
+        wide
+            ? _wideLayout(context, ref, dests)
+            : _narrowLayout(context, ref, dests),
+      ),
+    );
+  }
+
+  /// The maintenance banner, above whatever the layout drew.
+  ///
+  /// `0018` seeded `maintenance_mode` as "Show a maintenance banner and
+  /// block writes" and it did neither for five hundred migrations.
+  /// `0564` makes `can_write` and `can_admin` refuse; this is the other
+  /// half, and it is the half that stops somebody concluding the
+  /// product is broken. A save that fails with no explanation is a bug
+  /// report.
+  ///
+  /// Above the whole shell rather than on one screen, because the
+  /// screen somebody is on when the shutter comes down is not
+  /// predictable.
+  Widget _underTheNotice(WidgetRef ref, Widget shell) {
+    final notice = ref.watch(maintenanceNoticeProvider).valueOrNull;
+    if (notice == null) return shell;
+    return Column(
+      children: [
+        MaintenanceBanner(message: notice),
+        Expanded(child: shell),
+      ],
     );
   }
 
