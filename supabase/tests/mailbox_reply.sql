@@ -21,6 +21,29 @@
 -- Owner bypasses RLS, so everything that tests a policy runs as
 -- `authenticated`.
 --
+-- ---------------------------------------------------------------------
+-- Mutants, each named with the assertion that killed it
+--
+--   the `mailbox` case dropped from `can_read_attachment`, so the
+--   bucket falls through to its ordinary answer -- yes, for anybody who
+--   can write the books. The state before `0565`, and the one this file
+--   calls a door with the letter behind it and the envelope open -- "a
+--   colleague cannot read what is attached".
+--
+--   the org check dropped from that case, so the first path segment
+--   becomes decoration -- "the company in the path has to be the right
+--   one".
+--
+--   `can_attach_to` no longer asking whose mailbox it is, so a file can
+--   be dropped into a colleague's folder -- "nor put anything there".
+--
+--   the path anchor removed from `send_from_mailbox`, so a reply may
+--   reference any object in the company's bucket and mail it out --
+--   "and cannot point at somebody else's mailbox folder".
+--
+--   `0095`'s `is_org_member` outbox policy put back, which is `0560`
+--   reverted -- "a colleague cannot read what somebody sent".
+--
 -- Nothing is written; the file rolls back.
 -- =====================================================================
 \set ON_ERROR_STOP on

@@ -23,6 +23,18 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../../.."
 
+# No Deno, no deno.land to get one from. Rather than reporting that the
+# gate cannot run -- which is how it came to not run, on exactly the
+# machines where jsr.io is unreachable, for the same reason -- hand over
+# to the `tsc` fallback. It is weaker and it says so; it is not nothing,
+# and nothing is what this printed before.
+if ! command -v deno >/dev/null 2>&1; then
+  echo "No deno on this machine. Falling back to tsc, which is weaker:" >&2
+  echo "  the Deno globals are declared rather than known, and modules" >&2
+  echo "  resolve the way a bundler resolves them." >&2
+  exec "$(dirname "$0")/check_with_tsc.sh"
+fi
+
 entries=()
 for dir in supabase/functions/*/; do
   case "$(basename "$dir")" in _*) continue ;; esac

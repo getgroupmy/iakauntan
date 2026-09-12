@@ -7727,3 +7727,67 @@ its own migration as the way back. What was missing was a button. A
 sweep that only counts database functions cannot see that, and neither
 can one that only counts providers; the repository method is where the
 two halves fail to meet.
+
+### And the SQL half of the same pass
+
+Run for the first time in a while, and it came back clean. The query at
+the top of this page, plus a filter this page did not have:
+
+```sql
+-- Extension functions live in `public` too, and `pg_trgm` alone puts
+-- forty of them there. Without this the sweep reports `show_trgm` and
+-- `word_similarity_op` as gaps, which is forty lines of noise in front
+-- of whatever is real.
+and not exists (select 1 from pg_depend d
+                 where d.objid = p.oid and d.deptype = 'e')
+```
+
+654 of our own functions are granted to `authenticated`. Three came
+back and **all three were false positives of the grep, not of the
+check**:
+
+- `corp_display_name` is called by `0425`, and `corp_particulars.sql`
+  asserts it — `0425` even carries a guard that fails if the corporate
+  document builder stops calling it.
+- `corp_issued_capital` is called by `0065` and again by `0419`.
+- `pos_item_portions` is called by `pos_item_availability`, which this
+  page already says.
+
+All three were missed the same way: the call is written
+`public.corp_display_name(...)` and the pattern excluded a preceding
+dot. **Match the qualified form or the sweep hides exactly the
+functions that are called properly.** This is the third distinct way
+this grep has been got wrong — after opening `repository.dart` alone,
+and after running the provider sweep over `providers.dart` alone — and
+all three failed the same way: quietly, by reporting fewer things than
+were there.
+
+What the grep must allow, in one place, and the second correction is
+as important as the first:
+
+```python
+Q = r'(?:public\.|app\.)?'          # the qualified form, or the sweep
+                                     # hides the properly-written calls
+e = re.escape(name)
+calls = len(re.findall(r'(?<![a-z_])' + Q + e + r'\s*\(', sqltext))
+# Every way a statement NAMES a function without calling it. Counting
+# only `create function` leaves `grant execute on function`,
+# `comment on function` and `drop function` inside `calls`; counting
+# `function\s+` instead subtracts all of them TWICE, which is how
+# `corp_display_name` came back dead on the second attempt with a real
+# caller sitting in `0425`.
+named = len(re.findall(
+    r'(?:create\s+(?:or\s+replace\s+)?function|'
+    r'drop\s+function(?:\s+if\s+exists)?|'
+    r'(?:grant|revoke)[^;]*?on\s+function|'
+    r'comment\s+on\s+function|'
+    r'alter\s+function)\s+' + Q + e + r'\s*\(', sqltext, re.S))
+reached = calls - named > 0
+```
+
+with `--` comments stripped from every migration first, for the reason
+`scripts/check_settings_are_read.py` strips them: a migration header
+that explains why a function exists names it, and prose is not a
+caller.
+
+With both corrections the answer is **654 functions, none unreachable**.

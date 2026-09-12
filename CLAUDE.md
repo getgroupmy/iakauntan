@@ -44,6 +44,13 @@ type error in `pay-invoice-callback` was found by CI rather than before the
 push. Green there is not green in CI: every call made *on* the Supabase client
 is unchecked. Red there is red in CI.
 
+Where there is no `deno` either, it hands over to `check_with_tsc.sh` on its
+own — same entry points, same supabase-js stub, plus a narrow declaration of
+the four pieces of Deno this repository uses. It needs a `tsc`
+(`npm install --no-save typescript@5`, or set `TSC`). Weaker again, in the same
+direction: green under tsc is not green under `deno check`, which is not green
+in CI, and red at any level is red at every level above it.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

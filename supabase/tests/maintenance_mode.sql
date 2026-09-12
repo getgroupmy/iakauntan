@@ -15,6 +15,19 @@
 --     property that stops this being a way to brick the platform with
 --     one click.
 --
+-- ---------------------------------------------------------------------
+-- Mutants, each named with the assertion that killed it
+--
+--   `can_write` without its `not in_maintenance()` clause, so the
+--   banner shows and nothing is blocked -- "nobody may write".
+--
+--   `in_maintenance()`'s fallback flipped, so a deleted row stops every
+--   write in the product -- "a missing setting reads as open".
+--
+--   the grant left off `can_write`, which is the state the first draft
+--   of `0564` was in after `0165`'s event trigger stripped PUBLIC --
+--   "permission denied for function can_write", at the first write.
+--
 -- Nothing is written; the file rolls back.
 -- =====================================================================
 \set ON_ERROR_STOP on

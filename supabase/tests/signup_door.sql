@@ -18,6 +18,24 @@
 -- sign-up endpoint is public and the same whether a button was drawn
 -- or not.
 --
+-- ---------------------------------------------------------------------
+-- Mutants, each named with the assertion that killed it
+--
+--   `signups_open()` returns `true` always, so the switch is read and
+--   ignored -- "the switch is read at all".
+--
+--   the same function's fallback flipped, so a deleted row closes
+--   registration -- "and a missing setting reads as open".
+--
+--   the trigger's door block removed while the setting is still read
+--   honestly, which is precisely every version before `0563` -- "a
+--   stranger cannot register while it is shut: it was not refused at
+--   all".
+--
+--   the invitation exemption dropped from that block, so a shut door
+--   shuts on somebody a company invited -- the invitation insert
+--   raises, at the line that makes it.
+--
 -- Nothing is written; the file rolls back.
 -- =====================================================================
 \set ON_ERROR_STOP on
