@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,6 +7,7 @@ import '../../core/providers.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
 import '../../data/reserved_names_repository.dart';
+import 'attachments.dart';
 import 'compose.dart';
 
 /// Writing something, or answering something that arrived.
@@ -76,6 +78,14 @@ class _ComposeDialogState extends ConsumerState<_ComposeDialog> {
   String? _mailboxId;
   bool _sending = false;
   String? _error;
+
+  /// One file, held in memory until the message is sent.
+  ///
+  /// Uploaded at send rather than at choose, so a message somebody
+  /// abandons leaves nothing in the bucket. One rather than many
+  /// because `email_outbox` carries one pair of columns and has since
+  /// `0109`; a second would be a schema change, not a button.
+  PlatformFile? _file;
 
   @override
   void initState() {
@@ -175,6 +185,7 @@ class _ComposeDialogState extends ConsumerState<_ComposeDialog> {
                       ? 'A message needs something in it.'
                       : null,
                 ),
+                if (boxes.isNotEmpty) _attachment(context),
                 if (_error != null)
                   Padding(
                     padding: const EdgeInsets.only(top: Space.md),
@@ -201,6 +212,53 @@ class _ComposeDialogState extends ConsumerState<_ComposeDialog> {
     );
   }
 
+  /// Choose a file, or say which one is already chosen.
+  Widget _attachment(BuildContext context) {
+    final file = _file;
+    return Padding(
+      padding: const EdgeInsets.only(top: Space.md),
+      child: Row(
+        children: [
+          TextButton.icon(
+            onPressed: _sending ? null : _pickFile,
+            icon: const Icon(Icons.attach_file, size: 18),
+            label: Text(file == null ? 'Attach a file' : 'Change'),
+          ),
+          if (file != null) ...[
+            const SizedBox(width: Space.sm),
+            Expanded(
+              child: Text(
+                [file.name, sizeLabel(file.size)]
+                    .whereType<String>()
+                    .join(' · '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Remove',
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: _sending ? null : () => setState(() => _file = null),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickFile() async {
+    // withData because the web has no path to read from afterwards, and
+    // the upload wants bytes on every platform anyway.
+    final result = await FilePicker.platform.pickFiles(withData: true);
+    final file = result?.files.singleOrNull;
+    if (file == null || file.bytes == null || !mounted) return;
+    setState(() => _file = file);
+  }
+
   Future<void> _send() async {
     if (!(_form.currentState?.validate() ?? false)) return;
     final mailboxId = _mailboxId;
@@ -214,13 +272,32 @@ class _ComposeDialogState extends ConsumerState<_ComposeDialog> {
       _error = null;
     });
     try {
+      final client = ref.read(supabaseProvider);
+      String? path;
+      final file = _file;
+      if (file != null && file.bytes != null) {
+        final orgId = ref.read(currentOrgIdProvider);
+        if (orgId == null) throw StateError('No company is open.');
+        // Uploaded now rather than when it was chosen, so a message
+        // somebody changed their mind about leaves nothing behind.
+        path = await uploadMailboxAttachment(
+          client,
+          orgId: orgId,
+          mailboxId: mailboxId,
+          filename: file.name,
+          bytes: file.bytes!,
+        );
+      }
+
       await sendFromMailbox(
-        ref.read(supabaseProvider),
+        client,
         mailboxId: mailboxId,
         to: _to.text,
         subject: _subject.text,
         body: _body.text,
         inReplyTo: widget.inReplyTo,
+        attachmentPath: path,
+        attachmentName: path == null ? null : file!.name,
       );
       ref.invalidate(mailboxThreadProvider(mailboxId));
       if (mounted) Navigator.pop(context, true);

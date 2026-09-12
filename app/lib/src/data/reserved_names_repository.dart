@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -451,6 +453,8 @@ Future<void> sendFromMailbox(
   required String subject,
   required String body,
   String? inReplyTo,
+  String? attachmentPath,
+  String? attachmentName,
 }) =>
     client.rpc('send_from_mailbox', params: {
       'p_mailbox_id': mailboxId,
@@ -458,7 +462,34 @@ Future<void> sendFromMailbox(
       'p_subject': subject,
       'p_body': body,
       'p_in_reply_to': inReplyTo,
+      'p_attachment_path': attachmentPath,
+      'p_attachment_name': attachmentName,
     });
+
+/// Put a file where a reply from this mailbox may reference it.
+///
+/// The prefix is the whole of the security here, on both sides: the
+/// bucket policy asks `may_read_mailbox` about it since `0565`, and
+/// `send_from_mailbox` refuses a path that is not under exactly this
+/// mailbox. So the path is built here rather than passed in.
+///
+/// Returns the stored object name, which is what the send call wants.
+Future<String> uploadMailboxAttachment(
+  SupabaseClient client, {
+  required String orgId,
+  required String mailboxId,
+  required String filename,
+  required Uint8List bytes,
+}) async {
+  // Prefixed with the moment rather than overwriting: two replies
+  // attaching `invoice.pdf` an hour apart are two different files, and
+  // the second must not silently become the attachment on the first.
+  final stamp = DateTime.now().toUtc().millisecondsSinceEpoch;
+  final safe = filename.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+  final path = '$orgId/mailbox/$mailboxId/$stamp-$safe';
+  await client.storage.from('attachments').uploadBinary(path, bytes);
+  return path;
+}
 
 /// What came attached to one message.
 ///

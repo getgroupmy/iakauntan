@@ -359,4 +359,130 @@ begin
       where status <> 'approved'), 0::bigint);
 end $$;
 
+-- ---------------------------------------------------------------------
+-- And a reply can carry a file
+-- ---------------------------------------------------------------------
+do $$
+declare
+  f     record;
+  v_row public.email_outbox;
+begin
+  select * into f from fixture;
+  perform pg_temp.sign_in_as(f.owner);
+
+  v_row := public.send_from_mailbox(
+    f.mine, 'customer@example.com', 'Re: About your invoice',
+    'Signed copy attached.', null,
+    format('%s/mailbox/%s/signed.pdf', f.org, f.mine), 'signed.pdf');
+
+  perform pg_temp.check_eq('a reply carries what was attached to it',
+    v_row.attachment_name, 'signed.pdf');
+
+  -- `0109`'s rule on a mailbox. Without the anchor a member could point
+  -- a reply at any object in the company's bucket and mail it out: the
+  -- storage policy governs who may WRITE there, never what a queued
+  -- message may reference.
+  perform pg_temp.check_refused(
+    'and cannot point at somebody else''s mailbox folder',
+    format('select public.send_from_mailbox(%L, %L, %L, %L, null, %L)',
+           f.mine, 'customer@example.com', 'Re:', 'Wrong folder.',
+           format('%s/mailbox/%s/theirs.pdf', f.org, f.theirs)),
+    '%must live under%', '42501');
+
+  perform pg_temp.check_refused(
+    'nor at the rest of the bucket',
+    format('select public.send_from_mailbox(%L, %L, %L, %L, null, %L)',
+           f.mine, 'customer@example.com', 'Re:', 'Wrong folder.',
+           format('%s/sales_documents/%s/invoice.pdf', f.org,
+                  gen_random_uuid())),
+    '%must live under%', '42501');
+
+  -- And not at another company's, which the first segment is what
+  -- stops.
+  perform pg_temp.check_refused(
+    'nor at another company''s bucket',
+    format('select public.send_from_mailbox(%L, %L, %L, %L, null, %L)',
+           f.mine, 'customer@example.com', 'Re:', 'Wrong company.',
+           format('%s/mailbox/%s/x.pdf', gen_random_uuid(), f.mine)),
+    '%must live under%', '42501');
+
+  -- A path with no name falls back to the last segment rather than to
+  -- nothing: a mail client with no filename shows "attachment" and the
+  -- person opening it has to guess.
+  v_row := public.send_from_mailbox(
+    f.mine, 'customer@example.com', 'Re:', 'Here.', null,
+    format('%s/mailbox/%s/quote-9.pdf', f.org, f.mine));
+  perform pg_temp.check_eq('and is named after the file when nobody said',
+    v_row.attachment_name, 'quote-9.pdf');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- And the envelope is as private as the letter
+-- ---------------------------------------------------------------------
+do $$
+declare f record;
+begin
+  select * into f from fixture;
+
+  -- The bucket has read an object's name as `org/table/record/file`
+  -- since `0068` and asked `can_read_attachment` about it. A `mailbox`
+  -- prefix it had never heard of fell through to that function's
+  -- ordinary answer, which for anybody who can write the books is yes
+  -- -- so a file attached to a reply from a personal address would have
+  -- been readable by every colleague while the message it belongs to
+  -- was not. `personal_mailbox.sql` calls that a door with the letter
+  -- behind it and the envelope open.
+  perform pg_temp.sign_in_as(f.clerk);
+  perform pg_temp.check_true('a colleague cannot read what is attached',
+    not app.can_read_attachment(f.org, 'mailbox', f.mine));
+  perform pg_temp.check_true('nor put anything there',
+    not app.can_attach_to(f.org, 'mailbox', f.mine));
+  perform pg_temp.check_true('and can read their own',
+    app.can_read_attachment(f.org, 'mailbox', f.theirs));
+
+  perform pg_temp.sign_in_as(f.owner);
+  perform pg_temp.check_true('its owner can',
+    app.can_read_attachment(f.org, 'mailbox', f.mine));
+  perform pg_temp.check_true('and the company address is the company''s',
+    app.can_read_attachment(f.org, 'mailbox', f.shared));
+  -- The company's owner cannot read a colleague's mail, and the file
+  -- attached to it is the same answer.
+  perform pg_temp.check_true('and not a colleague''s',
+    not app.can_read_attachment(f.org, 'mailbox', f.theirs));
+
+  -- A path naming one company and a mailbox in another would make the
+  -- first segment decoration.
+  perform pg_temp.check_true('the company in the path has to be the right one',
+    not app.can_read_attachment(gen_random_uuid(), 'mailbox', f.mine));
+
+  -- And a segment that is not a uuid reads as nothing rather than
+  -- raising: `uuid_or_null` is how `0068` has always read one.
+  perform pg_temp.check_true('rubbish in the path is not a mailbox',
+    app.uuid_or_null('not-a-uuid') is null);
+  perform pg_temp.check_true('and is refused rather than raising',
+    not app.can_read_attachment(f.org, 'mailbox',
+                                app.uuid_or_null('not-a-uuid')));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Reading is not attaching
+-- ---------------------------------------------------------------------
+do $$
+declare
+  f         record;
+  v_auditor uuid;
+begin
+  select * into f from fixture;
+  select user_id into v_auditor from public.org_members
+   where org_id = f.org and role = 'auditor' limit 1;
+
+  perform pg_temp.sign_in_as(v_auditor);
+  -- An auditor reads the company's mail and does not answer it, so
+  -- they do not put files in its folder either.
+  perform pg_temp.check_true('an auditor reads the shared folder',
+    app.can_read_attachment(f.org, 'mailbox', f.shared));
+  perform pg_temp.check_true('and cannot write to it',
+    not app.can_attach_to(f.org, 'mailbox', f.shared));
+end $$;
+
 rollback;
