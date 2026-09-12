@@ -9,6 +9,7 @@ import '../../core/page_waiting.dart';
 import '../../core/providers.dart';
 import '../../data/reserved_names_repository.dart';
 import '../../data/signup_reference_repository.dart';
+import 'signup_gate.dart';
 import '../../data/site_pages_repository.dart';
 import '../../core/searchable_picker.dart';
 import '../../core/theme.dart';
@@ -530,6 +531,27 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       !_isSignUp &&
       ref.watch(workspaceLookupProvider).valueOrNull?.host ==
           WorkspaceHost.found;
+
+  /// Whether the platform is taking new registrations.
+  ///
+  /// Read rather than awaited, for `_asksEmailFirst`'s reason and with
+  /// a stronger one behind it: this only decides the shape of a form.
+  /// The trigger on `auth.users` is what refuses a registration, so a
+  /// lookup still in flight — or a deployment whose `signup_reference`
+  /// predates `0563` — draws the form and the database still says no.
+  ///
+  /// Open by default, deliberately. Closing registration because a
+  /// query had not answered yet would be the failure of a lookup
+  /// wearing the face of a decision.
+  bool get _signupsOpen =>
+      ref.watch(signupReferenceProvider).valueOrNull?.signupsOpen ?? true;
+
+  /// What to say to somebody who came to register and cannot.
+  String? get _signupsClosedNotice => _signupsOpen
+      ? null
+      : closedNotice(
+          ref.watch(signupReferenceProvider).valueOrNull?.closedMessage,
+        );
 
   /// Ask whether this email has any business here, before taking a
   /// password it may be about to refuse.
@@ -1520,10 +1542,22 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   const SizedBox(height: 12),
                   _Banner(message: _notice!, color: context.colors.success),
                 ],
+                // Said where the button is, rather than instead of the
+                // form. Somebody who arrived here to register has to
+                // read why they cannot, and a page that simply lost its
+                // Create account button reads as a fault.
+                if (_isSignUp && _signupsClosedNotice != null) ...[
+                  const SizedBox(height: 12),
+                  _Banner(
+                    message: _signupsClosedNotice!,
+                    color: context.colors.warning,
+                  ),
+                ],
                 const SizedBox(height: 20),
                 FilledButton(
-                  onPressed:
-                      _busy ? null : (_asksEmailFirst ? _checkEmail : _submit),
+                  onPressed: _busy || (_isSignUp && !_signupsOpen)
+                      ? null
+                      : (_asksEmailFirst ? _checkEmail : _submit),
                   child: _busy
                       ? const SizedBox(
                           height: 20,
@@ -1558,7 +1592,15 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                 // `_isSignUp` is exempt because that half of the button
                 // is the way *back* from the form somebody is already
                 // looking at, and hiding it would strand them.
+                // And not while the platform has stopped taking
+                // registrations. `0563`: the trigger is what refuses
+                // one, and this is so nobody is walked up to a door
+                // that will not open.
                 if (_workspace == null &&
+                    offersRegistration(
+                      signupsOpen: _signupsOpen,
+                      alreadyThere: _isSignUp,
+                    ) &&
                     (_isSignUp || (_brand?.signinShowRegister ?? false))) ...[
                   const SizedBox(height: 12),
                   TextButton(
