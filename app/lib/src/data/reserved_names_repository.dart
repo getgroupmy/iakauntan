@@ -107,11 +107,15 @@ class ReservedNames {
     return rows.isEmpty ? null : rows.first;
   }
 
+  /// `is_personal` and `owner_id` since `0559`. Without them the list
+  /// draws every address as though it were the company's, which is the
+  /// opposite of true for one with somebody's own name on it.
   Future<List<Map<String, dynamic>>> mailboxesFor(String orgId) async =>
       Repo.rows(
         await client
             .from('org_mailboxes')
-            .select('id, local_part, status, requested_at, decided_at, note')
+            .select('id, local_part, status, requested_at, decided_at, note, '
+                'is_personal, owner_id')
             .eq('org_id', orgId)
             .order('requested_at', ascending: true),
       );
@@ -122,10 +126,31 @@ class ReservedNames {
         'p_subdomain': name,
       });
 
-  Future<void> requestMailbox(String orgId, String localPart) => client
-      .rpc('request_mailbox', params: {
+  /// Ask for an address, optionally for one person.
+  ///
+  /// `0559` added the third argument and the app went on sending two,
+  /// so a personal address could not be asked for at all. It is asked
+  /// for WITH its owner rather than claimed afterwards: an approved
+  /// mailbox with nobody on it is one anybody in the company can read
+  /// until somebody remembers to assign it.
+  Future<void> requestMailbox(String orgId, String localPart,
+          {String? ownerId}) =>
+      client.rpc('request_mailbox', params: {
         'p_org_id': orgId,
         'p_local_part': localPart,
+        'p_owner_id': ownerId,
+      });
+
+  /// Move a mailbox to somebody, or back to the company with null.
+  ///
+  /// The door an administrator has instead of reading it: `0559` is
+  /// deliberate that reassignment leaves `owner_id` changed where an
+  /// audit can see it, and reading would leave nothing at all. It had
+  /// no caller until now, so the door existed and had no handle.
+  Future<void> assignMailbox(String mailboxId, String? ownerId) =>
+      client.rpc('assign_mailbox', params: {
+        'p_mailbox_id': mailboxId,
+        'p_owner_id': ownerId,
       });
 
   // -------------------------------------------------------------------

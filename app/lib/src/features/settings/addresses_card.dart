@@ -5,7 +5,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../data/models.dart';
 import '../../data/reserved_names_repository.dart';
+import '../../core/searchable_picker.dart';
+import 'mailbox_owners.dart';
 
 /// The two names a company can reserve on the platform's domain.
 ///
@@ -58,11 +61,24 @@ class AddressesCard extends ConsumerWidget {
 /// it is live and here is the address, somebody is looking at it, or it
 /// was refused and here is why.
 class _Standing extends StatelessWidget {
-  const _Standing({required this.status, required this.address, this.note});
+  const _Standing({
+    required this.status,
+    required this.address,
+    this.note,
+    this.owner,
+    this.trailing,
+  });
 
   final String status;
   final String address;
   final String? note;
+
+  /// Whose it is, for a mailbox. Null on a subdomain, which belongs to
+  /// the company by definition.
+  final String? owner;
+
+  /// The button that moves it, where the person looking may move it.
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -93,15 +109,34 @@ class _Standing extends StatelessWidget {
           Icon(icon, size: 18, color: colour),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              line,
-              style: TextStyle(
-                fontWeight: status == 'approved'
-                    ? FontWeight.w600
-                    : FontWeight.w400,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  line,
+                  style: TextStyle(
+                    fontWeight: status == 'approved'
+                        ? FontWeight.w600
+                        : FontWeight.w400,
+                  ),
+                ),
+                // Said on every mailbox, not only the personal ones.
+                // "Shared with the company" is the fact somebody needs
+                // before they write to a customer from it, and a line
+                // that appears only sometimes is one nobody learns to
+                // look for.
+                if (owner != null)
+                  Text(
+                    owner!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
             ),
           ),
+          if (trailing != null) trailing!,
         ],
       ),
     );
@@ -146,7 +181,9 @@ class _Subdomain extends ConsumerWidget {
                 scope: 'subdomain',
                 label: 'Name you would like',
                 suffix: '.iakauntan.com',
-                submit: (orgId, name) => ref
+                // A subdomain belongs to the company by definition, so
+                // the owner the mailbox form asks for is ignored here.
+                submit: (orgId, name, _) => ref
                     .read(reservedNamesProvider)
                     .requestSubdomain(orgId, name),
                 onDone: () => ref.invalidate(orgSubdomainProvider),
@@ -313,6 +350,11 @@ class _Mailboxes extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final boxes = ref.watch(orgMailboxesProvider);
+    // `0560` made the domain askable rather than a literal, and this
+    // screen was writing it out in two more places.
+    final domain = ref.watch(mailDomainProvider).valueOrNull ?? 'iakauntan.com';
+    final team = ref.watch(teamProvider).valueOrNull ?? const <TeamMember>[];
+    final names = namesById(team);
 
     return AsyncView(
       value: boxes,
@@ -328,25 +370,53 @@ class _Mailboxes extends ConsumerWidget {
           const SizedBox(height: 4),
           const Text(
             'Send and receive at your own name. More than one is fine — '
-            'sales and support are two addresses doing two jobs.',
+            'sales and support are two addresses doing two jobs, and an '
+            'address for one person is read by them and nobody else.',
           ),
           for (final row in rows)
             _Standing(
               status: '${row['status']}',
-              address: '${row['local_part']}@iakauntan.com',
+              address: '${row['local_part']}@$domain',
               note: row['note'] as String?,
+              owner: mailboxOwnerLabel(row, names),
+              trailing: TextButton(
+                onPressed: () => _move(context, ref, row, team),
+                child: Text(handOverLabel(row)),
+              ),
             ),
           _AskFor(
             scope: 'mailbox',
             label: 'Address you would like',
-            suffix: '@iakauntan.com',
-            submit: (orgId, name) =>
-                ref.read(reservedNamesProvider).requestMailbox(orgId, name),
+            suffix: '@$domain',
+            owners: mailboxOwnerCandidates(team),
+            submit: (orgId, name, ownerId) => ref
+                .read(reservedNamesProvider)
+                .requestMailbox(orgId, name, ownerId: ownerId),
             onDone: () => ref.invalidate(orgMailboxesProvider),
           ),
         ],
       ),
     );
+  }
+
+  /// Hand an address to somebody, or give it back to the company.
+  ///
+  /// The door an administrator has instead of reading somebody's mail.
+  /// It is refused for anybody who is not one, by `assign_mailbox` and
+  /// not by this screen — the button is drawn for everybody and the
+  /// refusal is shown, because hiding it would leave an owner wondering
+  /// why their own address cannot be moved.
+  Future<void> _move(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic> row,
+    List<TeamMember> team,
+  ) async {
+    final moved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _HandOver(row: row, team: team),
+    );
+    if (moved == true) ref.invalidate(orgMailboxesProvider);
   }
 }
 
@@ -362,13 +432,19 @@ class _AskFor extends ConsumerStatefulWidget {
     required this.suffix,
     required this.submit,
     required this.onDone,
+    this.owners = const [],
   });
 
   final String scope;
   final String label;
   final String suffix;
-  final Future<void> Function(String orgId, String name) submit;
+  final Future<void> Function(String orgId, String name, String? ownerId)
+      submit;
   final VoidCallback onDone;
+
+  /// The people this address could belong to. Empty for a subdomain,
+  /// which belongs to the company by definition.
+  final List<TeamMember> owners;
 
   @override
   ConsumerState<_AskFor> createState() => _AskForState();
@@ -379,6 +455,10 @@ class _AskForState extends ConsumerState<_AskFor> {
   List<Map<String, dynamic>> _reserved = const [];
   String? _problem;
   bool _busy = false;
+
+  /// Null is the company's own address, which is what `sales@` and
+  /// `support@` are and what every address was before `0559`.
+  String? _ownerId;
 
   @override
   void initState() {
@@ -418,8 +498,9 @@ class _AskForState extends ConsumerState<_AskFor> {
       _problem = null;
     });
     try {
-      await widget.submit(orgId, normalizeName(_controller.text));
+      await widget.submit(orgId, normalizeName(_controller.text), _ownerId);
       _controller.clear();
+      setState(() => _ownerId = null);
       widget.onDone();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -439,9 +520,7 @@ class _AskForState extends ConsumerState<_AskFor> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: Space.md),
-      child: Row(
+    final field = Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
@@ -469,7 +548,149 @@ class _AskForState extends ConsumerState<_AskFor> {
             ),
           ),
         ],
+    );
+
+    if (widget.owners.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: Space.md),
+        child: field,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: Space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          field,
+          const SizedBox(height: Space.md),
+          // Asked here rather than afterwards, and that is `0559`'s
+          // reasoning rather than a layout choice: an approved mailbox
+          // with nobody on it is one everybody in the company can read
+          // until somebody remembers to assign it.
+          SearchablePicker<String>(
+            label: 'Whose address is this?',
+            value: _ownerId,
+            allowEmpty: true,
+            emptyLabel: 'The company — anybody here can read it',
+            enabled: !_busy,
+            options: [
+              for (final m in widget.owners)
+                PickerOption(
+                  value: m.userId!,
+                  label: memberLabel(m),
+                  sublabel: 'Only they can read it',
+                  keywords: [if (m.email != null) m.email!],
+                ),
+            ],
+            onChanged: (v) => setState(() => _ownerId = v),
+          ),
+        ],
       ),
     );
+  }
+}
+
+/// Moving an address to somebody, or back to the company.
+///
+/// A dialog rather than a menu, because one of the two directions is
+/// not reversible in the way people assume: giving a personal mailbox
+/// back to the company makes every message already in it readable by
+/// every member, and that is worth a sentence and a second press.
+class _HandOver extends ConsumerStatefulWidget {
+  const _HandOver({required this.row, required this.team});
+
+  final Map<String, dynamic> row;
+  final List<TeamMember> team;
+
+  @override
+  ConsumerState<_HandOver> createState() => _HandOverState();
+}
+
+class _HandOverState extends ConsumerState<_HandOver> {
+  late String? _ownerId = widget.row['owner_id'] as String?;
+  bool _busy = false;
+  String? _problem;
+
+  @override
+  Widget build(BuildContext context) {
+    final candidates = mailboxOwnerCandidates(widget.team);
+
+    return AlertDialog(
+      title: Text('${widget.row['local_part']}'),
+      content: SizedBox(
+        width: 460,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SearchablePicker<String>(
+              label: 'Whose address is this?',
+              value: _ownerId,
+              allowEmpty: true,
+              emptyLabel: 'The company — anybody here can read it',
+              enabled: !_busy,
+              options: [
+                for (final m in candidates)
+                  PickerOption(
+                    value: m.userId!,
+                    label: memberLabel(m),
+                    sublabel: 'Only they can read it',
+                    keywords: [if (m.email != null) m.email!],
+                  ),
+              ],
+              onChanged: (v) => setState(() => _ownerId = v),
+            ),
+            const SizedBox(height: Space.md),
+            Text(
+              handOverWarning(_ownerId),
+              style: TextStyle(
+                fontSize: 12,
+                color: context.scheme.onSurfaceVariant,
+              ),
+            ),
+            if (_problem != null) ...[
+              const SizedBox(height: Space.md),
+              Text(
+                _problem!,
+                style: TextStyle(color: context.colors.danger),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _save,
+          child: Text(_busy ? 'Moving…' : 'Move it'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _save() async {
+    setState(() {
+      _busy = true;
+      _problem = null;
+    });
+    try {
+      await ref
+          .read(reservedNamesProvider)
+          .assignMailbox('${widget.row['id']}', _ownerId);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      // `assign_mailbox` refuses anybody who is not an owner or
+      // administrator, and says so in words written to be read.
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _problem = e is PostgrestException ? e.message : '$e';
+        });
+      }
+    }
   }
 }
