@@ -100,9 +100,6 @@ KNOWN_UNDRAWN = {
     'loyaltyAccountBalanceProvider':
         "a customer's points balance. The loyalty screen refreshes it "
         'after every change and shows it nowhere.',
-    'stockAdjustmentsProvider':
-        'what was written off or found. The stock take screen '
-        'refreshes it and never shows the history.',
 }
 
 EXEMPT_PROVIDERS: dict[str, str] = dict(KNOWN_UNDRAWN)
