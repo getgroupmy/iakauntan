@@ -7828,8 +7828,32 @@ repository method behind each has no other caller either, so the data
 is not reachable by any route. Somebody built each one, wired the
 invalidate into a screen, and never drew it.
 
-**It is a ratchet.** Those four are named in `KNOWN_UNDRAWN` with their
-reasons, the way `check_blind_catches.py` carries a budget, so a fifth
-fails the build while these four wait. Take one off the list when you
-draw it. `sstDueProvider` is the one to draw first: a statutory
-deadline nobody can see is a deadline nobody meets.
+**It is a ratchet.** Those four were named in `KNOWN_UNDRAWN` with
+their reasons, the way `check_blind_catches.py` carries a budget, so a
+fifth failed the build while these four waited.
+
+### The ratchet is now empty
+
+All four were drawn, in the order a shop would miss them:
+
+| Provider | Where it is now drawn |
+|---|---|
+| `sstDueProvider` | the alert at the top of the SST returns card |
+| `pdcMaturingProvider` | the worklist above the cheque register |
+| `stockAdjustmentsProvider` | "Recent counts" under the stock take sheet |
+| `loyaltyAccountBalanceProvider` | the member panel, with the dormancy |
+
+`sstDueProvider` went first because a statutory deadline nobody can see
+is a deadline nobody meets. The other three turned out to be the same
+shape of failure with the money in a different place: a cheque past its
+date and not banked; a count posted and then gone from the app; a
+points balance whose dormancy the sweep on that very screen acts on and
+which the screen could not show.
+
+Each is a pure function plus a widget, so the wording is asserted
+without a widget test having to reach a database — which is also what
+made them cheap enough to do in one pass.
+
+The list stays empty. A name added back here is an argument somebody
+has to make in writing, in `scripts/check_unreachable.py`, beside four
+entries that were each closed rather than kept.

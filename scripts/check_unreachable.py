@@ -86,21 +86,26 @@ EXEMPT_METHODS = {
 # A ratchet, not an exemption. `check_blind_catches.py` uses the same
 # shape and says why: "the number should go DOWN rather than up".
 #
-# Each of these four is declared, invalidated by exactly one screen,
-# and watched by nobody — the `bankTransfersProvider` specimen, four
-# times over. None is the "screen reads it directly" case either: the
-# repository method behind each has no other caller, so the data is not
-# reachable by any route. Somebody built each one, wired the
+# It started at four. Each was declared, invalidated by exactly one
+# screen, and watched by nobody — the `bankTransfersProvider` specimen,
+# four times over. None was the "screen reads it directly" case: the
+# repository method behind each had no other caller either, so the data
+# was not reachable by any route. Somebody built each one, wired the
 # invalidate, and never drew it.
 #
-# They are named rather than fixed in the same commit because the guard
-# is the point: with them named, no FIFTH one can be added. Take one
-# off this list when you draw it.
-KNOWN_UNDRAWN = {
-    'loyaltyAccountBalanceProvider':
-        "a customer's points balance. The loyalty screen refreshes it "
-        'after every change and shows it nowhere.',
-}
+# They were named rather than fixed in the same commit because the
+# guard was the point: with them named, no fifth could be added. Then
+# they were drawn, in the order a shop would miss them —
+#
+#   sstDueProvider              -> the alert on the SST returns card
+#   pdcMaturingProvider         -> the worklist above the cheque register
+#   stockAdjustmentsProvider    -> "Recent counts" on the stock take
+#   loyaltyAccountBalanceProvider -> the member panel, with dormancy
+#
+# — and the list is empty. It stays empty. A name added back here is an
+# argument somebody has to make in writing, in this file, next to four
+# entries that were each closed rather than kept.
+KNOWN_UNDRAWN: dict[str, str] = {}
 
 EXEMPT_PROVIDERS: dict[str, str] = dict(KNOWN_UNDRAWN)
 
@@ -214,6 +219,8 @@ def main() -> int:
           f'{len(KNOWN_UNDRAWN)} providers known undrawn)')
     if KNOWN_UNDRAWN:
         print('     still to draw: ' + ', '.join(sorted(KNOWN_UNDRAWN)))
+    else:
+        print('     nothing is declared and undrawn')
     return 0
 
 
