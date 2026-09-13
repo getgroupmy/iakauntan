@@ -18,7 +18,15 @@ supabase/
   migrations/         Schema, RLS, business logic, reports  (0001 … 0221)
   tests/              SQL assertions, run in CI on a throwaway stack
   functions/          Deno edge functions (MyInvois, email, OCR, push, …)
+docs/api/             The HTTP surface, generated from the catalog
 ```
+
+**The API is described in `docs/api/`.** `openapi.json` and `llms.txt`
+cover every function and table a tenant's own token can reach — 662 and
+329 of them — and both are generated from `pg_proc` by
+`scripts/generate_api_description.py` and checked against the schema in
+CI, so neither can drift from what the database will actually do.
+Do not edit them by hand.
 
 **Supabase project:** `ewwcgtnniwqndrzukksm` (`iakauntan`, ap-northeast-2)
 All migrations and the edge function are already deployed there.

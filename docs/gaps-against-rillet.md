@@ -62,8 +62,8 @@ of publishing an ERP's API, and iAkauntan publishes nothing:
 
 | Artifact | Rillet | iAkauntan |
 |---|---|---|
-| OpenAPI description | 30 documents | none |
-| `llms.txt` | yes | none |
+| OpenAPI description | 30 documents | one, generated — `docs/api/` |
+| `llms.txt` | yes | yes, generated — `docs/api/` |
 | MCP server | official, OAuth 2.0 + PKCE | none |
 | `.well-known/` discovery | yes | none |
 | Documented error format | RFC 9457 `problem+json` | none |
@@ -223,6 +223,35 @@ asserted in
 `supabase/tests/transfer.sql`; the arithmetic in
 `supabase/tests/revenue_recognition.sql`.
 
-**2 and 4 are untouched.** The API surface is still undescribed, and
-contracts and usage billing are still a product decision nobody has
-made.
+**2. Describing the surface — done.** `docs/api/openapi.json` and
+`docs/api/llms.txt` describe every function and table a tenant's own
+token reaches: 662 functions, 19 of them open to `anon`, and 329
+readable tables. Both are generated from `pg_proc` by
+`scripts/generate_api_description.py` and checked against the applied
+schema in CI, which is the whole point — a description maintained by
+hand drifts, and a drifted description is believed.
+
+Three decisions in it worth naming, because each was a choice rather
+than a default:
+
+- **Functions granted only to `service_role` are left out.** They are
+  reachable solely by the secret key, which never leaves the edge
+  functions and the workflows, so a map of them helps nobody building
+  against this and is a list of the most dangerous entry points in the
+  system.
+- **Enum labels are published.** They are the most useful thing in the
+  document: a caller guessing at a status gets 22P02 from Postgres and
+  no list of what would have been accepted. There are 243 such lists.
+- **Reachability is asked of the door, not of the ACL.** The surface is
+  what `has_function_privilege` says anon or authenticated can execute,
+  not what `proacl` names, because a grant to PUBLIC reaches anon and
+  appears in the ACL as grantee 0. The two agree today only because
+  `0165`'s event trigger strips PUBLIC — so reading the ACL would be
+  right by accident.
+
+**4 is untouched.** Contracts and usage billing are still a product
+decision nobody has made.
+
+The MCP server this page argued against is now a smaller question than
+it was: its two preconditions, idempotent writes and a described
+surface, both exist.

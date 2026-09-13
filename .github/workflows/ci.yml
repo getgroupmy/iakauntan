@@ -512,6 +512,21 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/check_embeds.py "$DB"
 
+      # `docs/api/` describes 662 functions and 329 tables that Supabase
+      # has been serving to any holder of a tenant's token since the
+      # first migration. The API was never missing -- it was
+      # undescribed, which is worse, because it is reachable either way.
+      #
+      # A description maintained by hand is a description that drifts,
+      # and a drifted one is believed. So it is generated from `pg_proc`
+      # and checked here: add a function, change an argument's default,
+      # grant something to anon, and this fails until the description is
+      # regenerated and committed.
+      - name: Check the API description still matches the schema
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/generate_api_description.py "$DB" --check
+
       # One level below the embeds, and the same string literal. The
       # screen that declares an employee's TP1 reliefs filtered
       # `statutory_schedules` on `schedule_type`, which this schema has
@@ -913,6 +928,16 @@ jobs:
       # lockfile reader that parses nothing.
       - name: The audit's own assertions
         run: python3 scripts/dependency_audit_test.py
+
+      # The generator's output is published: it is what somebody
+      # building against this database will believe. A description that
+      # is merely absent costs an hour; one that is confidently wrong
+      # costs a day and is not doubted until late. Its parsers have
+      # already been wrong three times -- enums resolving to nothing,
+      # `numeric(12,2)` read as two columns, and an optional argument
+      # called required -- and each is pinned.
+      - name: The API description generator's own assertions
+        run: python3 scripts/generate_api_description_test.py
 
       - name: Pins, and every published advisory against them
         run: python3 scripts/dependency_audit.py

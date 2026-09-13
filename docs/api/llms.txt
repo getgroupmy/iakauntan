@@ -1,0 +1,1155 @@
+# iAkauntan
+
+> Accounting, CRM, HR and payroll, corporate secretarial and LHDN
+> e-Invoice for Malaysian businesses. The HTTP surface is
+> PostgREST over Postgres: every endpoint below is a function or a
+> table in one database, and the authorization is that database's
+> own row-level security rather than a layer in front of it.
+
+Schema version `0568` (the highest applied migration).
+662 functions and 329 readable tables, of which
+254 functions only read.
+
+Generated from the catalog by
+`scripts/generate_api_description.py` and checked in CI, so this
+file cannot drift from what the database will actually do.
+
+**224 of 662 functions carry a `comment on
+function`**, and those are the only ones described here in
+words. The rest show their name, their arguments and their
+types, which is what the catalog knows about them. A function
+with no line of prose here is not a function that does nothing
+surprising — it is one nobody has written down yet, and the
+name is a worse guide than it looks.
+
+## Before anything else
+
+- **Base URL** `https://<project>.supabase.co/rest/v1`. Functions
+  are `POST /rpc/<name>` with a JSON object of the named
+  arguments; tables are `GET /<table>` with PostgREST's query
+  syntax.
+- **Two headers, both needed.** `apikey` is the project's anon
+  key and grants nothing on its own. `Authorization: Bearer
+  <token>` is the signed-in user, and it is what every policy
+  reads. The service role key bypasses RLS entirely and belongs
+  only in server-side code.
+- **A company is an argument, not a session.** Most functions take
+  `p_org_id` or `p_org`. A company you are not a member of is a
+  42501, never an empty list.
+- **A refusal is the rule speaking.** 42501 messages are written
+  to be shown to a person. Do not paraphrase them; the guard
+  knows why it said no and a paraphrase drifts.
+- **Writes that must not repeat take a key.** See the idempotency
+  overloads below.
+
+## Idempotent writes
+
+Four money writes have an overload whose first argument is
+`p_idempotency_key`. A retry with the same key returns the first
+call's answer; the same key with different arguments is refused
+rather than quietly answered. The key has no default, because a
+call that omits one merely-optional argument would otherwise
+resolve to the unprotected original and return a plausible id.
+
+- `create_contra`
+- `create_deposit`
+- `post_manual_journal`
+- `record_pdc`
+
+## Reachable without signing in
+
+19 functions are granted to `anon`. Everything else
+needs a user token.
+
+- `corp_decline_with_link`
+- `corp_open_signing_link`
+- `corp_sign_with_link`
+- `landing_page`
+- `maintenance_notice`
+- `may_sign_in_here`
+- `open_customer_portal`
+- `open_shared_document`
+- `open_shared_ticket`
+- `place_public_pos_order`
+- `portal_document_token`
+- `public_pos_menu`
+- `public_pos_menu_modifiers`
+- `reply_to_shared_ticket`
+- `report_failed_sign_in`
+- `shared_payment_options`
+- `signup_reference`
+- `site_pages`
+- `workspace_by_host`
+
+## The functions, by module
+
+### accounting (12)
+
+Refused unless the company has the `accounting` module switched on and the caller may use it.
+
+- `archive_budget(p_id uuid)` *(writes)*
+- `budget_lines_for(p_budget uuid)`
+- `budgets_list(p_org uuid)`
+- `build_budget_from_actual(p_budget uuid, p_from_year uuid, p_uplift_percent numeric)` *(writes)* — Fills a draft budget from a previous year's actuals, period by period, with an optional uplift.
+- `cash_forecast_detail(p_org uuid, p_from date, p_to date, p_use_history boolean)`
+- `cash_forecast_items_list(p_org uuid)`
+- `report_budget_vs_actual(p_budget uuid, p_from_period integer, p_to_period integer)` — What happened, what was supposed to, and whether the difference is good news.
+- `report_cash_forecast(p_org uuid, p_weeks integer, p_use_history boolean)` — Thirteen weeks of cash by default, from what the bank holds now plus what is expected in and out.
+- `retire_cash_forecast_item(p_id uuid)` *(writes)*
+- `set_budget_lines(p_budget uuid, p_lines jsonb)` *(writes)*
+- `upsert_budget(p_id uuid, p_org uuid, p_year uuid, p_name text, p_department text, p_notes text)` *(writes)*
+- `upsert_cash_forecast_item(p_id uuid, p_org uuid, p_direction text, p_description text, p_amount numeric, p_expected_on date, p_recurrence text, p_until date, p_notes text)` *(writes)*
+
+### crm (1)
+
+Refused unless the company has the `crm` module switched on and the caller may use it.
+
+- `report_pipeline_quote_mismatch(p_org uuid)` — Open deals whose figure no longer matches the quotation they are attached to.
+
+### einvoice (2)
+
+Refused unless the company has the `einvoice` module switched on and the caller may use it.
+
+- `consolidate_pos_einvoices(p_org uuid, p_month date)` *(writes)* — Rolls a month of anonymous counter sales into one consolidated e-Invoice, due seven days after month end.
+- `pos_einvoice_outstanding(p_org uuid)`
+
+### fixed_assets (1)
+
+Refused unless the company has the `fixed_assets` module switched on and the caller may use it.
+
+- `report_uncapitalised_purchases(p_org uuid, p_as_at date)` — Posted bill lines coded to a fixed asset account with no asset in the register against them — the reconciliation an auditor opens with, which the data could not answer.
+
+### forecasting (3)
+
+Refused unless the company has the `forecasting` module switched on and the caller may use it.
+
+- `create_po_from_suggestions(p_org uuid, p_lines jsonb, p_expected_date date, p_warehouse uuid)` *(writes)* — Turns the latest run for this location into one draft purchase order per supplier, ordering the stock into the place that is short of it.
+- `forecast_suggestions(p_org uuid, p_warehouse uuid)` — What the latest run for this organization and location says to order, with the item and supplier named and any draft orders already raised netted off.
+- `run_inventory_forecast(p_org uuid, p_warehouse uuid, p_as_of date)` *(writes)* — Forecasts every stocked item and records what it decided.
+
+### inventory (26)
+
+Refused unless the company has the `inventory` module switched on and the caller may use it.
+
+- `bundle_availability(p_item uuid, p_warehouse uuid)`
+- `bundle_margin(p_item uuid)`
+- `cancel_landed_cost_run(p_run uuid)` *(writes)*
+- `cancel_stock_transfer(p_id uuid)` *(writes)*
+- `delete_item_conversion(p_id uuid)` *(writes)*
+- `delete_item_uom_pack(p_item uuid, p_uom text)` *(writes)*
+- `item_bundle_for(p_item uuid)`
+- `item_bundles_list(p_org uuid)`
+- `item_conversion_outputs_for(p_conversion uuid)`
+- `item_conversions_list(p_org uuid)`
+- `item_uom_options(p_item uuid)`
+- `item_variant_matrix(p_parent uuid)`
+- `landed_cost_preview(p_run uuid)`
+- `landed_cost_runs_list(p_org uuid, p_status text)`
+- `post_landed_cost_run(p_run uuid)` *(writes)* — Puts a run's charges onto the cost of the goods that are still on the shelf, and takes the same money back off the accounts they were coded to.
+- `receive_stock_transfer(p_id uuid, p_counts jsonb)` *(writes)*
+- `run_item_conversion(p_conversion uuid, p_times numeric, p_warehouse uuid)` *(writes)*
+- `send_stock_transfer(p_id uuid)` *(writes)*
+- `set_item_weighed(p_item uuid, p_weighed boolean, p_plu text)` *(writes)*
+- `stock_transfer_lines_for(p_transfer uuid)`
+- `stock_transfers_list(p_org uuid, p_status app.stock_transfer_status)`
+- `upsert_item_bundle(p_org uuid, p_item uuid, p_lines jsonb, p_notes text, p_active boolean)` *(writes)* — Defines what a bundle is made of.
+- `upsert_item_conversion(p_id uuid, p_org uuid, p_code text, p_name text, p_item uuid, p_qty numeric, p_uom text, p_outputs jsonb, p_active boolean)` *(writes)*
+- `upsert_item_uom_pack(p_item uuid, p_uom text, p_qty numeric)` *(writes)*
+- `upsert_landed_cost_run(p_id uuid, p_org uuid, p_date date, p_bills jsonb, p_charges jsonb, p_notes text)` *(writes)*
+- `upsert_stock_transfer(p_id uuid, p_org uuid, p_from uuid, p_to uuid, p_date date, p_lines jsonb, p_notes text)` *(writes)*
+
+### legal (2)
+
+Refused unless the company has the `legal` module switched on and the caller may use it.
+
+- `check_matter_conflict(p_org uuid, p_client uuid, p_opposing_party text)` — Both directions of a professional conflict: files where the firm acts for the proposed opposing party, and files where it has acted against the proposed client.
+- `report_matters_over_agreed_fee(p_org uuid)` — Fixed-fee matters where billed plus unbilled time has passed the agreed fee.
+
+### loyalty (11)
+
+Refused unless the company has the `loyalty` module switched on and the caller may use it.
+
+- `adjust_loyalty_points(p_account uuid, p_points integer, p_note text)` *(writes)*
+- `enrol_loyalty_member(p_contact uuid, p_card_no text)` *(writes)*
+- `expire_loyalty_points(p_org uuid)` *(writes)*
+- `loyalty_account_balance(p_contact uuid)`
+- `loyalty_lookup(p_org uuid, p_query text)` — Finds a member from a card number, a phone or part of a name.
+- `loyalty_member_tier(p_account uuid)` — Which tier an account is in, what it earned to get there, and how many points short of the next one — the sentence a cashier reads out.
+- `loyalty_tiers_admin(p_org uuid)` — Every tier a company has, retired ones included, with how many members are actually sitting in each — which is how a shop finds out whether Gold means anything.
+- `pos_sale_member(p_sale uuid)` — Who is on a bill, what they hold, what this bill is already redeeming and what paying it would earn.
+- `redeem_loyalty_points(p_sale uuid, p_points integer)` *(writes)*
+- `retire_loyalty_tier(p_tier uuid)` *(writes)*
+- `upsert_loyalty_tier(p_program uuid, p_code text, p_name text, p_min_points integer, p_multiplier numeric, p_id uuid, p_is_active boolean)` *(writes)*
+
+### memberships (5)
+
+Refused unless the company has the `memberships` module switched on and the caller may use it.
+
+- `cover_line_with_membership(p_line uuid, p_subscription uuid)` *(writes)*
+- `membership_balance(p_subscription uuid)`
+- `membership_billing_gaps(p_org uuid)` — Active memberships with no renewal schedule behind them.
+- `set_membership_status(p_subscription uuid, p_status app.pos_membership_status)` *(writes)*
+- `start_membership(p_sale uuid, p_membership uuid)` *(writes)*
+
+### pos (124)
+
+Refused unless the company has the `pos` module switched on and the caller may use it.
+
+- `add_line_free_modifier(p_line uuid, p_group uuid, p_name text, p_price_delta numeric, p_quantity integer)` *(writes)* — Puts an answer nobody listed onto a line: a name and a price typed at the counter, snapshotted like any other.
+- `add_line_modifier(p_line uuid, p_modifier uuid, p_quantity integer)` *(writes)*
+- `add_pos_sale_line(p_sale uuid, p_item uuid, p_quantity numeric, p_price numeric, p_discount numeric, p_note text)` *(writes)*
+- `apply_pos_coupon(p_sale uuid, p_code text)` *(writes)* — Attaches a voucher to a parked bill, refusing a code that does not qualify rather than attaching it inert.
+- `assign_pos_delivery(p_delivery uuid, p_driver uuid)` *(writes)* — Puts a run on a driver's list, or moves it to another one.
+- `begin_pos_count(p_shift uuid)` *(writes)* — Stops the till while the drawer is counted.
+- `book_appointment(p_provider uuid, p_item uuid, p_starts_at timestamp with time zone, p_contact uuid, p_note text)` *(writes)*
+- `bump_kitchen_ticket(p_ticket uuid, p_status app.pos_ticket_status)` *(writes)*
+- `check_in_booking(p_booking uuid, p_register uuid)` *(writes)*
+- `claim_pos_sale(p_sale uuid, p_register uuid)` *(writes)* — Moves an open bill onto this till, register and shift together, so the drawer that takes the money is the drawer it counts against.
+- `clear_pos_delivery(p_sale uuid)` *(writes)* — Takes the address and the fee back off a parked bill.
+- `close_pos_shift(p_shift uuid, p_declared numeric, p_notes text)` *(writes)* — Counts a drawer out.
+- `complete_kiosk_order(p_sale uuid, p_tender uuid, p_amount numeric, p_reference text)` *(writes)*
+- `complete_pos_sale(p_sale uuid, p_tenders jsonb, p_contact uuid)` *(writes)* — Settles a parked sale: raises and posts the invoice, writes and posts a receipt for whatever was actually paid, records the tenders and awards the points.
+- `delete_pos_recipe(p_recipe uuid)` *(writes)*
+- `delete_pos_report(p_id uuid)` *(writes)*
+- `delete_scale_format(p_id uuid)` *(writes)*
+- `ingest_offline_sales(p_register uuid, p_sales jsonb)` *(writes)* — Lands a batch of sales rung up with no signal.
+- `item_modifier_group_ids(p_item uuid)` — Which questions a dish is currently sold with, retired ones included, so the editor shows what is actually attached.
+- `item_modifier_options(p_item uuid)` — What can be asked about a dish: the questions attached to it, their rules, whether each takes an answer that is not listed, and the answers that are.
+- `join_pos_queue(p_outlet uuid, p_party integer, p_name text, p_phone text, p_note text)` *(writes)* — Puts a party in the line and hands back their number, what they were told to expect, and how many are in front of them.
+- `kiosk_order_board(p_outlet uuid)` — Order numbers still waiting, and whether they are being made or ready.
+- `kitchen_display(p_station uuid)` — Open tickets at one station, oldest first — the only ordering a kitchen cares about is who has been waiting longest.
+- `merge_pos_sales(p_into uuid, p_from uuid)` *(writes)*
+- `merge_pos_table(p_table uuid)` *(writes)* — Puts a split table back together.
+- `move_pos_sale(p_sale uuid, p_table uuid)` *(writes)*
+- `name_pos_sale_customer(p_sale uuid, p_contact uuid)` *(writes)* — Puts a customer on a parked sale, which is what loyalty redemption reads.
+- `open_pos_sale(p_register uuid, p_contact uuid, p_client_uuid uuid)` *(writes)*
+- `open_pos_shift(p_register uuid, p_float numeric, p_notes text)` *(writes)* — Opens a drawer with a counted float.
+- `pos_day_board(p_org uuid, p_date date)` — One row per outlet for a trading day: bills, gross, cash and non-cash taken, average bill, what was written off — and how many bills are open right now, which is the one column on a different clock.
+- `pos_day_sheet(p_outlet uuid, p_date date)` — One row per provider per booking for a day, and one row with nulls for a provider with an empty diary.
+- `pos_delivery_board(p_outlet uuid)` — Every run at this outlet that has not landed, oldest first, with minutes waiting computed on the server so two devices cannot show two different boards.
+- `pos_delivery_day(p_org uuid, p_date date)` — One day of delivering, per outlet: what went out, what came back, what the rides earned and how many were given away free.
+- `pos_delivery_for(p_sale uuid)` — Where this bill is going, what the ride costs and who has it — with the shortfall sentence, so the till can say what is wrong while the customer is still on the phone.
+- `pos_delivery_zones_admin(p_org uuid)`
+- `pos_discount_summary(p_org uuid, p_from date, p_to date)` — What was discounted, by whom, on which day and in which shop.
+- `pos_driver_runs(p_org uuid, p_date date)` — What each driver carried on one trading day, in Asia/Kuala_Lumpur.
+- `pos_drivers_admin(p_org uuid)`
+- `pos_even_split(p_sale uuid, p_ways integer)` — Equal shares of one bill that sum to it exactly, remainder on the first.
+- `pos_floor_plan(p_outlet uuid)` — The dining room as it stands: every table, and every bill open on one.
+- `pos_item_availability(p_outlet uuid)` — What the till should do with each dish that has a recipe: how many are left, and whether a stop or a schedule refuses it before the count does.
+- `pos_item_portions(p_outlet uuid)` — How many more of each dish this outlet can make: the smallest number any required ingredient can still make, less what parked bills have already promised.
+- `pos_line_modifier_gaps(p_sale uuid)` — Required choices nobody has made yet, per line.
+- `pos_lookup_item(p_outlet uuid, p_code text)` — Resolves a scan or a typed search to sellable items.
+- `pos_menu(p_outlet uuid)` — Everything an outlet can sell, with whether it is offered right now, why not, how many more the kitchen can make, and whether it is sold by weight.
+- `pos_menu_links_admin(p_org uuid)`
+- `pos_menu_schedules_admin(p_org uuid)` — Every schedule a company has written, with how many dishes are on it and whether it is open right now — which is the question somebody opens the screen to answer.
+- `pos_modifier_groups_admin(p_org uuid)` — Every modifier group a company has, retired ones included, with how many answers it holds, how many dishes ask it, and whether it takes an answer that is not on the list.
+- `pos_modifier_options_admin(p_group uuid)` — The answers to one modifier group, retired ones last, for the screen that edits them.
+- `pos_offline_problems(p_org uuid)` — Sales a device took that the server could not accept.
+- `pos_open_orders(p_outlet uuid)` — Every bill still open in an outlet, whichever till holds it.
+- `pos_promotions_admin(p_org uuid)` — Every promotion a company has written, retired ones included, with how many bills used it and what it gave away.
+- `pos_queue(p_outlet uuid)` — Everyone still in the line at this outlet today, in arrival order, with minutes waited computed on the server so two devices with different clocks cannot show two different queues.
+- `pos_queue_day(p_org uuid, p_date date)` — What the line did on one day, per outlet.
+- `pos_receipt_settings_for(p_outlet uuid)` — What this outlet prints, defaults included.
+- `pos_receipt_text(p_sale uuid)` — The receipt as plain text, wrapped to the outlet's paper width.
+- `pos_recent_sale(p_outlet uuid)` — The last bill this outlet settled.
+- `pos_recipe_lines_for(p_recipe uuid)`
+- `pos_recipe_requirement(p_item uuid, p_qty numeric)`
+- `pos_recipes_list(p_org uuid)`
+- `pos_report_headers(p_report uuid)`
+- `pos_reports_list(p_org uuid)`
+- `pos_sale_promotions_on(p_sale uuid)` — What is on this bill and what each took off, including coupons that currently qualify for nothing and the reason why.
+- `pos_sales_by_channel(p_org uuid, p_from date, p_to date)` — Completed sales split by how the order arrived — how much of Friday was delivery, whether the dining room is worth the seats.
+- `pos_scan_serial(p_line uuid, p_serial text)` *(writes)* — Scan one serial onto a till line, checked while the customer is still at the counter.
+- `pos_stall_settlements_list(p_outlet uuid)`
+- `pos_stall_takings(p_outlet uuid, p_from date, p_to date)` — What each stall sold over a period and what it is owed.
+- `pos_stalls_list(p_outlet uuid)`
+- `pos_station_routing(p_outlet uuid)` — Every sellable item, the counter it goes to, and which of the three rules decided that — the dish, its category, or the outlet default.
+- `pos_stopped_items(p_outlet uuid)`
+- `pos_table_by_code(p_outlet uuid, p_code text)` — The table a scanned card, QR sticker or typed code names, with how many bills are already open on it.
+- `pos_unscan_serial(p_line uuid, p_serial text)` *(writes)* — Take a mis-scanned serial back off a till line.
+- `pos_void_summary(p_org uuid, p_from date, p_to date)`
+- `pos_voided_bills(p_org uuid, p_from date, p_to date)` — The bills written off in a period: what each came to, why, and who.
+- `refresh_pos_sale_promotions(p_sale uuid)` *(writes)*
+- `remove_line_modifier(p_line_modifier uuid)` *(writes)*
+- `remove_pos_sale_line(p_line uuid)` *(writes)* — Takes an unsent line off a parked bill.
+- `remove_pos_sale_promotion(p_row uuid)` *(writes)*
+- `request_einvoice_for_sale(p_sale uuid, p_contact uuid)` *(writes)* — The customer who asks after paying.
+- `resume_pos_item(p_outlet uuid, p_item uuid)` *(writes)*
+- `resume_pos_shift(p_shift uuid)` *(writes)* — Puts a counting till back into service.
+- `retire_kitchen_station(p_station uuid)` *(writes)*
+- `retire_pos_delivery_zone(p_id uuid)` *(writes)*
+- `retire_pos_driver(p_id uuid)` *(writes)* — Stands a driver down.
+- `retire_pos_menu_link(p_id uuid)` *(writes)*
+- `retire_pos_menu_schedule(p_schedule uuid)` *(writes)*
+- `retire_pos_modifier(p_modifier uuid)` *(writes)* — Takes one answer off the menu without deleting it, so what was ordered on it stays answerable.
+- `retire_pos_modifier_group(p_group uuid)` *(writes)* — Stops a question being asked, and says how many dishes that affects.
+- `retire_pos_promotion(p_promo uuid)` *(writes)*
+- `route_category_to_station(p_category uuid, p_outlet uuid, p_station uuid)` *(writes)*
+- `route_item_to_station(p_item uuid, p_outlet uuid, p_station uuid)` *(writes)*
+- `run_pos_report(p_report uuid, p_from date, p_to date)` — Runs a saved report and returns one row per group: the dimension values as text, the measures as numbers, both in the order the report declared.
+- `scale_formats_list(p_org uuid)`
+- `seat_table(p_register uuid, p_table uuid, p_covers integer)` *(writes)*
+- `send_order_to_kitchen(p_sale uuid)` *(writes)*
+- `set_booking_status(p_booking uuid, p_status app.pos_booking_status, p_note text)` *(writes)*
+- `set_item_modifier_groups(p_item uuid, p_groups uuid[])` *(writes)* — Sets which questions a dish is sold with, in the order they will be asked.
+- `set_item_stall(p_item uuid, p_stall uuid)` *(writes)*
+- `set_outlet_channel(p_outlet uuid, p_channel app.pos_order_channel, p_is_active boolean, p_is_default boolean, p_sort_order integer)` *(writes)*
+- `set_pos_delivery(p_sale uuid, p_line1 text, p_phone text, p_line2 text, p_city text, p_state text, p_postcode text, p_recipient text, p_notes text, p_promised timestamp with time zone, p_fee numeric)` *(writes)* — Takes or corrects the address on a parked bill, resolves the zone, derives the fee and puts the sale on the delivery channel.
+- `set_pos_delivery_status(p_delivery uuid, p_status app.pos_delivery_status, p_reason text)` *(writes)* — Moves a run along.
+- `set_pos_queue_status(p_entry uuid, p_status app.pos_queue_status, p_table uuid)` *(writes)* — Calls, seats or closes a party.
+- `set_pos_sale_channel(p_sale uuid, p_channel app.pos_order_channel)` *(writes)*
+- `set_pos_service_charge(p_outlet uuid, p_percent numeric, p_tax_code uuid)` *(writes)* — Sets the service charge an outlet adds to a bill and the tax that rides it.
+- `split_pos_sale(p_sale uuid, p_lines uuid[])` *(writes)* — Moves the named lines onto a second bill on the same table.
+- `split_pos_table(p_table uuid, p_parts integer)` *(writes)* — Turns a long table into T1-A, T1-B and so on: real tables with their own codes, cards and bills.
+- `start_kiosk_order(p_register uuid, p_client_uuid uuid)` *(writes)*
+- `stop_pos_item(p_outlet uuid, p_item uuid, p_reason text)` *(writes)* — Takes a dish off today at one outlet.
+- `upsert_kitchen_station(p_outlet uuid, p_code text, p_name text, p_id uuid, p_sort_order integer, p_is_default boolean, p_is_active boolean)` *(writes)*
+- `upsert_pos_delivery_zone(p_id uuid, p_outlet uuid, p_name text, p_postcodes text[], p_fee numeric, p_min_order numeric, p_free_above numeric, p_eta integer, p_sort integer, p_active boolean)` *(writes)*
+- `upsert_pos_driver(p_id uuid, p_org uuid, p_name text, p_phone text, p_vehicle text, p_plate text, p_outlet uuid, p_user uuid, p_active boolean)` *(writes)*
+- `upsert_pos_menu_link(p_outlet uuid, p_kind app.pos_menu_link_kind, p_table uuid, p_register uuid, p_label text, p_expires timestamp with time zone, p_single boolean, p_id uuid, p_active boolean)` *(writes)*
+- `upsert_pos_menu_schedule(p_org uuid, p_name text, p_weekdays smallint[], p_starts_at time without time zone, p_ends_at time without time zone, p_starts_on date, p_ends_on date, p_items uuid[], p_id uuid, p_is_active boolean)` *(writes)*
+- `upsert_pos_modifier(p_group uuid, p_code text, p_name text, p_price_delta numeric, p_id uuid, p_is_default boolean, p_sort_order integer, p_is_active boolean)` *(writes)* — Creates or edits one answer to a modifier group.
+- `upsert_pos_modifier_group(p_org uuid, p_code text, p_name text, p_min_select integer, p_max_select integer, p_id uuid, p_sort_order integer, p_is_active boolean, p_allows_free_text boolean)` *(writes)* — Creates or renames a modifier group -- the question a dish comes with -- including whether the till may answer it with something that is not on the list.
+- `upsert_pos_promotion(p_org uuid, p_name text, p_kind app.pos_promo_kind, p_code text, p_percent numeric, p_amount numeric, p_buy integer, p_get integer, p_starts_on date, p_ends_on date, p_weekdays smallint[], p_starts_at time without time zone, p_ends_at time without time zone, p_min_subtotal numeric, p_max_uses integer, p_max_per_customer integer, p_items uuid[], p_outlets uuid[], p_channels text[], p_id uuid, p_is_active boolean)` *(writes)* — Writes a promotion and its scope.
+- `upsert_pos_receipt_settings(p_outlet uuid, p_header text, p_footer text, p_paper_mm smallint, p_copies smallint, p_language text, p_item_codes boolean, p_cashier boolean, p_table boolean, p_channel boolean, p_tax boolean, p_customer boolean, p_points boolean, p_qr boolean)` *(writes)* — Saves what an outlet prints — the header and footer on pos_outlets, the choices on pos_receipt_settings — in one call, so a shop is never left having saved half of it.
+- `upsert_pos_recipe(p_org uuid, p_item uuid, p_yield numeric, p_lines jsonb, p_notes text, p_active boolean)` *(writes)*
+- `upsert_pos_report(p_org uuid, p_name text, p_source app.pos_report_source, p_dimensions text[], p_measures text[], p_period text, p_from date, p_to date, p_outlets uuid[], p_channels text[], p_sort_by text, p_sort_desc boolean, p_limit integer, p_shared boolean, p_id uuid)` *(writes)* — Saves a built report, checking every key through the same allow-list the query uses — so a report that cannot run cannot be saved.
+- `upsert_pos_stall(p_id uuid, p_outlet uuid, p_code text, p_name text, p_operator uuid, p_commission numeric, p_active boolean)` *(writes)*
+- `upsert_scale_format(p_id uuid, p_org uuid, p_name text, p_prefix text, p_code_digits integer, p_value_digits integer, p_kind app.scale_value_kind, p_check boolean, p_active boolean)` *(writes)*
+- `void_pos_sale(p_sale uuid, p_reason app.pos_void_reason, p_note text)` *(writes)* — Writes off a whole parked bill, behind the pos_void grant without exception: one void record per line the kitchen cooked, the live dockets cancelled, and the sale marked voided with a reason and a name.
+- `void_pos_sale_line(p_line uuid, p_reason app.pos_void_reason, p_note text)` *(writes)* — Takes a line off after the kitchen was told, recording what it said, why it went and who did it.
+- `weighed_items(p_org uuid)`
+
+### purchases (1)
+
+Refused unless the company has the `purchases` module switched on and the caller may use it.
+
+- `settle_pos_stalls(p_outlet uuid, p_from date, p_to date)` *(writes)* — Raises one posted purchase bill per stall for its takings less the court's commission, and records the period so the same days cannot be paid for twice.
+
+### sales (11)
+
+Refused unless the company has the `sales` module switched on and the caller may use it.
+
+- `contra_candidates(p_contact uuid)`
+- `contra_lines(p_id uuid)`
+- `contra_notes_list(p_org uuid, p_status text)`
+- `create_contra(p_org uuid, p_date date, p_invoices jsonb, p_bills jsonb, p_notes text)` *(writes)* — Offsets a party's outstanding invoices against their outstanding bills.
+- `customer_payment_lags(p_org uuid)`
+- `deposit_history(p_id uuid)`
+- `deposit_notes_list(p_org uuid, p_kind text, p_status text)`
+- `deposits_held_for(p_contact uuid)`
+- `pdc_list(p_org uuid, p_direction text, p_status text)`
+- `pdc_maturing(p_org uuid, p_from date, p_to date)` — Cheques still outstanding that mature by a date, plus any already past their date and not banked — which is the whole reason to look.
+- `void_contra(p_id uuid, p_reason text)` *(writes)*
+
+### ticketing (8)
+
+Refused unless the company has the `ticketing` module switched on and the caller may use it.
+
+- `add_ticket_comment(p_ticket uuid, p_body text, p_internal boolean, p_channel app.ticket_channel)` *(writes)*
+- `assign_ticket(p_ticket uuid, p_user uuid)` *(writes)* — Hands a ticket to somebody.
+- `create_ticket(p_org_id uuid, p_subject text, p_description text, p_category text, p_priority app.ticket_priority, p_type app.ticket_type, p_channel app.ticket_channel, p_requester_user_id uuid, p_requester_contact_id uuid, p_asset_id uuid)` *(writes)*
+- `escalate_ticket(p_ticket uuid, p_kind app.ticket_escalation, p_to_team uuid, p_to_user uuid, p_reason text)` *(writes)*
+- `module_dashboard(p_org_id uuid)` — Figures for the modules a company holds and this caller may read, keyed by module code.
+- `revoke_ticket_share(p_ticket uuid)` *(writes)*
+- `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)*
+- `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)*
+
+### general (455)
+
+Not gated on any module.
+
+- `accept_intercompany_bill(p_sales_document_id uuid, p_org_id uuid)` *(writes)*
+- `accept_invitation(p_token text)` *(writes)* — Takes up an invitation.
+- `add_fixed_public_holidays(p_org_id uuid, p_year integer)` *(writes)*
+- `adjust_attendance(p_record uuid, p_clock_in timestamp with time zone, p_clock_out timestamp with time zone, p_reason text)` *(writes)* — Corrects a day's clock times, recording who changed it and why.
+- `adopt_constitution(p_entity uuid, p_adopted_on date)` *(writes)*
+- `ai_answer(p_conversation uuid, p_content text, p_tool_calls jsonb)` *(writes)* — Files the assistant's reply in a conversation the caller may add to -- the same rule ai_ask applies and the same one the read policy on ai_messages applies.
+- `ai_ask(p_org_id uuid, p_question text, p_conversation uuid)` *(writes)*
+- `ai_conversation(p_id uuid)`
+- `ai_conversations_for(p_org_id uuid)`
+- `ai_run_tool(p_org_id uuid, p_tool text, p_args jsonb)` — Runs one allow-listed read for the assistant, as the caller — security invoker on purpose, so it cannot see what the person asking cannot.
+- `ai_status(p_org_id uuid)` — Whether the assistant is on, what it will call, and whether that call can be made.
+- `ai_tool_catalogue(p_org_id uuid)`
+- `allocate_payment_with_discount(p_payment uuid, p_bill uuid, p_amount numeric, p_discount numeric, p_as_at date)` *(writes)* — The purchase side of `0385`.
+- `allocate_with_discount(p_receipt uuid, p_invoice uuid, p_amount numeric, p_discount numeric, p_as_at date)` *(writes)* — Takes a settlement discount and posts it: Dr 4300, Cr receivable.
+- `am_i_platform_admin()`
+- `apply_business_type(p_org_id uuid, p_business_type text, p_modules text[])` *(writes)* — Records what the company said it does and switches on the modules it was shown.
+- `apply_deposit(p_deposit uuid, p_document uuid, p_amount numeric, p_date date)` *(writes)*
+- `apply_statutory_leave_bands(p_leave_type_id uuid, p_preset text)` *(writes)*
+- `approval_state(p_kind app.approval_entity, p_entity_id uuid)`
+- `approve_budget(p_id uuid)` *(writes)*
+- `assign_mailbox(p_mailbox_id uuid, p_owner_id uuid)` *(writes)* — Moves a mailbox to a person, or back to the company with null.
+- `attach_company_to_firm(p_org_id uuid, p_firm_id uuid, p_role app.member_role)` *(writes)*
+- `audit_list_payslips(p_org_id uuid, p_run_id uuid)` *(writes)* — Payslips a granted reader may see, logged as one list read against the grant that permitted it.
+- `audit_trail(p_org_id uuid, p_table text, p_record_id uuid, p_limit integer)` *(writes)*
+- `audit_view_payslip(p_payslip_id uuid)` *(writes)* — One payslip in full for a granted reader, logged against the grant that permitted it.
+- `bank_feed_status(p_bank_account_id uuid)` — What a screen may know about a feed: everything except the secret.
+- `bank_reconciliation_status(p_bank_account_id uuid, p_as_at date, p_statement_balance numeric)`
+- `bill_credit_remaining(p_bill uuid)` — What is left uncredited on each line of a bill, matched on item and description together so that two lines for the same item are two different things to credit.
+- `bill_matter_time(p_matter_id uuid, p_from date, p_to date, p_due date)` *(writes)*
+- `bill_project_time(p_project_id uuid, p_from date, p_to date, p_due date)` *(writes)*
+- `bill_statutory_charge(p_charge uuid, p_supplier uuid, p_doc_date date, p_supplier_doc_no text, p_account uuid)` *(writes)*
+- `bounce_pdc(p_id uuid, p_reason text, p_on date)` *(writes)* — Returns a cheque: the document it settled goes back into the aged listing and the money leaves the cheques account.
+- `bulk_email_documents(p_ids uuid[], p_template_code text)` *(writes)* — Send many sales documents, one savepoint each, and say per document what happened.
+- `bulk_post_documents(p_ids uuid[])` *(writes)* — Post many sales documents, one savepoint each, and say per document what happened.
+- `calculate_payroll_run(p_run_id uuid)` *(writes)* — Builds a payslip per employee whose employment overlaps the period, deriving every statutory figure from the schedules in force on the pay date.
+- `can_add_company()` — Whether this account may add another company, so the app can leave the button out rather than offer one that refuses.
+- `cancel_pdc(p_id uuid, p_reason text)` *(writes)*
+- `capitalise_bill_line(p_line uuid, p_asset_no text, p_name text, p_category text, p_method text, p_useful_life_months integer, p_rate_percent numeric, p_residual_value numeric)` *(writes)* — Makes a fixed asset out of a posted bill line, taking the cost, the date, the supplier and the account from the line rather than asking for them again.
+- `cash_runs_out_on(p_org uuid, p_weeks integer, p_use_history boolean)`
+- `change_company_name(p_entity uuid, p_new_name text, p_resolved_on date)` *(writes)* — Renames a company, keeps the former name, and opens the s.28 filing.
+- `change_registered_office(p_entity uuid, p_address text, p_effective_on date)` *(writes)*
+- `chat_access_list(p_org_id uuid)`
+- `chat_active_call(p_conversation_id uuid)`
+- `chat_add_participant(p_conversation_id uuid, p_user_id uuid, p_org_id uuid)` *(writes)*
+- `chat_create_group(p_my_org uuid, p_title text, p_members jsonb)` *(writes)*
+- `chat_decide_link(p_link_id uuid, p_approve boolean)` *(writes)*
+- `chat_decline_call(p_call_id uuid)` *(writes)*
+- `chat_delete_message(p_message_id uuid)` *(writes)*
+- `chat_directory(p_org_id uuid)`
+- `chat_edit_message(p_message_id uuid, p_body text)` *(writes)*
+- `chat_end_call(p_call_id uuid)` *(writes)*
+- `chat_heartbeat(p_idle boolean)` *(writes)*
+- `chat_incoming_calls()`
+- `chat_join_call(p_call_id uuid)` *(writes)*
+- `chat_leave(p_conversation_id uuid)` *(writes)*
+- `chat_leave_call(p_call_id uuid)` *(writes)*
+- `chat_links_for(p_org_id uuid)`
+- `chat_mark_delivered(p_conversation_id uuid)` *(writes)*
+- `chat_mark_read(p_conversation_id uuid)` *(writes)*
+- `chat_members(p_conversation_id uuid)`
+- `chat_my_conversations(p_org_id uuid)`
+- `chat_request_link(p_my_org uuid, p_target_org uuid, p_note text)` *(writes)*
+- `chat_revoke_link(p_link_id uuid)` *(writes)*
+- `chat_set_access(p_org_id uuid, p_user_id uuid, p_enabled boolean)` *(writes)*
+- `chat_start_call(p_conversation_id uuid, p_kind text)` *(writes)*
+- `chat_start_direct(p_my_org uuid, p_other_user uuid, p_other_org uuid)` *(writes)*
+- `chat_thread(p_conversation_id uuid, p_before timestamp with time zone, p_limit integer)`
+- `chat_typing_ping(p_conversation_id uuid, p_seconds integer)` *(writes)*
+- `chat_typing_stop(p_conversation_id uuid)` *(writes)*
+- `chat_who_is_typing(p_conversation_id uuid)`
+- `claims_awaiting_my_approval(p_org_id uuid)`
+- `clear_ai_credentials(p_org_id uuid, p_provider text)` *(writes)*
+- `clear_einvoice_credentials(p_org_id uuid, p_environment text)` *(writes)*
+- `clear_ocr_credentials(p_org_id uuid, p_provider text)` *(writes)*
+- `clear_org_payment_gateway(p_org_id uuid, p_gateway text, p_mode text)` *(writes)*
+- `clear_pdc(p_id uuid, p_on date, p_bank uuid)` *(writes)*
+- `clear_platform_ai_key(p_provider text)` *(writes)*
+- `clock_in(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` *(writes)*
+- `clock_out(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` *(writes)*
+- `close_lead(p_lead uuid, p_reason text)` *(writes)*
+- `close_matter(p_matter uuid, p_closed_date date, p_note text)` *(writes)* — Closes a file.
+- `close_opportunity(p_opportunity uuid, p_outcome text, p_reason text, p_competitor text, p_closed_on date)` *(writes)* — Closes a deal and insists on a reason for the ones worth learning from.
+- `close_project(p_project uuid, p_write_off boolean)` *(writes)*
+- `close_requisition(p_requisition uuid, p_status app.requisition_status, p_closed_on date)` *(writes)*
+- `collection_history(p_contact_id uuid)`
+- `company_export_manifest(p_org_id uuid)` *(writes)* — Every table holding this company's data, with a row count.
+- `company_export_page(p_org_id uuid, p_table text, p_after text, p_limit integer)` *(writes)*
+- `company_transfer_history(p_org_id uuid)`
+- `complete_bank_reconciliation(p_bank_account_id uuid, p_statement_date date, p_statement_balance numeric)` *(writes)*
+- `confirm_manufacturing_order(p_mo_id uuid)` *(writes)*
+- `connect_bank_feed(p_bank_account_id uuid, p_provider text, p_api_key text, p_api_secret text, p_account_ref text)` *(writes)* — Connect or re-credential a bank feed.
+- `contact_duplicates(p_org_id uuid)` — Live records of one company carrying the same registration number, ID or TIN and not yet linked.
+- `contact_lookalikes(p_org_id uuid, p_contact_type app.contact_type, p_name text, p_registration_no text, p_tin text, p_id_type text, p_id_value text, p_exclude uuid)` — The records already carrying this registration number, ID, TIN or name, and whether each is already in the role being typed.
+- `contact_records(p_contact_id uuid)` — The other records of the same company, and which of customer, supplier and prospect it has no record for yet -- each with the series it would be coded in.
+- `convert_lead(p_lead_id uuid, p_create_opportunity boolean, p_pipeline_id uuid, p_amount numeric, p_expected_close_date date)` *(writes)*
+- `corp_create_signing_link(p_signature_id uuid, p_valid_days integer, p_email text)` *(writes)*
+- `corp_decline_signature(p_signature_id uuid, p_reason text)` *(writes)* — Refusing to sign, with the reason.
+- `corp_decline_with_link(p_token text, p_reason text)` *(writes)*
+- `corp_display_name(p_entity uuid, p_as_at date)` — What the company is called on a document of that date: the new name with the former one beside it for twelve months after a change, and the former name alone on paper dated before it.
+- `corp_generate_document(p_entity_id uuid, p_template_code text, p_extra jsonb, p_title text)` *(writes)*
+- `corp_issued_capital(p_entity_id uuid)`
+- `corp_mark_lodged(p_filing uuid, p_lodged_on date, p_reference text, p_fee_paid numeric)` *(writes)* — Records a lodgement, with who did it and what SSM charged.
+- `corp_open_filing(p_entity_id uuid, p_filing_type text, p_trigger_date date)` *(writes)*
+- `corp_open_signing_link(p_token text)` *(writes)*
+- `corp_principals_for_alternate(p_entity uuid, p_exclude uuid)`
+- `corp_register_of_members(p_entity_id uuid)`
+- `corp_request_signatures(p_document_id uuid, p_person_ids uuid[], p_capacities text[], p_due_on date, p_note text)` *(writes)*
+- `corp_sign_document(p_signature_id uuid, p_signed_name text)` *(writes)*
+- `corp_sign_with_link(p_token text, p_signed_name text)` *(writes)*
+- `corp_signature_state(p_document_id uuid)`
+- `corp_template_placeholders(p_entity_id uuid, p_template_code text)`
+- `corp_upcoming_filings(p_org_id uuid, p_within_days integer)` — What each company owes SSM and when.
+- `corp_update_document(p_document_id uuid, p_title text, p_body text)` *(writes)*
+- `correct_company_name(p_entity uuid, p_name text)` *(writes)*
+- `correct_registered_office(p_entity uuid, p_address text)` *(writes)*
+- `create_bank_transfer(p_from_account_id uuid, p_to_account_id uuid, p_amount_sent numeric, p_transfer_date date, p_amount_received numeric, p_bank_charges numeric, p_reference text, p_notes text)` *(writes)*
+- `create_contact_as(p_contact_id uuid, p_type app.contact_type)` *(writes)* — A second record of the same company, in another role: the details, addresses and people copied, a code from that role's own series, the source left as it was.
+- `create_contra(p_org uuid, p_date date, p_invoices jsonb, p_bills jsonb, p_notes text, p_idempotency_key text)` *(writes)*
+- `create_deposit(p_org uuid, p_kind text, p_contact uuid, p_date date, p_amount numeric, p_bank uuid, p_mode text, p_reference text, p_notes text)` *(writes)*
+- `create_deposit(p_org uuid, p_kind text, p_contact uuid, p_date date, p_amount numeric, p_bank uuid, p_mode text, p_reference text, p_notes text, p_idempotency_key text)` *(writes)*
+- `create_firm(p_name text, p_registration_no text, p_email text, p_phone text)` *(writes)*
+- `create_fiscal_year(p_org_id uuid, p_start_date date)` *(writes)*
+- `create_item_variants(p_parent uuid, p_axes jsonb)` *(writes)*
+- `create_organization(p_name text, p_slug text, p_entity_type app.entity_type, p_registration_no text, p_tin text, p_msic_code text, p_business_activity text, p_state_code text, p_city text, p_postcode text, p_address_line1 text, p_phone text, p_email text, p_is_sst_registered boolean, p_sst_registration_no text, p_fiscal_year_end_month smallint, p_country_code text)` *(writes)*
+- `create_payroll_run(p_org_id uuid, p_period_id uuid, p_description text)` *(writes)*
+- `create_recurring_document(p_document_id uuid, p_name text, p_frequency text, p_start_date date, p_interval_count integer, p_end_date date, p_max_occurrences integer, p_auto_post boolean, p_auto_email boolean)` *(writes)*
+- `create_withholding(p_bill_id uuid, p_wht_code text, p_gross_amount numeric, p_rate numeric, p_cert_date date)` *(writes)*
+- `credit_purchase_bill(p_bill uuid, p_lines jsonb, p_reason text)` *(writes)* — Raises and posts a credit note against a supplier bill, capped at what is left uncredited on each line, and records which bill it credits — which nothing has ever done.
+- `credit_sales_invoice(p_invoice uuid, p_lines jsonb, p_reason text)` *(writes)* — Raises and posts a credit note against an invoice, capped at what is left uncredited on each line, and records which invoice it credits -- which nothing has ever done before.
+- `custom_field_lookup_options(p_org_id uuid, p_target_entity text, p_search text, p_limit integer)`
+- `customer_credit_status(p_contact_id uuid)` — What the document editor needs to know before an invoice is typed: the credit-control mode, the limit, what is outstanding against it, and whether the customer is on credit hold.
+- `dashboard_summary(p_org_id uuid, p_from date, p_to date)`
+- `decide_approval(p_request_id uuid, p_approve boolean, p_note text)` *(writes)*
+- `decide_claim_step(p_claim_id uuid, p_approve boolean, p_note text, p_approved_amount numeric)` *(writes)*
+- `decide_expense_claim(p_claim_id uuid, p_approve boolean, p_note text, p_approved_amount numeric)` *(writes)*
+- `decide_leave_request(p_request_id uuid, p_approve boolean, p_note text)` *(writes)*
+- `decide_mailbox(p_id uuid, p_approve boolean, p_note text)` *(writes)*
+- `decide_payslip_access(p_request_id uuid, p_approve boolean, p_note text, p_days integer)` *(writes)*
+- `decide_subdomain(p_id uuid, p_approve boolean, p_note text)` *(writes)*
+- `delete_my_account()` *(writes)* — Anonymises the signed-in account: identity scrubbed from profiles and auth.users, membership and push tokens removed, sessions killed.
+- `deposit_pdc(p_id uuid, p_on date)` *(writes)*
+- `depreciation_preview(p_org_id uuid, p_as_at date)`
+- `detach_company_from_firm(p_org_id uuid)` *(writes)*
+- `disconnect_bank_feed(p_bank_account_id uuid)` *(writes)*
+- `discount_pos_sale(p_sale uuid, p_percent numeric, p_amount numeric, p_reason text)` *(writes)* — Reduces a whole bill, by a percentage or by an amount.
+- `discount_pos_sale_line(p_line uuid, p_percent numeric, p_amount numeric, p_reason text)` *(writes)* — Reduces one line, by a percentage or by an amount, with a reason and a name against it.
+- `dismiss_notification(p_id uuid)` *(writes)*
+- `dispose_fixed_asset(p_asset_id uuid, p_date date, p_proceeds numeric, p_bank_account_id uuid)` *(writes)*
+- `document_activity(p_document_id uuid)` — One document's whole timeline: what was sent, what changed, what was paid, and what LHDN said.
+- `document_lot_problems(p_document_id uuid, p_kind text)`
+- `document_numbering(p_org_id uuid)` — Every series of the modules the company has, as it is set, with a sample of the next number composed the way the draw composes it.
+- `einvoice_credential_status(p_org_id uuid)`
+- `email_document(p_document_id uuid, p_to text, p_template_code text, p_share_days integer, p_dispatch text, p_attachment_path text, p_attachment_name text)` *(writes)*
+- `email_receipt(p_receipt_id uuid, p_to text, p_template_code text, p_dispatch text, p_attachment_path text, p_attachment_name text)` *(writes)*
+- `employee_directory(p_org_id uuid)` — Who works here: name, department, role and contact.
+- `ensure_default_warehouse(p_org_id uuid)` *(writes)*
+- `ensure_pay_period(p_org_id uuid, p_year integer, p_month integer)` *(writes)*
+- `exchange_rate_board(p_org_id uuid, p_on_date date)`
+- `exchange_rate_for(p_org_id uuid, p_currency character, p_on_date date)`
+- `expense_split(p_expense_id uuid)`
+- `extend_document_validity(p_document uuid, p_valid_until date)` *(writes)* — Puts a new date on a quotation or proforma.
+- `file_sst_return(p_org_id uuid, p_period_end date, p_amount numeric, p_reference text)` *(writes)*
+- `finalise_appraisal(p_appraisal uuid, p_final_rating numeric, p_calibration_note text)` *(writes)*
+- `firm_audit_trail(p_firm_id uuid, p_limit integer)` — What has happened to a practice: who joined it, who left it, and what changed about the firm itself.
+- `firm_portfolio(p_firm_id uuid)`
+- `firm_team(p_firm_id uuid)`
+- `fs_audit_exemption(p_filing_id uuid)`
+- `fs_balance_check(p_filing_id uuid)`
+- `fs_deadlines(p_filing_id uuid)`
+- `fs_export(p_filing_id uuid)`
+- `fs_freeze(p_filing_id uuid)` *(writes)*
+- `fs_lodge(p_filing_id uuid, p_reference text, p_lodged_on date)` *(writes)*
+- `fs_prepare(p_filing_id uuid)`
+- `fs_set_entity(p_filing_id uuid, p_entity_id uuid)` *(writes)*
+- `fs_unfreeze(p_filing_id uuid)` *(writes)*
+- `fx_revaluation_preview(p_org_id uuid, p_as_at date)`
+- `hire_applicant(p_applicant uuid, p_employee_no text, p_hire_date date, p_basic_salary numeric, p_date_of_birth date, p_department uuid, p_position uuid, p_manager uuid, p_early_start_note text)` *(writes)* — Turns an applicant into an employee and links the two.
+- `import_accounts(p_org_id uuid, p_rows jsonb, p_commit boolean)` *(writes)* — Brings a chart of accounts in from a file.
+- `import_bank_transactions(p_bank_account_id uuid, p_rows jsonb)` *(writes)* — Imports statement lines and checks them against their own running balance.
+- `import_contacts(p_org_id uuid, p_rows jsonb, p_commit boolean)` *(writes)* — Validate (p_commit false) or write (p_commit true) a pasted contact list.
+- `import_items(p_org_id uuid, p_rows jsonb, p_commit boolean)` *(writes)*
+- `import_open_bills(p_org_id uuid, p_rows jsonb, p_as_at date, p_commit boolean)` *(writes)*
+- `import_open_invoices(p_org_id uuid, p_rows jsonb, p_as_at date, p_commit boolean)` *(writes)* — Brings a customer's unpaid history over as posted invoices against opening equity.
+- `import_opening_balances(p_org_id uuid, p_rows jsonb, p_as_at date, p_commit boolean)` *(writes)* — The opening trial balance from a previous system.
+- `import_opening_stock(p_org_id uuid, p_rows jsonb, p_as_at date, p_commit boolean)` *(writes)* — Opening stock quantities and costs.
+- `inbound_attachments(p_email_id uuid)` — What came attached to one message.
+- `intercompany_inbox(p_org_id uuid)`
+- `invite_firm_member(p_firm_id uuid, p_email text, p_role app.firm_role)` *(writes)*
+- `invite_member(p_org_id uuid, p_email text, p_role app.member_role)` *(writes)* — Invites somebody into a company and returns the raw invitation token once.
+- `invoice_credit_remaining(p_invoice uuid)` — What is left uncredited on each line of an invoice.
+- `item_price(p_item_id uuid, p_contact_id uuid, p_quantity numeric)`
+- `join_company_group(p_org_id uuid, p_group_id uuid)` *(writes)*
+- `landing_page()`
+- `ledger_dimensions(p_org_id uuid)`
+- `line_lots(p_line_table text, p_line_id uuid)`
+- `link_contact_records(p_org_id uuid, p_ids uuid[])` *(writes)* — Makes the given contact records one company, bringing along every record already linked to any of them.
+- `link_group_contact(p_contact_id uuid, p_org_id uuid)` *(writes)*
+- `link_opportunity_quotation(p_opportunity uuid, p_document uuid)` *(writes)*
+- `log_document_download(p_document_id uuid, p_format text)` *(writes)*
+- `mail_domain()` — The domain reserved addresses live on, for screens that have to print one.
+- `mailbox_thread(p_mailbox_id uuid)` — Everything in one mailbox, received and sent, newest first.
+- `maintenance_notice()` — The maintenance banner, or null when there is nothing to say.
+- `mark_all_notifications_read(p_org uuid)` *(writes)*
+- `mark_notification_read(p_id uuid)` *(writes)*
+- `mark_payroll_paid(p_run_id uuid)` *(writes)*
+- `match_bank_transaction(p_transaction_id uuid, p_source_table text, p_source_id uuid)` *(writes)*
+- `matter_client_balance(p_matter uuid)` — What is held in the client account for one matter, right now.
+- `may_sign_in_here(p_host text, p_email text)` — Whether an email has any business signing in at this address, asked before the password.
+- `may_use_workspace(p_host text)`
+- `mo_shortages(p_mo_id uuid)`
+- `module_charges(p_org_id uuid, p_month date)` — What the add-ons a company holds have cost it so far this month, line by line, pro-rated by days and net of any promotion.
+- `my_account_deletion_blockers()`
+- `my_appraisal_parts(p_org uuid)` — Which part the caller holds on each appraisal they can see, from the same app.appraisal_part_of the trigger judges changes with.
+- `my_approvals(p_org_id uuid)`
+- `my_feedback(p_org_id uuid)`
+- `my_firms()`
+- `my_group_companies(p_org_id uuid)` — The companies in this one's group that the caller is already a member of, with the ownership 0148 records and whether the caller may change it for that company.
+- `my_mailboxes(p_org_id uuid)` — The approved addresses the caller may read and send from, personal first.
+- `my_module_access(p_org_id uuid)`
+- `my_notifications(p_org uuid, p_include_read boolean)` — What is waiting for the caller, in one company or in all of them.
+- `my_organizations()`
+- `my_payslip_access(p_org_id uuid)`
+- `next_contact_code(p_org_id uuid, p_type app.contact_type)` *(writes)* — The next code in the series for a contact of this type -- C-2026-00013, S-2026-00001, P-2026-00343.
+- `next_document_number(p_org_id uuid, p_doc_type text)` *(writes)* — Allocates the next number for a document type, e.g.
+- `ocr_begin(p_org_id uuid, p_attachment_id uuid)` *(writes)*
+- `ocr_record_local(p_org_id uuid, p_attachment_id uuid, p_extracted jsonb, p_error text)` *(writes)*
+- `ocr_status(p_org_id uuid)`
+- `open_appraisal_cycle(p_cycle uuid)` *(writes)*
+- `open_customer_portal(p_token text)` *(writes)* — What one customer owes, for somebody holding their portal token and no account.
+- `open_documents_across_companies(p_kind text, p_search text)` — What is open across every company the caller may post in — the list a group payment is chosen from.
+- `open_matter(p_org uuid, p_matter_no text, p_name text, p_client uuid, p_opposing_party text, p_matter_type text, p_fee_earner uuid, p_responsible uuid, p_agreed_fee numeric, p_hourly_rate numeric, p_conflict_note text)` *(writes)*
+- `open_requisition(p_requisition uuid, p_opened_on date)` *(writes)*
+- `open_shared_document(p_token text)` *(writes)*
+- `open_shared_ticket(p_token text)` *(writes)*
+- `org_module_surface(p_org_id uuid)` — Every module on offer, what this company is entitled to, and what each would cost it today net of any promotion.
+- `org_payment_gateway_status(p_org_id uuid)` *(writes)*
+- `org_save_login_page(p_org_id uuid, p_title text, p_body text)` *(writes)*
+- `org_team(p_org_id uuid)`
+- `pay_from_client_account(p_matter uuid, p_amount numeric, p_payee text, p_date date, p_description text, p_reference text, p_payment_mode text, p_refund boolean)` *(writes)* — A disbursement paid out of client money for a matter, or the refund of what is left at the end of one.
+- `payment_batch_lines(p_batch uuid)`
+- `payment_gateways_for(p_country text)` — The gateways this platform has switched on that sell in a given country, named in alpha-2 or alpha-3.
+- `payroll_payment_instruction(p_run_id uuid)` — The rows a bank needs to pay a posted run, with anything that would be rejected flagged rather than silently omitted.
+- `place_public_pos_order(p_token text, p_items jsonb, p_name text, p_phone text, p_note text, p_line1 text, p_line2 text, p_city text, p_state text, p_postcode text)` *(writes)* — Places an order from a published menu.
+- `platform_adjust_credit(p_org_id uuid, p_amount numeric, p_reason text)` *(writes)*
+- `platform_ai_providers()` — The provider list for the platform console, with whether a key is on file and when it was set.
+- `platform_audit_trail(p_table text, p_limit integer)` *(writes)* — The platform's own audit trail -- the rows with no organization, which since 0443 only the statutory rate tables may write.
+- `platform_credit_summary()`
+- `platform_delete_landing_app_link(p_store_code text)` *(writes)*
+- `platform_delete_landing_logo(p_id uuid)` *(writes)*
+- `platform_delete_landing_section(p_id uuid)` *(writes)*
+- `platform_delete_landing_stat(p_id uuid)` *(writes)*
+- `platform_delete_landing_testimonial(p_id uuid)` *(writes)*
+- `platform_end_promotion(p_id uuid, p_on date)` *(writes)*
+- `platform_feedback(p_status app.feedback_status, p_limit integer)` *(writes)*
+- `platform_force_transfer(p_org_id uuid, p_to_email text, p_reason text)` *(writes)*
+- `platform_landing_preview()`
+- `platform_mark_invoice_paid(p_invoice_id uuid, p_note text)` *(writes)*
+- `platform_organizations()`
+- `platform_payment_gateways()`
+- `platform_promotions()`
+- `platform_publish_statutory_schedule(p_body text, p_name text, p_method text, p_effective_from date, p_rates jsonb, p_source text, p_notes text, p_wage_round_up_to numeric, p_result_rounding text, p_is_verified boolean)` *(writes)*
+- `platform_reservations()`
+- `platform_reserve_subdomain(p_name text, p_org_id uuid, p_module_code text, p_landing_path text, p_note text, p_purpose text)` *(writes)*
+- `platform_save_landing_app_link(p_store_code text, p_label text, p_url text, p_badge_url text, p_sort_order integer, p_is_active boolean)` *(writes)*
+- `platform_save_landing_logo(p_id uuid, p_name text, p_logo_url text, p_sort_order integer, p_is_active boolean)` *(writes)*
+- `platform_save_landing_page(p_patch jsonb)` *(writes)*
+- `platform_save_landing_section(p_id uuid, p_title text, p_body text, p_icon text, p_sort_order integer, p_is_active boolean, p_kind text)` *(writes)*
+- `platform_save_landing_stat(p_id uuid, p_value text, p_label text, p_icon text, p_sort_order integer, p_is_active boolean)` *(writes)*
+- `platform_save_landing_testimonial(p_id uuid, p_quote text, p_author text, p_company text, p_avatar_url text, p_sort_order integer, p_is_active boolean)` *(writes)*
+- `platform_save_module(p_code text, p_name text, p_description text, p_monthly_price numeric, p_is_core boolean, p_sort_order integer, p_is_active boolean, p_nav_group text)` *(writes)*
+- `platform_save_payment_gateway(p_code text, p_name text, p_mode text, p_currency text, p_publishable_key text, p_secret_ref text, p_checkout_url text, p_instructions text, p_is_active boolean, p_sort_order integer, p_countries text[], p_methods text[], p_docs_url text)` *(writes)* — Adds or amends a payment gateway.
+- `platform_save_promotion(p_id uuid, p_name text, p_module_code text, p_org_id uuid, p_kind text, p_trial_days integer, p_percent_off numeric, p_fixed_price numeric, p_starts_on date, p_ends_on date, p_is_active boolean, p_notes text)` *(writes)* — Create or change a promotion.
+- `platform_save_site_page(p_slug text, p_title text, p_body text, p_is_published boolean)` *(writes)*
+- `platform_security_log(p_since timestamp with time zone, p_limit integer)` *(writes)* — The reads and refusals recorded against no organization, which is where `platform_audit_trail` files the record of its own use.
+- `platform_set_module(p_org_id uuid, p_module_code text, p_enabled boolean)` *(writes)*
+- `platform_set_ocr_provider(p_code text, p_name text, p_kind text, p_endpoint text, p_model text, p_price numeric, p_is_active boolean, p_blurb text)` *(writes)*
+- `platform_set_org_status(p_org_id uuid, p_status text)` *(writes)*
+- `platform_set_schedule_verified(p_schedule_id uuid, p_verified boolean, p_source text, p_notes text)` *(writes)*
+- `platform_stats()`
+- `platform_topup_credit(p_org_id uuid, p_amount numeric, p_note text)` *(writes)*
+- `platform_update_reservation(p_kind text, p_id uuid, p_org_id uuid, p_name text, p_module_code text, p_landing_path text, p_release boolean, p_purpose text)` *(writes)*
+- `platform_update_setting(p_key text, p_value jsonb)` *(writes)*
+- `portal_document_token(p_token text, p_document_id uuid)` *(writes)* — Hands a customer holding a portal token a document token for one of their own invoices, so 0067's view and 0414's payment work unchanged.
+- `pos_report_fields(p_source app.pos_report_source)` — What this source can be cut by and what it can add up.
+- `post_bank_transfer(p_id uuid)` *(writes)*
+- `post_client_transaction(p_id uuid)` *(writes)*
+- `post_expense(p_id uuid)` *(writes)*
+- `post_expense_claim(p_claim_id uuid, p_bank_account_id uuid)` *(writes)*
+- `post_manual_journal(p_org_id uuid, p_entry_date date, p_lines jsonb, p_description text, p_reference text)` *(writes)*
+- `post_manual_journal(p_org_id uuid, p_entry_date date, p_lines jsonb, p_description text, p_reference text, p_idempotency_key text)` *(writes)*
+- `post_manufacturing_order(p_mo_id uuid, p_quantity_done numeric)` *(writes)*
+- `post_payroll_run(p_run_id uuid)` *(writes)* — Posts a calculated run: salaries net of reimbursed claims, each claim to the account its type names, statutory amounts to their payables.
+- `post_purchase_document(p_id uuid)` *(writes)*
+- `post_purchase_payment(p_id uuid)` *(writes)*
+- `post_receipt(p_id uuid)` *(writes)*
+- `post_sales_document(p_id uuid)` *(writes)*
+- `post_stock_adjustment(p_id uuid)` *(writes)*
+- `post_withholding(p_id uuid)` *(writes)*
+- `prepare_einvoice(p_sales_document_id uuid)` *(writes)* — Snapshots a posted sales document into MyInvois e-Invoice form and queues it for submission.
+- `property_statutory_due(p_org_id uuid, p_within_days integer)`
+- `public_pos_menu(p_token text)` — The menu behind one published link.
+- `public_pos_menu_modifiers(p_token text, p_item uuid)`
+- `quote_opportunity(p_opportunity uuid, p_valid_until date, p_description text)` *(writes)* — Raises a quotation from a deal and links the two.
+- `raise_rent_invoices(p_site_id uuid, p_period_from date, p_period_to date, p_due_date date)` *(writes)*
+- `raise_strata_charges(p_scheme_id uuid, p_period_from date, p_period_to date, p_due_date date)` *(writes)*
+- `receive_client_money(p_matter uuid, p_amount numeric, p_date date, p_description text, p_reference text, p_payment_mode text)` *(writes)* — Money received from a client to hold on account for a matter.
+- `recognise_revenue(p_org_id uuid, p_upto date)` *(writes)* — Release deferred revenue that has been earned up to a date, one journal per period.
+- `record_departure(p_employee uuid, p_last_working_date date, p_status text, p_reason text, p_resignation_date date)` *(writes)* — Takes somebody off the payroll.
+- `record_export(p_org_id uuid, p_what text, p_detail text)` *(writes)*
+- `record_group_payment(p_paid_on date, p_reference text, p_lines jsonb, p_note text)` *(writes)* — One payment covering documents in several companies: one receipt (or supplier payment) per company and contact, linked by a batch that holds no money.
+- `record_pdc(p_org uuid, p_direction text, p_contact uuid, p_cheque_no text, p_cheque_date date, p_amount numeric, p_documents jsonb, p_bank uuid, p_bank_name text, p_received date, p_notes text)` *(writes)* — Puts a post-dated cheque in the register and takes the document it settles off the aged listing, without touching the bank balance.
+- `record_pdc(p_org uuid, p_direction text, p_contact uuid, p_cheque_no text, p_cheque_date date, p_amount numeric, p_documents jsonb, p_bank uuid, p_bank_name text, p_received date, p_notes text, p_idempotency_key text)` *(writes)*
+- `record_statutory_remittance(p_org_id uuid, p_period_id uuid, p_code text, p_amount numeric, p_paid_on date, p_reference text)` *(writes)*
+- `register_device(p_token text, p_platform text, p_label text, p_p256dh text, p_auth text)` *(writes)*
+- `reinstate_employee(p_employee uuid)` *(writes)* — Undoes a departure.
+- `remit_withholding(p_id uuid, p_paid_on date, p_bank_account_id uuid, p_reference text)` *(writes)*
+- `renew_employee_document(p_document uuid, p_expires_date date, p_issued_date date, p_title text, p_notes text)` *(writes)*
+- `rent_preview(p_site_id uuid, p_period_from date, p_period_to date)`
+- `reopen_appraisal(p_appraisal uuid, p_side text)` *(writes)*
+- `reopen_bank_reconciliation(p_id uuid)` *(writes)*
+- `reopen_lead(p_lead uuid)` *(writes)*
+- `reopen_matter(p_matter uuid)` *(writes)* — Reopens a closed file.
+- `reopen_opportunity(p_opportunity uuid, p_stage uuid)` *(writes)*
+- `reopen_project(p_project uuid)` *(writes)*
+- `reply_to_shared_ticket(p_token text, p_body text)` *(writes)*
+- `report_ap_aging(p_org_id uuid, p_as_at date)`
+- `report_appraisals_due(p_org uuid, p_as_at date)` — Who is late, and on which half.
+- `report_ar_aging(p_org_id uuid, p_as_at date)`
+- `report_asset_movements(p_org_id uuid, p_from date, p_to date)` — The fixed asset note by category: cost and accumulated depreciation brought forward, additions, disposals, the charge for the period and the carrying amount.
+- `report_balance_sheet(p_org_id uuid, p_as_at date)`
+- `report_bank_reconciliations(p_org_id uuid, p_bank_account_id uuid)` — Every completed reconciliation on an account, newest first, with the number of statement lines it closed over and whether it is the one that may still be reopened.
+- `report_cash_flow(p_org_id uuid, p_from date, p_to date)`
+- `report_changes_in_equity(p_org_id uuid, p_from date, p_to date)`
+- `report_collections(p_org_id uuid, p_as_at date)`
+- `report_deferred_revenue(p_org_id uuid, p_as_at date)` — What is sitting in 2127 at a date and which invoice lines it belongs to, with the account's own posted balance repeated on every row so the schedule and the ledger are read as one answer.
+- `report_denied(p_org_id uuid, p_action text, p_message text)` *(writes)*
+- `report_depreciation_history(p_org_id uuid, p_asset_id uuid)`
+- `report_expiring_documents(p_org_id uuid, p_within_days integer)`
+- `report_expiring_stock(p_org_id uuid, p_within_days integer)`
+- `report_failed_sign_in(p_email text)` *(writes)*
+- `report_feedback(p_title text, p_kind app.feedback_kind, p_body text, p_screen text, p_app_version text, p_severity smallint, p_org_id uuid)` *(writes)*
+- `report_fs_deadlines(p_org_id uuid, p_within_days integer)`
+- `report_general_ledger(p_org_id uuid, p_from date, p_to date, p_account_id uuid)` — The ledger by account: balance brought forward, every posted line in date order, and the balance carried down.
+- `report_group_consolidated_trial_balance(p_org_id uuid, p_from date, p_to date)`
+- `report_group_elimination_check(p_org_id uuid, p_from date, p_to date)`
+- `report_group_intercompany(p_org_id uuid, p_from date, p_to date)`
+- `report_group_trial_balance(p_org_id uuid, p_from date, p_to date)`
+- `report_late_orders(p_org_id uuid, p_as_at date)` — Sales orders past the delivery date they were given, with what is still unshipped.
+- `report_lot_balances(p_org_id uuid, p_item_id uuid, p_warehouse_id uuid)`
+- `report_matter_summary(p_org_id uuid)`
+- `report_migration_progress(p_org_id uuid)` — The six imports that make up moving onto this system, in the order they have to be done, with what is there for each — and the balance of 3900, which is the only one of the seven that can say the migration is finished.
+- `report_open_vacancies(p_org_id uuid)`
+- `report_opening_balance_suspense(p_org_id uuid)`
+- `report_profit_loss(p_org_id uuid, p_from date, p_to date)`
+- `report_profit_loss_by_dimension(p_org_id uuid, p_from date, p_to date, p_project_code text, p_department_code text)`
+- `report_project_budget(p_org_id uuid, p_include_closed boolean)`
+- `report_referral_hires(p_org uuid, p_from date, p_to date)` — Who introduced the people we hired.
+- `report_revenue_trend(p_org_id uuid, p_months integer)`
+- `report_sales_by_person(p_org_id uuid, p_from date, p_to date)`
+- `report_sst_due(p_org_id uuid, p_within_days integer)`
+- `report_sst_summary(p_org_id uuid, p_from date, p_to date)`
+- `report_statutory_charges(p_org_id uuid, p_year integer)`
+- `report_statutory_due(p_org_id uuid, p_within_days integer)`
+- `report_statutory_remittances(p_org_id uuid, p_from date, p_to date)` — What a posted payroll leaves the company owing KWSP, PERKESO, LHDN and HRD Corp, with the fifteenth of the following month against each, and whether it went.
+- `report_stock_card(p_org_id uuid, p_item_id uuid, p_from date, p_to date, p_warehouse_id uuid)` — Every movement of one item in order, with a running quantity and value over whatever scope was asked for.
+- `report_timesheet(p_org_id uuid, p_from date, p_to date)`
+- `report_trial_balance(p_org_id uuid, p_from date, p_to date)`
+- `report_who_is_away(p_org_id uuid, p_from date, p_to date)` — Approved leave overlapping the window, with the contact `0027` has had a column for since the beginning and nothing wrote until `0395`.
+- `report_win_loss(p_org_id uuid, p_from date, p_to date)` — Why deals closed, by outcome and reason, with the money and the competitors named.
+- `report_withholding(p_org_id uuid, p_from date, p_to date)`
+- `request_mailbox(p_org_id uuid, p_local_part text, p_owner_id uuid)` *(writes)*
+- `request_payslip_access(p_org_id uuid, p_reason text, p_period_from date, p_period_to date, p_run_id uuid, p_employee_id uuid)` *(writes)*
+- `request_subdomain(p_org_id uuid, p_subdomain text)` *(writes)*
+- `resync_bank_balance(p_bank_account_id uuid)` *(writes)* — Rebuilds bank_accounts.current_balance from posted ledger lines.
+- `retire_account(p_id uuid)` *(writes)*
+- `revalue_foreign_balances(p_org_id uuid, p_as_at date)` *(writes)*
+- `revenue_schedule_due(p_org_id uuid)` — Deferred revenue not yet released, one row per period end — the shape recognise_revenue posts in.
+- `reverse_gl_entry(p_entry_id uuid, p_date date)` *(writes)*
+- `revoke_customer_portal(p_contact_id uuid)` *(writes)*
+- `revoke_document_share(p_document_id uuid)` *(writes)*
+- `revoke_payslip_access(p_request_id uuid, p_note text)` *(writes)*
+- `run_depreciation(p_org_id uuid, p_as_at date)` *(writes)*
+- `run_recurring_documents_for(p_org_id uuid, p_on date)` *(writes)*
+- `run_recurring_journals_for(p_org_id uuid, p_on date)` *(writes)*
+- `search_mail(p_org_id uuid, p_query text, p_mailbox_id uuid, p_limit integer)` — Mail matching a search, both directions, newest first.
+- `security_log(p_org_id uuid, p_kind app.security_event, p_since timestamp with time zone, p_limit integer)` *(writes)*
+- `security_summary(p_org_id uuid, p_days integer)`
+- `send_from_mailbox(p_mailbox_id uuid, p_to text, p_subject text, p_body text, p_in_reply_to uuid, p_attachment_path text, p_attachment_name text)` *(writes)* — Queues a message from one of the company's addresses, optionally as a reply and optionally with one file.
+- `set_ai_credentials(p_org_id uuid, p_provider text, p_api_key text, p_base_url text)` *(writes)*
+- `set_ai_settings(p_org_id uuid, p_enabled boolean, p_provider text, p_model text, p_key_source text)` *(writes)* — One company's choice of provider, model and whose key pays.
+- `set_bank_feed_paused(p_bank_account_id uuid, p_paused boolean)` *(writes)*
+- `set_custom_field_active(p_org_id uuid, p_entity text, p_key text, p_active boolean)` *(writes)*
+- `set_document_numbering(p_org_id uuid, p_doc_type text, p_prefix text, p_suffix text, p_padding integer, p_reset_policy text, p_next_value bigint)` *(writes)* — Set a series -- prefix, suffix, padding, reset policy, next number -- and return the sample of the next number.
+- `set_einvoice_credentials(p_org_id uuid, p_environment text, p_client_id text, p_client_secret text, p_cert_pem text, p_cert_private_key_pem text, p_cert_serial_number text, p_cert_issuer_name text, p_cert_expires_at timestamp with time zone)` *(writes)*
+- `set_expense_split(p_expense_id uuid, p_lines jsonb)` *(writes)* — Replace an expense's split.
+- `set_feedback_status(p_id uuid, p_status app.feedback_status, p_note text)` *(writes)*
+- `set_fiscal_period_status(p_period_id uuid, p_status text)` *(writes)*
+- `set_group_ownership(p_org_id uuid, p_parent_org_id uuid, p_percent numeric)` *(writes)*
+- `set_line_lots(p_line_table text, p_line_id uuid, p_lots jsonb)` *(writes)*
+- `set_member_access_type(p_member_id uuid, p_access_type_id uuid)` *(writes)*
+- `set_module_hidden(p_org_id uuid, p_module text, p_hidden boolean)` *(writes)*
+- `set_ocr_credentials(p_org_id uuid, p_provider text, p_api_key text, p_project_id text, p_location text, p_processor_id text)` *(writes)*
+- `set_ocr_settings(p_org_id uuid, p_enabled boolean, p_provider text, p_key_source text)` *(writes)*
+- `set_onboarding_task_done(p_task_id uuid, p_done boolean)` *(writes)*
+- `set_org_payment_gateway(p_org_id uuid, p_gateway text, p_mode text, p_api_key text, p_collection_ref text, p_signature_key text, p_is_active boolean)` *(writes)*
+- `set_own_module(p_org_id uuid, p_module_code text, p_enabled boolean)` *(writes)* — A company switches one of the paid add-ons on or off for itself.
+- `set_platform_ai_default(p_provider text, p_model text)` *(writes)*
+- `set_platform_ai_key(p_provider text, p_api_key text, p_base_url text)` *(writes)*
+- `set_sst_registration(p_org_id uuid, p_registered boolean, p_from date, p_registration_no text, p_tax_code text)` *(writes)* — The only way to change a company's SST registration.
+- `settle_deposit(p_deposit uuid, p_kind text, p_amount numeric, p_reason text, p_bank uuid, p_date date)` *(writes)* — Gives a deposit back or keeps it.
+- `settle_from_client_account(p_matter uuid, p_invoice uuid, p_amount numeric, p_date date, p_office_bank uuid, p_reference text)` *(writes)* — Settles a rendered bill out of the client money held for its matter: the money leaves the client account AND arrives in the office one, which is what makes it a transfer rather than a disappearance.
+- `settlement_discount_available(p_document uuid, p_as_at date)`
+- `setup_legal_module(p_org_id uuid)` *(writes)* — Creates the client account, client monies liability and disbursement accounts a law firm needs.
+- `share_customer_portal(p_contact_id uuid, p_valid_days integer, p_email text)` *(writes)* — Issues one customer a link to their whole account and emails it.
+- `share_document(p_document_id uuid, p_valid_days integer, p_email text)` *(writes)*
+- `shared_payment_options(p_token text)`
+- `signup_reference()` — The dialling codes, salutations and Malaysian states the registration form offers, readable with no session because that form has none.
+- `site_pages()`
+- `sst_return_lines(p_org_id uuid, p_period_end date)`
+- `sst_taxable_periods(p_org_id uuid, p_from date, p_to date)`
+- `start_onboarding(p_employee_id uuid, p_template_id uuid, p_start_date date, p_kind text)` *(writes)*
+- `stock_on_hand(p_org_id uuid, p_warehouse_id uuid)`
+- `strata_arrears(p_scheme_id uuid, p_as_at date)`
+- `strata_charge_preview(p_scheme_id uuid, p_period_from date, p_period_to date)`
+- `submit_for_approval(p_kind app.approval_entity, p_entity_id uuid)` *(writes)*
+- `submit_leave_request(p_org_id uuid, p_leave_type_id uuid, p_start_date date, p_end_date date, p_total_days numeric, p_reason text, p_is_half_day boolean, p_half_day_period text, p_employee_id uuid, p_contact_while_away text)` *(writes)*
+- `submit_manager_appraisal(p_appraisal uuid, p_rating numeric, p_comments text, p_increment numeric, p_bonus numeric, p_promotion boolean, p_development_plan text)` *(writes)* — The reviewer's half.
+- `submit_self_appraisal(p_appraisal uuid, p_rating numeric, p_comments text)` *(writes)*
+- `suggest_bank_matches(p_transaction_id uuid, p_within_days integer)`
+- `suggest_lots(p_item_id uuid, p_warehouse_id uuid, p_quantity numeric)`
+- `ticket_team_roster(p_team_id uuid)` — Who is on a support team, leads first.
+- `trace_lot(p_org_id uuid, p_lot_id uuid)`
+- `transfer_between_matters(p_from uuid, p_to uuid, p_amount numeric, p_date date, p_description text)` *(writes)* — Moves client money from one matter to another matter of the same client, as a paired transfer_out and transfer_in posted together.
+- `transfer_company(p_org_id uuid, p_to_email text, p_note text)` *(writes)* — Hand a company to another person in one transaction: they become owner, the caller steps down to admin, any firm's borrowed access ends, and the handover is recorded.
+- `transfer_document(p_source_id uuid, p_target_type text, p_lines jsonb)` *(writes)* — The next document in the cycle, drawn from this one: what is left of each line, the header amounts in proportion.
+- `transfer_outstanding(p_source_id uuid, p_target_type text)`
+- `unlink_contact_record(p_contact_id uuid)` *(writes)* — Takes one record out of its company, for a link made on a number that turned out to be a typing mistake.
+- `unmatch_bank_transaction(p_transaction_id uuid)` *(writes)*
+- `unread_notifications(p_org uuid)`
+- `unregister_device(p_token text)` *(writes)*
+- `unverify_person_identity(p_person uuid)` *(writes)*
+- `update_leave_contact(p_request_id uuid, p_contact text)` *(writes)* — The one field on a live leave request the employee may still change after submitting it.
+- `update_my_phone(p_dial text, p_national text)` *(writes)* — Changes the caller's own mobile number, through the same E.164 rule registration uses.
+- `update_recurring_template(p_id uuid, p_document_id uuid)` *(writes)*
+- `upsert_account(p_code text, p_name text, p_type app.account_type, p_subtype app.account_subtype, p_id uuid, p_parent_id uuid, p_is_group boolean, p_description text, p_org_id uuid)` *(writes)* — Add or change an account.
+- `upsert_ai_model(p_provider text, p_model_id text, p_name text, p_kind text, p_is_free boolean, p_context_tokens integer, p_notes text, p_is_active boolean, p_sort_order integer)` *(writes)*
+- `upsert_ai_provider(p_code text, p_name text, p_wire text, p_base_url text, p_docs_url text, p_key_hint text, p_needs_key boolean, p_is_active boolean, p_sort_order integer)` *(writes)*
+- `upsert_bank_account(p_name text, p_bank_name text, p_bank_code text, p_account_number text, p_account_type text, p_currency text, p_account_id uuid, p_id uuid, p_org_id uuid)` *(writes)* — Adds or amends a bank account and the GL account behind it, as one act, so the two cannot disagree.
+- `upsert_custom_field(p_org_id uuid, p_entity text, p_label text, p_key text, p_kind text, p_is_required boolean, p_options jsonb, p_target_entity text, p_help_text text, p_min_value numeric, p_max_value numeric, p_max_length integer, p_show_on_list boolean, p_sort_order integer)` *(writes)*
+- `verify_person_identity(p_person uuid, p_document_type text, p_verified_on date, p_notes text)` *(writes)* — Records a CDD check as what it is — this document, seen by this individual, on this day.
+- `void_bank_transfer(p_id uuid, p_reason text)` *(writes)*
+- `void_deposit(p_id uuid, p_reason text)` *(writes)*
+- `void_sales_document(p_id uuid, p_reason text)` *(writes)*
+- `workspace_by_host(p_host text)`
+- `workspace_module_refusal(p_host text)` — Null when the signed-in account may open what this address is confined to, otherwise the name of the module it lacks.
+
+## Tables
+
+Read with `GET /<table>`. Row-level security decides which rows
+come back, so an empty list is a real answer and not an error.
+Writing through the table endpoints is not described here: the
+functions above carry the business rules, and an INSERT that
+bypasses them is refused by a policy or leaves the books
+inconsistent.
+
+- `access_permissions`
+- `access_type_modules`
+- `access_types`
+- `accounts`
+- `activities`
+- `ai_conversations`
+- `ai_messages`
+- `ai_models`
+- `ai_providers`
+- `ai_tools`
+- `applicant_stage_history`
+- `applicants`
+- `appraisal_cycles`
+- `appraisal_goals`
+- `appraisals`
+- `approval_requests`
+- `approval_rules`
+- `approval_steps`
+- `attachments`
+- `attendance_records`
+- `audit_logs`
+- `bank_accounts`
+- `bank_feed_runs`
+- `bank_reconciliations`
+- `bank_transactions`
+- `bank_transfers`
+- `billing_rates`
+- `bills_of_materials`
+- `bom_lines`
+- `bom_operations`
+- `branches`
+- `budget_lines`
+- `budgets`
+- `business_types`
+- `canned_responses`
+- `cash_forecast_items`
+- `category_kitchen_stations`
+- `chat_access`
+- `chat_attachments`
+- `chat_call_participants`
+- `chat_calls`
+- `chat_conversations`
+- `chat_links`
+- `chat_messages`
+- `chat_participants`
+- `chat_presence`
+- `chat_typing`
+- `claim_approval_settings`
+- `claim_approvals`
+- `claim_types`
+- `client_account_transactions`
+- `collection_attempts`
+- `company_groups`
+- `company_transfers`
+- `contact_addresses`
+- `contact_persons`
+- `contacts`
+- `contra_notes`
+- `corp_beneficial_owners`
+- `corp_charges`
+- `corp_documents`
+- `corp_entities`
+- `corp_filing_types`
+- `corp_filings`
+- `corp_officers`
+- `corp_persons`
+- `corp_resolutions`
+- `corp_share_classes`
+- `corp_share_events`
+- `corp_signature_requests`
+- `corp_signatures`
+- `corp_signing_links`
+- `corp_templates`
+- `credit_ledger`
+- `custom_field_entities`
+- `custom_fields_def`
+- `customer_portal_links`
+- `departments`
+- `deposit_events`
+- `deposit_notes`
+- `depreciation_entries`
+- `depreciation_runs`
+- `device_tokens`
+- `disbursements`
+- `document_downloads`
+- `document_line_lots`
+- `document_share_links`
+- `einvoice_consolidation_items`
+- `einvoice_consolidations`
+- `einvoice_documents`
+- `einvoice_lines`
+- `einvoice_logs`
+- `einvoice_submissions`
+- `email_outbox`
+- `email_settings`
+- `email_templates`
+- `employee_dependants`
+- `employee_documents`
+- `employee_salary_components`
+- `employee_shifts`
+- `employee_tax_reliefs`
+- `employee_ytd_opening`
+- `employees`
+- `exchange_rates`
+- `expense_claim_lines`
+- `expense_claims`
+- `expense_lines`
+- `expenses`
+- `feedback_reports`
+- `firm_members`
+- `firms`
+- `fiscal_periods`
+- `fiscal_years`
+- `fixed_assets`
+- `forecast_lines`
+- `forecast_runs`
+- `forecast_settings`
+- `fs_account_map`
+- `fs_disclosures`
+- `fs_figures`
+- `fs_filings`
+- `gl_entries`
+- `gl_lines`
+- `inbound_email_attachments`
+- `inbound_emails`
+- `interviews`
+- `item_barcodes`
+- `item_categories`
+- `item_conversion_outputs`
+- `item_conversions`
+- `item_forecast_params`
+- `item_kitchen_stations`
+- `item_modifier_groups`
+- `item_prices`
+- `item_uom_packs`
+- `items`
+- `job_requisitions`
+- `landed_cost_allocations`
+- `landed_cost_charges`
+- `landed_cost_runs`
+- `landed_cost_targets`
+- `landing_app_links`
+- `landing_logos`
+- `landing_page`
+- `landing_sections`
+- `landing_stats`
+- `landing_testimonials`
+- `leads`
+- `leave_balances`
+- `leave_entitlement_bands`
+- `leave_requests`
+- `leave_types`
+- `live_changes`
+- `loyalty_accounts`
+- `loyalty_entries`
+- `loyalty_programs`
+- `loyalty_tiers`
+- `manufacturing_orders`
+- `matters`
+- `mbrs_elements`
+- `membership_items`
+- `mo_components`
+- `mo_operations`
+- `module_promotions`
+- `notes`
+- `notifications`
+- `number_sequences`
+- `ocr_providers`
+- `ocr_scans`
+- `onboarding_checklists`
+- `onboarding_tasks`
+- `onboarding_template_items`
+- `onboarding_templates`
+- `opportunities`
+- `opportunity_stage_history`
+- `org_ai_settings`
+- `org_credits`
+- `org_login_pages`
+- `org_mailboxes`
+- `org_members`
+- `org_modules`
+- `org_ocr_settings`
+- `org_subdomains`
+- `organizations`
+- `pay_periods`
+- `payment_allocations`
+- `payment_batches`
+- `payment_gateways`
+- `payment_terms`
+- `payroll_runs`
+- `payroll_settings`
+- `payroll_ytd`
+- `payslip_access_log`
+- `payslip_access_requests`
+- `payslip_lines`
+- `payslips`
+- `pipeline_stages`
+- `pipelines`
+- `platform_admins`
+- `platform_invoices`
+- `platform_modules`
+- `platform_payments`
+- `platform_settings`
+- `pos_bookings`
+- `pos_deliveries`
+- `pos_delivery_zones`
+- `pos_drivers`
+- `pos_floor_areas`
+- `pos_item_stops`
+- `pos_kitchen_stations`
+- `pos_kitchen_ticket_lines`
+- `pos_kitchen_tickets`
+- `pos_membership_sessions`
+- `pos_membership_subscriptions`
+- `pos_memberships`
+- `pos_menu_links`
+- `pos_menu_schedule_items`
+- `pos_menu_schedules`
+- `pos_modifier_groups`
+- `pos_modifiers`
+- `pos_offline_rejects`
+- `pos_order_counters`
+- `pos_outlet_channels`
+- `pos_outlets`
+- `pos_promotion_channels`
+- `pos_promotion_items`
+- `pos_promotion_outlets`
+- `pos_promotions`
+- `pos_provider_hours`
+- `pos_provider_time_off`
+- `pos_queue_entries`
+- `pos_receipt_settings`
+- `pos_recipe_lines`
+- `pos_recipes`
+- `pos_registers`
+- `pos_reports`
+- `pos_sale_line_modifiers`
+- `pos_sale_line_voids`
+- `pos_sale_lines`
+- `pos_sale_promotions`
+- `pos_sales`
+- `pos_service_providers`
+- `pos_services`
+- `pos_settings`
+- `pos_shifts`
+- `pos_stall_settlements`
+- `pos_stalls`
+- `pos_tables`
+- `pos_tender_types`
+- `pos_tenders`
+- `positions`
+- `post_dated_cheques`
+- `price_levels`
+- `profiles`
+- `projects`
+- `property_sites`
+- `property_statutory_charges`
+- `property_units`
+- `public_holidays`
+- `purchase_document_lines`
+- `purchase_documents`
+- `purchase_payments`
+- `receipts`
+- `recurring_documents`
+- `recurring_journals`
+- `ref_classification_codes`
+- `ref_countries`
+- `ref_currencies`
+- `ref_einvoice_types`
+- `ref_exemption_reasons`
+- `ref_msic_codes`
+- `ref_payment_modes`
+- `ref_states`
+- `ref_statutory_remittances`
+- `ref_tax_types`
+- `ref_uom_codes`
+- `ref_uom_factors`
+- `ref_withholding_types`
+- `rent_run_lines`
+- `rent_runs`
+- `reserved_names`
+- `revenue_schedule_periods`
+- `salary_components`
+- `sales_document_lines`
+- `sales_documents`
+- `sales_gateway_payments`
+- `salespeople`
+- `salutations`
+- `scale_barcode_formats`
+- `security_events`
+- `site_pages`
+- `sla_policies`
+- `sla_targets`
+- `sst_returns`
+- `statutory_rates`
+- `statutory_remittances`
+- `statutory_schedules`
+- `stock_adjustment_lines`
+- `stock_adjustments`
+- `stock_levels`
+- `stock_lots`
+- `stock_movement_lots`
+- `stock_movements`
+- `stock_transfer_lines`
+- `stock_transfers`
+- `strata_charge_lines`
+- `strata_charge_rates`
+- `strata_charge_runs`
+- `strata_schemes`
+- `tax_brackets`
+- `tax_codes`
+- `tax_reliefs`
+- `tenancies`
+- `ticket_categories`
+- `ticket_comments`
+- `ticket_events`
+- `ticket_share_links`
+- `ticket_team_members`
+- `ticket_teams`
+- `tickets`
+- `time_entries`
+- `tin_validations`
+- `todos`
+- `user_preferences`
+- `v_lot_balances` *(view, caller's own rights)*
+- `warehouses`
+- `withholding_certificates`
+- `work_centres`
+- `work_shifts`
