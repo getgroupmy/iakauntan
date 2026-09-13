@@ -467,6 +467,13 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// expired one is a refusal with nothing on the screen to explain it.
   String? _captchaToken;
 
+  /// The check could not be drawn, so there is no token coming.
+  ///
+  /// Kept apart from "not passed yet" because the two need different
+  /// sentences: one is something to do, the other is something to
+  /// report.
+  bool _captchaBroken = false;
+
   String _country = homeCountryCodeForSignup;
   String? _stateCode = homeStateCode;
   final _stateText = TextEditingController();
@@ -535,6 +542,16 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// That is why this cannot leak which addresses exist — the question
   /// is never asked.
   Future<void> _passkeySignIn() async {
+    // The same gate the password form has, and it was missing here.
+    // GoTrue checks the captcha before it checks anything else, so a
+    // passkey press without a token came back "captcha protection:
+    // request disallowed (no captcha_token found)" — a sentence written
+    // for whoever wrote GoTrue, in front of somebody who pressed a
+    // button with a fingerprint on it.
+    if (_captchaPending) {
+      setState(() => _error = _captchaBroken ? captchaBroken : captchaNotDone);
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -732,7 +749,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_captchaPending) {
-      setState(() => _error = captchaNotDone);
+      setState(() => _error = _captchaBroken ? captchaBroken : captchaNotDone);
       return;
     }
 
@@ -834,7 +851,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     final email = _email.text.trim();
     if (email.isEmpty) return;
     if (_captchaPending) {
-      setState(() => _error = captchaNotDone);
+      setState(() => _error = _captchaBroken ? captchaBroken : captchaNotDone);
       return;
     }
 
@@ -1156,7 +1173,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       return;
     }
     if (_captchaPending) {
-      setState(() => _error = captchaNotDone);
+      setState(() => _error = _captchaBroken ? captchaBroken : captchaNotDone);
       return;
     }
 
@@ -1588,6 +1605,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   key: const ValueKey('auth-captcha'),
                   siteKey: _brand?.turnstileSiteKey,
                   onToken: (t) => setState(() => _captchaToken = t),
+                  onFailed: () => setState(() => _captchaBroken = true),
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),

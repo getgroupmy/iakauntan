@@ -138,8 +138,10 @@ String resendFailureDetail(String raw) {
 
   // `AuthApiException(message: Error sending confirmation email,
   // statusCode: 500, code: unexpected_failure)`.
-  final named = RegExp(r'message:\s*(.+?)(?:,\s*\w+:|\)\s*$)', dotAll: true)
-      .firstMatch(text);
+  final named = RegExp(
+    r'message:\s*(.+?)(?:,\s*\w+:|\)\s*$)',
+    dotAll: true,
+  ).firstMatch(text);
   if (named != null) {
     final field = named.group(1)!.trim();
     if (field.isNotEmpty && !field.contains('{')) return field;

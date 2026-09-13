@@ -31,14 +31,25 @@ external JSString? _render(JSAny container, JSObject options);
 /// do not exist yet on a single-page app.
 bool _scriptAdded = false;
 
+/// Set when the browser refuses or fails to fetch the script.
+///
+/// A blocked script is not an error this app can catch: the Content-
+/// Security-Policy refusal is a console message on somebody else's
+/// machine, and `onerror` is the only hint the page gets. It shipped
+/// blocked once — `script-src 'self'` — and the only symptom was a form
+/// asking for a check that was not on the screen.
+bool _scriptFailed = false;
+
 void _ensureScript() {
   if (_scriptAdded) return;
   _scriptAdded = true;
   final script = web.document.createElement('script') as web.HTMLScriptElement
-    ..src = 'https://challenges.cloudflare.com/turnstile/v0/api.js'
+    ..src =
+        'https://challenges.cloudflare.com/turnstile/v0/api.js'
         '?render=explicit'
     ..async = true
     ..defer = true;
+  script.onerror = ((JSAny _) => _scriptFailed = true).toJS;
   web.document.head!.appendChild(script);
 }
 
@@ -58,10 +69,14 @@ class TurnstileWidget extends StatefulWidget {
     super.key,
     required this.siteKey,
     required this.onToken,
+    required this.onFailed,
   });
 
   final String siteKey;
   final ValueChanged<String?> onToken;
+
+  /// Called once when the widget will not be drawn at all.
+  final VoidCallback onFailed;
 
   @override
   State<TurnstileWidget> createState() => _TurnstileWidgetState();
@@ -69,31 +84,49 @@ class TurnstileWidget extends StatefulWidget {
 
 class _TurnstileWidgetState extends State<TurnstileWidget> {
   late final String _viewType = 'turnstile-${widget.siteKey}';
+  bool _gaveUp = false;
 
   @override
   void initState() {
     super.initState();
     _ensureScript();
     if (_registered.add(_viewType)) {
-      ui_web.platformViewRegistry.registerViewFactory(
-        _viewType,
-        (int id) {
-          final host =
-              web.document.createElement('div') as web.HTMLDivElement;
-          _hosts[id] = host;
-          return host;
-        },
-      );
+      ui_web.platformViewRegistry.registerViewFactory(_viewType, (int id) {
+        final host = web.document.createElement('div') as web.HTMLDivElement;
+        _hosts[id] = host;
+        return host;
+      });
     }
   }
+
+  /// How many 200ms turns to wait for the script before saying so.
+  ///
+  /// Ten seconds. Long enough for a slow connection, short enough that
+  /// somebody staring at a gap gets an answer rather than a gap.
+  static const _maxTries = 50;
+  int _tries = 0;
 
   /// Ask Cloudflare to draw into the div once it is in the document.
   ///
   /// The script may still be loading when the form is built, so this
-  /// retries on a frame rather than giving up: a captcha that fails to
+  /// retries rather than giving up at once: a captcha that fails to
   /// appear is a form nobody can submit.
+  ///
+  /// BOUNDED, and that is the point. It used to retry for ever, so a
+  /// script the browser had refused produced an empty box that polled
+  /// silently for the life of the screen while the form went on
+  /// demanding a token from it. Giving up and saying so is worse for
+  /// nobody: the check is not coming.
   void _renderInto(web.Element container) {
+    if (_scriptFailed || _tries >= _maxTries) {
+      if (!_gaveUp) {
+        _gaveUp = true;
+        widget.onFailed();
+      }
+      return;
+    }
     if (_turnstile == null) {
+      _tries += 1;
       Future<void>.delayed(const Duration(milliseconds: 200), () {
         if (mounted) _renderInto(container);
       });
@@ -109,14 +142,8 @@ class _TurnstileWidgetState extends State<TurnstileWidget> {
       // Both of these mean "the token you have is no longer any good".
       // Telling the form so is what stops it sending one GoTrue will
       // refuse with nothing on screen to explain it.
-      ..setProperty(
-        'expired-callback'.toJS,
-        (() => widget.onToken(null)).toJS,
-      )
-      ..setProperty(
-        'error-callback'.toJS,
-        (() => widget.onToken(null)).toJS,
-      );
+      ..setProperty('expired-callback'.toJS, (() => widget.onToken(null)).toJS)
+      ..setProperty('error-callback'.toJS, (() => widget.onToken(null)).toJS);
     _render(container as JSAny, options);
   }
 

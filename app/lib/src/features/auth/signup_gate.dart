@@ -17,8 +17,7 @@ library;
 bool offersRegistration({
   required bool signupsOpen,
   required bool alreadyThere,
-}) =>
-    signupsOpen || alreadyThere;
+}) => signupsOpen || alreadyThere;
 
 /// Whether the button that creates the account may be pressed.
 bool canRegister({required bool signupsOpen}) => signupsOpen;

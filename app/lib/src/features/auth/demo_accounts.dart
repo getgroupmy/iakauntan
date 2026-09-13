@@ -49,8 +49,7 @@ bool showDemoAccounts({
   required bool platformOffers,
   required bool isSignUp,
   required bool atCompanyDoor,
-}) =>
-    buildAllows && platformOffers && !isSignUp && !atCompanyDoor;
+}) => buildAllows && platformOffers && !isSignUp && !atCompanyDoor;
 
 /// Overridable so a fork can seed its own demo data without editing code.
 const demoPassword = String.fromEnvironment(

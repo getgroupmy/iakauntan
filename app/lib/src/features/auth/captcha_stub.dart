@@ -11,10 +11,14 @@ class TurnstileWidget extends StatelessWidget {
     super.key,
     required this.siteKey,
     required this.onToken,
+    required this.onFailed,
   });
 
   final String siteKey;
   final ValueChanged<String?> onToken;
+
+  /// Never called here; the compile-time other half of [onFailed].
+  final VoidCallback onFailed;
 
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();

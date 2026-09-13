@@ -175,9 +175,9 @@ String dialCodeLabel(Map<String, dynamic> country) =>
 /// filled in for every row. A country with no code cannot be picked,
 /// because picking it would build a number with no country in it.
 List<Map<String, dynamic>> withDialCodes(List<Map<String, dynamic>> rows) => [
-      for (final row in rows)
-        if (phoneDigits('${row['dial_code'] ?? ''}').isNotEmpty) row,
-    ];
+  for (final row in rows)
+    if (phoneDigits('${row['dial_code'] ?? ''}').isNotEmpty) row,
+];
 
 /// The label on the title box.
 const salutationFieldLabel = 'Title';

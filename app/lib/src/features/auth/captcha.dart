@@ -38,7 +38,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'captcha_stub.dart' if (dart.library.js_interop) 'captcha_web.dart';
 
-
 /// Whether a captcha is being asked for at all.
 bool captchaOn(String? siteKey) => (siteKey ?? '').trim().isNotEmpty;
 
@@ -59,37 +58,69 @@ const captchaUnavailable =
 /// What it says when somebody has not passed it yet.
 const captchaNotDone = 'Complete the security check first';
 
+/// What it says when the check could not be drawn at all.
+///
+/// A different sentence from [captchaNotDone] on purpose. "Complete the
+/// security check first" is impossible to act on when there is no check
+/// on the screen to complete, and that is exactly the state a blocked
+/// script leaves the form in — it shipped that way once. This one names
+/// the real problem and says who can fix it, because the person reading
+/// it cannot.
+const captchaBroken =
+    'The security check could not load, so signing in is not possible '
+    'from here. It is blocked by this site rather than by you — please '
+    'tell whoever runs it.';
+
 /// The widget itself, or nothing at all when no key is configured.
 ///
 /// [onToken] is called with the token when the challenge passes, and
 /// with null when it expires — Turnstile tokens last five minutes, and
 /// a form holding an expired one would be refused by GoTrue with
 /// nothing on the screen to explain it.
-class CaptchaField extends StatelessWidget {
+class CaptchaField extends StatefulWidget {
   const CaptchaField({
     super.key,
     required this.siteKey,
     required this.onToken,
+    this.onFailed,
   });
 
   final String? siteKey;
   final ValueChanged<String?> onToken;
 
+  /// Told once when the check will not be drawn at all, so the form can
+  /// refuse with [captchaBroken] instead of asking for something that
+  /// is not there.
+  final VoidCallback? onFailed;
+
+  @override
+  State<CaptchaField> createState() => _CaptchaFieldState();
+}
+
+class _CaptchaFieldState extends State<CaptchaField> {
+  bool _failed = false;
+
+  Widget _note(String text) => Padding(
+    padding: const EdgeInsets.only(top: 12),
+    child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+  );
+
   @override
   Widget build(BuildContext context) {
-    if (!captchaOn(siteKey)) return const SizedBox.shrink();
-    if (!captchaAvailable) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: Text(
-          captchaUnavailable,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      );
-    }
+    if (!captchaOn(widget.siteKey)) return const SizedBox.shrink();
+    if (!captchaAvailable) return _note(captchaUnavailable);
+    if (_failed) return _note(captchaBroken);
     return Padding(
       padding: const EdgeInsets.only(top: 12),
-      child: TurnstileWidget(siteKey: siteKey!.trim(), onToken: onToken),
+      child: TurnstileWidget(
+        siteKey: widget.siteKey!.trim(),
+        onToken: widget.onToken,
+        onFailed: () {
+          if (!mounted || _failed) return;
+          setState(() => _failed = true);
+          widget.onFailed?.call();
+        },
+      ),
     );
   }
 }

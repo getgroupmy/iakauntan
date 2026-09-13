@@ -55,9 +55,10 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
     });
 
     try {
-      await ref.read(supabaseProvider).auth.updateUser(
-            UserAttributes(password: _password.text),
-          );
+      await ref
+          .read(supabaseProvider)
+          .auth
+          .updateUser(UserAttributes(password: _password.text));
       // Only now is the recovery over; until this call returned, the old
       // password was still the live one.
       ref.read(passwordRecoveryProvider.notifier).done();
@@ -107,9 +108,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                     children: [
                       Text(
                         'Choose a new password',
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineSmall
+                        style: Theme.of(context).textTheme.headlineSmall
                             ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: Space.xs),
@@ -121,8 +120,8 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                             ? 'Set a new password for your $_wordmark account.'
                             : 'Set a new password for ${user!.email}.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: context.scheme.onSurfaceVariant,
-                            ),
+                          color: context.scheme.onSurfaceVariant,
+                        ),
                       ),
                       const SizedBox(height: Space.lg),
                       TextFormField(
@@ -133,9 +132,11 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                           labelText: 'New password',
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
-                            icon: Icon(_obscure
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined),
+                            icon: Icon(
+                              _obscure
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                            ),
                             onPressed: () =>
                                 setState(() => _obscure = !_obscure),
                           ),
@@ -169,8 +170,9 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                             ? const SizedBox(
                                 height: 18,
                                 width: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Text('Set password'),
                       ),
