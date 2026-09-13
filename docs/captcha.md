@@ -31,12 +31,25 @@ payload the app can read.
    build.
 2. Paste the **site key** into the platform console, under the sign-in
    page settings, and save.
-3. Load `/signin` and check the widget draws.
-4. Only then, in Supabase: **Authentication → Attack Protection →
+3. Check the Content-Security-Policy allows Cloudflare. Turnstile is
+   a script, an iframe and a callback, so `deploy/vercel-output-config.json`
+   needs `https://challenges.cloudflare.com` in `script-src`,
+   `frame-src` AND `connect-src`. A missing `frame-src` is the quiet
+   one: there is no such directive by default, so it falls back to
+   `default-src 'self'` and the widget's iframe is refused with
+   everything else looking correct.
+
+   `scripts/check_csp_allows.py` asserts this, and CI runs it. It exists
+   because the policy shipped without any of the three: the widget never
+   drew, the form went on demanding a token from a box that was not on
+   the screen, and nobody could sign in with a password. A blocked
+   script is a console message on somebody else's machine.
+4. Load `/signin` and check the widget draws.
+5. Only then, in Supabase: **Authentication → Attack Protection →
    Enable Captcha protection**, provider Turnstile, and paste the
    **secret**.
 
-Doing 4 before 2 refuses every sign-in on the project — including
+Doing 5 before 2 refuses every sign-in on the project — including
 yours — because GoTrue starts demanding a token no form is sending.
 
 ## The trap: the switch covers the whole project

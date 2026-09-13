@@ -594,6 +594,13 @@ jobs:
       - name: Check the service role never writes without knowing the caller
         run: python3 scripts/check_edge_authorization.py
 
+      # Asks a question none of the others do: will the BROWSER let the
+      # app do what it compiles to do. Turnstile shipped unable to draw
+      # because the policy said `script-src 'self'`, and nothing said so
+      # until nobody could sign in.
+      - name: Check the policy allows what the app loads
+        run: python3 scripts/check_csp_allows.py
+
       # -----------------------------------------------------------------
       # And does the hosted project match the migrations that built it?
       #
