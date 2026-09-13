@@ -248,3 +248,11 @@ Nothing below can be done from a commit.
 5. **Take one live payment through a tenant's own acquirer.** Everything
    either side of the HTTP is asserted and no ringgit has ever been
    through it. `docs/first-payment.md` is the runbook.
+6. **Turn passkeys on for the project, and associate the two apps with
+   the domain.** The code is built and the console switch ships off,
+   because GoTrue answers `passkey_disabled` until somebody sets the
+   relying party ID in the dashboard, and neither phone will offer a
+   passkey for a domain that has not published an `assetlinks.json` and
+   an `apple-app-site-association`. `docs/passkeys.md` is the runbook.
+   The iOS half needs Xcode and a team ID, so it cannot be done from a
+   commit at all.

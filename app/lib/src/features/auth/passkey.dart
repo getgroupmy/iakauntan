@@ -36,9 +36,11 @@ library;
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'passkey_stub.dart' if (dart.library.js_interop) 'passkey_web.dart';
+import 'passkey_failure.dart';
+import 'passkey_mobile.dart' if (dart.library.js_interop) 'passkey_web.dart';
 
-export 'passkey_stub.dart'
+export 'passkey_failure.dart' show PasskeyFailure;
+export 'passkey_mobile.dart'
     if (dart.library.js_interop) 'passkey_web.dart'
     show passkeysAvailable, passkeysUsable;
 
@@ -87,7 +89,16 @@ Future<PasskeyResult> signInWithPasskey(
     );
   }
 
-  final assertion = await getPasskeyAssertion(options);
+  final Map<String, dynamic>? assertion;
+  try {
+    assertion = await getPasskeyAssertion(options);
+  } on PasskeyFailure catch (e) {
+    // The platform refused for a reason it was willing to state. Web
+    // never does this; a phone does, and the commonest one is a build
+    // whose domain is not associated, which is otherwise a button that
+    // silently does nothing.
+    return (outcome: PasskeyOutcome.failed, message: e.message);
+  }
   if (assertion == null) {
     return (outcome: PasskeyOutcome.cancelled, message: null);
   }
