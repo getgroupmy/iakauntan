@@ -70,8 +70,11 @@ if hasattr(signal, 'SIGPIPE'):
 # cashier cannot act on instantly is a queue. `0581` took the thirteen
 # approval gates, where the only question worth publishing is who may
 # say yes -- and three of them refuse self-approval while two
-# deliberately do not.
-BUDGET = 76
+# deliberately do not. `0582` took the eleven that do a lot at once,
+# where the only question is what happens if you run it twice -- and
+# `run_depreciation` charges nothing the second time while
+# `raise_rent_invoices` bills every tenant again.
+BUDGET = 65
 
 QUERY = r"""
 select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'

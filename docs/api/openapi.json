@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0581",
+    "version": "0582",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -18255,8 +18255,8 @@
     "/rpc/add_fixed_public_holidays": {
       "post": {
         "operationId": "add_fixed_public_holidays",
-        "summary": "Add fixed public holidays",
-        "description": "`public.add_fixed_public_holidays(p_org_id uuid, p_year integer)` Writes. Requires a signed-in user.",
+        "summary": "Adds the four fixed-date national holidays \u2014 Labour Day, National Day, Malaysia Day, Christmas \u2014 to a year's\u2026",
+        "description": "Adds the four fixed-date national holidays \u2014 Labour Day, National Day, Malaysia Day, Christmas \u2014 to a year's calendar, and returns how many were actually added. SAFE TO RUN TWICE: a date already in the calendar is left alone, so a second call returns 0 rather than duplicating anything. Only the fixed four: Hari Raya, Deepavali, Chinese New Year and Wesak move with the lunar and Hindu calendars and are not computed here. State holidays are untouched \u2014 the guard looks only at rows with no state code. Needs `can_manage_hr`.\n\n`public.add_fixed_public_holidays(p_org_id uuid, p_year integer)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -19597,8 +19597,8 @@
     "/rpc/apply_statutory_leave_bands": {
       "post": {
         "operationId": "apply_statutory_leave_bands",
-        "summary": "Apply statutory leave bands",
-        "description": "`public.apply_statutory_leave_bands(p_leave_type_id uuid, p_preset text)` Writes. Requires a signed-in user.",
+        "summary": "Writes the Employment Act service bands onto a leave type \u2014 8/12/16 days for annual, 14/18/22 for sick, by\u2026",
+        "description": "Writes the Employment Act service bands onto a leave type \u2014 8/12/16 days for annual, 14/18/22 for sick, by years of service \u2014 and switches the type to scale with service. DELETES EVERY EXISTING BAND FIRST: replaced wholesale rather than merged, because a band table with one row from the Act and two somebody typed is worse than either. Safe to run twice in that the result is the same both times, but hand-tuned bands do not survive the first call. The preset must be `annual` or `sick`. Needs `can_manage_hr`.\n\n`public.apply_statutory_leave_bands(p_leave_type_id uuid, p_preset text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -31720,8 +31720,8 @@
     "/rpc/ensure_default_warehouse": {
       "post": {
         "operationId": "ensure_default_warehouse",
-        "summary": "Ensure default warehouse",
-        "description": "`public.ensure_default_warehouse(p_org_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Returns the company's default store, creating one if it has none",
+        "description": "Returns the company's default store, creating one if it has none. Safe to run twice; it is a getter that happens to be able to write. Needs `can_write`.\n\n`public.ensure_default_warehouse(p_org_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -31775,8 +31775,8 @@
     "/rpc/ensure_pay_period": {
       "post": {
         "operationId": "ensure_pay_period",
-        "summary": "Ensure pay period",
-        "description": "`public.ensure_pay_period(p_org_id uuid, p_year integer, p_month integer)` Writes. Requires a signed-in user.",
+        "summary": "Returns the pay period for a month, creating it if it is not there",
+        "description": "Returns the pay period for a month, creating it if it is not there. SAFE TO RUN TWICE and deliberately NOT a refresh: an existing period is returned untouched, because a run may already have been calculated against its pay date and moving that underneath would change every statutory figure the run computed. Changing the pay day in settings affects periods raised after it, not ones already raised. The pay date comes from `payroll_settings.pay_day`, where 0 means the last day of the month and any other day is capped at the month's end \u2014 so the 29th is the 29th in January and the 28th in a February without one. Needs `can_run_payroll`.\n\n`public.ensure_pay_period(p_org_id uuid, p_year integer, p_month integer)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -33849,8 +33849,8 @@
     "/rpc/import_items": {
       "post": {
         "operationId": "import_items",
-        "summary": "Import items",
-        "description": "`public.import_items(p_org_id uuid, p_rows jsonb, p_commit boolean)` Writes. Requires a signed-in user.",
+        "summary": "Loads items from a parsed file and returns a verdict per row",
+        "description": "Loads items from a parsed file and returns a verdict per row. `p_commit` FALSE is a dry run \u2014 the default, so the accidental call is the harmless one \u2014 and true writes. Safe to run twice either way: a code that already exists in the company is reported as such rather than overwriting it, and a code repeated inside the file is caught on its second appearance, so an import is additive and never an update. Every row is checked against the reference tables the e-Invoice submission will later be validated against \u2014 unit of measure, MyInvois classification, currency \u2014 because a code MyInvois rejects is better found now than at submission. Needs `can_write`.\n\n`public.import_items(p_org_id uuid, p_rows jsonb, p_commit boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -49043,8 +49043,8 @@
     "/rpc/raise_rent_invoices": {
       "post": {
         "operationId": "raise_rent_invoices",
-        "summary": "Raise rent invoices",
-        "description": "`public.raise_rent_invoices(p_site_id uuid, p_period_from date, p_period_to date, p_due_date date)` Writes. Requires a signed-in user.",
+        "summary": "Invoices every active tenancy at a site for a period, POSTS each invoice, and returns the run",
+        "description": "Invoices every active tenancy at a site for a period, POSTS each invoice, and returns the run. NOT SAFE TO RUN TWICE: nothing looks for a run already covering this period, so a second call invoices every tenant a second time and posts those invoices too. Check `rent_runs` for the period before calling, and use `rent_preview` to see what would be raised. Refuses when no tenancy covers the period at all, which is the only accidental-call guard there is. The due date defaults to the start of the period. Needs `can_post` and the `property_nonstrata` module.\n\n`public.raise_rent_invoices(p_site_id uuid, p_period_from date, p_period_to date, p_due_date date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -49112,8 +49112,8 @@
     "/rpc/raise_strata_charges": {
       "post": {
         "operationId": "raise_strata_charges",
-        "summary": "Raise strata charges",
-        "description": "`public.raise_strata_charges(p_scheme_id uuid, p_period_from date, p_period_to date, p_due_date date)` Writes. Requires a signed-in user.",
+        "summary": "Charges every parcel in a scheme for a period \u2014 maintenance at the rate per share unit, plus the sinking fund\u2026",
+        "description": "Charges every parcel in a scheme for a period \u2014 maintenance at the rate per share unit, plus the sinking fund contribution as a second line \u2014 POSTS each invoice, and returns the run. NOT SAFE TO RUN TWICE, exactly as `raise_rent_invoices`: nothing checks for an existing run over the period, and a second call bills every parcel again. Check `strata_charge_runs` first; `strata_charge_preview` shows what would be raised. Refuses outright when no rate is in force on the period start \u2014 an AGM resolution sets the rate before charges can be raised \u2014 and refuses when any parcel has no owner on record, rather than skipping it, because a parcel silently left out of a charge run is one nobody discovers until the fund is short. Needs `can_post` and the `property_strata` module.\n\n`public.raise_strata_charges(p_scheme_id uuid, p_period_from date, p_period_to date, p_due_date date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -57295,8 +57295,8 @@
     "/rpc/run_depreciation": {
       "post": {
         "operationId": "run_depreciation",
-        "summary": "Run depreciation",
-        "description": "`public.run_depreciation(p_org_id uuid, p_as_at date)` Writes. Requires a signed-in user.",
+        "summary": "Charges depreciation on every active asset up to a date, posts one journal grouped by expense and accumulated\u2026",
+        "description": "Charges depreciation on every active asset up to a date, posts one journal grouped by expense and accumulated account, and returns the run. SAFE TO RUN TWICE: it computes what each asset SHOULD stand at on the date and charges only the difference, so a second run on the same date charges nothing, deletes its own empty run and returns NULL. A null return is therefore \"there was nothing to do\", not a failure. Assets acquired after the date are skipped and one that reaches cost less residual is marked fully depreciated. Refuses when the chart has no 6400 or 1590 and the asset names no accounts of its own \u2014 a journal that cannot name both sides is not one to guess at. Needs `can_post`.\n\n`public.run_depreciation(p_org_id uuid, p_as_at date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -57417,8 +57417,8 @@
     "/rpc/run_item_conversion": {
       "post": {
         "operationId": "run_item_conversion",
-        "summary": "Run item conversion",
-        "description": "`public.run_item_conversion(p_conversion uuid, p_times numeric, p_warehouse uuid)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
+        "summary": "Cuts one item up into others \u2014 a carcass into cuts, a drum into bottles \u2014 moving stock out of the source and\u2026",
+        "description": "Cuts one item up into others \u2014 a carcass into cuts, a drum into bottles \u2014 moving stock out of the source and into the outputs, with the source's cost split across them by `cost_share`. NOT IDEMPOTENT, and not meant to be: each call is a real conversion that really happened, so calling it twice converts twice. Refuses when there is not enough in the store, unless the company allows negative stock, and refuses when a batch-tracked source has less in traceable lots than the run would consume \u2014 the quantity and the lots can disagree, and the lots are what a recall follows. Needs `can_write_module('inventory')`.\n\n`public.run_item_conversion(p_conversion uuid, p_times numeric, p_warehouse uuid)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
         "tags": [
           "inventory"
         ],
@@ -57557,8 +57557,8 @@
     "/rpc/run_recurring_documents_for": {
       "post": {
         "operationId": "run_recurring_documents_for",
-        "summary": "Run recurring documents for",
-        "description": "`public.run_recurring_documents_for(p_org_id uuid, p_on date)` Writes. Requires a signed-in user.",
+        "summary": "Raises every recurring document due on or before a date for ONE company, and returns how many",
+        "description": "Raises every recurring document due on or before a date for ONE company, and returns how many. Safe to run twice on the same day: raising a document advances its `next_run_date`, so the second call finds nothing due. A date in the past will raise every occurrence that was missed, which is the intended way to catch up and is not what you want if you were only re-running today. Needs `can_post`.\n\n`public.run_recurring_documents_for(p_org_id uuid, p_on date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -57616,8 +57616,8 @@
     "/rpc/run_recurring_journals_for": {
       "post": {
         "operationId": "run_recurring_journals_for",
-        "summary": "Run recurring journals for",
-        "description": "`public.run_recurring_journals_for(p_org_id uuid, p_on date)` Writes. Requires a signed-in user.",
+        "summary": "The same for recurring journals, one company, returning how many were advanced",
+        "description": "The same for recurring journals, one company, returning how many were advanced. Two things a caller will not expect. First, a template with `auto_post` OFF POSTS NOTHING but still has its schedule advanced \u2014 it is counted in the return and no entry exists. Second, a template that throws does not stop the others: the error is written to `last_error` on that row and the loop carries on, so a return of 9 out of 10 is silent, and `last_error_at` is the only place it shows. Deliberately not `app.run_recurring_journals`, which walks every organization in the database; a signed-in user may only post in their own. Needs `can_post`.\n\n`public.run_recurring_journals_for(p_org_id uuid, p_on date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
