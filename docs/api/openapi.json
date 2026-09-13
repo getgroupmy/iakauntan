@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0571",
+    "version": "0572",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -21621,8 +21621,8 @@
     "/rpc/cancel_landed_cost_run": {
       "post": {
         "operationId": "cancel_landed_cost_run",
-        "summary": "Cancel landed cost run",
-        "description": "`public.cancel_landed_cost_run(p_run uuid)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
+        "summary": "Cancels a landed-cost run -- freight, duty and handling being spread across the items on a shipment",
+        "description": "Cancels a landed-cost run -- freight, duty and handling being spread across the items on a shipment. DRAFT ONLY: once applied, those costs are inside what each item is carried at, and every sale since has taken its cost of sales from that figure. Needs the `inventory` module.\n\n`public.cancel_landed_cost_run(p_run uuid)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
         "tags": [
           "inventory"
         ],
@@ -21675,8 +21675,8 @@
     "/rpc/cancel_pdc": {
       "post": {
         "operationId": "cancel_pdc",
-        "summary": "Cancel pdc",
-        "description": "`public.cancel_pdc(p_id uuid, p_reason text)` Writes. Requires a signed-in user.",
+        "summary": "Hands a post-dated cheque back to whoever wrote it, before it has been banked",
+        "description": "Hands a post-dated cheque back to whoever wrote it, before it has been banked. Only a cheque still `held` can be cancelled: one already deposited is with the bank and its fate is the bank's to report, not ours to decide. The reason is required. Any journal raised for it is reversed.\n\n`public.cancel_pdc(p_id uuid, p_reason text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -21734,8 +21734,8 @@
     "/rpc/cancel_stock_transfer": {
       "post": {
         "operationId": "cancel_stock_transfer",
-        "summary": "Cancel stock transfer",
-        "description": "`public.cancel_stock_transfer(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
+        "summary": "Cancels a transfer between warehouses",
+        "description": "Cancels a transfer between warehouses. DRAFT ONLY: once a transfer is sent, stock has physically left one shelf, and cancelling would leave that stock nowhere. Reverse the movement instead. Needs the `inventory` module.\n\n`public.cancel_stock_transfer(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
         "tags": [
           "inventory"
         ],
@@ -24443,8 +24443,8 @@
     "/rpc/clear_ai_credentials": {
       "post": {
         "operationId": "clear_ai_credentials",
-        "summary": "Clear ai credentials",
-        "description": "`public.clear_ai_credentials(p_org_id uuid, p_provider text)` Writes. Requires a signed-in user.",
+        "summary": "Removes a company's own key for one AI provider",
+        "description": "Removes a company's own key for one AI provider. The assistant falls back to the platform's key where one is configured, so this is \"stop billing us for it\" rather than necessarily \"switch it off\". Needs `can_admin`.\n\n`public.clear_ai_credentials(p_org_id uuid, p_provider text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -24501,8 +24501,8 @@
     "/rpc/clear_einvoice_credentials": {
       "post": {
         "operationId": "clear_einvoice_credentials",
-        "summary": "Clear einvoice credentials",
-        "description": "`public.clear_einvoice_credentials(p_org_id uuid, p_environment text)` Writes. Requires a signed-in user.",
+        "summary": "Removes a company's MyInvois credentials for one environment -- sandbox or production -- so nothing further\u2026",
+        "description": "Removes a company's MyInvois credentials for one environment -- sandbox or production -- so nothing further is submitted with them. Unlike `clear_ocr_credentials` this does NOT switch e-Invoicing off; the company's LHDN settings stay as they are and submissions will fail for want of a key until new ones are set. Documents already submitted and validated are LHDN's records and are unaffected. Needs `can_admin`.\n\n`public.clear_einvoice_credentials(p_org_id uuid, p_environment text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -24559,8 +24559,8 @@
     "/rpc/clear_ocr_credentials": {
       "post": {
         "operationId": "clear_ocr_credentials",
-        "summary": "Clear ocr credentials",
-        "description": "`public.clear_ocr_credentials(p_org_id uuid, p_provider text)` Writes. Requires a signed-in user.",
+        "summary": "Removes a company's own document-scanning key and SWITCHES SCANNING OFF in the same call",
+        "description": "Removes a company's own document-scanning key and SWITCHES SCANNING OFF in the same call. The second half is the point: leaving the company switched on with a key that is gone would turn a deliberate removal into a run of failed scans, which reads as a broken feature rather than a decision somebody made. Needs `can_admin`.\n\n`public.clear_ocr_credentials(p_org_id uuid, p_provider text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -24617,8 +24617,8 @@
     "/rpc/clear_org_payment_gateway": {
       "post": {
         "operationId": "clear_org_payment_gateway",
-        "summary": "Clear org payment gateway",
-        "description": "`public.clear_org_payment_gateway(p_org_id uuid, p_gateway text, p_mode text)` Writes. Requires a signed-in user.",
+        "summary": "Removes a company's own acquirer credentials for one gateway in one mode, live or test",
+        "description": "Removes a company's own acquirer credentials for one gateway in one mode, live or test. Customers stop being offered that gateway on a shared invoice -- `shared_payment_options` returns only gateways that are configured and active with a settlement account. Payments already taken are unaffected; what ends is the ability to take more. Needs `can_admin`.\n\n`public.clear_org_payment_gateway(p_org_id uuid, p_gateway text, p_mode text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -24678,8 +24678,8 @@
     "/rpc/clear_pdc": {
       "post": {
         "operationId": "clear_pdc",
-        "summary": "Clear pdc",
-        "description": "`public.clear_pdc(p_id uuid, p_on date, p_bank uuid)` Writes. Requires a signed-in user.",
+        "summary": "Records that a post-dated cheque actually cleared, which is the moment it stops being a promise and becomes\u2026",
+        "description": "Records that a post-dated cheque actually cleared, which is the moment it stops being a promise and becomes money: the bank balance moves and the receivable or payable is discharged. Accepts a cheque that is `held` or `deposited` and nothing else. The bank account, if given, is checked against the cheque's own company -- it was once org-checked only in the lookup that resolves the ledger account, while the balance update and the cheque row used it raw.\n\n`public.clear_pdc(p_id uuid, p_on date, p_bank uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -24741,8 +24741,8 @@
     "/rpc/clear_platform_ai_key": {
       "post": {
         "operationId": "clear_platform_ai_key",
-        "summary": "Clear platform ai key",
-        "description": "`public.clear_platform_ai_key(p_provider text)` Writes. Requires a signed-in user.",
+        "summary": "Removes the PLATFORM's key for one AI provider -- ours, not a tenant's",
+        "description": "Removes the PLATFORM's key for one AI provider -- ours, not a tenant's. Every company relying on the platform key rather than its own loses the assistant at once. Needs a platform administrator, which is a different question from being an administrator of any company.\n\n`public.clear_platform_ai_key(p_provider text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -30706,8 +30706,8 @@
     "/rpc/detach_company_from_firm": {
       "post": {
         "operationId": "detach_company_from_firm",
-        "summary": "Detach company from firm",
-        "description": "`public.detach_company_from_firm(p_org_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Ends the appointment between a company and the accounting practice keeping its books, and returns how many\u2026",
+        "description": "Ends the appointment between a company and the accounting practice keeping its books, and returns how many memberships it removed. EITHER SIDE MAY END IT -- the company's administrator or the firm's partner -- because an appointment only one party can end is not an appointment. Removes exactly the memberships the attachment created: somebody from the practice whom the client separately invited on their own account keeps their place, because that was never the firm's doing.\n\n`public.detach_company_from_firm(p_org_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -50394,8 +50394,8 @@
     "/rpc/reopen_appraisal": {
       "post": {
         "operationId": "reopen_appraisal",
-        "summary": "Reopen appraisal",
-        "description": "`public.reopen_appraisal(p_appraisal uuid, p_side text)` Writes. Requires a signed-in user.",
+        "summary": "Reopens one half of an appraisal -- `self`, `manager` or `final` -- by clearing that half's submission stamp\u2026",
+        "description": "Reopens one half of an appraisal -- `self`, `manager` or `final` -- by clearing that half's submission stamp, which is what the guard reads when it refuses a change. NOTHING WRITTEN IS ERASED: the author comes back to their own words and edits them rather than starting from a blank box. Any other side name is refused. Needs `can_manage_hr`.\n\n`public.reopen_appraisal(p_appraisal uuid, p_side text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -50452,8 +50452,8 @@
     "/rpc/reopen_bank_reconciliation": {
       "post": {
         "operationId": "reopen_bank_reconciliation",
-        "summary": "Reopen bank reconciliation",
-        "description": "`public.reopen_bank_reconciliation(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Reopens a completed bank reconciliation",
+        "description": "Reopens a completed bank reconciliation. Refuses if the SAME ACCOUNT has been reconciled again to a later statement date, naming that date and saying to reopen it first -- reopening an earlier one would release lines the later one was closed over, and that later reconciliation balanced against having them. Nothing about the matching itself is undone: the lines go back to matched-but-unclosed, which is what they were a moment before it was completed. Needs `can_post`.\n\n`public.reopen_bank_reconciliation(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -50506,8 +50506,8 @@
     "/rpc/reopen_lead": {
       "post": {
         "operationId": "reopen_lead",
-        "summary": "Reopen lead",
-        "description": "`public.reopen_lead(p_lead uuid)` Writes. Requires a signed-in user.",
+        "summary": "Puts a lost lead back in play",
+        "description": "Puts a lost lead back in play. Returns it to CONTACTED rather than to new, because somebody did speak to them and pretending otherwise loses the only thing the record knew. Refuses a lead that is not lost. Needs `can_write`.\n\n`public.reopen_lead(p_lead uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -50614,8 +50614,8 @@
     "/rpc/reopen_opportunity": {
       "post": {
         "operationId": "reopen_opportunity",
-        "summary": "Reopen opportunity",
-        "description": "`public.reopen_opportunity(p_opportunity uuid, p_stage uuid)` Writes. Requires a signed-in user.",
+        "summary": "Puts a closed deal back in play, at the stage given or the one it was working in",
+        "description": "Puts a closed deal back in play, at the stage given or the one it was working in. Never at the stage it DIED in: that is a closed column, and a deal sitting in it would read as closed again. Falls back to the first open stage when neither is available, and refuses if the pipeline has no open stage at all. Refuses a deal already open. Needs `can_write`.\n\n`public.reopen_opportunity(p_opportunity uuid, p_stage uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -50672,8 +50672,8 @@
     "/rpc/reopen_project": {
       "post": {
         "operationId": "reopen_project",
-        "summary": "Reopen project",
-        "description": "`public.reopen_project(p_project uuid)` Writes. Requires a signed-in user.",
+        "summary": "Makes a closed project active again so time and cost can be booked to it",
+        "description": "Makes a closed project active again so time and cost can be booked to it. Refuses one already open. Needs `can_post` rather than `can_write` -- a reopened project is somewhere the ledger can be told to put money.\n\n`public.reopen_project(p_project uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -56946,8 +56946,8 @@
     "/rpc/revoke_customer_portal": {
       "post": {
         "operationId": "revoke_customer_portal",
-        "summary": "Revoke customer portal",
-        "description": "`public.revoke_customer_portal(p_contact_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Turns off a customer's standing portal link -- the one that shows them everything outstanding rather than a\u2026",
+        "description": "Turns off a customer's standing portal link -- the one that shows them everything outstanding rather than a single document. Their invoices, payments and documents are all unaffected: what ends is their ability to look at them without being chased. Needs `can_write`.\n\n`public.revoke_customer_portal(p_contact_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -57000,8 +57000,8 @@
     "/rpc/revoke_document_share": {
       "post": {
         "operationId": "revoke_document_share",
-        "summary": "Revoke document share",
-        "description": "`public.revoke_document_share(p_document_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Turns off every share link for one sales document at once, and returns how many it turned off",
+        "description": "Turns off every share link for one sales document at once, and returns how many it turned off. A link already sent stops working immediately: `open_shared_document` answers with the state `revoked` and no document. The record of who opened it and when is kept -- revoking removes the access, not the evidence of it. Needs `can_write`.\n\n`public.revoke_document_share(p_document_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -57055,8 +57055,8 @@
     "/rpc/revoke_payslip_access": {
       "post": {
         "operationId": "revoke_payslip_access",
-        "summary": "Revoke payslip access",
-        "description": "`public.revoke_payslip_access(p_request_id uuid, p_note text)` Writes. Requires a signed-in user.",
+        "summary": "Withdraws an employee's approved access to their own payslips, with a note saying why",
+        "description": "Withdraws an employee's approved access to their own payslips, with a note saying why. Only an APPROVED request can be revoked -- a pending one is declined, not revoked, and the two read differently to the person waiting. Needs `can_admin`, not merely `can_write`: payslip access is the company's own people's pay.\n\n`public.revoke_payslip_access(p_request_id uuid, p_note text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -57112,8 +57112,8 @@
     "/rpc/revoke_ticket_share": {
       "post": {
         "operationId": "revoke_ticket_share",
-        "summary": "Revoke ticket share",
-        "description": "`public.revoke_ticket_share(p_ticket uuid)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
+        "summary": "Turns off every share link for one support ticket, returning the count",
+        "description": "Turns off every share link for one support ticket, returning the count. The customer's link stops opening and stops accepting replies. The conversation itself is untouched; what goes is the way in. Needs the `ticketing` module.\n\n`public.revoke_ticket_share(p_ticket uuid)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
         "tags": [
           "ticketing"
         ],
@@ -66006,8 +66006,8 @@
     "/rpc/void_bank_transfer": {
       "post": {
         "operationId": "void_bank_transfer",
-        "summary": "Void bank transfer",
-        "description": "`public.void_bank_transfer(p_id uuid, p_reason text)` Writes. Requires a signed-in user.",
+        "summary": "Voids a transfer between the company's own bank accounts and reverses its journal if it had one",
+        "description": "Voids a transfer between the company's own bank accounts and reverses its journal if it had one. Puts back exactly what `post_bank_transfer` took -- the amount SENT, which already includes the fee -- so the two are symmetric and the balance lands where it started. Refuses one already void. The original journal stays posted and a reversing one is added beside it. Needs `can_post`.\n\n`public.void_bank_transfer(p_id uuid, p_reason text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -66064,8 +66064,8 @@
     "/rpc/void_contra": {
       "post": {
         "operationId": "void_contra",
-        "summary": "Void contra",
-        "description": "`public.void_contra(p_id uuid, p_reason text)` Writes. Requires a signed-in user. Refused unless the company has the `sales` module and the caller may use it.",
+        "summary": "Voids a contra -- the set-off between what a contact owes and what they are owed -- and reverses its journal",
+        "description": "Voids a contra -- the set-off between what a contact owes and what they are owed -- and reverses its journal. The reason is REQUIRED, and the function says why when it is missing: a contra reversed without a reason is a set-off nobody can account for afterwards. Refuses one already void. Both invoices and bills go back to standing on their own.\n\n`public.void_contra(p_id uuid, p_reason text)` Writes. Requires a signed-in user. Refused unless the company has the `sales` module and the caller may use it.",
         "tags": [
           "sales"
         ],

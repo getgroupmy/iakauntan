@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0571` (the highest applied migration).
+Schema version `0572` (the highest applied migration).
 662 functions and 329 readable tables, of which
 254 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**271 of 662 functions carry a `comment on
+**292 of 662 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -133,8 +133,8 @@ Refused unless the company has the `inventory` module switched on and the caller
 
 - `bundle_availability(p_item uuid, p_warehouse uuid)`
 - `bundle_margin(p_item uuid)`
-- `cancel_landed_cost_run(p_run uuid)` *(writes)*
-- `cancel_stock_transfer(p_id uuid)` *(writes)*
+- `cancel_landed_cost_run(p_run uuid)` *(writes)* — Cancels a landed-cost run -- freight, duty and handling being spread across the items on a shipment.
+- `cancel_stock_transfer(p_id uuid)` *(writes)* — Cancels a transfer between warehouses.
 - `delete_item_conversion(p_id uuid)` *(writes)*
 - `delete_item_uom_pack(p_item uuid, p_uom text)` *(writes)*
 - `item_bundle_for(p_item uuid)`
@@ -340,7 +340,7 @@ Refused unless the company has the `sales` module switched on and the caller may
 - `deposits_held_for(p_contact uuid)`
 - `pdc_list(p_org uuid, p_direction text, p_status text)`
 - `pdc_maturing(p_org uuid, p_from date, p_to date)` — Cheques still outstanding that mature by a date, plus any already past their date and not banked — which is the whole reason to look.
-- `void_contra(p_id uuid, p_reason text)` *(writes)*
+- `void_contra(p_id uuid, p_reason text)` *(writes)* — Voids a contra -- the set-off between what a contact owes and what they are owed -- and reverses its journal.
 
 ### ticketing (8)
 
@@ -351,7 +351,7 @@ Refused unless the company has the `ticketing` module switched on and the caller
 - `create_ticket(p_org_id uuid, p_subject text, p_description text, p_category text, p_priority app.ticket_priority, p_type app.ticket_type, p_channel app.ticket_channel, p_requester_user_id uuid, p_requester_contact_id uuid, p_asset_id uuid)` *(writes)* — Raises a support ticket.
 - `escalate_ticket(p_ticket uuid, p_kind app.ticket_escalation, p_to_team uuid, p_to_user uuid, p_reason text)` *(writes)*
 - `module_dashboard(p_org_id uuid)` — Figures for the modules a company holds and this caller may read, keyed by module code.
-- `revoke_ticket_share(p_ticket uuid)` *(writes)*
+- `revoke_ticket_share(p_ticket uuid)` *(writes)* — Turns off every share link for one support ticket, returning the count.
 - `share_ticket(p_ticket uuid, p_valid_days integer, p_email text)` *(writes)*
 - `transition_ticket(p_ticket uuid, p_to app.ticket_status, p_note text)` *(writes)*
 
@@ -395,7 +395,7 @@ Not gated on any module.
 - `bulk_post_documents(p_ids uuid[])` *(writes)* — Post many sales documents, one savepoint each, and say per document what happened.
 - `calculate_payroll_run(p_run_id uuid)` *(writes)* — Builds a payslip per employee whose employment overlaps the period, deriving every statutory figure from the schedules in force on the pay date.
 - `can_add_company()` — Whether this account may add another company, so the app can leave the button out rather than offer one that refuses.
-- `cancel_pdc(p_id uuid, p_reason text)` *(writes)*
+- `cancel_pdc(p_id uuid, p_reason text)` *(writes)* — Hands a post-dated cheque back to whoever wrote it, before it has been banked.
 - `capitalise_bill_line(p_line uuid, p_asset_no text, p_name text, p_category text, p_method text, p_useful_life_months integer, p_rate_percent numeric, p_residual_value numeric)` *(writes)* — Makes a fixed asset out of a posted bill line, taking the cost, the date, the supplier and the account from the line rather than asking for them again.
 - `cash_runs_out_on(p_org uuid, p_weeks integer, p_use_history boolean)`
 - `change_company_name(p_entity uuid, p_new_name text, p_resolved_on date)` *(writes)* — Renames a company, keeps the former name, and opens the s.28 filing.
@@ -430,12 +430,12 @@ Not gated on any module.
 - `chat_typing_stop(p_conversation_id uuid)` *(writes)*
 - `chat_who_is_typing(p_conversation_id uuid)`
 - `claims_awaiting_my_approval(p_org_id uuid)`
-- `clear_ai_credentials(p_org_id uuid, p_provider text)` *(writes)*
-- `clear_einvoice_credentials(p_org_id uuid, p_environment text)` *(writes)*
-- `clear_ocr_credentials(p_org_id uuid, p_provider text)` *(writes)*
-- `clear_org_payment_gateway(p_org_id uuid, p_gateway text, p_mode text)` *(writes)*
-- `clear_pdc(p_id uuid, p_on date, p_bank uuid)` *(writes)*
-- `clear_platform_ai_key(p_provider text)` *(writes)*
+- `clear_ai_credentials(p_org_id uuid, p_provider text)` *(writes)* — Removes a company's own key for one AI provider.
+- `clear_einvoice_credentials(p_org_id uuid, p_environment text)` *(writes)* — Removes a company's MyInvois credentials for one environment -- sandbox or production -- so nothing further is submitted with them.
+- `clear_ocr_credentials(p_org_id uuid, p_provider text)` *(writes)* — Removes a company's own document-scanning key and SWITCHES SCANNING OFF in the same call.
+- `clear_org_payment_gateway(p_org_id uuid, p_gateway text, p_mode text)` *(writes)* — Removes a company's own acquirer credentials for one gateway in one mode, live or test.
+- `clear_pdc(p_id uuid, p_on date, p_bank uuid)` *(writes)* — Records that a post-dated cheque actually cleared, which is the moment it stops being a promise and becomes money: the bank balance moves and the receivable or payable is discharged.
+- `clear_platform_ai_key(p_provider text)` *(writes)* — Removes the PLATFORM's key for one AI provider -- ours, not a tenant's.
 - `clock_in(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` *(writes)*
 - `clock_out(p_org_id uuid, p_method app.clock_method, p_lat numeric, p_lng numeric, p_address text, p_device text, p_terminal text, p_employee_id uuid)` *(writes)*
 - `close_lead(p_lead uuid, p_reason text)` *(writes)*
@@ -501,7 +501,7 @@ Not gated on any module.
 - `delete_my_account()` *(writes)* — Anonymises the signed-in account: identity scrubbed from profiles and auth.users, membership and push tokens removed, sessions killed.
 - `deposit_pdc(p_id uuid, p_on date)` *(writes)*
 - `depreciation_preview(p_org_id uuid, p_as_at date)`
-- `detach_company_from_firm(p_org_id uuid)` *(writes)*
+- `detach_company_from_firm(p_org_id uuid)` *(writes)* — Ends the appointment between a company and the accounting practice keeping its books, and returns how many memberships it removed.
 - `disconnect_bank_feed(p_bank_account_id uuid)` *(writes)*
 - `discount_pos_sale(p_sale uuid, p_percent numeric, p_amount numeric, p_reason text)` *(writes)* — Reduces a whole bill, by a percentage or by an amount.
 - `discount_pos_sale_line(p_line uuid, p_percent numeric, p_amount numeric, p_reason text)` *(writes)* — Reduces one line, by a percentage or by an amount, with a reason and a name against it.
@@ -677,12 +677,12 @@ Not gated on any module.
 - `remit_withholding(p_id uuid, p_paid_on date, p_bank_account_id uuid, p_reference text)` *(writes)*
 - `renew_employee_document(p_document uuid, p_expires_date date, p_issued_date date, p_title text, p_notes text)` *(writes)*
 - `rent_preview(p_site_id uuid, p_period_from date, p_period_to date)`
-- `reopen_appraisal(p_appraisal uuid, p_side text)` *(writes)*
-- `reopen_bank_reconciliation(p_id uuid)` *(writes)*
-- `reopen_lead(p_lead uuid)` *(writes)*
+- `reopen_appraisal(p_appraisal uuid, p_side text)` *(writes)* — Reopens one half of an appraisal -- `self`, `manager` or `final` -- by clearing that half's submission stamp, which is what the guard reads when it refuses a change.
+- `reopen_bank_reconciliation(p_id uuid)` *(writes)* — Reopens a completed bank reconciliation.
+- `reopen_lead(p_lead uuid)` *(writes)* — Puts a lost lead back in play.
 - `reopen_matter(p_matter uuid)` *(writes)* — Reopens a closed file.
-- `reopen_opportunity(p_opportunity uuid, p_stage uuid)` *(writes)*
-- `reopen_project(p_project uuid)` *(writes)*
+- `reopen_opportunity(p_opportunity uuid, p_stage uuid)` *(writes)* — Puts a closed deal back in play, at the stage given or the one it was working in.
+- `reopen_project(p_project uuid)` *(writes)* — Makes a closed project active again so time and cost can be booked to it.
 - `reply_to_shared_ticket(p_token text, p_body text)` *(writes)* — Lets the customer answer their own ticket through the share link, without an account.
 - `report_ap_aging(p_org_id uuid, p_as_at date)`
 - `report_appraisals_due(p_org uuid, p_as_at date)` — Who is late, and on which half.
@@ -737,9 +737,9 @@ Not gated on any module.
 - `revalue_foreign_balances(p_org_id uuid, p_as_at date)` *(writes)* — Restates foreign-currency balances at the rate ruling on the date, posting the gain or loss.
 - `revenue_schedule_due(p_org_id uuid)` — Deferred revenue not yet released, one row per period end — the shape recognise_revenue posts in.
 - `reverse_gl_entry(p_entry_id uuid, p_date date)` *(writes)* — Posts the contra of a journal: the same lines with debit and credit swapped, dated today or the date given, numbered as a new journal and marked `is_reversal` pointing back at the original.
-- `revoke_customer_portal(p_contact_id uuid)` *(writes)*
-- `revoke_document_share(p_document_id uuid)` *(writes)*
-- `revoke_payslip_access(p_request_id uuid, p_note text)` *(writes)*
+- `revoke_customer_portal(p_contact_id uuid)` *(writes)* — Turns off a customer's standing portal link -- the one that shows them everything outstanding rather than a single document.
+- `revoke_document_share(p_document_id uuid)` *(writes)* — Turns off every share link for one sales document at once, and returns how many it turned off.
+- `revoke_payslip_access(p_request_id uuid, p_note text)` *(writes)* — Withdraws an employee's approved access to their own payslips, with a note saying why.
 - `run_depreciation(p_org_id uuid, p_as_at date)` *(writes)*
 - `run_recurring_documents_for(p_org_id uuid, p_on date)` *(writes)*
 - `run_recurring_journals_for(p_org_id uuid, p_on date)` *(writes)*
@@ -809,7 +809,7 @@ Not gated on any module.
 - `upsert_bank_account(p_name text, p_bank_name text, p_bank_code text, p_account_number text, p_account_type text, p_currency text, p_account_id uuid, p_id uuid, p_org_id uuid)` *(writes)* — Adds or amends a bank account and the GL account behind it, as one act, so the two cannot disagree.
 - `upsert_custom_field(p_org_id uuid, p_entity text, p_label text, p_key text, p_kind text, p_is_required boolean, p_options jsonb, p_target_entity text, p_help_text text, p_min_value numeric, p_max_value numeric, p_max_length integer, p_show_on_list boolean, p_sort_order integer)` *(writes)*
 - `verify_person_identity(p_person uuid, p_document_type text, p_verified_on date, p_notes text)` *(writes)* — Records a CDD check as what it is — this document, seen by this individual, on this day.
-- `void_bank_transfer(p_id uuid, p_reason text)` *(writes)*
+- `void_bank_transfer(p_id uuid, p_reason text)` *(writes)* — Voids a transfer between the company's own bank accounts and reverses its journal if it had one.
 - `void_deposit(p_id uuid, p_reason text)` *(writes)* — Voids a deposit and reverses its journal.
 - `void_sales_document(p_id uuid, p_reason text)` *(writes)* — Voids an invoice or other sales document and reverses its journal if it had one, recording the reason in `internal_notes` where the customer will not see it.
 - `workspace_by_host(p_host text)` — Resolves a company's own subdomain to the door that should be drawn at it: the name, the logo, the module, and the login wording if the company wrote any.
