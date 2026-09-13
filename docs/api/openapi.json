@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0574",
+    "version": "0575",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -40509,8 +40509,8 @@
     "/rpc/platform_adjust_credit": {
       "post": {
         "operationId": "platform_adjust_credit",
-        "summary": "Platform adjust credit",
-        "description": "`public.platform_adjust_credit(p_org_id uuid, p_amount numeric, p_reason text)` Writes. Requires a signed-in user.",
+        "summary": "Moves a company's credit balance by hand, up or down, and returns the new balance",
+        "description": "Moves a company's credit balance by hand, up or down, and returns the new balance. THE REASON IS REQUIRED: an unexplained adjustment to somebody's account is the one an auditor asks about, and this is the path that does not go through an invoice. Platform administrators only.\n\n`public.platform_adjust_credit(p_org_id uuid, p_amount numeric, p_reason text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -40831,8 +40831,8 @@
     "/rpc/platform_delete_landing_app_link": {
       "post": {
         "operationId": "platform_delete_landing_app_link",
-        "summary": "Platform delete landing app link",
-        "description": "`public.platform_delete_landing_app_link(p_store_code text)` Writes. Requires a signed-in user.",
+        "summary": "Removes one download button from the landing page",
+        "description": "Removes one download button from the landing page. Platform administrators only.\n\n`public.platform_delete_landing_app_link(p_store_code text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -40884,8 +40884,8 @@
     "/rpc/platform_delete_landing_logo": {
       "post": {
         "operationId": "platform_delete_landing_logo",
-        "summary": "Platform delete landing logo",
-        "description": "`public.platform_delete_landing_logo(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Removes one customer logo from the landing page",
+        "description": "Removes one customer logo from the landing page. Platform administrators only.\n\n`public.platform_delete_landing_logo(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -40938,8 +40938,8 @@
     "/rpc/platform_delete_landing_section": {
       "post": {
         "operationId": "platform_delete_landing_section",
-        "summary": "Platform delete landing section",
-        "description": "`public.platform_delete_landing_section(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Removes one section from the landing page",
+        "description": "Removes one section from the landing page. Platform administrators only.\n\n`public.platform_delete_landing_section(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -40992,8 +40992,8 @@
     "/rpc/platform_delete_landing_stat": {
       "post": {
         "operationId": "platform_delete_landing_stat",
-        "summary": "Platform delete landing stat",
-        "description": "`public.platform_delete_landing_stat(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Removes one figure from the landing page",
+        "description": "Removes one figure from the landing page. Platform administrators only.\n\n`public.platform_delete_landing_stat(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -41046,8 +41046,8 @@
     "/rpc/platform_delete_landing_testimonial": {
       "post": {
         "operationId": "platform_delete_landing_testimonial",
-        "summary": "Platform delete landing testimonial",
-        "description": "`public.platform_delete_landing_testimonial(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Removes one customer quote from the landing page",
+        "description": "Removes one customer quote from the landing page. Platform administrators only.\n\n`public.platform_delete_landing_testimonial(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -41100,8 +41100,8 @@
     "/rpc/platform_end_promotion": {
       "post": {
         "operationId": "platform_end_promotion",
-        "summary": "Platform end promotion",
-        "description": "`public.platform_end_promotion(p_id uuid, p_on date)` Writes. Requires a signed-in user.",
+        "summary": "Ends a promotion on a date, so it stops applying to new billing without touching what it has already\u2026",
+        "description": "Ends a promotion on a date, so it stops applying to new billing without touching what it has already discounted. Platform administrators only.\n\n`public.platform_end_promotion(p_id uuid, p_on date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -41158,8 +41158,8 @@
     "/rpc/platform_feedback": {
       "post": {
         "operationId": "platform_feedback",
-        "summary": "Platform feedback",
-        "description": "`public.platform_feedback(p_status app.feedback_status, p_limit integer)` Writes. Requires a signed-in user.",
+        "summary": "Reads what people have sent us, optionally filtered by status",
+        "description": "Reads what people have sent us, optionally filtered by status. Ordered faults first, worst first, then whatever came in most recently -- so the queue opens on the thing most likely to be costing somebody something. Platform administrators only.\n\n`public.platform_feedback(p_status app.feedback_status, p_limit integer)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -41283,8 +41283,8 @@
     "/rpc/platform_force_transfer": {
       "post": {
         "operationId": "platform_force_transfer",
-        "summary": "Platform force transfer",
-        "description": "`public.platform_force_transfer(p_org_id uuid, p_to_email text, p_reason text)` Writes. Requires a signed-in user.",
+        "summary": "Hands a company over to somebody else without the current owner's consent -- the path for an owner who has\u2026",
+        "description": "Hands a company over to somebody else without the current owner's consent -- the path for an owner who has died, left, or lost their account. The reason is REQUIRED and recorded: this is the most serious thing a platform administrator can do to a customer, and it must be answerable afterwards. The recipient must already have an account here, refused by name rather than invited. Goes through the same `app.hand_company_over` as a consented handover, so the membership changes and the audit trail are identical; what differs is only who authorised it.\n\n`public.platform_force_transfer(p_org_id uuid, p_to_email text, p_reason text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -41390,8 +41390,8 @@
     "/rpc/platform_mark_invoice_paid": {
       "post": {
         "operationId": "platform_mark_invoice_paid",
-        "summary": "Platform mark invoice paid",
-        "description": "`public.platform_mark_invoice_paid(p_invoice_id uuid, p_note text)` Writes. Requires a signed-in user.",
+        "summary": "Marks a platform invoice paid when the money arrived some way the system did not see -- a bank transfer\u2026",
+        "description": "Marks a platform invoice paid when the money arrived some way the system did not see -- a bank transfer reconciled by hand. Sends the company the payment-received notice, because a transfer somebody reconciled by hand is still a payment and the company that made it has no other way of learning it landed (`0491`). The notice is queued only if the invoice actually moved to paid, so the guard on the update is the guard on the mail: marking an already-paid invoice sends nothing.\n\n`public.platform_mark_invoice_paid(p_invoice_id uuid, p_note text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -41710,8 +41710,8 @@
     "/rpc/platform_publish_statutory_schedule": {
       "post": {
         "operationId": "platform_publish_statutory_schedule",
-        "summary": "Platform publish statutory schedule",
-        "description": "`public.platform_publish_statutory_schedule(p_body text, p_name text, p_method text, p_effective_from date, p_rates jsonb, p_source text, p_notes text, p_wage_round_up_to numeric, p_result_rounding text, p_is_verified boolean)` Writes. Requires a signed-in user.",
+        "summary": "Publishes a statutory rate table -- EPF, SOCSO, EIS or PCB -- that EVERY company's payroll is then computed\u2026",
+        "description": "Publishes a statutory rate table -- EPF, SOCSO, EIS or PCB -- that EVERY company's payroll is then computed from. Platform administrators only, and the refusal says why: these rates are shared by every organization. REFUSES TO CORRECT A TABLE PAYSLIPS HAVE ALREADY BEEN CALCULATED ON, telling the operator to publish the correction from the date it takes effect instead -- rewriting it underneath existing payslips would change what people were paid without changing what they were told. Closes only schedules that started EARLIER, so republishing a correction to the current table cannot give it an `effective_to` before its own `effective_from`. Asserts the bands have no gap in the same transaction that inserts them (`0404`), so a schedule with a hole in it is never published rather than published and then found. Refuses a schedule with no rates at all, and a rounding mode outside nearest_cent, nearest_5sen and up_ringgit.\n\n`public.platform_publish_statutory_schedule(p_body text, p_name text, p_method text, p_effective_from date, p_rates jsonb, p_source text, p_notes text, p_wage_round_up_to numeric, p_result_rounding text, p_is_verified boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -41885,8 +41885,8 @@
     "/rpc/platform_reserve_subdomain": {
       "post": {
         "operationId": "platform_reserve_subdomain",
-        "summary": "Platform reserve subdomain",
-        "description": "`public.platform_reserve_subdomain(p_name text, p_org_id uuid, p_module_code text, p_landing_path text, p_note text, p_purpose text)` Writes. Requires a signed-in user.",
+        "summary": "Holds a name on our domain -- for a company, for the platform's own use, or parked so nobody else takes it",
+        "description": "Holds a name on our domain -- for a company, for the platform's own use, or parked so nobody else takes it. The SHAPE of a host label is always checked; the reserved-names BLOCKLIST only when the name is about to become a company's (`0562`). That split is the point: `mail` sits on the blocklist with the reason \"the mail service\", and until `0562` nothing could ever point it AT the mail service -- the list held the name against the very use it was being held for. A null purpose means \"read it off the rest of the call\", which is what every caller written before `0562` meant and had no way to say. Platform administrators only.\n\n`public.platform_reserve_subdomain(p_name text, p_org_id uuid, p_module_code text, p_landing_path text, p_note text, p_purpose text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -41955,8 +41955,8 @@
     "/rpc/platform_save_landing_app_link": {
       "post": {
         "operationId": "platform_save_landing_app_link",
-        "summary": "Platform save landing app link",
-        "description": "`public.platform_save_landing_app_link(p_store_code text, p_label text, p_url text, p_badge_url text, p_sort_order integer, p_is_active boolean)` Writes. Requires a signed-in user.",
+        "summary": "Creates or edits a download button -- App Store, Play Store -- on the landing page",
+        "description": "Creates or edits a download button -- App Store, Play Store -- on the landing page. The URL must be one the browser can follow, for the reason the call-to-action gives: a button that goes nowhere tells a visitor the product is broken. Platform administrators only.\n\n`public.platform_save_landing_app_link(p_store_code text, p_label text, p_url text, p_badge_url text, p_sort_order integer, p_is_active boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -42025,8 +42025,8 @@
     "/rpc/platform_save_landing_logo": {
       "post": {
         "operationId": "platform_save_landing_logo",
-        "summary": "Platform save landing logo",
-        "description": "`public.platform_save_landing_logo(p_id uuid, p_name text, p_logo_url text, p_sort_order integer, p_is_active boolean)` Writes. Requires a signed-in user.",
+        "summary": "Creates or edits a customer logo on the landing page",
+        "description": "Creates or edits a customer logo on the landing page. Platform administrators only.\n\n`public.platform_save_landing_logo(p_id uuid, p_name text, p_logo_url text, p_sort_order integer, p_is_active boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -42090,8 +42090,8 @@
     "/rpc/platform_save_landing_page": {
       "post": {
         "operationId": "platform_save_landing_page",
-        "summary": "Platform save landing page",
-        "description": "`public.platform_save_landing_page(p_patch jsonb)` Writes. Requires a signed-in user.",
+        "summary": "Patches the landing page: only the fields present in the patch are changed",
+        "description": "Patches the landing page: only the fields present in the patch are changed. Validates the theme mode against system, light and dark, every colour as six hex digits after a hash, and the call-to-action as a full https address -- the same rule the store links and customer logos have, because a button the browser cannot follow is worse than an absent one: the visitor presses it and decides the product is broken. Platform administrators only.\n\n`public.platform_save_landing_page(p_patch jsonb)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -42139,8 +42139,8 @@
     "/rpc/platform_save_landing_section": {
       "post": {
         "operationId": "platform_save_landing_section",
-        "summary": "Platform save landing section",
-        "description": "`public.platform_save_landing_section(p_id uuid, p_title text, p_body text, p_icon text, p_sort_order integer, p_is_active boolean, p_kind text)` Writes. Requires a signed-in user.",
+        "summary": "Creates or edits one section of the landing page",
+        "description": "Creates or edits one section of the landing page. A blank field leaves what is stored alone, so correcting a title does not empty the body. Platform administrators only.\n\n`public.platform_save_landing_section(p_id uuid, p_title text, p_body text, p_icon text, p_sort_order integer, p_is_active boolean, p_kind text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -42210,8 +42210,8 @@
     "/rpc/platform_save_landing_stat": {
       "post": {
         "operationId": "platform_save_landing_stat",
-        "summary": "Platform save landing stat",
-        "description": "`public.platform_save_landing_stat(p_id uuid, p_value text, p_label text, p_icon text, p_sort_order integer, p_is_active boolean)` Writes. Requires a signed-in user.",
+        "summary": "Creates or edits one of the figures on the landing page -- \"12,000 invoices a month\" and the like",
+        "description": "Creates or edits one of the figures on the landing page -- \"12,000 invoices a month\" and the like. A blank field leaves the stored one alone. Platform administrators only.\n\n`public.platform_save_landing_stat(p_id uuid, p_value text, p_label text, p_icon text, p_sort_order integer, p_is_active boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -42278,8 +42278,8 @@
     "/rpc/platform_save_landing_testimonial": {
       "post": {
         "operationId": "platform_save_landing_testimonial",
-        "summary": "Platform save landing testimonial",
-        "description": "`public.platform_save_landing_testimonial(p_id uuid, p_quote text, p_author text, p_company text, p_avatar_url text, p_sort_order integer, p_is_active boolean)` Writes. Requires a signed-in user.",
+        "summary": "Creates or edits a customer quote on the landing page",
+        "description": "Creates or edits a customer quote on the landing page. A blank field leaves the stored one alone. Platform administrators only.\n\n`public.platform_save_landing_testimonial(p_id uuid, p_quote text, p_author text, p_company text, p_avatar_url text, p_sort_order integer, p_is_active boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -42349,8 +42349,8 @@
     "/rpc/platform_save_module": {
       "post": {
         "operationId": "platform_save_module",
-        "summary": "Platform save module",
-        "description": "`public.platform_save_module(p_code text, p_name text, p_description text, p_monthly_price numeric, p_is_core boolean, p_sort_order integer, p_is_active boolean, p_nav_group text)` Writes. Requires a signed-in user.",
+        "summary": "Creates or edits a module in the catalogue -- its name, its monthly price, whether it is core, where it sits\u2026",
+        "description": "Creates or edits a module in the catalogue -- its name, its monthly price, whether it is core, where it sits in the navigation. The refusal names the stake: module prices are what every organization is billed. A price below nothing is refused, and a NEW module needs a name. Platform administrators only.\n\n`public.platform_save_module(p_code text, p_name text, p_description text, p_monthly_price numeric, p_is_core boolean, p_sort_order integer, p_is_active boolean, p_nav_group text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -42609,8 +42609,8 @@
     "/rpc/platform_save_site_page": {
       "post": {
         "operationId": "platform_save_site_page",
-        "summary": "Platform save site page",
-        "description": "`public.platform_save_site_page(p_slug text, p_title text, p_body text, p_is_published boolean)` Writes. Requires a signed-in user.",
+        "summary": "Writes one of the platform's own six pages: signin, signup, login, terms, privacy, about",
+        "description": "Writes one of the platform's own six pages: signin, signup, login, terms, privacy, about. A slug outside those six is refused BY NAME -- the check constraint would catch it too, with a message about a constraint, and an operator who mistyped a slug wants to be told which six there are. An emptied box stores null, so clearing a field restores what the screen ships with rather than showing a blank. Note `site_pages()` serves signin, signup and login whether or not they are published, because they carry the terms somebody is asked to agree to while registering.\n\n`public.platform_save_site_page(p_slug text, p_title text, p_body text, p_is_published boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -42760,8 +42760,8 @@
     "/rpc/platform_set_module": {
       "post": {
         "operationId": "platform_set_module",
-        "summary": "Platform set module",
-        "description": "`public.platform_set_module(p_org_id uuid, p_module_code text, p_enabled boolean)` Writes. Requires a signed-in user.",
+        "summary": "Grants or withdraws one module for one company",
+        "description": "Grants or withdraws one module for one company. A CORE MODULE CANNOT BE SWITCHED OFF: those are what the product is, and a company without them would be signed in to nothing. Note this is entitlement, not visibility -- a company putting a module away for itself is `set_module_hidden`. Platform administrators only.\n\n`public.platform_set_module(p_org_id uuid, p_module_code text, p_enabled boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -42822,8 +42822,8 @@
     "/rpc/platform_set_ocr_provider": {
       "post": {
         "operationId": "platform_set_ocr_provider",
-        "summary": "Platform set ocr provider",
-        "description": "`public.platform_set_ocr_provider(p_code text, p_name text, p_kind text, p_endpoint text, p_model text, p_price numeric, p_is_active boolean, p_blurb text)` Writes. Requires a signed-in user.",
+        "summary": "Creates or edits a document-scanning provider in the platform's catalogue",
+        "description": "Creates or edits a document-scanning provider in the platform's catalogue. NULL LEAVES WHAT IS STORED ALONE, so correcting a price does not blank the endpoint -- the trap `0107` exists to document. Platform administrators only.\n\n`public.platform_set_ocr_provider(p_code text, p_name text, p_kind text, p_endpoint text, p_model text, p_price numeric, p_is_active boolean, p_blurb text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -42896,8 +42896,8 @@
     "/rpc/platform_set_org_status": {
       "post": {
         "operationId": "platform_set_org_status",
-        "summary": "Platform set org status",
-        "description": "`public.platform_set_org_status(p_org_id uuid, p_status text)` Writes. Requires a signed-in user.",
+        "summary": "Sets a company to active, trial, suspended or archived",
+        "description": "Sets a company to active, trial, suspended or archived. This is what `workspace_by_host` reads when it decides whether a company's own subdomain still opens: suspended and archived companies stop having a door. Platform administrators only.\n\n`public.platform_set_org_status(p_org_id uuid, p_status text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -42954,8 +42954,8 @@
     "/rpc/platform_set_schedule_verified": {
       "post": {
         "operationId": "platform_set_schedule_verified",
-        "summary": "Platform set schedule verified",
-        "description": "`public.platform_set_schedule_verified(p_schedule_id uuid, p_verified boolean, p_source text, p_notes text)` Writes. Requires a signed-in user.",
+        "summary": "Marks a statutory rate table as checked against its published source, with the source and a note",
+        "description": "Marks a statutory rate table as checked against its published source, with the source and a note. This is a claim about whether somebody compared the numbers to the gazette, not a calculation: nothing recomputes when it changes. Platform administrators only.\n\n`public.platform_set_schedule_verified(p_schedule_id uuid, p_verified boolean, p_source text, p_notes text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -43062,8 +43062,8 @@
     "/rpc/platform_topup_credit": {
       "post": {
         "operationId": "platform_topup_credit",
-        "summary": "Platform topup credit",
-        "description": "`public.platform_topup_credit(p_org_id uuid, p_amount numeric, p_note text)` Writes. Requires a signed-in user.",
+        "summary": "Adds credit to a company's platform account and raises the invoice for it, returning both",
+        "description": "Adds credit to a company's platform account and raises the invoice for it, returning both. Refuses a top-up of nothing. Invoice numbers are taken under a TRANSACTION-SCOPED ADVISORY LOCK, so two administrators topping up at the same moment queue rather than both reading the same maximum and colliding on the unique index. Platform administrators only.\n\n`public.platform_topup_credit(p_org_id uuid, p_amount numeric, p_note text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -43121,8 +43121,8 @@
     "/rpc/platform_update_reservation": {
       "post": {
         "operationId": "platform_update_reservation",
-        "summary": "Platform update reservation",
-        "description": "`public.platform_update_reservation(p_kind text, p_id uuid, p_org_id uuid, p_name text, p_module_code text, p_landing_path text, p_release boolean, p_purpose text)` Writes. Requires a signed-in user.",
+        "summary": "Moves a reserved name between companies, repoints it, or releases it",
+        "description": "Moves a reserved name between companies, repoints it, or releases it. RELEASING MEANS LETTING GO OF THE COMPANY AND KEEPING THE NAME (`0342`), not deleting the reservation. A mailbox is always a company's, so a purpose given for one is REFUSED rather than ignored: accepting it silently would leave a caller believing a mailbox can be the platform's. Handing a name to a company here runs the same blocklist the reservation itself does, so a rule refused in one move cannot be reached in two. Platform administrators only.\n\n`public.platform_update_reservation(p_kind text, p_id uuid, p_org_id uuid, p_name text, p_module_code text, p_landing_path text, p_release boolean, p_purpose text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -43198,8 +43198,8 @@
     "/rpc/platform_update_setting": {
       "post": {
         "operationId": "platform_update_setting",
-        "summary": "Platform update setting",
-        "description": "`public.platform_update_setting(p_key text, p_value jsonb)` Writes. Requires a signed-in user.",
+        "summary": "Writes one row of `platform_settings`",
+        "description": "Writes one row of `platform_settings`. Every key here is read by something -- `scripts/check_settings_are_read.py` fails the build if one is not -- because three settings once said what they did and did nothing: `nav_grouping`, `signup_enabled` and `maintenance_mode`. Platform administrators only.\n\n`public.platform_update_setting(p_key text, p_value jsonb)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
