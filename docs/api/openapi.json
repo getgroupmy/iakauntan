@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0576",
+    "version": "0577",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -18725,8 +18725,8 @@
     "/rpc/adopt_constitution": {
       "post": {
         "operationId": "adopt_constitution",
-        "summary": "Adopt constitution",
-        "description": "`public.adopt_constitution(p_entity uuid, p_adopted_on date)` Writes. Requires a signed-in user.",
+        "summary": "Records that a company has adopted a constitution, on the date it did",
+        "description": "Records that a company has adopted a constitution, on the date it did. Refuses one that already has an adopted constitution -- adopting twice is a different act, an alteration, with its own resolution -- and refuses a date before the company was incorporated.\n\n`public.adopt_constitution(p_entity uuid, p_adopted_on date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -22171,8 +22171,8 @@
     "/rpc/change_registered_office": {
       "post": {
         "operationId": "change_registered_office",
-        "summary": "Change registered office",
-        "description": "`public.change_registered_office(p_entity uuid, p_address text, p_effective_on date)` Writes. Requires a signed-in user.",
+        "summary": "Moves a company's registered office, dates the move, AND OPENS THE FILING -- s.46 of the Companies Act 2016\u2026",
+        "description": "Moves a company's registered office, dates the move, AND OPENS THE FILING -- s.46 of the Companies Act 2016 requires SSM to be told within fourteen days, so the change and the notification are one act, not two. Refuses an address that is already the registered office. USE THIS WHEN THE COMPANY HAS ACTUALLY MOVED. To fix a mistyped address, use `correct_registered_office`, which opens no filing.\n\n`public.change_registered_office(p_entity uuid, p_address text, p_effective_on date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -26674,8 +26674,8 @@
     "/rpc/corp_create_signing_link": {
       "post": {
         "operationId": "corp_create_signing_link",
-        "summary": "Corp create signing link",
-        "description": "`public.corp_create_signing_link(p_signature_id uuid, p_valid_days integer, p_email text)` Writes. Requires a signed-in user.",
+        "summary": "Issues a link letting a director sign without an account here, and returns the token ONCE -- only a digest is\u2026",
+        "description": "Issues a link letting a director sign without an account here, and returns the token ONCE -- only a digest is stored, so a link that is lost cannot be recovered, only reissued. ONE LIVE LINK PER SIGNATURE: issuing a new one retires the old, so a forwarded email cannot be used after a replacement was sent. Refuses a line that is not pending.\n\n`public.corp_create_signing_link(p_signature_id uuid, p_valid_days integer, p_email text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -26909,8 +26909,8 @@
     "/rpc/corp_generate_document": {
       "post": {
         "operationId": "corp_generate_document",
-        "summary": "Corp generate document",
-        "description": "`public.corp_generate_document(p_entity_id uuid, p_template_code text, p_extra jsonb, p_title text)` Writes. Requires a signed-in user.",
+        "summary": "Generates a corporate document -- a resolution, a notice, a minute -- from a template, filled with this\u2026",
+        "description": "Generates a corporate document -- a resolution, a notice, a minute -- from a template, filled with this entity's particulars. THE FIRM'S OWN VERSION OF A TEMPLATE WINS over the platform's, so a practice's house wording is what its clients get. Refuses a template that does not apply to that kind of entity.\n\n`public.corp_generate_document(p_entity_id uuid, p_template_code text, p_extra jsonb, p_title text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -27104,8 +27104,8 @@
     "/rpc/corp_open_filing": {
       "post": {
         "operationId": "corp_open_filing",
-        "summary": "Corp open filing",
-        "description": "`public.corp_open_filing(p_entity_id uuid, p_filing_type text, p_trigger_date date)` Writes. Requires a signed-in user.",
+        "summary": "Opens a statutory filing against an entity and returns it -- the record that something is due at SSM, with\u2026",
+        "description": "Opens a statutory filing against an entity and returns it -- the record that something is due at SSM, with the dates the Act sets. REFUSES A FILING TYPE THAT DOES NOT APPLY TO THAT KIND OF ENTITY: an AGM filing against a Sdn Bhd is not a typo to be tidied up later, it is a company being told to do something the Act does not require of it.\n\n`public.corp_open_filing(p_entity_id uuid, p_filing_type text, p_trigger_date date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -27419,8 +27419,8 @@
     "/rpc/corp_request_signatures": {
       "post": {
         "operationId": "corp_request_signatures",
-        "summary": "Corp request signatures",
-        "description": "`public.corp_request_signatures(p_document_id uuid, p_person_ids uuid[], p_capacities text[], p_due_on date, p_note text)` Writes. Requires a signed-in user.",
+        "summary": "Circulates a document to the people who must sign it, recording the HASH OF THE BODY AS IT WENT OUT",
+        "description": "Circulates a document to the people who must sign it, recording the HASH OF THE BODY AS IT WENT OUT. That hash is what every later signature is checked against, so nobody can sign text they were not sent. Refuses a request with nobody to sign.\n\n`public.corp_request_signatures(p_document_id uuid, p_person_ids uuid[], p_capacities text[], p_due_on date, p_note text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -27495,8 +27495,8 @@
     "/rpc/corp_sign_document": {
       "post": {
         "operationId": "corp_sign_document",
-        "summary": "Corp sign document",
-        "description": "`public.corp_sign_document(p_signature_id uuid, p_signed_name text)` Writes. Requires a signed-in user.",
+        "summary": "Signs a line as somebody signed in -- the authenticated counterpart of `corp_sign_with_link`",
+        "description": "Signs a line as somebody signed in -- the authenticated counterpart of `corp_sign_with_link`. Refuses a line that is not pending, a withdrawn request, an empty name, and a document whose body no longer hashes to what was circulated. That last refusal is the whole point of the chain: a signature means the signatory saw THAT text.\n\n`public.corp_sign_document(p_signature_id uuid, p_signed_name text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -27881,8 +27881,8 @@
     "/rpc/corp_update_document": {
       "post": {
         "operationId": "corp_update_document",
-        "summary": "Corp update document",
-        "description": "`public.corp_update_document(p_document_id uuid, p_title text, p_body text)` Writes. Requires a signed-in user.",
+        "summary": "Edits a corporate document's title and body before it is circulated",
+        "description": "Edits a corporate document's title and body before it is circulated. Editing after signatures are requested is what the body hash exists to catch: `corp_sign_document` and `corp_open_signing_link` both re-hash and refuse text that no longer matches what was sent.\n\n`public.corp_update_document(p_document_id uuid, p_title text, p_body text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -27943,8 +27943,8 @@
     "/rpc/correct_company_name": {
       "post": {
         "operationId": "correct_company_name",
-        "summary": "Correct company name",
-        "description": "`public.correct_company_name(p_entity uuid, p_name text)` Writes. Requires a signed-in user.",
+        "summary": "Corrects a company name that was recorded wrongly",
+        "description": "Corrects a company name that was recorded wrongly. OPENS NO FILING, for the same reason `correct_registered_office` does not: this is fixing our record, not reporting a change. An actual change of name is a resolution and a filing, not this. The marker is set for exactly one statement and cleared, because `is_local` alone would leave it standing for the rest of the transaction.\n\n`public.correct_company_name(p_entity uuid, p_name text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -28001,8 +28001,8 @@
     "/rpc/correct_registered_office": {
       "post": {
         "operationId": "correct_registered_office",
-        "summary": "Correct registered office",
-        "description": "`public.correct_registered_office(p_entity uuid, p_address text)` Writes. Requires a signed-in user.",
+        "summary": "Corrects a registered office address that was recorded wrongly",
+        "description": "Corrects a registered office address that was recorded wrongly. OPENS NO FILING, deliberately: nothing happened at the registrar, somebody mistyped what we had. It sets a transaction-local marker that tells the trigger no notification is due, cleared immediately so a second bare update cannot ride through on it. USE `change_registered_office` IF THE COMPANY HAS MOVED -- reaching for this one instead silently misses a fourteen-day statutory deadline, and nothing in the system will say so.\n\n`public.correct_registered_office(p_entity uuid, p_address text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -32283,8 +32283,8 @@
     "/rpc/file_sst_return": {
       "post": {
         "operationId": "file_sst_return",
-        "summary": "File sst return",
-        "description": "`public.file_sst_return(p_org_id uuid, p_period_end date, p_amount numeric, p_reference text)` Writes. Requires a signed-in user.",
+        "summary": "Records that the SST-02 for a taxable period has gone in, for how much, and under what reference",
+        "description": "Records that the SST-02 for a taxable period has gone in, for how much, and under what reference. THIS DOES NOT SUBMIT ANYTHING -- the return is filed on MyTax and what is kept here is that it was. Refuses a period that has not ended: the return declares what was charged in the period, and that is not known until it closes. Refuses a date that is not actually a period end for this company, so a typed date cannot create a period that does not exist. Needs `can_post`.\n\n`public.file_sst_return(p_org_id uuid, p_period_end date, p_amount numeric, p_reference text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -33154,8 +33154,8 @@
     "/rpc/fs_freeze": {
       "post": {
         "operationId": "fs_freeze",
-        "summary": "Fs freeze",
-        "description": "`public.fs_freeze(p_filing_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Fixes a set of financial statements as the reviewed version, and returns how many figures were captured",
+        "description": "Fixes a set of financial statements as the reviewed version, and returns how many figures were captured. REFUSES ACCOUNTS THAT DO NOT BALANCE: a rejected MBRS submission is a wasted fee and a missed deadline, and the difference is almost always a journal posted after the year was reviewed. Audited accounts need an auditor and an opinion; exempt and unaudited ones do not, and asking for them would be asking somebody to invent an audit that did not happen. Refuses a filing already lodged. Needs the `mbrs` module.\n\n`public.fs_freeze(p_filing_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -33209,8 +33209,8 @@
     "/rpc/fs_lodge": {
       "post": {
         "operationId": "fs_lodge",
-        "summary": "Fs lodge",
-        "description": "`public.fs_lodge(p_filing_id uuid, p_reference text, p_lodged_on date)` Writes. Requires a signed-in user.",
+        "summary": "Records that the accounts have been lodged at SSM through MBRS, with the reference mPortal gave back",
+        "description": "Records that the accounts have been lodged at SSM through MBRS, with the reference mPortal gave back. THE ACCOUNTS MUST BE FROZEN FIRST, so what is recorded as lodged is the set that was reviewed rather than whatever the ledger says today. The reference is required -- a lodgement nobody can quote is a lodgement nobody can prove -- and the accounts must have been circulated, which under s.258 is the step that starts the thirty days to lodge. Needs the `mbrs` module.\n\n`public.fs_lodge(p_filing_id uuid, p_reference text, p_lodged_on date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -33359,8 +33359,8 @@
     "/rpc/fs_set_entity": {
       "post": {
         "operationId": "fs_set_entity",
-        "summary": "Fs set entity",
-        "description": "`public.fs_set_entity(p_filing_id uuid, p_entity_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Says which corporate entity a set of accounts belongs to, which is what carries the company number and\u2026",
+        "description": "Says which corporate entity a set of accounts belongs to, which is what carries the company number and particulars onto the MBRS submission. The entity must be one of this company's. Refused once the filing is lodged. Needs the `mbrs` module.\n\n`public.fs_set_entity(p_filing_id uuid, p_entity_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -33418,8 +33418,8 @@
     "/rpc/fs_unfreeze": {
       "post": {
         "operationId": "fs_unfreeze",
-        "summary": "Fs unfreeze",
-        "description": "`public.fs_unfreeze(p_filing_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Reopens frozen accounts for further work",
+        "description": "Reopens frozen accounts for further work. DELIBERATELY STRICTER THAN FREEZING -- `can_admin` rather than `can_write` -- because unfreezing is how a mistake gets fixed and also how a reviewed set of accounts quietly becomes a different set of accounts. A lodged filing cannot be reopened at all: SSM has it, and what is here must go on matching what was sent.\n\n`public.fs_unfreeze(p_filing_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -49667,8 +49667,8 @@
     "/rpc/record_statutory_remittance": {
       "post": {
         "operationId": "record_statutory_remittance",
-        "summary": "Record statutory remittance",
-        "description": "`public.record_statutory_remittance(p_org_id uuid, p_period_id uuid, p_code text, p_amount numeric, p_paid_on date, p_reference text)` Writes. Requires a signed-in user.",
+        "summary": "Records a payment over to KWSP, PERKESO or the Inland Revenue Board against a pay period",
+        "description": "Records a payment over to KWSP, PERKESO or the Inland Revenue Board against a pay period. ONLY AGAINST A POSTED PAYROLL: recording a payment to KWSP for a run still in draft would be recording a payment of a figure that can still change. The code must be one the system knows somebody is owed under. Needs `can_run_payroll`, which is its own permission -- what people are paid is not something everybody who may edit a customer should see.\n\n`public.record_statutory_remittance(p_org_id uuid, p_period_id uuid, p_code text, p_amount numeric, p_paid_on date, p_reference text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -49995,8 +49995,8 @@
     "/rpc/remit_withholding": {
       "post": {
         "operationId": "remit_withholding",
-        "summary": "Remit withholding",
-        "description": "`public.remit_withholding(p_id uuid, p_paid_on date, p_bank_account_id uuid, p_reference text)` Writes. Requires a signed-in user.",
+        "summary": "Records that a withholding certificate has been paid over to the Inland Revenue Board, and posts the payment",
+        "description": "Records that a withholding certificate has been paid over to the Inland Revenue Board, and posts the payment. The certificate must be POSTED FIRST -- there is nothing to remit until the liability is in the books -- and one already remitted is refused, naming the date. A bank account belonging to another company is REFUSED BY NAME rather than quietly ignored: falling back to the default cash account would post the entry anyway and leave nobody any the wiser. Needs `can_post`.\n\n`public.remit_withholding(p_id uuid, p_paid_on date, p_bank_account_id uuid, p_reference text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],

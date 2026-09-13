@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0576` (the highest applied migration).
+Schema version `0577` (the highest applied migration).
 662 functions and 329 readable tables, of which
 254 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**380 of 662 functions carry a `comment on
+**397 of 662 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -363,7 +363,7 @@ Not gated on any module.
 - `accept_invitation(p_token text)` *(writes)* — Takes up an invitation.
 - `add_fixed_public_holidays(p_org_id uuid, p_year integer)` *(writes)*
 - `adjust_attendance(p_record uuid, p_clock_in timestamp with time zone, p_clock_out timestamp with time zone, p_reason text)` *(writes)* — Corrects a day's clock times, recording who changed it and why.
-- `adopt_constitution(p_entity uuid, p_adopted_on date)` *(writes)*
+- `adopt_constitution(p_entity uuid, p_adopted_on date)` *(writes)* — Records that a company has adopted a constitution, on the date it did.
 - `ai_answer(p_conversation uuid, p_content text, p_tool_calls jsonb)` *(writes)* — Files the assistant's reply in a conversation the caller may add to -- the same rule ai_ask applies and the same one the read policy on ai_messages applies.
 - `ai_ask(p_org_id uuid, p_question text, p_conversation uuid)` *(writes)*
 - `ai_conversation(p_id uuid)`
@@ -399,7 +399,7 @@ Not gated on any module.
 - `capitalise_bill_line(p_line uuid, p_asset_no text, p_name text, p_category text, p_method text, p_useful_life_months integer, p_rate_percent numeric, p_residual_value numeric)` *(writes)* — Makes a fixed asset out of a posted bill line, taking the cost, the date, the supplier and the account from the line rather than asking for them again.
 - `cash_runs_out_on(p_org uuid, p_weeks integer, p_use_history boolean)`
 - `change_company_name(p_entity uuid, p_new_name text, p_resolved_on date)` *(writes)* — Renames a company, keeps the former name, and opens the s.28 filing.
-- `change_registered_office(p_entity uuid, p_address text, p_effective_on date)` *(writes)*
+- `change_registered_office(p_entity uuid, p_address text, p_effective_on date)` *(writes)* — Moves a company's registered office, dates the move, AND OPENS THE FILING -- s.46 of the Companies Act 2016 requires SSM to be told within fourteen days, so the change and the notification are one act, not two.
 - `chat_access_list(p_org_id uuid)`
 - `chat_active_call(p_conversation_id uuid)`
 - `chat_add_participant(p_conversation_id uuid, p_user_id uuid, p_org_id uuid)` *(writes)* — Adds somebody to a group.
@@ -454,26 +454,26 @@ Not gated on any module.
 - `contact_lookalikes(p_org_id uuid, p_contact_type app.contact_type, p_name text, p_registration_no text, p_tin text, p_id_type text, p_id_value text, p_exclude uuid)` — The records already carrying this registration number, ID, TIN or name, and whether each is already in the role being typed.
 - `contact_records(p_contact_id uuid)` — The other records of the same company, and which of customer, supplier and prospect it has no record for yet -- each with the series it would be coded in.
 - `convert_lead(p_lead_id uuid, p_create_opportunity boolean, p_pipeline_id uuid, p_amount numeric, p_expected_close_date date)` *(writes)*
-- `corp_create_signing_link(p_signature_id uuid, p_valid_days integer, p_email text)` *(writes)*
+- `corp_create_signing_link(p_signature_id uuid, p_valid_days integer, p_email text)` *(writes)* — Issues a link letting a director sign without an account here, and returns the token ONCE -- only a digest is stored, so a link that is lost cannot be recovered, only reissued.
 - `corp_decline_signature(p_signature_id uuid, p_reason text)` *(writes)* — Refusing to sign, with the reason.
 - `corp_decline_with_link(p_token text, p_reason text)` *(writes)* — The other half of `corp_sign_with_link`: lets a director say no.
 - `corp_display_name(p_entity uuid, p_as_at date)` — What the company is called on a document of that date: the new name with the former one beside it for twelve months after a change, and the former name alone on paper dated before it.
-- `corp_generate_document(p_entity_id uuid, p_template_code text, p_extra jsonb, p_title text)` *(writes)*
+- `corp_generate_document(p_entity_id uuid, p_template_code text, p_extra jsonb, p_title text)` *(writes)* — Generates a corporate document -- a resolution, a notice, a minute -- from a template, filled with this entity's particulars.
 - `corp_issued_capital(p_entity_id uuid)`
 - `corp_mark_lodged(p_filing uuid, p_lodged_on date, p_reference text, p_fee_paid numeric)` *(writes)* — Records a lodgement, with who did it and what SSM charged.
-- `corp_open_filing(p_entity_id uuid, p_filing_type text, p_trigger_date date)` *(writes)*
+- `corp_open_filing(p_entity_id uuid, p_filing_type text, p_trigger_date date)` *(writes)* — Opens a statutory filing against an entity and returns it -- the record that something is due at SSM, with the dates the Act sets.
 - `corp_open_signing_link(p_token text)` *(writes)* — Opens a resolution or document sent to a director to sign.
 - `corp_principals_for_alternate(p_entity uuid, p_exclude uuid)`
 - `corp_register_of_members(p_entity_id uuid)`
-- `corp_request_signatures(p_document_id uuid, p_person_ids uuid[], p_capacities text[], p_due_on date, p_note text)` *(writes)*
-- `corp_sign_document(p_signature_id uuid, p_signed_name text)` *(writes)*
+- `corp_request_signatures(p_document_id uuid, p_person_ids uuid[], p_capacities text[], p_due_on date, p_note text)` *(writes)* — Circulates a document to the people who must sign it, recording the HASH OF THE BODY AS IT WENT OUT.
+- `corp_sign_document(p_signature_id uuid, p_signed_name text)` *(writes)* — Signs a line as somebody signed in -- the authenticated counterpart of `corp_sign_with_link`.
 - `corp_sign_with_link(p_token text, p_signed_name text)` *(writes)* — Signs the line the link names.
 - `corp_signature_state(p_document_id uuid)`
 - `corp_template_placeholders(p_entity_id uuid, p_template_code text)`
 - `corp_upcoming_filings(p_org_id uuid, p_within_days integer)` — What each company owes SSM and when.
-- `corp_update_document(p_document_id uuid, p_title text, p_body text)` *(writes)*
-- `correct_company_name(p_entity uuid, p_name text)` *(writes)*
-- `correct_registered_office(p_entity uuid, p_address text)` *(writes)*
+- `corp_update_document(p_document_id uuid, p_title text, p_body text)` *(writes)* — Edits a corporate document's title and body before it is circulated.
+- `correct_company_name(p_entity uuid, p_name text)` *(writes)* — Corrects a company name that was recorded wrongly.
+- `correct_registered_office(p_entity uuid, p_address text)` *(writes)* — Corrects a registered office address that was recorded wrongly.
 - `create_bank_transfer(p_from_account_id uuid, p_to_account_id uuid, p_amount_sent numeric, p_transfer_date date, p_amount_received numeric, p_bank_charges numeric, p_reference text, p_notes text)` *(writes)* — Records a transfer between two of the company's own bank accounts, ready to post.
 - `create_contact_as(p_contact_id uuid, p_type app.contact_type)` *(writes)* — A second record of the same company, in another role: the details, addresses and people copied, a code from that role's own series, the source left as it was.
 - `create_contra(p_org uuid, p_date date, p_invoices jsonb, p_bills jsonb, p_notes text, p_idempotency_key text)` *(writes)* — Sets a customer's invoices against the same party's bills and posts the offset, for a contact who is both.
@@ -520,7 +520,7 @@ Not gated on any module.
 - `exchange_rate_for(p_org_id uuid, p_currency character, p_on_date date)`
 - `expense_split(p_expense_id uuid)`
 - `extend_document_validity(p_document uuid, p_valid_until date)` *(writes)* — Puts a new date on a quotation or proforma.
-- `file_sst_return(p_org_id uuid, p_period_end date, p_amount numeric, p_reference text)` *(writes)*
+- `file_sst_return(p_org_id uuid, p_period_end date, p_amount numeric, p_reference text)` *(writes)* — Records that the SST-02 for a taxable period has gone in, for how much, and under what reference.
 - `finalise_appraisal(p_appraisal uuid, p_final_rating numeric, p_calibration_note text)` *(writes)*
 - `firm_audit_trail(p_firm_id uuid, p_limit integer)` — What has happened to a practice: who joined it, who left it, and what changed about the firm itself.
 - `firm_portfolio(p_firm_id uuid)`
@@ -529,11 +529,11 @@ Not gated on any module.
 - `fs_balance_check(p_filing_id uuid)`
 - `fs_deadlines(p_filing_id uuid)`
 - `fs_export(p_filing_id uuid)`
-- `fs_freeze(p_filing_id uuid)` *(writes)*
-- `fs_lodge(p_filing_id uuid, p_reference text, p_lodged_on date)` *(writes)*
+- `fs_freeze(p_filing_id uuid)` *(writes)* — Fixes a set of financial statements as the reviewed version, and returns how many figures were captured.
+- `fs_lodge(p_filing_id uuid, p_reference text, p_lodged_on date)` *(writes)* — Records that the accounts have been lodged at SSM through MBRS, with the reference mPortal gave back.
 - `fs_prepare(p_filing_id uuid)`
-- `fs_set_entity(p_filing_id uuid, p_entity_id uuid)` *(writes)*
-- `fs_unfreeze(p_filing_id uuid)` *(writes)*
+- `fs_set_entity(p_filing_id uuid, p_entity_id uuid)` *(writes)* — Says which corporate entity a set of accounts belongs to, which is what carries the company number and particulars onto the MBRS submission.
+- `fs_unfreeze(p_filing_id uuid)` *(writes)* — Reopens frozen accounts for further work.
 - `fx_revaluation_preview(p_org_id uuid, p_as_at date)`
 - `hire_applicant(p_applicant uuid, p_employee_no text, p_hire_date date, p_basic_salary numeric, p_date_of_birth date, p_department uuid, p_position uuid, p_manager uuid, p_early_start_note text)` *(writes)* — Turns an applicant into an employee and links the two.
 - `import_accounts(p_org_id uuid, p_rows jsonb, p_commit boolean)` *(writes)* — Brings a chart of accounts in from a file.
@@ -671,10 +671,10 @@ Not gated on any module.
 - `record_group_payment(p_paid_on date, p_reference text, p_lines jsonb, p_note text)` *(writes)* — One payment covering documents in several companies: one receipt (or supplier payment) per company and contact, linked by a batch that holds no money.
 - `record_pdc(p_org uuid, p_direction text, p_contact uuid, p_cheque_no text, p_cheque_date date, p_amount numeric, p_documents jsonb, p_bank uuid, p_bank_name text, p_received date, p_notes text)` *(writes)* — Puts a post-dated cheque in the register and takes the document it settles off the aged listing, without touching the bank balance.
 - `record_pdc(p_org uuid, p_direction text, p_contact uuid, p_cheque_no text, p_cheque_date date, p_amount numeric, p_documents jsonb, p_bank uuid, p_bank_name text, p_received date, p_notes text, p_idempotency_key text)` *(writes)*
-- `record_statutory_remittance(p_org_id uuid, p_period_id uuid, p_code text, p_amount numeric, p_paid_on date, p_reference text)` *(writes)*
+- `record_statutory_remittance(p_org_id uuid, p_period_id uuid, p_code text, p_amount numeric, p_paid_on date, p_reference text)` *(writes)* — Records a payment over to KWSP, PERKESO or the Inland Revenue Board against a pay period.
 - `register_device(p_token text, p_platform text, p_label text, p_p256dh text, p_auth text)` *(writes)*
 - `reinstate_employee(p_employee uuid)` *(writes)* — Undoes a departure.
-- `remit_withholding(p_id uuid, p_paid_on date, p_bank_account_id uuid, p_reference text)` *(writes)*
+- `remit_withholding(p_id uuid, p_paid_on date, p_bank_account_id uuid, p_reference text)` *(writes)* — Records that a withholding certificate has been paid over to the Inland Revenue Board, and posts the payment.
 - `renew_employee_document(p_document uuid, p_expires_date date, p_issued_date date, p_title text, p_notes text)` *(writes)*
 - `rent_preview(p_site_id uuid, p_period_from date, p_period_to date)`
 - `reopen_appraisal(p_appraisal uuid, p_side text)` *(writes)* — Reopens one half of an appraisal -- `self`, `manager` or `final` -- by clearing that half's submission stamp, which is what the guard reads when it refuses a change.
