@@ -930,6 +930,39 @@ begin
                           'maintenance_notice')),
     17);
 
+  -- And every one of them says what it hands to a stranger.
+  --
+  -- `docs/api/` made this countable: of the 662 functions a tenant's
+  -- token reaches, 436 carry no `comment on function`, and the
+  -- description generated from the catalog prints their name and
+  -- argument list and nothing else. Split by who can reach them, the
+  -- open doors were the worst of it -- 12 of these 19 undocumented --
+  -- which is the wrong way round. A function anybody on the internet
+  -- may call is the one whose bargain most needs writing down: what it
+  -- hands over, what it deliberately does not, and what it writes.
+  --
+  -- `0569` wrote the twelve. This is what stops the thirteenth door
+  -- being opened without one. It is deliberately not a count: a
+  -- count-based version of the allowlist above sat wrong by a third
+  -- for months, because nothing makes somebody update a number.
+  perform pg_temp.check_true(
+    'and every open door says what it hands over',
+    not exists (
+      select 1
+        from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+        left join pg_description d on d.objoid = p.oid and d.objsubid = 0
+       where n.nspname = 'public'
+         and p.prokind = 'f'
+         and p.prosecdef
+         and has_function_privilege('anon', p.oid, 'execute')
+         -- `citext`, `btree_gist` and `pg_trgm` install into `public`
+         -- and carry EXECUTE to PUBLIC, which anon inherits. They are
+         -- reachable and they are not ours to document.
+         and not exists (select 1 from pg_depend dp
+                          where dp.objid = p.oid and dp.deptype = 'e')
+         and coalesce(btrim(d.description), '') = ''));
+
   perform pg_temp.check_true('and the link tables stay shut to anon',
     not exists (
       select 1 from information_schema.role_table_grants

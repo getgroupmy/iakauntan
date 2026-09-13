@@ -162,6 +162,26 @@ class Operations(unittest.TestCase):
         self.assertEqual(body['required'], ['p_org_id'])
         self.assertIn('p_within_days', body['properties'])
 
+    def test_a_summary_ends_on_a_word(self):
+        # The summary is the line shown in an endpoint list, and for
+        # most readers it is the only thing they see of a function. The
+        # first version cut `report_failed_sign_in` off at "does not
+        # tell t".
+        long = ('Lets the browser tell the audit log that a password was '
+                'rejected, which Supabase own sign-in does not tell this '
+                'database. Returns void in every branch.')
+        got = gen.operation(fn(description=long), ENUMS, TABLES)['summary']
+        self.assertTrue(got.endswith('…'), got)
+        self.assertNotIn('databas…', got)
+        # Ends on a word boundary, so the last token is whole.
+        self.assertTrue(got[:-1].rstrip().split()[-1].isalpha(), got)
+
+    def test_a_short_first_sentence_is_kept_whole_and_unpunctuated(self):
+        got = gen.operation(
+            fn(description='Takes up an invitation. The token is a digest.'),
+            ENUMS, TABLES)['summary']
+        self.assertEqual(got, 'Takes up an invitation')
+
     def test_a_read_is_marked_as_one(self):
         self.assertEqual(
             gen.operation(fn(volatility='s'), ENUMS, TABLES)['x-volatility'],

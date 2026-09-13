@@ -344,6 +344,25 @@ def response_schema(fn: dict, enums: dict, tables: frozenset) -> dict:
     return {'type': 'array', 'items': one} if fn['returns_set'] else one
 
 
+def first_sentence(text: str, limit: int = 110) -> str:
+    """A summary that ends on a word.
+
+    The first version was `text.split('.')[0][:110]`, which cut
+    `report_failed_sign_in` off at "which Supabase's own sign-in does
+    not tell t" -- and a summary is the line shown in an endpoint list,
+    where it is the only thing most readers see of a function.
+
+    Splits on a full stop followed by a space, so `0569`'s decimal-free
+    prose keeps its first sentence whole, and backs off to the last
+    word boundary inside the limit rather than mid-word.
+    """
+    first = re.split(r'\.\s', text.strip(), maxsplit=1)[0].rstrip('.')
+    if len(first) <= limit:
+        return first
+    cut = first[:limit].rsplit(' ', 1)[0].rstrip(',;:')
+    return f'{cut}…'
+
+
 def operation(fn: dict, enums: dict, tables: frozenset) -> dict:
     """One function as an OpenAPI operation.
 
@@ -362,7 +381,7 @@ def operation(fn: dict, enums: dict, tables: frozenset) -> dict:
 
     reads = fn['volatility'] in ('s', 'i')
     described = fn['description'] or ''
-    summary = (described.split('.')[0][:110] if described
+    summary = (first_sentence(described) if described
                else fn['name'].replace('_', ' ').capitalize())
 
     body = {'type': 'object', 'properties': props}

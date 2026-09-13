@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0568",
+    "version": "0569",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -18784,7 +18784,7 @@
     "/rpc/ai_answer": {
       "post": {
         "operationId": "ai_answer",
-        "summary": "Files the assistant's reply in a conversation the caller may add to -- the same rule ai_ask applies and the sa",
+        "summary": "Files the assistant's reply in a conversation the caller may add to -- the same rule ai_ask applies and the\u2026",
         "description": "Files the assistant's reply in a conversation the caller may add to -- the same rule ai_ask applies and the same one the read policy on ai_messages applies. Called by the ask edge function under the asker's own token. See 0474.\n\n`public.ai_answer(p_conversation uuid, p_content text, p_tool_calls jsonb)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -19016,7 +19016,7 @@
     "/rpc/ai_run_tool": {
       "post": {
         "operationId": "ai_run_tool",
-        "summary": "Runs one allow-listed read for the assistant, as the caller \u2014 security invoker on purpose, so it cannot see wh",
+        "summary": "Runs one allow-listed read for the assistant, as the caller \u2014 security invoker on purpose, so it cannot see\u2026",
         "description": "Runs one allow-listed read for the assistant, as the caller \u2014 security invoker on purpose, so it cannot see what the person asking cannot. The company comes from the argument, never from the model. See 0470.\n\n`public.ai_run_tool(p_org_id uuid, p_tool text, p_args jsonb)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -20480,7 +20480,7 @@
     "/rpc/bill_credit_remaining": {
       "post": {
         "operationId": "bill_credit_remaining",
-        "summary": "What is left uncredited on each line of a bill, matched on item and description together so that two lines for",
+        "summary": "What is left uncredited on each line of a bill, matched on item and description together so that two lines\u2026",
         "description": "What is left uncredited on each line of a bill, matched on item and description together so that two lines for the same item are two different things to credit.\n\n`public.bill_credit_remaining(p_bill uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -20850,7 +20850,7 @@
     "/rpc/bounce_pdc": {
       "post": {
         "operationId": "bounce_pdc",
-        "summary": "Returns a cheque: the document it settled goes back into the aged listing and the money leaves the cheques acc",
+        "summary": "Returns a cheque: the document it settled goes back into the aged listing and the money leaves the cheques\u2026",
         "description": "Returns a cheque: the document it settled goes back into the aged listing and the money leaves the cheques account.\n\n`public.bounce_pdc(p_id uuid, p_reason text, p_on date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -21523,7 +21523,7 @@
     "/rpc/calculate_payroll_run": {
       "post": {
         "operationId": "calculate_payroll_run",
-        "summary": "Builds a payslip per employee whose employment overlaps the period, deriving every statutory figure from the s",
+        "summary": "Builds a payslip per employee whose employment overlaps the period, deriving every statutory figure from the\u2026",
         "description": "Builds a payslip per employee whose employment overlaps the period, deriving every statutory figure from the schedules in force on the pay date.\n\n`public.calculate_payroll_run(p_run_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -21575,7 +21575,7 @@
     "/rpc/can_add_company": {
       "post": {
         "operationId": "can_add_company",
-        "summary": "Whether this account may add another company, so the app can leave the button out rather than offer one that r",
+        "summary": "Whether this account may add another company, so the app can leave the button out rather than offer one that\u2026",
         "description": "Whether this account may add another company, so the app can leave the button out rather than offer one that refuses. See 0486.\n\n`public.can_add_company()` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -21788,7 +21788,7 @@
     "/rpc/capitalise_bill_line": {
       "post": {
         "operationId": "capitalise_bill_line",
-        "summary": "Makes a fixed asset out of a posted bill line, taking the cost, the date, the supplier and the account from th",
+        "summary": "Makes a fixed asset out of a posted bill line, taking the cost, the date, the supplier and the account from\u2026",
         "description": "Makes a fixed asset out of a posted bill line, taking the cost, the date, the supplier and the account from the line rather than asking for them again. `purchase_document_id` was a column nothing wrote, so the register and the fixed asset accounts had no way to be compared.\n\n`public.capitalise_bill_line(p_line uuid, p_asset_no text, p_name text, p_category text, p_method text, p_useful_life_months integer, p_rate_percent numeric, p_residual_value numeric)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -22108,7 +22108,7 @@
     "/rpc/change_company_name": {
       "post": {
         "operationId": "change_company_name",
-        "summary": "Renames a company, keeps the former name, and opens the s",
+        "summary": "Renames a company, keeps the former name, and opens the s.28 filing",
         "description": "Renames a company, keeps the former name, and opens the s.28 filing. Typing over the name loses both the old name and the date twelve months of s.28(4) are counted from.\n\n`public.change_company_name(p_entity uuid, p_new_name text, p_resolved_on date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -24232,7 +24232,7 @@
     "/rpc/check_matter_conflict": {
       "post": {
         "operationId": "check_matter_conflict",
-        "summary": "Both directions of a professional conflict: files where the firm acts for the proposed opposing party, and fil",
+        "summary": "Both directions of a professional conflict: files where the firm acts for the proposed opposing party, and\u2026",
         "description": "Both directions of a professional conflict: files where the firm acts for the proposed opposing party, and files where it has acted against the proposed client. `matters.opposing_party` was a column nothing wrote, so the question had no answer in the data.\n\n`public.check_matter_conflict(p_org uuid, p_client uuid, p_opposing_party text)` Reads only. Requires a signed-in user. Refused unless the company has the `legal` module and the caller may use it.",
         "tags": [
           "legal"
@@ -24320,7 +24320,7 @@
     "/rpc/claim_pos_sale": {
       "post": {
         "operationId": "claim_pos_sale",
-        "summary": "Moves an open bill onto this till, register and shift together, so the drawer that takes the money is the draw",
+        "summary": "Moves an open bill onto this till, register and shift together, so the drawer that takes the money is the\u2026",
         "description": "Moves an open bill onto this till, register and shift together, so the drawer that takes the money is the drawer it counts against.\n\n`public.claim_pos_sale(p_sale uuid, p_register uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -25870,7 +25870,7 @@
     "/rpc/complete_pos_sale": {
       "post": {
         "operationId": "complete_pos_sale",
-        "summary": "Settles a parked sale: raises and posts the invoice, writes and posts a receipt for whatever was actually paid",
+        "summary": "Settles a parked sale: raises and posts the invoice, writes and posts a receipt for whatever was actually\u2026",
         "description": "Settles a parked sale: raises and posts the invoice, writes and posts a receipt for whatever was actually paid, records the tenders and awards the points. An on_account tender is not payment \u2014 it leaves that much on the invoice and requires a named customer, because the outlet's walk-in contact is not an account anybody would ever be chased on.\n\n`public.complete_pos_sale(p_sale uuid, p_tenders jsonb, p_contact uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -26217,7 +26217,7 @@
     "/rpc/contact_lookalikes": {
       "post": {
         "operationId": "contact_lookalikes",
-        "summary": "The records already carrying this registration number, ID, TIN or name, and whether each is already in the rol",
+        "summary": "The records already carrying this registration number, ID, TIN or name, and whether each is already in the\u2026",
         "description": "The records already carrying this registration number, ID, TIN or name, and whether each is already in the role being typed. What the editor says before Save. See 0481.\n\n`public.contact_lookalikes(p_org_id uuid, p_contact_type app.contact_type, p_name text, p_registration_no text, p_tin text, p_id_type text, p_id_value text, p_exclude uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -26301,7 +26301,7 @@
     "/rpc/contact_records": {
       "post": {
         "operationId": "contact_records",
-        "summary": "The other records of the same company, and which of customer, supplier and prospect it has no record for yet -",
+        "summary": "The other records of the same company, and which of customer, supplier and prospect it has no record for yet\u2026",
         "description": "The other records of the same company, and which of customer, supplier and prospect it has no record for yet -- each with the series it would be coded in. Reads app.contact_carries, the same helper create_contact_as refuses on. See 0477.\n\n`public.contact_records(p_contact_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -26793,8 +26793,8 @@
     "/rpc/corp_decline_with_link": {
       "post": {
         "operationId": "corp_decline_with_link",
-        "summary": "Corp decline with link",
-        "description": "`public.corp_decline_with_link(p_token text, p_reason text)` Writes. Reachable without signing in.",
+        "summary": "The other half of `corp_sign_with_link`: lets a director say no",
+        "description": "The other half of `corp_sign_with_link`: lets a director say no. It exists because `app.signature_status` has had `declined` since `0069` and nothing could produce it, so a director reading a resolution could sign it or close the tab -- and a line that stays pending for ever reads at the other end as an email nobody opened. WRITES: marks the signature declined with the reason, the IP and the user agent, and spends the link either way, because a link that survives a refusal is one somebody can come back and sign with after saying no.\n\n`public.corp_decline_with_link(p_token text, p_reason text)` Writes. Reachable without signing in.",
         "tags": [
           "general"
         ],
@@ -26851,7 +26851,7 @@
     "/rpc/corp_display_name": {
       "post": {
         "operationId": "corp_display_name",
-        "summary": "What the company is called on a document of that date: the new name with the former one beside it for twelve m",
+        "summary": "What the company is called on a document of that date: the new name with the former one beside it for twelve\u2026",
         "description": "What the company is called on a document of that date: the new name with the former one beside it for twelve months after a change, and the former name alone on paper dated before it.\n\n`public.corp_display_name(p_entity uuid, p_as_at date)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -27168,8 +27168,8 @@
     "/rpc/corp_open_signing_link": {
       "post": {
         "operationId": "corp_open_signing_link",
-        "summary": "Corp open signing link",
-        "description": "`public.corp_open_signing_link(p_token text)` Writes. Reachable without signing in.",
+        "summary": "Opens a resolution or document sent to a director to sign",
+        "description": "Opens a resolution or document sent to a director to sign. The body is handed over ONLY when the state is `open` -- an expired, revoked, used, withdrawn or already-signed link returns the state, the company and the title and no text. `changed` means the document has been edited since it was circulated: the body is re-hashed on every open and compared with the hash recorded when the request went out, so nobody signs text they were not sent. WRITES: records the first open against the link with its IP and user agent, which is the only evidence the link reached anybody.\n\n`public.corp_open_signing_link(p_token text)` Writes. Reachable without signing in.",
         "tags": [
           "general"
         ],
@@ -27553,8 +27553,8 @@
     "/rpc/corp_sign_with_link": {
       "post": {
         "operationId": "corp_sign_with_link",
-        "summary": "Corp sign with link",
-        "description": "`public.corp_sign_with_link(p_token text, p_signed_name text)` Writes. Reachable without signing in.",
+        "summary": "Signs the line the link names",
+        "description": "Signs the line the link names. Refuses an empty name, an invalid, revoked, used or expired link, a line that is not pending, a withdrawn request, and -- the one that matters -- a document whose body no longer hashes to what was circulated, telling the signatory to ask for a new link rather than signing text nobody sent them. WRITES: marks the signature signed with the name typed, the hash signed against, the IP and the user agent, and spends the link. `signed_by` is deliberately null: nobody was signed in, and the link recorded beside it is the attribution.\n\n`public.corp_sign_with_link(p_token text, p_signed_name text)` Writes. Reachable without signing in.",
         "tags": [
           "general"
         ],
@@ -28198,7 +28198,7 @@
     "/rpc/create_contact_as": {
       "post": {
         "operationId": "create_contact_as",
-        "summary": "A second record of the same company, in another role: the details, addresses and people copied, a code from th",
+        "summary": "A second record of the same company, in another role: the details, addresses and people copied, a code from\u2026",
         "description": "A second record of the same company, in another role: the details, addresses and people copied, a code from that role's own series, the source left as it was. Refused where the company already has a record for the role. See 0477.\n\n`public.create_contact_as(p_contact_id uuid, p_type app.contact_type)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -28812,7 +28812,7 @@
     "/rpc/create_po_from_suggestions": {
       "post": {
         "operationId": "create_po_from_suggestions",
-        "summary": "Turns the latest run for this location into one draft purchase order per supplier, ordering the stock into the",
+        "summary": "Turns the latest run for this location into one draft purchase order per supplier, ordering the stock into\u2026",
         "description": "Turns the latest run for this location into one draft purchase order per supplier, ordering the stock into the place that is short of it. Items with no supplier come back as a final row with a null document rather than being dropped.\n\n`public.create_po_from_suggestions(p_org uuid, p_lines jsonb, p_expected_date date, p_warehouse uuid)` Writes. Requires a signed-in user. Refused unless the company has the `forecasting` module and the caller may use it.",
         "tags": [
           "forecasting"
@@ -29165,7 +29165,7 @@
     "/rpc/credit_purchase_bill": {
       "post": {
         "operationId": "credit_purchase_bill",
-        "summary": "Raises and posts a credit note against a supplier bill, capped at what is left uncredited on each line, and re",
+        "summary": "Raises and posts a credit note against a supplier bill, capped at what is left uncredited on each line, and\u2026",
         "description": "Raises and posts a credit note against a supplier bill, capped at what is left uncredited on each line, and records which bill it credits \u2014 which nothing has ever done. 0269 is the same function one table over, and its header says why the link matters.\n\n`public.credit_purchase_bill(p_bill uuid, p_lines jsonb, p_reason text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -29224,7 +29224,7 @@
     "/rpc/credit_sales_invoice": {
       "post": {
         "operationId": "credit_sales_invoice",
-        "summary": "Raises and posts a credit note against an invoice, capped at what is left uncredited on each line, and records",
+        "summary": "Raises and posts a credit note against an invoice, capped at what is left uncredited on each line, and\u2026",
         "description": "Raises and posts a credit note against an invoice, capped at what is left uncredited on each line, and records which invoice it credits -- which nothing has ever done before.\n\n`public.credit_sales_invoice(p_invoice uuid, p_lines jsonb, p_reason text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -29360,7 +29360,7 @@
     "/rpc/customer_credit_status": {
       "post": {
         "operationId": "customer_credit_status",
-        "summary": "What the document editor needs to know before an invoice is typed: the credit-control mode, the limit, what is",
+        "summary": "What the document editor needs to know before an invoice is typed: the credit-control mode, the limit, what\u2026",
         "description": "What the document editor needs to know before an invoice is typed: the credit-control mode, the limit, what is outstanding against it, and whether the customer is on credit hold. The hold is refused by app.enforce_credit_limit in every mode and at every limit, so it is reported the same way. See 0473.\n\n`public.customer_credit_status(p_contact_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -30100,7 +30100,7 @@
     "/rpc/delete_my_account": {
       "post": {
         "operationId": "delete_my_account",
-        "summary": "Anonymises the signed-in account: identity scrubbed from profiles and auth",
+        "summary": "Anonymises the signed-in account: identity scrubbed from profiles and auth.users, membership and push tokens\u2026",
         "description": "Anonymises the signed-in account: identity scrubbed from profiles and auth.users, membership and push tokens removed, sessions killed. The user row itself stays because a hundred audit columns reference it, and a ledger that cannot say who posted an entry is not a ledger.\n\n`public.delete_my_account()` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -31220,7 +31220,7 @@
     "/rpc/document_numbering": {
       "post": {
         "operationId": "document_numbering",
-        "summary": "Every series of the modules the company has, as it is set, with a sample of the next number composed the way t",
+        "summary": "Every series of the modules the company has, as it is set, with a sample of the next number composed the way\u2026",
         "description": "Every series of the modules the company has, as it is set, with a sample of the next number composed the way the draw composes it. Draws nothing. See 0480.\n\n`public.document_numbering(p_org_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -32691,7 +32691,7 @@
     "/rpc/forecast_suggestions": {
       "post": {
         "operationId": "forecast_suggestions",
-        "summary": "What the latest run for this organization and location says to order, with the item and supplier named and any",
+        "summary": "What the latest run for this organization and location says to order, with the item and supplier named and\u2026",
         "description": "What the latest run for this organization and location says to order, with the item and supplier named and any draft orders already raised netted off. Null warehouse means the company as a whole, and is matched with `is not distinct from` \u2014 a plain equality finds no run and empties the screen.\n\n`public.forecast_suggestions(p_org uuid, p_warehouse uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `forecasting` module and the caller may use it.",
         "tags": [
           "forecasting"
@@ -35075,7 +35075,7 @@
     "/rpc/item_modifier_group_ids": {
       "post": {
         "operationId": "item_modifier_group_ids",
-        "summary": "Which questions a dish is currently sold with, retired ones included, so the editor shows what is actually att",
+        "summary": "Which questions a dish is currently sold with, retired ones included, so the editor shows what is actually\u2026",
         "description": "Which questions a dish is currently sold with, retired ones included, so the editor shows what is actually attached.\n\n`public.item_modifier_group_ids(p_item uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -35144,7 +35144,7 @@
     "/rpc/item_modifier_options": {
       "post": {
         "operationId": "item_modifier_options",
-        "summary": "What can be asked about a dish: the questions attached to it, their rules, whether each takes an answer that i",
+        "summary": "What can be asked about a dish: the questions attached to it, their rules, whether each takes an answer that\u2026",
         "description": "What can be asked about a dish: the questions attached to it, their rules, whether each takes an answer that is not listed, and the answers that are.\n\n`public.item_modifier_options(p_item uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -35493,7 +35493,7 @@
     "/rpc/join_pos_queue": {
       "post": {
         "operationId": "join_pos_queue",
-        "summary": "Puts a party in the line and hands back their number, what they were told to expect, and how many are in front",
+        "summary": "Puts a party in the line and hands back their number, what they were told to expect, and how many are in\u2026",
         "description": "Puts a party in the line and hands back their number, what they were told to expect, and how many are in front of them. The number is allocated under an advisory lock so two people at the door at once cannot get the same one.\n\n`public.join_pos_queue(p_outlet uuid, p_party integer, p_name text, p_phone text, p_note text)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -35655,7 +35655,7 @@
     "/rpc/kitchen_display": {
       "post": {
         "operationId": "kitchen_display",
-        "summary": "Open tickets at one station, oldest first \u2014 the only ordering a kitchen cares about is who has been waiting lo",
+        "summary": "Open tickets at one station, oldest first \u2014 the only ordering a kitchen cares about is who has been waiting\u2026",
         "description": "Open tickets at one station, oldest first \u2014 the only ordering a kitchen cares about is who has been waiting longest.\n\n`public.kitchen_display(p_station uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -35940,8 +35940,8 @@
     "/rpc/landing_page": {
       "post": {
         "operationId": "landing_page",
-        "summary": "Landing page",
-        "description": "`public.landing_page()` Reads only. Reachable without signing in.",
+        "summary": "The marketing site's own contents, for the signed-out landing page",
+        "description": "The marketing site's own contents, for the signed-out landing page. Wraps `app.landing_payload(false)`, and the `false` is the whole security decision: it asks for the published payload, so unpublished copy being drafted is not served to a stranger who calls this directly rather than loading the page.\n\n`public.landing_page()` Reads only. Reachable without signing in.",
         "tags": [
           "general"
         ],
@@ -36540,7 +36540,7 @@
     "/rpc/loyalty_member_tier": {
       "post": {
         "operationId": "loyalty_member_tier",
-        "summary": "Which tier an account is in, what it earned to get there, and how many points short of the next one \u2014 the sent",
+        "summary": "Which tier an account is in, what it earned to get there, and how many points short of the next one \u2014 the\u2026",
         "description": "Which tier an account is in, what it earned to get there, and how many points short of the next one \u2014 the sentence a cashier reads out.\n\n`public.loyalty_member_tier(p_account uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
         "tags": [
           "loyalty"
@@ -36624,7 +36624,7 @@
     "/rpc/loyalty_tiers_admin": {
       "post": {
         "operationId": "loyalty_tiers_admin",
-        "summary": "Every tier a company has, retired ones included, with how many members are actually sitting in each \u2014 which is",
+        "summary": "Every tier a company has, retired ones included, with how many members are actually sitting in each \u2014 which\u2026",
         "description": "Every tier a company has, retired ones included, with how many members are actually sitting in each \u2014 which is how a shop finds out whether Gold means anything.\n\n`public.loyalty_tiers_admin(p_org uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
         "tags": [
           "loyalty"
@@ -37654,7 +37654,7 @@
     "/rpc/module_charges": {
       "post": {
         "operationId": "module_charges",
-        "summary": "What the add-ons a company holds have cost it so far this month, line by line, pro-rated by days and net of an",
+        "summary": "What the add-ons a company holds have cost it so far this month, line by line, pro-rated by days and net of\u2026",
         "description": "What the add-ons a company holds have cost it so far this month, line by line, pro-rated by days and net of any promotion. See 0489, 0548.\n\n`public.module_charges(p_org_id uuid, p_month date)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -37878,7 +37878,7 @@
     "/rpc/my_appraisal_parts": {
       "post": {
         "operationId": "my_appraisal_parts",
-        "summary": "Which part the caller holds on each appraisal they can see, from the same app",
+        "summary": "Which part the caller holds on each appraisal they can see, from the same app.appraisal_part_of the trigger\u2026",
         "description": "Which part the caller holds on each appraisal they can see, from the same app.appraisal_part_of the trigger judges changes with. The screen asks rather than working the rule out a second time: two implementations of one permission rule disagree eventually, and the one that is wrong is the one somebody reads.\n\n`public.my_appraisal_parts(p_org uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -38198,7 +38198,7 @@
     "/rpc/my_group_companies": {
       "post": {
         "operationId": "my_group_companies",
-        "summary": "The companies in this one's group that the caller is already a member of, with the ownership 0148 records and ",
+        "summary": "The companies in this one's group that the caller is already a member of, with the ownership 0148 records and\u2026",
         "description": "The companies in this one's group that the caller is already a member of, with the ownership 0148 records and whether the caller may change it for that company.\n\n`public.my_group_companies(p_org_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -38727,7 +38727,7 @@
     "/rpc/next_document_number": {
       "post": {
         "operationId": "next_document_number",
-        "summary": "Allocates the next number for a document type, e",
+        "summary": "Allocates the next number for a document type, e.g",
         "description": "Allocates the next number for a document type, e.g. INV-2026-00001.\n\n`public.next_document_number(p_org_id uuid, p_doc_type text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -39434,8 +39434,8 @@
     "/rpc/open_shared_document": {
       "post": {
         "operationId": "open_shared_document",
-        "summary": "Open shared document",
-        "description": "`public.open_shared_document(p_token text)` Writes. Reachable without signing in.",
+        "summary": "Opens an invoice or quotation shared by link, for a customer who is not a user of this system",
+        "description": "Opens an invoice or quotation shared by link, for a customer who is not a user of this system. Returns the company, the contact, the document and its lines, plus which acquirers can take payment if there is a balance. `internal_notes` is deliberately absent: `notes` is what the sender wrote for the customer to read and the other is not. An invalid, revoked, expired or withdrawn link returns only that state and no document. WRITES: records every open against the link -- the count, the time, the first caller's IP and user agent -- even when the answer is a refusal, because that somebody tried is worth as much as that somebody read it.\n\n`public.open_shared_document(p_token text)` Writes. Reachable without signing in.",
         "tags": [
           "general"
         ],
@@ -39486,8 +39486,8 @@
     "/rpc/open_shared_ticket": {
       "post": {
         "operationId": "open_shared_ticket",
-        "summary": "Open shared ticket",
-        "description": "`public.open_shared_ticket(p_token text)` Writes. Reachable without signing in.",
+        "summary": "Opens a support ticket shared by link, for the customer who raised it",
+        "description": "Opens a support ticket shared by link, for the customer who raised it. Returns the ticket, the company and the conversation as far as the customer is entitled to see it. An invalid, revoked or expired link returns only that state. WRITES: records the open against the link, the same way `open_shared_document` does and for the same reason.\n\n`public.open_shared_ticket(p_token text)` Writes. Reachable without signing in.",
         "tags": [
           "general"
         ],
@@ -39538,7 +39538,7 @@
     "/rpc/org_module_surface": {
       "post": {
         "operationId": "org_module_surface",
-        "summary": "Every module on offer, what this company is entitled to, and what each would cost it today net of any promotio",
+        "summary": "Every module on offer, what this company is entitled to, and what each would cost it today net of any\u2026",
         "description": "Every module on offer, what this company is entitled to, and what each would cost it today net of any promotion. See 0234, 0548.\n\n`public.org_module_surface(p_org_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -40123,7 +40123,7 @@
     "/rpc/payroll_payment_instruction": {
       "post": {
         "operationId": "payroll_payment_instruction",
-        "summary": "The rows a bank needs to pay a posted run, with anything that would be rejected flagged rather than silently o",
+        "summary": "The rows a bank needs to pay a posted run, with anything that would be rejected flagged rather than silently\u2026",
         "description": "The rows a bank needs to pay a posted run, with anything that would be rejected flagged rather than silently omitted.\n\n`public.payroll_payment_instruction(p_run_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -40312,7 +40312,7 @@
     "/rpc/pdc_maturing": {
       "post": {
         "operationId": "pdc_maturing",
-        "summary": "Cheques still outstanding that mature by a date, plus any already past their date and not banked \u2014 which is th",
+        "summary": "Cheques still outstanding that mature by a date, plus any already past their date and not banked \u2014 which is\u2026",
         "description": "Cheques still outstanding that mature by a date, plus any already past their date and not banked \u2014 which is the whole reason to look.\n\n`public.pdc_maturing(p_org uuid, p_from date, p_to date)` Reads only. Requires a signed-in user. Refused unless the company has the `sales` module and the caller may use it.",
         "tags": [
           "sales"
@@ -40678,7 +40678,7 @@
     "/rpc/platform_audit_trail": {
       "post": {
         "operationId": "platform_audit_trail",
-        "summary": "The platform's own audit trail -- the rows with no organization, which since 0443 only the statutory rate tabl",
+        "summary": "The platform's own audit trail -- the rows with no organization, which since 0443 only the statutory rate\u2026",
         "description": "The platform's own audit trail -- the rows with no organization, which since 0443 only the statutory rate tables may write. Refuses anybody who is not a platform administrator, and records the read.\n\n`public.platform_audit_trail(p_table text, p_limit integer)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -42671,7 +42671,7 @@
     "/rpc/platform_security_log": {
       "post": {
         "operationId": "platform_security_log",
-        "summary": "The reads and refusals recorded against no organization, which is where `platform_audit_trail` files the recor",
+        "summary": "The reads and refusals recorded against no organization, which is where `platform_audit_trail` files the\u2026",
         "description": "The reads and refusals recorded against no organization, which is where `platform_audit_trail` files the record of its own use.\n\n`public.platform_security_log(p_since timestamp with time zone, p_limit integer)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -43253,7 +43253,7 @@
     "/rpc/portal_document_token": {
       "post": {
         "operationId": "portal_document_token",
-        "summary": "Hands a customer holding a portal token a document token for one of their own invoices, so 0067's view and 041",
+        "summary": "Hands a customer holding a portal token a document token for one of their own invoices, so 0067's view and\u2026",
         "description": "Hands a customer holding a portal token a document token for one of their own invoices, so 0067's view and 0414's payment work unchanged. Revokes nothing. See 0493.\n\n`public.portal_document_token(p_token text, p_document_id uuid)` Writes. Reachable without signing in.",
         "tags": [
           "general"
@@ -43312,7 +43312,7 @@
     "/rpc/pos_day_board": {
       "post": {
         "operationId": "pos_day_board",
-        "summary": "One row per outlet for a trading day: bills, gross, cash and non-cash taken, average bill, what was written of",
+        "summary": "One row per outlet for a trading day: bills, gross, cash and non-cash taken, average bill, what was written\u2026",
         "description": "One row per outlet for a trading day: bills, gross, cash and non-cash taken, average bill, what was written off \u2014 and how many bills are open right now, which is the one column on a different clock.\n\n`public.pos_day_board(p_org uuid, p_date date)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -43522,7 +43522,7 @@
     "/rpc/pos_delivery_board": {
       "post": {
         "operationId": "pos_delivery_board",
-        "summary": "Every run at this outlet that has not landed, oldest first, with minutes waiting computed on the server so two",
+        "summary": "Every run at this outlet that has not landed, oldest first, with minutes waiting computed on the server so\u2026",
         "description": "Every run at this outlet that has not landed, oldest first, with minutes waiting computed on the server so two devices cannot show two different boards.\n\n`public.pos_delivery_board(p_outlet uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -43650,7 +43650,7 @@
     "/rpc/pos_delivery_day": {
       "post": {
         "operationId": "pos_delivery_day",
-        "summary": "One day of delivering, per outlet: what went out, what came back, what the rides earned and how many were give",
+        "summary": "One day of delivering, per outlet: what went out, what came back, what the rides earned and how many were\u2026",
         "description": "One day of delivering, per outlet: what went out, what came back, what the rides earned and how many were given away free.\n\n`public.pos_delivery_day(p_org uuid, p_date date)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -43748,7 +43748,7 @@
     "/rpc/pos_delivery_for": {
       "post": {
         "operationId": "pos_delivery_for",
-        "summary": "Where this bill is going, what the ride costs and who has it \u2014 with the shortfall sentence, so the till can sa",
+        "summary": "Where this bill is going, what the ride costs and who has it \u2014 with the shortfall sentence, so the till can\u2026",
         "description": "Where this bill is going, what the ride costs and who has it \u2014 with the shortfall sentence, so the till can say what is wrong while the customer is still on the phone.\n\n`public.pos_delivery_for(p_sale uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -44546,7 +44546,7 @@
     "/rpc/pos_item_availability": {
       "post": {
         "operationId": "pos_item_availability",
-        "summary": "What the till should do with each dish that has a recipe: how many are left, and whether a stop or a schedule ",
+        "summary": "What the till should do with each dish that has a recipe: how many are left, and whether a stop or a schedule\u2026",
         "description": "What the till should do with each dish that has a recipe: how many are left, and whether a stop or a schedule refuses it before the count does.\n\n`public.pos_item_availability(p_outlet uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -44624,7 +44624,7 @@
     "/rpc/pos_item_portions": {
       "post": {
         "operationId": "pos_item_portions",
-        "summary": "How many more of each dish this outlet can make: the smallest number any required ingredient can still make, l",
+        "summary": "How many more of each dish this outlet can make: the smallest number any required ingredient can still make\u2026",
         "description": "How many more of each dish this outlet can make: the smallest number any required ingredient can still make, less what parked bills have already promised.\n\n`public.pos_item_portions(p_outlet uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -44879,7 +44879,7 @@
     "/rpc/pos_menu": {
       "post": {
         "operationId": "pos_menu",
-        "summary": "Everything an outlet can sell, with whether it is offered right now, why not, how many more the kitchen can ma",
+        "summary": "Everything an outlet can sell, with whether it is offered right now, why not, how many more the kitchen can\u2026",
         "description": "Everything an outlet can sell, with whether it is offered right now, why not, how many more the kitchen can make, and whether it is sold by weight.\n\n`public.pos_menu(p_outlet uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -45085,7 +45085,7 @@
     "/rpc/pos_menu_schedules_admin": {
       "post": {
         "operationId": "pos_menu_schedules_admin",
-        "summary": "Every schedule a company has written, with how many dishes are on it and whether it is open right now \u2014 which ",
+        "summary": "Every schedule a company has written, with how many dishes are on it and whether it is open right now \u2014 which\u2026",
         "description": "Every schedule a company has written, with how many dishes are on it and whether it is open right now \u2014 which is the question somebody opens the screen to answer.\n\n`public.pos_menu_schedules_admin(p_org uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -45189,7 +45189,7 @@
     "/rpc/pos_modifier_groups_admin": {
       "post": {
         "operationId": "pos_modifier_groups_admin",
-        "summary": "Every modifier group a company has, retired ones included, with how many answers it holds, how many dishes ask",
+        "summary": "Every modifier group a company has, retired ones included, with how many answers it holds, how many dishes\u2026",
         "description": "Every modifier group a company has, retired ones included, with how many answers it holds, how many dishes ask it, and whether it takes an answer that is not on the list.\n\n`public.pos_modifier_groups_admin(p_org uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -45565,7 +45565,7 @@
     "/rpc/pos_promotions_admin": {
       "post": {
         "operationId": "pos_promotions_admin",
-        "summary": "Every promotion a company has written, retired ones included, with how many bills used it and what it gave awa",
+        "summary": "Every promotion a company has written, retired ones included, with how many bills used it and what it gave\u2026",
         "description": "Every promotion a company has written, retired ones included, with how many bills used it and what it gave away. The money is on the row because a list of names cannot tell those apart.\n\n`public.pos_promotions_admin(p_org uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -45718,7 +45718,7 @@
     "/rpc/pos_queue": {
       "post": {
         "operationId": "pos_queue",
-        "summary": "Everyone still in the line at this outlet today, in arrival order, with minutes waited computed on the server ",
+        "summary": "Everyone still in the line at this outlet today, in arrival order, with minutes waited computed on the server\u2026",
         "description": "Everyone still in the line at this outlet today, in arrival order, with minutes waited computed on the server so two devices with different clocks cannot show two different queues.\n\n`public.pos_queue(p_outlet uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -46813,7 +46813,7 @@
     "/rpc/pos_sale_promotions_on": {
       "post": {
         "operationId": "pos_sale_promotions_on",
-        "summary": "What is on this bill and what each took off, including coupons that currently qualify for nothing and the reas",
+        "summary": "What is on this bill and what each took off, including coupons that currently qualify for nothing and the\u2026",
         "description": "What is on this bill and what each took off, including coupons that currently qualify for nothing and the reason why.\n\n`public.pos_sale_promotions_on(p_sale uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -46903,7 +46903,7 @@
     "/rpc/pos_sales_by_channel": {
       "post": {
         "operationId": "pos_sales_by_channel",
-        "summary": "Completed sales split by how the order arrived \u2014 how much of Friday was delivery, whether the dining room is w",
+        "summary": "Completed sales split by how the order arrived \u2014 how much of Friday was delivery, whether the dining room is\u2026",
         "description": "Completed sales split by how the order arrived \u2014 how much of Friday was delivery, whether the dining room is worth the seats.\n\n`public.pos_sales_by_channel(p_org uuid, p_from date, p_to date)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -47328,7 +47328,7 @@
     "/rpc/pos_station_routing": {
       "post": {
         "operationId": "pos_station_routing",
-        "summary": "Every sellable item, the counter it goes to, and which of the three rules decided that \u2014 the dish, its categor",
+        "summary": "Every sellable item, the counter it goes to, and which of the three rules decided that \u2014 the dish, its\u2026",
         "description": "Every sellable item, the counter it goes to, and which of the three rules decided that \u2014 the dish, its category, or the outlet default.\n\n`public.pos_station_routing(p_outlet uuid)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -48060,7 +48060,7 @@
     "/rpc/post_landed_cost_run": {
       "post": {
         "operationId": "post_landed_cost_run",
-        "summary": "Puts a run's charges onto the cost of the goods that are still on the shelf, and takes the same money back off",
+        "summary": "Puts a run's charges onto the cost of the goods that are still on the shelf, and takes the same money back\u2026",
         "description": "Puts a run's charges onto the cost of the goods that are still on the shelf, and takes the same money back off the accounts they were coded to. What was already sold keeps its share on the expense account, because the sale that carried it is posted.\n\n`public.post_landed_cost_run(p_run uuid)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
         "tags": [
           "inventory"
@@ -48250,7 +48250,7 @@
     "/rpc/post_payroll_run": {
       "post": {
         "operationId": "post_payroll_run",
-        "summary": "Posts a calculated run: salaries net of reimbursed claims, each claim to the account its type names, statutory",
+        "summary": "Posts a calculated run: salaries net of reimbursed claims, each claim to the account its type names\u2026",
         "description": "Posts a calculated run: salaries net of reimbursed claims, each claim to the account its type names, statutory amounts to their payables.\n\n`public.post_payroll_run(p_run_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -48892,8 +48892,8 @@
     "/rpc/public_pos_menu_modifiers": {
       "post": {
         "operationId": "public_pos_menu_modifiers",
-        "summary": "Public pos menu modifiers",
-        "description": "`public.public_pos_menu_modifiers(p_token text, p_item uuid)` Reads only. Reachable without signing in.",
+        "summary": "The option groups for one item on a QR menu, for a customer holding a phone at a table",
+        "description": "The option groups for one item on a QR menu, for a customer holding a phone at a table. The token names the outlet and the item is checked against that outlet's own company, so a valid token cannot be pointed at another shop's item id to read its menu. Prices are the deltas the customer will be charged; nothing about cost or margin is here.\n\n`public.public_pos_menu_modifiers(p_token text, p_item uuid)` Reads only. Reachable without signing in.",
         "tags": [
           "general"
         ],
@@ -49499,7 +49499,7 @@
     "/rpc/record_group_payment": {
       "post": {
         "operationId": "record_group_payment",
-        "summary": "One payment covering documents in several companies: one receipt (or supplier payment) per company and contact",
+        "summary": "One payment covering documents in several companies: one receipt (or supplier payment) per company and\u2026",
         "description": "One payment covering documents in several companies: one receipt (or supplier payment) per company and contact, linked by a batch that holds no money. Rights are checked in every company before anything is written. See 0462.\n\n`public.record_group_payment(p_paid_on date, p_reference text, p_lines jsonb, p_note text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -50726,8 +50726,8 @@
     "/rpc/reply_to_shared_ticket": {
       "post": {
         "operationId": "reply_to_shared_ticket",
-        "summary": "Reply to shared ticket",
-        "description": "`public.reply_to_shared_ticket(p_token text, p_body text)` Writes. Reachable without signing in.",
+        "summary": "Lets the customer answer their own ticket through the share link, without an account",
+        "description": "Lets the customer answer their own ticket through the share link, without an account. WRITES: a comment, always visible -- `is_internal` defaults to TRUE and a customer's own message landing as an internal note would be invisible to the person who sent it -- plus a `requester_reply` event, and the ticket reopens if it was pending, on hold, resolved or closed. `first_response_at` is deliberately left alone: the first-response target is a promise the company made about how quickly IT would answer, and stopping that clock on the customer's own message would report a target met that nobody met. An empty body is refused.\n\n`public.reply_to_shared_ticket(p_token text, p_body text)` Writes. Reachable without signing in.",
         "tags": [
           "general"
         ],
@@ -51083,7 +51083,7 @@
     "/rpc/report_asset_movements": {
       "post": {
         "operationId": "report_asset_movements",
-        "summary": "The fixed asset note by category: cost and accumulated depreciation brought forward, additions, disposals, the",
+        "summary": "The fixed asset note by category: cost and accumulated depreciation brought forward, additions, disposals\u2026",
         "description": "The fixed asset note by category: cost and accumulated depreciation brought forward, additions, disposals, the charge for the period and the carrying amount. The closing figures are derived independently of the movements that should reconcile to them.\n\n`public.report_asset_movements(p_org_id uuid, p_from date, p_to date)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -51301,7 +51301,7 @@
     "/rpc/report_bank_reconciliations": {
       "post": {
         "operationId": "report_bank_reconciliations",
-        "summary": "Every completed reconciliation on an account, newest first, with the number of statement lines it closed over ",
+        "summary": "Every completed reconciliation on an account, newest first, with the number of statement lines it closed over\u2026",
         "description": "Every completed reconciliation on an account, newest first, with the number of statement lines it closed over and whether it is the one that may still be reopened.\n\n`public.report_bank_reconciliations(p_org_id uuid, p_bank_account_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -51925,7 +51925,7 @@
     "/rpc/report_deferred_revenue": {
       "post": {
         "operationId": "report_deferred_revenue",
-        "summary": "What is sitting in 2127 at a date and which invoice lines it belongs to, with the account's own posted balance",
+        "summary": "What is sitting in 2127 at a date and which invoice lines it belongs to, with the account's own posted\u2026",
         "description": "What is sitting in 2127 at a date and which invoice lines it belongs to, with the account's own posted balance repeated on every row so the schedule and the ledger are read as one answer.\n\n`public.report_deferred_revenue(p_org_id uuid, p_as_at date)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -52358,8 +52358,8 @@
     "/rpc/report_failed_sign_in": {
       "post": {
         "operationId": "report_failed_sign_in",
-        "summary": "Report failed sign in",
-        "description": "`public.report_failed_sign_in(p_email text)` Writes. Reachable without signing in.",
+        "summary": "Lets the browser tell the audit log that a password was rejected, which Supabase's own sign-in does not tell\u2026",
+        "description": "Lets the browser tell the audit log that a password was rejected, which Supabase's own sign-in does not tell this database. Returns void in every branch INCLUDING the branch where the address is unknown: a function that behaved differently for an address that exists would be a way to find out which addresses exist. WRITES: at most one `sign_in`/`refused` security event per account per minute, so a stranger cannot push the events that matter off the end of an auditor's screen.\n\n`public.report_failed_sign_in(p_email text)` Writes. Reachable without signing in.",
         "tags": [
           "general"
         ],
@@ -53548,7 +53548,7 @@
     "/rpc/report_migration_progress": {
       "post": {
         "operationId": "report_migration_progress",
-        "summary": "The six imports that make up moving onto this system, in the order they have to be done, with what is there fo",
+        "summary": "The six imports that make up moving onto this system, in the order they have to be done, with what is there\u2026",
         "description": "The six imports that make up moving onto this system, in the order they have to be done, with what is there for each \u2014 and the balance of 3900, which is the only one of the seven that can say the migration is finished.\n\n`public.report_migration_progress(p_org_id uuid)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -54877,7 +54877,7 @@
     "/rpc/report_statutory_remittances": {
       "post": {
         "operationId": "report_statutory_remittances",
-        "summary": "What a posted payroll leaves the company owing KWSP, PERKESO, LHDN and HRD Corp, with the fifteenth of the fol",
+        "summary": "What a posted payroll leaves the company owing KWSP, PERKESO, LHDN and HRD Corp, with the fifteenth of the\u2026",
         "description": "What a posted payroll leaves the company owing KWSP, PERKESO, LHDN and HRD Corp, with the fifteenth of the following month against each, and whether it went. See 0457.\n\n`public.report_statutory_remittances(p_org_id uuid, p_from date, p_to date)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -55330,7 +55330,7 @@
     "/rpc/report_uncapitalised_purchases": {
       "post": {
         "operationId": "report_uncapitalised_purchases",
-        "summary": "Posted bill lines coded to a fixed asset account with no asset in the register against them \u2014 the reconciliati",
+        "summary": "Posted bill lines coded to a fixed asset account with no asset in the register against them \u2014 the\u2026",
         "description": "Posted bill lines coded to a fixed asset account with no asset in the register against them \u2014 the reconciliation an auditor opens with, which the data could not answer.\n\n`public.report_uncapitalised_purchases(p_org uuid, p_as_at date)` Reads only. Requires a signed-in user. Refused unless the company has the `fixed_assets` module and the caller may use it.",
         "tags": [
           "fixed_assets"
@@ -55423,7 +55423,7 @@
     "/rpc/report_who_is_away": {
       "post": {
         "operationId": "report_who_is_away",
-        "summary": "Approved leave overlapping the window, with the contact `0027` has had a column for since the beginning and no",
+        "summary": "Approved leave overlapping the window, with the contact `0027` has had a column for since the beginning and\u2026",
         "description": "Approved leave overlapping the window, with the contact `0027` has had a column for since the beginning and nothing wrote until `0395`. HR reads the organization and anybody else reads their own reporting line and their own leave \u2014 the same set `0038`'s select policy already allows, because a contact-while-away is a personal number and not a directory entry.\n\n`public.report_who_is_away(p_org_id uuid, p_from date, p_to date)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"
@@ -56100,7 +56100,7 @@
     "/rpc/resync_bank_balance": {
       "post": {
         "operationId": "resync_bank_balance",
-        "summary": "Rebuilds bank_accounts",
+        "summary": "Rebuilds bank_accounts.current_balance from posted ledger lines",
         "description": "Rebuilds bank_accounts.current_balance from posted ledger lines. Assumes each bank account maps to its own GL account, which is the normal setup.\n\n`public.resync_bank_balance(p_bank_account_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -57478,7 +57478,7 @@
     "/rpc/run_pos_report": {
       "post": {
         "operationId": "run_pos_report",
-        "summary": "Runs a saved report and returns one row per group: the dimension values as text, the measures as numbers, both",
+        "summary": "Runs a saved report and returns one row per group: the dimension values as text, the measures as numbers\u2026",
         "description": "Runs a saved report and returns one row per group: the dimension values as text, the measures as numbers, both in the order the report declared.\n\n`public.run_pos_report(p_report uuid, p_from date, p_to date)` Reads only. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -60063,7 +60063,7 @@
     "/rpc/set_pos_delivery": {
       "post": {
         "operationId": "set_pos_delivery",
-        "summary": "Takes or corrects the address on a parked bill, resolves the zone, derives the fee and puts the sale on the de",
+        "summary": "Takes or corrects the address on a parked bill, resolves the zone, derives the fee and puts the sale on the\u2026",
         "description": "Takes or corrects the address on a parked bill, resolves the zone, derives the fee and puts the sale on the delivery channel. A fee below the zone's needs pos_discount.\n\n`public.set_pos_delivery(p_sale uuid, p_line1 text, p_phone text, p_line2 text, p_city text, p_state text, p_postcode text, p_recipient text, p_notes text, p_promised timestamp with time zone, p_fee numeric)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -60584,7 +60584,7 @@
     "/rpc/settle_from_client_account": {
       "post": {
         "operationId": "settle_from_client_account",
-        "summary": "Settles a rendered bill out of the client money held for its matter: the money leaves the client account AND a",
+        "summary": "Settles a rendered bill out of the client money held for its matter: the money leaves the client account AND\u2026",
         "description": "Settles a rendered bill out of the client money held for its matter: the money leaves the client account AND arrives in the office one, which is what makes it a transfer rather than a disappearance. See 0549.\n\n`public.settle_from_client_account(p_matter uuid, p_invoice uuid, p_amount numeric, p_date date, p_office_bank uuid, p_reference text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -60659,7 +60659,7 @@
     "/rpc/settle_pos_stalls": {
       "post": {
         "operationId": "settle_pos_stalls",
-        "summary": "Raises one posted purchase bill per stall for its takings less the court's commission, and records the period ",
+        "summary": "Raises one posted purchase bill per stall for its takings less the court's commission, and records the period\u2026",
         "description": "Raises one posted purchase bill per stall for its takings less the court's commission, and records the period so the same days cannot be paid for twice.\n\n`public.settle_pos_stalls(p_outlet uuid, p_from date, p_to date)` Writes. Requires a signed-in user. Refused unless the company has the `purchases` module and the caller may use it.",
         "tags": [
           "purchases"
@@ -61052,8 +61052,8 @@
     "/rpc/shared_payment_options": {
       "post": {
         "operationId": "shared_payment_options",
-        "summary": "Shared payment options",
-        "description": "`public.shared_payment_options(p_token text)` Reads only. Reachable without signing in.",
+        "summary": "Which acquirers a customer can pay a shared invoice through: the gateway code and its name, and nothing else",
+        "description": "Which acquirers a customer can pay a shared invoice through: the gateway code and its name, and nothing else. Returns nothing at all unless the link is live and unrevoked and unexpired, the document is neither void, rejected nor deleted, and there is a balance left to pay -- so an unpayable document offers no buttons. A gateway with no settlement account is omitted, because money must have somewhere to land. No key, secret or merchant identifier is returned.\n\n`public.shared_payment_options(p_token text)` Reads only. Reachable without signing in.",
         "tags": [
           "general"
         ],
@@ -61117,7 +61117,7 @@
     "/rpc/signup_reference": {
       "post": {
         "operationId": "signup_reference",
-        "summary": "The dialling codes, salutations and Malaysian states the registration form offers, readable with no session be",
+        "summary": "The dialling codes, salutations and Malaysian states the registration form offers, readable with no session\u2026",
         "description": "The dialling codes, salutations and Malaysian states the registration form offers, readable with no session because that form has none. 0554, 0555.\n\n`public.signup_reference()` Reads only. Reachable without signing in.",
         "tags": [
           "general"
@@ -61162,8 +61162,8 @@
     "/rpc/site_pages": {
       "post": {
         "operationId": "site_pages",
-        "summary": "Site pages",
-        "description": "`public.site_pages()` Reads only. Reachable without signing in.",
+        "summary": "The published pages of the marketing site, plus `signin`, `signup` and `login` whether or not they are\u2026",
+        "description": "The published pages of the marketing site, plus `signin`, `signup` and `login` whether or not they are published. Those three are exempt because they are not marketing: they carry the terms somebody is asked to agree to while registering, and a terms page that 404s is a registration nobody can honestly complete. Everything else must be published to appear.\n\n`public.site_pages()` Reads only. Reachable without signing in.",
         "tags": [
           "general"
         ],
@@ -62875,7 +62875,7 @@
     "/rpc/transfer_between_matters": {
       "post": {
         "operationId": "transfer_between_matters",
-        "summary": "Moves client money from one matter to another matter of the same client, as a paired transfer_out and transfer",
+        "summary": "Moves client money from one matter to another matter of the same client, as a paired transfer_out and\u2026",
         "description": "Moves client money from one matter to another matter of the same client, as a paired transfer_out and transfer_in posted together. Refuses a transfer between different clients, and one the source matter does not hold.\n\n`public.transfer_between_matters(p_from uuid, p_to uuid, p_amount numeric, p_date date, p_description text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -62949,7 +62949,7 @@
     "/rpc/transfer_company": {
       "post": {
         "operationId": "transfer_company",
-        "summary": "Hand a company to another person in one transaction: they become owner, the caller steps down to admin, any fi",
+        "summary": "Hand a company to another person in one transaction: they become owner, the caller steps down to admin, any\u2026",
         "description": "Hand a company to another person in one transaction: they become owner, the caller steps down to admin, any firm's borrowed access ends, and the handover is recorded. The books do not move because they were never anywhere else. See 0451.\n\n`public.transfer_company(p_org_id uuid, p_to_email text, p_note text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -63011,7 +63011,7 @@
     "/rpc/transfer_document": {
       "post": {
         "operationId": "transfer_document",
-        "summary": "The next document in the cycle, drawn from this one: what is left of each line, the header amounts in proporti",
+        "summary": "The next document in the cycle, drawn from this one: what is left of each line, the header amounts in\u2026",
         "description": "The next document in the cycle, drawn from this one: what is left of each line, the header amounts in proportion. A quotation or proforma held by a prospect is taken forward onto the company's customer record, and refused where there is none. See 0081, 0374, 0420 and 0478.\n\n`public.transfer_document(p_source_id uuid, p_target_type text, p_lines jsonb)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -63547,7 +63547,7 @@
     "/rpc/update_my_phone": {
       "post": {
         "operationId": "update_my_phone",
-        "summary": "Changes the caller's own mobile number, through the same E",
+        "summary": "Changes the caller's own mobile number, through the same E.164 rule registration uses",
         "description": "Changes the caller's own mobile number, through the same E.164 rule registration uses. 0557.\n\n`public.update_my_phone(p_dial text, p_national text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
@@ -65173,7 +65173,7 @@
     "/rpc/upsert_pos_modifier_group": {
       "post": {
         "operationId": "upsert_pos_modifier_group",
-        "summary": "Creates or renames a modifier group -- the question a dish comes with -- including whether the till may answer",
+        "summary": "Creates or renames a modifier group -- the question a dish comes with -- including whether the till may\u2026",
         "description": "Creates or renames a modifier group -- the question a dish comes with -- including whether the till may answer it with something that is not on the list. Refuses a maximum below the number of answers already ticked by default, because the till starts those selected.\n\n`public.upsert_pos_modifier_group(p_org uuid, p_code text, p_name text, p_min_select integer, p_max_select integer, p_id uuid, p_sort_order integer, p_is_active boolean, p_allows_free_text boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -65402,7 +65402,7 @@
     "/rpc/upsert_pos_receipt_settings": {
       "post": {
         "operationId": "upsert_pos_receipt_settings",
-        "summary": "Saves what an outlet prints \u2014 the header and footer on pos_outlets, the choices on pos_receipt_settings \u2014 in o",
+        "summary": "Saves what an outlet prints \u2014 the header and footer on pos_outlets, the choices on pos_receipt_settings \u2014 in\u2026",
         "description": "Saves what an outlet prints \u2014 the header and footer on pos_outlets, the choices on pos_receipt_settings \u2014 in one call, so a shop is never left having saved half of it.\n\n`public.upsert_pos_receipt_settings(p_outlet uuid, p_header text, p_footer text, p_paper_mm smallint, p_copies smallint, p_language text, p_item_codes boolean, p_cashier boolean, p_table boolean, p_channel boolean, p_tax boolean, p_customer boolean, p_points boolean, p_qr boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -65570,7 +65570,7 @@
     "/rpc/upsert_pos_report": {
       "post": {
         "operationId": "upsert_pos_report",
-        "summary": "Saves a built report, checking every key through the same allow-list the query uses \u2014 so a report that cannot ",
+        "summary": "Saves a built report, checking every key through the same allow-list the query uses \u2014 so a report that cannot\u2026",
         "description": "Saves a built report, checking every key through the same allow-list the query uses \u2014 so a report that cannot run cannot be saved.\n\n`public.upsert_pos_report(p_org uuid, p_name text, p_source app.pos_report_source, p_dimensions text[], p_measures text[], p_period text, p_from date, p_to date, p_outlets uuid[], p_channels text[], p_sort_by text, p_sort_desc boolean, p_limit integer, p_shared boolean, p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -66182,7 +66182,7 @@
     "/rpc/void_pos_sale": {
       "post": {
         "operationId": "void_pos_sale",
-        "summary": "Writes off a whole parked bill, behind the pos_void grant without exception: one void record per line the kitc",
+        "summary": "Writes off a whole parked bill, behind the pos_void grant without exception: one void record per line the\u2026",
         "description": "Writes off a whole parked bill, behind the pos_void grant without exception: one void record per line the kitchen cooked, the live dockets cancelled, and the sale marked voided with a reason and a name. The lines are kept -- they are what was written off.\n\n`public.void_pos_sale(p_sale uuid, p_reason app.pos_void_reason, p_note text)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
@@ -66458,8 +66458,8 @@
     "/rpc/workspace_by_host": {
       "post": {
         "operationId": "workspace_by_host",
-        "summary": "Workspace by host",
-        "description": "`public.workspace_by_host(p_host text)` Reads only. Reachable without signing in.",
+        "summary": "Resolves a company's own subdomain to the door that should be drawn at it: the name, the logo, the module\u2026",
+        "description": "Resolves a company's own subdomain to the door that should be drawn at it: the name, the logo, the module, and the login wording if the company wrote any. Only the first label is read, so `sinar.iakauntan.com` and `sinar.staging.iakauntan.com` are one company. Returns nothing unless the reservation is approved AND the company is active or on trial, undeleted, and still has the `workspace_address` module -- an address outliving the company that named it would be a page wearing a stranger's mark. Parked names resolve to nothing, which is the point of parked.\n\n`public.workspace_by_host(p_host text)` Reads only. Reachable without signing in.",
         "tags": [
           "general"
         ],
@@ -66541,7 +66541,7 @@
     "/rpc/workspace_module_refusal": {
       "post": {
         "operationId": "workspace_module_refusal",
-        "summary": "Null when the signed-in account may open what this address is confined to, otherwise the name of the module it",
+        "summary": "Null when the signed-in account may open what this address is confined to, otherwise the name of the module\u2026",
         "description": "Null when the signed-in account may open what this address is confined to, otherwise the name of the module it lacks.\n\n`public.workspace_module_refusal(p_host text)` Reads only. Requires a signed-in user.",
         "tags": [
           "general"

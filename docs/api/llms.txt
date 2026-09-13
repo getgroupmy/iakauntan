@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0568` (the highest applied migration).
+Schema version `0569` (the highest applied migration).
 662 functions and 329 readable tables, of which
 254 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**224 of 662 functions carry a `comment on
+**236 of 662 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -456,18 +456,18 @@ Not gated on any module.
 - `convert_lead(p_lead_id uuid, p_create_opportunity boolean, p_pipeline_id uuid, p_amount numeric, p_expected_close_date date)` *(writes)*
 - `corp_create_signing_link(p_signature_id uuid, p_valid_days integer, p_email text)` *(writes)*
 - `corp_decline_signature(p_signature_id uuid, p_reason text)` *(writes)* — Refusing to sign, with the reason.
-- `corp_decline_with_link(p_token text, p_reason text)` *(writes)*
+- `corp_decline_with_link(p_token text, p_reason text)` *(writes)* — The other half of `corp_sign_with_link`: lets a director say no.
 - `corp_display_name(p_entity uuid, p_as_at date)` — What the company is called on a document of that date: the new name with the former one beside it for twelve months after a change, and the former name alone on paper dated before it.
 - `corp_generate_document(p_entity_id uuid, p_template_code text, p_extra jsonb, p_title text)` *(writes)*
 - `corp_issued_capital(p_entity_id uuid)`
 - `corp_mark_lodged(p_filing uuid, p_lodged_on date, p_reference text, p_fee_paid numeric)` *(writes)* — Records a lodgement, with who did it and what SSM charged.
 - `corp_open_filing(p_entity_id uuid, p_filing_type text, p_trigger_date date)` *(writes)*
-- `corp_open_signing_link(p_token text)` *(writes)*
+- `corp_open_signing_link(p_token text)` *(writes)* — Opens a resolution or document sent to a director to sign.
 - `corp_principals_for_alternate(p_entity uuid, p_exclude uuid)`
 - `corp_register_of_members(p_entity_id uuid)`
 - `corp_request_signatures(p_document_id uuid, p_person_ids uuid[], p_capacities text[], p_due_on date, p_note text)` *(writes)*
 - `corp_sign_document(p_signature_id uuid, p_signed_name text)` *(writes)*
-- `corp_sign_with_link(p_token text, p_signed_name text)` *(writes)*
+- `corp_sign_with_link(p_token text, p_signed_name text)` *(writes)* — Signs the line the link names.
 - `corp_signature_state(p_document_id uuid)`
 - `corp_template_placeholders(p_entity_id uuid, p_template_code text)`
 - `corp_upcoming_filings(p_org_id uuid, p_within_days integer)` — What each company owes SSM and when.
@@ -551,7 +551,7 @@ Not gated on any module.
 - `invoice_credit_remaining(p_invoice uuid)` — What is left uncredited on each line of an invoice.
 - `item_price(p_item_id uuid, p_contact_id uuid, p_quantity numeric)`
 - `join_company_group(p_org_id uuid, p_group_id uuid)` *(writes)*
-- `landing_page()`
+- `landing_page()` — The marketing site's own contents, for the signed-out landing page.
 - `ledger_dimensions(p_org_id uuid)`
 - `line_lots(p_line_table text, p_line_id uuid)`
 - `link_contact_records(p_org_id uuid, p_ids uuid[])` *(writes)* — Makes the given contact records one company, bringing along every record already linked to any of them.
@@ -591,8 +591,8 @@ Not gated on any module.
 - `open_documents_across_companies(p_kind text, p_search text)` — What is open across every company the caller may post in — the list a group payment is chosen from.
 - `open_matter(p_org uuid, p_matter_no text, p_name text, p_client uuid, p_opposing_party text, p_matter_type text, p_fee_earner uuid, p_responsible uuid, p_agreed_fee numeric, p_hourly_rate numeric, p_conflict_note text)` *(writes)*
 - `open_requisition(p_requisition uuid, p_opened_on date)` *(writes)*
-- `open_shared_document(p_token text)` *(writes)*
-- `open_shared_ticket(p_token text)` *(writes)*
+- `open_shared_document(p_token text)` *(writes)* — Opens an invoice or quotation shared by link, for a customer who is not a user of this system.
+- `open_shared_ticket(p_token text)` *(writes)* — Opens a support ticket shared by link, for the customer who raised it.
 - `org_module_surface(p_org_id uuid)` — Every module on offer, what this company is entitled to, and what each would cost it today net of any promotion.
 - `org_payment_gateway_status(p_org_id uuid)` *(writes)*
 - `org_save_login_page(p_org_id uuid, p_title text, p_body text)` *(writes)*
@@ -660,7 +660,7 @@ Not gated on any module.
 - `prepare_einvoice(p_sales_document_id uuid)` *(writes)* — Snapshots a posted sales document into MyInvois e-Invoice form and queues it for submission.
 - `property_statutory_due(p_org_id uuid, p_within_days integer)`
 - `public_pos_menu(p_token text)` — The menu behind one published link.
-- `public_pos_menu_modifiers(p_token text, p_item uuid)`
+- `public_pos_menu_modifiers(p_token text, p_item uuid)` — The option groups for one item on a QR menu, for a customer holding a phone at a table.
 - `quote_opportunity(p_opportunity uuid, p_valid_until date, p_description text)` *(writes)* — Raises a quotation from a deal and links the two.
 - `raise_rent_invoices(p_site_id uuid, p_period_from date, p_period_to date, p_due_date date)` *(writes)*
 - `raise_strata_charges(p_scheme_id uuid, p_period_from date, p_period_to date, p_due_date date)` *(writes)*
@@ -683,7 +683,7 @@ Not gated on any module.
 - `reopen_matter(p_matter uuid)` *(writes)* — Reopens a closed file.
 - `reopen_opportunity(p_opportunity uuid, p_stage uuid)` *(writes)*
 - `reopen_project(p_project uuid)` *(writes)*
-- `reply_to_shared_ticket(p_token text, p_body text)` *(writes)*
+- `reply_to_shared_ticket(p_token text, p_body text)` *(writes)* — Lets the customer answer their own ticket through the share link, without an account.
 - `report_ap_aging(p_org_id uuid, p_as_at date)`
 - `report_appraisals_due(p_org uuid, p_as_at date)` — Who is late, and on which half.
 - `report_ar_aging(p_org_id uuid, p_as_at date)`
@@ -698,7 +698,7 @@ Not gated on any module.
 - `report_depreciation_history(p_org_id uuid, p_asset_id uuid)`
 - `report_expiring_documents(p_org_id uuid, p_within_days integer)`
 - `report_expiring_stock(p_org_id uuid, p_within_days integer)`
-- `report_failed_sign_in(p_email text)` *(writes)*
+- `report_failed_sign_in(p_email text)` *(writes)* — Lets the browser tell the audit log that a password was rejected, which Supabase's own sign-in does not tell this database.
 - `report_feedback(p_title text, p_kind app.feedback_kind, p_body text, p_screen text, p_app_version text, p_severity smallint, p_org_id uuid)` *(writes)*
 - `report_fs_deadlines(p_org_id uuid, p_within_days integer)`
 - `report_general_ledger(p_org_id uuid, p_from date, p_to date, p_account_id uuid)` — The ledger by account: balance brought forward, every posted line in date order, and the balance carried down.
@@ -774,9 +774,9 @@ Not gated on any module.
 - `setup_legal_module(p_org_id uuid)` *(writes)* — Creates the client account, client monies liability and disbursement accounts a law firm needs.
 - `share_customer_portal(p_contact_id uuid, p_valid_days integer, p_email text)` *(writes)* — Issues one customer a link to their whole account and emails it.
 - `share_document(p_document_id uuid, p_valid_days integer, p_email text)` *(writes)*
-- `shared_payment_options(p_token text)`
+- `shared_payment_options(p_token text)` — Which acquirers a customer can pay a shared invoice through: the gateway code and its name, and nothing else.
 - `signup_reference()` — The dialling codes, salutations and Malaysian states the registration form offers, readable with no session because that form has none.
-- `site_pages()`
+- `site_pages()` — The published pages of the marketing site, plus `signin`, `signup` and `login` whether or not they are published.
 - `sst_return_lines(p_org_id uuid, p_period_end date)`
 - `sst_taxable_periods(p_org_id uuid, p_from date, p_to date)`
 - `start_onboarding(p_employee_id uuid, p_template_id uuid, p_start_date date, p_kind text)` *(writes)*
@@ -812,7 +812,7 @@ Not gated on any module.
 - `void_bank_transfer(p_id uuid, p_reason text)` *(writes)*
 - `void_deposit(p_id uuid, p_reason text)` *(writes)*
 - `void_sales_document(p_id uuid, p_reason text)` *(writes)*
-- `workspace_by_host(p_host text)`
+- `workspace_by_host(p_host text)` — Resolves a company's own subdomain to the door that should be drawn at it: the name, the logo, the module, and the login wording if the company wrote any.
 - `workspace_module_refusal(p_host text)` — Null when the signed-in account may open what this address is confined to, otherwise the name of the module it lacks.
 
 ## Tables
