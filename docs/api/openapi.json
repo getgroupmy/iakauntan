@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0579",
+    "version": "0580",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -18386,8 +18386,8 @@
     "/rpc/add_line_modifier": {
       "post": {
         "operationId": "add_line_modifier",
-        "summary": "Add line modifier",
-        "description": "`public.add_line_modifier(p_line uuid, p_modifier uuid, p_quantity integer)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Adds a choice to a rung line \u2014 no onions, extra cheese, medium rare \u2014 and returns the row",
+        "description": "Adds a choice to a rung line \u2014 no onions, extra cheese, medium rare \u2014 and returns the row. The price consequence, whether the modifier is allowed on that item, and whether it clashes with one already chosen are all decided in `app.add_line_modifier_internal`, which is also what the offline queue replays into. Needs `can_write_module('pos')`.\n\n`public.add_line_modifier(p_line uuid, p_modifier uuid, p_quantity integer)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -18450,8 +18450,8 @@
     "/rpc/add_pos_sale_line": {
       "post": {
         "operationId": "add_pos_sale_line",
-        "summary": "Add pos sale line",
-        "description": "`public.add_pos_sale_line(p_sale uuid, p_item uuid, p_quantity numeric, p_price numeric, p_discount numeric, p_note text)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Rings an item onto a bill and returns the new line",
+        "description": "Rings an item onto a bill and returns the new line. A null price takes the item's price for this outlet, including whatever menu schedule is running at this minute \u2014 passing a price overrides it, which is what a manager keying a one-off does. Refuses a bill that does not exist; the rest of the refusals are in `app.add_pos_sale_line_internal`, which is also what the offline queue replays into. Needs `can_write_module('pos')`.\n\n`public.add_pos_sale_line(p_sale uuid, p_item uuid, p_quantity numeric, p_price numeric, p_discount numeric, p_note text)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -18661,8 +18661,8 @@
     "/rpc/adjust_loyalty_points": {
       "post": {
         "operationId": "adjust_loyalty_points",
-        "summary": "Adjust loyalty points",
-        "description": "`public.adjust_loyalty_points(p_account uuid, p_points integer, p_note text)` Writes. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
+        "summary": "Adds or removes points by hand and returns the new balance",
+        "description": "Adds or removes points by hand and returns the new balance. NEEDS `can_admin`, not the till permission \u2014 handing out points is handing out money, and a cashier who can do it unwitnessed is a control nobody has. Refuses an adjustment of zero, refuses one with no reason given \u2014 an unexplained adjustment is the one the auditor asks about \u2014 and refuses to take an account below zero. Written as a ledger entry, so the adjustment stays visible beside what earned and spent the rest.\n\n`public.adjust_loyalty_points(p_account uuid, p_points integer, p_note text)` Writes. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
         "tags": [
           "loyalty"
         ],
@@ -21311,8 +21311,8 @@
     "/rpc/bump_kitchen_ticket": {
       "post": {
         "operationId": "bump_kitchen_ticket",
-        "summary": "Bump kitchen ticket",
-        "description": "`public.bump_kitchen_ticket(p_ticket uuid, p_status app.pos_ticket_status)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Moves a docket along the kitchen screen \u2014 new, cooking, ready, served \u2014 and stamps the time it reached that\u2026",
+        "description": "Moves a docket along the kitchen screen \u2014 new, cooking, ready, served \u2014 and stamps the time it reached that state. A TICKET GOES FORWARD ONLY: it refuses a status at or behind where the ticket already is, so a mis-tap on a busy pass cannot silently un-cook something. `cancelled` is the exception and may be called from anywhere, but a cancelled ticket cannot be revived. Needs `can_write_module('pos')`.\n\n`public.bump_kitchen_ticket(p_ticket uuid, p_status app.pos_ticket_status)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -25786,8 +25786,8 @@
     "/rpc/complete_kiosk_order": {
       "post": {
         "operationId": "complete_kiosk_order",
-        "summary": "Complete kiosk order",
-        "description": "`public.complete_kiosk_order(p_sale uuid, p_tender uuid, p_amount numeric, p_reference text)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Takes payment for a self-service order, assigns the order number the customer watches for, and sends it to\u2026",
+        "description": "Takes payment for a self-service order, assigns the order number the customer watches for, and sends it to the kitchen if the outlet has one. REFUSES CASH, always: a kiosk has no drawer, and the customer has to be sent to the counter. The order number is taken BEFORE the sale completes, so somebody who has paid always has one \u2014 taking it afterwards leaves a window in which the money is gone and nothing on the screen belongs to them. Refuses a tender this company does not accept or has switched off. Needs `can_write_module('pos')`.\n\n`public.complete_kiosk_order(p_sale uuid, p_tender uuid, p_amount numeric, p_reference text)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -30144,8 +30144,8 @@
     "/rpc/delete_pos_recipe": {
       "post": {
         "operationId": "delete_pos_recipe",
-        "summary": "Delete pos recipe",
-        "description": "`public.delete_pos_recipe(p_recipe uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Removes the ingredient list behind a dish",
+        "description": "Removes the ingredient list behind a dish. A real delete: a recipe is what the next sale will consume, not a record of anything that happened, and stock already taken was written against the sale rather than against this. Returns false rather than raising when it was already gone. Needs `can_write_module('pos')`.\n\n`public.delete_pos_recipe(p_recipe uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -30198,8 +30198,8 @@
     "/rpc/delete_pos_report": {
       "post": {
         "operationId": "delete_pos_report",
-        "summary": "Delete pos report",
-        "description": "`public.delete_pos_report(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Removes a saved report",
+        "description": "Removes a saved report. A REAL DELETE, and the one place in this module where that is right: a report is a question, not a record of anything that happened. Nothing points at it and no history is lost. Needs `can_write_module('pos')`.\n\n`public.delete_pos_report(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -31662,8 +31662,8 @@
     "/rpc/enrol_loyalty_member": {
       "post": {
         "operationId": "enrol_loyalty_member",
-        "summary": "Enrol loyalty member",
-        "description": "`public.enrol_loyalty_member(p_contact uuid, p_card_no text)` Writes. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
+        "summary": "Puts a customer on the loyalty programme and returns the account",
+        "description": "Puts a customer on the loyalty programme and returns the account. IDEMPOTENT ON PURPOSE: a cashier who taps twice enrols one member and gets back the account they already had, rather than an error they have to explain to somebody holding a card \u2014 and a card number passed on the second tap is written to the existing account. Refuses when the company has no programme running. Needs `can_write_module('loyalty')`.\n\n`public.enrol_loyalty_member(p_contact uuid, p_card_no text)` Writes. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
         "tags": [
           "loyalty"
         ],
@@ -32150,8 +32150,8 @@
     "/rpc/expire_loyalty_points": {
       "post": {
         "operationId": "expire_loyalty_points",
-        "summary": "Expire loyalty points",
-        "description": "`public.expire_loyalty_points(p_org uuid)` Writes. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
+        "summary": "Zeroes the balance of every account dormant longer than the programme allows, and returns who lost what so\u2026",
+        "description": "Zeroes the balance of every account dormant longer than the programme allows, and returns who lost what so somebody can look before it is believed. NEEDS `can_admin`, for the same reason as adjusting. Does nothing at all when the programme sets no dormancy period, which is the default. Dormancy is measured from the last ledger entry, or from the joining date for an account that never earned anything. Written as ledger entries naming the date it went quiet, so a member who asks can be told.\n\n`public.expire_loyalty_points(p_org uuid)` Writes. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
         "tags": [
           "loyalty"
         ],
@@ -37462,8 +37462,8 @@
     "/rpc/merge_pos_sales": {
       "post": {
         "operationId": "merge_pos_sales",
-        "summary": "Merge pos sales",
-        "description": "`public.merge_pos_sales(p_into uuid, p_from uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Folds one parked bill into another and DESTROYS the emptied one, returning how many lines moved",
+        "description": "Folds one parked bill into another and DESTROYS the emptied one, returning how many lines moved. Both must still be parked and in the same outlet. What it carries across is decided by whether keeping one of two would be a decision nobody made: a redemption and a discount travel only when the receiving bill has none of its own, the kitchen dockets always follow the food, and TWO DELIVERY ADDRESSES REFUSE OUTRIGHT rather than picking, because quietly keeping one would send food to the wrong house. A bill already out with a driver cannot be folded into anything. Irreversible: the absorbed bill is deleted, not voided. Needs `can_write_module('pos')`.\n\n`public.merge_pos_sales(p_into uuid, p_from uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -37762,8 +37762,8 @@
     "/rpc/move_pos_sale": {
       "post": {
         "operationId": "move_pos_sale",
-        "summary": "Move pos sale",
-        "description": "`public.move_pos_sale(p_sale uuid, p_table uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Moves a parked bill to another table, or to none when the table is null",
+        "description": "Moves a parked bill to another table, or to none when the table is null. Refuses a bill that is already settled or voided \u2014 there is nobody left at that table to move \u2014 and refuses a table in a different outlet. Needs `can_write_module('pos')`.\n\n`public.move_pos_sale(p_sale uuid, p_table uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -39252,8 +39252,8 @@
     "/rpc/open_pos_sale": {
       "post": {
         "operationId": "open_pos_sale",
-        "summary": "Open pos sale",
-        "description": "`public.open_pos_sale(p_register uuid, p_contact uuid, p_client_uuid uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Opens a bill on a register and returns its id",
+        "description": "Opens a bill on a register and returns its id. Refuses a register that is retired or switched off, so a till taken out of service cannot quietly start selling again. `p_client_uuid` is the till's own idea of this sale and is what makes the call idempotent: a tablet that loses the reply and taps again gets the SAME bill back rather than a second one, which is the difference between one basket and two on a floor where nobody is watching the screen. Needs `can_write_module('pos')`.\n\n`public.open_pos_sale(p_register uuid, p_contact uuid, p_client_uuid uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -49742,8 +49742,8 @@
     "/rpc/redeem_loyalty_points": {
       "post": {
         "operationId": "redeem_loyalty_points",
-        "summary": "Redeem loyalty points",
-        "description": "`public.redeem_loyalty_points(p_sale uuid, p_points integer)` Writes. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
+        "summary": "Spends points against a parked bill and returns what was applied",
+        "description": "Spends points against a parked bill and returns what was applied. Points cannot buy more than the basket: rather than refuse, it takes only what is needed and LEAVES THE REST ON THE ACCOUNT, rounding the points DOWN so that over-redeeming never takes one more point than the basket is worth. Zero clears a redemption thought better of, without voiding the sale. The basket is read from the lines rather than from `total_amount`, which already has any earlier redemption off it \u2014 reading that would let two calls stack until the sale was free. Refuses a bill that is not parked, a sale not on a member's account, and anything under the programme's minimum. Needs `can_write_module('loyalty')`.\n\n`public.redeem_loyalty_points(p_sale uuid, p_points integer)` Writes. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
         "tags": [
           "loyalty"
         ],
@@ -49820,8 +49820,8 @@
     "/rpc/refresh_pos_sale_promotions": {
       "post": {
         "operationId": "refresh_pos_sale_promotions",
-        "summary": "Refresh pos sale promotions",
-        "description": "`public.refresh_pos_sale_promotions(p_sale uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Re-runs every active promotion against a bill and returns the new total",
+        "description": "Re-runs every active promotion against a bill and returns the new total. Promotions are recomputed rather than remembered, so this is what makes a basket that has just crossed a threshold \u2014 spend 50, get 5 off \u2014 pick the offer up without the line being re-rung. Safe to call repeatedly; it replaces what it found. Needs `can_write_module('pos')`.\n\n`public.refresh_pos_sale_promotions(p_sale uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -50061,8 +50061,8 @@
     "/rpc/remove_line_modifier": {
       "post": {
         "operationId": "remove_line_modifier",
-        "summary": "Remove line modifier",
-        "description": "`public.remove_line_modifier(p_line_modifier uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Takes a choice back off a line and re-prices the line",
+        "description": "Takes a choice back off a line and re-prices the line. Refuses once the bill is no longer parked. Silent on a row that is already gone, because a cashier tapping the same X twice has not made a mistake worth a dialog. Needs `can_write_module('pos')`.\n\n`public.remove_line_modifier(p_line_modifier uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -50169,8 +50169,8 @@
     "/rpc/remove_pos_sale_promotion": {
       "post": {
         "operationId": "remove_pos_sale_promotion",
-        "summary": "Remove pos sale promotion",
-        "description": "`public.remove_pos_sale_promotion(p_row uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Takes one promotion off a parked bill and returns the bill it was on",
+        "description": "Takes one promotion off a parked bill and returns the bill it was on. No line was ever rewritten to apply it, so there is no price to put back and nothing else changes. Refuses once the bill is settled or voided. Note that `refresh_pos_sale_promotions` will re-apply the same offer if it still qualifies \u2014 to hold a bill without it, remove the reason rather than the row. Needs `can_write_module('pos')`.\n\n`public.remove_pos_sale_promotion(p_row uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -55987,8 +55987,8 @@
     "/rpc/resume_pos_item": {
       "post": {
         "operationId": "resume_pos_item",
-        "summary": "Resume pos item",
-        "description": "`public.resume_pos_item(p_outlet uuid, p_item uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Puts a dish back on TODAY, undoing an 86",
+        "description": "Puts a dish back on TODAY, undoing an 86. Returns whether there was anything to undo. The stop is dated in Kuala Lumpur time and is only ever for today, so a kitchen that runs out at eight does not have to remember to put it back tomorrow morning. Needs `can_write_module('pos')`.\n\n`public.resume_pos_item(p_outlet uuid, p_item uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -56262,8 +56262,8 @@
     "/rpc/retire_kitchen_station": {
       "post": {
         "operationId": "retire_kitchen_station",
-        "summary": "Retire kitchen station",
-        "description": "`public.retire_kitchen_station(p_station uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Switches a counter off",
+        "description": "Switches a counter off. RETIRED, NEVER DELETED \u2014 `pos_kitchen_tickets.station_id` cascades on delete, so removing the row would remove every docket the counter ever received and destroy a day of kitchen history for somebody tidying a list. Refuses while any ticket on it is still new, cooking or ready: retiring the station takes those off every screen at once, and the plate does not stop existing because a list was tidied. Refuses to retire the outlet's default counter while another is active \u2014 make something else the default first, or unrouted dishes have nowhere to go. Needs `can_write_module('pos')`.\n\n`public.retire_kitchen_station(p_station uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -56317,8 +56317,8 @@
     "/rpc/retire_loyalty_tier": {
       "post": {
         "operationId": "retire_loyalty_tier",
-        "summary": "Retire loyalty tier",
-        "description": "`public.retire_loyalty_tier(p_tier uuid)` Writes. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
+        "summary": "Switches a tier off",
+        "description": "Switches a tier off. Retired rather than deleted: members drop to whichever band is below it, and a shop that retired one by mistake can put it back. Needs `can_write_module('loyalty')`.\n\n`public.retire_loyalty_tier(p_tier uuid)` Writes. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
         "tags": [
           "loyalty"
         ],
@@ -56372,8 +56372,8 @@
     "/rpc/retire_pos_delivery_zone": {
       "post": {
         "operationId": "retire_pos_delivery_zone",
-        "summary": "Retire pos delivery zone",
-        "description": "`public.retire_pos_delivery_zone(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Switches a delivery area off",
+        "description": "Switches a delivery area off. Retired, never deleted: every delivery already taken names the zone it was charged under, and the fee it was charged at has to stay explicable. Needs `can_write_module('pos')`.\n\n`public.retire_pos_delivery_zone(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -56480,8 +56480,8 @@
     "/rpc/retire_pos_menu_link": {
       "post": {
         "operationId": "retire_pos_menu_link",
-        "summary": "Retire pos menu link",
-        "description": "`public.retire_pos_menu_link(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Switches off a public ordering link",
+        "description": "Switches off a public ordering link. Switched off rather than deleted: the orders that came in through it still name it. A sticker somebody has to go and peel off is a sticker that should STOP WORKING the moment it is switched off, which is what this does. Needs `can_write_module('pos')`.\n\n`public.retire_pos_menu_link(p_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -56534,8 +56534,8 @@
     "/rpc/retire_pos_menu_schedule": {
       "post": {
         "operationId": "retire_pos_menu_schedule",
-        "summary": "Retire pos menu schedule",
-        "description": "`public.retire_pos_menu_schedule(p_schedule uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Switches a menu period off \u2014 breakfast, happy hour",
+        "description": "Switches a menu period off \u2014 breakfast, happy hour. The dishes on it go back to always-on rather than losing their grouping, which is why this is a switch and not a delete. Needs `can_write_module('pos')`.\n\n`public.retire_pos_menu_schedule(p_schedule uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -56699,8 +56699,8 @@
     "/rpc/retire_pos_promotion": {
       "post": {
         "operationId": "retire_pos_promotion",
-        "summary": "Retire pos promotion",
-        "description": "`public.retire_pos_promotion(p_promo uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Switches an offer off",
+        "description": "Switches an offer off. Bills it already discounted keep the discount \u2014 `refresh_pos_sale_promotions` only stops applying it to new ones \u2014 so this ends an offer rather than reversing it. Needs `can_write_module('pos')`.\n\n`public.retire_pos_promotion(p_promo uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -57167,8 +57167,8 @@
     "/rpc/route_category_to_station": {
       "post": {
         "operationId": "route_category_to_station",
-        "summary": "Route category to station",
-        "description": "`public.route_category_to_station(p_category uuid, p_outlet uuid, p_station uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "The same rule one level up: which counter makes everything in this category, in this outlet",
+        "description": "The same rule one level up: which counter makes everything in this category, in this outlet. An item with its own routing wins over this; a null station clears it and lets the category fall back to the outlet default. Refuses a counter that is not in the named outlet. Needs `can_write_module('pos')`.\n\n`public.route_category_to_station(p_category uuid, p_outlet uuid, p_station uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -57231,8 +57231,8 @@
     "/rpc/route_item_to_station": {
       "post": {
         "operationId": "route_item_to_station",
-        "summary": "Route item to station",
-        "description": "`public.route_item_to_station(p_item uuid, p_outlet uuid, p_station uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Says which counter makes this dish IN THIS OUTLET \u2014 the same item in another shop keeps its own routing\u2026",
+        "description": "Says which counter makes this dish IN THIS OUTLET \u2014 the same item in another shop keeps its own routing, which is why the table is not unique on item alone. A null station clears the rule and lets the item fall back to its category's. Refuses a counter that is not in the named outlet. Needs `can_write_module('pos')`.\n\n`public.route_item_to_station(p_item uuid, p_outlet uuid, p_station uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -57878,8 +57878,8 @@
     "/rpc/seat_table": {
       "post": {
         "operationId": "seat_table",
-        "summary": "Seat table",
-        "description": "`public.seat_table(p_register uuid, p_table uuid, p_covers integer)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Seats a table from a register and returns the bill to work on, opening one only if the table has none",
+        "description": "Seats a table from a register and returns the bill to work on, opening one only if the table has none. Tapping an occupied table therefore RESUMES that bill rather than starting a second, which is what a waiter walking back to a table means. Covers can be corrected on the way past: a two-top that became a four-top is the normal case, not an error. Refuses a table out of service, a table in another outlet \u2014 a waiter cannot seat a table they are not standing in \u2014 and a table with more than one bill open, where it asks which. Needs `can_write_module('pos')`.\n\n`public.seat_table(p_register uuid, p_table uuid, p_covers integer)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -58180,8 +58180,8 @@
     "/rpc/send_order_to_kitchen": {
       "post": {
         "operationId": "send_order_to_kitchen",
-        "summary": "Send order to kitchen",
-        "description": "`public.send_order_to_kitchen(p_sale uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Prints the dockets: takes every line the kitchen has NOT yet seen, routes each to its station, and returns\u2026",
+        "description": "Prints the dockets: takes every line the kitchen has NOT yet seen, routes each to its station, and returns one row per docket made. Sending twice sends only what was added since \u2014 the second round does not re-cook the first, and a station that already had a ticket from an earlier round gets a new one rather than having a line appended to something that may already be cooking. A PAID bill can still be sent: a kiosk and a fast-food counter take the money and then cook. Only a voided one refuses, along with a bill that still has unanswered \"choose one\" questions \u2014 a cook cannot guess \u2014 or a dish nothing routes and no default station to catch it. Needs `can_write_module('pos')`.\n\n`public.send_order_to_kitchen(p_sale uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -61522,8 +61522,8 @@
     "/rpc/start_kiosk_order": {
       "post": {
         "operationId": "start_kiosk_order",
-        "summary": "Start kiosk order",
-        "description": "`public.start_kiosk_order(p_register uuid, p_client_uuid uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Opens a bill a customer is ringing themselves",
+        "description": "Opens a bill a customer is ringing themselves. REFUSES A STAFF TILL: a kiosk order on one would be a sale with nobody behind it on a register that has a cash drawer. Still needs an open shift, like any other sale \u2014 a kiosk selling into a day nobody opened is a day whose takings belong to no count at all. Needs `can_write_module('pos')`.\n\n`public.start_kiosk_order(p_register uuid, p_client_uuid uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],

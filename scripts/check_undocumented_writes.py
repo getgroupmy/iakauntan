@@ -64,8 +64,11 @@ if hasattr(signal, 'SIGPIPE'):
 # `platform_*` family and `0576` the whole `chat_*` family. With the
 # named families closed, `0577` took the first slice chosen by what the
 # functions do rather than what they are called: the seventeen acts a
-# regulator reads.
-BUDGET = 117
+# regulator reads. `0580` took the second such slice, the twenty-eight
+# the restaurant runs on -- where the interesting thing written down is
+# not the arithmetic but WHICH REFUSALS ARE HARD, because a refusal a
+# cashier cannot act on instantly is a queue.
+BUDGET = 89
 
 QUERY = r"""
 select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'

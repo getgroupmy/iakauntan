@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0579` (the highest applied migration).
+Schema version `0580` (the highest applied migration).
 662 functions and 329 readable tables, of which
 254 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**397 of 662 functions carry a `comment on
+**425 of 662 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -169,16 +169,16 @@ Refused unless the company has the `legal` module switched on and the caller may
 
 Refused unless the company has the `loyalty` module switched on and the caller may use it.
 
-- `adjust_loyalty_points(p_account uuid, p_points integer, p_note text)` *(writes)*
-- `enrol_loyalty_member(p_contact uuid, p_card_no text)` *(writes)*
-- `expire_loyalty_points(p_org uuid)` *(writes)*
+- `adjust_loyalty_points(p_account uuid, p_points integer, p_note text)` *(writes)* — Adds or removes points by hand and returns the new balance.
+- `enrol_loyalty_member(p_contact uuid, p_card_no text)` *(writes)* — Puts a customer on the loyalty programme and returns the account.
+- `expire_loyalty_points(p_org uuid)` *(writes)* — Zeroes the balance of every account dormant longer than the programme allows, and returns who lost what so somebody can look before it is believed.
 - `loyalty_account_balance(p_contact uuid)`
 - `loyalty_lookup(p_org uuid, p_query text)` — Finds a member from a card number, a phone or part of a name.
 - `loyalty_member_tier(p_account uuid)` — Which tier an account is in, what it earned to get there, and how many points short of the next one — the sentence a cashier reads out.
 - `loyalty_tiers_admin(p_org uuid)` — Every tier a company has, retired ones included, with how many members are actually sitting in each — which is how a shop finds out whether Gold means anything.
 - `pos_sale_member(p_sale uuid)` — Who is on a bill, what they hold, what this bill is already redeeming and what paying it would earn.
-- `redeem_loyalty_points(p_sale uuid, p_points integer)` *(writes)*
-- `retire_loyalty_tier(p_tier uuid)` *(writes)*
+- `redeem_loyalty_points(p_sale uuid, p_points integer)` *(writes)* — Spends points against a parked bill and returns what was applied.
+- `retire_loyalty_tier(p_tier uuid)` *(writes)* — Switches a tier off.
 - `upsert_loyalty_tier(p_program uuid, p_code text, p_name text, p_min_points integer, p_multiplier numeric, p_id uuid, p_is_active boolean)` *(writes)* — Creates or edits a tier on a loyalty programme -- the points at which it starts and what it multiplies earning by.
 
 ### memberships (5)
@@ -196,21 +196,21 @@ Refused unless the company has the `memberships` module switched on and the call
 Refused unless the company has the `pos` module switched on and the caller may use it.
 
 - `add_line_free_modifier(p_line uuid, p_group uuid, p_name text, p_price_delta numeric, p_quantity integer)` *(writes)* — Puts an answer nobody listed onto a line: a name and a price typed at the counter, snapshotted like any other.
-- `add_line_modifier(p_line uuid, p_modifier uuid, p_quantity integer)` *(writes)*
-- `add_pos_sale_line(p_sale uuid, p_item uuid, p_quantity numeric, p_price numeric, p_discount numeric, p_note text)` *(writes)*
+- `add_line_modifier(p_line uuid, p_modifier uuid, p_quantity integer)` *(writes)* — Adds a choice to a rung line — no onions, extra cheese, medium rare — and returns the row.
+- `add_pos_sale_line(p_sale uuid, p_item uuid, p_quantity numeric, p_price numeric, p_discount numeric, p_note text)` *(writes)* — Rings an item onto a bill and returns the new line.
 - `apply_pos_coupon(p_sale uuid, p_code text)` *(writes)* — Attaches a voucher to a parked bill, refusing a code that does not qualify rather than attaching it inert.
 - `assign_pos_delivery(p_delivery uuid, p_driver uuid)` *(writes)* — Puts a run on a driver's list, or moves it to another one.
 - `begin_pos_count(p_shift uuid)` *(writes)* — Stops the till while the drawer is counted.
 - `book_appointment(p_provider uuid, p_item uuid, p_starts_at timestamp with time zone, p_contact uuid, p_note text)` *(writes)*
-- `bump_kitchen_ticket(p_ticket uuid, p_status app.pos_ticket_status)` *(writes)*
+- `bump_kitchen_ticket(p_ticket uuid, p_status app.pos_ticket_status)` *(writes)* — Moves a docket along the kitchen screen — new, cooking, ready, served — and stamps the time it reached that state.
 - `check_in_booking(p_booking uuid, p_register uuid)` *(writes)*
 - `claim_pos_sale(p_sale uuid, p_register uuid)` *(writes)* — Moves an open bill onto this till, register and shift together, so the drawer that takes the money is the drawer it counts against.
 - `clear_pos_delivery(p_sale uuid)` *(writes)* — Takes the address and the fee back off a parked bill.
 - `close_pos_shift(p_shift uuid, p_declared numeric, p_notes text)` *(writes)* — Counts a drawer out.
-- `complete_kiosk_order(p_sale uuid, p_tender uuid, p_amount numeric, p_reference text)` *(writes)*
+- `complete_kiosk_order(p_sale uuid, p_tender uuid, p_amount numeric, p_reference text)` *(writes)* — Takes payment for a self-service order, assigns the order number the customer watches for, and sends it to the kitchen if the outlet has one.
 - `complete_pos_sale(p_sale uuid, p_tenders jsonb, p_contact uuid)` *(writes)* — Settles a parked sale: raises and posts the invoice, writes and posts a receipt for whatever was actually paid, records the tenders and awards the points.
-- `delete_pos_recipe(p_recipe uuid)` *(writes)*
-- `delete_pos_report(p_id uuid)` *(writes)*
+- `delete_pos_recipe(p_recipe uuid)` *(writes)* — Removes the ingredient list behind a dish.
+- `delete_pos_report(p_id uuid)` *(writes)* — Removes a saved report.
 - `delete_scale_format(p_id uuid)` *(writes)*
 - `ingest_offline_sales(p_register uuid, p_sales jsonb)` *(writes)* — Lands a batch of sales rung up with no signal.
 - `item_modifier_group_ids(p_item uuid)` — Which questions a dish is currently sold with, retired ones included, so the editor shows what is actually attached.
@@ -218,11 +218,11 @@ Refused unless the company has the `pos` module switched on and the caller may u
 - `join_pos_queue(p_outlet uuid, p_party integer, p_name text, p_phone text, p_note text)` *(writes)* — Puts a party in the line and hands back their number, what they were told to expect, and how many are in front of them.
 - `kiosk_order_board(p_outlet uuid)` — Order numbers still waiting, and whether they are being made or ready.
 - `kitchen_display(p_station uuid)` — Open tickets at one station, oldest first — the only ordering a kitchen cares about is who has been waiting longest.
-- `merge_pos_sales(p_into uuid, p_from uuid)` *(writes)*
+- `merge_pos_sales(p_into uuid, p_from uuid)` *(writes)* — Folds one parked bill into another and DESTROYS the emptied one, returning how many lines moved.
 - `merge_pos_table(p_table uuid)` *(writes)* — Puts a split table back together.
-- `move_pos_sale(p_sale uuid, p_table uuid)` *(writes)*
+- `move_pos_sale(p_sale uuid, p_table uuid)` *(writes)* — Moves a parked bill to another table, or to none when the table is null.
 - `name_pos_sale_customer(p_sale uuid, p_contact uuid)` *(writes)* — Puts a customer on a parked sale, which is what loyalty redemption reads.
-- `open_pos_sale(p_register uuid, p_contact uuid, p_client_uuid uuid)` *(writes)*
+- `open_pos_sale(p_register uuid, p_contact uuid, p_client_uuid uuid)` *(writes)* — Opens a bill on a register and returns its id.
 - `open_pos_shift(p_register uuid, p_float numeric, p_notes text)` *(writes)* — Opens a drawer with a counted float.
 - `pos_day_board(p_org uuid, p_date date)` — One row per outlet for a trading day: bills, gross, cash and non-cash taken, average bill, what was written off — and how many bills are open right now, which is the one column on a different clock.
 - `pos_day_sheet(p_outlet uuid, p_date date)` — One row per provider per booking for a day, and one row with nulls for a provider with an empty diary.
@@ -269,27 +269,27 @@ Refused unless the company has the `pos` module switched on and the caller may u
 - `pos_unscan_serial(p_line uuid, p_serial text)` *(writes)* — Take a mis-scanned serial back off a till line.
 - `pos_void_summary(p_org uuid, p_from date, p_to date)`
 - `pos_voided_bills(p_org uuid, p_from date, p_to date)` — The bills written off in a period: what each came to, why, and who.
-- `refresh_pos_sale_promotions(p_sale uuid)` *(writes)*
-- `remove_line_modifier(p_line_modifier uuid)` *(writes)*
+- `refresh_pos_sale_promotions(p_sale uuid)` *(writes)* — Re-runs every active promotion against a bill and returns the new total.
+- `remove_line_modifier(p_line_modifier uuid)` *(writes)* — Takes a choice back off a line and re-prices the line.
 - `remove_pos_sale_line(p_line uuid)` *(writes)* — Takes an unsent line off a parked bill.
-- `remove_pos_sale_promotion(p_row uuid)` *(writes)*
+- `remove_pos_sale_promotion(p_row uuid)` *(writes)* — Takes one promotion off a parked bill and returns the bill it was on.
 - `request_einvoice_for_sale(p_sale uuid, p_contact uuid)` *(writes)* — The customer who asks after paying.
-- `resume_pos_item(p_outlet uuid, p_item uuid)` *(writes)*
+- `resume_pos_item(p_outlet uuid, p_item uuid)` *(writes)* — Puts a dish back on TODAY, undoing an 86.
 - `resume_pos_shift(p_shift uuid)` *(writes)* — Puts a counting till back into service.
-- `retire_kitchen_station(p_station uuid)` *(writes)*
-- `retire_pos_delivery_zone(p_id uuid)` *(writes)*
+- `retire_kitchen_station(p_station uuid)` *(writes)* — Switches a counter off.
+- `retire_pos_delivery_zone(p_id uuid)` *(writes)* — Switches a delivery area off.
 - `retire_pos_driver(p_id uuid)` *(writes)* — Stands a driver down.
-- `retire_pos_menu_link(p_id uuid)` *(writes)*
-- `retire_pos_menu_schedule(p_schedule uuid)` *(writes)*
+- `retire_pos_menu_link(p_id uuid)` *(writes)* — Switches off a public ordering link.
+- `retire_pos_menu_schedule(p_schedule uuid)` *(writes)* — Switches a menu period off — breakfast, happy hour.
 - `retire_pos_modifier(p_modifier uuid)` *(writes)* — Takes one answer off the menu without deleting it, so what was ordered on it stays answerable.
 - `retire_pos_modifier_group(p_group uuid)` *(writes)* — Stops a question being asked, and says how many dishes that affects.
-- `retire_pos_promotion(p_promo uuid)` *(writes)*
-- `route_category_to_station(p_category uuid, p_outlet uuid, p_station uuid)` *(writes)*
-- `route_item_to_station(p_item uuid, p_outlet uuid, p_station uuid)` *(writes)*
+- `retire_pos_promotion(p_promo uuid)` *(writes)* — Switches an offer off.
+- `route_category_to_station(p_category uuid, p_outlet uuid, p_station uuid)` *(writes)* — The same rule one level up: which counter makes everything in this category, in this outlet.
+- `route_item_to_station(p_item uuid, p_outlet uuid, p_station uuid)` *(writes)* — Says which counter makes this dish IN THIS OUTLET — the same item in another shop keeps its own routing, which is why the table is not unique on item alone.
 - `run_pos_report(p_report uuid, p_from date, p_to date)` — Runs a saved report and returns one row per group: the dimension values as text, the measures as numbers, both in the order the report declared.
 - `scale_formats_list(p_org uuid)`
-- `seat_table(p_register uuid, p_table uuid, p_covers integer)` *(writes)*
-- `send_order_to_kitchen(p_sale uuid)` *(writes)*
+- `seat_table(p_register uuid, p_table uuid, p_covers integer)` *(writes)* — Seats a table from a register and returns the bill to work on, opening one only if the table has none.
+- `send_order_to_kitchen(p_sale uuid)` *(writes)* — Prints the dockets: takes every line the kitchen has NOT yet seen, routes each to its station, and returns one row per docket made.
 - `set_booking_status(p_booking uuid, p_status app.pos_booking_status, p_note text)` *(writes)* — Moves a table booking along.
 - `set_item_modifier_groups(p_item uuid, p_groups uuid[])` *(writes)* — Sets which questions a dish is sold with, in the order they will be asked.
 - `set_item_stall(p_item uuid, p_stall uuid)` *(writes)* — Puts an item on a stall in a food court, or takes it off with null.
@@ -301,7 +301,7 @@ Refused unless the company has the `pos` module switched on and the caller may u
 - `set_pos_service_charge(p_outlet uuid, p_percent numeric, p_tax_code uuid)` *(writes)* — Sets the service charge an outlet adds to a bill and the tax that rides it.
 - `split_pos_sale(p_sale uuid, p_lines uuid[])` *(writes)* — Moves the named lines onto a second bill on the same table.
 - `split_pos_table(p_table uuid, p_parts integer)` *(writes)* — Turns a long table into T1-A, T1-B and so on: real tables with their own codes, cards and bills.
-- `start_kiosk_order(p_register uuid, p_client_uuid uuid)` *(writes)*
+- `start_kiosk_order(p_register uuid, p_client_uuid uuid)` *(writes)* — Opens a bill a customer is ringing themselves.
 - `stop_pos_item(p_outlet uuid, p_item uuid, p_reason text)` *(writes)* — Takes a dish off today at one outlet.
 - `upsert_kitchen_station(p_outlet uuid, p_code text, p_name text, p_id uuid, p_sort_order integer, p_is_default boolean, p_is_active boolean)` *(writes)* — Creates or edits a kitchen counter that orders are routed to.
 - `upsert_pos_delivery_zone(p_id uuid, p_outlet uuid, p_name text, p_postcodes text[], p_fee numeric, p_min_order numeric, p_free_above numeric, p_eta integer, p_sort integer, p_active boolean)` *(writes)* — Creates or edits a delivery zone for an outlet: the postcodes it covers, the fee, the minimum order, the amount above which delivery is free, and the expected minutes.
