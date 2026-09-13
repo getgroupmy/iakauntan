@@ -90,11 +90,16 @@ void main() {
       expect(chequeTone({'status': 'bounced', 'days_to_go': 30}), Tone.bad);
     });
 
-    test('worth looking at for one that matured and is still sitting there',
-        () {
-      expect(chequeTone({'status': 'held', 'days_to_go': -1}), Tone.warn);
-      expect(chequeTone({'status': 'deposited', 'days_to_go': -8}), Tone.warn);
-    });
+    test(
+      'worth looking at for one that matured and is still sitting there',
+      () {
+        expect(chequeTone({'status': 'held', 'days_to_go': -1}), Tone.warn);
+        expect(
+          chequeTone({'status': 'deposited', 'days_to_go': -8}),
+          Tone.warn,
+        );
+      },
+    );
 
     test('and nothing for one whose day has not come', () {
       expect(chequeTone({'status': 'held', 'days_to_go': 0}), isNull);
@@ -112,4 +117,106 @@ void main() {
     });
   });
 
+  /// The worklist that sat behind the register for a year.
+  ///
+  /// `pdc_maturing` and `pdcMaturingProvider` both existed, the screen
+  /// invalidated the provider after every action on a cheque, and
+  /// nothing read it — so the only thing a shop saw was the whole
+  /// register, cleared and bounced cheques among them, each with its
+  /// own countdown. The cheque sitting in a drawer was one line of two
+  /// hundred.
+  ///
+  /// What the database returns is `supabase/tests/post_dated_cheques.sql`'s
+  /// business. What is asserted here is the sentence: the count, its
+  /// verb, and — the part worth getting right — that the two directions
+  /// are totalled apart.
+  group('chequesToBankLine', () {
+    Map<String, dynamic> cheque({
+      String direction = 'incoming',
+      String chequeDate = '2026-10-15',
+      double amount = 1000,
+      bool overdue = false,
+    }) => {
+      'id': 'c1',
+      'pdc_no': 'PDC-0001',
+      'direction': direction,
+      'status': 'held',
+      'party': 'Ahmad Trading',
+      'cheque_no': '123456',
+      'cheque_date': chequeDate,
+      'amount': amount,
+      'overdue': overdue,
+    };
+
+    test('nothing outstanding says nothing', () {
+      expect(chequesToBankLine(const []), isNull);
+    });
+
+    test('one maturing is a note, not a warning', () {
+      final line = chequesToBankLine([cheque(chequeDate: '2026-10-15')]);
+
+      expect(line, isNotNull);
+      expect(
+        line!.tone,
+        isNull,
+        reason:
+            'nothing here is late, so colouring it would put a '
+            'warning against a cheque nobody has done anything wrong '
+            'about',
+      );
+      expect(line.text, contains('One cheque is maturing'));
+      expect(line.text, contains('15/10/2026'));
+      expect(line.text, contains('1,000.00 to bank'));
+    });
+
+    test('several agree with their verb', () {
+      final line = chequesToBankLine([
+        cheque(chequeDate: '2026-10-15'),
+        cheque(chequeDate: '2026-10-20'),
+      ]);
+
+      expect(line!.text, contains('2 cheques are maturing'));
+      expect(line.text, isNot(contains('1 cheques')));
+      // The nearest, not the last.
+      expect(line.text, contains('15/10/2026'));
+    });
+
+    test('one past its date outranks everything still to come', () {
+      final line = chequesToBankLine([
+        cheque(chequeDate: '2026-08-31', overdue: true, amount: 2500),
+        cheque(chequeDate: '2026-10-15', amount: 700),
+      ]);
+
+      expect(line!.tone, Tone.warn);
+      expect(line.text, contains('One cheque is past its date'));
+      // Only the late one is counted in the money: the sentence is
+      // about what has gone wrong, not about the register.
+      expect(line.text, contains('2,500.00'));
+      expect(line.text, isNot(contains('3,200.00')));
+    });
+
+    test('the two directions are never added together', () {
+      // A cheque we were given and have not banked is money not
+      // collected. A cheque we wrote that nobody has presented is money
+      // still in the account that somebody is entitled to take. One
+      // figure covering both would be neither.
+      final line = chequesToBankLine([
+        cheque(overdue: true, amount: 2000),
+        cheque(direction: 'outgoing', overdue: true, amount: 300),
+      ]);
+
+      expect(line!.text, contains('2,000.00 to bank'));
+      expect(line.text, contains('300.00 we wrote and nobody has presented'));
+      expect(line.text, isNot(contains('2,300.00')));
+    });
+
+    test('an outgoing-only list does not offer to bank RM 0.00', () {
+      final line = chequesToBankLine([
+        cheque(direction: 'outgoing', overdue: true, amount: 300),
+      ]);
+
+      expect(line!.text, isNot(contains('to bank')));
+      expect(line.text, contains('RM 300.00 we wrote'));
+    });
+  });
 }
