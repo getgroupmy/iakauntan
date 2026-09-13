@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0569",
+    "version": "0571",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -18141,8 +18141,8 @@
     "/rpc/accept_intercompany_bill": {
       "post": {
         "operationId": "accept_intercompany_bill",
-        "summary": "Accept intercompany bill",
-        "description": "`public.accept_intercompany_bill(p_sales_document_id uuid, p_org_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Raises, in this company, the bill matching an invoice another company in the group has issued to it",
+        "description": "Raises, in this company, the bill matching an invoice another company in the group has issued to it. Copies the figures, the dates and the issuer's own document number -- which an SST audit and a self-billed e-Invoice both ask for -- and matches tax codes BY CODE, because the two companies have their own `tax_codes` rows and an id from theirs would point at nothing here, or worse at one of ours by coincidence. Deliberately does NOT copy `item_id` or `account_id`: which of our items this is and which expense account it belongs in are decisions for this company, which is why the bill arrives as a DRAFT rather than posted. Refuses an invoice not addressed here, one not yet posted, one already billed, and one whose issuer has no supplier record on this company's books.\n\n`public.accept_intercompany_bill(p_sales_document_id uuid, p_org_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -19470,8 +19470,8 @@
     "/rpc/apply_deposit": {
       "post": {
         "operationId": "apply_deposit",
-        "summary": "Apply deposit",
-        "description": "`public.apply_deposit(p_deposit uuid, p_document uuid, p_amount numeric, p_date date)` Writes. Requires a signed-in user.",
+        "summary": "Settles an invoice or bill out of a deposit already held, posting the transfer and recording the allocation",
+        "description": "Settles an invoice or bill out of a deposit already held, posting the transfer and recording the allocation. Refuses more than the deposit has left, more than the document has outstanding, a voided deposit, a document that is not posted or partly paid, and a deposit belonging to a different contact. Refuses a currency mismatch on purpose and says why: the exchange difference belongs where the rest of them are struck, so settle that one with a receipt. Returns the journal's id.\n\n`public.apply_deposit(p_deposit uuid, p_document uuid, p_amount numeric, p_date date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -28118,8 +28118,8 @@
     "/rpc/create_bank_transfer": {
       "post": {
         "operationId": "create_bank_transfer",
-        "summary": "Create bank transfer",
-        "description": "`public.create_bank_transfer(p_from_account_id uuid, p_to_account_id uuid, p_amount_sent numeric, p_transfer_date date, p_amount_received numeric, p_bank_charges numeric, p_reference text, p_notes text)` Writes. Requires a signed-in user.",
+        "summary": "Records a transfer between two of the company's own bank accounts, ready to post",
+        "description": "Records a transfer between two of the company's own bank accounts, ready to post. Refuses two accounts belonging to different companies -- one journal spanning two companies would breach the boundary the rest of this system is built on -- the same account at both ends, an amount of nothing, and a same-currency transfer where sent does not equal received plus charges. Across currencies the residual is carried as exchange difference. Needs `can_post`.\n\n`public.create_bank_transfer(p_from_account_id uuid, p_to_account_id uuid, p_amount_sent numeric, p_transfer_date date, p_amount_received numeric, p_bank_charges numeric, p_reference text, p_notes text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -28265,8 +28265,8 @@
     "/rpc/create_contra": {
       "post": {
         "operationId": "create_contra",
-        "summary": "Create contra",
-        "description": "`public.create_contra(p_org uuid, p_date date, p_invoices jsonb, p_bills jsonb, p_notes text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_org uuid, p_date date, p_invoices jsonb, p_bills jsonb, p_notes text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
+        "summary": "Sets a customer's invoices against the same party's bills and posts the offset, for a contact who is both",
+        "description": "Sets a customer's invoices against the same party's bills and posts the offset, for a contact who is both. The protected overload: `p_idempotency_key` has no default, and a retry with the same key returns the first call's answer rather than contra-ing twice. Both sides must belong to one company and one contact.\n\n`public.create_contra(p_org uuid, p_date date, p_invoices jsonb, p_bills jsonb, p_notes text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_org uuid, p_date date, p_invoices jsonb, p_bills jsonb, p_notes text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -28340,8 +28340,8 @@
     "/rpc/create_deposit": {
       "post": {
         "operationId": "create_deposit",
-        "summary": "Create deposit",
-        "description": "`public.create_deposit(p_org uuid, p_kind text, p_contact uuid, p_date date, p_amount numeric, p_bank uuid, p_mode text, p_reference text, p_notes text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_org uuid, p_kind text, p_contact uuid, p_date date, p_amount numeric, p_bank uuid, p_mode text, p_reference text, p_notes text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
+        "summary": "Records and posts a deposit taken from a customer or paid to a supplier, once",
+        "description": "Records and posts a deposit taken from a customer or paid to a supplier, once. THE FORM TO CALL: a retry with the same `p_idempotency_key` returns the first call's deposit rather than taking the money twice, and the same key with different arguments is refused. A customer deposit posts as a LIABILITY rather than revenue, because it is not earned until the invoice it is held against exists. The key has no default, because a call that omits it resolves to the unprotected original (`0307`).\n\n`public.create_deposit(p_org uuid, p_kind text, p_contact uuid, p_date date, p_amount numeric, p_bank uuid, p_mode text, p_reference text, p_notes text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_org uuid, p_kind text, p_contact uuid, p_date date, p_amount numeric, p_bank uuid, p_mode text, p_reference text, p_notes text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -28437,8 +28437,8 @@
     "/rpc/create_firm": {
       "post": {
         "operationId": "create_firm",
-        "summary": "Create firm",
-        "description": "`public.create_firm(p_name text, p_registration_no text, p_email text, p_phone text)` Writes. Requires a signed-in user.",
+        "summary": "Starts an accounting practice and makes the caller a partner in it -- without that, nobody could do anything\u2026",
+        "description": "Starts an accounting practice and makes the caller a partner in it -- without that, nobody could do anything with it afterwards. Needs the same entitlement as a second company: a practice is the multi-company case with a nameplate on it, and one that could be started for nothing and then used to attach companies would be the module with the price taken off (`0486`).\n\n`public.create_firm(p_name text, p_registration_no text, p_email text, p_phone text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -28500,8 +28500,8 @@
     "/rpc/create_fiscal_year": {
       "post": {
         "operationId": "create_fiscal_year",
-        "summary": "Create fiscal year",
-        "description": "`public.create_fiscal_year(p_org_id uuid, p_start_date date)` Writes. Requires a signed-in user.",
+        "summary": "Opens a fiscal year and its periods, from the date given or from where the last one ended, honouring the\u2026",
+        "description": "Opens a fiscal year and its periods, from the date given or from where the last one ended, honouring the company's own year-end day. Refuses a year overlapping one that already exists, naming the dates: two periods covering one date would make \"which period does this post to\" ambiguous, and posting is refused outside an open period. Needs `can_post`.\n\n`public.create_fiscal_year(p_org_id uuid, p_start_date date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -28559,8 +28559,8 @@
     "/rpc/create_item_variants": {
       "post": {
         "operationId": "create_item_variants",
-        "summary": "Create item variants",
-        "description": "`public.create_item_variants(p_parent uuid, p_axes jsonb)` Writes. Requires a signed-in user.",
+        "summary": "Expands a style into its variants across the axes given -- size and colour and the like -- returning a row\u2026",
+        "description": "Expands a style into its variants across the axes given -- size and colour and the like -- returning a row per combination saying whether it was created or already existed, so re-running after adding one axis value is safe. Refuses an item that is itself a variant, an empty axis set, and a style that already holds stock: that stock has nowhere to go once the style stops holding any, and this function will not decide between moving it and writing it off. Needs `can_write`.\n\n`public.create_item_variants(p_parent uuid, p_axes jsonb)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -28634,8 +28634,8 @@
     "/rpc/create_organization": {
       "post": {
         "operationId": "create_organization",
-        "summary": "Create organization",
-        "description": "`public.create_organization(p_name text, p_slug text, p_entity_type app.entity_type, p_registration_no text, p_tin text, p_msic_code text, p_business_activity text, p_state_code text, p_city text, p_postcode text, p_address_line1 text, p_phone text, p_email text, p_is_sst_registered boolean, p_sst_registration_no text, p_fiscal_year_end_month smallint, p_country_code text)` Writes. Requires a signed-in user.",
+        "summary": "Creates a company, seeds its chart of accounts, and makes the caller its owner",
+        "description": "Creates a company, seeds its chart of accounts, and makes the caller its owner. The FIRST company is what signing up is for; every one after it needs the Multi-Company module, and the refusal names the way out because somebody who has just typed a company's details into a form is owed better than \"no\" (`0486`). Requires a signed-in user.\n\n`public.create_organization(p_name text, p_slug text, p_entity_type app.entity_type, p_registration_no text, p_tin text, p_msic_code text, p_business_activity text, p_state_code text, p_city text, p_postcode text, p_address_line1 text, p_phone text, p_email text, p_is_sst_registered boolean, p_sst_registration_no text, p_fiscal_year_end_month smallint, p_country_code text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -28749,8 +28749,8 @@
     "/rpc/create_payroll_run": {
       "post": {
         "operationId": "create_payroll_run",
-        "summary": "Create payroll run",
-        "description": "`public.create_payroll_run(p_org_id uuid, p_period_id uuid, p_description text)` Writes. Requires a signed-in user.",
+        "summary": "Opens a payroll run over a pay period, ready for employees to be added and the statutory amounts computed",
+        "description": "Opens a payroll run over a pay period, ready for employees to be added and the statutory amounts computed. Needs `can_run_payroll`, which is its own permission and not `can_write` -- what people are paid is not something everybody who may edit a customer should see.\n\n`public.create_payroll_run(p_org_id uuid, p_period_id uuid, p_description text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -28904,8 +28904,8 @@
     "/rpc/create_recurring_document": {
       "post": {
         "operationId": "create_recurring_document",
-        "summary": "Create recurring document",
-        "description": "`public.create_recurring_document(p_document_id uuid, p_name text, p_frequency text, p_start_date date, p_interval_count integer, p_end_date date, p_max_occurrences integer, p_auto_post boolean, p_auto_email boolean)` Writes. Requires a signed-in user.",
+        "summary": "Turns a posted invoice or bill into a schedule that raises it again on a cycle, optionally posting and\u2026",
+        "description": "Turns a posted invoice or bill into a schedule that raises it again on a cycle, optionally posting and emailing each one unattended. Due dates come from the terms this customer was actually given last time rather than a number somebody has to remember to type. Only an invoice or a bill can recur. Refuses an end date before the start and a schedule with no name. Needs `can_post`.\n\n`public.create_recurring_document(p_document_id uuid, p_name text, p_frequency text, p_start_date date, p_interval_count integer, p_end_date date, p_max_occurrences integer, p_auto_post boolean, p_auto_email boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -28990,8 +28990,8 @@
     "/rpc/create_ticket": {
       "post": {
         "operationId": "create_ticket",
-        "summary": "Create ticket",
-        "description": "`public.create_ticket(p_org_id uuid, p_subject text, p_description text, p_category text, p_priority app.ticket_priority, p_type app.ticket_type, p_channel app.ticket_channel, p_requester_user_id uuid, p_requester_contact_id uuid, p_asset_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
+        "summary": "Raises a support ticket",
+        "description": "Raises a support ticket. With neither requester given, the caller is raising it for themselves, which is the self-service case. A contact or asset that does not exist is refused with a sentence rather than a foreign-key name: a support desk that picked the wrong customer from a stale list should read English, not `tickets_contact_fk`. Needs the `ticketing` module.\n\n`public.create_ticket(p_org_id uuid, p_subject text, p_description text, p_category text, p_priority app.ticket_priority, p_type app.ticket_type, p_channel app.ticket_channel, p_requester_user_id uuid, p_requester_contact_id uuid, p_asset_id uuid)` Writes. Requires a signed-in user. Refused unless the company has the `ticketing` module and the caller may use it.",
         "tags": [
           "ticketing"
         ],
@@ -29096,8 +29096,8 @@
     "/rpc/create_withholding": {
       "post": {
         "operationId": "create_withholding",
-        "summary": "Create withholding",
-        "description": "`public.create_withholding(p_bill_id uuid, p_wht_code text, p_gross_amount numeric, p_rate numeric, p_cert_date date)` Writes. Requires a signed-in user.",
+        "summary": "Records withholding tax deducted from a supplier bill under the named LHDN code: what was withheld becomes a\u2026",
+        "description": "Records withholding tax deducted from a supplier bill under the named LHDN code: what was withheld becomes a liability owed to the Inland Revenue Board rather than money paid to the supplier, so the bill is settled by a smaller payment plus this. The certificate date is what the remittance is due from.\n\n`public.create_withholding(p_bill_id uuid, p_wht_code text, p_gross_amount numeric, p_rate numeric, p_cert_date date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -33926,8 +33926,8 @@
     "/rpc/import_open_bills": {
       "post": {
         "operationId": "import_open_bills",
-        "summary": "Import open bills",
-        "description": "`public.import_open_bills(p_org_id uuid, p_rows jsonb, p_as_at date, p_commit boolean)` Writes. Requires a signed-in user.",
+        "summary": "Brings unpaid supplier bills in from another system as opening balances, against the opening-balance equity\u2026",
+        "description": "Brings unpaid supplier bills in from another system as opening balances, against the opening-balance equity account. `p_commit` DEFAULTS TO FALSE and the call is a dry run: it returns a row per input row with its status and message and writes nothing. With `p_commit` true it is all or nothing -- if any row has a problem, the whole run is refused naming how many, so a half-imported ledger cannot happen. Returns the per-row report either way.\n\n`public.import_open_bills(p_org_id uuid, p_rows jsonb, p_as_at date, p_commit boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -37066,8 +37066,8 @@
     "/rpc/match_bank_transaction": {
       "post": {
         "operationId": "match_bank_transaction",
-        "summary": "Match bank transaction",
-        "description": "`public.match_bank_transaction(p_transaction_id uuid, p_source_table text, p_source_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Ties a statement line to the thing in the books that caused it, posting a journal where the match implies one",
+        "description": "Ties a statement line to the thing in the books that caused it, posting a journal where the match implies one. Refuses a line belonging to a reconciliation that has been completed: a closed reconciliation balanced against the lines it had, and changing one afterwards would silently unbalance it. Needs `can_post`.\n\n`public.match_bank_transaction(p_transaction_id uuid, p_source_table text, p_source_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -47836,8 +47836,8 @@
     "/rpc/post_bank_transfer": {
       "post": {
         "operationId": "post_bank_transfer",
-        "summary": "Post bank transfer",
-        "description": "`public.post_bank_transfer(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Posts a transfer between two of the company's own bank accounts, with the fee to its own account and any\u2026",
+        "description": "Posts a transfer between two of the company's own bank accounts, with the fee to its own account and any residual as exchange difference. That residual is only ever non-zero across currencies: `create_bank_transfer` refuses one when both ends are in the same currency. Balances move by the amount sent alone, because the fee is already inside it and is debited to a different account -- subtracting it again took it twice. Refuses a transfer already posted. Needs `can_post`.\n\n`public.post_bank_transfer(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -47891,8 +47891,8 @@
     "/rpc/post_client_transaction": {
       "post": {
         "operationId": "post_client_transaction",
-        "summary": "Post client transaction",
-        "description": "`public.post_client_transaction(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Posts money through a legal practice's CLIENT account -- money the firm holds and does not own",
+        "description": "Posts money through a legal practice's CLIENT account -- money the firm holds and does not own. In debits the client bank and credits what the firm owes the client; out does the reverse. A bank account that is not a client account is REFUSED rather than redirected: the ledger and the bank register have to name the same account, and the money is not the firm's to move. Needs the legal module set up and `can_post`.\n\n`public.post_client_transaction(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -47946,8 +47946,8 @@
     "/rpc/post_expense": {
       "post": {
         "operationId": "post_expense",
-        "summary": "Post expense",
-        "description": "`public.post_expense(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Posts a recorded expense",
+        "description": "Posts a recorded expense. Refuses one that has been deleted -- this was the only posting function in the schema that did not, so an expense somebody had removed from the list could still reach the accounts, where no screen would ever show it to them again. Refuses a total that does not equal amount plus tax, said plainly and BEFORE any conversion, so the person who saved it is told which number is wrong rather than what the ledger made of the result. Refuses one already posted. Needs `can_post`.\n\n`public.post_expense(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -48001,8 +48001,8 @@
     "/rpc/post_expense_claim": {
       "post": {
         "operationId": "post_expense_claim",
-        "summary": "Post expense claim",
-        "description": "`public.post_expense_claim(p_claim_id uuid, p_bank_account_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Pays an approved employee claim and posts it",
+        "description": "Pays an approved employee claim and posts it. Refuses a claim that is not approved, one already posted, one with nothing on it, and -- the one worth knowing -- a claim marked `pay_with_payroll`, which is settled through the payroll run rather than here, so paying it twice is not possible by arithmetic rather than by care. Needs `can_post`.\n\n`public.post_expense_claim(p_claim_id uuid, p_bank_account_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -48115,8 +48115,8 @@
     "/rpc/post_manual_journal": {
       "post": {
         "operationId": "post_manual_journal",
-        "summary": "Post manual journal",
-        "description": "`public.post_manual_journal(p_org_id uuid, p_entry_date date, p_lines jsonb, p_description text, p_reference text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_org_id uuid, p_entry_date date, p_lines jsonb, p_description text, p_reference text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
+        "summary": "Posts a journal typed by hand, once",
+        "description": "Posts a journal typed by hand, once. THE FORM TO CALL: a retry with the same `p_idempotency_key` returns the first call's journal instead of posting a second, and the same key with different arguments is refused rather than quietly answered. A manual journal has no document behind it, so there is no \"already posted\" flag to catch a repeat -- which is why this overload exists (`0307`). The key has no default, because a call that omits it resolves to the unprotected original. Refuses lines that do not balance and a date outside an open fiscal period. Needs `can_post`.\n\n`public.post_manual_journal(p_org_id uuid, p_entry_date date, p_lines jsonb, p_description text, p_reference text, p_idempotency_key text)` Writes. Requires a signed-in user.\n\nThis function is overloaded. Described above is the longest form; also defined: `(p_org_id uuid, p_entry_date date, p_lines jsonb, p_description text, p_reference text, p_idempotency_key text)`. PostgREST picks between them on the argument names in the request body, so omitting one merely-optional argument can resolve to a different function than the one intended \u2014 for the idempotency-protected writes, to the unprotected original.",
         "tags": [
           "general"
         ],
@@ -48192,8 +48192,8 @@
     "/rpc/post_manufacturing_order": {
       "post": {
         "operationId": "post_manufacturing_order",
-        "summary": "Post manufacturing order",
-        "description": "`public.post_manufacturing_order(p_mo_id uuid, p_quantity_done numeric)` Writes. Requires a signed-in user.",
+        "summary": "Posts a production run: components out at what they are carried at, finished goods in at what they cost",
+        "description": "Posts a production run: components out at what they are carried at, finished goods in at what they cost. A short run consumes PROPORTIONALLY less -- costing the whole recipe against half an output is how a finished item ends up carried at twice its worth. Refuses an order that is not confirmed or in progress, one already posted, and a run that produced nothing. Needs `can_post`.\n\n`public.post_manufacturing_order(p_mo_id uuid, p_quantity_done numeric)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -48305,8 +48305,8 @@
     "/rpc/post_purchase_document": {
       "post": {
         "operationId": "post_purchase_document",
-        "summary": "Post purchase document",
-        "description": "`public.post_purchase_document(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Posts a bill, or its credit or debit note, to the ledger: the expense or the asset, the input tax, and the\u2026",
+        "description": "Posts a bill, or its credit or debit note, to the ledger: the expense or the asset, the input tax, and the payable. Refuses a document already posted and a type that does not post. Needs `can_post`.\n\n`public.post_purchase_document(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -48360,8 +48360,8 @@
     "/rpc/post_purchase_payment": {
       "post": {
         "operationId": "post_purchase_payment",
-        "summary": "Post purchase payment",
-        "description": "`public.post_purchase_payment(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Posts a payment to a supplier: money out of the bank, the payable discharged, and any exchange difference\u2026",
+        "description": "Posts a payment to a supplier: money out of the bank, the payable discharged, and any exchange difference struck as its own line. Refuses a payment already posted, so a retry cannot pay twice. Needs `can_post`. Returns the journal's id.\n\n`public.post_purchase_payment(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -48415,8 +48415,8 @@
     "/rpc/post_receipt": {
       "post": {
         "operationId": "post_receipt",
-        "summary": "Post receipt",
-        "description": "`public.post_receipt(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Posts money received from a customer: bank debited net of charges, bank charges to their own account\u2026",
+        "description": "Posts money received from a customer: bank debited net of charges, bank charges to their own account, receivable credited, and any exchange movement between the invoice and the receipt struck as its own line. That adjustment is stated in ringgit with no foreign amount behind it, because deriving one would invent dollars that were never invoiced. Refuses a receipt already posted. Needs `can_post`.\n\n`public.post_receipt(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -48470,8 +48470,8 @@
     "/rpc/post_sales_document": {
       "post": {
         "operationId": "post_sales_document",
-        "summary": "Post sales document",
-        "description": "`public.post_sales_document(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Posts an invoice, credit note, debit note or refund note to the ledger",
+        "description": "Posts an invoice, credit note, debit note or refund note to the ledger. Any other document type is refused rather than ignored -- a quotation does not post, and saying so beats appearing to succeed. Credit and refund notes move the ledger the other way. A line carrying a service period credits deferred revenue instead of revenue and opens a release schedule (`0309`); a credit note cancels the schedule it credits rather than opening a second one (`0310`). Stock lines also post cost of sales. Refuses a document already posted. Needs `can_post`.\n\n`public.post_sales_document(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -48525,8 +48525,8 @@
     "/rpc/post_stock_adjustment": {
       "post": {
         "operationId": "post_stock_adjustment",
-        "summary": "Post stock adjustment",
-        "description": "`public.post_stock_adjustment(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Posts a stock take or write-off at current average cost, line by line, skipping lines where the count agreed",
+        "description": "Posts a stock take or write-off at current average cost, line by line, skipping lines where the count agreed. Refuses a line for an item that does not track inventory and one whose account is missing, rather than posting a partial adjustment. Does NOT fall back to a default warehouse: the adjustment already names one, and a posting function that silently picks a warehouse is one that moves stock somewhere nobody asked for. Refuses an adjustment already posted. Needs `can_post`.\n\n`public.post_stock_adjustment(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -48580,8 +48580,8 @@
     "/rpc/post_withholding": {
       "post": {
         "operationId": "post_withholding",
-        "summary": "Post withholding",
-        "description": "`public.post_withholding(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Posts a withholding certificate: the control account comes down and the amount becomes owed to the Inland\u2026",
+        "description": "Posts a withholding certificate: the control account comes down and the amount becomes owed to the Inland Revenue Board. Also writes the subledger half, without which the bill goes on showing the gross outstanding while the control account has already moved. Refuses a certificate for nothing, and one already posted. Needs `can_post`.\n\n`public.post_withholding(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -56154,8 +56154,8 @@
     "/rpc/retire_account": {
       "post": {
         "operationId": "retire_account",
-        "summary": "Retire account",
-        "description": "`public.retire_account(p_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Removes an account from the chart if it can be removed and switches it off if it cannot, returning 'deleted'\u2026",
+        "description": "Removes an account from the chart if it can be removed and switches it off if it cannot, returning 'deleted' or 'deactivated' so the caller can say which happened. Anything ever posted to it, a non-zero opening balance, or any other row still naming it -- a bank account, a budget line, an item's posting account -- means deactivated: deleting would take a balance out of the trial balance or answer with a constraint name instead of a sentence. Refuses outright for an account the ledger posts to by number, which can be renamed but not removed, and for one that still has accounts under it. Needs `can_post`.\n\n`public.retire_account(p_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -56754,8 +56754,8 @@
     "/rpc/revalue_foreign_balances": {
       "post": {
         "operationId": "revalue_foreign_balances",
-        "summary": "Revalue foreign balances",
-        "description": "`public.revalue_foreign_balances(p_org_id uuid, p_as_at date)` Writes. Requires a signed-in user.",
+        "summary": "Restates foreign-currency balances at the rate ruling on the date, posting the gain or loss",
+        "description": "Restates foreign-currency balances at the rate ruling on the date, posting the gain or loss. Undoes its own previous standing revaluation first, dated the same day, so running it twice does not compound: the figure is always the difference from cost, never from the last run. Needs `can_post`. Returns the journal's id.\n\n`public.revalue_foreign_balances(p_org_id uuid, p_as_at date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -56887,8 +56887,8 @@
     "/rpc/reverse_gl_entry": {
       "post": {
         "operationId": "reverse_gl_entry",
-        "summary": "Reverse gl entry",
-        "description": "`public.reverse_gl_entry(p_entry_id uuid, p_date date)` Writes. Requires a signed-in user.",
+        "summary": "Posts the contra of a journal: the same lines with debit and credit swapped, dated today or the date given\u2026",
+        "description": "Posts the contra of a journal: the same lines with debit and credit swapped, dated today or the date given, numbered as a new journal and marked `is_reversal` pointing back at the original. The original STAYS POSTED, which reads as an omission and is the design -- the pair nets to zero and both halves are on the page where an auditor can see what happened. Refuses a journal that is not posted, one already reversed (reversing twice would contra the contra and put the entry back), a date no fiscal period covers, and a date whose period is not open. Returns the new journal's id.\n\n`public.reverse_gl_entry(p_entry_id uuid, p_date date)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -62252,8 +62252,8 @@
     "/rpc/submit_for_approval": {
       "post": {
         "operationId": "submit_for_approval",
-        "summary": "Submit for approval",
-        "description": "`public.submit_for_approval(p_kind app.approval_entity, p_entity_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Opens an approval request over a sales document, a purchase document or a journal, and builds one step per\u2026",
+        "description": "Opens an approval request over a sales document, a purchase document or a journal, and builds one step per matching rule in the rules' own step order. Refuses when no rule covers a document of that type and amount -- saying so rather than creating a request nobody needs -- when it is already approved, and when rules match but no approver is configured, which would otherwise be a request that can never be granted. Two rules on one step number is a configuration error and is caught here rather than by whoever tries to approve it.\n\n`public.submit_for_approval(p_kind app.approval_entity, p_entity_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -66123,8 +66123,8 @@
     "/rpc/void_deposit": {
       "post": {
         "operationId": "void_deposit",
-        "summary": "Void deposit",
-        "description": "`public.void_deposit(p_id uuid, p_reason text)` Writes. Requires a signed-in user.",
+        "summary": "Voids a deposit and reverses its journal",
+        "description": "Voids a deposit and reverses its journal. Refuses one already void, and refuses any deposit that has been touched at all -- applied, refunded or forfeited -- naming the three figures and saying to undo those first, because voiding underneath them would leave allocations pointing at a deposit that never happened.\n\n`public.void_deposit(p_id uuid, p_reason text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -66320,8 +66320,8 @@
     "/rpc/void_sales_document": {
       "post": {
         "operationId": "void_sales_document",
-        "summary": "Void sales document",
-        "description": "`public.void_sales_document(p_id uuid, p_reason text)` Writes. Requires a signed-in user.",
+        "summary": "Voids an invoice or other sales document and reverses its journal if it had one, recording the reason in\u2026",
+        "description": "Voids an invoice or other sales document and reverses its journal if it had one, recording the reason in `internal_notes` where the customer will not see it. Refuses outright if any payment has been applied -- a document somebody has paid against is corrected with a credit note, not erased -- and refuses if the e-Invoice is `valid`, because LHDN has it and the cancellation belongs there first. Needs `can_post`.\n\n`public.void_sales_document(p_id uuid, p_reason text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],

@@ -527,6 +527,24 @@ jobs:
           DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
           python3 scripts/generate_api_description.py "$DB" --check
 
+      # The description is only as good as what the catalog says, and
+      # for most of these functions the catalog says nothing -- so the
+      # published document prints a name and an argument list and has
+      # told a caller nothing about what the function refuses. For a
+      # write, the refusals are the rule: `void_sales_document` will
+      # not void an invoice with a payment against it, and
+      # `create_deposit` has an overload that takes the money twice on
+      # a retry.
+      #
+      # A ratchet, like the blind-catch budget beside it. Two hundred
+      # comments is a body of work rather than a commit, and a gate
+      # that failed until all of them existed would be switched off
+      # within the week. `0569`, `0570` and `0571` took it from 278.
+      - name: Check no new write goes undocumented
+        run: |
+          DB="$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"
+          python3 scripts/check_undocumented_writes.py "$DB"
+
       # One level below the embeds, and the same string literal. The
       # screen that declares an employee's TP1 reliefs filtered
       # `statutory_schedules` on `schedule_type`, which this schema has
