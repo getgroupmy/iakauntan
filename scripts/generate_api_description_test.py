@@ -298,6 +298,42 @@ class LlmsTxt(unittest.TestCase):
         self.assertIn("caller's own rights", text)
         self.assertNotIn('no row-level security', text)
 
+    def test_the_order_is_the_documents_not_the_servers(self):
+        # The bug CI found on the first run after the drift check went
+        # in. `order by` uses the SERVER's collation: the local cluster
+        # is `C.UTF-8`, where `_` (0x5F) sorts before `s`, so
+        # `applicant_stage_history` precedes `applicants`; Supabase's
+        # Postgres collates the other way. Same schema, same line count,
+        # different order -- a committed file that could never match the
+        # one CI regenerated, failing for ever on a difference that
+        # means nothing.
+        #
+        # So the shuffled input must produce the identical document.
+        rows = [fn(name='applicants'), fn(name='applicant_stage_history'),
+                fn(name='Apple'), fn(name='apple')]
+        one = gen.llms_txt(gen.ordered(rows, 'name', 'signature'), [], '0568')
+        two = gen.llms_txt(
+            gen.ordered(list(reversed(rows)), 'name', 'signature'), [], '0568')
+        self.assertEqual(one, two)
+        # And it is codepoint order, which is the same on every machine:
+        # `A` (0x41) before `a` (0x61), and `apple` before `applicant…`
+        # because `e` < `i`. Not what a person would call alphabetical,
+        # and that is the point -- it does not vary by locale.
+        self.assertEqual(
+            [r['name'] for r in gen.ordered(rows, 'name', 'signature')],
+            ['Apple', 'apple', 'applicant_stage_history', 'applicants'])
+
+    def test_a_table_list_is_ordered_the_same_way(self):
+        tabs = [{'name': 'applicants', 'kind': 'r', 'rls': True,
+                 'security_invoker': False, 'description': None,
+                 'privileges': [], 'columns': []},
+                {'name': 'applicant_stage_history', 'kind': 'r', 'rls': True,
+                 'security_invoker': False, 'description': None,
+                 'privileges': [], 'columns': []}]
+        got = gen.llms_txt([], gen.ordered(tabs, 'name'), '0568')
+        self.assertLess(got.index('`applicant_stage_history`'),
+                        got.index('`applicants`'))
+
     def test_it_admits_how_much_of_itself_is_only_a_name(self):
         # 436 of 658 functions in this schema carry no comment, and
         # their summary is a de-underscored name. A document that let

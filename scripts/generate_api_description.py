@@ -111,7 +111,7 @@ with granted as (
      and (has_function_privilege('anon', p.oid, 'execute')
        or has_function_privilege('authenticated', p.oid, 'execute'))
 )
-select coalesce(json_agg(x order by x->>'name', x->>'signature'), '[]'::json)
+select coalesce(json_agg(x), '[]'::json)
   from (
     select json_build_object(
       'name', p.proname,
@@ -128,7 +128,7 @@ select coalesce(json_agg(x order by x->>'name', x->>'signature'), '[]'::json)
       'module', (regexp_match(
           p.prosrc, 'can_(?:read|write)_module\([^,]+,\s*''([a-z_]+)'''))[1],
       'roles', (
-        select array_agg(r order by r)
+        select array_agg(r)
           from unnest(%(roles)s::text[]) r
          where has_function_privilege(r, p.oid, 'execute')),
       'args', (
@@ -171,7 +171,7 @@ select coalesce(json_object_agg(name, labels), '{}'::json) from (
 # on is reported rather than assumed: a granted table with RLS off is
 # the whole tenant's data, and that would be a finding, not a footnote.
 TABLES_SQL = r"""
-select coalesce(json_agg(x order by x->>'name'), '[]'::json) from (
+select coalesce(json_agg(x), '[]'::json) from (
   select json_build_object(
     'name', c.relname,
     'kind', c.relkind,
@@ -186,7 +186,7 @@ select coalesce(json_agg(x order by x->>'name'), '[]'::json) from (
         (c.reloptions @> array['security_invoker=true']), false),
     'description', d.description,
     'privileges', (
-      select array_agg(pr order by pr)
+      select array_agg(pr)
         from unnest(%(roles)s::text[]) r
         cross join unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE']) priv
         cross join lateral (select priv || ':' || r as pr) x
@@ -216,6 +216,28 @@ select coalesce(json_agg(x order by x->>'name'), '[]'::json) from (
      or has_table_privilege('authenticated', c.oid, 'select'))
 ) s;
 """
+
+
+def ordered(rows: list, *keys: str) -> list:
+    """Sort here rather than in SQL, and sort every list in the output.
+
+    `order by` in Postgres uses the SERVER's collation, and the artifact
+    is committed. The local cluster in `supabase/tests/run_locally.sh`
+    is initdb'd `C.UTF-8`, where `_` (0x5F) sorts before `s`, so
+    `applicant_stage_history` comes before `applicants`. Supabase's own
+    Postgres collates the other way round and puts `applicants` first.
+
+    Same schema, same 1155 lines, different order -- so the committed
+    file could never match the one CI regenerated, and the drift check
+    would have failed for ever on a difference that means nothing. It
+    did, on the first run after this check went in, which is the check
+    working.
+
+    Python's string sort is codepoint order on every machine. It is the
+    only ordering here that is a property of the document rather than of
+    whoever's database produced it.
+    """
+    return sorted(rows, key=lambda r: tuple(str(r.get(k) or '') for k in keys))
 
 
 def query(db: str, sql: str) -> object:
@@ -729,8 +751,14 @@ def main() -> int:
     args = ap.parse_args()
 
     enums = query(args.database_url, ENUMS_SQL)
-    fns = query(args.database_url, FUNCTIONS_SQL)
-    tables = query(args.database_url, TABLES_SQL)
+    fns = ordered(query(args.database_url, FUNCTIONS_SQL),
+                  'name', 'signature')
+    tables = ordered(query(args.database_url, TABLES_SQL), 'name')
+    # The small lists inside each row, for the same reason.
+    for row in fns:
+        row['roles'] = sorted(row['roles'] or [])
+    for row in tables:
+        row['privileges'] = sorted(row['privileges'] or [])
     version = schema_version()
 
     openapi = json.dumps(build_openapi(fns, tables, enums),
