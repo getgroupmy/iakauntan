@@ -59,9 +59,9 @@ if hasattr(signal, 'SIGPIPE'):
 #
 # 278 when this was written. `0569` took the open doors, `0570` the
 # thirteen that move money, `0571` the posting and creating verbs,
-# `0572` the twenty-one that undo something, and `0573` the whole
-# `set_*` family.
-BUDGET = 199
+# `0572` the twenty-one that undo something, `0573` the whole `set_*`
+# family and `0574` the whole `upsert_*` family.
+BUDGET = 181
 
 QUERY = r"""
 select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0573",
+    "version": "0574",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -63782,8 +63782,8 @@
     "/rpc/upsert_ai_model": {
       "post": {
         "operationId": "upsert_ai_model",
-        "summary": "Upsert ai model",
-        "description": "`public.upsert_ai_model(p_provider text, p_model_id text, p_name text, p_kind text, p_is_free boolean, p_context_tokens integer, p_notes text, p_is_active boolean, p_sort_order integer)` Writes. Requires a signed-in user.",
+        "summary": "Creates or edits one model under a provider, with its context window and whether it is free",
+        "description": "Creates or edits one model under a provider, with its context window and whether it is free. Refuses a provider that does not exist and a model with no id: a model has to be named to be called. Platform administrators only.\n\n`public.upsert_ai_model(p_provider text, p_model_id text, p_name text, p_kind text, p_is_free boolean, p_context_tokens integer, p_notes text, p_is_active boolean, p_sort_order integer)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -63864,8 +63864,8 @@
     "/rpc/upsert_ai_provider": {
       "post": {
         "operationId": "upsert_ai_provider",
-        "summary": "Upsert ai provider",
-        "description": "`public.upsert_ai_provider(p_code text, p_name text, p_wire text, p_base_url text, p_docs_url text, p_key_hint text, p_needs_key boolean, p_is_active boolean, p_sort_order integer)` Writes. Requires a signed-in user.",
+        "summary": "Creates or edits an AI provider in the platform's catalogue -- how to reach it, whether it needs a key, and\u2026",
+        "description": "Creates or edits an AI provider in the platform's catalogue -- how to reach it, whether it needs a key, and what a key looks like so an operator can tell they have pasted the right thing. Platform administrators only.\n\n`public.upsert_ai_provider(p_code text, p_name text, p_wire text, p_base_url text, p_docs_url text, p_key_hint text, p_needs_key boolean, p_is_active boolean, p_sort_order integer)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -64025,8 +64025,8 @@
     "/rpc/upsert_budget": {
       "post": {
         "operationId": "upsert_budget",
-        "summary": "Upsert budget",
-        "description": "`public.upsert_budget(p_id uuid, p_org uuid, p_year uuid, p_name text, p_department text, p_notes text)` Writes. Requires a signed-in user. Refused unless the company has the `accounting` module and the caller may use it.",
+        "summary": "Creates or renames a budget for a financial year",
+        "description": "Creates or renames a budget for a financial year. An APPROVED budget is refused: it is what variance is reported against, and changing it underneath a report already circulated would change what people were told without changing the report. The lines are `set_budget_lines`, separately and under the same rule. Needs the `accounting` module.\n\n`public.upsert_budget(p_id uuid, p_org uuid, p_year uuid, p_name text, p_department text, p_notes text)` Writes. Requires a signed-in user. Refused unless the company has the `accounting` module and the caller may use it.",
         "tags": [
           "accounting"
         ],
@@ -64100,8 +64100,8 @@
     "/rpc/upsert_cash_forecast_item": {
       "post": {
         "operationId": "upsert_cash_forecast_item",
-        "summary": "Upsert cash forecast item",
-        "description": "`public.upsert_cash_forecast_item(p_id uuid, p_org uuid, p_direction text, p_description text, p_amount numeric, p_expected_on date, p_recurrence text, p_until date, p_notes text)` Writes. Requires a signed-in user. Refused unless the company has the `accounting` module and the caller may use it.",
+        "summary": "Creates or edits one of the things only a person knows -- a payment expected or promised that no invoice or\u2026",
+        "description": "Creates or edits one of the things only a person knows -- a payment expected or promised that no invoice or bill has yet recorded -- so the thirteen-week forecast can include it. Refuses a description like \"Payment\" that tells a later reader nothing, an amount of nothing, and a recurrence that ends before it starts. Needs the `accounting` module.\n\n`public.upsert_cash_forecast_item(p_id uuid, p_org uuid, p_direction text, p_description text, p_amount numeric, p_expected_on date, p_recurrence text, p_until date, p_notes text)` Writes. Requires a signed-in user. Refused unless the company has the `accounting` module and the caller may use it.",
         "tags": [
           "accounting"
         ],
@@ -64187,8 +64187,8 @@
     "/rpc/upsert_custom_field": {
       "post": {
         "operationId": "upsert_custom_field",
-        "summary": "Upsert custom field",
-        "description": "`public.upsert_custom_field(p_org_id uuid, p_entity text, p_label text, p_key text, p_kind text, p_is_required boolean, p_options jsonb, p_target_entity text, p_help_text text, p_min_value numeric, p_max_value numeric, p_max_length integer, p_show_on_list boolean, p_sort_order integer)` Writes. Requires a signed-in user.",
+        "summary": "Creates or edits a custom field on a master record",
+        "description": "Creates or edits a custom field on a master record. THE KEY IS DERIVED FROM THE LABEL THE FIRST TIME AND FROZEN AFTER: renaming the label later changes what people read and not where the values live, so existing data stays attached. Refuses an entity that cannot carry custom fields, a label nobody can read, and a kind outside text, number, date, boolean, select and lookup. Needs `can_admin`.\n\n`public.upsert_custom_field(p_org_id uuid, p_entity text, p_label text, p_key text, p_kind text, p_is_required boolean, p_options jsonb, p_target_entity text, p_help_text text, p_min_value numeric, p_max_value numeric, p_max_length integer, p_show_on_list boolean, p_sort_order integer)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -64351,8 +64351,8 @@
     "/rpc/upsert_item_conversion": {
       "post": {
         "operationId": "upsert_item_conversion",
-        "summary": "Upsert item conversion",
-        "description": "`public.upsert_item_conversion(p_id uuid, p_org uuid, p_code text, p_name text, p_item uuid, p_qty numeric, p_uom text, p_outputs jsonb, p_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
+        "summary": "Creates or edits a conversion -- one item broken down into several, a carcass into cuts, a drum into bottles",
+        "description": "Creates or edits a conversion -- one item broken down into several, a carcass into cuts, a drum into bottles. REPLACES EVERY OUTPUT. Refuses a conversion that starts with nothing, produces nothing, or names an item that is not this company's, and every output needs both an item and a quantity above nought. Needs the `inventory` module.\n\n`public.upsert_item_conversion(p_id uuid, p_org uuid, p_code text, p_name text, p_item uuid, p_qty numeric, p_uom text, p_outputs jsonb, p_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
         "tags": [
           "inventory"
         ],
@@ -64437,8 +64437,8 @@
     "/rpc/upsert_item_uom_pack": {
       "post": {
         "operationId": "upsert_item_uom_pack",
-        "summary": "Upsert item uom pack",
-        "description": "`public.upsert_item_uom_pack(p_item uuid, p_uom text, p_qty numeric)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
+        "summary": "Says how many base units are in a pack -- a dozen, a case of twenty-four -- so an order in cases becomes a\u2026",
+        "description": "Says how many base units are in a pack -- a dozen, a case of twenty-four -- so an order in cases becomes a quantity in the books. Refuses a pack of nothing, and refuses the item's OWN base unit: a base unit is one by definition, and a row saying otherwise would silently rescale every quantity the item has. Needs the `inventory` module.\n\n`public.upsert_item_uom_pack(p_item uuid, p_uom text, p_qty numeric)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
         "tags": [
           "inventory"
         ],
@@ -64500,8 +64500,8 @@
     "/rpc/upsert_kitchen_station": {
       "post": {
         "operationId": "upsert_kitchen_station",
-        "summary": "Upsert kitchen station",
-        "description": "`public.upsert_kitchen_station(p_outlet uuid, p_code text, p_name text, p_id uuid, p_sort_order integer, p_is_default boolean, p_is_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Creates or edits a kitchen counter that orders are routed to",
+        "description": "Creates or edits a kitchen counter that orders are routed to. Making one the default clears the previous one IN THE SAME TRANSACTION: the unique partial index rejects a second default outright, and doing it as two calls from the client would leave a moment with no default at all -- which is exactly the moment `send_order_to_kitchen` refuses an unrouted order. Needs the `pos` module.\n\n`public.upsert_kitchen_station(p_outlet uuid, p_code text, p_name text, p_id uuid, p_sort_order integer, p_is_default boolean, p_is_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -64577,8 +64577,8 @@
     "/rpc/upsert_landed_cost_run": {
       "post": {
         "operationId": "upsert_landed_cost_run",
-        "summary": "Upsert landed cost run",
-        "description": "`public.upsert_landed_cost_run(p_id uuid, p_org uuid, p_date date, p_bills jsonb, p_charges jsonb, p_notes text)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
+        "summary": "Creates or edits a draft landed-cost run -- freight, duty and handling to be spread across the items on one\u2026",
+        "description": "Creates or edits a draft landed-cost run -- freight, duty and handling to be spread across the items on one or more bills. REPLACES EVERY TARGET AND CHARGE: both lists are deleted and rewritten from what is sent. DRAFT ONLY, because once applied those costs are inside what each item is carried at and every sale since has taken its cost of sales from that figure. A bill must be posted, partly paid or completed to be a target: only a posted bill has moved any stock, and freight can only go onto stock that is there. Needs the `inventory` module.\n\n`public.upsert_landed_cost_run(p_id uuid, p_org uuid, p_date date, p_bills jsonb, p_charges jsonb, p_notes text)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
         "tags": [
           "inventory"
         ],
@@ -64649,8 +64649,8 @@
     "/rpc/upsert_loyalty_tier": {
       "post": {
         "operationId": "upsert_loyalty_tier",
-        "summary": "Upsert loyalty tier",
-        "description": "`public.upsert_loyalty_tier(p_program uuid, p_code text, p_name text, p_min_points integer, p_multiplier numeric, p_id uuid, p_is_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
+        "summary": "Creates or edits a tier on a loyalty programme -- the points at which it starts and what it multiplies\u2026",
+        "description": "Creates or edits a tier on a loyalty programme -- the points at which it starts and what it multiplies earning by. Refuses a tier starting below nothing, and refuses a MULTIPLIER OF NOUGHT OR LESS: a tier that earns nothing is a punishment dressed as a reward, and a shop that means \"no points\" should turn earning off on the scheme itself. Needs the `loyalty` module.\n\n`public.upsert_loyalty_tier(p_program uuid, p_code text, p_name text, p_min_points integer, p_multiplier numeric, p_id uuid, p_is_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `loyalty` module and the caller may use it.",
         "tags": [
           "loyalty"
         ],
@@ -64726,8 +64726,8 @@
     "/rpc/upsert_pos_delivery_zone": {
       "post": {
         "operationId": "upsert_pos_delivery_zone",
-        "summary": "Upsert pos delivery zone",
-        "description": "`public.upsert_pos_delivery_zone(p_id uuid, p_outlet uuid, p_name text, p_postcodes text[], p_fee numeric, p_min_order numeric, p_free_above numeric, p_eta integer, p_sort integer, p_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Creates or edits a delivery zone for an outlet: the postcodes it covers, the fee, the minimum order, the\u2026",
+        "description": "Creates or edits a delivery zone for an outlet: the postcodes it covers, the fee, the minimum order, the amount above which delivery is free, and the expected minutes. Postcodes are NORMALISED ON THE WAY IN, so matching an address later is an equality test rather than a function somebody has to remember to call. Needs the `pos` module.\n\n`public.upsert_pos_delivery_zone(p_id uuid, p_outlet uuid, p_name text, p_postcodes text[], p_fee numeric, p_min_order numeric, p_free_above numeric, p_eta integer, p_sort integer, p_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -64816,8 +64816,8 @@
     "/rpc/upsert_pos_driver": {
       "post": {
         "operationId": "upsert_pos_driver",
-        "summary": "Upsert pos driver",
-        "description": "`public.upsert_pos_driver(p_id uuid, p_org uuid, p_name text, p_phone text, p_vehicle text, p_plate text, p_outlet uuid, p_user uuid, p_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Creates or edits a delivery driver, optionally tied to a user account",
+        "description": "Creates or edits a delivery driver, optionally tied to a user account. THE USER SHOULD BE SOMEBODY WHO WORKS HERE: pointing the row at a stranger does not fail, and the run is simply assigned and never seen, because row-level security keeps them out of the very rows the app would fetch for them. Needs the `pos` module.\n\n`public.upsert_pos_driver(p_id uuid, p_org uuid, p_name text, p_phone text, p_vehicle text, p_plate text, p_outlet uuid, p_user uuid, p_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -64900,8 +64900,8 @@
     "/rpc/upsert_pos_menu_link": {
       "post": {
         "operationId": "upsert_pos_menu_link",
-        "summary": "Upsert pos menu link",
-        "description": "`public.upsert_pos_menu_link(p_outlet uuid, p_kind app.pos_menu_link_kind, p_table uuid, p_register uuid, p_label text, p_expires timestamp with time zone, p_single boolean, p_id uuid, p_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Creates or edits a QR menu link -- the sticker on a table or beside a register",
+        "description": "Creates or edits a QR menu link -- the sticker on a table or beside a register. A table must belong to the outlet the link is for, refused by name. `p_single` makes it single-use and `p_expires` gives it a life; both are what stop a photographed sticker ordering for ever. Needs the `pos` module.\n\n`public.upsert_pos_menu_link(p_outlet uuid, p_kind app.pos_menu_link_kind, p_table uuid, p_register uuid, p_label text, p_expires timestamp with time zone, p_single boolean, p_id uuid, p_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -64999,8 +64999,8 @@
     "/rpc/upsert_pos_menu_schedule": {
       "post": {
         "operationId": "upsert_pos_menu_schedule",
-        "summary": "Upsert pos menu schedule",
-        "description": "`public.upsert_pos_menu_schedule(p_org uuid, p_name text, p_weekdays smallint[], p_starts_at time without time zone, p_ends_at time without time zone, p_starts_on date, p_ends_on date, p_items uuid[], p_id uuid, p_is_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Creates or edits a menu schedule -- which dishes are orderable on which days and between which hours",
+        "description": "Creates or edits a menu schedule -- which dishes are orderable on which days and between which hours. Weekdays run 1 (Monday) to 7 (Sunday), and an hours window needs both ends. The item list is checked BEFORE anything is written, so a bad list does not leave a schedule behind it: `pos_menu_schedule_items_item_same_org` refuses it too since `0522`, but a constraint cannot name the dish. Needs the `pos` module.\n\n`public.upsert_pos_menu_schedule(p_org uuid, p_name text, p_weekdays smallint[], p_starts_at time without time zone, p_ends_at time without time zone, p_starts_on date, p_ends_on date, p_items uuid[], p_id uuid, p_is_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -65498,8 +65498,8 @@
     "/rpc/upsert_pos_recipe": {
       "post": {
         "operationId": "upsert_pos_recipe",
-        "summary": "Upsert pos recipe",
-        "description": "`public.upsert_pos_recipe(p_org uuid, p_item uuid, p_yield numeric, p_lines jsonb, p_notes text, p_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Creates or edits what a dish is made of, so selling one takes the ingredients off the shelf",
+        "description": "Creates or edits what a dish is made of, so selling one takes the ingredients off the shelf. REPLACES EVERY LINE. REFUSES A DISH THAT KEEPS ITS OWN STOCK, and that refusal is the design rather than a validation: selling a stock-tracked item already moves it, so a recipe would take the ingredients out a second time. The message names both ways out -- turn tracking off for the dish, or make it with a manufacturing order. Also refuses an item as its own ingredient, and a yield of nothing. Needs the `pos` module.\n\n`public.upsert_pos_recipe(p_org uuid, p_item uuid, p_yield numeric, p_lines jsonb, p_notes text, p_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -65689,8 +65689,8 @@
     "/rpc/upsert_pos_stall": {
       "post": {
         "operationId": "upsert_pos_stall",
-        "summary": "Upsert pos stall",
-        "description": "`public.upsert_pos_stall(p_id uuid, p_outlet uuid, p_code text, p_name text, p_operator uuid, p_commission numeric, p_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Creates or edits a stall in a food court, with the operator who runs it and the commission the court takes",
+        "description": "Creates or edits a stall in a food court, with the operator who runs it and the commission the court takes. The operator must be a contact of this company. Needs the `pos` module.\n\n`public.upsert_pos_stall(p_id uuid, p_outlet uuid, p_code text, p_name text, p_operator uuid, p_commission numeric, p_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -65768,8 +65768,8 @@
     "/rpc/upsert_scale_format": {
       "post": {
         "operationId": "upsert_scale_format",
-        "summary": "Upsert scale format",
-        "description": "`public.upsert_scale_format(p_id uuid, p_org uuid, p_name text, p_prefix text, p_code_digits integer, p_value_digits integer, p_kind app.scale_value_kind, p_check boolean, p_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Describes how a weighing scale's barcodes are laid out, so the till can read a price or a weight out of the\u2026",
+        "description": "Describes how a weighing scale's barcodes are laid out, so the till can read a price or a weight out of the label. The prefix must be one to three digits, and prefix plus code digits plus value digits must come to a length a scanner actually produces -- twelve or thirteen with a check digit, eight for the short ones. A format that does not add up would silently mis-read every label it was applied to. Needs the `pos` module.\n\n`public.upsert_scale_format(p_id uuid, p_org uuid, p_name text, p_prefix text, p_code_digits integer, p_value_digits integer, p_kind app.scale_value_kind, p_check boolean, p_active boolean)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -65861,8 +65861,8 @@
     "/rpc/upsert_stock_transfer": {
       "post": {
         "operationId": "upsert_stock_transfer",
-        "summary": "Upsert stock transfer",
-        "description": "`public.upsert_stock_transfer(p_id uuid, p_org uuid, p_from uuid, p_to uuid, p_date date, p_lines jsonb, p_notes text)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
+        "summary": "Creates or edits a draft transfer between two of this company's own warehouses",
+        "description": "Creates or edits a draft transfer between two of this company's own warehouses. REPLACES EVERY LINE: what is sent becomes the whole list, and a line left out is deleted. DRAFT ONLY -- once the transfer is sent, the note is a record of what went on the van, and editing it would change what was recorded as having left. Refuses the same store at both ends, a store that is not this company's, and a transfer with no origin or destination. Needs the `inventory` module.\n\n`public.upsert_stock_transfer(p_id uuid, p_org uuid, p_from uuid, p_to uuid, p_date date, p_lines jsonb, p_notes text)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
         "tags": [
           "inventory"
         ],

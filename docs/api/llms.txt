@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0573` (the highest applied migration).
+Schema version `0574` (the highest applied migration).
 662 functions and 329 readable tables, of which
 254 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**315 of 662 functions carry a `comment on
+**333 of 662 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -97,8 +97,8 @@ Refused unless the company has the `accounting` module switched on and the calle
 - `report_cash_forecast(p_org uuid, p_weeks integer, p_use_history boolean)` — Thirteen weeks of cash by default, from what the bank holds now plus what is expected in and out.
 - `retire_cash_forecast_item(p_id uuid)` *(writes)*
 - `set_budget_lines(p_budget uuid, p_lines jsonb)` *(writes)* — Replaces a budget's lines wholesale and returns how many were written.
-- `upsert_budget(p_id uuid, p_org uuid, p_year uuid, p_name text, p_department text, p_notes text)` *(writes)*
-- `upsert_cash_forecast_item(p_id uuid, p_org uuid, p_direction text, p_description text, p_amount numeric, p_expected_on date, p_recurrence text, p_until date, p_notes text)` *(writes)*
+- `upsert_budget(p_id uuid, p_org uuid, p_year uuid, p_name text, p_department text, p_notes text)` *(writes)* — Creates or renames a budget for a financial year.
+- `upsert_cash_forecast_item(p_id uuid, p_org uuid, p_direction text, p_description text, p_amount numeric, p_expected_on date, p_recurrence text, p_until date, p_notes text)` *(writes)* — Creates or edits one of the things only a person knows -- a payment expected or promised that no invoice or bill has yet recorded -- so the thirteen-week forecast can include it.
 
 ### crm (1)
 
@@ -153,10 +153,10 @@ Refused unless the company has the `inventory` module switched on and the caller
 - `stock_transfer_lines_for(p_transfer uuid)`
 - `stock_transfers_list(p_org uuid, p_status app.stock_transfer_status)`
 - `upsert_item_bundle(p_org uuid, p_item uuid, p_lines jsonb, p_notes text, p_active boolean)` *(writes)* — Defines what a bundle is made of.
-- `upsert_item_conversion(p_id uuid, p_org uuid, p_code text, p_name text, p_item uuid, p_qty numeric, p_uom text, p_outputs jsonb, p_active boolean)` *(writes)*
-- `upsert_item_uom_pack(p_item uuid, p_uom text, p_qty numeric)` *(writes)*
-- `upsert_landed_cost_run(p_id uuid, p_org uuid, p_date date, p_bills jsonb, p_charges jsonb, p_notes text)` *(writes)*
-- `upsert_stock_transfer(p_id uuid, p_org uuid, p_from uuid, p_to uuid, p_date date, p_lines jsonb, p_notes text)` *(writes)*
+- `upsert_item_conversion(p_id uuid, p_org uuid, p_code text, p_name text, p_item uuid, p_qty numeric, p_uom text, p_outputs jsonb, p_active boolean)` *(writes)* — Creates or edits a conversion -- one item broken down into several, a carcass into cuts, a drum into bottles.
+- `upsert_item_uom_pack(p_item uuid, p_uom text, p_qty numeric)` *(writes)* — Says how many base units are in a pack -- a dozen, a case of twenty-four -- so an order in cases becomes a quantity in the books.
+- `upsert_landed_cost_run(p_id uuid, p_org uuid, p_date date, p_bills jsonb, p_charges jsonb, p_notes text)` *(writes)* — Creates or edits a draft landed-cost run -- freight, duty and handling to be spread across the items on one or more bills.
+- `upsert_stock_transfer(p_id uuid, p_org uuid, p_from uuid, p_to uuid, p_date date, p_lines jsonb, p_notes text)` *(writes)* — Creates or edits a draft transfer between two of this company's own warehouses.
 
 ### legal (2)
 
@@ -179,7 +179,7 @@ Refused unless the company has the `loyalty` module switched on and the caller m
 - `pos_sale_member(p_sale uuid)` — Who is on a bill, what they hold, what this bill is already redeeming and what paying it would earn.
 - `redeem_loyalty_points(p_sale uuid, p_points integer)` *(writes)*
 - `retire_loyalty_tier(p_tier uuid)` *(writes)*
-- `upsert_loyalty_tier(p_program uuid, p_code text, p_name text, p_min_points integer, p_multiplier numeric, p_id uuid, p_is_active boolean)` *(writes)*
+- `upsert_loyalty_tier(p_program uuid, p_code text, p_name text, p_min_points integer, p_multiplier numeric, p_id uuid, p_is_active boolean)` *(writes)* — Creates or edits a tier on a loyalty programme -- the points at which it starts and what it multiplies earning by.
 
 ### memberships (5)
 
@@ -303,19 +303,19 @@ Refused unless the company has the `pos` module switched on and the caller may u
 - `split_pos_table(p_table uuid, p_parts integer)` *(writes)* — Turns a long table into T1-A, T1-B and so on: real tables with their own codes, cards and bills.
 - `start_kiosk_order(p_register uuid, p_client_uuid uuid)` *(writes)*
 - `stop_pos_item(p_outlet uuid, p_item uuid, p_reason text)` *(writes)* — Takes a dish off today at one outlet.
-- `upsert_kitchen_station(p_outlet uuid, p_code text, p_name text, p_id uuid, p_sort_order integer, p_is_default boolean, p_is_active boolean)` *(writes)*
-- `upsert_pos_delivery_zone(p_id uuid, p_outlet uuid, p_name text, p_postcodes text[], p_fee numeric, p_min_order numeric, p_free_above numeric, p_eta integer, p_sort integer, p_active boolean)` *(writes)*
-- `upsert_pos_driver(p_id uuid, p_org uuid, p_name text, p_phone text, p_vehicle text, p_plate text, p_outlet uuid, p_user uuid, p_active boolean)` *(writes)*
-- `upsert_pos_menu_link(p_outlet uuid, p_kind app.pos_menu_link_kind, p_table uuid, p_register uuid, p_label text, p_expires timestamp with time zone, p_single boolean, p_id uuid, p_active boolean)` *(writes)*
-- `upsert_pos_menu_schedule(p_org uuid, p_name text, p_weekdays smallint[], p_starts_at time without time zone, p_ends_at time without time zone, p_starts_on date, p_ends_on date, p_items uuid[], p_id uuid, p_is_active boolean)` *(writes)*
+- `upsert_kitchen_station(p_outlet uuid, p_code text, p_name text, p_id uuid, p_sort_order integer, p_is_default boolean, p_is_active boolean)` *(writes)* — Creates or edits a kitchen counter that orders are routed to.
+- `upsert_pos_delivery_zone(p_id uuid, p_outlet uuid, p_name text, p_postcodes text[], p_fee numeric, p_min_order numeric, p_free_above numeric, p_eta integer, p_sort integer, p_active boolean)` *(writes)* — Creates or edits a delivery zone for an outlet: the postcodes it covers, the fee, the minimum order, the amount above which delivery is free, and the expected minutes.
+- `upsert_pos_driver(p_id uuid, p_org uuid, p_name text, p_phone text, p_vehicle text, p_plate text, p_outlet uuid, p_user uuid, p_active boolean)` *(writes)* — Creates or edits a delivery driver, optionally tied to a user account.
+- `upsert_pos_menu_link(p_outlet uuid, p_kind app.pos_menu_link_kind, p_table uuid, p_register uuid, p_label text, p_expires timestamp with time zone, p_single boolean, p_id uuid, p_active boolean)` *(writes)* — Creates or edits a QR menu link -- the sticker on a table or beside a register.
+- `upsert_pos_menu_schedule(p_org uuid, p_name text, p_weekdays smallint[], p_starts_at time without time zone, p_ends_at time without time zone, p_starts_on date, p_ends_on date, p_items uuid[], p_id uuid, p_is_active boolean)` *(writes)* — Creates or edits a menu schedule -- which dishes are orderable on which days and between which hours.
 - `upsert_pos_modifier(p_group uuid, p_code text, p_name text, p_price_delta numeric, p_id uuid, p_is_default boolean, p_sort_order integer, p_is_active boolean)` *(writes)* — Creates or edits one answer to a modifier group.
 - `upsert_pos_modifier_group(p_org uuid, p_code text, p_name text, p_min_select integer, p_max_select integer, p_id uuid, p_sort_order integer, p_is_active boolean, p_allows_free_text boolean)` *(writes)* — Creates or renames a modifier group -- the question a dish comes with -- including whether the till may answer it with something that is not on the list.
 - `upsert_pos_promotion(p_org uuid, p_name text, p_kind app.pos_promo_kind, p_code text, p_percent numeric, p_amount numeric, p_buy integer, p_get integer, p_starts_on date, p_ends_on date, p_weekdays smallint[], p_starts_at time without time zone, p_ends_at time without time zone, p_min_subtotal numeric, p_max_uses integer, p_max_per_customer integer, p_items uuid[], p_outlets uuid[], p_channels text[], p_id uuid, p_is_active boolean)` *(writes)* — Writes a promotion and its scope.
 - `upsert_pos_receipt_settings(p_outlet uuid, p_header text, p_footer text, p_paper_mm smallint, p_copies smallint, p_language text, p_item_codes boolean, p_cashier boolean, p_table boolean, p_channel boolean, p_tax boolean, p_customer boolean, p_points boolean, p_qr boolean)` *(writes)* — Saves what an outlet prints — the header and footer on pos_outlets, the choices on pos_receipt_settings — in one call, so a shop is never left having saved half of it.
-- `upsert_pos_recipe(p_org uuid, p_item uuid, p_yield numeric, p_lines jsonb, p_notes text, p_active boolean)` *(writes)*
+- `upsert_pos_recipe(p_org uuid, p_item uuid, p_yield numeric, p_lines jsonb, p_notes text, p_active boolean)` *(writes)* — Creates or edits what a dish is made of, so selling one takes the ingredients off the shelf.
 - `upsert_pos_report(p_org uuid, p_name text, p_source app.pos_report_source, p_dimensions text[], p_measures text[], p_period text, p_from date, p_to date, p_outlets uuid[], p_channels text[], p_sort_by text, p_sort_desc boolean, p_limit integer, p_shared boolean, p_id uuid)` *(writes)* — Saves a built report, checking every key through the same allow-list the query uses — so a report that cannot run cannot be saved.
-- `upsert_pos_stall(p_id uuid, p_outlet uuid, p_code text, p_name text, p_operator uuid, p_commission numeric, p_active boolean)` *(writes)*
-- `upsert_scale_format(p_id uuid, p_org uuid, p_name text, p_prefix text, p_code_digits integer, p_value_digits integer, p_kind app.scale_value_kind, p_check boolean, p_active boolean)` *(writes)*
+- `upsert_pos_stall(p_id uuid, p_outlet uuid, p_code text, p_name text, p_operator uuid, p_commission numeric, p_active boolean)` *(writes)* — Creates or edits a stall in a food court, with the operator who runs it and the commission the court takes.
+- `upsert_scale_format(p_id uuid, p_org uuid, p_name text, p_prefix text, p_code_digits integer, p_value_digits integer, p_kind app.scale_value_kind, p_check boolean, p_active boolean)` *(writes)* — Describes how a weighing scale's barcodes are laid out, so the till can read a price or a weight out of the label.
 - `void_pos_sale(p_sale uuid, p_reason app.pos_void_reason, p_note text)` *(writes)* — Writes off a whole parked bill, behind the pos_void grant without exception: one void record per line the kitchen cooked, the live dockets cancelled, and the sale marked voided with a reason and a name.
 - `void_pos_sale_line(p_line uuid, p_reason app.pos_void_reason, p_note text)` *(writes)* — Takes a line off after the kitchen was told, recording what it said, why it went and who did it.
 - `weighed_items(p_org uuid)`
@@ -804,10 +804,10 @@ Not gated on any module.
 - `update_my_phone(p_dial text, p_national text)` *(writes)* — Changes the caller's own mobile number, through the same E.164 rule registration uses.
 - `update_recurring_template(p_id uuid, p_document_id uuid)` *(writes)*
 - `upsert_account(p_code text, p_name text, p_type app.account_type, p_subtype app.account_subtype, p_id uuid, p_parent_id uuid, p_is_group boolean, p_description text, p_org_id uuid)` *(writes)* — Add or change an account.
-- `upsert_ai_model(p_provider text, p_model_id text, p_name text, p_kind text, p_is_free boolean, p_context_tokens integer, p_notes text, p_is_active boolean, p_sort_order integer)` *(writes)*
-- `upsert_ai_provider(p_code text, p_name text, p_wire text, p_base_url text, p_docs_url text, p_key_hint text, p_needs_key boolean, p_is_active boolean, p_sort_order integer)` *(writes)*
+- `upsert_ai_model(p_provider text, p_model_id text, p_name text, p_kind text, p_is_free boolean, p_context_tokens integer, p_notes text, p_is_active boolean, p_sort_order integer)` *(writes)* — Creates or edits one model under a provider, with its context window and whether it is free.
+- `upsert_ai_provider(p_code text, p_name text, p_wire text, p_base_url text, p_docs_url text, p_key_hint text, p_needs_key boolean, p_is_active boolean, p_sort_order integer)` *(writes)* — Creates or edits an AI provider in the platform's catalogue -- how to reach it, whether it needs a key, and what a key looks like so an operator can tell they have pasted the right thing.
 - `upsert_bank_account(p_name text, p_bank_name text, p_bank_code text, p_account_number text, p_account_type text, p_currency text, p_account_id uuid, p_id uuid, p_org_id uuid)` *(writes)* — Adds or amends a bank account and the GL account behind it, as one act, so the two cannot disagree.
-- `upsert_custom_field(p_org_id uuid, p_entity text, p_label text, p_key text, p_kind text, p_is_required boolean, p_options jsonb, p_target_entity text, p_help_text text, p_min_value numeric, p_max_value numeric, p_max_length integer, p_show_on_list boolean, p_sort_order integer)` *(writes)*
+- `upsert_custom_field(p_org_id uuid, p_entity text, p_label text, p_key text, p_kind text, p_is_required boolean, p_options jsonb, p_target_entity text, p_help_text text, p_min_value numeric, p_max_value numeric, p_max_length integer, p_show_on_list boolean, p_sort_order integer)` *(writes)* — Creates or edits a custom field on a master record.
 - `verify_person_identity(p_person uuid, p_document_type text, p_verified_on date, p_notes text)` *(writes)* — Records a CDD check as what it is — this document, seen by this individual, on this day.
 - `void_bank_transfer(p_id uuid, p_reason text)` *(writes)* — Voids a transfer between the company's own bank accounts and reverses its journal if it had one.
 - `void_deposit(p_id uuid, p_reason text)` *(writes)* — Voids a deposit and reverses its journal.
