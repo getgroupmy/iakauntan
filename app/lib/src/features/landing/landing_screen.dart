@@ -1402,104 +1402,123 @@ class _Footer extends StatelessWidget {
     link('terms', 'Terms', content.termsUrl);
     link('contact', 'Contact us', null);
 
-    return Container(
-      width: double.infinity,
-      color: scheme.surfaceContainerLowest,
-      padding: const EdgeInsets.symmetric(
-        horizontal: Land.gutter,
-        vertical: Land.bandYTight,
-      ),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: Land.maxWidth),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 64,
-                runSpacing: 32,
+    // The same 760 the bar and the hero fold at, read from the real
+    // width rather than from the clamped content box inside `Center`
+    // below — otherwise "phone" would mean something different at the
+    // bottom of the page than at the top.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth > 760;
+        return Container(
+          width: double.infinity,
+          color: scheme.surfaceContainerLowest,
+          padding: const EdgeInsets.symmetric(
+            horizontal: Land.gutter,
+            vertical: Land.bandYTight,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: Land.maxWidth),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: 300,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        LandingMark(content: content, size: 30),
-                        if (content.tagline != null) ...[
-                          const SizedBox(height: 12),
-                          Text(content.tagline!, style: small),
-                        ],
-                        if (company.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          for (final line in company) Text(line, style: small),
-                        ],
-                      ],
-                    ),
-                  ),
-                  _FooterColumn(
-                    heading: 'Get started',
+                  Wrap(
+                    spacing: 64,
+                    runSpacing: 32,
                     children: [
-                      _FooterLink(
-                        label: content.signInLabel,
-                        onTap: preview ? null : () => context.go('/signin'),
+                      SizedBox(
+                        width: 300,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            LandingMark(content: content, size: 30),
+                            if (content.tagline != null) ...[
+                              const SizedBox(height: 12),
+                              Text(content.tagline!, style: small),
+                            ],
+                            if (company.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              for (final line in company)
+                                Text(line, style: small),
+                            ],
+                          ],
+                        ),
                       ),
-                      if (content.registerEnabled)
-                        _FooterLink(
-                          label: content.registerLabel,
-                          onTap: preview
-                              ? null
-                              : () => context.go('/signin?mode=register'),
+                      // `0578`. Each link switchable on its own and by
+                      // width, and the heading dropped with them: a
+                      // "Get started" with nothing under it reads as a
+                      // broken page, which is what the legal column below
+                      // already guards against.
+                      if (content.footerWayIn(wide: wide))
+                        _FooterColumn(
+                          heading: 'Get started',
+                          children: [
+                            if (content.footerSignIn(wide: wide))
+                              _FooterLink(
+                                label: content.signInLabel,
+                                onTap: preview
+                                    ? null
+                                    : () => context.go('/signin'),
+                              ),
+                            if (content.footerRegister(wide: wide))
+                              _FooterLink(
+                                label: content.registerLabel,
+                                onTap: preview
+                                    ? null
+                                    : () => context.go('/signin?mode=register'),
+                              ),
+                          ],
+                        ),
+                      if (contact.isNotEmpty)
+                        _FooterColumn(
+                          heading: 'Contact',
+                          children: [
+                            for (final (label, url) in contact)
+                              url == null
+                                  ? Padding(
+                                      padding: const EdgeInsets.only(bottom: 6),
+                                      child: Text(label, style: small),
+                                    )
+                                  : _FooterLink(
+                                      label: label,
+                                      onTap: preview
+                                          ? null
+                                          : () => launchExternal(url),
+                                    ),
+                          ],
+                        ),
+                      if (legal.isNotEmpty)
+                        _FooterColumn(
+                          heading: 'Legal',
+                          children: [
+                            for (final (label, url, internal) in legal)
+                              _FooterLink(
+                                label: label,
+                                onTap: preview
+                                    ? null
+                                    : internal
+                                    ? () => context.go(url)
+                                    : () => launchExternal(url),
+                              ),
+                          ],
                         ),
                     ],
                   ),
-                  if (contact.isNotEmpty)
-                    _FooterColumn(
-                      heading: 'Contact',
-                      children: [
-                        for (final (label, url) in contact)
-                          url == null
-                              ? Padding(
-                                  padding: const EdgeInsets.only(bottom: 6),
-                                  child: Text(label, style: small),
-                                )
-                              : _FooterLink(
-                                  label: label,
-                                  onTap: preview
-                                      ? null
-                                      : () => launchExternal(url),
-                                ),
-                      ],
-                    ),
-                  if (legal.isNotEmpty)
-                    _FooterColumn(
-                      heading: 'Legal',
-                      children: [
-                        for (final (label, url, internal) in legal)
-                          _FooterLink(
-                            label: label,
-                            onTap: preview
-                                ? null
-                                : internal
-                                    ? () => context.go(url)
-                                    : () => launchExternal(url),
-                          ),
-                      ],
-                    ),
+                  const SizedBox(height: 40),
+                  Divider(color: Land.border(scheme), height: 1),
+                  const SizedBox(height: 20),
+                  Text(
+                    '© ${DateTime.now().year} '
+                    '${content.companyName ?? content.wordmark}',
+                    style: small,
+                  ),
                 ],
               ),
-              const SizedBox(height: 40),
-              Divider(color: Land.border(scheme), height: 1),
-              const SizedBox(height: 20),
-              Text(
-                '© ${DateTime.now().year} '
-                '${content.companyName ?? content.wordmark}',
-                style: small,
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

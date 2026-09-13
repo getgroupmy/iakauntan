@@ -75,8 +75,12 @@ void main() {
   /// rather than by widget, because the point of these switches is what
   /// a visitor sees at a given width — the bar is the strip across the
   /// top, the hero is the band around the headline, and anything below
-  /// that is the footer, which these switches deliberately do not
-  /// touch.
+  /// that is the footer.
+  ///
+  /// The footer is deliberately NOT in this set. `0578` made it
+  /// switchable too, and it is asserted separately below on the labels
+  /// it draws: folding it in here would make every existing assertion
+  /// about the bar and the hero depend on a footer setting as well.
   Set<String> drawn(WidgetTester tester) {
     final headline = tester.getRect(find.textContaining('Accounting').first);
     final out = <String>{};
@@ -244,9 +248,13 @@ void main() {
   testWidgets('all eight off still leaves a way in at the bottom', (
     tester,
   ) async {
-    // Deliberate. Somebody who has read to the bottom and wants in
-    // should not have to guess the address, and a footer link is not a
-    // button competing for attention at the top of the page.
+    // The DEFAULT, not an invariant any more. `0321` made this a rule
+    // — somebody who has read to the bottom should not have to guess
+    // the address, and a footer link is not a button competing for
+    // attention at the top — and `0578` kept the behaviour and made it
+    // reachable: the four footer switches ship on, so a platform that
+    // sets none of them sees exactly what this asserts. What happens
+    // when they ARE set is the four tests below.
     await pump(
       tester,
       parseLandingContent({
@@ -265,6 +273,142 @@ void main() {
     );
     expect(drawn(tester), isEmpty);
     expect(labelled(tester, 'Sign in'), greaterThan(0));
+  });
+
+  /// Every way-in label in the footer, by name.
+  ///
+  /// Anything below the hero band. `drawn` stops there on purpose, so
+  /// this is the other half of the same question: what a visitor who
+  /// has read to the bottom is offered.
+  Set<String> inFooter(WidgetTester tester) {
+    final headline = tester.getRect(find.textContaining('Accounting').first);
+    final out = <String>{};
+    for (final label in ['Sign in', 'Create an account']) {
+      for (final e in find.text(label).evaluate()) {
+        if (tester.getTopLeft(find.byWidget(e.widget)).dy >
+            headline.bottom + 1000) {
+          out.add(label);
+        }
+      }
+    }
+    return out;
+  }
+
+  testWidgets('each footer switch moves its own link, at its own width', (
+    tester,
+  ) async {
+    // `0578`. The same grain as the eight above: a footer link is the
+    // same three decisions — where it sits, how wide the screen is, and
+    // which way in it offers.
+    for (final (key, wide, gone) in [
+      ('footer_sign_in_desktop', true, 'Sign in'),
+      ('footer_sign_in_mobile', false, 'Sign in'),
+      ('footer_register_desktop', true, 'Create an account'),
+      ('footer_register_mobile', false, 'Create an account'),
+    ]) {
+      await pump(
+        tester,
+        parseLandingContent({
+          'page': {'is_published': true, key: false},
+        }),
+        wide: wide,
+      );
+      expect(
+        inFooter(tester),
+        isNot(contains(gone)),
+        reason: '$key off still shows "$gone" in the footer',
+      );
+
+      // And the other width is untouched, which is the half a switch
+      // named "desktop" could silently get wrong.
+      await pump(
+        tester,
+        parseLandingContent({
+          'page': {'is_published': true, key: false},
+        }),
+        wide: !wide,
+      );
+      expect(
+        inFooter(tester),
+        contains(gone),
+        reason: '$key off also took "$gone" away at the other width',
+      );
+    }
+  });
+
+  testWidgets('a footer switch leaves the bar and the hero alone', (
+    tester,
+  ) async {
+    // The mirror of the test above. Turning the footer off must not
+    // quietly take the buttons at the top with it.
+    await pump(
+      tester,
+      parseLandingContent({
+        'page': {
+          'is_published': true,
+          'footer_sign_in_desktop': false,
+          'footer_register_desktop': false,
+        },
+      }),
+      wide: true,
+    );
+    expect(inFooter(tester), isEmpty);
+    expect(drawn(tester), {
+      'bar:Sign in',
+      'bar:Create an account',
+      'hero:Sign in',
+      'hero:Create an account',
+    });
+  });
+
+  testWidgets('both footer links off draws no "Get started" heading', (
+    tester,
+  ) async {
+    // A heading with nothing under it reads as a broken page rather
+    // than a deliberate one — the same rule the legal column in that
+    // widget already follows.
+    await pump(
+      tester,
+      parseLandingContent({
+        'page': {
+          'is_published': true,
+          'footer_sign_in_desktop': false,
+          'footer_register_desktop': false,
+        },
+      }),
+      wide: true,
+    );
+    expect(find.text('Get started'), findsNothing);
+  });
+
+  testWidgets('one footer link left still keeps the heading', (tester) async {
+    // The control for the test above: the heading goes when the column
+    // is empty, not whenever a switch is touched.
+    await pump(
+      tester,
+      parseLandingContent({
+        'page': {'is_published': true, 'footer_register_desktop': false},
+      }),
+      wide: true,
+    );
+    expect(find.text('Get started'), findsOneWidget);
+    expect(inFooter(tester), {'Sign in'});
+  });
+
+  testWidgets('registration closed takes the footer link with it', (
+    tester,
+  ) async {
+    // `register_enabled` says whether there is a link to draw at all;
+    // the footer switches say where it is drawn. Off, and the footer
+    // must not offer a way to register that the platform will refuse.
+    await pump(
+      tester,
+      parseLandingContent({
+        'page': {'is_published': true, 'register_enabled': false},
+      }),
+      wide: true,
+    );
+    expect(inFooter(tester), {'Sign in'});
   });
 
   testWidgets('the menu on a phone follows the bar it folds up', (

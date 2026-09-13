@@ -325,6 +325,10 @@ class LandingContent {
     this.heroSignInMobile = true,
     this.heroRegisterDesktop = true,
     this.heroRegisterMobile = true,
+    this.footerSignInDesktop = true,
+    this.footerSignInMobile = true,
+    this.footerRegisterDesktop = true,
+    this.footerRegisterMobile = true,
     this.companyName,
     this.companyRegNo,
     this.address,
@@ -434,11 +438,18 @@ class LandingContent {
   /// the other would be hiding it from nobody.
   ///
   /// `registerEnabled` still decides whether the platform takes
-  /// registrations at all; these say where its button is drawn. The
-  /// footer's links stay whatever is set here — somebody who has read
-  /// to the bottom and wants in should not have to guess the address.
+  /// registrations at all; these say where its button is drawn.
   ///
-  /// All eight default true here as well as in the database, so a
+  /// `0321` deliberately left the footer out of this, on the argument
+  /// that somebody who has read to the bottom and wants in should not
+  /// have to guess the address. `0578` made the footer switchable too,
+  /// and kept that argument as the DEFAULT rather than as a rule: all
+  /// four footer switches ship true, so nothing changes for a platform
+  /// that does not go looking. What changed is that a platform running
+  /// a closed beta, or one whose footer sits under a page that already
+  /// carries its own call to action, can now say so.
+  ///
+  /// All twelve default true here as well as in the database, so a
   /// payload that predates the columns, or the shipped fallback
   /// content, still gives a visitor a way in.
   final bool barSignInDesktop;
@@ -449,10 +460,14 @@ class LandingContent {
   final bool heroSignInMobile;
   final bool heroRegisterDesktop;
   final bool heroRegisterMobile;
+  final bool footerSignInDesktop;
+  final bool footerSignInMobile;
+  final bool footerRegisterDesktop;
+  final bool footerRegisterMobile;
 
   /// Which way in each place offers at this width.
   ///
-  /// Four questions rather than eight fields at every call site, and
+  /// Six questions rather than twelve fields at every call site, and
   /// the one place `registerEnabled` is folded in: a register button is
   /// only ever drawn where the platform is actually taking
   /// registrations, so no caller has to remember to ask twice.
@@ -464,6 +479,19 @@ class LandingContent {
       wide ? heroSignInDesktop : heroSignInMobile;
   bool heroRegister({required bool wide}) =>
       registerEnabled && (wide ? heroRegisterDesktop : heroRegisterMobile);
+  bool footerSignIn({required bool wide}) =>
+      wide ? footerSignInDesktop : footerSignInMobile;
+  bool footerRegister({required bool wide}) =>
+      registerEnabled && (wide ? footerRegisterDesktop : footerRegisterMobile);
+
+  /// Whether the footer's "Get started" column has anything in it.
+  ///
+  /// Asked by the footer so the heading is not drawn over nothing. The
+  /// legal column in the same widget already guards this way, and for
+  /// the same reason: a heading with nothing behind it reads as a
+  /// broken page rather than a deliberate one.
+  bool footerWayIn({required bool wide}) =>
+      footerSignIn(wide: wide) || footerRegister(wide: wide);
   final String? companyName;
   final String? companyRegNo;
   final String? address;
@@ -963,6 +991,18 @@ LandingContent parseLandingContent(Object? raw) {
         : true,
     heroRegisterMobile: page['hero_register_mobile'] is bool
         ? page['hero_register_mobile'] as bool
+        : true,
+    footerSignInDesktop: page['footer_sign_in_desktop'] is bool
+        ? page['footer_sign_in_desktop'] as bool
+        : true,
+    footerSignInMobile: page['footer_sign_in_mobile'] is bool
+        ? page['footer_sign_in_mobile'] as bool
+        : true,
+    footerRegisterDesktop: page['footer_register_desktop'] is bool
+        ? page['footer_register_desktop'] as bool
+        : true,
+    footerRegisterMobile: page['footer_register_mobile'] is bool
+        ? page['footer_register_mobile'] as bool
         : true,
     companyName: str('company_name'),
     companyRegNo: str('company_reg_no'),

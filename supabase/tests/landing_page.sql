@@ -1264,19 +1264,29 @@ end $$;
 
 -- ---------------------------------------------------------------------
 -- 0321: one switch per button, and a hero picture out of the box
+-- 0578: and the footer, which 0321 left out
 --
 -- `0320` had two switches, one per place. `0321` has eight — place,
 -- width, and which way in — because a button is three decisions and an
 -- operator wanting "Create an account on the desktop bar, only Sign in
 -- on a phone" could not say so.
 --
+-- `0578` adds the footer's two links at both widths, making twelve.
+-- `0321` left the footer out deliberately, on the argument that
+-- somebody who has read to the bottom should not have to guess the
+-- address; `0578` keeps that as the DEFAULT -- all four ship on -- and
+-- stops it being a rule the operator cannot reach.
+--
 -- What is asserted is the shape the page has to have for the switches
--- to be believed: all eight default on, each saves on its own without
--- disturbing the other seven, an untouched one survives somebody else's
--- edit, and none of them can be set by anybody but a platform
+-- to be believed: all twelve default on, each saves on its own without
+-- disturbing the other eleven, an untouched one survives somebody
+-- else's edit, and none of them can be set by anybody but a platform
 -- administrator. The failure this catches is a switch the console
 -- writes and the payload drops, which is worse than no switch because
 -- it is trusted.
+--
+-- The list below is what drives all four of those checks, so adding a
+-- switch here is adding it to every one of them.
 -- ---------------------------------------------------------------------
 do $$
 declare
@@ -1286,7 +1296,9 @@ declare
     'bar_sign_in_desktop', 'bar_sign_in_mobile',
     'bar_register_desktop', 'bar_register_mobile',
     'hero_sign_in_desktop', 'hero_sign_in_mobile',
-    'hero_register_desktop', 'hero_register_mobile'];
+    'hero_register_desktop', 'hero_register_mobile',
+    'footer_sign_in_desktop', 'footer_sign_in_mobile',
+    'footer_register_desktop', 'footer_register_mobile'];
 begin
   insert into public.platform_admins (user_id) values (v_admin)
     on conflict do nothing;
@@ -1295,8 +1307,8 @@ begin
   perform public.platform_save_landing_page(
     jsonb_build_object('is_published', true));
 
-  -- Shipped on, all eight. A platform that never opens the console has
-  -- the page it had before the columns existed.
+  -- Shipped on, all twelve. A platform that never opens the console
+  -- has the page it had before the columns existed.
   v_out := public.landing_page();
   foreach v_key in array v_keys loop
     perform pg_temp.check_eq(format('%s ships on', v_key),

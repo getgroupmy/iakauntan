@@ -213,10 +213,14 @@ class _PageFormState extends ConsumerState<_PageForm> {
     'meta_description': 'Link preview description',
   };
 
-  /// The eight switches, in the order somebody reads the page.
+  /// The twelve switches, in the order somebody reads the page: the
+  /// top bar, then the headline, then the footer.
   ///
   /// Keyed by column so the form, the patch and the database cannot
   /// drift: adding a switch is adding a line here.
+  ///
+  /// `0578` added the footer four. They ship on, like the other eight,
+  /// so a platform that never opens this card sees no change.
   static const _wayIn = <String, String>{
     'bar_sign_in_desktop': 'Sign in — top bar, desktop',
     'bar_register_desktop': 'Create an account — top bar, desktop',
@@ -226,6 +230,10 @@ class _PageFormState extends ConsumerState<_PageForm> {
     'hero_register_desktop': 'Create an account — under the headline, desktop',
     'hero_sign_in_mobile': 'Sign in — under the headline, phone',
     'hero_register_mobile': 'Create an account — under the headline, phone',
+    'footer_sign_in_desktop': 'Sign in — footer, desktop',
+    'footer_register_desktop': 'Create an account — footer, desktop',
+    'footer_sign_in_mobile': 'Sign in — footer, phone',
+    'footer_register_mobile': 'Create an account — footer, phone',
   };
 
   late final Map<String, TextEditingController> _c = {
