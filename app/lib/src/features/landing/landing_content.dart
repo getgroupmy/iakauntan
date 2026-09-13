@@ -366,6 +366,7 @@ class LandingContent {
     this.signinShowHeadline = false,
     this.signinShowHeading = false,
     this.signinShowRegister = false,
+    this.signinShowPasskey = false,
     this.turnstileSiteKey,
     this.signinPoints = const [],
     this.signinEmailLabel,
@@ -637,6 +638,15 @@ class LandingContent {
   /// Whether "New to X? Create an account" is offered under the button.
   final bool signinShowRegister;
 
+  /// `0579`. Draws "Sign in with a passkey" on the form.
+  ///
+  /// Ships FALSE, unlike the rest of this page's switches, because
+  /// GoTrue answers `passkey_disabled` until passkeys are turned on
+  /// for the project in the Supabase dashboard. Dashboard first,
+  /// then here — the other order draws a button that fails for
+  /// everybody who presses it.
+  final bool signinShowPasskey;
+
   /// Cloudflare Turnstile's site key, or null where no captcha is
   /// configured (`0556`).
   ///
@@ -820,6 +830,7 @@ LandingContent parseLandingContent(Object? raw) {
       signinShowHeadline: brandBool('signin_show_headline'),
       signinShowHeading: brandBool('signin_show_heading'),
       signinShowRegister: brandBool('signin_show_register'),
+      signinShowPasskey: brandBool('signin_show_passkey'),
       turnstileSiteKey: brandStr('turnstile_site_key'),
       signinPoints: blocks('signin_points'),
       signinEmailLabel: brandStr('signin_email_label'),
@@ -1049,6 +1060,7 @@ LandingContent parseLandingContent(Object? raw) {
     signinShowHeadline: brandBool('signin_show_headline'),
     signinShowHeading: brandBool('signin_show_heading'),
     signinShowRegister: brandBool('signin_show_register'),
+    signinShowPasskey: brandBool('signin_show_passkey'),
     turnstileSiteKey: brandStr('turnstile_site_key'),
     signinPoints: blocks('signin_points'),
     signinEmailLabel: brandStr('signin_email_label'),

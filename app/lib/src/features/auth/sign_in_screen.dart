@@ -16,6 +16,7 @@ import '../../core/theme.dart';
 import '../landing/landing_content.dart';
 import '../onboarding/onboarding_copy.dart';
 import 'captcha.dart';
+import 'passkey.dart';
 import 'confirmation_resend.dart';
 import 'password_rules.dart';
 import 'phone_number.dart';
@@ -124,8 +125,10 @@ class PasswordDialogState extends State<PasswordDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(widget.email,
-                      style: Theme.of(context).textTheme.bodySmall),
+                  Text(
+                    widget.email,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _password,
@@ -232,9 +235,9 @@ Future<void> vettedSignIn({
 /// lookup has not landed by the time the refusal has.
 String notTheirDoorMessage(String? whose) => whose == null
     ? 'That account may not use this address. Sign in at iakauntan.com '
-        'to reach your own books.'
+          'to reach your own books.'
     : "That account is not on $whose's team. Sign in at iakauntan.com "
-        'to reach your own books.';
+          'to reach your own books.';
 
 /// Whose door this screen is drawing.
 ///
@@ -395,8 +398,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// a company's address, so the form can only be in its sign-in mood
   /// here — and if that ever changes, this says which settings it would
   /// be reading.
-  bool get _ownDoor =>
-      widget.scope == SignInScope.workspace && !_isSignUp;
+  bool get _ownDoor => widget.scope == SignInScope.workspace && !_isSignUp;
 
   String? get _emailLabel =>
       _ownDoor ? _brand?.loginEmailLabel : _brand?.signinEmailLabel;
@@ -427,10 +429,8 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// Sinar's, and these switches are about whether *our* marketing
   /// appears on the page. Taking a company's own logo off its own door
   /// because the platform turned its own off would be the wrong reading.
-  bool get _showLogo =>
-      _workspace != null || (_brand?.signinShowLogo ?? false);
-  bool get _showName =>
-      _workspace != null || (_brand?.signinShowName ?? false);
+  bool get _showLogo => _workspace != null || (_brand?.signinShowLogo ?? false);
+  bool get _showName => _workspace != null || (_brand?.signinShowName ?? false);
 
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
@@ -505,6 +505,60 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// to end.
   bool _unconfirmed = false;
 
+  /// Whether this browser can actually run a passkey ceremony.
+  ///
+  /// Asked once, because it is a fact about the device rather than
+  /// about the form, and asked at all because a desktop with no
+  /// fingerprint reader, face camera or device PIN is a real and
+  /// common case — drawing the button there offers a door with nothing
+  /// behind it.
+  ///
+  /// Starts false, so the button is absent until the answer is yes.
+  /// The other way round would flash a button onto the form and take
+  /// it away again.
+  bool _passkeyUsable = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (passkeysAvailable) {
+      passkeysUsable().then((yes) {
+        if (mounted && yes) setState(() => _passkeyUsable = true);
+      });
+    }
+  }
+
+  /// Sign in with a passkey.
+  ///
+  /// No email is typed and none is sent: the browser offers whichever
+  /// accounts hold a passkey for this site and the person picks one.
+  /// That is why this cannot leak which addresses exist — the question
+  /// is never asked.
+  Future<void> _passkeySignIn() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    final result = await signInWithPasskey(
+      ref.read(supabaseProvider).auth,
+      captchaToken: _captchaToken,
+    );
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      // A dismissed prompt says nothing. Somebody who closed it did so
+      // on purpose, and "that did not work" is the app arguing with
+      // them about a decision they just made.
+      _error = result.outcome == PasskeyOutcome.failed
+          ? (result.message ?? 'That passkey was not accepted.')
+          : null;
+    });
+    // Signed in needs no navigation: `verifyAuthentication` saves the
+    // session and fires `signedIn`, and the router is already watching
+    // for it — the same ending the password form has.
+  }
+
   @override
   void dispose() {
     _email.dispose();
@@ -569,10 +623,14 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       _unconfirmed = false;
     });
     try {
-      final allowed = await ref.read(supabaseProvider).rpc(
-            'may_sign_in_here',
-            params: {'p_host': Uri.base.host, 'p_email': email},
-          ) as bool? ??
+      final allowed =
+          await ref
+                  .read(supabaseProvider)
+                  .rpc(
+                    'may_sign_in_here',
+                    params: {'p_host': Uri.base.host, 'p_email': email},
+                  )
+              as bool? ??
           true;
       if (!mounted) return;
       if (!allowed) {
@@ -633,7 +691,10 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       hold: (held) => ref.read(vettingProvider.notifier).state = held,
       signIn: () async {
         try {
-          await ref.read(supabaseProvider).auth.signInWithPassword(
+          await ref
+              .read(supabaseProvider)
+              .auth
+              .signInWithPassword(
                 email: _email.text.trim(),
                 password: password,
               );
@@ -705,8 +766,9 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
             // already does with the same column and for the same
             // reason: storing a Malaysian code for a Thai province
             // would be the dishonest half of the two.
-            'state_code':
-                _malaysian ? (_stateCode ?? '') : _stateText.text.trim(),
+            'state_code': _malaysian
+                ? (_stateCode ?? '')
+                : _stateText.text.trim(),
           },
         );
         // With email confirmation enabled there is no session yet.
@@ -782,16 +844,19 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       _notice = null;
     });
     try {
-      await ref.read(supabaseProvider).auth.resend(
-        type: OtpType.signup,
-        email: email,
-        // Back to this page, where the sign-in form is. Web only: on
-        // mobile the deep link is configured in the project rather
-        // than sent per request, and passing an http URL there would
-        // send somebody to a browser instead of the app.
-        emailRedirectTo: kIsWeb ? '${Uri.base.origin}/#/signin' : null,
-        captchaToken: _captchaToken,
-      );
+      await ref
+          .read(supabaseProvider)
+          .auth
+          .resend(
+            type: OtpType.signup,
+            email: email,
+            // Back to this page, where the sign-in form is. Web only: on
+            // mobile the deep link is configured in the project rather
+            // than sent per request, and passing an http URL there would
+            // send somebody to a browser instead of the app.
+            emailRedirectTo: kIsWeb ? '${Uri.base.origin}/#/signin' : null,
+            captchaToken: _captchaToken,
+          );
       if (mounted) {
         setState(() => _notice = resendConfirmationSent(email));
       }
@@ -815,9 +880,9 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
         // Whatever this is, it is not a sentence: a JSON body or a
         // `toString` naming a class. `resendFailureDetail` keeps the
         // part somebody can read and drops the rest.
-        setState(() => _error = resendConfirmationFailed(
-              resendFailureDetail('$e'),
-            ));
+        setState(
+          () => _error = resendConfirmationFailed(resendFailureDetail('$e')),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -860,10 +925,12 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     final client = ref.read(supabaseProvider);
     String? refused;
     try {
-      refused = await client.rpc(
-        'workspace_module_refusal',
-        params: {'p_host': Uri.base.host},
-      ) as String?;
+      refused =
+          await client.rpc(
+                'workspace_module_refusal',
+                params: {'p_host': Uri.base.host},
+              )
+              as String?;
     } catch (_) {
       return null;
     }
@@ -887,10 +954,7 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// sends a signed-in visitor at `/signin` on to their books, so
   /// leaving the session in place would move them off the page the
   /// message is on.
-  Future<void> refuse({
-    required String title,
-    required String message,
-  }) async {
+  Future<void> refuse({required String title, required String message}) async {
     await ref.read(supabaseProvider).auth.signOut();
     if (!mounted) return;
     await showRefusal(title: title, message: message);
@@ -901,22 +965,20 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
   /// change, and a test that has to stand up a signed-in Supabase to
   /// see it would be asserting the fake.
   @visibleForTesting
-  Future<void> showRefusal({
-    required String title,
-    required String message,
-  }) => showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: Text(message),
-      actions: [
-        FilledButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('OK'),
+  Future<void> showRefusal({required String title, required String message}) =>
+      showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      );
 
   /// Turn away somebody who signed in correctly at a door that is not
   /// theirs.
@@ -967,10 +1029,12 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     final client = ref.read(supabaseProvider);
     bool allowed;
     try {
-      allowed = await client.rpc(
-            'may_use_workspace',
-            params: {'p_host': Uri.base.host},
-          ) as bool? ??
+      allowed =
+          await client.rpc(
+                'may_use_workspace',
+                params: {'p_host': Uri.base.host},
+              )
+              as bool? ??
           true;
     } catch (_) {
       return null;
@@ -1047,10 +1111,10 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       // which made it the one way into the app that asked nothing.
       await vettedSignIn(
         hold: (held) => ref.read(vettingProvider.notifier).state = held,
-        signIn: () => ref.read(supabaseProvider).auth.signInWithPassword(
-              email: account.email,
-              password: demoPassword,
-            ),
+        signIn: () => ref
+            .read(supabaseProvider)
+            .auth
+            .signInWithPassword(email: account.email, password: demoPassword),
         vet: () async {
           if (await _refuseIfNotTheirDoor()) return;
           await _refuseIfModuleNotActive();
@@ -1062,9 +1126,11 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       // before the project took real books, which is exactly what the
       // README tells you to do. Saying "invalid login credentials" would
       // send somebody hunting for a typo in a password they never typed.
-      setState(() => _error = e.statusCode == '400'
-          ? 'The demo accounts are not available on this deployment.'
-          : e.message);
+      setState(
+        () => _error = e.statusCode == '400'
+            ? 'The demo accounts are not available on this deployment.'
+            : e.message,
+      );
     } catch (e) {
       if (mounted) setState(() => _error = resendFailureDetail('$e'));
     } finally {
@@ -1082,9 +1148,11 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
     // would only waste somebody's time. Said here rather than three
     // screens later, once they have already opened their inbox.
     if (demoAccounts.any((a) => a.email.toLowerCase() == email.toLowerCase())) {
-      setState(() => _error =
-          'The demo accounts share a fixed password, so it cannot be reset. '
-          'Use the buttons below to sign in.');
+      setState(
+        () => _error =
+            'The demo accounts share a fixed password, so it cannot be reset. '
+            'Use the buttons below to sign in.',
+      );
       return;
     }
     if (_captchaPending) {
@@ -1123,7 +1191,10 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       _notice = null;
     });
     try {
-      await ref.read(supabaseProvider).auth.resetPasswordForEmail(
+      await ref
+          .read(supabaseProvider)
+          .auth
+          .resetPasswordForEmail(
             email,
             // Aim the link at the reset screen rather than leaving it to
             // the project's Site URL, so a preview deployment sends
@@ -1167,8 +1238,9 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
       // one button tells them the name of a Dart class and buries the
       // one fact they needed.
       if (mounted) {
-        setState(() =>
-            _error = resendConfirmationFailed(resendFailureDetail('$e')));
+        setState(
+          () => _error = resendConfirmationFailed(resendFailureDetail('$e')),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1213,10 +1285,9 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   Text(
                     _copy?.title ??
                         (_isSignUp ? 'Create your account' : 'Welcome back'),
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.w700),
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -1269,13 +1340,13 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                       ),
                     ],
                     selected: {_use},
-                    onSelectionChanged: (v) =>
-                        setState(() => _use = v.first),
+                    onSelectionChanged: (v) => setState(() => _use = v.first),
                   ),
                   const SizedBox(height: 14),
                   Consumer(
                     builder: (context, ref, _) {
-                      final titles = ref
+                      final titles =
+                          ref
                               .watch(signupReferenceProvider)
                               .valueOrNull
                               ?.salutations ??
@@ -1316,17 +1387,18 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                       labelText: _brand?.signinNameLabel ?? 'Full name',
                       prefixIcon: const Icon(Icons.person_outline),
                     ),
-                    validator: (v) => (v ?? '').trim().isEmpty
-                        ? 'Enter your name'
-                        : null,
+                    validator: (v) =>
+                        (v ?? '').trim().isEmpty ? 'Enter your name' : null,
                   ),
                   const SizedBox(height: 14),
                   Consumer(
                     builder: (context, ref, _) {
-                      final reference =
-                          ref.watch(signupReferenceProvider).valueOrNull;
+                      final reference = ref
+                          .watch(signupReferenceProvider)
+                          .valueOrNull;
                       final codes = withDialCodes(
-                          reference?.dialCodes ?? const <Map<String, dynamic>>[]);
+                        reference?.dialCodes ?? const <Map<String, dynamic>>[],
+                      );
                       // One question. The dialling code is not asked
                       // for: it is read off the country, so the two
                       // cannot disagree.
@@ -1364,7 +1436,8 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   const SizedBox(height: 14),
                   Consumer(
                     builder: (context, ref, _) {
-                      final states = ref
+                      final states =
+                          ref
                               .watch(signupReferenceProvider)
                               .valueOrNull
                               ?.states ??
@@ -1401,9 +1474,8 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                             ),
                         ],
                         onChanged: (v) => setState(() => _stateCode = v),
-                        validator: (_) => _stateCode == null
-                            ? 'Choose your state'
-                            : null,
+                        validator: (_) =>
+                            _stateCode == null ? 'Choose your state' : null,
                       );
                     },
                   ),
@@ -1455,60 +1527,59 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                   },
                 ),
                 if (!_asksEmailFirst) ...[
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _password,
-                  obscureText: _obscure,
-                  autofillHints: const [AutofillHints.password],
-                  onFieldSubmitted: (_) => _submit(),
-                  decoration: InputDecoration(
-                    labelText: _passwordLabel ?? 'Password',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscure ? Icons.visibility_off : Icons.visibility,
-                      ),
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                    ),
-                  ),
-                  validator: (v) => passwordError(v, isNew: _isSignUp),
-                ),
-                if (_isSignUp) ...[
                   const SizedBox(height: 14),
                   TextFormField(
-                    key: const ValueKey('signup-confirm-password'),
-                    controller: _confirmPassword,
-                    obscureText: _obscureConfirm,
+                    controller: _password,
+                    obscureText: _obscure,
+                    autofillHints: const [AutofillHints.password],
+                    onFieldSubmitted: (_) => _submit(),
                     decoration: InputDecoration(
-                      labelText: confirmPasswordLabel,
+                      labelText: _passwordLabel ?? 'Password',
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _obscureConfirm
-                              ? Icons.visibility_off
-                              : Icons.visibility,
+                          _obscure ? Icons.visibility_off : Icons.visibility,
                         ),
-                        onPressed: () =>
-                            setState(() => _obscureConfirm = !_obscureConfirm),
+                        onPressed: () => setState(() => _obscure = !_obscure),
                       ),
                     ),
-                    onFieldSubmitted: (_) => _submit(),
-                    validator: (v) => confirmPasswordError(
-                      password: _password.text,
-                      confirm: v,
-                    ),
+                    validator: (v) => passwordError(v, isNew: _isSignUp),
                   ),
-                ],
-                if (!_isSignUp)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _busy ? null : _resetPassword,
-                      child: Text(
-                        _forgotLabel ?? 'Forgot password?',
+                  if (_isSignUp) ...[
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      key: const ValueKey('signup-confirm-password'),
+                      controller: _confirmPassword,
+                      obscureText: _obscureConfirm,
+                      decoration: InputDecoration(
+                        labelText: confirmPasswordLabel,
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscureConfirm
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                          ),
+                          onPressed: () => setState(
+                            () => _obscureConfirm = !_obscureConfirm,
+                          ),
+                        ),
+                      ),
+                      onFieldSubmitted: (_) => _submit(),
+                      validator: (v) => confirmPasswordError(
+                        password: _password.text,
+                        confirm: v,
                       ),
                     ),
-                  ),
+                  ],
+                  if (!_isSignUp)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _busy ? null : _resetPassword,
+                        child: Text(_forgotLabel ?? 'Forgot password?'),
+                      ),
+                    ),
                 ],
                 // The security check, when one is configured. Empty
                 // site key means no widget and no token, which is what
@@ -1532,8 +1603,10 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                       child: TextButton.icon(
                         key: const ValueKey('resend-confirmation'),
                         onPressed: _busy ? null : _resendConfirmation,
-                        icon: const Icon(Icons.mark_email_unread_outlined,
-                            size: 18),
+                        icon: const Icon(
+                          Icons.mark_email_unread_outlined,
+                          size: 18,
+                        ),
                         label: const Text(resendConfirmationLabel),
                       ),
                     ),
@@ -1571,10 +1644,34 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                       // ignoring both, so renaming it in the console
                       // changed the landing page and not the form the
                       // button leads to.
-                      : Text(_isSignUp
-                          ? (_brand?.registerLabel ?? 'Create account')
-                          : (_signInLabel ?? 'Sign in')),
+                      : Text(
+                          _isSignUp
+                              ? (_brand?.registerLabel ?? 'Create account')
+                              : (_signInLabel ?? 'Sign in'),
+                        ),
                 ),
+                // `0579`. A passkey instead of a password, and only
+                // when all three are true: the console switch is on,
+                // the build can reach an authenticator, and the person
+                // is looking at the sign-in half rather than the
+                // sign-up half — there is nothing to assert against an
+                // account that does not exist yet.
+                //
+                // Absent rather than disabled when any is missing. A
+                // disabled control invites somebody to work out why,
+                // and there is nothing they can do about a dashboard
+                // setting or a laptop with no fingerprint reader.
+                if (!_isSignUp &&
+                    _passkeyUsable &&
+                    (_brand?.signinShowPasskey ?? false)) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    key: const ValueKey('passkey-sign-in'),
+                    onPressed: _busy ? null : _passkeySignIn,
+                    icon: const Icon(Icons.fingerprint, size: 18),
+                    label: const Text('Sign in with a passkey'),
+                  ),
+                ],
                 // Everything below the Sign in button is about joining
                 // the platform, and none of it belongs at a company's
                 // own address.
@@ -1607,21 +1704,21 @@ class SignInScreenState extends ConsumerState<SignInScreen> {
                     onPressed: _busy
                         ? null
                         : () => setState(() {
-                              _isSignUp = !_isSignUp;
-                              _error = null;
-                              _notice = null;
-                              // Leaving it behind would refuse a
-                              // sign-in that has nothing to confirm,
-                              // and would confirm a password nobody
-                              // typed on the way back.
-                              _confirmPassword.clear();
-                            }),
+                            _isSignUp = !_isSignUp;
+                            _error = null;
+                            _notice = null;
+                            // Leaving it behind would refuse a
+                            // sign-in that has nothing to confirm,
+                            // and would confirm a password nobody
+                            // typed on the way back.
+                            _confirmPassword.clear();
+                          }),
                     child: Text(
                       _isSignUp
                           ? (_brand?.signinSigninPrompt ??
-                              'Already have an account? Sign in')
+                                'Already have an account? Sign in')
                           : (_brand?.signinRegisterPrompt ??
-                              'New to $_wordmark? Create an account'),
+                                'New to $_wordmark? Create an account'),
                     ),
                   ),
                 ],
@@ -1792,7 +1889,8 @@ class _Brand extends ConsumerWidget {
 
     // On the panel the light logo is the wrong one: same rule the
     // landing page uses, for the same reason.
-    final url = workspace?['logo_url'] as String? ??
+    final url =
+        workspace?['logo_url'] as String? ??
         (onDark ? brand?.logoDarkUrl : null) ??
         brand?.logoUrl;
 
@@ -1876,8 +1974,11 @@ class _Hero extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.check_circle,
-                    color: ink.withValues(alpha: 0.9), size: 20),
+                Icon(
+                  Icons.check_circle,
+                  color: ink.withValues(alpha: 0.9),
+                  size: 20,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(

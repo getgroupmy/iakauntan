@@ -60,7 +60,8 @@ class _SitePageTabState extends ConsumerState<SitePageTab> {
   /// The three auth pages are wording on a screen that always draws —
   /// `login` joined them in `0348`, and gating it would leave a blank
   /// heading over the form at every company address at once.
-  bool get _gated => const {'terms', 'privacy', 'contact'}.contains(widget.slug);
+  bool get _gated =>
+      const {'terms', 'privacy', 'contact'}.contains(widget.slug);
 
   @override
   Widget build(BuildContext context) {
@@ -186,12 +187,14 @@ class _SitePageTabState extends ConsumerState<SitePageTab> {
       // The text is sent whatever it says, empty included: an empty box
       // is somebody asking for the shipped wording back, and the saver
       // reads only an *absent* argument as "leave it alone".
-      action: () => ref.read(sitePagesRepositoryProvider).save(
-        widget.slug,
-        title: _title.text,
-        body: _body.text,
-        isPublished: _gated ? (_published ?? false) : null,
-      ),
+      action: () => ref
+          .read(sitePagesRepositoryProvider)
+          .save(
+            widget.slug,
+            title: _title.text,
+            body: _body.text,
+            isPublished: _gated ? (_published ?? false) : null,
+          ),
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -217,22 +220,28 @@ String sitePageLabel(String slug) => switch (slug) {
 
 /// One line saying where the words actually end up.
 String sitePageHint(String slug) => switch (slug) {
-  'signin' => 'The line above the password box. Always shown; there is '
-      'nothing to publish.',
-  'signup' => 'The line above the registration form. Always shown; there '
-      'is nothing to publish.',
-  'terms' => 'Linked from the footer once published, and reachable at '
-      '/terms.',
-  'privacy' => 'Linked from the footer once published, and reachable at '
-      '/privacy.',
-  'contact' => 'Linked from the footer once published, and reachable at '
-      '/contact.',
+  'signin' =>
+    'The line above the password box. Always shown; there is '
+        'nothing to publish.',
+  'signup' =>
+    'The line above the registration form. Always shown; there '
+        'is nothing to publish.',
+  'terms' =>
+    'Linked from the footer once published, and reachable at '
+        '/terms.',
+  'privacy' =>
+    'Linked from the footer once published, and reachable at '
+        '/privacy.',
+  'contact' =>
+    'Linked from the footer once published, and reachable at '
+        '/contact.',
   _ => '',
 };
 
 String sitePageTitleHelp(String slug) => switch (slug) {
-  'signin' || 'signup' => 'The line above the form — "Welcome back". Left '
-      'empty, the screen uses its own wording.',
+  'signin' || 'signup' =>
+    'The line above the form — "Welcome back". Left '
+        'empty, the screen uses its own wording.',
   _ => 'Shown at the top of the page.',
 };
 
@@ -242,10 +251,12 @@ String sitePageTitleHelp(String slug) => switch (slug) {
 /// the company's name after it, so an operator writes the half that is
 /// theirs and never has to know whose door this is.
 String sitePageBodyHelp(String slug) => switch (slug) {
-  'signin' => 'The line under it, without the name — "Sign in to continue '
-      'to". The company\'s name, or yours, is added after it.',
-  'signup' => 'The line under it, without the name — "Create your account '
-      'at". Your name is added after it.',
+  'signin' =>
+    'The line under it, without the name — "Sign in to continue '
+        'to". The company\'s name, or yours, is added after it.',
+  'signup' =>
+    'The line under it, without the name — "Create your account '
+        'at". Your name is added after it.',
   _ => 'Left empty, the screen uses the wording the product ships with.',
 };
 
@@ -309,9 +320,9 @@ class _DemoAccountsCardState extends ConsumerState<_DemoAccountsCard> {
     final ok = await runWithFeedback(
       context,
       successMessage: value ? 'Demo logins on' : 'Demo logins off',
-      action: () => ref
-          .read(landingAdminProvider)
-          .saveLandingPage({'demo_accounts_enabled': value}),
+      action: () => ref.read(landingAdminProvider).saveLandingPage({
+        'demo_accounts_enabled': value,
+      }),
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -419,7 +430,8 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
                 value: on('signin_show_logo'),
                 busy: _busy,
                 title: 'Your logo',
-                subtitle: 'On the panel beside the form, and above the '
+                subtitle:
+                    'On the panel beside the form, and above the '
                     'form on a phone. A company signing in at its own '
                     'subdomain always sees its own, whichever way this '
                     'is set.',
@@ -429,7 +441,8 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
                 value: on('signin_show_name'),
                 busy: _busy,
                 title: 'Your name beside it',
-                subtitle: 'Separate from the logo, because a logo that '
+                subtitle:
+                    'Separate from the logo, because a logo that '
                     'already has the name in it does not want the word '
                     'next to it.',
                 onChanged: (v) => _save({'signin_show_name': v}),
@@ -439,7 +452,8 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
               value: on('${_p}_show_headline'),
               busy: _busy,
               title: 'The headline',
-              subtitle: 'The large line on the panel. Its wording is the '
+              subtitle:
+                  'The large line on the panel. Its wording is the '
                   'box below.',
               onChanged: (v) => _save({'${_p}_show_headline': v}),
             ),
@@ -451,7 +465,8 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
               decoration: const InputDecoration(
                 labelText: 'Headline',
                 alignLabelWithHint: true,
-                helperText: 'One line per line. Left empty, the panel uses '
+                helperText:
+                    'One line per line. Left empty, the panel uses '
                     'the wording the product ships with.',
               ),
             ),
@@ -471,7 +486,8 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
               value: on('${_p}_show_heading'),
               busy: _busy,
               title: 'The heading above the form',
-              subtitle: 'The line and sentence you edit at the top of this '
+              subtitle:
+                  'The line and sentence you edit at the top of this '
                   'screen. Off, the form has no heading at all.',
               onChanged: (v) => _save({'${_p}_show_heading': v}),
             ),
@@ -483,11 +499,35 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
                 value: on('signin_show_register'),
                 busy: _busy,
                 title: 'Offer an account',
-                subtitle: 'Draws "New to us? Create an account" under '
+                subtitle:
+                    'Draws "New to us? Create an account" under '
                     'the button. Off, somebody can still reach the form '
                     'at /signin?mode=register, and the way back from it '
                     'is always drawn.',
                 onChanged: (v) => _save({'signin_show_register': v}),
+              ),
+            // `0579`. The passkey button, and the only switch on this
+            // screen that ships OFF.
+            //
+            // GoTrue answers `passkey_disabled` until passkeys are
+            // turned on for the project in the Supabase dashboard, so
+            // this being on first would draw a button that fails for
+            // everybody who presses it. The subtitle says the order
+            // rather than leaving somebody to find it out from a
+            // refusal.
+            if (!widget.login)
+              _Switch(
+                value: on('signin_show_passkey'),
+                busy: _busy,
+                title: 'Offer a passkey',
+                subtitle:
+                    'Draws "Sign in with a passkey" under the '
+                    'button. Turn passkeys on in the Supabase dashboard '
+                    'FIRST — until then every press is refused. The '
+                    'button is also absent on a device with no '
+                    'fingerprint reader, face camera or PIN, and on '
+                    'Android and iOS, which cannot reach one yet.',
+                onChanged: (v) => _save({'signin_show_passkey': v}),
               ),
             const Divider(height: Space.lg),
             // The captcha. A box rather than a switch: there is nothing
@@ -500,7 +540,8 @@ class _SigninPanelCardState extends ConsumerState<_SigninPanelCard> {
               decoration: const InputDecoration(
                 labelText: 'Cloudflare Turnstile site key',
                 hintText: '0x4AAAAAAA…',
-                helperText: 'Empty means no security check. The site key '
+                helperText:
+                    'Empty means no security check. The site key '
                     'is public; the SECRET goes in Supabase under '
                     'Authentication → Attack Protection, and the order '
                     'is: key here first, then the switch there. See '
@@ -604,57 +645,57 @@ class _SigninWordsCardState extends ConsumerState<_SigninWordsCard> {
   /// eight rather than of six of them.
   static const _fields =
       <({String column, String label, String ships, bool notNull})>[
-    (
-      column: 'signin_email_label',
-      label: 'Email box',
-      ships: 'Email',
-      notNull: false,
-    ),
-    (
-      column: 'signin_password_label',
-      label: 'Password box',
-      ships: 'Password',
-      notNull: false,
-    ),
-    (
-      column: 'signin_name_label',
-      label: 'Name box, on the sign-up form',
-      ships: 'Full name',
-      notNull: false,
-    ),
-    (
-      column: 'signin_forgot_label',
-      label: 'The forgotten-password link',
-      ships: 'Forgot password?',
-      notNull: false,
-    ),
-    (
-      column: 'sign_in_label',
-      label: 'The sign-in button',
-      ships: 'Sign in',
-      notNull: true,
-    ),
-    (
-      column: 'register_label',
-      label: 'The sign-up button',
-      ships: 'Create an account',
-      notNull: true,
-    ),
-    (
-      column: 'signin_register_prompt',
-      label: 'The sentence offering an account',
-      // Built from your name rather than stored, so there is no literal
-      // to show here — clearing the box gives the sentence back.
-      ships: 'New to <your name>? Create an account',
-      notNull: false,
-    ),
-    (
-      column: 'signin_signin_prompt',
-      label: 'The sentence back to signing in',
-      ships: 'Already have an account? Sign in',
-      notNull: false,
-    ),
-  ];
+        (
+          column: 'signin_email_label',
+          label: 'Email box',
+          ships: 'Email',
+          notNull: false,
+        ),
+        (
+          column: 'signin_password_label',
+          label: 'Password box',
+          ships: 'Password',
+          notNull: false,
+        ),
+        (
+          column: 'signin_name_label',
+          label: 'Name box, on the sign-up form',
+          ships: 'Full name',
+          notNull: false,
+        ),
+        (
+          column: 'signin_forgot_label',
+          label: 'The forgotten-password link',
+          ships: 'Forgot password?',
+          notNull: false,
+        ),
+        (
+          column: 'sign_in_label',
+          label: 'The sign-in button',
+          ships: 'Sign in',
+          notNull: true,
+        ),
+        (
+          column: 'register_label',
+          label: 'The sign-up button',
+          ships: 'Create an account',
+          notNull: true,
+        ),
+        (
+          column: 'signin_register_prompt',
+          label: 'The sentence offering an account',
+          // Built from your name rather than stored, so there is no literal
+          // to show here — clearing the box gives the sentence back.
+          ships: 'New to <your name>? Create an account',
+          notNull: false,
+        ),
+        (
+          column: 'signin_signin_prompt',
+          label: 'The sentence back to signing in',
+          ships: 'Already have an account? Sign in',
+          notNull: false,
+        ),
+      ];
 
   /// The login page's four, and why it is four rather than eight.
   ///
@@ -665,34 +706,34 @@ class _SigninWordsCardState extends ConsumerState<_SigninWordsCard> {
   /// get the word under it" holds for all four.
   static const _loginFields =
       <({String column, String label, String ships, bool notNull})>[
-    (
-      column: 'login_email_label',
-      label: 'Email box',
-      ships: 'Email',
-      notNull: false,
-    ),
-    (
-      column: 'login_password_label',
-      label: 'Password box',
-      ships: 'Password',
-      notNull: false,
-    ),
-    (
-      column: 'login_forgot_label',
-      label: 'The forgotten-password link',
-      ships: 'Forgot password?',
-      notNull: false,
-    ),
-    (
-      column: 'login_sign_in_label',
-      label: 'The sign-in button',
-      ships: 'Sign in',
-      notNull: false,
-    ),
-  ];
+        (
+          column: 'login_email_label',
+          label: 'Email box',
+          ships: 'Email',
+          notNull: false,
+        ),
+        (
+          column: 'login_password_label',
+          label: 'Password box',
+          ships: 'Password',
+          notNull: false,
+        ),
+        (
+          column: 'login_forgot_label',
+          label: 'The forgotten-password link',
+          ships: 'Forgot password?',
+          notNull: false,
+        ),
+        (
+          column: 'login_sign_in_label',
+          label: 'The sign-in button',
+          ships: 'Sign in',
+          notNull: false,
+        ),
+      ];
 
   List<({String column, String label, String ships, bool notNull})>
-      get _showing => widget.login ? _loginFields : _fields;
+  get _showing => widget.login ? _loginFields : _fields;
 
   final _controllers = <String, TextEditingController>{
     for (final f in [..._fields, ..._loginFields])

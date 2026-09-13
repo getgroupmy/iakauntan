@@ -1449,4 +1449,67 @@ begin
 end $$;
 
 
+-- ---------------------------------------------------------------------
+-- 0579: a key instead of a password
+--
+-- `signin_show_passkey` is the only switch on this page that ships
+-- OFF, and that is the whole assertion. GoTrue answers
+-- `passkey_disabled` until passkeys are turned on for the project in
+-- the Supabase dashboard, so a button drawn before that fails for
+-- everybody who presses it. A default of true here would be a default
+-- that breaks the sign-in form of every deployment that takes it.
+--
+-- Also asserted: it reaches the form. It rides in `brand` rather than
+-- `page` for the reason `signin_show_register` does — the sign-in
+-- screen draws before anything is published, and a platform with no
+-- marketing site still has a door.
+-- ---------------------------------------------------------------------
+do $$
+declare
+  v_admin uuid := pg_temp.test_user();
+  v_out jsonb;
+begin
+  insert into public.platform_admins (user_id) values (v_admin)
+    on conflict do nothing;
+  perform pg_temp.sign_in_as(v_admin);
+  perform pg_temp.reset_landing();
+  -- `reset_landing` deletes the row; the payload's `brand` falls back
+  -- to a literal when there is none, and a literal has no opinion
+  -- about a column. So make the row the way every other block here
+  -- does, and read the default off THAT.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('is_published', true));
+
+  -- Off out of the box, unlike every other switch here.
+  v_out := public.landing_page();
+  perform pg_temp.check_eq('a passkey is not offered until somebody says so',
+    v_out -> 'brand' ->> 'signin_show_passkey', 'false');
+
+  -- And it is in `brand`, so an unpublished platform still gets it.
+  perform public.platform_save_landing_page(
+    jsonb_build_object('signin_show_passkey', true));
+  v_out := public.landing_page();
+  perform pg_temp.check_eq(
+    'and reaches the sign-in form before anything is published',
+    v_out -> 'brand' ->> 'signin_show_passkey', 'true');
+
+  -- Turning it on left the rest of the form alone. The failure this
+  -- catches is a patch that writes one column by clearing its
+  -- neighbours.
+  perform pg_temp.check_eq('without disturbing the register switch',
+    v_out -> 'brand' ->> 'signin_show_register', 'false');
+
+  -- As somebody who is not platform staff. Without this the check
+  -- would run as the administrator above and pass for the wrong
+  -- reason, which is the failure `check_refused` exists to make
+  -- impossible to write by accident.
+  perform pg_temp.sign_in_as(pg_temp.another_user('outsider@example.test'));
+  perform pg_temp.check_refused(
+    'and only a platform administrator may offer it',
+    format('select public.platform_save_landing_page(%L::jsonb)',
+           jsonb_build_object('signin_show_passkey', false)),
+    '%front door%', '42501');
+end $$;
+
+
 rollback;
