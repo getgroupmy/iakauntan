@@ -72,57 +72,44 @@ begin
   -- ---------------------------------------------------------------
   -- Registering needs every one of the four facts
   -- ---------------------------------------------------------------
-  v_refused := false;
-  begin
-    perform public.set_sst_registration(v_org, true, null, 'W10-1234', 'ST8');
-  exception when others then v_refused := true;
-  end;
-  perform pg_temp.sign_in_as(v_owner);
-  perform pg_temp.check_true(
+  perform pg_temp.check_refused(
     'registering without the effective date is refused — without it there '
-    'is nothing to judge an invoice''s date against', v_refused);
-
-  v_refused := false;
-  begin
-    perform public.set_sst_registration(v_org, true, date '2026-09-01', null, 'ST8');
-  exception when others then v_refused := true;
-  end;
+    'is nothing to judge an invoice''s date against',
+    format('select public.set_sst_registration(%L, true, null, %L, %L)',
+           v_org, 'W10-1234', 'ST8'),
+    '%needs the date it took effect%');
   perform pg_temp.sign_in_as(v_owner);
-  perform pg_temp.check_true(
+
+  perform pg_temp.check_refused(
     'and without the number, which has to print on every tax invoice',
-    v_refused);
-
-  v_refused := false;
-  begin
-    perform public.set_sst_registration(
-      v_org, true, date '2026-09-01', 'W10-1234', 'ZR');
-  exception when others then v_refused := true;
-  end;
+    format('select public.set_sst_registration(%L, true, %L, null, %L)',
+           v_org, date '2026-09-01', 'ST8'),
+    '%needs the registration number%');
   perform pg_temp.sign_in_as(v_owner);
-  perform pg_temp.check_true(
+
+  perform pg_temp.check_refused(
     'and a zero-rated default, which would leave every line at nothing '
-    'while the company believed it was charging tax', v_refused);
-
-  v_refused := false;
-  begin
-    perform public.set_sst_registration(
-      v_org, true, date '2026-09-01', 'W10-1234', 'ST99');
-  exception when others then v_refused := true;
-  end;
+    'while the company believed it was charging tax',
+    format('select public.set_sst_registration(%L, true, %L, %L, %L)',
+           v_org, date '2026-09-01', 'W10-1234', 'ZR'),
+    '%zero rated%');
   perform pg_temp.sign_in_as(v_owner);
-  perform pg_temp.check_true('and a code this company does not have', v_refused);
+
+  perform pg_temp.check_refused(
+    'and a code this company does not have',
+    format('select public.set_sst_registration(%L, true, %L, %L, %L)',
+           v_org, date '2026-09-01', 'W10-1234', 'ST99'),
+    '%No active tax code%');
+  perform pg_temp.sign_in_as(v_owner);
 
   -- Somebody who can post but not administer.
   perform pg_temp.sign_in_as(v_clerk);
-  v_refused := false;
-  begin
-    perform public.set_sst_registration(
-      v_org, true, date '2026-09-01', 'W10-1234', 'ST8');
-  exception when others then v_refused := true;
-  end;
+  perform pg_temp.check_refused(
+    'and an accountant cannot register the company for tax',
+    format('select public.set_sst_registration(%L, true, %L, %L, %L)',
+           v_org, date '2026-09-01', 'W10-1234', 'ST8'),
+    '%cannot change this company%', '42501');
   perform pg_temp.sign_in_as(v_clerk);
-  perform pg_temp.check_true(
-    'and an accountant cannot register the company for tax', v_refused);
 
   -- ---------------------------------------------------------------
   -- The control: a complete registration, which moves the default
@@ -191,14 +178,11 @@ begin
     v_doc is not null);
 
   -- Inserting is not the only way in.
-  v_refused := false;
-  begin
-    update public.sales_documents set doc_date = date '2026-08-01'
-     where id = v_doc;
-  exception when others then v_refused := true;
-  end;
-  perform pg_temp.check_true(
-    'and a taxed document cannot be backdated past it either', v_refused);
+  perform pg_temp.check_refused(
+    'and a taxed document cannot be backdated past it either',
+    format('update public.sales_documents set doc_date = %L where id = %L',
+           date '2026-08-01', v_doc),
+    '%before SST registration took effect%');
 
   -- And explicitly *not* the same rule on the purchase side.
   --
@@ -300,22 +284,17 @@ begin
     'and the company is still unregistered afterwards', not v_flag);
 
   -- The other two guarded columns, each on its own.
-  v_ok := false;
-  begin
-    update public.organizations set sst_registered_from = date '2026-01-01'
-     where id = v_org;
-  exception when others then v_ok := true;
-  end;
-  perform pg_temp.check_true('the effective date cannot be set directly', v_ok);
+  perform pg_temp.check_refused(
+    'the effective date cannot be set directly',
+    format('update public.organizations set sst_registered_from = %L '
+           'where id = %L', date '2026-01-01', v_org),
+    '%not a field to set%');
 
-  v_ok := false;
-  begin
-    update public.organizations set sst_registration_no = 'W10-9999-99999999'
-     where id = v_org;
-  exception when others then v_ok := true;
-  end;
-  perform pg_temp.check_true(
-    'nor the registration number, which prints on every tax invoice', v_ok);
+  perform pg_temp.check_refused(
+    'nor the registration number, which prints on every tax invoice',
+    format('update public.organizations set sst_registration_no = %L '
+           'where id = %L', 'W10-9999-99999999', v_org),
+    '%not a field to set%');
 
   -- The door itself still opens.
   perform public.set_sst_registration(
@@ -330,13 +309,11 @@ begin
   -- transaction-local and this whole file is one transaction, so if the
   -- function leaked it every later write in the session would sail
   -- through — which is the failure this pair exists to catch.
-  v_ok := false;
-  begin
-    update public.organizations set is_sst_registered = false where id = v_org;
-  exception when others then v_ok := true;
-  end;
-  perform pg_temp.check_true(
-    'and the permission it granted itself did not outlive the call', v_ok);
+  perform pg_temp.check_refused(
+    'and the permission it granted itself did not outlive the call',
+    format('update public.organizations set is_sst_registered = false '
+           'where id = %L', v_org),
+    '%not a field to set%');
 
   -- Deregistering through the front door still works after all that.
   perform public.set_sst_registration(v_org, false);

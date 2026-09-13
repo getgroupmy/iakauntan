@@ -25,7 +25,12 @@ from collections import Counter
 from pathlib import Path
 
 # Lower this when you fix some. Never raise it.
-BUDGET = 97
+#
+# 97 for a long while. `invitations.sql` and `sst_registration.sql` gave
+# up fifteen between them, and the conversion is mechanical once the
+# refusal's own words are known: run the statement, read the message,
+# assert on it.
+BUDGET = 82
 
 TESTS = Path(__file__).resolve().parent.parent / 'supabase' / 'tests'
 

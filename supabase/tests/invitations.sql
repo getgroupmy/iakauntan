@@ -101,20 +101,16 @@ begin
   end;
 
   perform pg_temp.sign_in_as(v_owner);
-  begin
-    perform public.invite_member(v_org, 'someone@example.test', 'owner');
-    v_took := true;
-  exception when others then v_took := false;
-  end;
-  perform pg_temp.check_true('ownership is not something you invite somebody to',
-    not v_took);
+  perform pg_temp.check_refused(
+    'ownership is not something you invite somebody to',
+    format('select public.invite_member(%L, %L, %L)',
+           v_org, 'someone@example.test', 'owner'),
+    '%Ownership is transferred, not invited%');
 
-  begin
-    perform public.invite_member(v_org, '   ', 'viewer');
-    v_took := true;
-  exception when others then v_took := false;
-  end;
-  perform pg_temp.check_true('an invitation needs an address', not v_took);
+  perform pg_temp.check_refused(
+    'an invitation needs an address',
+    format('select public.invite_member(%L, %L, %L)', v_org, '   ', 'viewer'),
+    '%email address is required%');
 
   -- ==================================================================
   -- The owner keeps the company
@@ -192,13 +188,10 @@ begin
   end;
 
   perform pg_temp.sign_in_as(v_joiner);
-  begin
-    perform public.accept_invitation('not-a-real-token');
-    v_took := true;
-  exception when others then v_took := false;
-  end;
-  perform pg_temp.check_true('a token that was never issued is refused',
-    not v_took);
+  perform pg_temp.check_refused(
+    'a token that was never issued is refused',
+    'select public.accept_invitation(''not-a-real-token'')',
+    '%invitation is not valid%');
 
   perform pg_temp.check_eq('a valid token joins the company',
     public.accept_invitation(v_token), v_org);
@@ -215,12 +208,10 @@ begin
   -- forwarded.
   perform pg_temp.check_true('and the token is spent',
     r.invite_token is null);
-  begin
-    perform public.accept_invitation(v_token);
-    v_took := true;
-  exception when others then v_took := false;
-  end;
-  perform pg_temp.check_true('so it cannot be used twice', not v_took);
+  perform pg_temp.check_refused(
+    'so it cannot be used twice',
+    format('select public.accept_invitation(%L)', v_token),
+    '%invitation is not valid%');
 
   -- An invitation that has run out is refused even though it is still
   -- sitting there unaccepted.
@@ -231,12 +222,10 @@ begin
   update public.org_members
      set invite_expires_at = now() - interval '1 day' where id = v_id2;
   perform pg_temp.sign_in_as(pg_temp.another_user('late@example.test'));
-  begin
-    perform public.accept_invitation(v_token);
-    v_took := true;
-  exception when others then v_took := false;
-  end;
-  perform pg_temp.check_true('an expired invitation is refused', not v_took);
+  perform pg_temp.check_refused(
+    'an expired invitation is refused',
+    format('select public.accept_invitation(%L)', v_token),
+    '%invitation has expired%');
   -- And signing up at that address does not let it in either. This is
   -- the half that was missing: app.handle_new_user claims pending
   -- invitations on signup and never looked at the expiry, so an
@@ -339,13 +328,10 @@ begin
     v_stolen <> v_token);
 
   perform pg_temp.sign_in_as(pg_temp.another_user('outsider@elsewhere.test'));
-  begin
-    perform public.accept_invitation(v_stolen);
-    v_took := true;
-  exception when others then v_took := false;
-  end;
-  perform pg_temp.check_true('so what a member can read will not open the door',
-    not v_took);
+  perform pg_temp.check_refused(
+    'so what a member can read will not open the door',
+    format('select public.accept_invitation(%L)', v_stolen),
+    '%invitation is not valid%');
 
   -- And the raw token, in the wrong hands, does not either. This is the
   -- half that matters when a link is forwarded rather than stolen from
