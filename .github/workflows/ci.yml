@@ -467,6 +467,17 @@ jobs:
       - name: Check every ordering says which direction it means
         run: python3 scripts/check_order_direction.py
 
+      # `docs/unreachable.md` described this sweep for months as a thing
+      # to run when you remember, and this is what that meant: `0559`
+      # built the personal-mailbox model and nothing could reach it,
+      # and `0567`'s bank feed shipped unreachable four hours after the
+      # lesson was written into that file. A procedure nobody is
+      # reminded of is a procedure that runs after the fact.
+      #
+      # No database needed: it reads the Dart.
+      - name: Check every repository method and provider is reached
+        run: python3 scripts/check_unreachable.py
+
       # `0531`. STABLE is a promise that a function does not write, and
       # PostgREST believes it: such a function runs in a READ ONLY
       # transaction, so a write inside one fails with 25006 and takes

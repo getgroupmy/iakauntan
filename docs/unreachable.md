@@ -7791,3 +7791,45 @@ that explains why a function exists names it, and prose is not a
 caller.
 
 With both corrections the answer is **654 functions, none unreachable**.
+
+## It is a gate now, not a procedure
+
+`scripts/check_unreachable.py`, in CI beside the other guards. Both
+sweeps, no database needed, about a second.
+
+Three things it does that the versions written out above do not:
+
+**It counts same-file callers.** The `unreferenced` helper skips the
+declaring files, so a helper whose callers all live in its own file
+reads as dead — which is why running it by hand reported eight names
+that were fine and taught everybody to skim the output. Counting every
+reference and subtracting the declarations leaves five, each named in
+the script with its reason.
+
+**An `invalidate` is not a read.** This is the correction that matters,
+and writing the check without it missed the very specimen this page
+names. `ref.invalidate(fooProvider)` is a screen saying "whatever that
+was, it is stale" — a provider whose only reference anywhere is an
+invalidate is declared, thrown away on every save, and looked at by
+nobody. `ref.refresh` is deliberately still a read, because it returns
+the value.
+
+That one change found **four** more on the first run:
+
+| Provider | What nobody can see |
+|---|---|
+| `loyaltyAccountBalanceProvider` | a customer's points balance |
+| `pdcMaturingProvider` | post-dated cheques coming due |
+| `sstDueProvider` | SST returns falling due within 120 days |
+| `stockAdjustmentsProvider` | what was written off or found |
+
+None is the "screen reads it directly" case this page warns about: the
+repository method behind each has no other caller either, so the data
+is not reachable by any route. Somebody built each one, wired the
+invalidate into a screen, and never drew it.
+
+**It is a ratchet.** Those four are named in `KNOWN_UNDRAWN` with their
+reasons, the way `check_blind_catches.py` carries a budget, so a fifth
+fails the build while these four wait. Take one off the list when you
+draw it. `sstDueProvider` is the one to draw first: a statutory
+deadline nobody can see is a deadline nobody meets.
