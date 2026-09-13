@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0572",
+    "version": "0573",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -58309,8 +58309,8 @@
     "/rpc/set_ai_credentials": {
       "post": {
         "operationId": "set_ai_credentials",
-        "summary": "Set ai credentials",
-        "description": "`public.set_ai_credentials(p_org_id uuid, p_provider text, p_api_key text, p_base_url text)` Writes. Requires a signed-in user.",
+        "summary": "Stores a company's own key for one AI provider, so the assistant bills them rather than us",
+        "description": "Stores a company's own key for one AI provider, so the assistant bills them rather than us. Refuses an unknown provider, an empty key, and a provider that needs a base URL given without one. Needs `can_admin`.\n\n`public.set_ai_credentials(p_org_id uuid, p_provider text, p_api_key text, p_base_url text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -58441,8 +58441,8 @@
     "/rpc/set_bank_feed_paused": {
       "post": {
         "operationId": "set_bank_feed_paused",
-        "summary": "Set bank feed paused",
-        "description": "`public.set_bank_feed_paused(p_bank_account_id uuid, p_paused boolean)` Writes. Requires a signed-in user.",
+        "summary": "Pauses or resumes the automatic statement feed on one bank account",
+        "description": "Pauses or resumes the automatic statement feed on one bank account. Pausing stops new statement lines arriving; it does not disconnect the feed or discard what has already come in. Needs `can_admin`.\n\n`public.set_bank_feed_paused(p_bank_account_id uuid, p_paused boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -58499,8 +58499,8 @@
     "/rpc/set_booking_status": {
       "post": {
         "operationId": "set_booking_status",
-        "summary": "Set booking status",
-        "description": "`public.set_booking_status(p_booking uuid, p_status app.pos_booking_status, p_note text)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Moves a table booking along",
+        "description": "Moves a table booking along. `arrived` and `completed` CANNOT be set here: they are claims about money and stock, and checking in and settling the sale are the only things entitled to make them. A completed booking cannot be moved at all. Needs the `pos` module.\n\n`public.set_booking_status(p_booking uuid, p_status app.pos_booking_status, p_note text)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -58576,8 +58576,8 @@
     "/rpc/set_budget_lines": {
       "post": {
         "operationId": "set_budget_lines",
-        "summary": "Set budget lines",
-        "description": "`public.set_budget_lines(p_budget uuid, p_lines jsonb)` Writes. Requires a signed-in user. Refused unless the company has the `accounting` module and the caller may use it.",
+        "summary": "Replaces a budget's lines wholesale and returns how many were written",
+        "description": "Replaces a budget's lines wholesale and returns how many were written. DRAFT ONLY: an approved budget is what variance is reported against, and rewriting it underneath a report already circulated would change what people were told without changing the report. A ZERO IS NOT A LINE and is dropped rather than stored -- keeping them would fill the grid with rows that say nothing and make \"which accounts are budgeted\" unanswerable. Refuses an account that does not exist or is a heading, and a period outside the budget's year.\n\n`public.set_budget_lines(p_budget uuid, p_lines jsonb)` Writes. Requires a signed-in user. Refused unless the company has the `accounting` module and the caller may use it.",
         "tags": [
           "accounting"
         ],
@@ -58633,8 +58633,8 @@
     "/rpc/set_custom_field_active": {
       "post": {
         "operationId": "set_custom_field_active",
-        "summary": "Set custom field active",
-        "description": "`public.set_custom_field_active(p_org_id uuid, p_entity text, p_key text, p_active boolean)` Writes. Requires a signed-in user.",
+        "summary": "Switches one custom field on or off for an entity type",
+        "description": "Switches one custom field on or off for an entity type. Switching off hides the field from forms and keeps every value already recorded against it, so turning it back on restores the data rather than an empty column. Refuses a field that does not exist on that entity, naming both. Needs `can_admin`.\n\n`public.set_custom_field_active(p_org_id uuid, p_entity text, p_key text, p_active boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -58779,8 +58779,8 @@
     "/rpc/set_einvoice_credentials": {
       "post": {
         "operationId": "set_einvoice_credentials",
-        "summary": "Set einvoice credentials",
-        "description": "`public.set_einvoice_credentials(p_org_id uuid, p_environment text, p_client_id text, p_client_secret text, p_cert_pem text, p_cert_private_key_pem text, p_cert_serial_number text, p_cert_issuer_name text, p_cert_expires_at timestamp with time zone)` Writes. Requires a signed-in user.",
+        "summary": "Stores a company's MyInvois credentials and signing certificate for one environment, sandbox or production\u2026",
+        "description": "Stores a company's MyInvois credentials and signing certificate for one environment, sandbox or production, replacing what was there. The environment must be one of those two by name. The client secret may be omitted on a later call to keep the one already stored -- so a screen can show the certificate details and save them without having the secret to re-send -- but it must be present the FIRST time, and the function says so rather than storing a row that cannot authenticate. Needs `can_admin`.\n\n`public.set_einvoice_credentials(p_org_id uuid, p_environment text, p_client_id text, p_client_secret text, p_cert_pem text, p_cert_private_key_pem text, p_cert_serial_number text, p_cert_issuer_name text, p_cert_expires_at timestamp with time zone)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -58917,8 +58917,8 @@
     "/rpc/set_feedback_status": {
       "post": {
         "operationId": "set_feedback_status",
-        "summary": "Set feedback status",
-        "description": "`public.set_feedback_status(p_id uuid, p_status app.feedback_status, p_note text)` Writes. Requires a signed-in user.",
+        "summary": "Moves a piece of feedback somebody sent us along, with a note",
+        "description": "Moves a piece of feedback somebody sent us along, with a note. Platform administrators only: this is our own queue, not a tenant's.\n\n`public.set_feedback_status(p_id uuid, p_status app.feedback_status, p_note text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -58987,8 +58987,8 @@
     "/rpc/set_fiscal_period_status": {
       "post": {
         "operationId": "set_fiscal_period_status",
-        "summary": "Set fiscal period status",
-        "description": "`public.set_fiscal_period_status(p_period_id uuid, p_status text)` Writes. Requires a signed-in user.",
+        "summary": "Opens, closes or LOCKS a fiscal period, which decides what the ledger will take: posting is refused outside\u2026",
+        "description": "Opens, closes or LOCKS a fiscal period, which decides what the ledger will take: posting is refused outside an open period, so this is the switch behind every \"the period is closed\" refusal elsewhere. Three statuses and no others. LOCKED IS TERMINAL -- a locked period cannot be reopened by any path, because that is what year-end sign-off means, and a lock somebody can undo is not a sign-off. Needs `can_admin`: closing the books is not a bookkeeping act.\n\n`public.set_fiscal_period_status(p_period_id uuid, p_status text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -59045,8 +59045,8 @@
     "/rpc/set_group_ownership": {
       "post": {
         "operationId": "set_group_ownership",
-        "summary": "Set group ownership",
-        "description": "`public.set_group_ownership(p_org_id uuid, p_parent_org_id uuid, p_percent numeric)` Writes. Requires a signed-in user.",
+        "summary": "States what share of THIS company the parent holds, which is what consolidation is computed from",
+        "description": "States what share of THIS company the parent holds, which is what consolidation is computed from. Needs `can_admin` of the company being owned and deliberately NOT of the parent: this is a fact about this company's share capital, and the person who runs it is the one who knows it. The parent must be in the same group and one the caller can already reach -- the rule `link_group_contact` uses, for the same reason: otherwise this becomes a way to discover which companies exist. Refuses a company owning itself, and a percentage outside nought to a hundred.\n\n`public.set_group_ownership(p_org_id uuid, p_parent_org_id uuid, p_percent numeric)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -59170,8 +59170,8 @@
     "/rpc/set_item_stall": {
       "post": {
         "operationId": "set_item_stall",
-        "summary": "Set item stall",
-        "description": "`public.set_item_stall(p_item uuid, p_stall uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Puts an item on a stall in a food court, or takes it off with null",
+        "description": "Puts an item on a stall in a food court, or takes it off with null. The stall must be this company's, refused by name rather than ignored. Needs the `pos` module.\n\n`public.set_item_stall(p_item uuid, p_stall uuid)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -59229,8 +59229,8 @@
     "/rpc/set_item_weighed": {
       "post": {
         "operationId": "set_item_weighed",
-        "summary": "Set item weighed",
-        "description": "`public.set_item_weighed(p_item uuid, p_weighed boolean, p_plu text)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
+        "summary": "Marks an item as sold by weight, with the PLU the scale prints",
+        "description": "Marks an item as sold by weight, with the PLU the scale prints. Refuses it unless the item's unit actually measures something -- a kilogram, a litre -- because a third of a box is not a quantity and neither is a third of a piece. Needs the `inventory` module.\n\n`public.set_item_weighed(p_item uuid, p_weighed boolean, p_plu text)` Writes. Requires a signed-in user. Refused unless the company has the `inventory` module and the caller may use it.",
         "tags": [
           "inventory"
         ],
@@ -59290,8 +59290,8 @@
     "/rpc/set_line_lots": {
       "post": {
         "operationId": "set_line_lots",
-        "summary": "Set line lots",
-        "description": "`public.set_line_lots(p_line_table text, p_line_id uuid, p_lots jsonb)` Writes. Requires a signed-in user.",
+        "summary": "Records which batches or serial numbers a line is made up of, and returns how many were recorded",
+        "description": "Records which batches or serial numbers a line is made up of, and returns how many were recorded. Refused for sales lines -- those take their lots at picking, not at entry. Refuses an item not tracked by batch or serial, a line with no reference, and a quantity of nothing. A serial is one unit by definition, so the screen cannot say otherwise. All of it is refused HERE rather than at posting, deliberately: the person who knows which boxes they picked is the one looking at this line now; the one who finds out at posting is whoever presses the button a week later.\n\n`public.set_line_lots(p_line_table text, p_line_id uuid, p_lots jsonb)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -59351,8 +59351,8 @@
     "/rpc/set_member_access_type": {
       "post": {
         "operationId": "set_member_access_type",
-        "summary": "Set member access type",
-        "description": "`public.set_member_access_type(p_member_id uuid, p_access_type_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Puts a member on an access type -- the named bundle of permissions this company defined -- or takes them off\u2026",
+        "description": "Puts a member on an access type -- the named bundle of permissions this company defined -- or takes them off it with null. The access type must belong to the SAME company, refused by name rather than ignored: an id from another company's list would otherwise be silently dropped and read as applied. Needs `can_admin`.\n\n`public.set_member_access_type(p_member_id uuid, p_access_type_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -59410,8 +59410,8 @@
     "/rpc/set_membership_status": {
       "post": {
         "operationId": "set_membership_status",
-        "summary": "Set membership status",
-        "description": "`public.set_membership_status(p_subscription uuid, p_status app.pos_membership_status)` Writes. Requires a signed-in user. Refused unless the company has the `memberships` module and the caller may use it.",
+        "summary": "Changes a membership's status and returns what it became",
+        "description": "Changes a membership's status and returns what it became. Ending a membership -- cancelled or expired -- ALSO STOPS ITS RECURRING BILLING, and that second half is the point: a cancelled member who keeps receiving invoices is the complaint that reaches the regulator. Needs the `memberships` module.\n\n`public.set_membership_status(p_subscription uuid, p_status app.pos_membership_status)` Writes. Requires a signed-in user. Refused unless the company has the `memberships` module and the caller may use it.",
         "tags": [
           "memberships"
         ],
@@ -59480,8 +59480,8 @@
     "/rpc/set_module_hidden": {
       "post": {
         "operationId": "set_module_hidden",
-        "summary": "Set module hidden",
-        "description": "`public.set_module_hidden(p_org_id uuid, p_module text, p_hidden boolean)` Writes. Requires a signed-in user.",
+        "summary": "Puts a module away, or brings it back, for one company",
+        "description": "Puts a module away, or brings it back, for one company. The test is ENTITLEMENT, not whether a row happens to exist: `0233`'s backfill left `is_enabled = false` rows on companies that do not hold the module, and a \"no row\" test let those straight through -- which is what the production probe caught. You cannot put away something you were never given. Needs `can_admin`.\n\n`public.set_module_hidden(p_org_id uuid, p_module text, p_hidden boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -59542,8 +59542,8 @@
     "/rpc/set_ocr_credentials": {
       "post": {
         "operationId": "set_ocr_credentials",
-        "summary": "Set ocr credentials",
-        "description": "`public.set_ocr_credentials(p_org_id uuid, p_provider text, p_api_key text, p_project_id text, p_location text, p_processor_id text)` Writes. Requires a signed-in user.",
+        "summary": "Stores a company's own document-scanning key for `claude` or `google`",
+        "description": "Stores a company's own document-scanning key for `claude` or `google`. The key may be omitted to keep the stored one, but is required the first time a provider is configured. For Google, a processor id is required as well: Document AI is addressed by processor, not by project alone, and a key with no processor behind it is a 404 at the first scan. Needs `can_admin`.\n\n`public.set_ocr_credentials(p_org_id uuid, p_provider text, p_api_key text, p_project_id text, p_location text, p_processor_id text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -59612,8 +59612,8 @@
     "/rpc/set_ocr_settings": {
       "post": {
         "operationId": "set_ocr_settings",
-        "summary": "Set ocr settings",
-        "description": "`public.set_ocr_settings(p_org_id uuid, p_enabled boolean, p_provider text, p_key_source text)` Writes. Requires a signed-in user.",
+        "summary": "Switches document scanning on or off and chooses whose key it uses -- the company's own or the platform's",
+        "description": "Switches document scanning on or off and chooses whose key it uses -- the company's own or the platform's. Refuses to switch on a provider that is not available, and refuses to switch on a reader with nowhere to send the document and no model to send it to. That last one is caught HERE, where an operator can still do something about it, rather than becoming a 404 waiting for somebody to press Scan. Needs `can_admin`.\n\n`public.set_ocr_settings(p_org_id uuid, p_enabled boolean, p_provider text, p_key_source text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -59676,8 +59676,8 @@
     "/rpc/set_onboarding_task_done": {
       "post": {
         "operationId": "set_onboarding_task_done",
-        "summary": "Set onboarding task done",
-        "description": "`public.set_onboarding_task_done(p_task_id uuid, p_done boolean)` Writes. Requires a signed-in user.",
+        "summary": "Ticks or unticks one task on somebody's onboarding checklist",
+        "description": "Ticks or unticks one task on somebody's onboarding checklist. WHOEVER THE TASK BELONGS TO MAY TICK IT -- the assignee as well as HR -- which is the point of assigning one to a line manager rather than to a department. The checklist's completion timestamp is written only when the answer actually changes, so ticking a fourth optional task does not keep moving the completion date of a checklist that finished last week.\n\n`public.set_onboarding_task_done(p_task_id uuid, p_done boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -59733,8 +59733,8 @@
     "/rpc/set_org_payment_gateway": {
       "post": {
         "operationId": "set_org_payment_gateway",
-        "summary": "Set org payment gateway",
-        "description": "`public.set_org_payment_gateway(p_org_id uuid, p_gateway text, p_mode text, p_api_key text, p_collection_ref text, p_signature_key text, p_is_active boolean)` Writes. Requires a signed-in user.",
+        "summary": "Stores a company's own acquirer credentials for one gateway in one mode",
+        "description": "Stores a company's own acquirer credentials for one gateway in one mode. `can_admin` and not `can_write`, because these are the keys to taking money in this company's name. Refuses a gateway this platform does not know and a mode that is neither sandbox nor production. The key is resolved BEFORE the insert rather than in the `on conflict` arm: `api_key` is NOT NULL and the proposed row is validated before the conflict is looked for, so a coalesce in the update arm would never run (`0107`).\n\n`public.set_org_payment_gateway(p_org_id uuid, p_gateway text, p_mode text, p_api_key text, p_collection_ref text, p_signature_key text, p_is_active boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -59806,8 +59806,8 @@
     "/rpc/set_outlet_channel": {
       "post": {
         "operationId": "set_outlet_channel",
-        "summary": "Set outlet channel",
-        "description": "`public.set_outlet_channel(p_outlet uuid, p_channel app.pos_order_channel, p_is_active boolean, p_is_default boolean, p_sort_order integer)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Configures one order channel for an outlet -- whether it is offered, whether it is the default, and where it\u2026",
+        "description": "Configures one order channel for an outlet -- whether it is offered, whether it is the default, and where it sits in the list. Refuses a default that is not active rather than quietly correcting it: a default nobody can order through is not a default, and the caller asked for two things that contradict each other. Making one the default clears the previous one in the same transaction. Needs the `pos` module.\n\n`public.set_outlet_channel(p_outlet uuid, p_channel app.pos_order_channel, p_is_active boolean, p_is_default boolean, p_sort_order integer)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
@@ -59946,8 +59946,8 @@
     "/rpc/set_platform_ai_default": {
       "post": {
         "operationId": "set_platform_ai_default",
-        "summary": "Set platform ai default",
-        "description": "`public.set_platform_ai_default(p_provider text, p_model text)` Writes. Requires a signed-in user.",
+        "summary": "Chooses which provider and model the assistant uses by default",
+        "description": "Chooses which provider and model the assistant uses by default. Refuses a provider that is not switched on and a model that provider does not offer, so the default can never name something that cannot answer. Platform administrators only.\n\n`public.set_platform_ai_default(p_provider text, p_model text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -60003,8 +60003,8 @@
     "/rpc/set_platform_ai_key": {
       "post": {
         "operationId": "set_platform_ai_key",
-        "summary": "Set platform ai key",
-        "description": "`public.set_platform_ai_key(p_provider text, p_api_key text, p_base_url text)` Writes. Requires a signed-in user.",
+        "summary": "Stores the PLATFORM's key for one AI provider -- ours, used by every company that has not set its own",
+        "description": "Stores the PLATFORM's key for one AI provider -- ours, used by every company that has not set its own. Needs a platform administrator, which is a different question from being an administrator of any company.\n\n`public.set_platform_ai_key(p_provider text, p_api_key text, p_base_url text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -60311,8 +60311,8 @@
     "/rpc/set_pos_sale_channel": {
       "post": {
         "operationId": "set_pos_sale_channel",
-        "summary": "Set pos sale channel",
-        "description": "`public.set_pos_sale_channel(p_sale uuid, p_channel app.pos_order_channel)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
+        "summary": "Says how an order arrived -- counter, delivery, and the rest -- for one sale",
+        "description": "Says how an order arrived -- counter, delivery, and the rest -- for one sale. ONLY WHILE IT IS STILL A BASKET: once the sale completes the channel is on an issued invoice and part of what has been reported, and an issued document does not change because somebody re-categorised it. A channel the outlet does not offer is refused.\n\n`public.set_pos_sale_channel(p_sale uuid, p_channel app.pos_order_channel)` Writes. Requires a signed-in user. Refused unless the company has the `pos` module and the caller may use it.",
         "tags": [
           "pos"
         ],
