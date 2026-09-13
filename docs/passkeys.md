@@ -18,8 +18,9 @@ presses it. That is why `signin_show_passkey` ships **off**.
 * **The console.** Platform console → Site pages → "Offer a passkey".
 * **The web.** `passkey_web.dart` calls the browser's own WebAuthn JSON
   converters. Nothing to install.
-* **The phone.** `passkey_mobile.dart`, over the `passkeys` plugin. Android
-  reaches Credential Manager, iOS reaches `ASAuthorizationController`.
+* **The phone.** NOT SHIPPED. See the section at the bottom — the obvious
+  plugin cannot be added to this app without taking the web build down
+  with it, and it did.
 
 The button appears only when all three of these are true: the switch is on,
 the platform can reach an authenticator, and — the one nobody can see from
@@ -122,3 +123,56 @@ A debug build goes further: the `passkeys` plugin's doctor runs only when
 `debugMode` is set, which is `kDebugMode` here, and it fetches the two files
 above and prints what it found wrong with them. A release build makes no
 such call.
+
+## Why the phone is still not done
+
+The obvious route is the `passkeys` plugin (Corbado). It was added, it
+worked, and it white-screened production the moment it deployed. The
+reason is worth writing down, because nothing about it is visible from
+the pub page, from `flutter analyze`, or from a successful
+`flutter build web`.
+
+`passkeys` declares a **web** implementation, `passkeys_web`. Flutter
+generates `web_plugin_registrant.dart` from the platform declarations of
+every package in the tree, so adding the plugin for Android and iOS
+silently enrols `passkeys_web` into the web bundle as well — there is no
+per-platform dependency in `pubspec.yaml` and nothing asks whether you
+wanted it.
+
+`PasskeysWeb.registerWith` then runs inside `registerPlugins()`, which
+runs **before `runApp`**, and its last line is an unconditional call to:
+
+```dart
+@JS('PasskeyAuthenticator.init')
+external void init();
+```
+
+`PasskeyAuthenticator` is a global that exists only if you have manually
+included Corbado's `bundle.js` in `index.html`. This app does not, and
+`script-src 'self'` in `deploy/vercel-output-config.json` would refuse to
+load it if it tried. So `init()` throws during bootstrap, `main()` never
+finishes, and every page of the app is a white screen — the landing page
+included, which has nothing to do with passkeys.
+
+The guard immediately above it does not help. It reads
+`window['PasskeyAuthenticator']`, which returns null rather than throwing
+for a missing global, so the `catch` never fires; the `window.close()`
+inside it is never even reached, and would be a no-op on a tab the script
+did not open anyway.
+
+None of the local gates catch this. `flutter build web` compiles it
+happily — the failure is a missing JS global at runtime, in a browser.
+
+### What a second attempt has to do
+
+Keep `passkeys_web` out of the bundle. The supportable way is a
+`dependency_overrides` entry pointing `passkeys_web` at a local no-op
+package that implements `PasskeysPlatform` and registers without touching
+any JS. The web half of this app has never needed the plugin — it calls
+the browser's own WebAuthn through `passkey_web.dart` — so a no-op there
+loses nothing.
+
+Whatever the approach, the test that would have caught this is the one to
+write first: build for web and assert that
+`.dart_tool/flutter_build/*/web_plugin_registrant.dart` does not mention
+`passkeys_web`.

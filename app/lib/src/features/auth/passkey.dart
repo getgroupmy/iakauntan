@@ -37,10 +37,10 @@ library;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'passkey_failure.dart';
-import 'passkey_mobile.dart' if (dart.library.js_interop) 'passkey_web.dart';
+import 'passkey_stub.dart' if (dart.library.js_interop) 'passkey_web.dart';
 
 export 'passkey_failure.dart' show PasskeyFailure;
-export 'passkey_mobile.dart'
+export 'passkey_stub.dart'
     if (dart.library.js_interop) 'passkey_web.dart'
     show passkeysAvailable, passkeysUsable;
 

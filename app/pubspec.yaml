@@ -111,24 +111,6 @@ dependencies:
   # supabase_flutter; named here because `call_engine.dart` imports it
   # directly and a transitive dependency is not a promise.
   web_socket_channel: ^3.0.3
-  # Passkeys on a phone. The browser owns the WebAuthn ceremony and
-  # needs no package; Android reaches it through Credential Manager and
-  # iOS through `ASAuthorizationController`, and neither is reachable
-  # from Dart without a plugin.
-  #
-  # It brings eleven packages with it, which for an accounting product
-  # is a question rather than a detail. What they do is written down in
-  # `lib/src/features/auth/passkey_mobile.dart`: nothing in the set
-  # contacts a third party, and the one package that makes any network
-  # call at all fetches this application's own `.well-known` files and
-  # only when `debugMode` is set, which is `kDebugMode` here.
-  #
-  # The reason it is worth that is the type mapping. Its request and
-  # response types take and emit exactly the JSON GoTrue speaks, so no
-  # base64url conversion is hand-written on the sign-in path — which is
-  # the one place where "subtly wrong" means a signature that will not
-  # verify and a person who cannot get in.
-  passkeys: ^2.21.1
 
 dev_dependencies:
   flutter_test:
