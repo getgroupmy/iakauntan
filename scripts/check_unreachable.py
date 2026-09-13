@@ -103,10 +103,6 @@ KNOWN_UNDRAWN = {
     'pdcMaturingProvider':
         'post-dated cheques coming due. The cheques screen refreshes '
         'it twice and never lists them.',
-    'sstDueProvider':
-        'SST returns falling due within 120 days. Statutory, and the '
-        'one on this list that matters most: a deadline nobody can see '
-        'is a deadline nobody meets.',
     'stockAdjustmentsProvider':
         'what was written off or found. The stock take screen '
         'refreshes it and never shows the history.',

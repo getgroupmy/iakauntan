@@ -43,6 +43,7 @@ class SstReturnsCard extends ConsumerWidget {
                     'Two calendar months, and the return due on the last '
                     'day of the month after',
               ),
+              const _DueAlert(),
               AsyncView(
                 value: periods,
                 onRetry: () => ref.invalidate(sstTaxablePeriodsProvider),
@@ -69,6 +70,125 @@ class SstReturnsCard extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The one sentence a company needs before it reads any list: whether a
+/// return is late, or how long is left on the next one.
+///
+/// `report_sst_due` already answers that — it filters to the periods
+/// that have ended, have not been filed, and fall due inside the
+/// window, in due-date order. Until now nothing drew it: the card
+/// listed every period, newest first, and left the reader to work out
+/// which of them was a breach. A deadline nobody can see is a deadline
+/// nobody meets.
+///
+/// Null when there is nothing to say — no unfiled return inside the
+/// window — so the card shows nothing rather than an empty reassurance.
+/// "Everything is filed" would be a claim about periods the window does
+/// not cover, and this function cannot make it.
+///
+/// Separated from the widget so the wording can be asserted. The
+/// arithmetic is `sst_taxable_periods` and `report_sst_due`, asserted in
+/// `supabase/tests/sst_taxable_period.sql`; what is asserted here is only which
+/// sentence is chosen, that "1 day" is not "1 days", and that a missed
+/// date is stated in the past tense rather than as a negative countdown.
+({String text, bool overdue})? sstDueLine(List<Map<String, dynamic>> rows) {
+  if (rows.isEmpty) return null;
+
+  // `report_sst_due` returns them in due-date order, so the first
+  // overdue row is the one that has been outstanding longest.
+  final late = rows.where((r) => r['is_overdue'] == true).toList();
+  if (late.isNotEmpty) {
+    final total = late.fold<double>(
+      0,
+      (sum, r) => sum + Fmt.toDouble(r['output_tax']),
+    );
+    if (late.length == 1) {
+      final r = late.single;
+      return (
+        text:
+            'The return for the period ending '
+            '${Fmt.date(Fmt.parseDate(r['period_end']))} was due '
+            '${Fmt.date(Fmt.parseDate(r['due_date']))}. '
+            '${Fmt.money(total)} was charged in it.',
+        overdue: true,
+      );
+    }
+    return (
+      text:
+          '${late.length} returns are overdue. The earliest was due '
+          '${Fmt.date(Fmt.parseDate(late.first['due_date']))}, and '
+          '${Fmt.money(total)} was charged across them.',
+      overdue: true,
+    );
+  }
+
+  final next = rows.first;
+  final due = Fmt.parseDate(next['due_date']);
+  if (due == null) return null;
+  final left = (next['days_left'] as num?)?.toInt();
+  final tax = Fmt.money(Fmt.toDouble(next['output_tax']));
+  final ending = Fmt.date(Fmt.parseDate(next['period_end']));
+
+  // Past tense is the overdue branch's job. Here the date is still
+  // ahead, so `days_left` is zero or more and reads as a countdown.
+  final when = left == null
+      ? 'due ${Fmt.date(due)}'
+      : left == 0
+      ? 'due today, ${Fmt.date(due)}'
+      : 'due ${Fmt.date(due)} — $left ${left == 1 ? 'day' : 'days'}';
+  return (
+    text: 'The return for the period ending $ending is $when. $tax to declare.',
+    overdue: false,
+  );
+}
+
+/// Draws [sstDueLine] above the list.
+///
+/// Overdue is `danger` rather than `warning` for the reason the filings
+/// countdown uses it: the date has gone and the company is late, which
+/// is not a warning about something that might happen.
+class _DueAlert extends ConsumerWidget {
+  const _DueAlert();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rows = ref.watch(sstDueProvider).valueOrNull;
+    // A card that has not loaded yet, or whose load failed, says
+    // nothing: the list below carries its own error state, and two
+    // failures reported twice is noise.
+    if (rows == null) return const SizedBox.shrink();
+    final line = sstDueLine(rows);
+    if (line == null) return const SizedBox.shrink();
+
+    final colour = line.overdue
+        ? context.colors.danger
+        : context.colors.warning;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            line.overdue ? Icons.error_outline : Icons.schedule,
+            size: 18,
+            color: colour,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              line.text,
+              key: const ValueKey('sst-due-line'),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: colour,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
