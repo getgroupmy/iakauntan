@@ -6,7 +6,7 @@
 > table in one database, and the authorization is that database's
 > own row-level security rather than a layer in front of it.
 
-Schema version `0575` (the highest applied migration).
+Schema version `0576` (the highest applied migration).
 662 functions and 329 readable tables, of which
 254 functions only read.
 
@@ -14,7 +14,7 @@ Generated from the catalog by
 `scripts/generate_api_description.py` and checked in CI, so this
 file cannot drift from what the database will actually do.
 
-**360 of 662 functions carry a `comment on
+**380 of 662 functions carry a `comment on
 function`**, and those are the only ones described here in
 words. The rest show their name, their arguments and their
 types, which is what the catalog knows about them. A function
@@ -402,32 +402,32 @@ Not gated on any module.
 - `change_registered_office(p_entity uuid, p_address text, p_effective_on date)` *(writes)*
 - `chat_access_list(p_org_id uuid)`
 - `chat_active_call(p_conversation_id uuid)`
-- `chat_add_participant(p_conversation_id uuid, p_user_id uuid, p_org_id uuid)` *(writes)*
-- `chat_create_group(p_my_org uuid, p_title text, p_members jsonb)` *(writes)*
-- `chat_decide_link(p_link_id uuid, p_approve boolean)` *(writes)*
-- `chat_decline_call(p_call_id uuid)` *(writes)*
-- `chat_delete_message(p_message_id uuid)` *(writes)*
+- `chat_add_participant(p_conversation_id uuid, p_user_id uuid, p_org_id uuid)` *(writes)* — Adds somebody to a group.
+- `chat_create_group(p_my_org uuid, p_title text, p_members jsonb)` *(writes)* — Starts a named group and adds the members given.
+- `chat_decide_link(p_link_id uuid, p_approve boolean)` *(writes)* — Answers a link request, approving or rejecting it.
+- `chat_decline_call(p_call_id uuid)` *(writes)* — Refuses a ringing call.
+- `chat_delete_message(p_message_id uuid)` *(writes)* — Takes back your own message.
 - `chat_directory(p_org_id uuid)`
-- `chat_edit_message(p_message_id uuid, p_body text)` *(writes)*
-- `chat_end_call(p_call_id uuid)` *(writes)*
-- `chat_heartbeat(p_idle boolean)` *(writes)*
+- `chat_edit_message(p_message_id uuid, p_body text)` *(writes)* — Edits your own message.
+- `chat_end_call(p_call_id uuid)` *(writes)* — Ends a call for everybody.
+- `chat_heartbeat(p_idle boolean)` *(writes)* — Says you are still here, and whether you have gone idle.
 - `chat_incoming_calls()`
-- `chat_join_call(p_call_id uuid)` *(writes)*
-- `chat_leave(p_conversation_id uuid)` *(writes)*
-- `chat_leave_call(p_call_id uuid)` *(writes)*
+- `chat_join_call(p_call_id uuid)` *(writes)* — Joins a call that is ringing or live.
+- `chat_leave(p_conversation_id uuid)` *(writes)* — Leaves a group.
+- `chat_leave_call(p_call_id uuid)` *(writes)* — Leaves a call without ending it for anybody else.
 - `chat_links_for(p_org_id uuid)`
-- `chat_mark_delivered(p_conversation_id uuid)` *(writes)*
-- `chat_mark_read(p_conversation_id uuid)` *(writes)*
+- `chat_mark_delivered(p_conversation_id uuid)` *(writes)* — Records that the messages in a conversation reached your device, which is the difference between the one tick and the two.
+- `chat_mark_read(p_conversation_id uuid)` *(writes)* — Marks a conversation read up to now, which is what clears its unread count for you.
 - `chat_members(p_conversation_id uuid)`
 - `chat_my_conversations(p_org_id uuid)`
-- `chat_request_link(p_my_org uuid, p_target_org uuid, p_note text)` *(writes)*
-- `chat_revoke_link(p_link_id uuid)` *(writes)*
-- `chat_set_access(p_org_id uuid, p_user_id uuid, p_enabled boolean)` *(writes)*
-- `chat_start_call(p_conversation_id uuid, p_kind text)` *(writes)*
-- `chat_start_direct(p_my_org uuid, p_other_user uuid, p_other_org uuid)` *(writes)*
+- `chat_request_link(p_my_org uuid, p_target_org uuid, p_note text)` *(writes)* — Asks another company to allow chat between the two.
+- `chat_revoke_link(p_link_id uuid)` *(writes)* — Ends a link between two companies.
+- `chat_set_access(p_org_id uuid, p_user_id uuid, p_enabled boolean)` *(writes)* — Switches chat on or off for one person in one company.
+- `chat_start_call(p_conversation_id uuid, p_kind text)` *(writes)* — Starts a voice or video call on a conversation, or RETURNS THE ONE ALREADY RUNNING: two people pressing the button at the same moment should end up in one call, not two.
+- `chat_start_direct(p_my_org uuid, p_other_user uuid, p_other_org uuid)` *(writes)* — Opens or reuses the one-to-one conversation between two people, returning it.
 - `chat_thread(p_conversation_id uuid, p_before timestamp with time zone, p_limit integer)`
-- `chat_typing_ping(p_conversation_id uuid, p_seconds integer)` *(writes)*
-- `chat_typing_stop(p_conversation_id uuid)` *(writes)*
+- `chat_typing_ping(p_conversation_id uuid, p_seconds integer)` *(writes)* — Says you are typing, for a few seconds.
+- `chat_typing_stop(p_conversation_id uuid)` *(writes)* — Says you have stopped typing, before the ping would have expired on its own -- what sending the message, or clearing the box, does.
 - `chat_who_is_typing(p_conversation_id uuid)`
 - `claims_awaiting_my_approval(p_org_id uuid)`
 - `clear_ai_credentials(p_org_id uuid, p_provider text)` *(writes)* — Removes a company's own key for one AI provider.

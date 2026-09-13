@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "iAkauntan",
-    "version": "0575",
+    "version": "0576",
     "summary": "Accounting, CRM, HR and payroll, corporate secretarial and LHDN e-Invoice for Malaysian businesses.",
     "description": "Generated from `pg_proc` by `scripts/generate_api_description.py` and\nchecked against the schema in CI. Do not edit by hand: the next run\nwill overwrite it, and the check will fail before that.\n\n**The database is the application.** Business rules are SQL \u2014 RLS\npolicies plus `app.can_*` guards inside SECURITY DEFINER functions \u2014\nso a refusal here is the rule itself talking, not a validation layer in\nfront of it. There is no way to reach this API that skips them.\n\n**Every call carries a company.** Most functions take `p_org_id` or\n`p_org` and check membership of that company before anything else.\nPassing a company you are not a member of is a 42501, not an empty\nresult.\n\n**Writes that must not happen twice take a key.** `post_manual_journal`,\n`create_contra`, `create_deposit` and `record_pdc` each have an overload\nwhose first argument is an idempotency key. A retry with the same key\nreturns the first call's answer; the same key with different arguments\nis refused. The key parameter has no default on purpose \u2014 a call that\nomits it resolves to the unprotected original.\n\n**Errors are Postgres errors.** PostgREST returns the SQLSTATE and the\nmessage. 42501 is a guard refusing, 23514 a check constraint, 23505 a\nunique violation, P0002 a missing row. The messages are written to be\nshown to a person.\n",
     "license": {
@@ -22402,8 +22402,8 @@
     "/rpc/chat_add_participant": {
       "post": {
         "operationId": "chat_add_participant",
-        "summary": "Chat add participant",
-        "description": "`public.chat_add_participant(p_conversation_id uuid, p_user_id uuid, p_org_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Adds somebody to a group",
+        "description": "Adds somebody to a group. A DIRECT CONVERSATION CANNOT TAKE A THIRD PERSON: silently turning a private exchange into a room somebody else can read is not a feature, and the refusal says to start a group instead. The newcomer's company must be linked to every company already in the room, and they must have chat switched on. You must be in the conversation yourself to add anybody to it.\n\n`public.chat_add_participant(p_conversation_id uuid, p_user_id uuid, p_org_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -22466,8 +22466,8 @@
     "/rpc/chat_create_group": {
       "post": {
         "operationId": "chat_create_group",
-        "summary": "Chat create group",
-        "description": "`public.chat_create_group(p_my_org uuid, p_title text, p_members jsonb)` Writes. Requires a signed-in user.",
+        "summary": "Starts a named group and adds the members given",
+        "description": "Starts a named group and adds the members given. Each member's company is checked against EVERYBODY ALREADY ADDED, which as the list grows means every pair in the room has agreed to a link -- not merely that the person starting it can reach each of them. That is what stops a group being a way to put two companies who have refused each other into one conversation. Everybody needs chat switched on, and a group needs a name and somebody in it.\n\n`public.chat_create_group(p_my_org uuid, p_title text, p_members jsonb)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -22527,8 +22527,8 @@
     "/rpc/chat_decide_link": {
       "post": {
         "operationId": "chat_decide_link",
-        "summary": "Chat decide link",
-        "description": "`public.chat_decide_link(p_link_id uuid, p_approve boolean)` Writes. Requires a signed-in user.",
+        "summary": "Answers a link request, approving or rejecting it",
+        "description": "Answers a link request, approving or rejecting it. ONLY THE COMPANY THAT WAS ASKED MAY ANSWER -- the asking side cannot approve its own request. Refuses a link that is not pending, naming what it already is.\n\n`public.chat_decide_link(p_link_id uuid, p_approve boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -22585,8 +22585,8 @@
     "/rpc/chat_decline_call": {
       "post": {
         "operationId": "chat_decline_call",
-        "summary": "Chat decline call",
-        "description": "`public.chat_decline_call(p_call_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Refuses a ringing call",
+        "description": "Refuses a ringing call. IN A PAIR, ONE REFUSAL ENDS IT. IN A ROOM IT DOES NOT: the others are still talking, and hanging up on them because one person is busy would be a strange thing for software to do.\n\n`public.chat_decline_call(p_call_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -22639,8 +22639,8 @@
     "/rpc/chat_delete_message": {
       "post": {
         "operationId": "chat_delete_message",
-        "summary": "Chat delete message",
-        "description": "`public.chat_delete_message(p_message_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Takes back your own message",
+        "description": "Takes back your own message. The body is EMPTIED, not hidden: any participant may select from `chat_messages` directly, so a body left in place behind a flag is a body still readable by the people it was taken back from. Attachment rows go with it. IDEMPOTENT -- deleting twice is what a double tap on a slow connection looks like, and it should not be an error.\n\n`public.chat_delete_message(p_message_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -22782,8 +22782,8 @@
     "/rpc/chat_edit_message": {
       "post": {
         "operationId": "chat_edit_message",
-        "summary": "Chat edit message",
-        "description": "`public.chat_edit_message(p_message_id uuid, p_body text)` Writes. Requires a signed-in user.",
+        "summary": "Edits your own message",
+        "description": "Edits your own message. YOUR OWN AND NOBODY ELSE'S -- not an administrator's either, because there is no version of this where somebody edits words another person is recorded as having said. Refuses a deleted message, and refuses if your chat access has been withdrawn since: somebody switched off this morning does not get to spend the afternoon editing what they said with it.\n\n`public.chat_edit_message(p_message_id uuid, p_body text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -22840,8 +22840,8 @@
     "/rpc/chat_end_call": {
       "post": {
         "operationId": "chat_end_call",
-        "summary": "Chat end call",
-        "description": "`public.chat_end_call(p_call_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Ends a call for everybody",
+        "description": "Ends a call for everybody. ONLY WHOEVER STARTED IT MAY DO THIS -- anybody else leaves with `chat_leave_call` rather than hanging up on the room.\n\n`public.chat_end_call(p_call_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -22894,8 +22894,8 @@
     "/rpc/chat_heartbeat": {
       "post": {
         "operationId": "chat_heartbeat",
-        "summary": "Chat heartbeat",
-        "description": "`public.chat_heartbeat(p_idle boolean)` Writes. Requires a signed-in user.",
+        "summary": "Says you are still here, and whether you have gone idle",
+        "description": "Says you are still here, and whether you have gone idle. Drives the online dot beside a name and nothing else -- it is not attendance, not activity monitoring, and nothing reads it as a record of when somebody was at their desk.\n\n`public.chat_heartbeat(p_idle boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -23019,8 +23019,8 @@
     "/rpc/chat_join_call": {
       "post": {
         "operationId": "chat_join_call",
-        "summary": "Chat join call",
-        "description": "`public.chat_join_call(p_call_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Joins a call that is ringing or live",
+        "description": "Joins a call that is ringing or live. Refuses one that is over. Somebody added to the conversation after the call began may still join it -- membership of the conversation is the test, not having been there when it started.\n\n`public.chat_join_call(p_call_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -23073,8 +23073,8 @@
     "/rpc/chat_leave": {
       "post": {
         "operationId": "chat_leave",
-        "summary": "Chat leave",
-        "description": "`public.chat_leave(p_conversation_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Leaves a group",
+        "description": "Leaves a group. A DIRECT CONVERSATION CANNOT BE LEFT, ONLY IGNORED -- there is no version of a two-person thread with one person in it. What was already said stays where it is.\n\n`public.chat_leave(p_conversation_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -23127,8 +23127,8 @@
     "/rpc/chat_leave_call": {
       "post": {
         "operationId": "chat_leave_call",
-        "summary": "Chat leave call",
-        "description": "`public.chat_leave_call(p_call_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Leaves a call without ending it for anybody else",
+        "description": "Leaves a call without ending it for anybody else. The call goes on as long as somebody is still in it.\n\n`public.chat_leave_call(p_call_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -23270,8 +23270,8 @@
     "/rpc/chat_mark_delivered": {
       "post": {
         "operationId": "chat_mark_delivered",
-        "summary": "Chat mark delivered",
-        "description": "`public.chat_mark_delivered(p_conversation_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Records that the messages in a conversation reached your device, which is the difference between the one tick\u2026",
+        "description": "Records that the messages in a conversation reached your device, which is the difference between the one tick and the two. Separate from read on purpose -- arriving on a phone is not somebody looking at it.\n\n`public.chat_mark_delivered(p_conversation_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -23324,8 +23324,8 @@
     "/rpc/chat_mark_read": {
       "post": {
         "operationId": "chat_mark_read",
-        "summary": "Chat mark read",
-        "description": "`public.chat_mark_read(p_conversation_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Marks a conversation read up to now, which is what clears its unread count for you",
+        "description": "Marks a conversation read up to now, which is what clears its unread count for you. Yours alone: it says nothing about whether anybody else has read it.\n\n`public.chat_mark_read(p_conversation_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -23582,8 +23582,8 @@
     "/rpc/chat_request_link": {
       "post": {
         "operationId": "chat_request_link",
-        "summary": "Chat request link",
-        "description": "`public.chat_request_link(p_my_org uuid, p_target_org uuid, p_note text)` Writes. Requires a signed-in user.",
+        "summary": "Asks another company to allow chat between the two",
+        "description": "Asks another company to allow chat between the two. Needs `can_admin` of YOUR OWN company -- one administrator cannot link two companies they do not both run. A rejected or revoked link may be asked for again, which is deliberately a different thing from pretending the first request never happened: the earlier answer stays on the record. Refuses a company linking to itself and one that does not exist.\n\n`public.chat_request_link(p_my_org uuid, p_target_org uuid, p_note text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -23645,8 +23645,8 @@
     "/rpc/chat_revoke_link": {
       "post": {
         "operationId": "chat_revoke_link",
-        "summary": "Chat revoke link",
-        "description": "`public.chat_revoke_link(p_link_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Ends a link between two companies",
+        "description": "Ends a link between two companies. EITHER SIDE MAY REVOKE, because consent to be reachable is not something one party gets to hold the other to. Existing conversations stop being joinable; what was already said is not deleted.\n\n`public.chat_revoke_link(p_link_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -23699,8 +23699,8 @@
     "/rpc/chat_set_access": {
       "post": {
         "operationId": "chat_set_access",
-        "summary": "Chat set access",
-        "description": "`public.chat_set_access(p_org_id uuid, p_user_id uuid, p_enabled boolean)` Writes. Requires a signed-in user.",
+        "summary": "Switches chat on or off for one person in one company",
+        "description": "Switches chat on or off for one person in one company. The person must be a member of that company. Note this is per company, not per account: somebody who works for two companies can have chat in one and not the other. Needs `can_admin`.\n\n`public.chat_set_access(p_org_id uuid, p_user_id uuid, p_enabled boolean)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -23762,8 +23762,8 @@
     "/rpc/chat_start_call": {
       "post": {
         "operationId": "chat_start_call",
-        "summary": "Chat start call",
-        "description": "`public.chat_start_call(p_conversation_id uuid, p_kind text)` Writes. Requires a signed-in user.",
+        "summary": "Starts a voice or video call on a conversation, or RETURNS THE ONE ALREADY RUNNING: two people pressing the\u2026",
+        "description": "Starts a voice or video call on a conversation, or RETURNS THE ONE ALREADY RUNNING: two people pressing the button at the same moment should end up in one call, not two. Anything still marked ringing from a previous attempt is past its deadline and never answered, and is closed here so the unique index does not refuse the new one.\n\n`public.chat_start_call(p_conversation_id uuid, p_kind text)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -23820,8 +23820,8 @@
     "/rpc/chat_start_direct": {
       "post": {
         "operationId": "chat_start_direct",
-        "summary": "Chat start direct",
-        "description": "`public.chat_start_direct(p_my_org uuid, p_other_user uuid, p_other_org uuid)` Writes. Requires a signed-in user.",
+        "summary": "Opens or reuses the one-to-one conversation between two people, returning it",
+        "description": "Opens or reuses the one-to-one conversation between two people, returning it. EXACTLY THOSE TWO AND NO THIRD -- calling again returns the same conversation rather than making another. Both people must have chat switched on in the company they are being addressed in, and the two companies must be linked. Refuses a conversation with yourself.\n\n`public.chat_start_direct(p_my_org uuid, p_other_user uuid, p_other_org uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -23994,8 +23994,8 @@
     "/rpc/chat_typing_ping": {
       "post": {
         "operationId": "chat_typing_ping",
-        "summary": "Chat typing ping",
-        "description": "`public.chat_typing_ping(p_conversation_id uuid, p_seconds integer)` Writes. Requires a signed-in user.",
+        "summary": "Says you are typing, for a few seconds",
+        "description": "Says you are typing, for a few seconds. Expires by itself, so a client that stops without saying so does not leave \"typing\u2026\" on somebody else's screen for ever. You must be in the conversation.\n\n`public.chat_typing_ping(p_conversation_id uuid, p_seconds integer)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
@@ -24052,8 +24052,8 @@
     "/rpc/chat_typing_stop": {
       "post": {
         "operationId": "chat_typing_stop",
-        "summary": "Chat typing stop",
-        "description": "`public.chat_typing_stop(p_conversation_id uuid)` Writes. Requires a signed-in user.",
+        "summary": "Says you have stopped typing, before the ping would have expired on its own -- what sending the message, or\u2026",
+        "description": "Says you have stopped typing, before the ping would have expired on its own -- what sending the message, or clearing the box, does.\n\n`public.chat_typing_stop(p_conversation_id uuid)` Writes. Requires a signed-in user.",
         "tags": [
           "general"
         ],
